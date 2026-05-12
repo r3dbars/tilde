@@ -21,6 +21,7 @@ struct SuggestionPresentationDeliveryRequest {
 
 struct SuggestionPresentationDeliverySuccess: Equatable {
     let panelRect: CGRect
+    let placement: PlacementHealthPresentation
 }
 
 enum SuggestionPresentationDeliveryFailure: Error, Equatable {
@@ -63,44 +64,55 @@ final class SuggestionPresentationDelivery {
     func deliver(
         _ request: SuggestionPresentationDeliveryRequest
     ) -> Result<SuggestionPresentationDeliverySuccess, SuggestionPresentationDeliveryFailure> {
-        let placement = request.placement
-        guard let panelRect = panelPresenter(
-            request.suggestion.visibleText,
-            placement.anchorRect,
-            placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
-            placement.clippingRect,
-            request.context.textStyle,
-            placement.renderMode
-        ) else {
+        let attempt = SuggestionPanelPresentationPolicy.attempt(
+            initialPlacement: request.placement,
+            fallbackRenderMode: request.profile.fallbackRenderMode
+        ) { placement in
+            panelPresenter(
+                request.suggestion.visibleText,
+                placement.anchorRect,
+                placement.renderMode == .inlineAdjacent ? placement.textLineRect : nil,
+                placement.clippingRect,
+                request.context.textStyle,
+                placement.renderMode
+            )
+        }
+
+        guard let panelRect = attempt.panelRect else {
             return .failure(.panelFrameUnusable)
         }
 
         fieldStatusPresenter(request.context)
 
-        return .success(SuggestionPresentationDeliverySuccess(panelRect: panelRect))
+        return .success(SuggestionPresentationDeliverySuccess(
+            panelRect: panelRect,
+            placement: attempt.placement
+        ))
     }
 
     func tracePayload(
         for request: SuggestionPresentationDeliveryRequest,
+        placement: PlacementHealthPresentation? = nil,
         panelRect: CGRect,
         screenshotCapture: TraceScreenshotCaptureResult
     ) -> SuggestionPresentationTracePayload {
-        tracePayloadBuilder.presented(
+        let placement = placement ?? request.placement
+        return tracePayloadBuilder.presented(
             suggestionID: request.suggestionID,
             requestMode: request.completionRequest.mode.rawValue,
-            renderMode: request.placement.renderMode.rawValue,
+            renderMode: placement.renderMode.rawValue,
             visibleText: request.suggestion.visibleText,
             visibleWordCount: request.suggestion.visibleWordCount,
             latencyMilliseconds: request.latencyMilliseconds,
-            anchorRect: request.placement.anchorRect,
-            textLineRect: request.placement.textLineRect,
+            anchorRect: placement.anchorRect,
+            textLineRect: placement.textLineRect,
             panelRect: panelRect,
-            clippingRect: request.placement.clippingRect,
+            clippingRect: placement.clippingRect,
             screenshotCaptureRect: screenshotCapture.rectDescription,
             requestMetadata: request.requestMetadata,
             geometryMetadata: request.geometryMetadata,
             learningMetadata: request.learningMetadata,
-            placementMetadata: request.placement.metadata,
+            placementMetadata: placement.metadata,
             candidateSelectionMetadata: request.candidateSelectionMetadata,
             displayScoreMetadata: request.displayScoreMetadata,
             replacementMetadata: request.replacementMetadata

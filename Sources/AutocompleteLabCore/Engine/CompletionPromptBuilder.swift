@@ -11,7 +11,7 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "screen-aware-continuation-v5"
+    public static let promptStyleIdentifier = "screen-aware-continuation-v6"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -100,6 +100,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer the next word or short phrase the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
+        When the continuation is a common phrase, put that boring obvious phrase first.
         When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
         Do not repeat the Before cursor text.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.

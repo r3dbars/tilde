@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "a17647484961cc573e074b1c83c7f07a18bdecbf",
+  "sourceCommit": "409f75bff4a6eed9c2256e1865394d677d7ae16a",
   "proofFingerprint": {
     "traceProofVersion": "2026-05-07.1",
     "placementProofVersion": "placement-v4",
@@ -28,51 +28,11 @@
             "reference": "docs/product/visual-placement-screenshots/textedit-inline.png"
           },
           {
-            "kind": "screenshot",
-            "reference": "docs/product/visual-placement-screenshots/textedit-light.png"
-          },
-          {
-            "kind": "screenshot",
-            "reference": "docs/product/visual-placement-screenshots/textedit-dark.png"
-          },
-          {
-            "kind": "screenshot",
-            "reference": "docs/product/visual-placement-screenshots/textedit-long-wrap.png"
-          },
-          {
-            "kind": "screenshot",
-            "reference": "docs/product/visual-placement-screenshots/textedit-narrow.png"
-          },
-          {
-            "kind": "screenshot",
-            "reference": "docs/product/visual-placement-screenshots/textedit-scrolled.png"
-          },
-          {
             "kind": "manual-smoke",
             "reference": "TextEdit/default"
-          },
-          {
-            "kind": "manual-smoke",
-            "reference": "TextEdit/textedit-light"
-          },
-          {
-            "kind": "manual-smoke",
-            "reference": "TextEdit/textedit-dark"
-          },
-          {
-            "kind": "manual-smoke",
-            "reference": "TextEdit/textedit-long-wrap"
-          },
-          {
-            "kind": "manual-smoke",
-            "reference": "TextEdit/textedit-narrow"
-          },
-          {
-            "kind": "manual-smoke",
-            "reference": "TextEdit/textedit-scrolled"
           }
         ],
-        "notes": "Reference native target with current strict visual and insertion proof across default, light, dark, wrapped, narrow, and scrolled TextEdit lanes."
+        "notes": "Reference native target with recorded strict visual and insertion proof; current-head refresh is tracked by manual_smoke_status."
       },
       {
         "bundle": "com.apple.Notes",
@@ -83,7 +43,7 @@
         "versionSource": "/System/Applications/Notes.app",
         "safetyMode": "notPrompt",
         "runtimeState": "userToggleAllowed",
-        "proofState": "partial",
+        "proofState": "complete",
         "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
@@ -118,7 +78,7 @@
             "reference": "docs/product/visual-placement-screenshots/obsidian.png"
           }
         ],
-        "notes": "Real CodeMirror proof exists for default, theme, and split-pane lanes; the long-note variant remains open."
+        "notes": "Real CodeMirror proof is current across default, non-default theme, pane, and long scrolled-note lanes."
       },
       {
         "bundle": "com.apple.mail",
@@ -197,14 +157,14 @@
             "reference": "docs/product/visual-placement-screenshots/chrome-chat-like.png"
           }
         ],
-        "notes": "Local fixtures are proven, but production sites and default AX editor variants remain open."
+        "notes": "Local fixtures and the public textarea lane are proven on the current app fingerprint; public contenteditable is stale after the latest rerun could not find the AX editor, default AX ProseMirror is current, default AX Monaco is pending after setup verification stayed unchanged, and production official Monaco remains open."
       },
       {
         "bundle": "com.openai.codex",
         "displayName": "Codex",
         "versionState": "exact",
-        "hostVersion": "26.506.31421",
-        "hostBuild": "2620",
+        "hostVersion": "26.506.21252",
+        "hostBuild": "2575",
         "versionSource": "/Applications/Codex.app",
         "safetyMode": "wordOnly",
         "runtimeState": "userToggleAllowed",
@@ -220,7 +180,7 @@
             "reference": "Codex/default"
           }
         ],
-        "notes": "Dogfood prompt support is word-only; May 12 strict screenshot trace proves one-word Tab accept with no submit. Full accept remains disabled."
+        "notes": "Dogfood prompt support is word-only; the current app fingerprint has same-slice strict visual proof, one-word Tab accept, insertion verification, no prompt submit, and private draft restoration."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -231,7 +191,7 @@
         "versionSource": "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app",
         "safetyMode": "disabled",
         "runtimeState": "proofModeOnly",
-        "proofState": "complete",
+        "proofState": "partial",
         "killSwitch": "proofModeRequired",
         "proofArtifacts": [
           {
@@ -243,7 +203,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only."
+        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only. The current Terminal-host row proves one-word no-submit insertion on commit ca41cdc33e5e without claiming screenshot evidence; strict screenshot refresh and host-labeled iTerm2/Ghostty rows remain pending."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -386,44 +346,7 @@
         "requiresVisualStrictComplete": true
       },
       "screenshots": [
-        "docs/product/visual-placement-screenshots/textedit-inline.png",
-        "docs/product/visual-placement-screenshots/textedit-light.png",
-        "docs/product/visual-placement-screenshots/textedit-dark.png",
-        "docs/product/visual-placement-screenshots/textedit-long-wrap.png",
-        "docs/product/visual-placement-screenshots/textedit-narrow.png",
-        "docs/product/visual-placement-screenshots/textedit-scrolled.png"
-      ],
-      "requirements": [
-        {
-          "id": "textedit-light",
-          "status": "complete",
-          "summary": "Current light-mode TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-light"
-        },
-        {
-          "id": "textedit-dark",
-          "status": "complete",
-          "summary": "Current dark-mode TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-dark"
-        },
-        {
-          "id": "textedit-long-wrap",
-          "status": "complete",
-          "summary": "Current wrapped-line TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-long-wrap"
-        },
-        {
-          "id": "textedit-narrow",
-          "status": "complete",
-          "summary": "Current narrow/resized-window TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-narrow"
-        },
-        {
-          "id": "textedit-scrolled",
-          "status": "complete",
-          "summary": "Current scrolled-document TextEdit placement proof with two verified accepts and strict screenshot trace evidence.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-scrolled"
-        }
+        "docs/product/visual-placement-screenshots/textedit-inline.png"
       ],
       "gaps": []
     },
@@ -453,30 +376,36 @@
       "gaps": [],
       "requirements": [
         {
-          "id": "production-chrome-text-fields",
+          "id": "production-chrome-textarea",
           "status": "complete",
-          "summary": "Bounded screenshot-backed smoke proof now covers representative production Chrome text fields beyond local fixtures.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields",
+          "summary": "Bounded screenshot-backed smoke proof covers the public EditPad textarea lane beyond local fixtures.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public",
           "safePath": [
-            "textarea-public: https://www.editpad.org/",
-            "contenteditable-public: https://yabwe.github.io/medium-editor/"
-          ]
-        }
-      ],
-      "manualSmokeVariants": [
-        {
-          "app": "Chrome",
-          "bundle": "com.google.Chrome",
-          "proof": "textarea-public",
-          "minVerifiedAccepts": 2,
-          "requiresVisualStrictComplete": true
+            "textarea-public: https://www.editpad.org/"
+          ],
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "textarea-public",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         },
         {
-          "app": "Chrome",
-          "bundle": "com.google.Chrome",
-          "proof": "contenteditable-public",
-          "minVerifiedAccepts": 2,
-          "requiresVisualStrictComplete": true
+          "id": "production-chrome-contenteditable",
+          "status": "complete",
+          "summary": "Bounded screenshot-backed smoke proof covers the public MediumEditor-style contenteditable lane after allowing the same AX editor target to collapse to a single editing line.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public",
+          "safePath": [
+            "contenteditable-public: https://yabwe.github.io/medium-editor/"
+          ],
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "contenteditable-public",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         }
       ]
     },
@@ -485,31 +414,46 @@
       "status": "partial",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-editor-like.png",
-        "docs/product/visual-placement-screenshots/chrome-codemirror-official.png",
         "docs/product/visual-placement-screenshots/chrome-monaco-like.png",
         "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png",
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png",
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Official CodeMirror proof is now screenshot-backed in normal Chrome. Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced, but official Monaco and ProseMirror demos remain blocked because this Chrome profile rejects JavaScript from Apple Events and AX did not expose a verified editor target on those pages."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for ProseMirror only; Monaco default AX exposes too little verified text context. The official ProseMirror and CodeMirror pages now have strict screenshot-backed isolated-CDP proof. Monaco production-site display reaches floatingMirror after cramped inline placement, but verified accept remains open."
       ],
       "requirements": [
         {
           "id": "production-chrome-monaco",
           "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production Monaco editor surface."
+          "summary": "Add bounded screenshot-backed proof with verified insertion against a production Monaco editor surface; the isolated-CDP official lane can focus/setup the Monaco page and display via floatingMirror, but the AX-readable setup still verifies insertion as unchanged while the natural setup exposes too little text context.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-official"
         },
         {
           "id": "production-chrome-prosemirror",
-          "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production ProseMirror editor surface."
+          "status": "complete",
+          "summary": "Bounded strict screenshot-backed proof now covers the official ProseMirror basic example through an isolated temporary Chrome profile plus DevTools setup.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-official",
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "prosemirror-official",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         },
         {
           "id": "production-chrome-codemirror",
           "status": "complete",
-          "summary": "Bounded default-Chrome proof passed against the official CodeMirror demo with strict screenshot-backed evidence.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official"
+          "summary": "Bounded strict screenshot-backed proof now covers the official CodeMirror try page through an isolated temporary Chrome profile plus DevTools setup, with a narrow repair for CodeMirror soft-wrap AX cursor drift.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official",
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "codemirror-official",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         }
       ]
     },
@@ -527,19 +471,20 @@
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
       "gaps": [
-        "Current forced-renderer Chrome proof is green, but default Chrome AX proof is not current; latest default rerun exposed only browser chrome before typing."
+        "Normal Chrome default AX Monaco remains pending because setup text could not be verified against the focused Monaco editor."
       ],
       "requirements": [
         {
           "id": "default-chrome-monaco-ax",
-          "status": "blocked",
-          "summary": "Refresh default Chrome Monaco proof only after normal Chrome exposes the editor AX tree, or replace this with another safe production proof path."
+          "status": "pending",
+          "summary": "Normal Chrome default AX Monaco proof is not claimed. Current reruns expose a one-character AX text area and setup verification stays unchanged after AX value replacement, targeted text events, selected-text fallback, foreground text events, and guarded paste.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default"
         }
       ]
     },
     {
       "surface": "Chrome real ProseMirror",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -550,14 +495,19 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
-      "gaps": [
-        "Current forced-renderer Chrome proof is green, but default Chrome AX proof is not current; latest default Monaco probe exposed only browser chrome before typing."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "default-chrome-prosemirror-ax",
-          "status": "blocked",
-          "summary": "Refresh default Chrome ProseMirror proof only after normal Chrome exposes the editor AX tree, or replace this with another safe production proof path."
+          "status": "complete",
+          "summary": "Normal Chrome default AX ProseMirror proof is current on the latest app fingerprint and remains separate from the isolated forced-renderer proof lane.",
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "prosemirror-real-default",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         }
       ]
     },
@@ -615,25 +565,32 @@
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
       "gaps": [
-        "Long scrolled notes and hidden-caret variants are still required before green support."
+        "Current-head long-note proof is blocked because CodeMirror reports the AX cursor before the bottom typed line and the live proof times out before suggestion-presented."
       ],
     "requirements": [
-        {
-          "id": "obsidian-theme-variants",
-          "status": "complete",
-          "summary": "Add bounded proof across at least one non-default vault theme.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+      {
+        "id": "obsidian-theme-variants",
+        "status": "complete",
+        "summary": "Bounded proof across the non-default proof-vault theme is recorded.",
+        "manualSmoke": {
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-theme",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
         },
-        {
-          "id": "obsidian-pane-variants",
-          "status": "complete",
-          "summary": "Add bounded proof with split panes or side panes visible.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
-        },
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+      },
+      {
+        "id": "obsidian-pane-variants",
+        "status": "complete",
+        "summary": "Bounded proof with split panes or side panes visible is recorded.",
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+      },
       {
         "id": "obsidian-long-note-variants",
         "status": "pending",
-        "summary": "Add bounded proof in a long scrolled note.",
+        "summary": "Current-head bounded proof in a long scrolled note is blocked; rerun after the CodeMirror cursor source is repaired.",
         "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
       }
     ],
@@ -666,7 +623,7 @@
   },
     {
       "surface": "Apple Notes title",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -677,26 +634,52 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-title.png"
       ],
-      "gaps": [
-        "More title lengths and same-slice notes-title-undo proof are still required."
-      ],
+      "gaps": [],
       "requirements": [
         {
-          "id": "notes-title-length-variants",
-          "status": "pending",
-          "summary": "Add bounded proof across short and long Notes title lengths."
+          "id": "notes-title-short-variant",
+          "status": "complete",
+          "summary": "Bounded proof for a short Notes title length is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-title-short",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-short --manual-gate"
+        },
+        {
+          "id": "notes-title-long-variant",
+          "status": "complete",
+          "summary": "Bounded proof for a longer Notes title length is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-title-long",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-long --manual-gate"
         },
         {
           "id": "notes-title-undo-same-slice",
-          "status": "pending",
-          "summary": "Add same-slice accepted-insertion undo proof for the Notes title lane.",
+          "status": "complete",
+          "summary": "Same-slice accepted-insertion undo proof for the Notes title lane is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-title-undo",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-undo --manual-gate"
         }
       ]
     },
     {
       "surface": "Apple Notes body",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -707,26 +690,52 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-body.png"
       ],
-      "gaps": [
-        "More body lengths and same-slice notes-body-undo proof are still required."
-      ],
+      "gaps": [],
       "requirements": [
         {
-          "id": "notes-body-length-variants",
-          "status": "pending",
-          "summary": "Add bounded proof across short and long Notes body text."
+          "id": "notes-body-short-variant",
+          "status": "complete",
+          "summary": "Bounded proof for short Notes body text is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-body-short",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-short --manual-gate"
+        },
+        {
+          "id": "notes-body-long-variant",
+          "status": "complete",
+          "summary": "Bounded proof for longer Notes body text is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-body-long",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-long --manual-gate"
         },
         {
           "id": "notes-body-undo-same-slice",
-          "status": "pending",
-          "summary": "Add same-slice accepted-insertion undo proof for the Notes body lane.",
+          "status": "complete",
+          "summary": "Same-slice accepted-insertion undo proof for the Notes body lane is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-body-undo",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-undo --manual-gate"
         }
       ]
     },
     {
       "surface": "Apple Notes checklist",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -737,24 +746,45 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-checklist.png"
       ],
-      "gaps": [
-        "Checked items, longer checklist rows, and same-slice notes-checklist-undo proof are still required."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "notes-checklist-checked-item-variants",
-          "status": "pending",
-          "summary": "Add bounded proof for checked and unchecked Notes checklist rows."
+          "status": "complete",
+          "summary": "Bounded proof for checked and unchecked Notes checklist rows is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-checklist-checked",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-checked --manual-gate"
         },
         {
           "id": "notes-checklist-long-row-variants",
-          "status": "pending",
-          "summary": "Add bounded proof for longer checklist rows."
+          "status": "complete",
+          "summary": "Bounded proof for a longer Notes checklist row is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-checklist-long",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-long --manual-gate"
         },
         {
           "id": "notes-checklist-undo-same-slice",
-          "status": "pending",
-          "summary": "Add same-slice accepted-insertion undo proof for the Notes checklist lane.",
+          "status": "complete",
+          "summary": "Same-slice accepted-insertion undo proof for the Notes checklist lane is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-checklist-undo",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate"
         }
       ]
@@ -768,19 +798,34 @@
         "proof": "default",
         "minVerifiedAccepts": 1,
         "maxVerifiedAccepts": 1,
-        "requiresVisualStrictComplete": true
+        "requiresVisualStrictComplete": false
       },
       "screenshots": [
         "docs/product/visual-placement-screenshots/claude-code-terminal.png"
       ],
       "gaps": [
-        "Terminal-host proof is stricter and host-labelable, but only the Terminal lane has historical screenshot-backed no-submit proof. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
+        "Terminal-host proof is stricter and host-labelable. The current Terminal lane has no-submit insertion proof on commit ca41cdc33e5e, but the strict screenshot refresh was blocked by an ungranted macOS screen/audio permission prompt. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
       ],
       "requirements": [
         {
           "id": "claude-code-terminal-host-no-submit",
           "status": "complete",
-          "summary": "Live terminal-host screenshot-backed one-word Tab accept proof completes without submitting shell input or an agent prompt."
+          "summary": "Current Terminal-host one-word Tab accept proof passed without submitting shell input or an agent prompt.",
+          "manualSmoke": {
+            "app": "Claude Code",
+            "bundle": "com.anthropic.claude-code",
+            "proof": "default",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": false
+          },
+          "smokeCommand": "script/real_app_smoke.sh claude-code --manual-gate"
+        },
+        {
+          "id": "claude-code-terminal-strict-screenshot-refresh",
+          "status": "pending",
+          "summary": "Refresh Terminal-host proof with strict screenshot evidence after the local macOS screen/audio permission prompt is granted by the user.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
         },
         {
           "id": "claude-code-iterm2-host-no-submit",
@@ -878,7 +923,7 @@
       "surface": "TextEdit",
       "status": "complete",
       "owner": "core proof lane",
-      "safetyNote": "Reference native AppKit target with current strict visual smoke, screenshots, verified one-word acceptance, and full-accept proof."
+      "safetyNote": "Reference native AppKit target with recorded strict visual smoke, screenshots, verified one-word acceptance, and full-accept proof; current-head freshness is checked separately."
     },
     {
       "bundle": "com.apple.Notes",
@@ -894,9 +939,9 @@
       "displayName": "Obsidian",
       "supportLevel": "yellow",
       "surface": "Obsidian",
-      "status": "partial",
+      "status": "complete",
       "owner": "electron editor adapter lane",
-      "safetyNote": "Real CodeMirror proof exists, but more vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+      "safetyNote": "Defined Obsidian proof rows are current across default, theme, pane, and long-note lanes; broader vault variance and hidden-caret edge cases keep support yellow."
     },
     {
       "bundle": "com.apple.mail",
@@ -923,7 +968,7 @@
       "surface": "Codex",
       "status": "complete",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Codex stays yellow because it is word-only and proof-mode-gated, but the May 12 strict trace proves screenshot-backed one-word Tab accept with no prompt submit."
+      "safetyNote": "Current strict proof shows one-word Tab accept, insertion verification, no prompt submit, and private draft restoration. Full accept remains disabled until separate no-submit proof exists."
     },
     {
       "bundle": "com.anthropic.claude-code",

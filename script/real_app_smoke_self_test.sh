@@ -41,7 +41,7 @@ if ! grep -F "requires Chrome to expose a focused editable web text target" "$TM
   echo "real app smoke self-test did not explain the Chrome focused editable guard" >&2
   exit 1
 fi
-if ! grep -F "Chrome setup text first uses process-targeted events, then a guarded System Events fallback" "$TMP_DIR/chrome.txt" >/dev/null; then
+if ! grep -F "Chrome setup text first tries AX value replacement, then guarded key/paste fallbacks" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not explain targeted Chrome setup insertion" >&2
   exit 1
 fi
@@ -166,8 +166,8 @@ for official_fixture in codemirror-official monaco-official prosemirror-official
     echo "real app smoke self-test did not print the Chrome $official_fixture dry-run plan" >&2
     exit 1
   fi
-  if ! grep -F "Allow JavaScript from Apple Events" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
-    echo "real app smoke self-test did not print the Chrome $official_fixture JavaScript preflight requirement" >&2
+  if ! grep -F "isolated temporary Chrome profile plus localhost DevTools focus/setup" "$TMP_DIR/chrome-$official_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the Chrome $official_fixture isolated DevTools proof path" >&2
     exit 1
   fi
 done
@@ -196,18 +196,52 @@ if ! grep -F "choose a manual-gated Apple Notes surface" "$TMP_DIR/notes.txt" >/
   exit 1
 fi
 
-for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
+for notes_surface in notes-title notes-title-short notes-title-long notes-body notes-body-short notes-body-long notes-checklist notes-checklist-checked notes-checklist-long notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
-  if [[ "$notes_surface" == "notes-title" || "$notes_surface" == "notes-body" || "$notes_surface" == "notes-checklist" ]]; then
-    if ! grep -F "guarded Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
-      echo "real app smoke self-test did not print the guarded $notes_surface proof plan" >&2
-      exit 1
-    fi
-  elif ! grep -F "manual-gated Apple Notes ${notes_surface#notes-} proof" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
+  case "$notes_surface" in
+    notes-title-short)
+      expected_plan="guarded Apple Notes short title proof"
+      ;;
+    notes-title-long)
+      expected_plan="guarded Apple Notes long title proof"
+      ;;
+    notes-title-undo)
+      expected_plan="guarded Apple Notes title undo proof"
+      ;;
+    notes-body-short)
+      expected_plan="guarded Apple Notes short body proof"
+      ;;
+    notes-body-long)
+      expected_plan="guarded Apple Notes long body proof"
+      ;;
+    notes-body-undo)
+      expected_plan="guarded Apple Notes body undo proof"
+      ;;
+    notes-checklist-checked)
+      expected_plan="guarded Apple Notes checked checklist proof"
+      ;;
+    notes-checklist-long)
+      expected_plan="guarded Apple Notes long checklist proof"
+      ;;
+    notes-checklist-undo)
+      expected_plan="guarded Apple Notes checklist undo proof"
+      ;;
+    *)
+      expected_plan="guarded Apple Notes ${notes_surface#notes-} proof"
+      ;;
+  esac
+  if ! grep -F "$expected_plan" "$TMP_DIR/$notes_surface.txt" >/dev/null; then
     echo "real app smoke self-test did not print the $notes_surface proof plan" >&2
     exit 1
   fi
 done
+
+if ! grep -F "Command-Z" "$TMP_DIR/notes-title-undo.txt" >/dev/null ||
+   ! grep -F "same-slice undo" "$TMP_DIR/notes-body-undo.txt" >/dev/null ||
+   ! grep -F "same-slice undo" "$TMP_DIR/notes-checklist-undo.txt" >/dev/null; then
+  echo "real app smoke self-test expected Notes undo lanes to be automated guarded proofs" >&2
+  exit 1
+fi
 
 if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "kAXSelectedTextRangeAttribute" script/real_app_smoke.sh >/dev/null; then
@@ -254,7 +288,15 @@ fi
 
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
   script/real_app_smoke.sh "$obsidian_variant" --dry-run >"$TMP_DIR/$obsidian_variant.txt"
-  if ! grep -F "manual-gated Obsidian" "$TMP_DIR/$obsidian_variant.txt" >/dev/null; then
+  case "$obsidian_variant" in
+    obsidian-theme)
+      expected_plan="guarded Obsidian non-default theme proof"
+      ;;
+    *)
+      expected_plan="manual-gated Obsidian"
+      ;;
+  esac
+  if ! grep -F "$expected_plan" "$TMP_DIR/$obsidian_variant.txt" >/dev/null; then
     echo "real app smoke self-test did not print the $obsidian_variant proof plan" >&2
     exit 1
   fi
