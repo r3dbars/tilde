@@ -43,7 +43,7 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 | Claude desktop layouts | word-only | Default one-word no-submit proof exists, but layout variants are pending and full accept remains disabled. |
 | Codex layouts | word-only | Default one-word no-submit proof exists; broader layouts and full accept remain gated. |
 | Obsidian long notes | blocked | General Obsidian proof exists, but current-head long-note proof is still pending. |
-| Real Monaco/CodeMirror editors | blocked | Forced local fixtures are useful evidence, but official/default Monaco and current CodeMirror proof are not complete. |
+| Real Monaco and CodeMirror editors | blocked | Forced local fixtures are useful evidence, but official/default Monaco and current CodeMirror proof are not complete. |
 
 | Surface | Grade | Screenshot proof | Accept proof | Current read | Evidence gap |
 | --- | --- | --- | --- | --- | --- |

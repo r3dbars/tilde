@@ -9,29 +9,44 @@ if [[ ! -s "$LOG_PATH" ]]; then
   exit 1
 fi
 
-if [[ -n "${AUTOCOMPLETE_LAB_LOG_START_LINE:-}" ]]; then
-  START_LINE=$((AUTOCOMPLETE_LAB_LOG_START_LINE + 1))
-  SCAN_LINES="$(tail -n +"$START_LINE" "$LOG_PATH" 2>/dev/null || true)"
-else
-  SCAN_LINES="$(cat "$LOG_PATH")"
-fi
+scan_log_lines() {
+  if [[ -n "${AUTOCOMPLETE_LAB_LOG_START_LINE:-}" ]]; then
+    local start_line=$((AUTOCOMPLETE_LAB_LOG_START_LINE + 1))
+    tail -n +"$start_line" "$LOG_PATH" 2>/dev/null || true
+    return
+  fi
 
-RECENT_LINES="$(tail -n "${AUTOCOMPLETE_LAB_LOG_LINES:-120}" <<<"$SCAN_LINES")"
-LATEST_LAUNCH_LINES="$(
-  awk '
-    /launch accessibility=/ {
-      buffer = $0 ORS
-      found = 1
-      next
-    }
-    found {
-      buffer = buffer $0 ORS
-    }
-    END {
-      printf "%s", buffer
-    }
-  ' <<<"$SCAN_LINES"
-)"
+  cat "$LOG_PATH"
+}
+
+latest_launch_lines() {
+  local launch_line
+
+  if [[ -n "${AUTOCOMPLETE_LAB_LOG_START_LINE:-}" ]]; then
+    local start_line=$((AUTOCOMPLETE_LAB_LOG_START_LINE + 1))
+    local relative_line
+    relative_line="$(
+      tail -n +"$start_line" "$LOG_PATH" 2>/dev/null |
+        grep -F -n "launch accessibility=" |
+        tail -n 1 |
+        cut -d: -f1
+    )"
+    [[ -n "$relative_line" ]] || return 0
+    launch_line=$((start_line + relative_line - 1))
+  else
+    launch_line="$(
+      grep -F -n "launch accessibility=" "$LOG_PATH" |
+        tail -n 1 |
+        cut -d: -f1
+    )"
+    [[ -n "$launch_line" ]] || return 0
+  fi
+
+  tail -n +"$launch_line" "$LOG_PATH" 2>/dev/null || true
+}
+
+RECENT_LINES="$(scan_log_lines | tail -n "${AUTOCOMPLETE_LAB_LOG_LINES:-120}")"
+LATEST_LAUNCH_LINES="$(latest_launch_lines)"
 
 if [[ -z "$LATEST_LAUNCH_LINES" ]]; then
   LATEST_LAUNCH_LINES="$RECENT_LINES"
@@ -78,28 +93,7 @@ wait_for_latest_launch_ready() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while (( SECONDS <= deadline )); do
-    if [[ -n "${AUTOCOMPLETE_LAB_LOG_START_LINE:-}" ]]; then
-      START_LINE=$((AUTOCOMPLETE_LAB_LOG_START_LINE + 1))
-      SCAN_LINES="$(tail -n +"$START_LINE" "$LOG_PATH" 2>/dev/null || true)"
-    else
-      SCAN_LINES="$(cat "$LOG_PATH")"
-    fi
-
-    LATEST_LAUNCH_LINES="$(
-      awk '
-        /launch accessibility=/ {
-          buffer = $0 ORS
-          found = 1
-          next
-        }
-        found {
-          buffer = buffer $0 ORS
-        }
-        END {
-          printf "%s", buffer
-        }
-      ' <<<"$SCAN_LINES"
-    )"
+    LATEST_LAUNCH_LINES="$(latest_launch_lines)"
 
     if [[ -z "$LATEST_LAUNCH_LINES" ]]; then
       sleep 1
@@ -129,7 +123,7 @@ reject_recent_pattern '(^| )(textBeforeCursor|textAfterCursor|selectedText|rawTe
 
 if [[ "${AUTOCOMPLETE_LAB_REQUIRE_READY:-0}" == "1" ]]; then
   wait_for_latest_launch_ready
-  RECENT_LINES="$(tail -n "${AUTOCOMPLETE_LAB_LOG_LINES:-120}" <<<"$SCAN_LINES")"
+  RECENT_LINES="$(scan_log_lines | tail -n "${AUTOCOMPLETE_LAB_LOG_LINES:-120}")"
 fi
 
 require_latest_launch_line "launch accessibility="

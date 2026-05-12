@@ -397,7 +397,7 @@ print_focused_graduation_decisions() {
   echo "- Claude desktop layouts: word-only - default proof exists; layout variants remain pending."
   echo "- Codex layouts: word-only - default proof exists; more prompt layouts remain pending."
   echo "- Obsidian long notes: blocked - current-head long-note proof is still pending."
-  echo "- Real Monaco/CodeMirror editors: blocked - official/default editor proof is not complete."
+  echo "- Real Monaco and CodeMirror editors: blocked - official/default editor proof is not complete."
 }
 
 if [[ ! -f "$REPORT_PATH" ]]; then
