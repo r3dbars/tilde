@@ -414,13 +414,13 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror. The official ProseMirror and CodeMirror pages now have strict screenshot-backed isolated-CDP proof, but Monaco production-site proof remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror. The official ProseMirror and CodeMirror pages now have strict screenshot-backed isolated-CDP proof. Monaco production-site display reaches floatingMirror after cramped inline placement, but verified accept remains open."
       ],
       "requirements": [
         {
           "id": "production-chrome-monaco",
           "status": "pending",
-          "summary": "Add bounded screenshot-backed proof against a production Monaco editor surface; the isolated-CDP official lane can focus/setup the Monaco page, but the current page still exposes too little AX text context for Autocomplete Lab to present a suggestion.",
+          "summary": "Add bounded screenshot-backed proof with verified insertion against a production Monaco editor surface; the isolated-CDP official lane can focus/setup the Monaco page and display via floatingMirror, but the AX-readable setup still verifies insertion as unchanged while the natural setup exposes too little text context.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-official"
         },
         {
