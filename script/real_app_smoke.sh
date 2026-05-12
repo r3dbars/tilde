@@ -465,6 +465,21 @@ APPLESCRIPT
   fi
 }
 
+cleanup_stale_textedit_smoke_windows() {
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "TextEdit"
+  repeat with docRef in documents
+    try
+      set docName to name of docRef
+      if docName starts with "textedit-smoke-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
+        close docRef saving no
+      end if
+    end try
+  end repeat
+end tell
+APPLESCRIPT
+}
+
 cleanup_smoke() {
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
@@ -8183,6 +8198,7 @@ run_textedit() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     stop_current_steadytype_app_bundle
   fi
+  cleanup_stale_textedit_smoke_windows
   open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
   sleep 0.8
 

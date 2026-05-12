@@ -16,6 +16,8 @@ enum PrivacyExportProofCommand {
         "proof-private-remaining-redbars",
         "https://private.example/redbars",
         "/tmp/proof-private-screenshot-redbars.png",
+        "/Users/redbars/Library/Application Support/SteadyType/private-cache-redbars",
+        "loaded from /Users/redbars/private/freeform-reason-redbars.md",
         "proof private document title redbars",
         "proof-private-recipient@example.com",
         "proof private subject redbars"
@@ -114,7 +116,9 @@ enum PrivacyExportProofCommand {
                 metadata: [
                     "documentTitle": "proof private document title redbars",
                     "fieldKind": "multilineCompose",
+                    "localCacheDirectory": "/Users/redbars/Library/Application Support/SteadyType/private-cache-redbars",
                     "recipientEmail": "proof-private-recipient@example.com",
+                    "runtimeReason": "loaded from /Users/redbars/private/freeform-reason-redbars.md",
                     "subjectLine": "proof private subject redbars",
                     "visibleURL": "https://private.example/redbars"
                 ]
@@ -173,8 +177,9 @@ enum PrivacyExportProofCommand {
     private static func writeProofManifest(to outputURL: URL, exportURL: URL) throws {
         let manifest: [String: String] = [
             "generatedAt": ISO8601DateFormatter().string(from: Date()),
-            "sourceBinary": CommandLine.arguments.first ?? "unknown",
-            "privacyExport": exportURL.path,
+            "sourceBinaryName": sourceBinaryName(),
+            "privacyExportDirectoryName": exportURL.lastPathComponent,
+            "privacyExportPathRedacted": "true",
             "rawProofInputRetained": "false",
             "rawTextIncludedInDefaultArtifact": "false"
         ]
@@ -184,6 +189,14 @@ enum PrivacyExportProofCommand {
             options: [.prettyPrinted, .sortedKeys]
         )
         try data.write(to: outputURL.appendingPathComponent("proof-manifest.json"), options: .atomic)
+    }
+
+    private static func sourceBinaryName() -> String {
+        guard let sourceBinary = CommandLine.arguments.first, !sourceBinary.isEmpty else {
+            return "unknown"
+        }
+
+        return URL(fileURLWithPath: sourceBinary).lastPathComponent
     }
 }
 

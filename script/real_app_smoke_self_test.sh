@@ -78,6 +78,11 @@ if ! grep -F 'move_textedit_caret_to_document_end "$window_title"' script/real_a
   echo "real app smoke self-test expected TextEdit proof typing to keep the caret at document end" >&2
   exit 1
 fi
+if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected stale TextEdit proof windows to be cleaned before opening a new disposable document" >&2
+  exit 1
+fi
 if ! grep -F 'launch_steadytype_after_chrome_setup' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'pause_steadytype_for_chrome_setup' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Chrome proof to pause during setup and relaunch before proof" >&2

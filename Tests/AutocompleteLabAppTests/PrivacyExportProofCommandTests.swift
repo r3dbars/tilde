@@ -39,7 +39,9 @@ struct PrivacyExportProofCommandTests {
 
         let exportedText = try recursiveTextContents(at: outputURL)
         #expect(exportedText.contains("rawTextIncludedInDefaultArtifact"))
+        #expect(exportedText.contains("privacyExportPathRedacted"))
         #expect(exportedText.contains("false"))
+        #expect(!exportedText.contains(outputURL.path))
         #expect(!exportedText.contains("proof-private-before-redbars"))
         #expect(!exportedText.contains("proof-private-after-redbars"))
         #expect(!exportedText.contains("proof-private-system-prompt-redbars"))
@@ -50,6 +52,8 @@ struct PrivacyExportProofCommandTests {
         #expect(!exportedText.contains("proof-private-remaining-redbars"))
         #expect(!exportedText.contains("https://private.example/redbars"))
         #expect(!exportedText.contains("/tmp/proof-private-screenshot-redbars.png"))
+        #expect(!exportedText.contains("/Users/redbars/Library/Application Support/SteadyType/private-cache-redbars"))
+        #expect(!exportedText.contains("loaded from /Users/redbars/private/freeform-reason-redbars.md"))
         #expect(!exportedText.contains("proof private document title redbars"))
         #expect(!exportedText.contains("proof-private-recipient@example.com"))
         #expect(!exportedText.contains("proof private subject redbars"))
