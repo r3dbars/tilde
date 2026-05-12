@@ -262,4 +262,41 @@ if script/typing_performance_soak.sh --self-test-log-scan "$large_log" 9000; the
   exit 1
 fi
 
+runtime_ready_log="$TMP_DIR/runtime-ready-diagnostics.log"
+cat >"$runtime_ready_log" <<'EOF'
+2026-05-12T00:00:00Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+2026-05-12T00:00:01Z status decision=waiting
+EOF
+
+if ! script/typing_performance_soak.sh --self-test-runtime-ready "$runtime_ready_log" 1 1; then
+  echo "typing soak self-test expected existing ready runtime to be reusable" >&2
+  exit 1
+fi
+
+runtime_warming_log="$TMP_DIR/runtime-warming-diagnostics.log"
+cat >"$runtime_warming_log" <<'EOF'
+2026-05-12T00:00:00Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+2026-05-12T00:00:01Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T00:00:01Z runtime-bootstrap activeCandidate=mlx
+2026-05-12T00:00:01Z runtime completionLength=5 words / 11 tokens readinessAction=wait readinessStage=warming state=warming MLX
+EOF
+
+if script/typing_performance_soak.sh --self-test-runtime-ready "$runtime_warming_log" 1 1; then
+  echo "typing soak self-test expected stale ready runtime to be rejected during fresh warmup" >&2
+  exit 1
+fi
+
+runtime_fresh_ready_log="$TMP_DIR/runtime-fresh-ready-diagnostics.log"
+cat >"$runtime_fresh_ready_log" <<'EOF'
+2026-05-12T00:00:00Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+2026-05-12T00:00:01Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T00:00:01Z runtime completionLength=5 words / 11 tokens readinessAction=wait readinessStage=warming state=warming MLX
+2026-05-12T00:00:03Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+EOF
+
+if ! script/typing_performance_soak.sh --self-test-runtime-ready "$runtime_fresh_ready_log" 1 1; then
+  echo "typing soak self-test expected fresh ready runtime to satisfy the gate" >&2
+  exit 1
+fi
+
 echo "Typing performance soak self-test passed."
