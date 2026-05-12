@@ -64,6 +64,23 @@ The command-line delete path is:
 ./script/delete_local_traces.sh
 ```
 
+## Quiet Surfaces
+
+Suggestions should stay hidden in search, login, password, payment, address,
+URL/address bars, command-line, private prompt, password-manager, government ID,
+date-of-birth, tax, insurance, medical, and crypto wallet fields.
+
+Browser-hosted Google Docs, Notion, ChatGPT, Slack, Discord, unknown browser
+pages, browser search/address bars, and browser developer tools stay blocked
+until each surface has bounded proof. This policy applies across Chrome, Safari,
+Brave, Arc, Firefox, and Chromium-like browsers.
+
+The local proof gate is:
+
+```bash
+./script/check_sensitive_field_proof.sh <redacted-trace.jsonl>
+```
+
 ## Beta Rule
 
 Private beta reports should use only the redacted export. Do not ask testers for

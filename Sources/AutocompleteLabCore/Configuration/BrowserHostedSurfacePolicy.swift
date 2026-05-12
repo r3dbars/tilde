@@ -121,7 +121,14 @@ public enum BrowserHostedSurfaceDecision: Equatable, Sendable {
 
 public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
     public static let browserBundleIdentifiers: Set<String> = [
-        "com.google.Chrome"
+        "com.apple.Safari",
+        "com.apple.SafariTechnologyPreview",
+        "com.brave.Browser",
+        "com.google.Chrome",
+        "com.google.Chrome.canary",
+        "company.thebrowser.Browser",
+        "org.chromium.Chromium",
+        "org.mozilla.firefox"
     ]
 
     public init() {}
