@@ -414,7 +414,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror. The official ProseMirror page now has insertion-only isolated-CDP proof, but broad screenshot-backed production-site proof remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror. The official ProseMirror page now has strict screenshot-backed isolated-CDP proof, but Monaco and CodeMirror production-site proof remain open."
       ],
       "requirements": [
         {
@@ -425,9 +425,16 @@
         },
         {
           "id": "production-chrome-prosemirror",
-          "status": "pending",
-          "summary": "Refresh the current isolated-CDP ProseMirror official insertion pass with strict screenshot evidence before counting it as complete production proof.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-official"
+          "status": "complete",
+          "summary": "Bounded strict screenshot-backed proof now covers the official ProseMirror basic example through an isolated temporary Chrome profile plus DevTools setup.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-official",
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "prosemirror-official",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
         },
         {
           "id": "production-chrome-codemirror",

@@ -771,9 +771,9 @@ these are true.
    isolated Chrome plus localhost DevTools for official-demo readiness/focus/
    setup, requires a focused editable web text AX target before Chrome setup
    text, and verifies setup text before waiting for app logs. `prosemirror-
-   official` now has insertion-only proof; CodeMirror and Monaco still fail on
-   current-page AX context, so Chrome scores stay capped until screenshot-backed
-   official-demo traces pass.
+   official` now has strict screenshot-backed proof; CodeMirror and Monaco still
+   fail on current-page AX context, so Chrome scores stay capped until the
+   remaining screenshot-backed official-demo traces pass.
 
 ## Goal Status
 
