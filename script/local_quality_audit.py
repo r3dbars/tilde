@@ -164,11 +164,15 @@ PRE_MODEL_SUPPRESSION_HINTS = [
 ]
 DISPLAY_SUPPRESSION_PREFIXES = [
     "as an ai",
+    "comes to life",
+    "comprehensive recovery plan",
     "here is",
     "here's",
     "i can help",
     "i would recommend",
     "i would suggest",
+    "implement a comprehensive",
+    "key features and benefits",
     "like a formal announcement",
     "return exactly",
     "return only",
@@ -176,6 +180,8 @@ DISPLAY_SUPPRESSION_PREFIXES = [
     "return the same",
     "sure,",
     "the user",
+    "the key features",
+    "to acknowledge the user",
     "you should",
 ]
 
@@ -226,8 +232,21 @@ def relevance_failure(output_words: list[str], expected_terms: tuple[str, ...]) 
     word_set = set(output_words)
     content_word_count = max(1, sum(1 for word in output_words if word not in LOW_SIGNAL_WORDS))
     denominator = min(3, len(expected_terms), content_word_count)
-    hits = sum(1 for term in expected_terms if term.lower() in word_set)
+    hits = sum(1 for term in expected_terms if expected_term_matches(term.lower(), word_set))
     return hits / denominator < MIN_RELEVANCE_SCORE
+
+
+def expected_term_matches(term: str, word_set: set[str]) -> bool:
+    if term in word_set:
+        return True
+    if len(term) < 4:
+        return any(word.endswith(term) for word in word_set if len(word) >= len(term) + 2)
+    return any(
+        word.startswith(term)
+        or term.startswith(word)
+        or word.endswith(term)
+        for word in word_set
+    )
 
 
 def literal_continuation_failure(output: str) -> bool:
@@ -364,6 +383,9 @@ def display_output(row: AuditRow, raw_output: str) -> str:
         return "<NO_SUGGESTION>"
 
     stripped = raw_output.strip()
+    if row.mode.lower() in {"word", "word_completion", "wordcompletion"}:
+        stripped = word_completion_display_output(row.user, stripped)
+
     lowered = stripped.lower()
     lowered = re.sub(r"^\s*(?:candidate\s+\d+|next words|suffix)\s*[\).:-]\s*", "", lowered)
     if normalized_no_suggestion(stripped):
@@ -377,7 +399,25 @@ def display_output(row: AuditRow, raw_output: str) -> str:
     if re.search(r"[.!?]\s+\S", stripped):
         return "<NO_SUGGESTION>"
 
-    return raw_output
+    return stripped
+
+
+def word_completion_display_output(text_before_cursor: str, output: str) -> str:
+    stripped = output.strip().strip("\"'`")
+    if normalized_no_suggestion(stripped):
+        return stripped
+
+    stripped = re.sub(r"^\s*(?:candidate\s+\d+|next words|suffix)\s*[\).:-]\s*", "", stripped, flags=re.IGNORECASE)
+    if re.search(r"[^A-Za-z]", stripped):
+        return "<NO_SUGGESTION>"
+
+    match = re.search(r"([A-Za-z]+)$", text_before_cursor)
+    fragment = match.group(1) if match else ""
+    if fragment and stripped.lower().startswith(fragment.lower()):
+        suffix = stripped[len(fragment):]
+        return suffix or "<NO_SUGGESTION>"
+
+    return stripped
 
 
 def parse_row(line: str, line_number: int) -> AuditRow:

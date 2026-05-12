@@ -122,6 +122,7 @@ def system_prompt_text(payload: dict[str, str]) -> str:
             "No explanation, labels, quotes, reasoning, or mention of the user.",
             "Never repeat the Before cursor text.",
             "Never suggest pressing Enter or Return, sending, submitting, clicking, running, or approving.",
+            "Never use generic filler like comes to life, key features and benefits, comprehensive plan, or acknowledge the user's point.",
             "When the text discusses Tab or acceptance behavior, continue the safety rule itself; never suggest accepting terms.",
             "Return <NO_SUGGESTION> for passwords, secrets, private fields, search fields, terminal punctuation, weak guesses, new topics, full-sentence answers, or list markers.",
         ]

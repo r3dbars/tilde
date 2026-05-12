@@ -16,6 +16,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("full-sentence continuation"))
         #expect(prompt.system.contains("Never suggest pressing Tab, Option-Tab, Backtick"))
         #expect(prompt.system.contains("do not suggest accepting terms or permissions"))
+        #expect(prompt.system.contains("Avoid generic filler"))
         #expect(prompt.system.contains("common phrase"))
         #expect(prompt.system.contains("Do not answer, explain"))
         #expect(prompt.system.contains("repeat the Before cursor text"))
