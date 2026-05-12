@@ -175,6 +175,11 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         if mode.isContinuation {
+            score += commonPhrasePriorScore(
+                visibleText,
+                textBeforeCursor: textBeforeCursor,
+                behaviorProfileID: behaviorProfileID
+            )
             score += localContextAlignmentScore(visibleText, textBeforeCursor: textBeforeCursor)
             score -= unsupportedCommitmentPenalty(visibleText, textBeforeCursor: textBeforeCursor)
             score -= genericFillerPenalty(visibleText)
@@ -190,6 +195,44 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         return score
+    }
+
+    private func commonPhrasePriorScore(
+        _ text: String,
+        textBeforeCursor: String?,
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> Double {
+        guard let textBeforeCursor,
+              !textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              allowsCommonPhrasePrior(for: behaviorProfileID)
+        else {
+            return 0
+        }
+
+        let context = normalizedPhrase(textBeforeCursor)
+        let candidateWords = allWords(in: text)
+        guard !candidateWords.isEmpty else {
+            return 0
+        }
+
+        for prior in Self.commonPhrasePriors where context.hasSuffix(prior.contextSuffix) {
+            guard candidateWords.starts(with: prior.continuationWords) else {
+                continue
+            }
+
+            return prior.score
+        }
+
+        return 0
+    }
+
+    private func allowsCommonPhrasePrior(for behaviorProfileID: AutocompleteBehaviorProfileID?) -> Bool {
+        switch behaviorProfileID {
+        case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
+            return false
+        case .some, .none:
+            return true
+        }
     }
 
     private func phraseLengthScore(_ wordCount: Int) -> Double {
@@ -503,6 +546,37 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
+
+    private func allWords(in text: String) -> [String] {
+        normalizedPhrase(text)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+    }
+
+    private struct CommonPhrasePrior: Equatable {
+        let contextSuffix: String
+        let continuationWords: [String]
+        let score: Double
+    }
+
+    private static let commonPhrasePriors: [CommonPhrasePrior] = [
+        CommonPhrasePrior(contextSuffix: "we should keep this", continuationWords: ["small"], score: 0.32),
+        CommonPhrasePrior(contextSuffix: "the draft is almost", continuationWords: ["ready"], score: 0.32),
+        CommonPhrasePrior(contextSuffix: "please make this", continuationWords: ["clearer"], score: 0.32),
+        CommonPhrasePrior(contextSuffix: "this feels genuinely", continuationWords: ["useful"], score: 0.32),
+        CommonPhrasePrior(contextSuffix: "i just wanted to", continuationWords: ["follow", "up"], score: 0.30),
+        CommonPhrasePrior(contextSuffix: "i think we should", continuationWords: ["make", "sure"], score: 0.30),
+        CommonPhrasePrior(contextSuffix: "when this works we can", continuationWords: ["keep", "moving"], score: 0.30),
+        CommonPhrasePrior(contextSuffix: "the app should", continuationWords: ["stay", "quiet"], score: 0.30),
+        CommonPhrasePrior(contextSuffix: "can you please", continuationWords: ["take", "a", "look"], score: 0.28),
+        CommonPhrasePrior(contextSuffix: "we should probably", continuationWords: ["keep", "it", "simple"], score: 0.28),
+        CommonPhrasePrior(contextSuffix: "i want to", continuationWords: ["move", "this", "forward"], score: 0.28),
+        CommonPhrasePrior(contextSuffix: "it would help to", continuationWords: ["make", "it", "easier"], score: 0.28),
+        CommonPhrasePrior(contextSuffix: "the most important thing is to", continuationWords: ["keep", "the", "scope", "small"], score: 0.26),
+        CommonPhrasePrior(contextSuffix: "i am trying to", continuationWords: ["figure", "out", "how", "to"], score: 0.26),
+        CommonPhrasePrior(contextSuffix: "this sentence should continue", continuationWords: ["without", "sounding", "too", "formal"], score: 0.26),
+        CommonPhrasePrior(contextSuffix: "the safest version is to", continuationWords: ["make", "this", "easier", "to"], score: 0.26)
+    ]
 
     private static let promptCommandPrefixes = [
         "/", "!", "@", "--", "sudo ", "curl ", "bash ", "sh ", "rm "
