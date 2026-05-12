@@ -46,6 +46,19 @@ def fields_from(parts):
     return fields
 
 
+def int_value(value):
+    if value is None or value == "none":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def suggestion_key(event, line_number):
+    return event.get("suggestionID") or event.get("id") or f"line-{line_number}"
+
+
 def runtime_launches(path):
     launches = []
     if not path.exists():
@@ -77,6 +90,8 @@ def trace_window(path, timestamp):
     trace_start_line = None
     first_visible_samples = 0
     model_samples = 0
+    seen_presented = set()
+    seen_model = set()
 
     if not timestamp or not path.exists():
         return TraceWindow(0, first_visible_samples, model_samples)
@@ -97,16 +112,26 @@ def trace_window(path, timestamp):
 
             event_type = event.get("type")
             if event_type == "suggestionPresented" and event.get("latencyMilliseconds") is not None:
-                first_visible_samples += 1
+                key = suggestion_key(event, line_number)
+                if key in seen_presented:
+                    continue
+                seen_presented.add(key)
+                if int_value(event.get("latencyMilliseconds")) is not None:
+                    first_visible_samples += 1
                 continue
 
             if event_type == "modelResult":
+                key = (suggestion_key(event, line_number), line_number)
+                if key in seen_model:
+                    continue
+                seen_model.add(key)
                 metadata = event.get("metadata") or {}
-                if (
-                    event.get("latencyMilliseconds") is not None
-                    or metadata.get("firstTokenLatencyMilliseconds") is not None
-                    or metadata.get("totalGenerationLatencyMilliseconds") is not None
-                ):
+                generation_latency = int_value(
+                    metadata.get("totalGenerationLatencyMilliseconds")
+                )
+                if generation_latency is None:
+                    generation_latency = int_value(event.get("latencyMilliseconds"))
+                if generation_latency is not None:
                     model_samples += 1
 
     return TraceWindow(trace_start_line or 0, first_visible_samples, model_samples)
