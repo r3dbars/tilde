@@ -106,48 +106,12 @@ latency_beta_gate() {
   if [[ -z "${AUTOCOMPLETE_LAB_LOG_START_LINE:-}" && -z "${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}" ]]; then
     while IFS= read -r assignment; do
       [[ -n "$assignment" ]] && start_env+=("$assignment")
-    done < <(python3 - \
-      "${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}" \
-      "${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-diagnostics_path = Path(sys.argv[1])
-trace_path = Path(sys.argv[2])
-
-latest_launch_line = 0
-latest_launch_timestamp = ""
-
-if diagnostics_path.exists():
-    with diagnostics_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if "launch accessibility=" not in line:
-                continue
-            latest_launch_line = line_number
-            latest_launch_timestamp = line.split(maxsplit=1)[0]
-
-if latest_launch_line:
-    print(f"AUTOCOMPLETE_LAB_LOG_START_LINE={max(0, latest_launch_line - 1)}")
-
-if latest_launch_timestamp and trace_path.exists():
-    trace_start_line = 0
-    trace_line_count = 0
-    with trace_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            trace_line_count = line_number
-            try:
-                timestamp = json.loads(line).get("timestamp", "")
-            except json.JSONDecodeError:
-                continue
-            if timestamp >= latest_launch_timestamp:
-                trace_start_line = max(0, line_number - 1)
-                break
-    if not trace_start_line and trace_line_count:
-        trace_start_line = trace_line_count
-    if trace_start_line:
-        print(f"AUTOCOMPLETE_LAB_TRACE_START_LINE={trace_start_line}")
-PY
+    done < <(./script/select_latency_window.py \
+      --diagnostics-log "${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}" \
+      --trace-log "${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}" \
+      --expected-asset "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
+      --min-first-visible-samples "${AUTOCOMPLETE_LAB_BETA_MIN_FIRST_VISIBLE_SAMPLES:-5}" \
+      --min-model-samples "${AUTOCOMPLETE_LAB_BETA_MIN_MODEL_SAMPLES:-5}"
     )
   fi
 
