@@ -134,6 +134,16 @@ def parse_diagnostics(path: Path, line_limit: int) -> tuple[list[str], dict[str,
                 f"override={override} line={line_number}"
             )
             continue
+        if event == "mlx-model-load-succeeded" and current_alias:
+            load = int_field(fields, "loadMilliseconds")
+            if load is not None:
+                timings[current_alias]["load"].append(load)
+            continue
+        if event == "runtime-warm-succeeded" and current_alias:
+            warm = int_field(fields, "warmMilliseconds")
+            if warm is not None:
+                timings[current_alias]["warm"].append(warm)
+            continue
         if event != "mlx-completion-timing" or not current_alias:
             continue
         first = int_field(fields, "firstChunkMilliseconds")
@@ -201,9 +211,14 @@ def main() -> int:
     print()
     print("Timing matrix")
     for alias in aliases:
+        load = timings.get(alias, {}).get("load", [])
+        warm = timings.get(alias, {}).get("warm", [])
         first = timings.get(alias, {}).get("first", [])
         total = timings.get(alias, {}).get("total", [])
-        print(f"  {alias}: firstToken {summary(first)}; totalGeneration {summary(total)}")
+        print(
+            f"  {alias}: modelLoad {summary(load)}; runtimeWarm {summary(warm)}; "
+            f"firstToken {summary(first)}; totalGeneration {summary(total)}"
+        )
     return 0
 
 
