@@ -5144,11 +5144,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        lastCaretRect = placement.anchorRect
-        lastTextLineRect = placement.textLineRect
-        lastClippingRect = placement.clippingRect
-        lastTextStyle = context.textStyle
-        lastRenderMode = placement.renderMode
         lastCompatibilityLearningTrustContext = visualTrustContext
         cancelKeyboardEventTapIdleStop()
         let presentationDeliveryRequest = SuggestionPresentationDeliveryRequest(
@@ -5168,9 +5163,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             replacementMetadata: replacementMetadata
         )
         let panelRect: CGRect
+        let deliveredPlacement: PlacementHealthPresentation
         switch suggestionPresentationDelivery.deliver(presentationDeliveryRequest) {
         case let .success(delivery):
             panelRect = delivery.panelRect
+            deliveredPlacement = delivery.placement
         case let .failure(failure):
             let reason = failure.reason
             setSuggestionDecision("Blocked: \(reason)")
@@ -5212,10 +5209,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        lastCaretRect = deliveredPlacement.anchorRect
+        lastTextLineRect = deliveredPlacement.textLineRect
+        lastClippingRect = deliveredPlacement.clippingRect
+        lastTextStyle = context.textStyle
+        lastRenderMode = deliveredPlacement.renderMode
         lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
             context: context,
             fieldIdentity: fieldIdentity,
-            placement: placement
+            placement: deliveredPlacement
         )
         suggestionSession.present(suggestion)
         setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
@@ -5248,10 +5250,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let screenshotCapture = traceScreenshotCaptureCoordinator.capture(
             TraceScreenshotCaptureRequest(
                 rects: [
-                    placement.anchorRect,
-                    placement.textLineRect,
+                    deliveredPlacement.anchorRect,
+                    deliveredPlacement.textLineRect,
                     panelRect,
-                    placement.clippingRect
+                    deliveredPlacement.clippingRect
                 ].compactMap { $0 },
                 expectedSignalRect: traceScreenshotCaptureCoordinator.expectedSignalRect(
                     panelRect: panelRect
@@ -5269,6 +5271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let presentationTracePayload = suggestionPresentationDelivery.tracePayload(
             for: presentationDeliveryRequest,
+            placement: deliveredPlacement,
             panelRect: panelRect,
             screenshotCapture: screenshotCapture
         )

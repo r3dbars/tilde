@@ -8,7 +8,7 @@ import Testing
 struct SuggestionPresentationDeliveryTests {
     @Test("Shows the panel and field status before trace recording")
     func showsPanelAndFieldStatusBeforeTraceRecording() throws {
-        let store = DeliveryStore(panelRect: CGRect(x: 40, y: 20, width: 120, height: 24))
+        let store = DeliveryStore(panelRects: [CGRect(x: 40, y: 20, width: 120, height: 24)])
         let delivery = makeDelivery(store: store)
         let request = makeRequest()
 
@@ -16,15 +16,18 @@ struct SuggestionPresentationDeliveryTests {
         let success = try #require(result.success)
 
         #expect(success.panelRect == CGRect(x: 40, y: 20, width: 120, height: 24))
+        #expect(success.placement == request.placement)
         #expect(store.panelText == " finish this")
         #expect(store.panelAnchorRect == request.placement.anchorRect)
         #expect(store.panelTextLineRect == request.placement.textLineRect)
         #expect(store.panelClippingRect == request.placement.clippingRect)
         #expect(store.panelRenderMode == .inlineAdjacent)
+        #expect(store.panelRenderModes == [.inlineAdjacent])
         #expect(store.fieldStatusContexts == [request.context])
 
         let payload = delivery.tracePayload(
             for: request,
+            placement: success.placement,
             panelRect: success.panelRect,
             screenshotCapture: TraceScreenshotCaptureResult(
                 path: "/tmp/suggestion.png",
@@ -41,7 +44,7 @@ struct SuggestionPresentationDeliveryTests {
 
     @Test("Does not mark field shown when the panel frame is unusable")
     func doesNotMarkFieldShownWhenPanelFrameIsUnusable() throws {
-        let store = DeliveryStore(panelRect: nil)
+        let store = DeliveryStore(panelRects: [nil, nil])
         let delivery = makeDelivery(store: store)
 
         let result = delivery.deliver(makeRequest())
@@ -50,15 +53,49 @@ struct SuggestionPresentationDeliveryTests {
         #expect(store.fieldStatusContexts.isEmpty)
     }
 
+    @Test("Falls back to mirror when inline panel frame is unusable")
+    func fallsBackToMirrorWhenInlinePanelFrameIsUnusable() throws {
+        let store = DeliveryStore(panelRects: [
+            nil,
+            CGRect(x: 44, y: 18, width: 140, height: 26)
+        ])
+        let delivery = makeDelivery(store: store)
+        let request = makeRequest()
+
+        let result = delivery.deliver(request)
+        let success = try #require(result.success)
+
+        #expect(success.panelRect == CGRect(x: 44, y: 18, width: 140, height: 26))
+        #expect(success.placement.renderMode == .floatingMirror)
+        #expect(success.placement.reason == .inlineRoomTooSmall)
+        #expect(store.panelRenderModes == [.inlineAdjacent, .floatingMirror])
+        #expect(store.panelTextLineRects == [request.placement.textLineRect, nil])
+        #expect(store.fieldStatusContexts == [request.context])
+
+        let payload = delivery.tracePayload(
+            for: request,
+            placement: success.placement,
+            panelRect: success.panelRect,
+            screenshotCapture: TraceScreenshotCaptureResult(
+                path: "/tmp/suggestion.png",
+                rectDescription: "x=10,y=10,w=150,h=40"
+            )
+        )
+        #expect(payload.rawTraceMetadata["placementEffectiveRenderMode"] == "floatingMirror")
+        #expect(payload.rawTraceMetadata["placementHealthReason"] == "inline-room-too-small")
+    }
+
     private func makeDelivery(store: DeliveryStore) -> SuggestionPresentationDelivery {
         SuggestionPresentationDelivery(
             panelPresenter: { text, anchorRect, textLineRect, clippingRect, _, renderMode in
                 store.panelText = text
                 store.panelAnchorRect = anchorRect
                 store.panelTextLineRect = textLineRect
+                store.panelTextLineRects.append(textLineRect)
                 store.panelClippingRect = clippingRect
                 store.panelRenderMode = renderMode
-                return store.panelRect
+                store.panelRenderModes.append(renderMode)
+                return store.nextPanelRect()
             },
             fieldStatusPresenter: { context in
                 store.fieldStatusContexts.append(context)
@@ -131,16 +168,26 @@ struct SuggestionPresentationDeliveryTests {
 }
 
 private final class DeliveryStore {
-    let panelRect: CGRect?
+    private var panelRects: [CGRect?]
     var panelText = ""
     var panelAnchorRect: CGRect?
     var panelTextLineRect: CGRect?
+    var panelTextLineRects: [CGRect?] = []
     var panelClippingRect: CGRect?
     var panelRenderMode: SuggestionRenderMode?
+    var panelRenderModes: [SuggestionRenderMode] = []
     var fieldStatusContexts: [FocusedTextContext] = []
 
-    init(panelRect: CGRect?) {
-        self.panelRect = panelRect
+    init(panelRects: [CGRect?]) {
+        self.panelRects = panelRects
+    }
+
+    func nextPanelRect() -> CGRect? {
+        guard !panelRects.isEmpty else {
+            return nil
+        }
+
+        return panelRects.removeFirst()
     }
 }
 
