@@ -6,24 +6,39 @@ cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+EXPECTED_CURRENT_SCORE=98
 
-script/check_graduation_score.sh >"$TMP_DIR/good.txt"
-if ! grep -F "Graduation score: 100/100" "$TMP_DIR/good.txt" >/dev/null; then
-  echo "graduation score self-test did not report 100/100 for current fixtures" >&2
+script/check_graduation_score.sh --min-score "$EXPECTED_CURRENT_SCORE" >"$TMP_DIR/current.txt"
+if ! grep -F "Graduation score: $EXPECTED_CURRENT_SCORE/100" "$TMP_DIR/current.txt" >/dev/null; then
+  echo "graduation score self-test did not report the expected current score" >&2
   exit 1
 fi
-script/check_graduation_score.sh --json --min-score 100 >"$TMP_DIR/good.json"
-python3 - "$TMP_DIR/good.json" <<'PY'
+if ! grep -F "Proof manifest validator passes with current source-compatible evidence" "$TMP_DIR/current.txt" >/dev/null; then
+  echo "graduation score self-test did not keep the pending proof blocker visible" >&2
+  exit 1
+fi
+
+script/check_graduation_score.sh --json --min-score "$EXPECTED_CURRENT_SCORE" >"$TMP_DIR/current.json"
+python3 - "$TMP_DIR/current.json" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if payload.get("score") != 100 or payload.get("status") != "pass" or payload.get("threshold") != 100:
+if payload.get("score") != 98 or payload.get("status") != "pass" or payload.get("threshold") != 98:
     raise SystemExit("unexpected graduation score JSON payload")
-if payload.get("hardGateBlockers"):
-    raise SystemExit("100/100 payload should not list hard gate blockers")
+if "Proof manifest validator passes with current source-compatible evidence" not in payload.get("hardGateBlockers", []):
+    raise SystemExit("current payload should keep pending proof blockers visible")
 PY
+
+if script/check_graduation_score.sh --min-score 100 >"$TMP_DIR/missing-proof.txt" 2>&1; then
+  echo "graduation score self-test expected current fixtures to fail the 100/100 beta gate" >&2
+  exit 1
+fi
+if ! grep -F "Graduation score check failed: expected at least 100/100." "$TMP_DIR/missing-proof.txt" >/dev/null; then
+  echo "graduation score self-test did not print the expected 100/100 failure" >&2
+  exit 1
+fi
 
 BROKEN_MANIFEST="$TMP_DIR/broken-proof-manifest.json"
 cp docs/product/proof-manifest.json "$BROKEN_MANIFEST"
