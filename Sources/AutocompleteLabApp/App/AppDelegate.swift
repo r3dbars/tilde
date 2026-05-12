@@ -245,6 +245,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastObservedSettingsApp: RunningApplicationInfo?
     private var lastFieldControlTarget: FieldControlTarget?
     private var currentRuntimeState: LocalRuntimeState = .unavailable(reason: "starting")
+    private var automaticTerminationActivity: NSObjectProtocol?
+    private var didDisableAutomaticTermination = false
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
     private var isModelInstallCancelRequested = false
@@ -264,7 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var visiblePageContextEnabled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        ProcessInfo.processInfo.disableAutomaticTermination("SteadyType runs as a persistent menu bar agent.")
+        keepProcessResident()
         NSApp.setActivationPolicy(.accessory)
         loadPauseState()
         loadDisabledApps()
@@ -289,10 +291,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startWorkspaceFocusObservers()
         startScreenGeometryObserver()
         startPolling()
+        DispatchQueue.main.async { [weak self] in
+            self?.keepProcessResident()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         DiagnosticsLog.shared.record("terminate")
+        if let automaticTerminationActivity {
+            ProcessInfo.processInfo.endActivity(automaticTerminationActivity)
+            self.automaticTerminationActivity = nil
+        }
         debounceTask?.cancel()
         pauseExpirationTask?.cancel()
         keyboardEventTapStopTask?.cancel()
@@ -306,6 +315,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stopScreenGeometryObserver()
         stopKeyboardEventTapNow(reason: "terminate")
         fieldStatusIndicator.hide()
+    }
+
+    private func keepProcessResident() {
+        if !didDisableAutomaticTermination {
+            ProcessInfo.processInfo.disableAutomaticTermination(AppResidencyPolicy.automaticTerminationReason)
+            didDisableAutomaticTermination = true
+        }
+        if automaticTerminationActivity == nil {
+            automaticTerminationActivity = ProcessInfo.processInfo.beginActivity(
+                options: AppResidencyPolicy.activityOptions,
+                reason: AppResidencyPolicy.automaticTerminationReason
+            )
+        }
     }
 
     private func startWorkspaceFocusObservers() {
