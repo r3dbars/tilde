@@ -59,12 +59,12 @@ public enum DiagnosticsMetadataRedactor {
     }
 
     private static func shouldRedactValue(forKey key: String, value: String) -> Bool {
-        guard !isShapeKey(key) else {
-            return false
-        }
-
         if containsLocalPath(value) {
             return true
+        }
+
+        guard !isShapeKey(key) else {
+            return false
         }
 
         return isReasonLikeKey(key) && !isKnownSafeReasonValue(value)
