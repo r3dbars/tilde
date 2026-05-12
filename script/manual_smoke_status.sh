@@ -33,6 +33,8 @@ It separates insertion proof from screenshot-backed visual placement proof so
 real-app visual gaps stay visible after insertion passes.
 Notes title, body, and checklist are separate proof targets.
 Obsidian default, theme, pane, and long-note lanes are separate proof targets.
+Focused graduation decisions are printed separately so blocked or
+diagnostics-only high-value surfaces do not masquerade as supported proof.
 
 Use --require-all or --strict when you want the command to fail until every
 target app has a recorded pass and every visual audit row has screenshot-backed
@@ -383,6 +385,21 @@ run_strict_visual_evidence_gate() {
   fi
 }
 
+print_focused_graduation_decisions() {
+  echo
+  echo "Focused graduation decisions:"
+  echo "- Google Docs browser: blocked - no disposable-doc screenshot, insertion, undo, and safe-Tab proof yet."
+  echo "- Notion browser/desktop: blocked - no disposable-page ProseMirror placement and insertion proof yet."
+  echo "- Slack browser/desktop: blocked - no disposable-channel no-send proof yet."
+  echo "- Discord browser/desktop: blocked - no disposable-server no-send proof yet."
+  echo "- Mail compose: diagnostics-only - compose text is sensitive and insertion is unproven."
+  echo "- Browser ChatGPT: blocked - no real-service one-word no-submit proof yet."
+  echo "- Claude desktop layouts: word-only - default proof exists; layout variants remain pending."
+  echo "- Codex layouts: word-only - default proof exists; more prompt layouts remain pending."
+  echo "- Obsidian long notes: blocked - current-head long-note proof is still pending."
+  echo "- Real Monaco/CodeMirror editors: blocked - official/default editor proof is not complete."
+}
+
 if [[ ! -f "$REPORT_PATH" ]]; then
   echo "Insertion proof status: no report yet ($REPORT_PATH)"
 else
@@ -471,6 +488,7 @@ else
 fi
 
 print_visual_audit_status
+print_focused_graduation_decisions
 print_scorecard_gaps
 run_strict_visual_evidence_gate
 

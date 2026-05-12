@@ -38,7 +38,7 @@ CODEX_DRAFT_BACKUP_ACTIVE=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -81,6 +81,9 @@ to run bounded proof against top-level public demo pages with disposable text.
 Use --fixture browser-chat-harness, or script/real_browser_chat_proof.sh, for a
 bounded HTTP browser-chat no-submit proof harness. That harness proves only the
 disposable harness surface, not Slack, Discord, ChatGPT, or broad chat support.
+The google-docs, notion, browser-chatgpt, browser-slack, and browser-discord
+fixtures are blocked preflight labels: they document the next high-value
+surfaces but refuse to type until a safe disposable proof path exists.
 Use
 --fixture all to run every local Chrome browser/editor fixture with one app
 build. Add --include-default-real-editor-proof with --fixture all to rerun real
@@ -319,7 +322,7 @@ case "$APP" in
 esac
 
 case "$CHROME_FIXTURE" in
-  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|all)
+  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all)
     ;;
   *)
     echo "Unknown Chrome fixture: $CHROME_FIXTURE" >&2
@@ -1408,6 +1411,37 @@ chrome_fixture_is_public_text_field_demo() {
       ;;
     *)
       return 1
+      ;;
+  esac
+}
+
+chrome_fixture_is_blocked_high_value_surface() {
+  case "$1" in
+    google-docs|notion|browser-chatgpt|browser-slack|browser-discord)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+chrome_blocked_high_value_surface_reason() {
+  case "$1" in
+    google-docs)
+      printf 'Google Docs is blocked until a disposable document proves placement, safe Tab, insertion verification, undo/recovery, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
+      ;;
+    notion)
+      printf 'Notion is blocked until a disposable page proves ProseMirror placement, safe Tab, insertion verification, undo/recovery, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
+      ;;
+    browser-chatgpt)
+      printf 'Browser ChatGPT is blocked until a disposable prompt proves one-word Tab accept, no submit/send, insertion verification, undo/recovery, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
+      ;;
+    browser-slack)
+      printf 'Browser Slack is blocked until a disposable workspace/channel proves one-word Tab accept, no send, insertion verification, undo/recovery, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
+      ;;
+    browser-discord)
+      printf 'Browser Discord is blocked until a disposable server/channel proves one-word Tab accept, no send, insertion verification, undo/recovery, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
       ;;
   esac
 }
@@ -6219,6 +6253,9 @@ describe_plan() {
       elif [[ "$CHROME_FIXTURE" == "browser-chat-harness" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, type disposable text, then validate trace and harness counters."
         echo "Scope: this proves only the disposable harness surface. It does not enable Slack, Discord, ChatGPT, or broad browser chat support."
+      elif chrome_fixture_is_blocked_high_value_surface "$CHROME_FIXTURE"; then
+        echo "Plan: blocked preflight only. This fixture records the next high-value surface but refuses to type into the live service."
+        echo "Blocked: $(chrome_blocked_high_value_surface_reason "$CHROME_FIXTURE")"
       else
         echo "Plan: build/relaunch AutocompleteLab, open a disposable Chrome $CHROME_FIXTURE fixture, type a test fragment, then validate logs and traces."
       fi
@@ -8111,6 +8148,13 @@ describe_plan
 
 if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
+fi
+
+if [[ "$APP" == "chrome" ]] && chrome_fixture_is_blocked_high_value_surface "$CHROME_FIXTURE"; then
+  echo "Blocked Chrome fixture: $CHROME_FIXTURE" >&2
+  chrome_blocked_high_value_surface_reason "$CHROME_FIXTURE" >&2
+  echo "No Chrome typing was attempted." >&2
+  exit 1
 fi
 
 refuse_other_smoke_processes

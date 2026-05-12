@@ -582,6 +582,14 @@ if ! grep -F -- "next: Needs a safe prompt screenshot audit." "$STATUS_OUTPUT" >
   exit 1
 fi
 
+if ! grep -F -- "Focused graduation decisions:" "$STATUS_OUTPUT" >/dev/null ||
+   ! grep -F -- "- Google Docs browser: blocked" "$STATUS_OUTPUT" >/dev/null ||
+   ! grep -F -- "- Mail compose: diagnostics-only" "$STATUS_OUTPUT" >/dev/null ||
+   ! grep -F -- "- Claude desktop layouts: word-only" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not print focused graduation decisions" >&2
+  exit 1
+fi
+
 if ! grep -F -- "- Codex support: 6/10 - Needs prompt proof." "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not report remaining non-10 scorecard gaps" >&2
   exit 1

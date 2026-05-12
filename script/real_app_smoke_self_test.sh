@@ -154,6 +154,26 @@ if ! grep -F "does not enable Slack, Discord, ChatGPT, or broad browser chat sup
   exit 1
 fi
 
+for blocked_fixture in google-docs notion browser-chatgpt browser-slack browser-discord; do
+  script/real_app_smoke.sh chrome --fixture "$blocked_fixture" --dry-run >"$TMP_DIR/chrome-$blocked_fixture.txt"
+  if ! grep -F "blocked preflight only" "$TMP_DIR/chrome-$blocked_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not print the Chrome $blocked_fixture blocked plan" >&2
+    exit 1
+  fi
+  if ! grep -F "refuses to type into the live service" "$TMP_DIR/chrome-$blocked_fixture.txt" >/dev/null; then
+    echo "real app smoke self-test did not explain the Chrome $blocked_fixture no-typing guard" >&2
+    exit 1
+  fi
+  if script/real_app_smoke.sh chrome --fixture "$blocked_fixture" >"$TMP_DIR/chrome-$blocked_fixture-run.txt" 2>&1; then
+    echo "real app smoke self-test expected Chrome $blocked_fixture to fail closed before typing" >&2
+    exit 1
+  fi
+  if ! grep -F "No Chrome typing was attempted." "$TMP_DIR/chrome-$blocked_fixture-run.txt" >/dev/null; then
+    echo "real app smoke self-test did not confirm Chrome $blocked_fixture failed closed before typing" >&2
+    exit 1
+  fi
+done
+
 script/real_browser_chat_proof.sh --dry-run >"$TMP_DIR/real-browser-chat-proof.txt"
 if ! grep -F "Chrome fixture: browser-chat-harness" "$TMP_DIR/real-browser-chat-proof.txt" >/dev/null; then
   echo "real browser chat proof wrapper did not select the browser-chat harness fixture" >&2
