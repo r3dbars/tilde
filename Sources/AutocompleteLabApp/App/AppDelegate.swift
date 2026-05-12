@@ -215,6 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
+    private let typingBurstPolicy = TypingBurstPolicy()
+    private var typingBurstState = TypingBurstState()
     private var currentSuggestionID: String?
     private var currentSuggestionAppBundleIdentifier: String?
     private var currentSuggestionFieldIdentity: FocusedFieldIdentity?
@@ -1332,6 +1334,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastFocusedTextChangeAt = Date()
         }
         cancelPrefixCooldownRetry()
+        let typingBurstDecision = observeTypingBurst(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: snapshot
+        )
 
         recordTypedOverSuggestionIfNeeded(
             newTextBeforeCursor: context.textBeforeCursor,
@@ -1343,6 +1349,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSnapshot: snapshot,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
+        if typingBurstDecision.shouldSuppressSuggestions {
+            lastTextSnapshot = snapshot
+            invalidatePendingSuggestionRequest()
+            currentSuggestionInvalidatedByUserKeyDown = true
+            let requestMode = activationPolicy(for: profile).decision(
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                isSecure: context.isSecure,
+                selectedTextLength: context.selectedTextLength,
+                isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+                fieldKind: fieldClassification.kind,
+                allowsUnknownFieldKind: profile.allowsUnknownFieldKind
+            ).requestMode?.rawValue ?? ""
+            let metadata = fieldClassification.traceMetadata
+                .merging(typingBurstDecision.traceMetadata) { current, _ in current }
+                .merging(["reason": "typing-burst"]) { current, _ in current }
+            if suggestionSession.hasVisibleSuggestion {
+                hideSuggestion(reason: "typing-burst", metadata: typingBurstDecision.traceMetadata)
+            }
+            setSuggestionDecision("Waiting: fast typing")
+            showFieldStatusIndicator(.waiting, context: context)
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: requestMode,
+                triggerReason: "typing-burst-policy",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: "typing-burst",
+                metadata: metadata
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: metadata
+            )
+            return
+        }
         if advanceVisibleSuggestionForTypingProgressIfNeeded(
             context: context,
             profile: profile,
@@ -2952,6 +3000,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             previousSnapshot: lastTextSnapshot
         )
+        if fieldClassification(for: context).suppressesSuggestionsByDefault {
+            blockReason = .currentBecameSuppressedField
+            return nil
+        }
+
         return SuggestionAcceptanceSnapshot(
             fieldIdentity: fieldIdentity(
                 app: frontmostApp,
@@ -5746,6 +5799,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ).count
     }
 
+    private func observeTypingBurst(
+        previousSnapshot: FocusedTextSnapshot?,
+        currentSnapshot: FocusedTextSnapshot
+    ) -> TypingBurstDecision {
+        guard let previousSnapshot,
+              previousSnapshot.fieldIdentity == currentSnapshot.fieldIdentity else {
+            typingBurstState.reset()
+            return .idle
+        }
+
+        return typingBurstPolicy.observe(
+            previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
+            currentTextBeforeCursor: currentSnapshot.textBeforeCursor,
+            nowMilliseconds: Int(Date().timeIntervalSince1970 * 1_000),
+            state: &typingBurstState
+        )
+    }
+
     private func recordSuggestionEvent(
         _ event: String,
         context: FocusedTextContext,
@@ -7716,6 +7787,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextSnapshot = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
+        typingBurstState.reset()
         suggestionBlockLogGate.reset()
     }
 
@@ -7741,6 +7813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastTextSnapshot = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
+        typingBurstState.reset()
         fieldStatusIndicator.hide()
         if resetBlockLogGate {
             suggestionBlockLogGate.reset()

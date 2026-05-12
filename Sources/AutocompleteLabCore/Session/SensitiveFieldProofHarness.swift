@@ -107,6 +107,28 @@ public struct SensitiveFieldProofFixture: Equatable, Sendable {
             fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "omnibox", placeholder: "Search or enter address")
         ),
         SensitiveFieldProofFixture(
+            name: "shipping-address-field",
+            category: .address,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "shipping-address", placeholder: "Shipping address", windowTitle: "Checkout"),
+            textBeforeCursor: "1600 Amphitheatre Parkway",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "shipping-address", placeholder: "Shipping address", windowTitle: "Checkout")
+        ),
+        SensitiveFieldProofFixture(
+            name: "browser-command-line-field",
+            category: .commandLine,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "terminal-command", placeholder: "Command line", windowTitle: "Web terminal"),
+            textBeforeCursor: "rm -rf local-fixture",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "terminal-command", placeholder: "Command line", windowTitle: "Web terminal")
+        ),
+        SensitiveFieldProofFixture(
             name: "api-key-like-field",
             category: .apiKeyLikeText,
             proofLevel: .localFixture,

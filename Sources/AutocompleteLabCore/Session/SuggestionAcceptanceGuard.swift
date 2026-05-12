@@ -7,6 +7,7 @@ public enum SuggestionAcceptanceBlockReason: String, Equatable, Sendable {
     case missingShownSnapshot = "missing-shown-snapshot-before-accept"
     case missingCurrentSnapshot = "missing-current-snapshot-before-accept"
     case currentBecameSecure = "secure-field-before-accept"
+    case currentBecameSuppressedField = "suppressed-field-before-accept"
     case promptTargetChanged = "prompt-target-changed-before-accept"
     case targetFingerprintChanged = "target-fingerprint-changed-before-accept"
 
@@ -19,6 +20,7 @@ public enum SuggestionAcceptanceBlockReason: String, Equatable, Sendable {
              .missingShownSnapshot,
              .missingCurrentSnapshot,
              .currentBecameSecure,
+             .currentBecameSuppressedField,
              .promptTargetChanged:
             false
         }

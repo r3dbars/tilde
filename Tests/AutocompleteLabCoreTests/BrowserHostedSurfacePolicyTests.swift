@@ -74,6 +74,27 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(decision.canSuggest)
     }
 
+    @Test("Chrome sensitive pages block before local fixture allowlist")
+    func blocksSensitiveBrowserPagesBeforeFixtureAllowlists() throws {
+        let payment = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(
+                title: "SteadyType Chrome Smoke payment fixture",
+                windowTitle: "Local checkout smoke [ready=1]"
+            )
+        )
+        let login = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(
+                title: "Autocomplete Lab Chrome smoke login fixture",
+                windowTitle: "Local sign in smoke [ready=1]"
+            )
+        )
+
+        #expect(try #require(blockedSurface(from: payment)).surface == .payment)
+        #expect(try #require(blockedSurface(from: login)).surface == .login)
+    }
+
     @Test("Chrome unknown browser pages fail closed until proofed")
     func blocksUnknownChromePages() throws {
         let decision = policy.decision(
@@ -137,6 +158,21 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(metadata["browserSurface"] == "slack")
         #expect(metadata["browserSurfaceSafetyClass"] == "browser-chat")
         #expect(metadata["promptSafetyMetricSurface"] == "browser-chat")
+    }
+
+    @Test("Browser sensitive blocks are tagged separately")
+    func sensitiveBrowserBlocksAreTagged() throws {
+        let decision = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Checkout - payment")
+        )
+
+        let block = try #require(blockedSurface(from: decision))
+        let metadata = block.traceMetadata
+
+        #expect(block.surface == .payment)
+        #expect(metadata["browserSurfaceSafetyClass"] == "browser-sensitive")
+        #expect(metadata["promptSafetyMetricSurface"] == "browser-sensitive")
     }
 
     private func blockedSurface(

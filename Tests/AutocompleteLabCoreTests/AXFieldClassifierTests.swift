@@ -29,6 +29,7 @@ struct AXFieldClassifierTests {
         #expect(classifier.classify(AXFieldClassifierInput(description: "Payment cardholder name")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(help: "Use this field to sign in")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(title: "Credit card number")) == .form)
+        #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Shipping address")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(windowTitle: "Login")) == .form)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextField")) == .form)
         #expect(AXFieldKind.form.suppressesSuggestionsByDefault)
@@ -44,6 +45,8 @@ struct AXFieldClassifierTests {
         ).reason == "unprovenSurface:notion")
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "general - Slack")) == .unprovenSurface)
         #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Discord")) == .unprovenSurface)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", windowTitle: "Web terminal")) == .unprovenSurface)
+        #expect(classifier.classify(AXFieldClassifierInput(role: "AXTextArea", placeholder: "Command line")) == .unprovenSurface)
         #expect(classifier.classification(
             for: AXFieldClassifierInput(role: "AXWebArea", textBeforeCursorLength: 12)
         ).reason == "webAreaWithoutComposeHint")

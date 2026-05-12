@@ -7,6 +7,10 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
     case chatGPT = "chatgpt"
     case slack = "slack"
     case discord = "discord"
+    case login = "browser-login"
+    case payment = "browser-payment"
+    case passwordManager = "browser-password-manager"
+    case privateSearch = "browser-private-search"
 
     public var displayName: String {
         switch self {
@@ -22,6 +26,14 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "Slack"
         case .discord:
             return "Discord"
+        case .login:
+            return "This login page"
+        case .payment:
+            return "This payment page"
+        case .passwordManager:
+            return "This password manager page"
+        case .privateSearch:
+            return "This private search page"
         }
     }
 
@@ -33,6 +45,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "browser-unknown"
         case .googleDocs, .notion:
             return "browser-editor"
+        case .login, .payment, .passwordManager, .privateSearch:
+            return "browser-sensitive"
         }
     }
 }
@@ -103,9 +117,6 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         }
 
         let searchableText = fingerprint.searchableText
-        if matchesLocalProofFixture(searchableText) {
-            return .allowed
-        }
         if matchesGoogleDocs(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .googleDocs))
         }
@@ -121,6 +132,21 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesDiscord(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
         }
+        if matchesPayment(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .payment))
+        }
+        if matchesPasswordManager(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .passwordManager))
+        }
+        if matchesPrivateSearch(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .privateSearch))
+        }
+        if matchesLogin(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .login))
+        }
+        if matchesLocalProofFixture(searchableText) {
+            return .allowed
+        }
 
         return .blocked(BrowserHostedSurfaceBlock(surface: .unproven))
     }
@@ -129,6 +155,13 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         (searchableText.contains("autocomplete lab chrome")
             || searchableText.contains("steadytype chrome"))
             && searchableText.contains("smoke")
+            && (
+                searchableText.contains("local")
+                    || searchableText.contains("fixture")
+                    || searchableText.contains("localhost")
+                    || searchableText.contains("127.0.0.1")
+                    || searchableText.contains("ready=1")
+            )
     }
 
     private func matchesGoogleDocs(_ searchableText: String) -> Bool {
@@ -172,5 +205,36 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("discord -")
             || searchableText.contains("- discord")
             || searchableText == "discord"
+    }
+
+    private func matchesPayment(_ searchableText: String) -> Bool {
+        searchableText.contains("checkout")
+            || searchableText.contains("payment")
+            || searchableText.contains("billing")
+            || searchableText.contains("credit card")
+            || searchableText.contains("card number")
+            || searchableText.contains("stripe.com")
+    }
+
+    private func matchesPasswordManager(_ searchableText: String) -> Bool {
+        searchableText.contains("1password")
+            || searchableText.contains("bitwarden")
+            || searchableText.contains("dashlane")
+            || searchableText.contains("lastpass")
+            || searchableText.contains("password manager")
+    }
+
+    private func matchesPrivateSearch(_ searchableText: String) -> Bool {
+        searchableText.contains("private search")
+            || searchableText.contains("incognito search")
+            || searchableText.contains("private browsing")
+    }
+
+    private func matchesLogin(_ searchableText: String) -> Bool {
+        searchableText.contains("login")
+            || searchableText.contains("log in")
+            || searchableText.contains("sign in")
+            || searchableText.contains("signin")
+            || searchableText.contains("authentication")
     }
 }

@@ -157,8 +157,8 @@ struct CompletionActivationPolicyTests {
         ) == .block(.selectedText))
     }
 
-    @Test("Blocks token, payment, and API key looking fields")
-    func blocksTokenPaymentAndAPIKeyLookingFields() {
+    @Test("Blocks token, payment, address, command, and API key looking fields")
+    func blocksTokenPaymentAddressCommandAndAPIKeyLookingFields() {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.decision(
@@ -184,6 +184,20 @@ struct CompletionActivationPolicyTests {
         ) == .block(.sensitiveContent))
         #expect(policy.decision(
             textBeforeCursor: "Verification code: 123456",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.sensitiveContent))
+        #expect(policy.decision(
+            textBeforeCursor: "Shipping address: 1600 Amphitheatre Parkway",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.sensitiveContent))
+        #expect(policy.decision(
+            textBeforeCursor: "Command line: rm -rf local-fixture",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false,
@@ -377,7 +391,7 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .block(.tooLittleContext))
+        ) == .block(.sensitiveContent))
     }
 
     @Test("Allows safe word completion in short contexts")
