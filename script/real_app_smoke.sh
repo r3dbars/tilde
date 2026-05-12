@@ -38,7 +38,7 @@ CODEX_DRAFT_BACKUP_ACTIVE=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -56,9 +56,9 @@ prints the surface picker and does not record proof.
 
 TextEdit proof can use textedit-light, textedit-dark, textedit-long-wrap,
 textedit-narrow, textedit-scrolled, textedit-selected-suppression, textedit-undo-one-word,
-textedit-undo-full, or textedit-fast-typing. These are still narrow TextEdit
-lanes, not a generic native-app claim. The TextEdit undo lanes automatically
-use native single-edit Command-Z proof.
+textedit-undo-full, textedit-fast-typing, or textedit-model-latency. These are
+still narrow TextEdit lanes, not a generic native-app claim. The TextEdit undo
+lanes automatically use native single-edit Command-Z proof.
 
 Obsidian proof must keep obsidian, obsidian-theme, obsidian-pane, and
 obsidian-long-note as separate manual-gated lanes before it can be complete.
@@ -210,6 +210,10 @@ case "$APP" in
   textedit-fast-typing)
     APP="textedit"
     TEXTEDIT_VARIANT="fast-typing"
+    ;;
+  textedit-model-latency)
+    APP="textedit"
+    TEXTEDIT_VARIANT="model-latency"
     ;;
   notes-title)
     APP="notes"
@@ -4275,6 +4279,16 @@ textedit_scrolled_prefill() {
   done
 }
 
+textedit_model_latency_fragments() {
+  cat <<'EOF'
+The local runtime hardening pass keeps every model checksum verifi
+Private beta recovery should explain the next safe repair before it confu
+Offline launch proof needs the embedded model to stay boringly relia
+The app owned runtime should catch a corrupt weight file immedia
+The tester facing failure state should make recovery feel trustw
+EOF
+}
+
 set_textedit_appearance() {
   local desired="$1"
 
@@ -6537,6 +6551,9 @@ describe_plan() {
         fast-typing)
           echo "Plan: build/relaunch AutocompleteLab, run the disposable TextEdit typing soak, then record pass-through proof."
           ;;
+        model-latency)
+          echo "Plan: build/relaunch AutocompleteLab once, type several disposable TextEdit fragments, and require real model-backed suggestions in one launch."
+          ;;
         undo-one-word)
           echo "Plan: build/relaunch AutocompleteLab with app rollback disabled, prove TextEdit Tab accept, then Command-Z the one-word insertion through native TextEdit undo."
           ;;
@@ -8164,6 +8181,11 @@ run_textedit() {
   local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
 
+  if [[ "$TEXTEDIT_VARIANT" == "model-latency" ]]; then
+    run_textedit_model_latency
+    return 0
+  fi
+
   if [[ "$TEXTEDIT_VARIANT" == "fast-typing" ]]; then
     prepare_temporary_app_enablement
     build_if_needed
@@ -8345,6 +8367,71 @@ APPLESCRIPT
   AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh "$manual_app" --check
+}
+
+run_textedit_model_latency() {
+  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+
+  textedit_tmp_dir="$(make_tmp_dir)"
+  textedit_file="$textedit_tmp_dir/textedit-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
+  textedit_window_title="$(basename "$textedit_file")"
+  SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
+  : >"$textedit_file"
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    stop_current_steadytype_app_bundle
+  fi
+  cleanup_stale_textedit_smoke_windows
+  open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
+  sleep 0.8
+
+  wait_for_textedit_smoke_editor "$textedit_window_title"
+  focus_textedit_smoke_editor "$textedit_window_title"
+  click_textedit_smoke_editor "$textedit_window_title"
+  set_textedit_document_text "$textedit_window_title" ""
+  wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit model latency initial reset" 5
+  move_textedit_caret_to_document_end "$textedit_window_title"
+
+  prepare_temporary_app_enablement
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" 60 "$SKIP_BUILD"
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  local sample_index=0 fragment sample_start
+  while IFS= read -r fragment; do
+    [[ -z "$fragment" ]] && continue
+    sample_index=$((sample_index + 1))
+
+    set_textedit_document_text "$textedit_window_title" ""
+    wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit model latency reset $sample_index" 5
+    move_textedit_caret_to_document_end "$textedit_window_title"
+
+    sample_start="$(line_count "$LOG_PATH")"
+    type_textedit_smoke_fragment_and_confirm "$textedit_window_title" "$fragment" "model latency sample $sample_index"
+    wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
+      "mlx-completion-timing" \
+      "app=com.apple.TextEdit" \
+      "mode=wordCompletion"
+    wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index" 20 \
+      "suggestion-presented" \
+      "app=com.apple.TextEdit" \
+      "candidateSelectionSource=app-model-result"
+    focus_textedit_smoke_editor "$textedit_window_title"
+    press_key_code 53
+    sleep 0.4
+  done < <(textedit_model_latency_fragments)
+
+  if ((sample_index < 5)); then
+    echo "TextEdit model latency proof expected at least 5 samples, got $sample_index." >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/latency_benchmark_report.py --beta-gate
 }
 
 run_chrome_fixture() {

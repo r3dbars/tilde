@@ -16,7 +16,7 @@ FRESH_LATENCY_LOCK_HELD=0
 
 usage() {
   cat <<'EOF'
-Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit]
+Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency]
 
 Runs a fresh bounded latency proof: one current-app smoke launch, repeated
 TextEdit smoke passes with rebuilds skipped, then latency_benchmark_report.py
