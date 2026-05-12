@@ -92,4 +92,57 @@ struct AutocompleteTraceEventTests {
         #expect(!json.contains("private"))
         #expect(!json.contains("/tmp/private.png"))
     }
+
+    @Test("Shared trace signal helpers classify trust signals")
+    func sharedTraceSignalHelpersClassifyTrustSignals() {
+        let kept = event(metadata: [
+            "acceptanceID": "accept-1",
+            "checkpoint": "10s",
+            "survivalClass": "exactKept"
+        ])
+        let earlyKept = event(metadata: [
+            "checkpoint": "2s",
+            "survivalClass": "exactKept"
+        ])
+        let duplicate = event(
+            type: .insertionFailed,
+            reason: "duplicate text",
+            metadata: ["duplicateDetected": "true"]
+        )
+        let tabConflict = event(reason: "tab-conflict")
+        let focusSteal = event(outcome: "focus steal")
+        let rejected = event(
+            type: .acceptedTextEdited,
+            metadata: [
+                "checkpoint": "2s",
+                "survivalClass": "rejectedAfterAccept",
+                "firstEditDelayMs": "1400"
+            ]
+        )
+
+        #expect(kept.acceptanceIdentifier == "accept-1")
+        #expect(kept.isAcceptedAndKeptSignal)
+        #expect(!earlyKept.isAcceptedAndKeptSignal)
+        #expect(duplicate.isDuplicateInsertionSignal)
+        #expect(tabConflict.isTabConflictSignal)
+        #expect(focusSteal.isFocusStealSignal)
+        #expect(rejected.isAcceptedThenDeletedWithinTwoSecondsSignal)
+    }
+
+    private func event(
+        type: AutocompleteTraceEventType = .acceptedTextEdited,
+        reason: String = "",
+        outcome: String = "",
+        metadata: [String: String] = [:]
+    ) -> AutocompleteTraceEvent {
+        AutocompleteTraceEvent(
+            timestamp: "2026-05-07T00:00:00Z",
+            sessionID: "session",
+            suggestionID: "suggestion",
+            type: type,
+            outcome: outcome,
+            reason: reason,
+            metadata: metadata
+        )
+    }
 }

@@ -113,7 +113,7 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
         let presentedIDs = Set(presentedByID.keys)
         let acceptedTextEdited = appEvents.filter { $0.type == .acceptedTextEdited }
         let acceptedAndKeptSuggestionIDs = Set(acceptedTextEdited
-            .filter(isAcceptedAndKeptEvent)
+            .filter(\.isAcceptedAndKeptSignal)
             .map(\.suggestionID))
             .intersection(presentedIDs)
         let insertionVerifiedCount = appEvents.filter { $0.type == .insertionVerified }.count
@@ -124,11 +124,11 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
             : Double(insertionVerifiedCount) / Double(insertionAttemptCount)
         let caretFailureCount = appEvents.filter { $0.type == .caretGeometryFailed }.count
         let caretFailureRate = Double(caretFailureCount) / Double(max(1, presented.count + caretFailureCount))
-        let duplicateTextCount = insertionFailures.filter(isDuplicateTextEvent).count
-        let wrongInsertionCount = insertionFailures.filter { !isDuplicateTextEvent($0) }.count
-        let acceptedThenDeletedCount = appEvents.filter(isAcceptedThenDeletedEvent).count
-        let tabConflictCount = appEvents.filter(isTabConflictEvent).count
-        let focusStealCount = appEvents.filter(isFocusStealEvent).count
+        let duplicateTextCount = insertionFailures.filter(\.isDuplicateInsertionSignal).count
+        let wrongInsertionCount = insertionFailures.filter { !$0.isDuplicateInsertionSignal }.count
+        let acceptedThenDeletedCount = appEvents.filter(\.isAcceptedThenDeletedWithinTwoSecondsSignal).count
+        let tabConflictCount = appEvents.filter(\.isTabConflictSignal).count
+        let focusStealCount = appEvents.filter(\.isFocusStealSignal).count
         let sensitiveFieldShownCount = presented.filter(isSensitiveFieldPresentation).count
         let appDisableCount = appEvents.filter { $0.type == .appDisabled }.count
         let detachedWholeAnchorCount = presented.filter(isDetachedWholeAnchorPresentation).count
@@ -314,51 +314,6 @@ public struct CompatibilitySupportEvaluator: Equatable, Sendable {
             eventsByID[event.suggestionID] = event
         }
         return eventsByID
-    }
-
-    private func isAcceptedAndKeptEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        if event.metadata["strongAcceptedAndKept"] == "true"
-            || event.metadata["finalAcceptedAndKept"] == "true" {
-            return true
-        }
-
-        guard ["10s", "30s", "fieldBlur", "fieldSend"].contains(event.metadata["checkpoint"] ?? "") else {
-            return false
-        }
-
-        return ["exactKept", "lightlyEditedKept", "partiallyKept"].contains(event.metadata["survivalClass"] ?? "")
-    }
-
-    private func isDuplicateTextEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["duplicateDetected"] == "true"
-            || event.reason.localizedCaseInsensitiveContains("duplicate")
-            || event.outcome.localizedCaseInsensitiveContains("duplicate")
-    }
-
-    private func isTabConflictEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["tabConflict"] == "true"
-            || event.reason.localizedCaseInsensitiveContains("tab-conflict")
-            || event.reason.localizedCaseInsensitiveContains("tab conflict")
-            || event.outcome.localizedCaseInsensitiveContains("tab-conflict")
-            || event.outcome.localizedCaseInsensitiveContains("tab conflict")
-    }
-
-    private func isFocusStealEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["focusStealing"] == "true"
-            || event.metadata["focusSteal"] == "true"
-            || event.reason.localizedCaseInsensitiveContains("focus-steal")
-            || event.reason.localizedCaseInsensitiveContains("focus steal")
-            || event.outcome.localizedCaseInsensitiveContains("focus-steal")
-            || event.outcome.localizedCaseInsensitiveContains("focus steal")
-    }
-
-    private func isAcceptedThenDeletedEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        event.type == .acceptedTextEdited
-            && event.metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue
-            && (
-                (Int(event.metadata["firstEditDelayMs"] ?? "") ?? Int.max) <= 2_000
-                    || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue
-            )
     }
 
     private func isSensitiveFieldPresentation(_ event: AutocompleteTraceEvent) -> Bool {
