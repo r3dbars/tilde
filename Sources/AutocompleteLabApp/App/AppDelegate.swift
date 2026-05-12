@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
+    private let workspaceFocusChangePolicy = WorkspaceFocusChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
     private let wordCompletionRanker = WordCompletionCandidateRanker()
     private lazy var suggestionOrchestrator = SuggestionOrchestrator(
@@ -313,18 +314,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 forName: NSWorkspace.didActivateApplicationNotification,
                 object: nil,
                 queue: .main
-            ) { [weak self] _ in
+            ) { [weak self] notification in
+                let bundleIdentifier = (
+                    notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                )?.bundleIdentifier
                 Task { @MainActor in
-                    self?.handleWorkspaceFocusChange(reason: "workspace-app-activated")
+                    self?.handleWorkspaceFocusChange(
+                        reason: "workspace-app-activated",
+                        kind: .activated,
+                        bundleIdentifier: bundleIdentifier
+                    )
                 }
             },
             center.addObserver(
                 forName: NSWorkspace.didDeactivateApplicationNotification,
                 object: nil,
                 queue: .main
-            ) { [weak self] _ in
+            ) { [weak self] notification in
+                let bundleIdentifier = (
+                    notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                )?.bundleIdentifier
                 Task { @MainActor in
-                    self?.handleWorkspaceFocusChange(reason: "workspace-app-deactivated")
+                    self?.handleWorkspaceFocusChange(
+                        reason: "workspace-app-deactivated",
+                        kind: .deactivated,
+                        bundleIdentifier: bundleIdentifier
+                    )
                 }
             }
         ]
@@ -387,11 +402,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleWorkspaceFocusChange(reason: String) {
+    private func handleWorkspaceFocusChange(
+        reason: String,
+        kind: WorkspaceFocusChangePolicy.ChangeKind,
+        bundleIdentifier: String?
+    ) {
         guard suggestionSession.hasVisibleSuggestion
             || suggestionOrchestrator.currentRequest != nil
             || currentFieldIdentity != nil
             || fieldStatusIndicator.isVisible else {
+            return
+        }
+
+        let currentBundleIdentifier = currentFieldIdentity?.bundleIdentifier ?? "unknown"
+        let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard workspaceFocusChangePolicy.shouldClearFocus(
+            kind: kind,
+            notificationBundleIdentifier: bundleIdentifier,
+            frontmostBundleIdentifier: frontmostBundleIdentifier,
+            currentFieldIdentity: currentFieldIdentity
+        ) else {
+            DiagnosticsLog.shared.record(
+                "workspace-focus-retained",
+                metadata: [
+                    "reason": reason,
+                    "app": bundleIdentifier ?? "unknown",
+                    "frontmostApp": frontmostBundleIdentifier ?? "unknown",
+                    "currentApp": currentBundleIdentifier
+                ]
+            )
             return
         }
 
@@ -401,7 +440,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DiagnosticsLog.shared.record(
             "workspace-focus-changed",
             metadata: [
-                "reason": reason
+                "reason": reason,
+                "app": bundleIdentifier ?? "unknown",
+                "frontmostApp": frontmostBundleIdentifier ?? "unknown",
+                "currentApp": currentBundleIdentifier
             ]
         )
     }
