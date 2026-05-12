@@ -287,7 +287,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Allow Accessibility in System Settings so Autocomplete Lab can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn Autocomplete Lab back on. Text stays on this Mac."
+                == "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -295,7 +295,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Accessibility permission: allowed")
         #expect(
             allowed.detailText
-                == "Autocomplete Lab can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
+                == "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
         )
     }
 
@@ -774,7 +774,7 @@ struct SettingsWindowControllerStateTests {
                 isReady: true
             ),
             runtimeTargetSummary: "Qwen local - short completions - normal",
-            modelDirectoryPath: "/tmp/AutocompleteLab/Models",
+            modelDirectoryPath: "/tmp/SteadyType/Models",
             modelInstallStatusText: nil,
             isModelInstallInProgress: false,
             currentApp: SettingsCurrentAppState(
@@ -827,7 +827,7 @@ struct SettingsWindowControllerStateTests {
             suggestionsPaused: false,
             runtimeReport: readyRuntimeReport,
             runtimeTargetSummary: "Qwen local - short completions - normal",
-            modelDirectoryPath: "/tmp/AutocompleteLab/Models",
+            modelDirectoryPath: "/tmp/SteadyType/Models",
             modelInstallStatusText: nil,
             isModelInstallInProgress: false,
             currentApp: SettingsCurrentAppState(

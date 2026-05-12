@@ -5,7 +5,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
     static let shared = CompatibilityLearningStore(
         fileURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/AutocompleteLab/compatibility-learning.json")
+            .appendingPathComponent("Library/Application Support/SteadyType/compatibility-learning.json")
     )
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.compatibility-learning")

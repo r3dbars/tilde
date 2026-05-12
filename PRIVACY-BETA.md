@@ -1,6 +1,6 @@
-# Autocomplete Lab Beta Privacy
+# SteadyType Beta Privacy
 
-Autocomplete Lab is local-first by default.
+SteadyType is local-first by default.
 
 ## What Accessibility Is Used For
 

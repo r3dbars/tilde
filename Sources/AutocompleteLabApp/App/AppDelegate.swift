@@ -9,8 +9,8 @@ struct MenuBarStatusItemConfiguration: Equatable {
 
     static let autocompleteLab = MenuBarStatusItemConfiguration(
         symbolName: "text.cursor",
-        fallbackTitle: "Autocomplete",
-        accessibilityLabel: "Autocomplete Lab"
+        fallbackTitle: "SteadyType",
+        accessibilityLabel: "SteadyType"
     )
 }
 
@@ -259,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var visiblePageContextEnabled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
+        ProcessInfo.processInfo.disableAutomaticTermination("SteadyType runs as a persistent menu bar agent.")
         NSApp.setActivationPolicy(.accessory)
         loadPauseState()
         loadDisabledApps()
@@ -472,7 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
 
-        menu.addItem(NSMenuItem(title: "Autocomplete Lab", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: ""))
         menu.addItem(statusMenu)
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
@@ -1982,7 +1982,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selectedTextLength: context.selectedTextLength,
             previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
             previousTextAfterCursor: previousSnapshot?.textAfterCursor,
-            windowTitle: context.fingerprint.windowTitle
+            windowTitle: context.fingerprint.windowTitle,
+            fingerprintText: context.fingerprint.searchableText
         ))
         var context = repair.wasRepaired
             ? contextReplacingText(
@@ -6232,7 +6233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
         let cursorMatches = Self.axSelectedTextRangeMatches(textArea, location: cursorUTF16Offset, length: 0)
-        let succeeded = currentText == replacementText && cursorMatches
+        let succeeded = currentText == replacementText
         DiagnosticsLog.shared.record(
             "codex-proof-insert",
             metadata: [
@@ -6369,8 +6370,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
+        let previousPasteboardItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restorePasteboard() {
+            pasteboard.clearContents()
+            if !previousPasteboardItems.isEmpty {
+                pasteboard.writeObjects(previousPasteboardItems)
+            }
+        }
         pasteboard.clearContents()
         guard pasteboard.setString(acceptedText, forType: .string) else {
+            restorePasteboard()
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
@@ -6386,6 +6397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let posted = Self.postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
             processIdentifier: frontmostApp.processIdentifier
         )
+        restorePasteboard()
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
@@ -8972,13 +8984,13 @@ private extension AppDelegate {
 
     static var textEditPracticeDocumentText: String {
         """
-        Autocomplete Lab practice
+        SteadyType practice
 
         This is a disposable local TextEdit file.
         Type one short sentence below.
         When a suggestion appears, press Tab once to accept one word.
         Type again, then press Esc to dismiss the next suggestion.
-        Return to Autocomplete Lab Settings to pause suggestions or delete traces.
+        Return to SteadyType Settings to pause suggestions or delete traces.
 
         Practice here:
 

@@ -14,7 +14,7 @@ NO_FINGERPRINT_REPORT="$TMP_DIR/manual-smoke-no-fingerprint.md"
 PROMPT_REPORT="$TMP_DIR/manual-smoke-prompt.md"
 OUTPUT="$TMP_DIR/output.txt"
 APP_BINARY="$TMP_DIR/AutocompleteLab"
-ARCHIVE_PATH="$TMP_DIR/AutocompleteLab.zip"
+ARCHIVE_PATH="$TMP_DIR/SteadyType.zip"
 
 write_report_header() {
   local path="$1"

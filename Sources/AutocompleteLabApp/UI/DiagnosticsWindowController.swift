@@ -1,6 +1,14 @@
 import AppKit
 import AutocompleteLabCore
 
+private extension Collection where Element == AutocompleteTraceEvent {
+    func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
+    }
+}
+
 struct DiagnosticsInspectorState: Equatable {
     let appTrusted: Bool
     let appEnabled: Bool
@@ -711,7 +719,7 @@ struct PromptContextDiagnostics: Equatable {
     }
 
     private var latestDocumentTitleShapeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "documentTitleWordCount",
             "documentTitleLengthBucket"
         ]) else {
@@ -727,7 +735,7 @@ struct PromptContextDiagnostics: Equatable {
     }
 
     private var latestPartialWordShapeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "partialWordCharacters",
             "partialWordLetters"
         ]) else {
@@ -744,7 +752,7 @@ struct PromptContextDiagnostics: Equatable {
     }
 
     private var latestCurrentLineShapeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "currentLineStructure",
             "currentLineMarkerStyle"
         ]) else {
@@ -765,12 +773,6 @@ struct PromptContextDiagnostics: Equatable {
                     || key.hasPrefix("partialWord")
                     || key.hasPrefix("currentLine")
             }
-        }
-    }
-
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
         }
     }
 }
@@ -805,7 +807,7 @@ struct PlacementDiagnostics: Equatable {
     }
 
     private var latestPlacementText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "placementConfidenceScore",
             "placementConfidenceBand",
             "placementAnchorSource",
@@ -856,12 +858,6 @@ struct PlacementDiagnostics: Equatable {
 
             return "\(requested)->\(effective)"
         })
-    }
-
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
-        }
     }
 
     private func clippingDescription(for event: AutocompleteTraceEvent) -> String {
@@ -976,7 +972,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentDisplayAffinityText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "displayScoreAcceptedAndKeptProbability",
             "displayScoreAcceptedAndKeptSamples"
         ]) else {
@@ -990,7 +986,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentQuietModeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "quietMode",
             "quietReason",
             "quietScore",
@@ -1008,7 +1004,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentRepeatedMissText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "repetitionMissTotal",
             "repetitionMissSuppressed"
         ]) else {
@@ -1024,7 +1020,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentPrefixCooldownText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "prefixCooldownReason",
             "prefixCooldownDurationMilliseconds"
         ]) else {
@@ -1040,7 +1036,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentStyleSketchText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "styleSketchSamples",
             "styleSketchAverageWords"
         ]) else {
@@ -1085,12 +1081,6 @@ struct SuggestionLearningDiagnostics: Equatable {
             "  \(key): \(value)"
         }.joined(separator: "\n"))
         """
-    }
-
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
-        }
     }
 
     private static func percent(_ value: Double) -> String {
