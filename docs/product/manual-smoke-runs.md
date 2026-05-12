@@ -15,6 +15,11 @@ use bounded `lines N-M` ranges so strict proof can replay exactly that slice.
 Rows may also include `build` proof such as the source commit and app binary
 SHA so current-build status checks do not treat fresh proof as stale.
 
+Blocked preflights are not proof rows. The 2026-05-12 `codemirror-official`
+attempt stopped before Chrome typing because SteadyType was missing macOS
+Accessibility permission, so it stays in the manifest/matrix as a blocked
+official-demo preflight instead of being recorded below.
+
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 | 2026-04-26T12:46:01Z | TextEdit | `com.apple.TextEdit` | `default` | 2 | `inlineAdjacent|floatingMirror` | lines 3037+ in `/Users/redbars/Library/Logs/AutocompleteLab/diagnostics.log` | lines 137+ in `/Users/redbars/Library/Logs/AutocompleteLab/traces.jsonl` |

@@ -641,6 +641,49 @@ latest_runtime_is_ready() {
   [[ "$latest_runtime_line" == *"readinessStage=ready"* ]]
 }
 
+latest_accessibility_is_ready() {
+  local latest_accessibility_line
+  latest_accessibility_line="$(
+    grep -E "launch accessibility=(true|trusted)|status .*accessibility=AX ok" "$LOG_PATH" 2>/dev/null |
+      tail -n 1 || true
+  )"
+  [[ -n "$latest_accessibility_line" ]]
+}
+
+wait_for_accessibility_ready() {
+  local start_line="$1"
+  local label="${2:-Accessibility readiness}"
+  local timeout_seconds="${3:-20}"
+  local allow_existing_ready="${4:-0}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local saw_missing=0
+
+  while ((SECONDS <= deadline)); do
+    if log_since_matches "$start_line" "launch accessibility=(true|trusted)|status .*accessibility=AX ok"; then
+      return 0
+    fi
+
+    if [[ "$allow_existing_ready" == "1" ]] && latest_accessibility_is_ready; then
+      return 0
+    fi
+
+    if log_since_matches "$start_line" "launch accessibility=false|status .*accessibility=AX missing"; then
+      saw_missing=1
+    fi
+
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label." >&2
+  echo "Pattern: launch accessibility=true or status accessibility=AX ok" >&2
+  if [[ "$saw_missing" == "1" ]]; then
+    echo "SteadyType Accessibility permission is missing. Enable SteadyType in System Settings > Privacy & Security > Accessibility, then rerun this smoke lane." >&2
+  fi
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
 wait_for_runtime_ready() {
   local start_line="$1"
   local label="${2:-runtime ready}"
@@ -665,6 +708,20 @@ wait_for_runtime_ready() {
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
   exit 1
+}
+
+chrome_runtime_ready_timeout_seconds() {
+  if [[ -n "${AUTOCOMPLETE_LAB_RUNTIME_READY_TIMEOUT_SECONDS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_RUNTIME_READY_TIMEOUT_SECONDS"
+    return 0
+  fi
+
+  if chrome_fixture_is_official_demo "$CHROME_FIXTURE" && ! chrome_fixture_is_public_text_field_demo "$CHROME_FIXTURE"; then
+    printf '180\n'
+    return 0
+  fi
+
+  printf '60\n'
 }
 
 wait_for_frontmost_app() {
@@ -5126,6 +5183,8 @@ describe_plan() {
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
         echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
         echo "Requirement: official Chrome demo lanes need Chrome's View > Developer > Allow JavaScript from Apple Events setting so the script can focus and verify the editor."
+        echo "Requirement: SteadyType must already be allowed in macOS Accessibility; the lane fails closed before typing if AX is missing."
+        echo "Runtime: official demo lanes allow up to $(chrome_runtime_ready_timeout_seconds)s for cold current-build MLX warmup before touching Chrome."
       elif [[ "$CHROME_FIXTURE" == "browser-chat-harness" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, type disposable text, then validate trace and harness counters."
         echo "Scope: this proves only the disposable harness surface. It does not enable Slack, Discord, ChatGPT, or broad browser chat support."
@@ -5297,6 +5356,7 @@ run_codex() {
 
   prepare_temporary_app_enablement
   build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Codex Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Codex runtime readiness" 60 "$SKIP_BUILD"
 
   start_line="$(line_count "$LOG_PATH")"
@@ -5851,6 +5911,7 @@ run_obsidian() {
 
   prepare_temporary_app_enablement
   build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Obsidian Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
 
   full_accept_key="$(accept_all_shortcut)"
@@ -5926,6 +5987,7 @@ run_notes() {
 
   prepare_temporary_app_enablement
   build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Notes Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Notes runtime readiness" 60 "$SKIP_BUILD"
 
   full_accept_key="$(accept_all_shortcut)"
@@ -6082,6 +6144,7 @@ run_textedit() {
 
   prepare_temporary_app_enablement
   build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "TextEdit Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
 
   if [[ "$TEXTEDIT_VARIANT" == "fast-typing" ]]; then
@@ -6413,7 +6476,8 @@ run_chrome() {
 
   prepare_temporary_app_enablement
   build_if_needed
-  wait_for_runtime_ready "$runtime_start_line" "Chrome runtime readiness" 60 "$SKIP_BUILD"
+  wait_for_accessibility_ready "$runtime_start_line" "Chrome Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Chrome runtime readiness" "$(chrome_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
 
   if [[ "$CHROME_FIXTURE" == "all" ]]; then
     run_chrome_fixture textarea

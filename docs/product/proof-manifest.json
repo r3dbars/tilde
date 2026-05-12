@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "409f75bff4a6eed9c2256e1865394d677d7ae16a",
+  "sourceCommit": "a17647484961cc573e074b1c83c7f07a18bdecbf",
   "proofFingerprint": {
     "traceProofVersion": "2026-05-07.1",
     "placementProofVersion": "placement-v4",
@@ -357,11 +357,29 @@
         "docs/product/visual-placement-screenshots/chrome-textarea.png",
         "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
       ],
+      "requiredManualSmokes": [
+        {
+          "id": "textarea-public",
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "textarea-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "contenteditable-public",
+          "app": "Chrome",
+          "bundle": "com.google.Chrome",
+          "proof": "contenteditable-public",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        }
+      ],
       "gaps": [],
       "requirements": [
         {
           "id": "production-chrome-text-fields",
-          "status": "passed",
+          "status": "complete",
           "summary": "Bounded screenshot-backed smoke proof now covers representative production Chrome text fields beyond local fixtures.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields",
           "safePath": [
@@ -413,8 +431,18 @@
         },
         {
           "id": "production-chrome-codemirror",
-          "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface."
+          "status": "blocked",
+          "summary": "Run the guarded official CodeMirror demo lane after SteadyType has macOS Accessibility permission on this host.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official",
+          "safePath": [
+            "codemirror-official: https://codemirror.net/try/"
+          ],
+          "latestAttempt": {
+            "timeUTC": "2026-05-12T12:18:03Z",
+            "result": "failed-closed-before-typing",
+            "diagnostics": "lines 1-6 in `/Users/redbars/Library/Logs/SteadyType/diagnostics.log`",
+            "reason": "SteadyType launch reported accessibility=false and status accessibility=AX missing; no Chrome editor text was typed."
+          }
         }
       ]
     },
