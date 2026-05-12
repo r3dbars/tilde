@@ -252,19 +252,21 @@ classify_current_commit_or_archive() {
   TARGET_STATUS="stale"
   TARGET_STATUS_REASON="missing current commit/archive fingerprint"
 
-  if [[ "$line" == *"archive-sha256:"* ]]; then
-    if [[ -z "$CURRENT_ARCHIVE_PROOF" || "$line" != *"$CURRENT_ARCHIVE_PROOF"* ]]; then
-      TARGET_STATUS_REASON="stale archive fingerprint"
-      return 0
-    fi
+  if [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]]; then
     TARGET_STATUS="current"
-    TARGET_STATUS_REASON="current archive fingerprint"
+    TARGET_STATUS_REASON="current commit fingerprint"
     return 0
   fi
 
   if [[ -n "$CURRENT_APP_PROOF" && "$line" == *"$CURRENT_APP_PROOF"* ]]; then
     TARGET_STATUS="current"
     TARGET_STATUS_REASON="current app binary fingerprint"
+    return 0
+  fi
+
+  if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
+    TARGET_STATUS="current"
+    TARGET_STATUS_REASON="current archive fingerprint"
     return 0
   fi
 
@@ -275,9 +277,13 @@ classify_current_commit_or_archive() {
     fi
   fi
 
-  if [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]]; then
-    TARGET_STATUS="current"
-    TARGET_STATUS_REASON="current commit fingerprint"
+  if [[ "$line" == *"archive-sha256:"* ]]; then
+    TARGET_STATUS_REASON="stale archive fingerprint"
+    return 0
+  fi
+
+  if [[ "$line" == *"app-sha256:"* ]]; then
+    TARGET_STATUS_REASON="stale app binary fingerprint"
     return 0
   fi
 
