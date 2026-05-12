@@ -227,7 +227,7 @@ cheap, even if the model output is good.
 | Notes title | 90 | 100 | More title lengths and variants. |
 | Notes body | 90 | 100 | More body lengths and variants. |
 | Notes checklist | 90 | 100 | Dedicated checklist proof exists; checked items, long rows, and undo variants still need proof. |
-| Obsidian | 90 | 100 | More vault themes, panes, and long-note variants. |
+| Obsidian | 96 | 100 | Default, theme, pane, and long-note lanes are current; more vault layouts and hidden-caret variants would make this stronger. |
 
 ## Category 3: Acceptance Safety
 
