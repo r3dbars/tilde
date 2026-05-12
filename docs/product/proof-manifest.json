@@ -157,7 +157,7 @@
             "reference": "docs/product/visual-placement-screenshots/chrome-chat-like.png"
           }
         ],
-        "notes": "Local fixtures and default AX editor variants are proven; production official editor sites remain open."
+        "notes": "Local fixtures and public text fields are proven on the current app fingerprint; default AX editor variants are stale after the latest rebuild, and production official editor sites remain open."
       },
       {
         "bundle": "com.openai.codex",
@@ -168,7 +168,7 @@
         "versionSource": "/Applications/Codex.app",
         "safetyMode": "wordOnly",
         "runtimeState": "userToggleAllowed",
-        "proofState": "complete",
+        "proofState": "partial",
         "killSwitch": "proofModeRequired",
         "proofArtifacts": [
           {
@@ -180,7 +180,7 @@
             "reference": "Codex/default"
           }
         ],
-        "notes": "Dogfood prompt support is word-only; same-slice no-submit proof is green and full accept remains disabled."
+        "notes": "Dogfood prompt support is word-only; historical no-submit proof exists, but the current app fingerprint needs a fresh same-slice no-submit row before support can be called complete."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -191,7 +191,7 @@
         "versionSource": "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app",
         "safetyMode": "disabled",
         "runtimeState": "proofModeOnly",
-        "proofState": "complete",
+        "proofState": "partial",
         "killSwitch": "proofModeRequired",
         "proofArtifacts": [
           {
@@ -203,7 +203,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only."
+        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only, but the current app fingerprint still needs a fresh host-labeled no-submit row."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -414,7 +414,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced and normal Chrome default AX. Broad production-site proof remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is stale after the latest rebuild, and broad production-site proof remains open."
       ],
       "requirements": [
         {
@@ -439,7 +439,7 @@
     },
     {
       "surface": "Chrome real Monaco",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -450,12 +450,14 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
-      "gaps": [],
+      "gaps": [
+        "The isolated renderer-accessibility real Monaco lane is current, but normal Chrome default AX proof is stale after the latest rebuild."
+      ],
       "requirements": [
         {
           "id": "default-chrome-monaco-ax",
-          "status": "complete",
-          "summary": "Default Chrome Monaco proof refreshed with normal Chrome AX exposure and strict visual evidence.",
+          "status": "pending",
+          "summary": "Refresh normal Chrome default AX Monaco proof on the current app fingerprint; the latest rerun failed before proof because Chrome focus/setup became unstable.",
           "manualSmoke": {
             "app": "Chrome",
             "bundle": "com.google.Chrome",
@@ -468,7 +470,7 @@
     },
     {
       "surface": "Chrome real ProseMirror",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -479,12 +481,14 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
-      "gaps": [],
+      "gaps": [
+        "The isolated renderer-accessibility real ProseMirror lane is current, but normal Chrome default AX proof is stale after the latest rebuild."
+      ],
       "requirements": [
         {
           "id": "default-chrome-prosemirror-ax",
-          "status": "complete",
-          "summary": "Default Chrome ProseMirror proof refreshed with normal Chrome AX exposure and strict visual evidence.",
+          "status": "pending",
+          "summary": "Refresh normal Chrome default AX ProseMirror proof on the current app fingerprint; keep it separate from the isolated forced-renderer proof lane.",
           "manualSmoke": {
             "app": "Chrome",
             "bundle": "com.google.Chrome",
@@ -521,7 +525,7 @@
     },
     {
       "surface": "Codex",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Codex",
         "bundle": "com.openai.codex",
@@ -533,7 +537,9 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/codex-inline.png"
       ],
-      "gaps": []
+      "gaps": [
+        "Historical Codex no-submit proof exists, but it is stale after the latest app fingerprint and needs a fresh current-binary manual-gated row."
+      ]
     },
     {
       "surface": "Obsidian",
@@ -713,8 +719,9 @@
       "requirements": [
         {
           "id": "claude-code-terminal-host-no-submit",
-          "status": "complete",
-          "summary": "Live terminal-host screenshot-backed one-word Tab accept proof completes without submitting shell input or an agent prompt."
+          "status": "pending",
+          "summary": "Refresh terminal-host screenshot-backed one-word Tab accept proof on the current app fingerprint without submitting shell input or an agent prompt.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
         },
         {
           "id": "claude-code-iterm2-host-no-submit",
