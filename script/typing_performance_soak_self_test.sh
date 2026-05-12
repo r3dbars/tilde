@@ -257,6 +257,30 @@ fi
 
 script/typing_performance_soak.sh --self-test-osascript-timeout
 
+lock_dir="$TMP_DIR/typing-soak.lock"
+AUTOCOMPLETE_LAB_SOAK_LOCK_DIR="$lock_dir" \
+  script/typing_performance_soak.sh --self-test-soak-lock
+
+if [[ -e "$lock_dir" ]]; then
+  echo "typing soak self-test expected the soak lock to be released" >&2
+  exit 1
+fi
+
+mkdir "$lock_dir"
+if AUTOCOMPLETE_LAB_SOAK_LOCK_DIR="$lock_dir" \
+  AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS=1 \
+  script/typing_performance_soak.sh --self-test-soak-lock >/dev/null 2>"$TMP_DIR/locked.txt"; then
+  echo "typing soak self-test expected an already-held lock to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Timed out waiting for another TextEdit typing soak to finish." "$TMP_DIR/locked.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the held soak lock" >&2
+  cat "$TMP_DIR/locked.txt" >&2
+  exit 1
+fi
+rmdir "$lock_dir"
+
 large_log="$TMP_DIR/large-diagnostics.log"
 for _ in $(seq 1 8000); do
   printf '2026-05-12T00:00:00Z status decision=waiting\n'

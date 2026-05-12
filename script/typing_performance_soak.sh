@@ -61,13 +61,14 @@ EOF
 }
 
 cleanup_soak() {
-  if [[ "$SOAK_LOCK_HELD" == "1" ]]; then
+  if [[ "$SOAK_LOCK_HELD" == "1" && ( -n "$SOAK_TARGET_DOCUMENT_NAME" || -n "$SOAK_TARGET_TEXT_FILE" ) ]]; then
     close_stale_textedit_soak_documents "" >/dev/null 2>&1 || true
   elif [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
     close_textedit_document "$SOAK_TARGET_DOCUMENT_NAME" >/dev/null 2>&1 || true
   fi
 
   if [[ "$SOAK_LOCK_HELD" == "1" ]]; then
+    rm -f "$SOAK_LOCK_DIR/owner" >/dev/null 2>&1 || true
     rmdir "$SOAK_LOCK_DIR" >/dev/null 2>&1 || true
     SOAK_LOCK_HELD=0
   fi
@@ -93,7 +94,7 @@ cleanup_soak() {
   fi
 }
 
-trap cleanup_soak EXIT
+trap cleanup_soak EXIT INT TERM HUP
 
 make_tmp_dir() {
   local tmp_dir
@@ -104,12 +105,19 @@ make_tmp_dir() {
 
 acquire_soak_lock() {
   local timeout_seconds="${AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS:-90}"
-  local deadline
+  local deadline owner_pid
 
   require_positive_int "$timeout_seconds" "AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS"
   deadline=$((SECONDS + timeout_seconds))
 
   while ! mkdir "$SOAK_LOCK_DIR" 2>/dev/null; do
+    owner_pid="$(awk -F= '/^pid=/{print $2; exit}' "$SOAK_LOCK_DIR/owner" 2>/dev/null || true)"
+    if [[ -n "$owner_pid" ]] && ! kill -0 "$owner_pid" 2>/dev/null; then
+      rm -f "$SOAK_LOCK_DIR/owner" >/dev/null 2>&1 || true
+      rmdir "$SOAK_LOCK_DIR" >/dev/null 2>&1 || true
+      continue
+    fi
+
     if ((SECONDS >= deadline)); then
       echo "Timed out waiting for another TextEdit typing soak to finish." >&2
       echo "Lock: $SOAK_LOCK_DIR" >&2
