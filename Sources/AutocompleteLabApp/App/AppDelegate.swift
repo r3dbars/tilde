@@ -9031,10 +9031,12 @@ private extension AppDelegate {
         SteadyType practice
 
         This is a disposable local TextEdit file.
+        Suggestions appear near the cursor in TextEdit.
         Type one short sentence below.
-        When a suggestion appears, press Tab once to accept one word.
+        Press Tab once to accept one word.
         Type again, then press Esc to dismiss the next suggestion.
-        Return to SteadyType Settings to pause suggestions or delete traces.
+        Use the SteadyType menu bar item to Pause Suggestions at any time.
+        Return to SteadyType Settings to delete traces or export only the redacted Privacy Bundle.
 
         Practice here:
 

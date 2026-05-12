@@ -313,10 +313,24 @@ struct SettingsPermissionState: Equatable {
 
     var detailText: String {
         if isTrusted {
-            return "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
+            return "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac. Normal setup does not need Screen Recording."
         }
 
-        return "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac."
+        return "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
+    }
+}
+
+struct SettingsFirstRunTrustState: Equatable {
+    var statusText: String {
+        "First 10 minutes: start in TextEdit"
+    }
+
+    var detailText: String {
+        "Suggestions appear near the cursor in supported writing apps. Tab accepts one word. Esc dismisses. Pause stops suggestions everywhere. Text, prompts, accepted text, screenshots, and diagnostics stay on this Mac unless you export a redacted Privacy Bundle."
+    }
+
+    var appsText: String {
+        "Supported test apps: TextEdit, Notes, Obsidian, and Chrome local text fields. Codex and Claude are proof targets. Mail, Atlas, chat, search, login, payment, URL, and private fields stay off."
     }
 }
 
@@ -516,7 +530,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var detailText: String {
-        "Safe target: TextEdit. Start Practice enables TextEdit, opens a disposable local file, and does not ask for Screen Recording."
+        "Safe target: TextEdit. Start Practice enables TextEdit, opens a disposable local file, and shows suggestions near the cursor. It does not ask for Screen Recording."
     }
 
     var modelText: String {
@@ -530,7 +544,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var stepsText: String {
-        "Try: press Tab once to accept one word, type again and press Esc to dismiss, then use Pause or Delete Traces before leaving."
+        "Try: press Tab once to accept one word, type again and press Esc to dismiss, then use Pause Suggestions or Delete Traces before leaving."
     }
 
     var primaryAction: SettingsPracticePrimaryAction {
@@ -683,6 +697,9 @@ final class SettingsWindowController: NSObject {
     private let window: NSWindow
     private let contentScrollView = NSScrollView()
     private let scrollDocumentView = FlippedSettingsDocumentView()
+    private let firstRunTrustLabel = NSTextField(labelWithString: "")
+    private let firstRunTrustDetailLabel = NSTextField(labelWithString: "")
+    private let firstRunTrustAppsLabel = NSTextField(labelWithString: "")
     private let permissionLabel = NSTextField(labelWithString: "")
     private let permissionDetailLabel = NSTextField(labelWithString: "")
     private let runtimeLabel = NSTextField(labelWithString: "")
@@ -958,11 +975,15 @@ final class SettingsWindowController: NSObject {
     ) {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         let permission = SettingsPermissionState(isTrusted: isTrusted)
+        let firstRunTrust = SettingsFirstRunTrustState()
         let pauseControl = ControlPauseState(
             isPaused: suggestionsPaused,
             pausedUntil: suggestionsPausedUntil,
             now: now
         )
+        firstRunTrustLabel.stringValue = firstRunTrust.statusText
+        firstRunTrustDetailLabel.stringValue = firstRunTrust.detailText
+        firstRunTrustAppsLabel.stringValue = firstRunTrust.appsText
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
         controlLabel.stringValue = pauseControl.settingsSummaryText
@@ -1109,6 +1130,9 @@ final class SettingsWindowController: NSObject {
 
         let title = NSTextField(labelWithString: "SteadyType")
         title.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        firstRunTrustLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(firstRunTrustDetailLabel)
+        configureSecondaryLabel(firstRunTrustAppsLabel)
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(permissionDetailLabel)
         runtimeLabel.lineBreakMode = .byWordWrapping
@@ -1266,6 +1290,14 @@ final class SettingsWindowController: NSObject {
 
         [
             title,
+            makeSection(
+                title: "First 10 Minutes",
+                views: [
+                    firstRunTrustLabel,
+                    firstRunTrustDetailLabel,
+                    firstRunTrustAppsLabel
+                ]
+            ),
             makeSection(
                 title: "Access",
                 views: [
