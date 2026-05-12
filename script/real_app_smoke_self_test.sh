@@ -78,6 +78,11 @@ if ! grep -F 'move_textedit_caret_to_document_end "$window_title"' script/real_a
   echo "real app smoke self-test expected TextEdit proof typing to keep the caret at document end" >&2
   exit 1
 fi
+if ! grep -F 'wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit initial reset" 5' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_textedit_document_exact "$textedit_window_title" "$first_fragment" "TextEdit first typed exact" 5' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof setup to verify reset and first typed text before waiting for suggestions" >&2
+  exit 1
+fi
 if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected stale TextEdit proof windows to be cleaned before opening a new disposable document" >&2
