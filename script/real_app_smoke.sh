@@ -3862,13 +3862,38 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
 
         let currentValue = copyAttribute(textInput, kAXValueAttribute) as? String ?? ""
-        var range = CFRange(location: currentValue.utf16.count, length: 0)
-        guard let rangeValue = AXValueCreate(.cfRange, &range) else {
-            exit(1)
+        func moveCaret(to location: Int) -> Bool {
+            var range = CFRange(location: location, length: 0)
+            guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+                return false
+            }
+            return AXUIElementSetAttributeValue(
+                textInput,
+                kAXSelectedTextRangeAttribute as CFString,
+                rangeValue
+            ) == .success
         }
-        AXUIElementSetAttributeValue(textInput, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-        let result = AXUIElementSetAttributeValue(textInput, kAXSelectedTextAttribute as CFString, fragment as CFString)
-        exit(result == .success ? 0 : 1)
+
+        let insertionLocation = currentValue.utf16.count
+        if moveCaret(to: insertionLocation) {
+            let result = AXUIElementSetAttributeValue(
+                textInput,
+                kAXSelectedTextAttribute as CFString,
+                fragment as CFString
+            )
+            if result == .success && moveCaret(to: insertionLocation + fragment.utf16.count) {
+                exit(0)
+            }
+        }
+
+        let replacementValue = currentValue + fragment
+        let valueResult = AXUIElementSetAttributeValue(
+            textInput,
+            kAXValueAttribute as CFString,
+            replacementValue as CFString
+        )
+        _ = moveCaret(to: replacementValue.utf16.count)
+        exit(valueResult == .success ? 0 : 1)
     }
 }
 
