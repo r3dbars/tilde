@@ -118,6 +118,72 @@ public struct SensitiveFieldProofFixture: Equatable, Sendable {
             fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "shipping-address", placeholder: "Shipping address", windowTitle: "Checkout")
         ),
         SensitiveFieldProofFixture(
+            name: "government-id-field",
+            category: .governmentID,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "ssn", placeholder: "Social security number", windowTitle: "Identity verification"),
+            textBeforeCursor: "123-45-6789",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "ssn", placeholder: "Social security number", windowTitle: "Identity verification")
+        ),
+        SensitiveFieldProofFixture(
+            name: "date-of-birth-field",
+            category: .dateOfBirth,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "dob", placeholder: "Date of birth", windowTitle: "Identity verification"),
+            textBeforeCursor: "01/02/1990",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "dob", placeholder: "Date of birth", windowTitle: "Identity verification")
+        ),
+        SensitiveFieldProofFixture(
+            name: "tax-field",
+            category: .tax,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "tax-id", placeholder: "Tax ID", windowTitle: "Tax form"),
+            textBeforeCursor: "12-3456789",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "tax-id", placeholder: "Tax ID", windowTitle: "Tax form")
+        ),
+        SensitiveFieldProofFixture(
+            name: "insurance-field",
+            category: .insurance,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextField",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "insurance-member-id", placeholder: "Insurance member ID", windowTitle: "Coverage"),
+            textBeforeCursor: "ABC123456",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextField", identifier: "insurance-member-id", placeholder: "Insurance member ID", windowTitle: "Coverage")
+        ),
+        SensitiveFieldProofFixture(
+            name: "medical-field",
+            category: .medical,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "medical-history", placeholder: "Medical history", windowTitle: "Patient intake"),
+            textBeforeCursor: "Current medication",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextArea", identifier: "medical-history", placeholder: "Medical history", windowTitle: "Patient intake")
+        ),
+        SensitiveFieldProofFixture(
+            name: "crypto-wallet-seed-field",
+            category: .cryptoWallet,
+            proofLevel: .boundedBrowser,
+            bundleIdentifier: "com.google.Chrome",
+            role: "AXTextArea",
+            subrole: nil,
+            fingerprint: FocusedElementFingerprint(identifier: "seed-phrase", placeholder: "Secret recovery phrase", windowTitle: "Crypto wallet"),
+            textBeforeCursor: "abandon abandon abandon",
+            fieldClassifierInput: AXFieldClassifierInput(role: "AXTextArea", identifier: "seed-phrase", placeholder: "Secret recovery phrase", windowTitle: "Crypto wallet")
+        ),
+        SensitiveFieldProofFixture(
             name: "browser-command-line-field",
             category: .commandLine,
             proofLevel: .boundedBrowser,
