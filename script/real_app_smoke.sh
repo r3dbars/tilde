@@ -5934,8 +5934,9 @@ APPLESCRIPT
 
 reset_obsidian_smoke_note() {
   local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}"
+  local reset_text="${AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT:-$marker}"
 
-  AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift - <<'SWIFT'
+  AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$reset_text" swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
 import Foundation
@@ -5991,6 +5992,22 @@ end tell
 APPLESCRIPT
 }
 
+obsidian_reset_text_for_variant() {
+  local variant="$1"
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}"
+
+  if [[ "$variant" != "obsidian-long-note" ]]; then
+    printf '%s' "$marker"
+    return 0
+  fi
+
+  local index
+  for index in $(seq 1 90); do
+    printf 'Autocomplete Lab Obsidian scroll filler line %s\n' "$index"
+  done
+  printf '%s' "$marker"
+}
+
 open_obsidian_smoke_note_if_configured() {
   local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
   if [[ -n "$smoke_uri" ]]; then
@@ -6018,7 +6035,7 @@ run_obsidian() {
   local manual_app
   manual_app="$(obsidian_session_app)"
   case "$manual_app" in
-    obsidian|obsidian-theme)
+    obsidian|obsidian-theme|obsidian-pane|obsidian-long-note)
       ;;
     *)
       run_manual_gated
@@ -6038,7 +6055,9 @@ run_obsidian() {
   open_obsidian_smoke_note_if_configured
   wait_for_frontmost_app "Obsidian" 8
   assert_obsidian_smoke_target
-  reset_obsidian_smoke_note
+  local obsidian_reset_text
+  obsidian_reset_text="$(obsidian_reset_text_for_variant "$manual_app")"
+  AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" reset_obsidian_smoke_note
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
