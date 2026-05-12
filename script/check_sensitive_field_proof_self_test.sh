@@ -64,6 +64,14 @@ if "$(dirname "$0")/check_sensitive_field_proof.sh" "$leak" >/dev/null 2>&1; the
   exit 1
 fi
 
+unsafe_kind="$tmpdir/unsafe-kind.jsonl"
+cp "$trace" "$unsafe_kind"
+printf '{"timestamp":"2026-05-08T00:00:00Z","sessionID":"sensitive-self-test","suggestionID":"unsafe-kind","type":"suggestionPresented","metadata":{"fieldKind":"search"}}\n' >> "$unsafe_kind"
+if "$(dirname "$0")/check_sensitive_field_proof.sh" "$unsafe_kind" >/dev/null 2>&1; then
+  echo "expected unsafe field kind presentation trace to fail" >&2
+  exit 1
+fi
+
 missing="$tmpdir/missing.jsonl"
 grep -v '"private-search"' "$trace" > "$missing"
 if "$(dirname "$0")/check_sensitive_field_proof.sh" "$missing" >/dev/null 2>&1; then

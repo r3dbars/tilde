@@ -6,6 +6,7 @@ STATE_FOLDER="${AUTOCOMPLETE_LAB_STATE_FOLDER:-$HOME/Library/Application Support
 
 rm -f "$TRACE_FOLDER/traces.jsonl"
 rm -f "$TRACE_FOLDER/raw-traces.jsonl"
+rm -f "$TRACE_FOLDER/diagnostics.log"
 rm -f "$TRACE_FOLDER/trace-report.html"
 rm -f "$TRACE_FOLDER/survival-report.json"
 rm -rf "$TRACE_FOLDER/privacy-export"

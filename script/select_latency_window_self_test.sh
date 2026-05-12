@@ -89,7 +89,7 @@ if script/select_latency_window.py \
   exit 1
 fi
 
-if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/token-only-model.err" >/dev/null; then
+if ! grep -F "no sampled default runtime launch meets sample requirements" "$TMP_DIR/token-only-model.err" >/dev/null; then
   echo "latency window self-test did not explain the undersampled latest launch" >&2
   cat "$TMP_DIR/token-only-model.err" >&2
   exit 1
@@ -98,6 +98,31 @@ fi
 if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/token-only-model.err" >/dev/null; then
   echo "latency window self-test did not report benchmark-equivalent model samples" >&2
   cat "$TMP_DIR/token-only-model.err" >&2
+  exit 1
+fi
+
+cat >>"$DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T10:12:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+WINDOW_WITH_EMPTY_LATEST="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$DIAGNOSTICS_LOG" \
+    --trace-log "$TRACE_LOG" \
+    --min-first-visible-samples 2 \
+    --min-model-samples 2 2>"$TMP_DIR/empty-latest.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=3" <<<"$WINDOW_WITH_EMPTY_LATEST" >/dev/null; then
+  echo "latency window self-test did not skip an unsampled latest default launch" >&2
+  cat "$TMP_DIR/empty-latest.err" >&2
+  echo "$WINDOW_WITH_EMPTY_LATEST" >&2
+  exit 1
+fi
+
+if ! grep -F "skippedUnsampledDefaultLaunches=1" "$TMP_DIR/empty-latest.err" >/dev/null; then
+  echo "latency window self-test did not explain the skipped unsampled launch" >&2
+  cat "$TMP_DIR/empty-latest.err" >&2
   exit 1
 fi
 

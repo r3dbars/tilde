@@ -5920,7 +5920,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: AXFieldClassifierInput(
                 role: context.role,
                 subrole: context.subrole,
+                identifier: context.fingerprint.identifier,
                 title: context.fingerprint.title,
+                description: context.fingerprint.description,
+                help: context.fingerprint.help,
                 placeholder: context.fingerprint.placeholder,
                 windowTitle: context.fingerprint.windowTitle,
                 isSecure: context.isSecure,

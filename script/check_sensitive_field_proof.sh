@@ -39,7 +39,9 @@ raw_needles = [
 
 seen = set()
 presented = []
+unsafe_field_presentations = []
 errors = []
+unsafe_field_kinds = {"search", "form", "secure", "url", "unprovenSurface", "unknown"}
 
 for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
     if not line.strip():
@@ -47,6 +49,9 @@ for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines()
     event = json.loads(line)
     metadata = event.get("metadata") or {}
     category = metadata.get("sensitiveSuppressionCategory") or metadata.get("sensitiveFieldCategory")
+    field_kind = metadata.get("fieldKind") or event.get("fieldKind")
+    if event.get("type") == "suggestionPresented" and field_kind in unsafe_field_kinds:
+        unsafe_field_presentations.append((line_number, field_kind))
     if not category:
         continue
 
@@ -65,6 +70,8 @@ if missing:
     errors.append("missing sensitive categories: " + ", ".join(missing))
 if presented:
     errors.append("sensitive presentations: " + ", ".join(f"line {line}:{category}" for line, category in presented))
+if unsafe_field_presentations:
+    errors.append("unsafe field presentations: " + ", ".join(f"line {line}:{field_kind}" for line, field_kind in unsafe_field_presentations))
 
 contents = path.read_text(encoding="utf-8")
 for needle in raw_needles:

@@ -89,6 +89,16 @@ struct SensitiveTextFieldPolicyTests {
         #expect(results.allSatisfy { $0.isSilent })
         #expect(categories == Set(SensitiveFieldProofCategory.allCases))
         #expect(results.allSatisfy { $0.traceMetadata["rawTextIncluded"] == "false" })
+        #expect(results.allSatisfy {
+            $0.assessment.category == $0.fixture.category
+                || $0.fieldClassification.suppressesSuggestionsByDefault
+        })
+        #expect(results.allSatisfy {
+            guard let policyCategory = $0.assessment.category else {
+                return $0.traceMetadata["sensitivePolicyCategory"] == "none"
+            }
+            return $0.traceMetadata["sensitivePolicyCategory"] == policyCategory.rawValue
+        })
     }
 
     @Test("Allows ordinary writing fields")
