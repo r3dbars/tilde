@@ -18,6 +18,7 @@ printf '{}\n' >"$TRACE_FOLDER/raw-traces.jsonl"
 printf 'diagnostics\n' >"$TRACE_FOLDER/diagnostics.log"
 printf '<html></html>\n' >"$TRACE_FOLDER/trace-report.html"
 printf '[]\n' >"$TRACE_FOLDER/survival-report.json"
+printf '{"acceptedText":"private"}\n' >"$TRACE_FOLDER/survival-inspector-debug.json"
 printf 'png\n' >"$TRACE_FOLDER/screenshots/sample.txt"
 printf '{}\n' >"$STATE_FOLDER/compatibility-learning.json"
 
@@ -31,6 +32,7 @@ for path in \
   "$TRACE_FOLDER/diagnostics.log" \
   "$TRACE_FOLDER/trace-report.html" \
   "$TRACE_FOLDER/survival-report.json" \
+  "$TRACE_FOLDER/survival-inspector-debug.json" \
   "$TRACE_FOLDER/privacy-export" \
   "$TRACE_FOLDER/screenshots" \
   "$STATE_FOLDER/compatibility-learning.json"; do

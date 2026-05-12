@@ -145,6 +145,7 @@ struct DiagnosticsTypingHealthTests {
             requestMode: "phrase",
             displayedText: "private client sentence",
             acceptedText: "private",
+            screenshotPath: "/tmp/private-proof.png",
             latencyMilliseconds: 24,
             reason: "shown",
             metadata: [
@@ -162,6 +163,7 @@ struct DiagnosticsTypingHealthTests {
         #expect(text.contains("render=inlineAdjacent"))
         #expect(!text.contains("private client sentence"))
         #expect(!text.contains("private"))
+        #expect(!text.contains("/tmp/private-proof.png"))
     }
 
     @Test("Diagnostics placement evidence shows confidence without raw text")

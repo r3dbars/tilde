@@ -108,6 +108,39 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: login)).surface == .login)
     }
 
+    @Test("Chrome risky browser-hosted fields stay blocked")
+    func blocksRiskyBrowserHostedFields() throws {
+        let cases: [(BrowserHostedSurface, FocusedElementFingerprint)] = [
+            (.login, FocusedElementFingerprint(placeholder: "Passkey", windowTitle: "Sign in")),
+            (.login, FocusedElementFingerprint(title: "Sign in with SSO", windowTitle: "OAuth consent")),
+            (.login, FocusedElementFingerprint(placeholder: "One-time code", windowTitle: "Account authentication")),
+            (.payment, FocusedElementFingerprint(placeholder: "Apple Pay", windowTitle: "Checkout")),
+            (.payment, FocusedElementFingerprint(title: "PayPal", windowTitle: "Billing")),
+            (.payment, FocusedElementFingerprint(placeholder: "IBAN", windowTitle: "Bank transfer")),
+            (.payment, FocusedElementFingerprint(help: "Routing number", windowTitle: "Payment")),
+            (.passwordManager, FocusedElementFingerprint(title: "Autofill", windowTitle: "1Password")),
+            (.privateSearch, FocusedElementFingerprint(placeholder: "Private search", windowTitle: "Incognito")),
+            (.browserSearchOrAddressBar, FocusedElementFingerprint(placeholder: "Search Google or type a URL", windowTitle: "Google Chrome")),
+            (.browserSearchOrAddressBar, FocusedElementFingerprint(title: "Omnibox", windowTitle: "Google Chrome")),
+            (.browserDeveloperTool, FocusedElementFingerprint(placeholder: "sudo command", windowTitle: "Web terminal")),
+            (.browserDeveloperTool, FocusedElementFingerprint(title: "GitHub Codespaces", windowTitle: "github.dev")),
+            (.browserDeveloperTool, FocusedElementFingerprint(placeholder: "StackBlitz terminal", windowTitle: "StackBlitz")),
+            (.browserDeveloperTool, FocusedElementFingerprint(help: "PowerShell prompt", windowTitle: "Replit"))
+        ]
+
+        for (surface, fingerprint) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            let block = try #require(blockedSurface(from: decision))
+            #expect(block.surface == surface)
+            #expect(block.traceMetadata["browserSurfaceSafetyClass"] == "browser-sensitive")
+            #expect(block.traceMetadata["promptSafetyMetricSurface"] == "browser-sensitive")
+        }
+    }
+
     @Test("Chrome sensitive pages outrank service fingerprints")
     func sensitiveBrowserPagesOutrankServiceFingerprints() throws {
         let slackLogin = policy.decision(
@@ -121,6 +154,120 @@ struct BrowserHostedSurfacePolicyTests {
 
         #expect(try #require(blockedSurface(from: slackLogin)).surface == .login)
         #expect(try #require(blockedSurface(from: docsCheckout)).surface == .payment)
+    }
+
+    @Test("Chrome login, sign-in, and passkey surfaces are sensitive")
+    func blocksLoginSignInAndPasskeySurfaces() throws {
+        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(windowTitle: "Log in to example.com"), .login),
+            (FocusedElementFingerprint(title: "Sign-in with SSO"), .login),
+            (FocusedElementFingerprint(placeholder: "Use passkey"), .login)
+        ]
+
+        for (fingerprint, expectedSurface) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+        }
+    }
+
+    @Test("Chrome checkout, payment, PayPal, IBAN, and routing surfaces are sensitive")
+    func blocksPaymentAndBankingSurfaces() throws {
+        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(windowTitle: "Secure checkout"), .payment),
+            (FocusedElementFingerprint(title: "Payment details"), .payment),
+            (FocusedElementFingerprint(title: "PayPal"), .payment),
+            (FocusedElementFingerprint(placeholder: "IBAN"), .payment),
+            (FocusedElementFingerprint(placeholder: "Routing number"), .payment)
+        ]
+
+        for (fingerprint, expectedSurface) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+        }
+    }
+
+    @Test("Chrome password manager and autofill surfaces are sensitive")
+    func blocksPasswordManagerAndAutofillSurfaces() throws {
+        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(windowTitle: "1Password"), .passwordManager),
+            (FocusedElementFingerprint(title: "Password manager"), .passwordManager),
+            (FocusedElementFingerprint(description: "Autofill suggestion"), .passwordManager)
+        ]
+
+        for (fingerprint, expectedSurface) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+        }
+    }
+
+    @Test("Chrome private search surfaces are sensitive")
+    func blocksPrivateSearchSurfaces() throws {
+        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(windowTitle: "Private search"), .privateSearch),
+            (FocusedElementFingerprint(title: "Incognito search"), .privateSearch),
+            (FocusedElementFingerprint(description: "Private browsing search field"), .privateSearch)
+        ]
+
+        for (fingerprint, expectedSurface) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+        }
+    }
+
+    @Test("Chrome search and address bars are sensitive")
+    func blocksBrowserSearchAndAddressBars() throws {
+        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(title: "Address bar"), .browserSearchOrAddressBar),
+            (FocusedElementFingerprint(description: "Location bar"), .browserSearchOrAddressBar),
+            (FocusedElementFingerprint(help: "Search Google or type a URL"), .browserSearchOrAddressBar),
+            (FocusedElementFingerprint(placeholder: "Search or enter address"), .browserSearchOrAddressBar)
+        ]
+
+        for (fingerprint, expectedSurface) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+        }
+    }
+
+    @Test("Chrome dev terminals, consoles, and hosted coding surfaces are sensitive")
+    func blocksBrowserDeveloperSurfaces() throws {
+        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(title: "Dev terminal"), .browserDeveloperTool),
+            (FocusedElementFingerprint(description: "Developer console"), .browserDeveloperTool),
+            (FocusedElementFingerprint(windowTitle: "Codespaces"), .browserDeveloperTool),
+            (FocusedElementFingerprint(windowTitle: "github.dev - Visual Studio Code"), .browserDeveloperTool),
+            (FocusedElementFingerprint(windowTitle: "Replit"), .browserDeveloperTool),
+            (FocusedElementFingerprint(windowTitle: "StackBlitz"), .browserDeveloperTool)
+        ]
+
+        for (fingerprint, expectedSurface) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(try #require(blockedSurface(from: decision)).surface == expectedSurface)
+        }
     }
 
     @Test("Chrome unknown browser pages fail closed until proofed")

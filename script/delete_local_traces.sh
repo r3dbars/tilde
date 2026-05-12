@@ -38,7 +38,8 @@ for name in \
   raw-traces.jsonl \
   diagnostics.log \
   trace-report.html \
-  survival-report.json; do
+  survival-report.json \
+  survival-inspector-debug.json; do
   delete_file "$TRACE_FOLDER/$name"
 done
 

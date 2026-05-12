@@ -115,6 +115,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("raw-traces.jsonl"))
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("trace-report.html"))
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("survival-report.json"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("survival-inspector-debug.json"))
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("privacy-export"))
             try? FileManager.default.removeItem(at: screenshotsURL)
         }

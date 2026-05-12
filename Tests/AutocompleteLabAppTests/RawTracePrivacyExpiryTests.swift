@@ -122,6 +122,7 @@ struct RawTracePrivacyExpiryTests {
             temporaryFolder.appendingPathComponent("raw-traces.jsonl"),
             temporaryFolder.appendingPathComponent("trace-report.html"),
             temporaryFolder.appendingPathComponent("survival-report.json"),
+            temporaryFolder.appendingPathComponent("survival-inspector-debug.json"),
             privacyExport.appendingPathComponent("manifest.json"),
             screenshots.appendingPathComponent("debug.png")
         ] {
@@ -135,6 +136,7 @@ struct RawTracePrivacyExpiryTests {
             temporaryFolder.appendingPathComponent("raw-traces.jsonl"),
             temporaryFolder.appendingPathComponent("trace-report.html"),
             temporaryFolder.appendingPathComponent("survival-report.json"),
+            temporaryFolder.appendingPathComponent("survival-inspector-debug.json"),
             privacyExport,
             screenshots
         ] {

@@ -82,6 +82,7 @@ for script_path in \
   ./script/delete_local_traces.sh \
   ./script/delete_local_traces_self_test.sh \
   ./script/check_diagnostics_log_self_test.sh \
+  ./script/check_controls_diagnostics_readiness_self_test.sh \
   ./script/check_redacted_report_export.sh \
   ./script/check_current_build_privacy_export.sh; do
   run_check "Executable $(basename "$script_path")" require_executable "$script_path" || failures=$((failures + 1))
@@ -92,11 +93,12 @@ run_logged_check "Swift controls and diagnostics tests" run_swift_tests "$CONTRO
 
 run_logged_check "Delete local traces self-test" ./script/delete_local_traces_self_test.sh || failures=$((failures + 1))
 run_logged_check "Diagnostics log self-test" ./script/check_diagnostics_log_self_test.sh || failures=$((failures + 1))
+run_logged_check "Controls diagnostics readiness self-test" ./script/check_controls_diagnostics_readiness_self_test.sh || failures=$((failures + 1))
 run_logged_check "Redacted report export" env \
   AUTOCOMPLETE_LAB_SWIFT_SKIP_BUILD=1 \
   ./script/check_redacted_report_export.sh || failures=$((failures + 1))
 
-run_check "Current build privacy export proof" env \
+run_logged_check "Current build privacy export proof" env \
   "${CURRENT_BUILD_ENV[@]}" \
   ./script/check_current_build_privacy_export.sh || failures=$((failures + 1))
 
