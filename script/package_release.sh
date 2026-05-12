@@ -219,8 +219,13 @@ record_command_allow_failure() {
 }
 
 create_zip() {
+  create_zip_from_app "$APP_BUNDLE"
+}
+
+create_zip_from_app() {
+  local source_app="$1"
   rm -f "$ZIP_PATH"
-  ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+  ditto -c -k --keepParent "$source_app" "$ZIP_PATH"
 }
 
 create_dmg() {
@@ -344,14 +349,13 @@ case "$MODE" in
     record_command "$PROOF_DIR/spctl-dmg.txt" \
       spctl -a -t open --context context:primary-signature -v "$DMG_PATH"
 
-    create_zip
-
     verify_dir="$(mktemp -d)"
     trap 'rm -rf "$verify_dir"' EXIT
     mkdir -p "$verify_dir/mount"
     hdiutil attach "$DMG_PATH" -mountpoint "$verify_dir/mount" -nobrowse -quiet
     cp -R "$verify_dir/mount/SteadyType.app" "$verify_dir/SteadyType.app"
     hdiutil detach "$verify_dir/mount" -quiet
+    create_zip_from_app "$verify_dir/SteadyType.app"
     record_command "$PROOF_DIR/spctl-installed-app.txt" \
       spctl --assess --type execute --verbose=4 "$verify_dir/SteadyType.app"
     write_checksums
