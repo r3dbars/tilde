@@ -8,7 +8,8 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
-if ! grep -F "requires that process" "$TMP_DIR/help.txt" >/dev/null; then
+if ! grep -F "fails closed unless" "$TMP_DIR/help.txt" >/dev/null ||
+   ! grep -F "this checkout's dist/SteadyType.app binary" "$TMP_DIR/help.txt" >/dev/null; then
   echo "real app smoke help must explain --skip-build checkout verification" >&2
   exit 1
 fi
@@ -82,6 +83,26 @@ if ! grep -F 'build_bundle_if_needed' script/real_app_smoke.sh >/dev/null ||
   echo "real app smoke self-test expected Chrome proof to build before seeding and launch only for proof" >&2
   exit 1
 fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+
+def function_body(name: str) -> str:
+    marker = f"{name}() {{"
+    start = source.index(marker)
+    next_start = source.find("\n}\n\n", start)
+    return source[start:next_start]
+
+build_if_needed = function_body("build_if_needed")
+build_bundle_if_needed = function_body("build_bundle_if_needed")
+if "wait_for_current_autocomplete_lab_process\n  refresh_build_archive_proof" not in build_if_needed:
+    raise SystemExit("build_if_needed must verify the current checkout process before proof")
+if 'else\n    wait_for_current_autocomplete_lab_process' not in build_bundle_if_needed:
+    raise SystemExit("build_bundle_if_needed must verify the current checkout process when --skip-build is used")
+if "SteadyType smoke launch did not settle on this checkout" not in source:
+    raise SystemExit("stale process failure message is missing")
+PY
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Codex seeding to allow refocus-step verification" >&2

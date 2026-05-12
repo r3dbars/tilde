@@ -93,9 +93,9 @@ Claude Code is proof-only through supported terminal hosts. Use --host or the
 claude-code-<host> aliases to record host-specific proof labels without enabling
 normal terminal suggestions.
 
---skip-build reuses the already-running AutocompleteLab app and requires that process
-to have been launched from this checkout with any proof-mode environment needed
-by the smoke pass.
+--skip-build reuses the already-running AutocompleteLab app. It fails closed unless
+the only running SteadyType process is this checkout's dist/SteadyType.app binary
+and that process already has any proof-mode environment needed by the smoke pass.
 
 --native-undo-proof relaunches AutocompleteLab with app rollback disabled,
 passes Command-Z through to the target app, and records native single-edit undo
@@ -6670,15 +6670,17 @@ build_if_needed() {
       AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
     )
     env "${build_run_env[@]}" ./script/build_and_run.sh run
-    wait_for_current_autocomplete_lab_process
   fi
 
+  wait_for_current_autocomplete_lab_process
   refresh_build_archive_proof
 }
 
 build_bundle_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 ./script/build_and_run.sh bundle-only
+  else
+    wait_for_current_autocomplete_lab_process
   fi
 
   refresh_build_archive_proof
