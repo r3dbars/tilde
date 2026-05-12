@@ -214,6 +214,10 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "recovery key",
         "recovery phrase",
         "seed phrase",
+        "secret recovery phrase",
+        "wallet seed",
+        "mnemonic phrase",
+        "crypto wallet",
         "security code",
         "cvv",
         "cvc",
@@ -229,7 +233,26 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "access token",
         "auth token",
         "bearer token",
-        "personal access token"
+        "personal access token",
+        "ssn",
+        "social security",
+        "passport number",
+        "driver license",
+        "drivers license",
+        "government id",
+        "date of birth",
+        "birth date",
+        "dob",
+        "tax id",
+        "taxpayer id",
+        "insurance",
+        "policy number",
+        "member id",
+        "medical record",
+        "health record",
+        "patient id",
+        "prescription",
+        "diagnosis"
     ]
 
     private static let urlNeedles: [String] = [
