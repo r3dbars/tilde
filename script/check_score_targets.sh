@@ -23,6 +23,7 @@ MANUAL_SMOKE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRI
 VISUAL_EVIDENCE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT:-./script/check_visual_placement_evidence.sh}"
 PROOF_MANIFEST_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT:-./script/check_proof_manifest.sh}"
 PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_manifest_proof.sh}"
+BETA_READINESS_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_BETA_READINESS_GATE_SCRIPT:-./script/beta_readiness.sh}"
 
 ISSUES=0
 LIVE_PROMPT_PROOF_ISSUES=0
@@ -117,7 +118,7 @@ print_blocker_summary() {
     echo "- Release and architecture polish: $RELEASE_ARCHITECTURE_ISSUES issue(s). Keep aggregate scores below target until proof gates and shared orchestration gaps close."
   fi
   if ((STRICT_PROOF_GATE_ISSUES > 0)); then
-    echo "- Strict proof gates: $STRICT_PROOF_GATE_ISSUES issue(s). Do not allow Markdown scores to reach target until manual smoke, visual evidence, proof manifest, and prompt-app proof gates pass."
+    echo "- Strict proof gates: $STRICT_PROOF_GATE_ISSUES issue(s). Do not allow Markdown scores to reach target until manual smoke, visual evidence, proof manifest, prompt-app proof, and beta readiness gates pass."
   fi
 }
 
@@ -283,6 +284,7 @@ check_strict_proof_gates() {
   run_strict_proof_gate "visual placement evidence" "$VISUAL_EVIDENCE_GATE_SCRIPT" --require-all
   run_strict_proof_gate "proof manifest" "$PROOF_MANIFEST_GATE_SCRIPT" --require-all
   run_strict_proof_gate "prompt app proof" "$PROMPT_APP_PROOF_GATE_SCRIPT"
+  run_strict_proof_gate "beta readiness" "$BETA_READINESS_GATE_SCRIPT" --check-only
 }
 
 check_steadytype_scorecard() {
