@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 DOC="$ROOT_DIR/docs/product/dependency-sdk-data-inventory.md"
-APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/AutocompleteLab.app}"
-APP_BINARY="$APP_BUNDLE/Contents/MacOS/AutocompleteLab"
+APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
+APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 RUN_DIR="$ROOT_DIR/docs/diagnostics/runs/dependency-inventory"
 

@@ -1,4 +1,4 @@
-name: Autocomplete Lab beta feedback
+name: SteadyType beta feedback
 description: Report a private beta issue without sharing private typed text.
 title: "[Beta] "
 labels:
@@ -14,7 +14,7 @@ body:
     attributes:
       label: Build
       description: Version, build number, commit, or artifact checksum.
-      placeholder: "commit 771f14d, AutocompleteLab.dmg sha256 ..."
+      placeholder: "commit 771f14d, SteadyType.dmg sha256 ..."
     validations:
       required: true
   - type: input

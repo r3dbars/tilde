@@ -62,8 +62,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-root",
         type=Path,
-        default=Path.home() / "Library/Application Support/AutocompleteLab",
-        help="Autocomplete Lab Application Support root.",
+        default=Path.home() / "Library/Application Support/SteadyType",
+        help="SteadyType Application Support root.",
     )
     parser.add_argument(
         "--print-path",
@@ -105,7 +105,7 @@ def validation_failure(model: str, path: Path, reason: str) -> str:
             f"Expected: {path}",
             "",
             "Fix:",
-            "  Open Autocomplete Lab Settings and use the Local model action.",
+            "  Open SteadyType Settings and use the Local model action.",
             "  The app shows the expected model folder and keeps suggestions off until the model is valid.",
             "",
             "Developer fallback:",

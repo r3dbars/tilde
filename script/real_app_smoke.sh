@@ -366,9 +366,9 @@ if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$APP" != "textedit" && "$APP
   exit 2
 fi
 
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
-DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.autocomplete-lab}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
+DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 declare -a SMOKE_TMP_DIRS=()
 declare -a SMOKE_CHROME_PIDS=()
 declare -a SMOKE_HTTP_PIDS=()
@@ -3148,7 +3148,7 @@ on run argv
           if expectedLeaf is not "" then
             set leafMatches to tabURL contains expectedLeaf
           end if
-          set titleMatches to tabTitle contains ("Autocomplete Lab Chrome") and tabTitle contains ("[ready=1]")
+          set titleMatches to tabTitle contains ("SteadyType Chrome") and tabTitle contains ("[ready=1]")
           if urlMatches or leafMatches or titleMatches then
             set active tab index of chromeWindow to tabIndex
             set index of chromeWindow to 1
@@ -4518,7 +4518,7 @@ chrome_fixture_html() {
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Textarea Smoke</title>
+<title>SteadyType Chrome Textarea Smoke</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <textarea data-smoke-editor autofocus aria-label="Smoke textarea" style="font: 18px -apple-system; width: 720px; height: 180px; margin: 80px;"></textarea>
 <script>
@@ -4543,7 +4543,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Contenteditable Smoke</title>
+<title>SteadyType Chrome Contenteditable Smoke</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <main data-smoke-editor role="textbox" aria-label="Smoke rich text editor" contenteditable="true" spellcheck="false" style="font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; padding: 12px; border: 1px solid #bbb; outline: none;"></main>
 <script>
@@ -4565,7 +4565,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Editor-Like Smoke</title>
+<title>SteadyType Chrome Editor-Like Smoke</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <div class="cm-editor" role="application" aria-label="Local editor-like smoke fixture" style="display: grid; grid-template-columns: 48px 1fr; font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; border: 1px solid #bbb;">
   <div aria-hidden="true" style="padding-top: 14px; border-right: 1px solid #ddd; background: #f5f5f2; color: #777; font: 14px Menlo, monospace; text-align: center;">1</div>
@@ -4590,7 +4590,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Monaco-Like Smoke</title>
+<title>SteadyType Chrome Monaco-Like Smoke</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -4652,7 +4652,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Real Monaco Smoke [ready=0]</title>
+<title>SteadyType Chrome Real Monaco Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file: blob:; worker-src blob: file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -4719,7 +4719,7 @@ require(["vs/editor/editor.main"], function () {
     editor.focus();
   };
   window.autocompleteSmokeReady = true;
-  document.title = "Autocomplete Lab Chrome Real Monaco Smoke [ready=1]";
+  document.title = "SteadyType Chrome Real Monaco Smoke [ready=1]";
   window.focusSmokeEditor();
 });
 </script>
@@ -4729,7 +4729,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome ProseMirror-Like Smoke</title>
+<title>SteadyType Chrome ProseMirror-Like Smoke</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -4782,7 +4782,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Real ProseMirror Smoke [ready=0]</title>
+<title>SteadyType Chrome Real ProseMirror Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -4819,7 +4819,7 @@ body { margin: 0; background: #fbfbfb; }
 <script>
 window.autocompleteSmokeReady = false;
 window.AutocompleteLabRealProseMirrorSmoke.mount(document.querySelector("[data-prosemirror-mount]"));
-document.title = "Autocomplete Lab Chrome Real ProseMirror Smoke [ready=1]";
+document.title = "SteadyType Chrome Real ProseMirror Smoke [ready=1]";
 </script>
 HTML
       ;;
@@ -4827,7 +4827,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=0]</title>
+<title>SteadyType Chrome Chat-Like No-Submit Smoke [submits=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -4889,7 +4889,7 @@ button {
 <script>
 window.autocompleteSmokeSubmitCount = 0;
 window.updateSmokeSubmitCount = function () {
-  document.title = "Autocomplete Lab Chrome Chat-Like No-Submit Smoke [submits=" + window.autocompleteSmokeSubmitCount + "]";
+  document.title = "SteadyType Chrome Chat-Like No-Submit Smoke [submits=" + window.autocompleteSmokeSubmitCount + "]";
   document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
 };
 window.autocompleteSmokeEditorText = function () {
@@ -4919,7 +4919,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>Autocomplete Lab Browser Chat Proof Harness [submits=0 sendKeys=0 promptMutations=0 wrongContext=0]</title>
+<title>SteadyType Browser Chat Proof Harness [submits=0 sendKeys=0 promptMutations=0 wrongContext=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -5006,7 +5006,7 @@ window.autocompleteSmokeCounters = {
 };
 window.updateSmokeCounters = function () {
   const counters = window.autocompleteSmokeCounters;
-  document.title = "Autocomplete Lab Browser Chat Proof Harness [submits=" + counters.submits
+  document.title = "SteadyType Browser Chat Proof Harness [submits=" + counters.submits
     + " sendKeys=" + counters.sendKeys
     + " promptMutations=" + counters.promptMutations
     + " wrongContext=" + counters.wrongContext + "]";
@@ -5224,7 +5224,7 @@ build_if_needed() {
 }
 
 wait_for_current_autocomplete_lab_process() {
-  local expected_binary="$ROOT_DIR/dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab"
+  local expected_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
   local deadline=$((SECONDS + 20))
 
   while ((SECONDS <= deadline)); do
@@ -5240,7 +5240,7 @@ wait_for_current_autocomplete_lab_process() {
       else
         stale_processes+="${pid} ${command}"$'\n'
       fi
-    done < <(pgrep -f "/[A]utocompleteLab.app/Contents/MacOS/AutocompleteLab" 2>/dev/null || true)
+    done < <(pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType" 2>/dev/null || true)
 
     if [[ "$found_current" == "1" && -z "$stale_processes" ]]; then
       return 0
@@ -5248,10 +5248,10 @@ wait_for_current_autocomplete_lab_process() {
     sleep 0.25
   done
 
-  echo "AutocompleteLab smoke launch did not settle on this checkout's app bundle." >&2
+  echo "SteadyType smoke launch did not settle on this checkout's app bundle." >&2
   echo "Expected binary: $expected_binary" >&2
-  echo "Running AutocompleteLab processes:" >&2
-  pgrep -f "/[A]utocompleteLab.app/Contents/MacOS/AutocompleteLab" 2>/dev/null |
+  echo "Running SteadyType processes:" >&2
+  pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType" 2>/dev/null |
     while IFS= read -r pid; do
       [[ -z "$pid" ]] && continue
       ps -p "$pid" -o pid=,command= 2>/dev/null || true
@@ -5260,8 +5260,8 @@ wait_for_current_autocomplete_lab_process() {
 }
 
 refresh_build_archive_proof() {
-  local app_bundle="dist/AutocompleteLab.app"
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  local app_bundle="dist/SteadyType.app"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip}"
   local archive_dir archive_name archive_abs
 
   [[ -d "$app_bundle" ]] || return 0
@@ -5272,7 +5272,7 @@ refresh_build_archive_proof() {
   archive_abs="$(cd "$archive_dir" && pwd)/$archive_name"
 
   rm -f "$archive_abs"
-  (cd dist && ditto -c -k --keepParent "AutocompleteLab.app" "$archive_abs")
+  (cd dist && ditto -c -k --keepParent "SteadyType.app" "$archive_abs")
 
   local archive_sha
   archive_sha="$(shasum -a 256 "$archive_abs" | awk '{print $1}')"
@@ -5530,7 +5530,7 @@ import ApplicationServices
 import Foundation
 
 let expectedPrefix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_EXPECTED_PREFIX"] ?? ""
-let titleMarker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE"] ?? "Autocomplete Lab Checklist Smoke"
+let titleMarker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE"] ?? "SteadyType Checklist Smoke"
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -5604,7 +5604,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "SteadyType Obsidian proof"
 let expectedSuffix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -5693,7 +5693,7 @@ APPLESCRIPT
 }
 
 ensure_notes_checklist_smoke_note() {
-  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-Autocomplete Lab Checklist Smoke}"
+  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-SteadyType Checklist Smoke}"
 
   open -a Notes
   wait_for_frontmost_app "Notes" 8
@@ -5718,7 +5718,7 @@ APPLESCRIPT
 }
 
 ensure_notes_body_smoke_note() {
-  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_SMOKE_TITLE:-Autocomplete Lab Smoke}"
+  local smoke_title="${AUTOCOMPLETE_LAB_NOTES_SMOKE_TITLE:-SteadyType Smoke}"
   local smoke_marker="${AUTOCOMPLETE_LAB_NOTES_SMOKE_MARKER:-Autocomplete smoke}"
 
   open -a Notes
@@ -5764,14 +5764,14 @@ APPLESCRIPT
 }
 
 reset_obsidian_smoke_note() {
-  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}"
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-SteadyType Obsidian proof}"
 
   AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
 import Foundation
 
-let markerText = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? "Autocomplete Lab Obsidian proof"
+let markerText = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? "SteadyType Obsidian proof"
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -5977,7 +5977,7 @@ run_notes() {
   fi
 
   if [[ "$manual_app" == "notes-checklist" ]]; then
-    local checklist_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-Autocomplete Lab Checklist Smoke}"
+    local checklist_title="${AUTOCOMPLETE_LAB_NOTES_CHECKLIST_TITLE:-SteadyType Checklist Smoke}"
     ensure_notes_checklist_smoke_note
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
