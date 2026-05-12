@@ -37,6 +37,7 @@ OUTPUT="$(
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
   AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
   AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency.lock" \
     ./script/fresh_latency_proof.sh --runs 3
 )"
 
@@ -67,6 +68,37 @@ fi
 if [[ "$(grep -c -- '--skip-build' "$SMOKE_LOG")" != "2" ]]; then
   echo "fresh latency proof self-test expected two skip-build smoke reruns" >&2
   cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if [[ -d "$TMP_DIR/fresh-latency.lock" ]]; then
+  echo "fresh latency proof self-test expected lock cleanup after success" >&2
+  exit 1
+fi
+
+BLOCKED_OUTPUT="$TMP_DIR/blocked-output.txt"
+if AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-blocked.lock" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS=0 \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_PROCESS_LIST=$'123 1 123 bash ./script/real_app_smoke.sh chrome\n124 1 124 bash ./script/fresh_latency_proof.sh --runs 3' \
+    ./script/fresh_latency_proof.sh --runs 1 >"$BLOCKED_OUTPUT" 2>&1; then
+  echo "fresh latency proof self-test expected active proof processes to fail before selecting a window" >&2
+  cat "$BLOCKED_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Another proof process is already active." "$BLOCKED_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected active proof process warning" >&2
+  cat "$BLOCKED_OUTPUT" >&2
+  exit 1
+fi
+
+if grep -F "Fresh latency proof start:" "$BLOCKED_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected no latency window after active proof refusal" >&2
+  cat "$BLOCKED_OUTPUT" >&2
   exit 1
 fi
 
