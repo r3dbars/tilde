@@ -306,6 +306,30 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast phrase selection predicts common continuations when enabled")
+    func fastPhraseSelectionPredictiveFallback() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let disabledSelection = orchestrator.fastPhraseSelection(
+            for: "Quick note: I just wanted to",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4
+        )
+        let enabledSelection = orchestrator.fastPhraseSelection(
+            for: "Quick note: I just wanted to",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true
+        )
+
+        #expect(disabledSelection.suggestion == nil)
+        #expect(disabledSelection.suppressionReason == "disabled")
+        #expect(enabledSelection.suggestion?.visibleText == " follow up")
+        #expect(enabledSelection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+        #expect(enabledSelection.traceMetadata["predictivePhraseMatch"] == "i just wanted to")
+    }
+
+    @MainActor
     @Test("App model result metadata is trace safe")
     func appModelResultMetadataIsTraceSafe() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

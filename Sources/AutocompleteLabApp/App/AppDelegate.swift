@@ -4707,6 +4707,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        if requestMode == .phraseContinuation {
+            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
+                for: context.textBeforeCursor,
+                behaviorProfileID: request.behaviorProfileID,
+                maxVisibleWords: request.maxVisibleWords,
+                allowPredictiveFallback: shouldUsePredictivePhraseFallback(
+                    profile: profile,
+                    behaviorProfileID: request.behaviorProfileID,
+                    visiblePageContext: visiblePageContext
+                )
+            )
+            let fastSelectionMetadata = fastSelection.traceMetadata
+            if let fastSuggestion = fastSelection.suggestion {
+                guard !suggestionRepetitionSuppressor.shouldSuppress(
+                    fastSuggestion.visibleText,
+                    mode: request.mode,
+                    scope: appBundleIdentifier
+                ) else {
+                    RawAutocompleteTraceLog.shared.record(
+                        type: .suggestionSuppressed,
+                        suggestionID: suggestionID,
+                        appBundleIdentifier: appBundleIdentifier,
+                        fieldIdentity: fieldIdentityDescription,
+                        requestMode: request.mode.rawValue,
+                        triggerReason: "predictive-phrase-fallback",
+                        textBeforeCursor: request.textBeforeCursor,
+                        textAfterCursor: request.textAfterCursor,
+                        cleanedVisibleText: fastSuggestion.visibleText,
+                        displayedText: fastSuggestion.visibleText,
+                        latencyMilliseconds: 0,
+                        reason: "repeated-miss",
+                        metadata: [
+                            "renderMode": renderMode.rawValue
+                        ]
+                        .merging(fastSelectionMetadata) { current, _ in current }
+                        .merging(requestMetadata) { current, _ in current }
+                    )
+                    recordSuggestionEvent(
+                        "suggestion-blocked",
+                        context: context,
+                        profile: profile,
+                        metadata: [
+                            "reason": "repeated-miss",
+                            "triggerReason": "predictive-phrase-fallback"
+                        ]
+                    )
+                    recordAnnoyanceSignal(
+                        .repeatedRejection,
+                        context: annoyanceContext(
+                            appBundleIdentifier: appBundleIdentifier,
+                            fieldIdentity: fieldIdentity,
+                            requestMode: request.mode,
+                            fieldKind: fieldClassification.kind
+                        ),
+                        suggestionID: suggestionID,
+                        reason: "repeated-miss"
+                    )
+                    hideSuggestion()
+                    return
+                }
+
+                presentSuggestion(
+                    fastSuggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    renderMode: renderMode,
+                    latencyMilliseconds: 0,
+                    triggerReason: "predictive-phrase-fallback",
+                    candidateSelectionMetadata: fastSelectionMetadata,
+                    refreshBeforePresenting: false
+                )
+                return
+            }
+        }
+
         debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity] in
             let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 60)
             try? await Task.sleep(for: .milliseconds(renderDelay))
@@ -8013,6 +8091,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         suggestionTuning.allowsPredictiveWordFallback(
             appBundleIdentifier: profile.bundleIdentifier,
+            visiblePageContextAvailable: visiblePageContext != nil
+        )
+    }
+
+    private func shouldUsePredictivePhraseFallback(
+        profile: CompatibilityProfile,
+        behaviorProfileID: AutocompleteBehaviorProfileID?,
+        visiblePageContext: VisiblePageContext?
+    ) -> Bool {
+        suggestionTuning.allowsPredictivePhraseFallback(
+            appBundleIdentifier: profile.bundleIdentifier,
+            behaviorProfileID: behaviorProfileID,
             visiblePageContextAvailable: visiblePageContext != nil
         )
     }
