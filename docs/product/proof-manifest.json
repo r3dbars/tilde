@@ -606,7 +606,7 @@
   },
     {
       "surface": "Apple Notes title",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -617,14 +617,33 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-title.png"
       ],
-      "gaps": [
-        "More title lengths are still required; same-slice notes-title-undo proof is current."
-      ],
+      "gaps": [],
       "requirements": [
         {
-          "id": "notes-title-length-variants",
-          "status": "pending",
-          "summary": "Add bounded proof across short and long Notes title lengths."
+          "id": "notes-title-short-variant",
+          "status": "complete",
+          "summary": "Bounded proof for a short Notes title length is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-title-short",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-short --manual-gate"
+        },
+        {
+          "id": "notes-title-long-variant",
+          "status": "complete",
+          "summary": "Bounded proof for a longer Notes title length is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-title-long",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title-long --manual-gate"
         },
         {
           "id": "notes-title-undo-same-slice",
@@ -643,7 +662,7 @@
     },
     {
       "surface": "Apple Notes body",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -654,14 +673,33 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-body.png"
       ],
-      "gaps": [
-        "More body lengths are still required; same-slice notes-body-undo proof is current."
-      ],
+      "gaps": [],
       "requirements": [
         {
-          "id": "notes-body-length-variants",
-          "status": "pending",
-          "summary": "Add bounded proof across short and long Notes body text."
+          "id": "notes-body-short-variant",
+          "status": "complete",
+          "summary": "Bounded proof for short Notes body text is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-body-short",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-short --manual-gate"
+        },
+        {
+          "id": "notes-body-long-variant",
+          "status": "complete",
+          "summary": "Bounded proof for longer Notes body text is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-body-long",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body-long --manual-gate"
         },
         {
           "id": "notes-body-undo-same-slice",
@@ -680,7 +718,7 @@
     },
     {
       "surface": "Apple Notes checklist",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Notes",
         "bundle": "com.apple.Notes",
@@ -691,19 +729,33 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/notes-checklist.png"
       ],
-      "gaps": [
-        "Checked items and longer checklist rows are still required; same-slice notes-checklist-undo proof is current."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "notes-checklist-checked-item-variants",
-          "status": "pending",
-          "summary": "Add bounded proof for checked and unchecked Notes checklist rows."
+          "status": "complete",
+          "summary": "Bounded proof for checked and unchecked Notes checklist rows is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-checklist-checked",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-checked --manual-gate"
         },
         {
           "id": "notes-checklist-long-row-variants",
-          "status": "pending",
-          "summary": "Add bounded proof for longer checklist rows."
+          "status": "complete",
+          "summary": "Bounded proof for a longer Notes checklist row is recorded.",
+          "manualSmoke": {
+            "app": "Notes",
+            "bundle": "com.apple.Notes",
+            "proof": "notes-checklist-long",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-long --manual-gate"
         },
         {
           "id": "notes-checklist-undo-same-slice",

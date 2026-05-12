@@ -186,14 +186,32 @@ if ! grep -F "choose a manual-gated Apple Notes surface" "$TMP_DIR/notes.txt" >/
   exit 1
 fi
 
-for notes_surface in notes-title notes-body notes-checklist notes-title-undo notes-body-undo notes-checklist-undo; do
+for notes_surface in notes-title notes-title-short notes-title-long notes-body notes-body-short notes-body-long notes-checklist notes-checklist-checked notes-checklist-long notes-title-undo notes-body-undo notes-checklist-undo; do
   script/real_app_smoke.sh "$notes_surface" --dry-run >"$TMP_DIR/$notes_surface.txt"
   case "$notes_surface" in
+    notes-title-short)
+      expected_plan="guarded Apple Notes short title proof"
+      ;;
+    notes-title-long)
+      expected_plan="guarded Apple Notes long title proof"
+      ;;
     notes-title-undo)
       expected_plan="guarded Apple Notes title undo proof"
       ;;
+    notes-body-short)
+      expected_plan="guarded Apple Notes short body proof"
+      ;;
+    notes-body-long)
+      expected_plan="guarded Apple Notes long body proof"
+      ;;
     notes-body-undo)
       expected_plan="guarded Apple Notes body undo proof"
+      ;;
+    notes-checklist-checked)
+      expected_plan="guarded Apple Notes checked checklist proof"
+      ;;
+    notes-checklist-long)
+      expected_plan="guarded Apple Notes long checklist proof"
       ;;
     notes-checklist-undo)
       expected_plan="guarded Apple Notes checklist undo proof"
