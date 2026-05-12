@@ -94,9 +94,9 @@ for filter in \
   run_logged_check "Swift test $filter" run_swift_test "$filter" || failures=$((failures + 1))
 done
 
-run_check "Delete local traces self-test" ./script/delete_local_traces_self_test.sh || failures=$((failures + 1))
-run_check "Diagnostics log self-test" ./script/check_diagnostics_log_self_test.sh || failures=$((failures + 1))
-run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+run_logged_check "Delete local traces self-test" ./script/delete_local_traces_self_test.sh || failures=$((failures + 1))
+run_logged_check "Diagnostics log self-test" ./script/check_diagnostics_log_self_test.sh || failures=$((failures + 1))
+run_logged_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
 
 run_logged_check "Current build privacy export proof" env \
   "${CURRENT_BUILD_ENV[@]}" \
