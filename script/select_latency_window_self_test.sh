@@ -89,8 +89,8 @@ if script/select_latency_window.py \
   exit 1
 fi
 
-if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/token-only-model.err" >/dev/null; then
-  echo "latency window self-test did not keep partial latest launch proof red" >&2
+if ! grep -F "no sampled default runtime launch meets sample requirements" "$TMP_DIR/token-only-model.err" >/dev/null; then
+  echo "latency window self-test did not explain the undersampled launch set" >&2
   cat "$TMP_DIR/token-only-model.err" >&2
   exit 1
 fi
@@ -134,7 +134,7 @@ if ! grep -F "AUTOCOMPLETE_LAB_TRACE_END_LINE=10" <<<"$WINDOW_WITH_EMPTY_LATEST"
   exit 1
 fi
 
-if ! grep -F "skippedEmptyDefaultRelaunches=1" "$TMP_DIR/empty-latest.err" >/dev/null; then
+if ! grep -F "skippedUnsampledDefaultLaunches=1" "$TMP_DIR/empty-latest.err" >/dev/null; then
   echo "latency window self-test did not explain the skipped unsampled launch" >&2
   cat "$TMP_DIR/empty-latest.err" >&2
   exit 1
@@ -145,18 +145,63 @@ cat >>"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T10:12:02Z","sessionID":"session","suggestionID":"future-slow","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":2000,"metadata":{"behaviorProfile":"docs_prose"}}
 LOG
 
-if script/select_latency_window.py \
-  --diagnostics-log "$DIAGNOSTICS_LOG" \
-  --trace-log "$TRACE_LOG" \
-  --min-first-visible-samples 2 \
-  --min-model-samples 2 2>"$TMP_DIR/partial-latest.err" >/dev/null; then
-  echo "latency window self-test expected partial latest launch samples to fail" >&2
+WINDOW_WITH_PARTIAL_LATEST="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$DIAGNOSTICS_LOG" \
+    --trace-log "$TRACE_LOG" \
+    --min-first-visible-samples 2 \
+    --min-model-samples 2 2>"$TMP_DIR/partial-latest.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_TRACE_END_LINE=10" <<<"$WINDOW_WITH_PARTIAL_LATEST" >/dev/null; then
+  echo "latency window self-test did not bound the selected window before partial latest samples" >&2
+  cat "$TMP_DIR/partial-latest.err" >&2
+  echo "$WINDOW_WITH_PARTIAL_LATEST" >&2
   exit 1
 fi
 
-if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/partial-latest.err" >/dev/null; then
-  echo "latency window self-test did not explain the partial latest launch" >&2
-  cat "$TMP_DIR/partial-latest.err" >&2
+env $WINDOW_WITH_PARTIAL_LATEST \
+  script/latency_benchmark_report.py \
+    --diagnostics-log "$DIAGNOSTICS_LOG" \
+    --trace-log "$TRACE_LOG" \
+    --beta-gate \
+    --require-first-visible-samples 2 \
+    --require-model-samples 2 \
+    --require-event-tap-samples 0 \
+    --require-ax-samples 1 \
+    --max-first-visible-p95-ms 250 \
+    --max-first-visible-p99-ms 250 \
+    --max-first-token-p95-ms 650 \
+    --max-total-generation-p95-ms 850 >/dev/null
+
+CROSS_DIAGNOSTICS_LOG="$TMP_DIR/cross-override-diagnostics.log"
+CROSS_TRACE_LOG="$TMP_DIR/cross-override-traces.jsonl"
+
+cat >"$CROSS_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T11:00:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T11:05:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=qwen3-0.6b-4bit modelOverride=qwen3-0.6b nativeRuntimeAvailable=true
+2026-05-12T11:10:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$CROSS_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T11:00:02Z","sessionID":"session","suggestionID":"old-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T11:00:03Z","sessionID":"session","suggestionID":"old-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose"}}
+{"timestamp":"2026-05-12T11:00:04Z","sessionID":"session","suggestionID":"old-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T11:00:05Z","sessionID":"session","suggestionID":"old-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"behaviorProfile":"docs_prose"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$CROSS_DIAGNOSTICS_LOG" \
+  --trace-log "$CROSS_TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 2>"$TMP_DIR/cross-override.err" >/dev/null; then
+  echo "latency window self-test crossed an override launch to reuse old default samples" >&2
+  exit 1
+fi
+
+if ! grep -F "no sampled default runtime launch meets sample requirements" "$TMP_DIR/cross-override.err" >/dev/null; then
+  echo "latency window self-test did not explain the post-override undersampled launch" >&2
+  cat "$TMP_DIR/cross-override.err" >&2
   exit 1
 fi
 

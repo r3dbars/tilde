@@ -196,10 +196,15 @@ def select_window(
         )
         return Selection(latest_launch, trace_window(trace_log, latest_launch.timestamp), reason, False)
 
-    skipped_empty_default_relaunches = 0
+    current_segment_start = 0
+    for index, launch in enumerate(launches[:-1]):
+        if not is_eligible_default_launch(launch, expected_asset):
+            current_segment_start = index + 1
+
+    skipped_unsampled_default_launches = 0
     eligible_indexed_launches = [
         (index, launch)
-        for index, launch in enumerate(launches)
+        for index, launch in enumerate(launches[current_segment_start:], start=current_segment_start)
         if is_eligible_default_launch(launch, expected_asset)
     ]
     for index, launch in reversed(eligible_indexed_launches):
@@ -212,14 +217,12 @@ def select_window(
             and window.model_samples >= min_model_samples
         ):
             reason = "selected latest sampled default runtime launch"
-            if skipped_empty_default_relaunches:
-                reason += (
-                    f"; skippedEmptyDefaultRelaunches={skipped_empty_default_relaunches}"
-                )
+            if skipped_unsampled_default_launches:
+                reason += f"; skippedUnsampledDefaultLaunches={skipped_unsampled_default_launches}"
             return Selection(launch, window, reason, True, diagnostics_end_line)
 
         if window.first_visible_samples == 0 and window.model_samples == 0:
-            skipped_empty_default_relaunches += 1
+            skipped_unsampled_default_launches += 1
             continue
 
         return Selection(
