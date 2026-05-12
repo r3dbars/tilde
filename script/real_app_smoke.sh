@@ -710,6 +710,75 @@ wait_for_log_fields_optional() {
   return 1
 }
 
+wait_for_textedit_acceptance_with_stale_retry() {
+  local start_line="$1"
+  local label="$2"
+  local key_name="$3"
+  local action_name="$4"
+  local window_title="$5"
+  local attempt attempt_start
+
+  for attempt in 1 2 3; do
+    attempt_start="$(line_count "$LOG_PATH")"
+    case "$action_name" in
+      acceptNextWord)
+        press_key_code 48
+        ;;
+      acceptAllVisible)
+        press_accept_all_shortcut
+        ;;
+      *)
+        echo "unknown TextEdit acceptance action: $action_name" >&2
+        exit 2
+        ;;
+    esac
+
+    if wait_for_log_fields_optional "$attempt_start" 4 \
+      "keyboard-action" \
+      "app=com.apple.TextEdit" \
+      "key=$key_name" \
+      "action=$action_name" \
+      "handled=true"; then
+      return 0
+    fi
+
+    if wait_for_log_fields_optional "$attempt_start" 1 \
+      "keyboard-action" \
+      "app=com.apple.TextEdit" \
+      "key=$key_name" \
+      "action=$action_name" \
+      "handled=false" \
+      "reason=text-before-cursor-changed-before-accept"; then
+      wait_for_log_pattern "$attempt_start" "suggestion-presented .*app=com.apple.TextEdit" "$label refreshed suggestion" 12
+      wait_for_screenshot_capture_if_enabled "$attempt_start" "com.apple.TextEdit" "$label refreshed"
+      focus_textedit_smoke_editor "$window_title"
+      assert_textedit_frontmost_window "$window_title" "$label refreshed"
+      continue
+    fi
+
+    if wait_for_log_fields_optional "$attempt_start" 1 \
+      "keyboard-action" \
+      "app=com.apple.TextEdit" \
+      "key=$key_name" \
+      "action=$action_name" \
+      "handled=false" \
+      "reason=text-after-cursor-changed-before-accept"; then
+      wait_for_log_pattern "$attempt_start" "suggestion-presented .*app=com.apple.TextEdit" "$label refreshed suggestion" 12
+      wait_for_screenshot_capture_if_enabled "$attempt_start" "com.apple.TextEdit" "$label refreshed"
+      focus_textedit_smoke_editor "$window_title"
+      assert_textedit_frontmost_window "$window_title" "$label refreshed"
+      continue
+    fi
+  done
+
+  wait_for_log_fields "$start_line" "$label" 1 \
+    "keyboard-action" \
+    "app=com.apple.TextEdit" \
+    "key=$key_name" \
+    "action=$action_name" \
+    "handled=true"
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -7824,13 +7893,7 @@ APPLESCRIPT
   assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_one_word_accept_text
   before_one_word_accept_text="$(textedit_document_text "$textedit_window_title")"
-  press_key_code 48
-  wait_for_log_fields "$start_line" "TextEdit Tab acceptance" 12 \
-    "keyboard-action" \
-    "app=com.apple.TextEdit" \
-    "key=tab" \
-    "action=acceptNextWord" \
-    "handled=true"
+  wait_for_textedit_acceptance_with_stale_retry "$start_line" "TextEdit Tab acceptance" "tab" "acceptNextWord" "$textedit_window_title"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
   if native_undo_proof_requested; then
     verify_textedit_native_undo "$textedit_window_title" "$before_one_word_accept_text" "$start_line" "TextEdit one-word native undo" "acceptNextWord"
@@ -7864,13 +7927,7 @@ APPLESCRIPT
   local before_full_accept_text
   before_full_accept_text="$(textedit_document_text "$textedit_window_title")"
   full_start_line="$(line_count "$LOG_PATH")"
-  press_accept_all_shortcut
-  wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \
-    "keyboard-action" \
-    "app=com.apple.TextEdit" \
-    "key=$full_accept_key" \
-    "action=acceptAllVisible" \
-    "handled=true"
+  wait_for_textedit_acceptance_with_stale_retry "$full_start_line" "TextEdit full acceptance" "$full_accept_key" "acceptAllVisible" "$textedit_window_title"
   wait_for_log_pattern "$full_start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit full verified insertion"
 
   if native_undo_proof_requested; then
