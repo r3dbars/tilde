@@ -3,12 +3,13 @@ import argparse
 import datetime as dt
 import statistics
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 
 DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
-DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/AutocompleteLab/Models"
+DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/SteadyType/Models"
 DEFAULT_LINE_LIMIT = 5000
 
 SUPPORTED_MODELS = [
@@ -373,6 +374,21 @@ def find_live_process(explicit_pid=None):
     return LiveProcess(pid=pid, cpu_percent=cpu, rss_mb=rss_mb, elapsed=parts[2])
 
 
+def sample_live_process(explicit_pid, duration_seconds, interval_seconds):
+    samples = []
+    duration = max(0.0, duration_seconds)
+    interval = max(0.1, interval_seconds)
+    deadline = time.monotonic() + duration
+    while True:
+        sample = find_live_process(explicit_pid)
+        if sample:
+            samples.append(sample)
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
+    return samples
+
+
 def energy_risk(data, live_process):
     score = 0
     reasons = []
@@ -418,7 +434,38 @@ def energy_risk(data, live_process):
     return label, reasons or ["no current risk markers"]
 
 
-def print_report(args, data, live_process, models):
+def energy_gate_summary(samples, args):
+    if not samples:
+        return "fail", ["energy gate requires a live process sample"]
+
+    cpu_values = [sample.cpu_percent for sample in samples]
+    rss_values = [sample.rss_mb for sample in samples]
+    avg_cpu = statistics.mean(cpu_values)
+    p95_cpu = percentile(cpu_values, 0.95) or 0.0
+    max_rss = max(rss_values)
+    rss_growth = max_rss - min(rss_values)
+    failures = []
+    if avg_cpu > args.max_average_cpu:
+        failures.append(f"average CPU {avg_cpu:.1f}% > {args.max_average_cpu:.1f}%")
+    if p95_cpu > args.max_p95_cpu:
+        failures.append(f"p95 CPU {p95_cpu:.1f}% > {args.max_p95_cpu:.1f}%")
+    if max_rss > args.max_rss_mb:
+        failures.append(f"max RSS {max_rss}MB > {args.max_rss_mb}MB")
+    if rss_growth > args.max_rss_growth_mb:
+        failures.append(f"RSS growth {rss_growth}MB > {args.max_rss_growth_mb}MB")
+
+    status = "fail" if failures else "pass"
+    details = [
+        f"samples={len(samples)}",
+        f"avgCPU={avg_cpu:.1f}%",
+        f"p95CPU={p95_cpu:.1f}%",
+        f"maxRSS={max_rss}MB",
+        f"rssGrowth={rss_growth}MB",
+    ]
+    return status, details + failures
+
+
+def print_report(args, data, live_process, models, energy_gate=None):
     print("Runtime performance report")
     print(f"Diagnostics log: {args.diagnostics_log}")
     print(f"Line limit: {args.line_limit if args.line_limit > 0 else 'all'}")
@@ -455,6 +502,9 @@ def print_report(args, data, live_process, models):
 
     risk, reasons = energy_risk(data, live_process)
     print(f"Battery/energy risk: {risk} ({'; '.join(reasons)})")
+    if energy_gate:
+        status, details = energy_gate
+        print(f"Energy sample gate: {status} ({'; '.join(details)})")
     print()
     print("Scorecard caveats")
     caveats = scorecard_caveats(data)
@@ -480,6 +530,13 @@ def main():
     parser.add_argument("--line-limit", type=int, default=DEFAULT_LINE_LIMIT)
     parser.add_argument("--pid", type=int, help="SteadyType process id")
     parser.add_argument("--no-live-process", action="store_true")
+    parser.add_argument("--energy-gate", action="store_true", help="Fail if non-sudo CPU/RSS sampling exceeds energy-risk thresholds")
+    parser.add_argument("--sample-duration-seconds", type=float, default=0.0)
+    parser.add_argument("--sample-interval-seconds", type=float, default=2.0)
+    parser.add_argument("--max-average-cpu", type=float, default=10.0)
+    parser.add_argument("--max-p95-cpu", type=float, default=25.0)
+    parser.add_argument("--max-rss-mb", type=int, default=6144)
+    parser.add_argument("--max-rss-growth-mb", type=int, default=512)
     args = parser.parse_args()
 
     diagnostics_path = Path(args.diagnostics_log).expanduser()
@@ -490,8 +547,19 @@ def main():
         raise SystemExit(f"diagnostics log missing: {diagnostics_path}")
 
     data = parse_diagnostics(diagnostics_path, max(0, args.line_limit))
-    live_process = None if args.no_live_process else find_live_process(args.pid)
-    print_report(args, data, live_process, model_table(model_root))
+    energy_samples = []
+    if args.energy_gate and not args.no_live_process:
+        energy_samples = sample_live_process(
+            args.pid,
+            args.sample_duration_seconds,
+            args.sample_interval_seconds,
+        )
+
+    live_process = None if args.no_live_process else (energy_samples[-1] if energy_samples else find_live_process(args.pid))
+    energy_gate = energy_gate_summary(energy_samples, args) if args.energy_gate else None
+    print_report(args, data, live_process, model_table(model_root), energy_gate=energy_gate)
+    if energy_gate and energy_gate[0] != "pass":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
