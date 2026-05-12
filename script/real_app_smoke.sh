@@ -447,7 +447,7 @@ cleanup_smoke_http_pids() {
 
 cleanup_smoke_textedit_windows() {
   if ((${#SMOKE_TEXTEDIT_WINDOW_TITLES[@]})); then
-    osascript "${SMOKE_TEXTEDIT_WINDOW_TITLES[@]}" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+    osascript "${SMOKE_TEXTEDIT_WINDOW_TITLES[@]}" <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
   tell application "TextEdit"
     repeat with targetTitle in argv
@@ -462,22 +462,28 @@ on run argv
   end tell
 end run
 APPLESCRIPT
+    local osascript_pid="$!"
+    wait_for_background_process "$osascript_pid" 4 "TextEdit smoke cleanup" >/dev/null 2>&1 || true
   fi
 }
 
 cleanup_stale_textedit_smoke_windows() {
-  osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
-tell application "TextEdit"
-  repeat with docRef in documents
-    try
-      set docName to name of docRef
-      if docName starts with "textedit-smoke-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
-        close docRef saving no
-      end if
-    end try
-  end repeat
-end tell
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1 &
+on run argv
+  tell application "TextEdit"
+    repeat with docRef in documents
+      try
+        set docName to name of docRef
+        if docName starts with "textedit-smoke-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
+          close docRef saving no
+        end if
+      end try
+    end repeat
+  end tell
+end run
 APPLESCRIPT
+  local osascript_pid="$!"
+  wait_for_background_process "$osascript_pid" 4 "stale TextEdit smoke cleanup" >/dev/null 2>&1 || true
 }
 
 cleanup_smoke() {
