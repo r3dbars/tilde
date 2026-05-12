@@ -4170,7 +4170,9 @@ type_textedit_smoke_fragment() {
 
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
+  move_textedit_caret_to_document_end "$window_title"
   if textedit_smoke_allows_ax_proof_typing && insert_textedit_smoke_fragment "$window_title" "$fragment"; then
+    move_textedit_caret_to_document_end "$window_title"
     return 0
   fi
 
@@ -4194,6 +4196,7 @@ type_textedit_smoke_fragment_and_confirm() {
 
   type_textedit_smoke_fragment "$window_title" "$fragment"
   if wait_for_textedit_document_fragment "$window_title" "$fragment" "$label" 5; then
+    move_textedit_caret_to_document_end "$window_title"
     return 0
   fi
 
@@ -4203,6 +4206,7 @@ type_textedit_smoke_fragment_and_confirm() {
   set_textedit_document_text "$window_title" ""
   type_textedit_smoke_fragment "$window_title" "$fragment"
   wait_for_textedit_document_fragment "$window_title" "$fragment" "$label retry" 5
+  move_textedit_caret_to_document_end "$window_title"
 }
 
 wait_for_textedit_smoke_editor() {
@@ -4414,6 +4418,19 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
 
 exit(1)
 SWIFT
+}
+
+textedit_utf16_length() {
+  python3 -c 'import sys; text = sys.stdin.read(); print(len(text.encode("utf-16-le")) // 2)'
+}
+
+move_textedit_caret_to_document_end() {
+  local window_title="$1"
+  local current_text utf16_length
+
+  current_text="$(textedit_document_text "$window_title")"
+  utf16_length="$(printf '%s' "$current_text" | textedit_utf16_length)"
+  set_textedit_selected_range "$window_title" "$utf16_length" 0
 }
 
 assert_chrome_chat_safety_counters_zero() {

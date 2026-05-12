@@ -73,6 +73,11 @@ if ! grep -F 'textedit_smoke_allows_ax_proof_typing' script/real_app_smoke.sh >/
   echo "real app smoke self-test expected TextEdit proof fragments to default to System Events key typing" >&2
   exit 1
 fi
+if ! grep -F 'move_textedit_caret_to_document_end "$window_title"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set_textedit_selected_range "$window_title" "$utf16_length" 0' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof typing to keep the caret at document end" >&2
+  exit 1
+fi
 if ! grep -F 'launch_steadytype_after_chrome_setup' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'pause_steadytype_for_chrome_setup' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Chrome proof to pause during setup and relaunch before proof" >&2
