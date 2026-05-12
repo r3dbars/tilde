@@ -35,6 +35,7 @@ TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
 CODEX_DRAFT_BACKUP_ACTIVE=0
+SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
@@ -463,6 +464,21 @@ APPLESCRIPT
   fi
 }
 
+cleanup_stale_textedit_smoke_windows() {
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "TextEdit"
+  repeat with docRef in documents
+    try
+      set docName to name of docRef
+      if docName starts with "textedit-smoke-" then
+        close docRef saving no
+      end if
+    end try
+  end repeat
+end tell
+APPLESCRIPT
+}
+
 cleanup_smoke() {
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
@@ -518,6 +534,30 @@ APPLESCRIPT
 }
 
 trap cleanup_smoke EXIT
+
+diagnose_smoke_signal() {
+  local signal_name="$1"
+  echo "real_app_smoke received $signal_name during phase: $SMOKE_PHASE" >&2
+  echo "Smoke lock: $SMOKE_LOCK_DIR" >&2
+  echo "Running SteadyType processes:" >&2
+  pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType" 2>/dev/null |
+    while IFS= read -r pid; do
+      [[ -z "$pid" ]] && continue
+      ps -p "$pid" -o pid=,ppid=,pgid=,etime=,command= 2>/dev/null || true
+    done >&2
+  echo "Tracked TextEdit smoke windows: ${SMOKE_TEXTEDIT_WINDOW_TITLES[*]:-none}" >&2
+  if [[ -f "$LOG_PATH" ]]; then
+    echo "Last diagnostics line:" >&2
+    tail -n 1 "$LOG_PATH" >&2 || true
+  fi
+}
+
+handle_smoke_term() {
+  diagnose_smoke_signal "SIGTERM"
+  exit 143
+}
+
+trap handle_smoke_term TERM
 
 acquire_smoke_lock() {
   local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
@@ -6429,6 +6469,7 @@ describe_plan() {
 }
 
 build_if_needed() {
+  SMOKE_PHASE="build/relaunch current SteadyType"
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
       AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
@@ -6441,6 +6482,7 @@ build_if_needed() {
   fi
 
   refresh_build_archive_proof
+  SMOKE_PHASE="build proof refreshed"
 }
 
 wait_for_current_autocomplete_lab_process() {
@@ -7803,10 +7845,12 @@ run_claude_code_blocked() {
 
 run_textedit() {
   local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
+  SMOKE_PHASE="TextEdit setup"
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   prepare_temporary_app_enablement
   build_if_needed
+  SMOKE_PHASE="TextEdit readiness"
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit runtime readiness" 60 "$SKIP_BUILD"
 
@@ -7837,11 +7881,14 @@ run_textedit() {
       ;;
   esac
 
+  SMOKE_PHASE="TextEdit stale smoke cleanup"
+  cleanup_stale_textedit_smoke_windows
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-smoke-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   textedit_window_title="$(basename "$textedit_file")"
   SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
   : >"$textedit_file"
+  SMOKE_PHASE="TextEdit open disposable document"
   open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
   sleep 0.8
 
@@ -7882,6 +7929,7 @@ APPLESCRIPT
   first_fragment="$(textedit_first_fragment)"
   manual_app="$(textedit_smoke_session_app)"
 
+  SMOKE_PHASE="TextEdit first suggestion"
   type_textedit_smoke_fragment_and_confirm "$textedit_window_title" "$first_fragment" "first typed"
 
   if [[ "$TEXTEDIT_VARIANT" == "selected-suppression" ]]; then
@@ -7899,6 +7947,7 @@ APPLESCRIPT
   assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_one_word_accept_text
   before_one_word_accept_text="$(textedit_document_text "$textedit_window_title")"
+  SMOKE_PHASE="TextEdit Tab acceptance"
   wait_for_textedit_acceptance_with_stale_retry "$start_line" "TextEdit Tab acceptance" "tab" "acceptNextWord" "$textedit_window_title"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
   if native_undo_proof_requested; then
@@ -7924,6 +7973,7 @@ APPLESCRIPT
   full_accept_key="$(accept_all_shortcut)"
   second_start_line="$(line_count "$LOG_PATH")"
 
+  SMOKE_PHASE="TextEdit second suggestion"
   type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and stays inst" "second typed"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
@@ -7933,6 +7983,7 @@ APPLESCRIPT
   local before_full_accept_text
   before_full_accept_text="$(textedit_document_text "$textedit_window_title")"
   full_start_line="$(line_count "$LOG_PATH")"
+  SMOKE_PHASE="TextEdit full acceptance"
   wait_for_textedit_acceptance_with_stale_retry "$full_start_line" "TextEdit full acceptance" "$full_accept_key" "acceptAllVisible" "$textedit_window_title"
   wait_for_log_pattern "$full_start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit full verified insertion"
 
@@ -7961,6 +8012,7 @@ APPLESCRIPT
   AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh "$manual_app" --check
+  SMOKE_PHASE="TextEdit proof complete"
 }
 
 run_chrome_fixture() {
