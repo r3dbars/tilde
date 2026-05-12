@@ -102,7 +102,7 @@ require_contains "$PRIVACY_DOC" "Raw text traces and placement screenshots are d
 require_contains "$PRIVACY_DOC" "Normal first-run setup does not need Screen Recording"
 require_contains "$PRIVACY_DOC" "Pause the current app from the menu bar"
 
-SCRIPT_TEXT="$(sed -n '1,620p' script/private_beta_packet.sh)"
+SCRIPT_TEXT="$(cat script/private_beta_packet.sh)"
 
 for expected_doc in \
   "PRIVACY-BETA.md" \
@@ -121,6 +121,9 @@ for expected_doc in \
   "check_current_build_privacy_export.sh"; do
   require_contains "$SCRIPT_TEXT" "$expected_doc"
 done
+
+require_contains "$SCRIPT_TEXT" "beta packet commit is stale"
+require_contains "$SCRIPT_TEXT" "require_generated_file"
 
 ./script/validate_beta_issue_template.sh --quiet
 
