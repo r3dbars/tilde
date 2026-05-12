@@ -20,6 +20,26 @@ For screenshot-backed app-by-app grades and gaps, use
 | Mail | diagnostics only | disabled | disabled | unavailable | blocked until safe compose adapter exists |
 | Atlas | unsupported | disabled | disabled | unavailable | blocked until focused AX element is reliable |
 
+## Focused Graduation Queue
+
+These are the next high-value writing surfaces. The decision is intentionally
+conservative: no surface moves up without current-head screenshot evidence,
+safe Tab behavior, no submit/send, sensitive-field suppression, verified
+insertion, and undo/recovery proof.
+
+| Surface | Decision | Current proof state | Required next proof |
+| --- | --- | --- | --- |
+| Google Docs in Chrome | blocked | Browser policy suppresses `docs.google.com` as `unsupported-browser-surface`. | Disposable document proof for placement, one-word Tab, insertion verification, undo/recovery, and no sensitive-field leak. |
+| Notion browser or desktop | blocked | Browser Notion and `notion.id` stay disabled. | Disposable page proof for ProseMirror placement, insertion verification, undo/recovery, and no submit/navigation side effect. |
+| Slack browser or desktop | blocked | Browser Slack and `com.tinyspeck.slackmacgap` stay disabled. | Disposable channel proof for one-word Tab, no send, insertion verification, undo/recovery, and sensitive-field suppression. |
+| Discord browser or desktop | blocked | Browser Discord and Discord app variants stay disabled. | Disposable server/channel proof for one-word Tab, no send, insertion verification, undo/recovery, and sensitive-field suppression. |
+| Mail compose | diagnostics-only | `com.apple.mail` has a diagnostics-only profile and disabled insertion. | Compose-body-only adapter proof that avoids recipients/search/account fields, verifies insertion, and proves undo/recovery. |
+| Browser ChatGPT | blocked | Browser ChatGPT is blocked by hosted-surface policy; ChatGPT app/Atlas profiles are disabled. | Disposable prompt proof for one-word Tab, no submit/tool/context side effect, insertion verification, undo/recovery, and screenshot-backed placement. |
+| Claude desktop layouts | word-only | Default Claude desktop proof exists; layout variants are pending. | Empty, long, wrapped, narrow, context, light, and dark prompt layout rows with one-word no-submit proof. |
+| Codex layouts | word-only | Default Codex proof exists with one-word no-submit behavior. | More prompt layouts before raising beyond word-only; full accept stays off until a separate no-submit lane exists. |
+| Obsidian long notes | blocked | General Obsidian proof exists, but current-head long-note proof is pending. | Repair CodeMirror cursor source for scrolled long notes, then record screenshot-backed accept and undo proof. |
+| Real Monaco/CodeMirror editors | blocked | ProseMirror proof is stronger; official/default Monaco and current CodeMirror are not complete. | Official CodeMirror and Monaco/default-AX lanes with verified insertion, undo/recovery, and current screenshots. |
+
 Run:
 
 ```bash

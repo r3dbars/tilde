@@ -11,18 +11,21 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.TextEdit")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.apple.TextEdit")?.appFamily == .nativeAppKit)
         #expect(store.profile(for: "com.apple.TextEdit")?.supportLevel == .green)
+        #expect(store.profile(for: "com.apple.TextEdit")?.graduationDecision == .supported)
         #expect(store.profile(for: "com.apple.TextEdit")?.supportsObserverUpdates == true)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.apple.TextEdit")?.fallbackInsertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.apple.Notes")?.insertionMode == .axThenKeyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.appFamily == .swiftUIAppKit)
         #expect(store.profile(for: "com.apple.Notes")?.supportLevel == .yellow)
+        #expect(store.profile(for: "com.apple.Notes")?.graduationDecision == .supported)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
         #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)
         #expect(store.profile(for: "md.obsidian")?.anchorLadder == [.caret])
         #expect(store.profile(for: "md.obsidian")?.supportLevel == .yellow)
+        #expect(store.profile(for: "md.obsidian")?.graduationDecision == .supported)
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
@@ -33,6 +36,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.displayName == "Mail")
         #expect(store.profile(for: "com.apple.mail")?.anchorLadder == [.none])
         #expect(store.profile(for: "com.apple.mail")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.apple.mail")?.graduationDecision == .diagnosticsOnly)
         #expect(store.profile(for: "com.apple.mail")?.renderMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.insertionMode == .disabled)
         #expect(store.profile(for: "com.apple.mail")?.fallbackInsertionMode == .disabled)
@@ -41,6 +45,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.openai.atlas")?.displayName == "ChatGPT Atlas")
         #expect(store.profile(for: "com.openai.atlas")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.openai.atlas")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.openai.atlas")?.renderMode == .disabled)
         #expect(store.profile(for: "com.openai.atlas")?.insertionMode == .disabled)
         #expect(store.profile(for: "com.openai.atlas")?.supportsOneWordAcceptance == false)
@@ -50,15 +55,18 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.atlas")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.openai.chat")?.displayName == "ChatGPT")
         #expect(store.profile(for: "com.openai.chat")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.openai.chat")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.openai.chat")?.renderMode == .disabled)
         #expect(store.profile(for: "com.openai.chat")?.insertionMode == .disabled)
         #expect(store.profile(for: "com.openai.chat")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "com.openai.ChatGPT")?.displayName == "ChatGPT")
+        #expect(store.profile(for: "com.openai.ChatGPT")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.openai.ChatGPT")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "com.google.Chrome")?.displayName == "Chrome")
         #expect(store.profile(for: "com.google.Chrome")?.appFamily == .chromium)
         #expect(store.profile(for: "com.google.Chrome")?.anchorLadder == [.caret, .field])
         #expect(store.profile(for: "com.google.Chrome")?.supportLevel == .yellow)
+        #expect(store.profile(for: "com.google.Chrome")?.graduationDecision == .supported)
         #expect(store.profile(for: "com.google.Chrome")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.google.Chrome")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.google.Chrome")?.insertionMode == .axThenKeyEvents)
@@ -69,6 +77,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
         #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
+        #expect(store.profile(for: "com.openai.codex")?.graduationDecision == .wordOnly)
         #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
@@ -84,6 +93,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.graduationDecision == .diagnosticsOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .disabled)
@@ -98,6 +108,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claude-code")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
+        #expect(store.profile(for: "com.anthropic.claudefordesktop")?.graduationDecision == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.insertionMode == .axValueReplacement)
@@ -111,20 +122,29 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.apple.Safari")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.apple.Safari")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.apple.Safari")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.appFamily == .electron)
+        #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.tinyspeck.slackmacgap")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.displayName == "Telegram")
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "ru.keepcoder.Telegram")?.graduationDecision == .blocked)
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.renderMode == .disabled)
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.promptAppSafetyMode == .disabled)
         #expect(store.profile(for: "notion.id")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "notion.id")?.graduationDecision == .blocked)
         #expect(store.profile(for: "notion.id")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.hnc.Discord")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "com.hnc.Discord")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.hnc.DiscordPTB")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.hnc.DiscordPTB")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.hnc.DiscordCanary")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.hnc.DiscordCanary")?.graduationDecision == .blocked)
         #expect(store.profiles["com.microsoft.VSCode"]?.anchorLadder == [.none])
+        #expect(store.profiles["com.microsoft.VSCode"]?.graduationDecision == .blocked)
         #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.renderMode == .disabled)
+        #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.graduationDecision == .blocked)
     }
 
     @Test("Denylisted apps are never allowed")
@@ -357,6 +377,52 @@ struct CompatibilityProfileTests {
             #expect(profile.promptAppSafetyMode == .disabled)
             #expect(profile.canPresentSuggestions == false)
         }
+    }
+
+    @Test("High-value writing surfaces have explicit graduation decisions")
+    func highValueWritingSurfacesHaveExplicitGraduationDecisions() throws {
+        let store = CompatibilityProfileStore.mvp
+
+        let supportedBundles = [
+            "com.google.Chrome",
+            "md.obsidian"
+        ]
+        for bundleIdentifier in supportedBundles {
+            #expect(try #require(store.profile(for: bundleIdentifier)).graduationDecision == .supported)
+        }
+
+        let wordOnlyBundles = [
+            "com.openai.codex",
+            "com.anthropic.claudefordesktop"
+        ]
+        for bundleIdentifier in wordOnlyBundles {
+            let profile = try #require(store.profile(for: bundleIdentifier))
+            #expect(profile.graduationDecision == .wordOnly)
+            #expect(profile.supportsOneWordAcceptance)
+            #expect(!profile.supportsFullAcceptance)
+            #expect(profile.requiresNoSubmitAcceptanceProof)
+        }
+
+        #expect(try #require(store.profile(for: "com.apple.mail")).graduationDecision == .diagnosticsOnly)
+
+        let blockedBundles = [
+            "com.openai.chat",
+            "com.openai.ChatGPT",
+            "com.openai.atlas",
+            "notion.id",
+            "com.tinyspeck.slackmacgap",
+            "com.hnc.Discord",
+            "com.hnc.DiscordPTB",
+            "com.hnc.DiscordCanary"
+        ]
+        for bundleIdentifier in blockedBundles {
+            #expect(try #require(store.profile(for: bundleIdentifier)).graduationDecision == .blocked)
+        }
+
+        #expect(store.profiles["com.microsoft.VSCode"]?.graduationDecision == .blocked)
+        #expect(store.supportStatus(for: "com.microsoft.VSCode") == .denylisted)
+        #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.graduationDecision == .blocked)
+        #expect(store.supportStatus(for: "com.todesktop.230313mzl4w4u92") == .denylisted)
     }
 
     @Test("Safety summaries expose the practical current-app stance")

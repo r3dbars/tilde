@@ -143,6 +143,16 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             verticalToleranceMultiplier: 0.65
         ),
         AppCompatibilityProfile(
+            id: "notion-blocked",
+            displayName: "Notion",
+            bundleIdentifierPrefixes: ["notion.id"],
+            defaultRung: .blocked,
+            textPath: .blocked,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .ignoreFocusedTextElement
+        ),
+        AppCompatibilityProfile(
             id: "openai-composer",
             displayName: "OpenAI Composer",
             bundleIdentifierPrefixes: [
@@ -214,8 +224,7 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             id: "chat-app",
             displayName: "Chat App",
             bundleIdentifierPrefixes: [
-                "ru.keepcoder.Telegram",
-                "com.tinyspeck.slackmacgap"
+                "ru.keepcoder.Telegram"
             ],
             defaultRung: .detect,
             textPath: .editorPlugin,
@@ -224,6 +233,30 @@ public struct AppCompatibilityRegistry: Equatable, Sendable {
             boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside,
             maximumLineHeightMultiplier: 1.45,
             verticalToleranceMultiplier: 0.65
+        ),
+        AppCompatibilityProfile(
+            id: "slack-blocked",
+            displayName: "Slack",
+            bundleIdentifierPrefixes: ["com.tinyspeck.slackmacgap"],
+            defaultRung: .blocked,
+            textPath: .blocked,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .ignoreFocusedTextElement
+        ),
+        AppCompatibilityProfile(
+            id: "discord-blocked",
+            displayName: "Discord",
+            bundleIdentifierPrefixes: [
+                "com.hnc.Discord",
+                "com.hnc.DiscordPTB",
+                "com.hnc.DiscordCanary"
+            ],
+            defaultRung: .blocked,
+            textPath: .blocked,
+            acceptMode: .none,
+            lineRectPolicy: .caretOnly,
+            boundaryClipPolicy: .ignoreFocusedTextElement
         ),
         AppCompatibilityProfile(
             id: "electron-editor",

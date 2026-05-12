@@ -74,11 +74,19 @@ public enum PromptAppSafetyMode: String, Equatable, Sendable {
     }
 }
 
+public enum CompatibilityGraduationDecision: String, Equatable, Sendable {
+    case supported
+    case wordOnly = "word-only"
+    case diagnosticsOnly = "diagnostics-only"
+    case blocked
+}
+
 public struct CompatibilityProfile: Equatable, Sendable {
     public let bundleIdentifier: String
     public let displayName: String
     public let appFamily: CompatibilityAppFamily
     public let supportLevel: CompatibilitySupportLevel
+    public let graduationDecision: CompatibilityGraduationDecision
     public let supportReason: String
     public let renderMode: SuggestionRenderMode
     public let insertionMode: InsertionMode
@@ -109,6 +117,7 @@ public struct CompatibilityProfile: Equatable, Sendable {
         displayName: String,
         appFamily: CompatibilityAppFamily = .unknown,
         supportLevel: CompatibilitySupportLevel,
+        graduationDecision: CompatibilityGraduationDecision? = nil,
         supportReason: String,
         renderMode: SuggestionRenderMode,
         insertionMode: InsertionMode,
@@ -138,6 +147,15 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.displayName = displayName
         self.appFamily = appFamily
         self.supportLevel = supportLevel
+        self.graduationDecision = graduationDecision ?? Self.defaultGraduationDecision(
+            supportLevel: supportLevel,
+            renderMode: renderMode,
+            insertionMode: insertionMode,
+            supportsOneWordAcceptance: supportsOneWordAcceptance,
+            supportsFullAcceptance: supportsFullAcceptance,
+            requiresNoSubmitAcceptanceProof: requiresNoSubmitAcceptanceProof,
+            isSensitive: isSensitive
+        )
         self.supportReason = supportReason
         self.renderMode = renderMode
         self.insertionMode = insertionMode
@@ -162,6 +180,37 @@ public struct CompatibilityProfile: Equatable, Sendable {
         self.isSensitive = isSensitive
         self.promptAppSafetyMode = promptAppSafetyMode
         self.notes = notes
+    }
+
+    private static func defaultGraduationDecision(
+        supportLevel: CompatibilitySupportLevel,
+        renderMode: SuggestionRenderMode,
+        insertionMode: InsertionMode,
+        supportsOneWordAcceptance: Bool,
+        supportsFullAcceptance: Bool,
+        requiresNoSubmitAcceptanceProof: Bool,
+        isSensitive: Bool
+    ) -> CompatibilityGraduationDecision {
+        let canPresent = renderMode != .disabled
+            && insertionMode != .disabled
+            && (supportsOneWordAcceptance || supportsFullAcceptance)
+
+        if canPresent,
+           supportsOneWordAcceptance,
+           !supportsFullAcceptance,
+           requiresNoSubmitAcceptanceProof {
+            return .wordOnly
+        }
+
+        if canPresent, !isSensitive {
+            return .supported
+        }
+
+        if supportLevel == .diagnosticsOnly {
+            return .diagnosticsOnly
+        }
+
+        return .blocked
     }
 
     public var canPresentSuggestions: Bool {
@@ -368,6 +417,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Mail",
             appFamily: .nativeAppKit,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .diagnosticsOnly,
             supportReason: "Mail compose is sensitive and insertion is not proven.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -389,6 +439,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "ChatGPT Atlas",
             appFamily: .chromium,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Atlas can contain private browser text and prompt chats; no no-submit proof exists.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -410,6 +461,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "ChatGPT",
             appFamily: .chromium,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "ChatGPT prompt composers can submit, attach context, and expose tools; no exact-version no-submit proof exists.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -431,6 +483,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "ChatGPT",
             appFamily: .chromium,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "ChatGPT prompt composers can submit, attach context, and expose tools; no exact-version no-submit proof exists.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -489,6 +542,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Claude Code",
             appFamily: .customCanvas,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .diagnosticsOnly,
             supportReason: "The installed Claude Code bundle is a background-only CLI helper; interactive Claude Code typing usually happens inside a terminal host, which is blocked until a separate safe adapter exists.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -534,6 +588,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Safari",
             appFamily: .webKit,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Browser rich editors need separate proof from textareas.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -553,6 +608,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Slack",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Electron rich editor needs app-specific proof.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -572,6 +628,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Telegram",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Telegram send-by-enter behavior and attachment/caption flows need app-specific no-submit proof.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -591,6 +648,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Notion",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Notion pages need app-specific ProseMirror placement and insertion proof.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -609,6 +667,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Discord",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Discord message composers need explicit no-submit proof before suggestions can run.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -628,6 +687,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Discord PTB",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Discord message composers need explicit no-submit proof before suggestions can run.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -647,6 +707,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Discord Canary",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Discord message composers need explicit no-submit proof before suggestions can run.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -666,6 +727,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "VS Code",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Monaco editor exposes custom text geometry.",
             renderMode: .disabled,
             insertionMode: .disabled,
@@ -684,6 +746,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Cursor",
             appFamily: .electron,
             supportLevel: .diagnosticsOnly,
+            graduationDecision: .blocked,
             supportReason: "Monaco editor exposes custom text geometry.",
             renderMode: .disabled,
             insertionMode: .disabled,

@@ -30,6 +30,21 @@ row below must stay non-A until the required screenshot-backed and accept-proof
 evidence exists in the repo. The proof manifest also keeps variant-incomplete
 A- rows as `partial`, even when they have a passing live smoke slice.
 
+## Focused Graduation Decisions
+
+| Surface | Decision | Why |
+| --- | --- | --- |
+| Google Docs in Chrome | blocked | Hosted Docs is blocked by browser-surface policy until a disposable document has screenshot-backed placement, safe Tab, verified insertion, undo/recovery, and no sensitive-field leak. |
+| Notion browser or desktop | blocked | Notion pages can contain private workspace text, and neither browser Notion nor `notion.id` has disposable-page ProseMirror proof. |
+| Slack browser or desktop | blocked | Message composers need exact no-send proof before suggestions can run. |
+| Discord browser or desktop | blocked | Message composers need exact no-send proof before suggestions can run. |
+| Mail compose | diagnostics-only | Compose content is sensitive and insertion is unproven; suggestions stay off. |
+| Browser ChatGPT | blocked | Real ChatGPT prompt surfaces need one-word no-submit proof; the local browser-chat harness does not count. |
+| Claude desktop layouts | word-only | Default one-word no-submit proof exists, but layout variants are pending and full accept remains disabled. |
+| Codex layouts | word-only | Default one-word no-submit proof exists; broader layouts and full accept remain gated. |
+| Obsidian long notes | blocked | General Obsidian proof exists, but current-head long-note proof is still pending. |
+| Real Monaco/CodeMirror editors | blocked | Forced local fixtures are useful evidence, but official/default Monaco and current CodeMirror proof are not complete. |
+
 | Surface | Grade | Screenshot proof | Accept proof | Current read | Evidence gap |
 | --- | --- | --- | --- | --- | --- |
 | TextEdit | A | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Bounded strict visual smoke refreshed at 2026-05-12T05:06:55Z with 2 verified accepts and current app fingerprint proof. Native single-edit proof now has a separate `--native-undo-proof` lane. | Strongest native-app proof. Ghost text is readable, on the same line, and Tab/full accept verifies against the configured shortcut. The smoke lane now uses a unique disposable file, targets that exact AX window/title even when old TextEdit windows are restored, and dismisses TextEdit's native inline completion before waiting for Autocomplete Lab. Native proof is only counted when `acceptedInsertionUndone` records `undoMechanism=nativeSingleEdit`; app rollback is recoverable but degraded. | More dark/light document variants and fresh native undo proof rows. |
