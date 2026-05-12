@@ -1677,6 +1677,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch decision {
         case .eligible:
+            guard ClaudeCodeTerminalHostProofPolicy.proofInputText(
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor
+            ) != nil else {
+                return "claude-code-terminal-host-unsafeInputLine"
+            }
             return nil
         case let .blocked(reason):
             return "claude-code-terminal-host-\(reason.rawValue)"
@@ -6370,18 +6376,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
-        let previousPasteboardItems = pasteboard.pasteboardItems?.compactMap {
+        let originalItems = pasteboard.pasteboardItems?.compactMap {
             $0.copy() as? NSPasteboardItem
         } ?? []
-        func restorePasteboard() {
+        func restoreOriginalPasteboard() {
             pasteboard.clearContents()
-            if !previousPasteboardItems.isEmpty {
-                pasteboard.writeObjects(previousPasteboardItems)
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
             }
         }
         pasteboard.clearContents()
         guard pasteboard.setString(acceptedText, forType: .string) else {
-            restorePasteboard()
+            restoreOriginalPasteboard()
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
@@ -6393,11 +6399,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return false
         }
+        let fallbackChangeCount = pasteboard.changeCount
 
         let posted = Self.postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
             processIdentifier: frontmostApp.processIdentifier
         )
-        restorePasteboard()
+        schedulePasteboardRestore(
+            insertedText: acceptedText,
+            fallbackChangeCount: fallbackChangeCount,
+            originalItems: originalItems
+        )
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
@@ -6408,6 +6419,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         return posted
+    }
+
+    private func schedulePasteboardRestore(
+        insertedText: String,
+        fallbackChangeCount: Int,
+        originalItems: [NSPasteboardItem]
+    ) {
+        let restorePolicy = ClipboardFallbackRestorePolicy()
+        let pasteboard = NSPasteboard.general
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            let restoreDecision = restorePolicy.decision(
+                insertedText: insertedText,
+                currentString: pasteboard.string(forType: .string),
+                fallbackChangeCount: fallbackChangeCount,
+                currentChangeCount: pasteboard.changeCount
+            )
+            if restoreDecision == .restoreOriginalPasteboard {
+                pasteboard.clearContents()
+                pasteboard.writeObjects(originalItems)
+            }
+        }
     }
 
     nonisolated private static func postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
