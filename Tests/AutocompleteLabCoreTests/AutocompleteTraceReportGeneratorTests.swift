@@ -48,7 +48,7 @@ struct AutocompleteTraceReportGeneratorTests {
 
         let html = generator.htmlReport(for: events)
 
-        #expect(html.contains("Autocomplete Lab Redacted Trace Report"))
+        #expect(html.contains("SteadyType Redacted Trace Report"))
         #expect(html.contains("Do-not-ship blockers"))
         #expect(html.contains("Sensitive-field silence"))
         #expect(html.contains("RAM-only retention proof"))

@@ -6,10 +6,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/AutocompleteLab/traces.jsonl"
+DEFAULT_TRACE_PATH = Path.home() / "Library/Logs/SteadyType/traces.jsonl"
 DEFAULT_LEARNING_PATH = (
     Path.home()
-    / "Library/Application Support/AutocompleteLab/compatibility-learning.json"
+    / "Library/Application Support/SteadyType/compatibility-learning.json"
 )
 NUDGE_STEP_PIXELS = 2.0
 CODE_PROMOTION_REASONS = {"manual-visual-nudge", "screenshot-visual-correction"}

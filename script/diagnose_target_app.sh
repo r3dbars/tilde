@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNS_DIR="$ROOT_DIR/docs/diagnostics/runs"
 APP_BINARY_NAME="AutocompleteLab"
-APP_BUNDLE_ID="bar.r3d.autocomplete-lab"
+APP_BUNDLE_ID="bar.r3d.steadytype"
 
 PROFILE="frontmost"
 REQUESTED_APP=""

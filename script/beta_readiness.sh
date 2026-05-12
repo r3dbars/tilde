@@ -119,16 +119,16 @@ if [[ "$MODE" == "check-only" ]]; then
 
   echo
   echo "== Private beta archive =="
-  if [[ -s "$ROOT_DIR/dist/AutocompleteLab.zip" ]]; then
+  if [[ -s "$ROOT_DIR/dist/SteadyType.zip" ]]; then
     echo "Private beta archive: OK"
     run_check "Notarized install proof" check_notarized_install_proof || failures=$((failures + 1))
   else
     echo "Private beta archive: blocked"
-    echo "missing archive: $ROOT_DIR/dist/AutocompleteLab.zip"
+    echo "missing archive: $ROOT_DIR/dist/SteadyType.zip"
     failures=$((failures + 1))
   fi
 
-  if [[ -s "$ROOT_DIR/dist/AutocompleteLab.zip" ]]; then
+  if [[ -s "$ROOT_DIR/dist/SteadyType.zip" ]]; then
     run_check "Private beta packet" ./script/private_beta_packet.sh --check || failures=$((failures + 1))
   else
     echo
@@ -200,7 +200,7 @@ echo "== Private beta packet =="
 
 echo
 echo "Beta readiness passed."
-echo "Archive: $ROOT_DIR/dist/AutocompleteLab.zip"
+echo "Archive: $ROOT_DIR/dist/SteadyType.zip"
 echo "Private beta packet: $ROOT_DIR/dist/private-beta"
 
 if [[ -z "${NOTARYTOOL_PROFILE:-}" ]]; then

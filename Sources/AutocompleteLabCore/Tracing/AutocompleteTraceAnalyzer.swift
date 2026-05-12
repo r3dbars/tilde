@@ -166,6 +166,43 @@ public struct AutocompleteInsertionReliability: Equatable, Sendable {
     }
 }
 
+public struct AutocompleteUndoRecoverability: Equatable, Sendable {
+    public let appBundleIdentifier: String
+    public let acceptedCount: Int
+    public let verifiedCount: Int
+    public let nativeSingleEditCount: Int
+    public let appRollbackCount: Int
+    public let degradedCount: Int
+    public let oneWordNativeCount: Int
+    public let fullNativeCount: Int
+    public let status: String
+    public let reason: String
+
+    public init(
+        appBundleIdentifier: String,
+        acceptedCount: Int,
+        verifiedCount: Int,
+        nativeSingleEditCount: Int,
+        appRollbackCount: Int,
+        degradedCount: Int,
+        oneWordNativeCount: Int,
+        fullNativeCount: Int,
+        status: String,
+        reason: String
+    ) {
+        self.appBundleIdentifier = appBundleIdentifier
+        self.acceptedCount = acceptedCount
+        self.verifiedCount = verifiedCount
+        self.nativeSingleEditCount = nativeSingleEditCount
+        self.appRollbackCount = appRollbackCount
+        self.degradedCount = degradedCount
+        self.oneWordNativeCount = oneWordNativeCount
+        self.fullNativeCount = fullNativeCount
+        self.status = status
+        self.reason = reason
+    }
+}
+
 public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let totalEvents: Int
     public let presentedCount: Int
@@ -230,6 +267,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let annoyanceFunnel: AutocompleteAnnoyanceFunnel
     public let recommendedFixes: [AutocompleteRecommendedFix]
     public let insertionReliabilityByAppAndMode: [AutocompleteInsertionReliability]
+    public let undoRecoverabilityByApp: [AutocompleteUndoRecoverability]
     public let acceptRateByApp: [String: Double]
     public let acceptRateByMode: [String: Double]
     public let acceptRateByExperimentArm: [String: Double]
@@ -327,6 +365,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         annoyanceFunnel: AutocompleteAnnoyanceFunnel = AutocompleteAnnoyanceFunnel(),
         recommendedFixes: [AutocompleteRecommendedFix] = [],
         insertionReliabilityByAppAndMode: [AutocompleteInsertionReliability] = [],
+        undoRecoverabilityByApp: [AutocompleteUndoRecoverability] = [],
         acceptRateByApp: [String: Double] = [:],
         acceptRateByMode: [String: Double] = [:],
         acceptRateByExperimentArm: [String: Double] = [:],
@@ -423,6 +462,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.annoyanceFunnel = annoyanceFunnel
         self.recommendedFixes = recommendedFixes
         self.insertionReliabilityByAppAndMode = insertionReliabilityByAppAndMode
+        self.undoRecoverabilityByApp = undoRecoverabilityByApp
         self.acceptRateByApp = acceptRateByApp
         self.acceptRateByMode = acceptRateByMode
         self.acceptRateByExperimentArm = acceptRateByExperimentArm
@@ -486,6 +526,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let sensitiveSuppressed = suppressed.filter { sensitiveCategory($0) != nil }
         let insertionFailures = events.filter { $0.type == .insertionFailed }
         let insertionVerified = events.filter { $0.type == .insertionVerified }
+        let acceptedInsertionUndone = events.filter { $0.type == .acceptedInsertionUndone }
         let caretGeometryFailures = events.filter { $0.type == .caretGeometryFailed }
         let acceptedTextEdited = events.filter { $0.type == .acceptedTextEdited }
         let acceptanceRetentionCleared = events.filter { $0.type == .acceptanceRetentionCleared }
@@ -509,12 +550,12 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .sorted()
         let emptyModelResults = modelResults.filter(isEmptyModelResult)
         let preRenderBlocked = suppressed.filter { !presentedIDs.contains($0.suggestionID) }
-        let acceptedEventIDs = Set(accepted.map(acceptanceIdentifier))
+        let acceptedEventIDs = Set(accepted.map(\.acceptanceIdentifier))
         let acceptedAndKeptEventIDs = Set(acceptedTextEdited
-            .filter(isAcceptedAndKeptEvent)
-            .map(acceptanceIdentifier))
+            .filter(\.isAcceptedAndKeptSignal)
+            .map(\.acceptanceIdentifier))
         let acceptedAndKeptSuggestionIDs = Set(acceptedTextEdited
-            .filter(isAcceptedAndKeptEvent)
+            .filter(\.isAcceptedAndKeptSignal)
             .map(\.suggestionID))
             .intersection(presentedIDs)
         let editDistances = acceptedTextEdited
@@ -553,7 +594,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             acceptanceRetentionClearedByReason: countsByReason(acceptanceRetentionCleared),
             tabAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isTabAccept).count) / Double(accepted.count),
             fullAcceptShare: accepted.isEmpty ? 0 : Double(accepted.filter(isFullAccept).count) / Double(accepted.count),
-            duplicateTextCount: insertionFailures.filter(isDuplicateTextEvent).count,
+            duplicateTextCount: insertionFailures.filter(\.isDuplicateInsertionSignal).count,
             doNotShipCounters: doNotShipCounters(from: events),
             appDisableCount: events.filter { $0.type == .appDisabled }.count,
             caretGeometryFailureCount: caretGeometryFailures.count,
@@ -635,6 +676,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 insertionVerified: insertionVerified,
                 insertionFailures: insertionFailures
             ),
+            undoRecoverabilityByApp: undoRecoverabilityByApp(
+                accepted: accepted,
+                insertionVerified: insertionVerified,
+                acceptedInsertionUndone: acceptedInsertionUndone
+            ),
             acceptRateByApp: rates(
                 presentedByID: firstPresentedByID,
                 outcomeIDs: acceptedIDs,
@@ -702,20 +748,20 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             ),
             presentedByExperimentArm: counts(Array(firstPresentedByID.values), key: experimentArm),
             acceptedAndKeptByExperimentArm: counts(
-                acceptedTextEdited.filter(isAcceptedAndKeptEvent),
+                acceptedTextEdited.filter(\.isAcceptedAndKeptSignal),
                 key: experimentArm
             ),
             suppressedByExperimentArm: counts(suppressed, key: experimentArm),
             presentedByFieldKind: counts(Array(firstPresentedByID.values), key: fieldKind),
             acceptedAndKeptByFieldKind: counts(
-                acceptedTextEdited.filter(isAcceptedAndKeptEvent),
+                acceptedTextEdited.filter(\.isAcceptedAndKeptSignal),
                 key: fieldKind
             ),
             suppressedByFieldKind: counts(suppressed, key: fieldKind),
             suppressedByReason: countsByReason(suppressed),
             sensitiveSuppressedByCategory: counts(sensitiveSuppressed, key: sensitiveSuppressionCategory),
             sensitivePresentedByCategory: counts(
-                Array(firstPresentedByID.values).filter { sensitivePresentationCategory($0) != nil },
+                Array(firstPresentedByID.values).filter(isSensitivePresentation),
                 key: sensitivePresentationCategory
             ),
             suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
@@ -778,6 +824,10 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         sensitiveCategory(event) ?? (isSensitiveFieldKind(event) ? fieldKind(event) : "unknown")
     }
 
+    private func isSensitivePresentation(_ event: AutocompleteTraceEvent) -> Bool {
+        sensitiveCategory(event) != nil || isSensitiveFieldKind(event)
+    }
+
     private func isSensitiveFieldKind(_ event: AutocompleteTraceEvent) -> Bool {
         ["search", "form", "url", "secure", "password", "unprovenSurface"]
             .contains(event.metadata["fieldKind"] ?? "")
@@ -821,35 +871,16 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         return "unknown"
     }
 
-    private func acceptanceIdentifier(_ event: AutocompleteTraceEvent) -> String {
-        event.metadata["acceptanceID"] ?? event.suggestionID
-    }
-
-    private func isAcceptedAndKeptEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        if event.metadata["strongAcceptedAndKept"] == "true"
-            || event.metadata["finalAcceptedAndKept"] == "true" {
-            return true
-        }
-
-        guard ["10s", "30s", "fieldBlur", "fieldSend"].contains(event.metadata["checkpoint"] ?? "") else {
-            return false
-        }
-
-        return ["exactKept", "lightlyEditedKept", "partiallyKept"].contains(event.metadata["survivalClass"] ?? "")
-    }
-
     private func isTabAccept(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["acceptMode"] == "tab" || event.outcome == "acceptNextWord"
+        event.metadata["acceptMode"] == "tab"
+            || event.metadata["acceptMode"] == "acceptNextWord"
+            || event.outcome == "acceptNextWord"
     }
 
     private func isFullAccept(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["acceptMode"] == "full" || event.outcome == "acceptAllVisible"
-    }
-
-    private func isDuplicateTextEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["duplicateDetected"] == "true"
-            || event.reason.localizedCaseInsensitiveContains("duplicate")
-            || event.outcome.localizedCaseInsensitiveContains("duplicate")
+        event.metadata["acceptMode"] == "full"
+            || event.metadata["acceptMode"] == "acceptAllVisible"
+            || event.outcome == "acceptAllVisible"
     }
 
     private func doubleMetadata(_ event: AutocompleteTraceEvent, key: String) -> Double? {
@@ -1054,6 +1085,74 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
                 return $0.appBundleIdentifier < $1.appBundleIdentifier
             }
+    }
+
+    private func undoRecoverabilityByApp(
+        accepted: [AutocompleteTraceEvent],
+        insertionVerified: [AutocompleteTraceEvent],
+        acceptedInsertionUndone: [AutocompleteTraceEvent]
+    ) -> [AutocompleteUndoRecoverability] {
+        let acceptedByApp = Dictionary(grouping: accepted) { event in
+            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+        }
+        let verifiedByApp = Dictionary(grouping: insertionVerified) { event in
+            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+        }
+        let undoneByApp = Dictionary(grouping: acceptedInsertionUndone) { event in
+            event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+        }
+
+        return Set(acceptedByApp.keys)
+            .union(verifiedByApp.keys)
+            .union(undoneByApp.keys)
+            .sorted()
+            .map { app in
+                let appAccepted = acceptedByApp[app] ?? []
+                let appVerified = verifiedByApp[app] ?? []
+                let appUndone = undoneByApp[app] ?? []
+                let native = appUndone.filter { undoMechanism($0) == .nativeSingleEdit }
+                let rollback = appUndone.filter { undoMechanism($0) == .appRollback }
+                let degraded = appUndone.filter { undoMechanism($0) == .degraded }
+                let oneWordNative = native.filter(isTabAccept)
+                let fullNative = native.filter(isFullAccept)
+                let status: String
+                let reason: String
+
+                if !native.isEmpty {
+                    status = "nativeSingleEdit"
+                    reason = "Native undo proof exists in the same trace slice."
+                } else if !rollback.isEmpty {
+                    status = "appRollback"
+                    reason = "App rollback proof exists, but native undo is not proven."
+                } else if !degraded.isEmpty {
+                    status = "degraded"
+                    reason = "Surface is marked degraded for undo."
+                } else {
+                    status = "missing"
+                    reason = "No same-slice undo proof recorded."
+                }
+
+                return AutocompleteUndoRecoverability(
+                    appBundleIdentifier: app,
+                    acceptedCount: appAccepted.count,
+                    verifiedCount: appVerified.count,
+                    nativeSingleEditCount: native.count,
+                    appRollbackCount: rollback.count,
+                    degradedCount: degraded.count,
+                    oneWordNativeCount: oneWordNative.count,
+                    fullNativeCount: fullNative.count,
+                    status: status,
+                    reason: reason
+                )
+            }
+    }
+
+    private func undoMechanism(_ event: AutocompleteTraceEvent) -> InsertionUndoRecoverabilityLevel? {
+        guard let value = event.metadata["undoMechanism"] ?? event.metadata["rollbackMechanism"] else {
+            return nil
+        }
+
+        return InsertionUndoRecoverabilityLevel(rawValue: value)
     }
 
     private func topMisses(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceMiss] {
@@ -1294,7 +1393,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 )
                 let accepted = dayEvents.filter { $0.type == .suggestionAccepted }
                 let acceptedAndKept = dayEvents
-                    .filter { $0.type == .acceptedTextEdited && isAcceptedAndKeptEvent($0) }
+                    .filter { $0.type == .acceptedTextEdited && $0.isAcceptedAndKeptSignal }
                 let latencies = presentedByID.values.compactMap(\.latencyMilliseconds).sorted()
 
                 return AutocompleteTraceDailySummary(
@@ -1302,7 +1401,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     activeWritingMinutes: activeWritingMinutes(in: dayEvents),
                     shown: presentedByID.count,
                     accepted: accepted.count,
-                    acceptedAndKept: Set(acceptedAndKept.map(acceptanceIdentifier)).count,
+                    acceptedAndKept: Set(acceptedAndKept.map(\.acceptanceIdentifier)).count,
                     p50LatencyMilliseconds: percentile(0.50, in: latencies),
                     p95LatencyMilliseconds: percentile(0.95, in: latencies),
                     severeFailures: severeFailureCount(in: dayEvents),
@@ -1315,7 +1414,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
 
     private func topFailureReasons(from events: [AutocompleteTraceEvent]) -> [AutocompleteTraceFailureReason] {
         let insertionFailures = events.filter { $0.type == .insertionFailed }
-        let duplicateText = insertionFailures.filter(isDuplicateTextEvent).count
+        let duplicateText = insertionFailures.filter(\.isDuplicateInsertionSignal).count
         let wrongInsertion = insertionFailures.count - duplicateText
         let tabConflict = tabConflictCount(in: events)
         let focusStealing = focusStealingCount(in: events)
@@ -1393,18 +1492,18 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let keptAt10 = Set(events
             .filter {
                 $0.type == .acceptedTextEdited
-                    && isAcceptedAndKeptEvent($0)
+                    && $0.isAcceptedAndKeptSignal
                     && $0.metadata["checkpoint"] == "10s"
             }
-            .map(acceptanceIdentifier))
+            .map(\.acceptanceIdentifier))
             .count
         let keptAt30OrBlur = Set(events
             .filter {
                 $0.type == .acceptedTextEdited
-                    && isAcceptedAndKeptEvent($0)
+                    && $0.isAcceptedAndKeptSignal
                     && ["30s", "fieldBlur", "fieldSend"].contains($0.metadata["checkpoint"] ?? "")
             }
-            .map(acceptanceIdentifier))
+            .map(\.acceptanceIdentifier))
             .count
 
         return AutocompleteAcceptanceFunnel(
@@ -1439,7 +1538,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         p95LatencyMilliseconds: Int?
     ) -> [AutocompleteRecommendedFix] {
         let insertionFailures = events.filter { $0.type == .insertionFailed }
-        let duplicateText = insertionFailures.filter(isDuplicateTextEvent).count
+        let duplicateText = insertionFailures.filter(\.isDuplicateInsertionSignal).count
         let wrongInsertion = insertionFailures.count - duplicateText
         let focusStealing = focusStealingCount(in: events)
         let tabConflicts = tabConflictCount(in: events)
@@ -1477,7 +1576,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         }
 
         if fixes.isEmpty,
-           !events.contains(where: { $0.type == .acceptedTextEdited && isAcceptedAndKeptEvent($0) }),
+           !events.contains(where: { $0.type == .acceptedTextEdited && $0.isAcceptedAndKeptSignal }),
            events.contains(where: { $0.type == .suggestionPresented }) {
             fixes.append(AutocompleteRecommendedFix(
                 title: "Collect accepted-and-kept proof",
@@ -1848,8 +1947,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 return event.metadata["severe"] == "true"
             }
 
-            return event.metadata["focusStealing"] == "true"
-                || event.metadata["tabConflict"] == "true"
+            return event.isFocusStealSignal || event.isTabConflictSignal
         }.count
     }
 
@@ -1927,19 +2025,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func tabConflictCount(in events: [AutocompleteTraceEvent]) -> Int {
-        events.filter { event in
-            event.reason == "tab-conflict"
-                || event.outcome == "tab-conflict"
-                || event.metadata["tabConflict"] == "true"
-        }.count
+        events.filter(\.isTabConflictSignal).count
     }
 
     private func focusStealingCount(in events: [AutocompleteTraceEvent]) -> Int {
-        events.filter { event in
-            event.reason.localizedCaseInsensitiveContains("focus-steal")
-                || event.outcome.localizedCaseInsensitiveContains("focus-steal")
-                || event.metadata["focusStealing"] == "true"
-        }.count
+        events.filter(\.isFocusStealSignal).count
     }
 
     private func searchOrFormLeakageCount(in events: [AutocompleteTraceEvent]) -> Int {
@@ -1972,12 +2062,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func acceptedThenDeletedCount(in events: [AutocompleteTraceEvent]) -> Int {
-        events.filter { event in
-            event.type == .acceptedTextEdited
-                && event.metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue
-                && ((intMetadata(event, key: "firstEditDelayMs") ?? Int.max) <= 2_000
-                    || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue)
-        }.count
+        events.filter(\.isAcceptedThenDeletedWithinTwoSecondsSignal).count
     }
 
     private func iso8601Date(from value: String) -> Date? {
@@ -2028,11 +2113,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         for event in events {
             switch event.type {
             case .insertionFailed:
-                increment(isDuplicateTextEvent(event) ? "duplicateText" : "wrongInsertion")
-                if event.metadata["focusStealing"] == "true" {
+                increment(event.isDuplicateInsertionSignal ? "duplicateText" : "wrongInsertion")
+                if event.isFocusStealSignal {
                     increment("focusStealing")
                 }
-                if event.metadata["tabConflict"] == "true" {
+                if event.isTabConflictSignal {
                     increment("tabConflict")
                 }
 
@@ -2046,10 +2131,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 }
 
             case .acceptedTextEdited:
-                let rejected = event.metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue
-                let fastDelete = (intMetadata(event, key: "firstEditDelayMs") ?? Int.max) <= 2_000
-                    || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue
-                if rejected && fastDelete {
+                if event.isAcceptedThenDeletedWithinTwoSecondsSignal {
                     increment("acceptedThenDeleted")
                 }
 
@@ -2075,7 +2157,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                     increment("repeatedRejection")
                 }
 
-                if event.reason == "tab-conflict" {
+                if event.isTabConflictSignal {
                     increment("tabConflict")
                 }
 
@@ -2093,11 +2175,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 increment("caretGeometryFailed")
 
             default:
-                if event.metadata["focusStealing"] == "true" {
+                if event.isFocusStealSignal {
                     increment("focusStealing")
                 }
 
-                if event.metadata["tabConflict"] == "true" {
+                if event.isTabConflictSignal {
                     increment("tabConflict")
                 }
             }

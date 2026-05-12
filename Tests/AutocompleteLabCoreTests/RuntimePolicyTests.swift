@@ -299,6 +299,7 @@ struct RuntimePolicyTests {
         #expect(manifest.runtimeCandidate == .mlx)
         #expect(manifest.cacheDirectoryName.contains("Qwen35FourB"))
         #expect(manifest.source?.repoID == "mlx-community/Qwen3.5-4B-MLX-4bit")
+        #expect(manifest.source?.revision == "32f3e8ecf65426fc3306969496342d504bfa13f3")
         #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
         #expect(manifest.source?.estimatedBytes == 3_030_000_000)
         #expect(manifest.requiredFileNames.contains("config.json"))

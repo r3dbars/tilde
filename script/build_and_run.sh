@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="AutocompleteLab"
-BUNDLE_ID="bar.r3d.autocomplete-lab"
+APP_NAME="SteadyType"
+BUNDLE_ID="bar.r3d.steadytype"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
@@ -49,7 +49,9 @@ running_app_services() {
 stale_app_bundles() {
   local search_root="$HOME/.codex/worktrees"
   [[ -d "$search_root" ]] || return 0
-  find "$search_root" -path "*/dist/$APP_NAME.app" -type d -prune 2>/dev/null || true
+  find "$search_root" \
+    \( -name .build -o -name .git -o -name .swiftpm -o -name node_modules -o -name DerivedData \) -type d -prune -o \
+    -path "*/dist/$APP_NAME.app" -type d -print 2>/dev/null || true
 }
 
 unregister_stale_app_bundles() {
@@ -320,7 +322,7 @@ cat >"$INFO_PLIST" <<PLIST
   <key>NSSupportsAutomaticTermination</key>
   <false/>
   <key>NSAccessibilityUsageDescription</key>
-  <string>AutocompleteLab needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
+  <string>SteadyType needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>

@@ -103,7 +103,7 @@ struct RawTraceReportExportTests {
             from: Data(survivalJSON.utf8)
         )
 
-        #expect(html.contains("Autocomplete Lab Redacted Trace Report"))
+        #expect(html.contains("SteadyType Redacted Trace Report"))
         #expect(html.contains("RAM-only retention proof"))
         #expect(html.contains("Generated locally from the default redacted trace. Nothing was uploaded."))
         #expect(!html.contains("private-before"))

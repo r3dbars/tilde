@@ -76,19 +76,21 @@ enforceable. `script/check_prompt_app_proof.sh` reads JSONL trace slices,
 reports the five prompt-app safety counters, and exits nonzero when any counter
 is nonzero or when no prompt-app proof events are present. It is wired into the
 score loop, strict score target gates, beta readiness, and smoke self-tests.
-Strict manual proof remains stale or missing for some real target apps, so this
+Codex and Claude desktop now have same-slice one-word no-submit proof. Strict
+manual proof remains stale or missing for some other real target apps, so this
 does not claim beta-ready prompt-app support.
 
 ## Score
 
-Overall score: 85/100
+Overall score: 87/100
 
 Starting score before this pass: 83/100
-Ending score after this pass: 85/100
+Ending score after this pass: 87/100
 
 The score moves above the old proof-gate cap because prompt-app safety can now
-fail closed from trace evidence. It is still capped well short of 100 because
-fresh, exact-version, human-confirmed prompt-app proof is still missing.
+fail closed from trace evidence and Codex now has exact same-slice proof. It is
+still capped well short of 100 because fresh, exact-version, human-confirmed
+prompt-app proof is still missing for other required hosts.
 
 ## Score Breakdown
 
@@ -119,11 +121,12 @@ fresh, exact-version, human-confirmed prompt-app proof is still missing.
 ### Acceptance Channel Safety
 
 - Weight: 25
-- Current score: 22/25
+- Current score: 23/25
 - Why this score: Full accept is disabled for prompt apps, Tab is one-word
   only where allowed, and missing-profile insertion now fails closed. Existing
   acceptance guards recheck app, field, focused text, selection, and stale
-  context. Real prompt-app key collision proof is still missing.
+  context. Codex now has a same-slice Tab one-word no-submit proof; broader
+  real prompt-app key collision proof is still incomplete.
 - Evidence found in repo:
   - `Sources/AutocompleteLabApp/App/AppDelegate.swift`
   - `Sources/AutocompleteLabCore/Session/SuggestionAcceptanceGuard.swift`
@@ -133,8 +136,8 @@ fresh, exact-version, human-confirmed prompt-app proof is still missing.
   - `Tests/AutocompleteLabAppTests/SettingsWindowControllerStateTests.swift`
 - Missing evidence:
   - Event-level proof that accept never dispatches Return, Enter, submit,
-    newline, command, approval, or host shortcut collisions in required apps.
-  - Active-run proof for Codex and Claude Code.
+    newline, command, approval, or host shortcut collisions in every required app.
+  - More host-labeled active-run proof for Claude Code and browser prompt hosts.
 - What would make it 100/100:
   - Recorded proof bundles showing zero accidental sends and zero key
     collisions across every required target app and preference mode.
@@ -185,11 +188,11 @@ fresh, exact-version, human-confirmed prompt-app proof is still missing.
 ### Testing And Proof Coverage
 
 - Weight: 15
-- Current score: 10/15
+- Current score: 11/15
 - Why this score: Unit coverage is strong, proof scripts are strict, and the
   new prompt-app proof gate has pass/fail fixtures for the exact hard metrics.
-  The required target apps still do not all have fresh proof for this
-  implementation commit.
+  Codex now has fresh same-slice proof for this implementation branch, while
+  the required target apps still do not all have fresh proof.
 - Evidence found in repo:
   - `swift test` passed 742 tests.
   - `script/check_test_coverage_manifest.sh` passed.
@@ -201,8 +204,8 @@ fresh, exact-version, human-confirmed prompt-app proof is still missing.
   - `script/check_prompt_app_proof.sh`
   - `script/check_prompt_app_proof_self_test.sh`
 - Missing evidence:
-  - Fresh proof for Codex, Claude Code, Claude desktop, ChatGPT, Slack, and
-    Telegram.
+  - Fresh proof for Claude Code host variants, Claude desktop layout variants,
+    ChatGPT, Slack, and Telegram.
   - Same-slice screenshot, one-word accept, verified insertion, before/after
     diff, event log, and no-submit confirmation for each required prompt app.
 - What would make it 100/100:
@@ -252,8 +255,9 @@ are disabled or word-only, full accept is off, wrong-context insertion is
 guarded, unsafe content is blocked, unit tests pass, and proof scripts clearly
 name remaining manual blockers.
 
-This repo now clears that bar at 83 because the prompt-app trace gate exists
-and can fail closed. It still needs live target-app proof before beta support.
+This repo now clears that bar at 87 because the prompt-app trace gate exists,
+can fail closed, and Codex has live same-slice proof. It still needs broader
+live target-app proof before beta support.
 
 ## 100/100 Definition
 
@@ -282,7 +286,8 @@ clear host rollback path. Unsupported or unproven hosts stay disabled.
   filtering, acceptance guard behavior, and prompt-app metrics.
 - `swift build` and `swift test` passing on the implementation commit.
 - Manual proof for Codex, Claude Code, Claude desktop, ChatGPT, Slack, and
-  Telegram on exact versions.
+  Telegram on exact versions. Codex and Claude desktop now have current
+  one-word no-submit rows; other hosts still need coverage.
 - For each prompt app: screen video or screenshot trace, key/event log,
   before/after prompt diff, send-count or no-submit confirmation, field role
   log, app version, commit/archive proof token, and trace slice.
@@ -315,8 +320,9 @@ clear host rollback path. Unsupported or unproven hosts stay disabled.
 
 ### 2. Exact Target-App Manual Proof Pack
 
-- Objective: Run the required manual-gated proof for Codex, Claude Code,
-  Claude desktop, ChatGPT, Slack, and Telegram.
+- Objective: Run the required manual-gated proof for Claude Code host variants,
+  Claude desktop layout variants, ChatGPT, Slack, and Telegram. Codex default
+  same-slice proof is complete.
 - Files likely involved:
   - `docs/product/manual-smoke-runs.md`
   - `docs/product/proof-manifest.json`
@@ -400,10 +406,9 @@ fresh human/manual target-app proof.
 ## Remaining Gaps
 
 - Required real-app proof is missing for ChatGPT, Slack, and Telegram.
-- Codex, Claude Code, and Claude desktop need fresh same-slice one-word
-  no-submit proof against this implementation commit or a release archive.
-- `docs/product/app-proof-matrix.md` and `docs/product/proof-manifest.json`
-  still disagree in places; proof docs need a cleanup pass after fresh runs.
+- Claude Code still needs more host-labeled one-word no-submit proof, and
+  Claude desktop still needs layout variants. Codex default proof is complete
+  against the current proof branch.
 - `check_trace_eval.sh` fails on old all-history traces with insertion
   failures; release proof should use fresh bounded trace slices.
 - `beta_readiness.sh --check-only` is blocked by manual proof, the prompt-app

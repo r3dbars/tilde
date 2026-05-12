@@ -1,84 +1,71 @@
-# Transcripted Autocomplete Lab
+# SteadyType
 
-A standalone lab for testing a Co-Typist-style Mac autocomplete experience.
+![SteadyType cover](Assets/GitHub/steadytype-cover.png)
 
-This is intentionally separate from Transcripted. The goal is to learn fast without adding risk or clutter to the main app.
+SteadyType is a small Mac app for quiet writing suggestions near your cursor.
 
-## The Bet
+It watches the active text field, shows a short suggestion, and only inserts text when you accept it. The question for this beta is simple: does this make writing feel easier, or does it get in the way?
 
-Transcripted helps people get thoughts out.
+## What It Does
 
-This app explores the next step: helping people keep typing in a few proven writing contexts without opening a prompt box.
+- runs as a macOS menu bar app
+- reads the focused text field through Accessibility
+- shows a small suggestion near the cursor
+- uses `Tab` to accept one word
+- uses `Esc` to dismiss
+- runs local-first by default
+- keeps app support proof-gated instead of pretending it works everywhere
 
-The magic feeling we are testing:
+## Current Beta Scope
 
-> You keep writing, and the next useful words quietly appear.
-
-## First MVP
-
-- menu bar Mac app
-- reads the active text field through Accessibility
-- shows a small floating suggestion near the cursor
-- `Tab` accepts one word
-- backtick/tilde accepts the whole visible suggestion
-- `Esc` dismisses
-- local-only by default
-- default model target: Qwen3.5 4B on Apple Silicon / 16 GB
-- starts with a small app allowlist
-
-Target apps for the first pass:
+The first target apps are:
 
 - TextEdit
-- Notes
+- Apple Notes
 - Obsidian
-- Chrome text fields
+- Chrome text fields and local editor fixtures
 
-Diagnostics-only until same-slice one-word no-submit proof exists:
+Prompt and chat apps stay heavily guarded. Codex and Claude-style fields are proof-gated because accepting text must never submit a prompt by surprise.
 
-- Codex prompt fields
+## Privacy
 
-Claude desktop is limited to one-word proof-gated acceptance; full accept stays
-off until separate no-submit proof exists.
+SteadyType is local-first. Typed text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, and subject lines are not uploaded by default.
 
-Mail is diagnostics-only until compose insertion is proven safe. Claude Code
-CLI sessions are also diagnostics-only for now because the live typing surface
-is a terminal host, not the background-only `com.anthropic.claude-code` bundle.
+Diagnostics are local and redacted unless a tester explicitly opts into a short-lived raw or screenshot trace for debugging.
 
-## Model Decision
+Useful docs:
 
-Run the MVP on Qwen3.5 4B through MLX.
+- [Beta privacy](PRIVACY-BETA.md)
+- [Known limitations](KNOWN-LIMITATIONS.md)
+- [Diagnostic export](DIAGNOSTIC-EXPORT.md)
+- [Uninstall and delete data](UNINSTALL-DELETE-DATA.md)
 
-The first supported hardware target is Apple Silicon with 16 GB RAM. The app should not expose a broad model picker yet. The product question is whether the typing experience feels useful, so the model layer should stay boring: local, warm, short completions, and tuned for speed.
+## Runtime
 
-Users should never need to start a model server. The model runtime is owned by the app. Any Ollama or llama.cpp run is only a private benchmark tool, not part of the product experience.
+The app owns the model runtime. Testers should not need to start Ollama, llama.cpp, Python, or any other server.
 
-## Permissions And Local-First Behavior
+The current local runtime path uses MLX on Apple Silicon and downloads the default model files once.
 
-Accessibility is required so the app can see the focused text field, find the cursor, and insert text only when the user accepts a suggestion. The app should explain this before opening System Settings.
-
-Screen Recording is not required for normal autocomplete. It is only for optional local placement diagnostics when screenshot proof is explicitly enabled.
-
-Suggestions run locally after the model is installed. Installing the default model downloads files from Hugging Face once. Redacted diagnostics stay on the Mac unless the user chooses to share an exported privacy bundle.
-
-The user can pause suggestions, block the current app, delete local traces, and remove local model files from the model folder.
-
-## What We Are Not Building Yet
+## What This Is Not
 
 - not a Transcripted feature yet
-- not a full Co-Typist clone
+- not a cloud-first writing assistant
 - not personalization
-- not cloud-first
-- not broad app compatibility
-- not a polished release
+- not a broad compatibility claim
+- not a full release
 
-## Success Test
+## Development
 
-Give it to 3-5 people for a week and ask:
+```bash
+swift test
+./script/check_test_coverage_manifest.sh
+./script/build_and_run.sh --verify
+```
 
-- Did it help?
-- Did it interrupt you?
-- Did `Tab` feel natural?
-- Where did it break?
-- Would you miss it if it disappeared?
+Full private beta validation lives in:
 
-If the answer is yes, then we can decide whether it graduates into Transcripted.
+```bash
+./script/beta_readiness.sh
+```
+
+The repo also includes smoke tests, privacy checks, runtime checks, proof manifests, and visual placement evidence under `script/` and `docs/product/`.
