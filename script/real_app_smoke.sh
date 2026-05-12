@@ -6436,6 +6436,8 @@ build_if_needed() {
     )
     env "${build_run_env[@]}" ./script/build_and_run.sh run
     wait_for_current_autocomplete_lab_process
+  else
+    wait_for_current_autocomplete_lab_process
   fi
 
   refresh_build_archive_proof

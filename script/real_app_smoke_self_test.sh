@@ -50,6 +50,11 @@ if ! grep -F 'AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1' script/real_app_smoke.sh >/dev/n
   echo "real app smoke self-test expected proof runs to direct-launch the current app bundle" >&2
   exit 1
 fi
+if ! grep -F 'wait_for_current_autocomplete_lab_process' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- '--skip-build uses the already-running app' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected skip-build proof to verify the running app belongs to this checkout" >&2
+  exit 1
+fi
 if ! grep -F 'wait_for_textedit_acceptance_with_stale_retry' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reason=text-before-cursor-changed-before-accept' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit stale-suggestion acceptance retry" >&2
