@@ -14,6 +14,10 @@ Run the full gate:
 ./script/beta_readiness.sh
 ```
 
+The full gate archives locally, then stops before Apple upload unless
+`AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE=1` is set. Use the opt-in only when
+you intend to submit the current DMG for notarization.
+
 That must create and verify:
 
 - `dist/SteadyType.dmg`

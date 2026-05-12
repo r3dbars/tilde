@@ -11,7 +11,7 @@ cat >"$LOG_FILE" <<'LOG'
 2026-04-26T18:00:01Z suggestion-presented app=com.openai.codex latencyMilliseconds=220 requestMode=phraseContinuation traceID=first
 2026-04-26T18:05:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
 2026-04-26T18:05:01Z suggestion-presented app=com.openai.codex latencyMilliseconds=0 requestMode=wordCompletion traceID=word
-2026-04-26T18:05:02Z mlx-completion-timing app=com.openai.codex cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=70 generationMilliseconds=100 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=101
+2026-04-26T18:05:02Z mlx-completion-timing app=com.openai.codex cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=70 generationMilliseconds=100 maxTokens=11 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=101
 2026-04-26T18:05:02Z suggestion-presented app=com.openai.codex latencyMilliseconds=130 requestMode=phraseContinuation traceID=stream
 2026-04-26T18:05:02Z suggestion-presented app=com.openai.codex latencyMilliseconds=190 requestMode=phraseContinuation traceID=stream
 LOG
@@ -30,7 +30,7 @@ if ! grep -F "first token: n=1 min=70ms avg=70ms p50=70ms p90=70ms p95=70ms p99=
   exit 1
 fi
 
-if ! grep -F "max tokens: 9" <<<"$REPORT" >/dev/null; then
+if ! grep -F "max tokens: 11" <<<"$REPORT" >/dev/null; then
   echo "latency report self-test did not show token budget" >&2
   echo "$REPORT" >&2
   exit 1
