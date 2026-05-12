@@ -112,7 +112,7 @@ def system_prompt_text(payload: dict[str, str]) -> str:
         rules = [
             "Return only the missing suffix for the current word.",
             "No spaces, punctuation, explanation, labels, quotes, reasoning, or mention of the user.",
-            "Examples: transi -> tion; configu -> rable; visi -> ble; redac -> ted.",
+            "Examples: transi -> tion; configu -> rable; visi -> ble; redac -> ted. For setting should be configu, return rable, not ration.",
             "If the suffix is not obvious, return <NO_SUGGESTION>.",
         ]
     else:
@@ -126,6 +126,7 @@ def system_prompt_text(payload: dict[str, str]) -> str:
             "Never use generic filler like comes to life, key features and benefits, comprehensive plan, or acknowledge the user's point.",
             "When the text discusses Tab or acceptance behavior, continue the safety rule itself; never suggest accepting terms.",
             "Examples: The draft feels calmer when it -> stays short and specific; The review should focus on -> real user risk; A good reply here would be -> short, kind, and specific.",
+            "More examples: The quiet mode should stay quiet mode should stay -> calm in the background; Hold the risky path until -> proof exists; the next step is to -> write a small repro; autocomplete should -> stay silent.",
             "Return <NO_SUGGESTION> for passwords, secrets, private fields, search fields, terminal punctuation, weak guesses, new topics, full-sentence answers, or list markers.",
         ]
     return "\n".join([system, *rules]).strip()
