@@ -14,12 +14,62 @@ struct MenuBarStatusItemConfiguration: Equatable {
     )
 }
 
+struct CodexProofFocusedTargetPolicy {
+    static let bundleIdentifier = "com.openai.codex"
+    static let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+
+    func matches(
+        app: RunningApplicationInfo,
+        profile: CompatibilityProfile,
+        suggestionBundleIdentifier: String?,
+        requestMode: CompletionRequestMode?,
+        expectedFieldIdentity: FocusedFieldIdentity,
+        snapshot: FocusedTextSnapshot,
+        focusedContext: FocusedTextContext,
+        focusedFieldIdentity: FocusedFieldIdentity,
+        proofModeEnabled: Bool,
+        expectedFocusedText: String? = nil
+    ) -> Bool {
+        guard suggestionBundleIdentifier == Self.bundleIdentifier,
+              requestMode == .wordCompletion,
+              profile.bundleIdentifier == Self.bundleIdentifier,
+              profile.supportsOneWordAcceptance,
+              !profile.supportsFullAcceptance,
+              profile.requiresNoSubmitAcceptanceProof,
+              profile.insertionMode == .axValueReplacement,
+              proofModeEnabled,
+              app.bundleIdentifier == Self.bundleIdentifier,
+              app.processIdentifier == expectedFieldIdentity.processIdentifier,
+              snapshot.fieldIdentity == expectedFieldIdentity,
+              focusedFieldIdentity == expectedFieldIdentity,
+              snapshot.textBeforeCursor.contains(Self.marker),
+              snapshot.textAfterCursor.isEmpty,
+              focusedContext.role == "AXTextArea",
+              focusedContext.selectedTextLength == 0,
+              focusedContext.elementRect != nil,
+              !focusedContext.isSecure,
+              focusedContext.textBeforeCursor.contains(Self.marker),
+              focusedContext.textAfterCursor.isEmpty else {
+            return false
+        }
+
+        let focusedText = focusedContext.textBeforeCursor + focusedContext.textAfterCursor
+        let targetText = expectedFocusedText ?? snapshot.textBeforeCursor + snapshot.textAfterCursor
+        guard targetText.contains(Self.marker) else {
+            return false
+        }
+
+        return focusedText == targetText
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
     private let startupOnboardingPolicy = StartupOnboardingPolicy()
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
+    private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
@@ -3299,9 +3349,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    private func codexProofFocusedTarget(
+        app frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile,
+        suggestionBundleIdentifier: String?,
+        requestMode: CompletionRequestMode?,
+        expectedFieldIdentity: FocusedFieldIdentity?,
+        snapshot: FocusedTextSnapshot?,
+        expectedFocusedText: String? = nil
+    ) -> (context: FocusedTextContext, fieldIdentity: FocusedFieldIdentity)? {
+        let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
+        guard let expectedFieldIdentity,
+              let snapshot,
+              let rawContext = accessibilityClient.focusedTextContext(
+                  for: frontmostApp,
+                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ) else {
+            return nil
+        }
+
+        let context = presentationAdjustedContext(
+            rawContext,
+            app: frontmostApp,
+            profile: profile,
+            previousSnapshot: snapshot
+        )
+        guard promptTextAreaMatch(
+            for: frontmostApp.bundleIdentifier,
+            context: context
+        ).canSuggest else {
+            return nil
+        }
+
+        let focusedFieldIdentity = fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: profile
+        )
+        guard codexProofFocusedTargetPolicy.matches(
+            app: frontmostApp,
+            profile: profile,
+            suggestionBundleIdentifier: suggestionBundleIdentifier,
+            requestMode: requestMode,
+            expectedFieldIdentity: expectedFieldIdentity,
+            snapshot: snapshot,
+            focusedContext: context,
+            focusedFieldIdentity: focusedFieldIdentity,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+            expectedFocusedText: expectedFocusedText
+        ) else {
+            return nil
+        }
+
+        return (context, focusedFieldIdentity)
+    }
+
     private func codexProofSnapshotMatchesCurrentSuggestion() -> Bool {
-        let bundleIdentifier = "com.openai.codex"
-        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
+        let marker = CodexProofFocusedTargetPolicy.marker
         guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
               currentSuggestionRequestMode == .wordCompletion,
               let currentProfile,
@@ -3329,12 +3434,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let expectedText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        guard let target = codexProofFocusedTarget(
+            app: frontmostApp,
+            profile: profile,
+            suggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            requestMode: currentSuggestionRequestMode,
+            expectedFieldIdentity: currentSuggestionFieldIdentity,
+            snapshot: lastTextSnapshot,
+            expectedFocusedText: expectedText
+        ) else {
+            return false
+        }
+
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
-        guard Self.axTextAreaDescendant(
+        guard Self.axFocusedTextArea(
             in: appElement,
             matchingValue: expectedText,
             containing: marker,
-            maxDepth: 32
+            elementIdentifier: target.context.elementIdentifier
         ) != nil else {
             return false
         }
@@ -4142,8 +4259,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frontmostApp: RunningApplicationInfo,
         context: FocusedTextContext
     ) -> Bool {
-        let bundleIdentifier = "com.openai.codex"
-        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
+        let marker = CodexProofFocusedTargetPolicy.marker
         let replacementText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
         guard !acceptedText.isEmpty,
               baseline.profile.bundleIdentifier == bundleIdentifier,
@@ -4167,12 +4284,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
+        let snapshot = FocusedTextSnapshot(
+            fieldIdentity: baseline.fieldIdentity,
+            textBeforeCursor: baseline.previousTextBeforeCursor,
+            textAfterCursor: baseline.previousTextAfterCursor
+        )
+        let currentFieldIdentity = fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: baseline.profile
+        )
+        guard codexProofFocusedTargetPolicy.matches(
+            app: frontmostApp,
+            profile: baseline.profile,
+            suggestionBundleIdentifier: baseline.profile.bundleIdentifier,
+            requestMode: baseline.requestMode,
+            expectedFieldIdentity: baseline.fieldIdentity,
+            snapshot: snapshot,
+            focusedContext: context,
+            focusedFieldIdentity: currentFieldIdentity,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+            expectedFocusedText: replacementText
+        ) else {
+            return false
+        }
+
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
-        guard Self.axTextAreaDescendant(
+        guard Self.axFocusedTextArea(
             in: appElement,
             matchingValue: replacementText,
             containing: marker,
-            maxDepth: 32
+            elementIdentifier: context.elementIdentifier
         ) != nil else {
             return false
         }
@@ -4304,8 +4446,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frontmostApp providedFrontmostApp: RunningApplicationInfo?,
         reason: String
     ) -> FocusedTextContext? {
-        let bundleIdentifier = "com.openai.codex"
-        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
+        let marker = CodexProofFocusedTargetPolicy.marker
         guard baseline.profile.bundleIdentifier == bundleIdentifier,
               baseline.profile.requiresNoSubmitAcceptanceProof,
               baseline.profile.insertionMode == .axValueReplacement,
@@ -4324,12 +4466,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let expectedText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
+        let snapshot = FocusedTextSnapshot(
+            fieldIdentity: baseline.fieldIdentity,
+            textBeforeCursor: baseline.previousTextBeforeCursor,
+            textAfterCursor: baseline.previousTextAfterCursor
+        )
+        guard let target = codexProofFocusedTarget(
+            app: frontmostApp,
+            profile: baseline.profile,
+            suggestionBundleIdentifier: baseline.profile.bundleIdentifier,
+            requestMode: baseline.requestMode,
+            expectedFieldIdentity: baseline.fieldIdentity,
+            snapshot: snapshot,
+            expectedFocusedText: expectedText
+        ) else {
+            return nil
+        }
+
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
-        guard Self.axTextAreaDescendant(
+        guard Self.axFocusedTextArea(
             in: appElement,
             matchingValue: expectedText,
             containing: marker,
-            maxDepth: 32
+            elementIdentifier: target.context.elementIdentifier
         ) != nil else {
             return nil
         }
@@ -4343,32 +4502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reason": reason
             ]
         )
-        return FocusedTextContext(
-            elementIdentifier: baseline.fieldIdentity.elementIdentifier,
-            role: "AXTextArea",
-            subrole: nil,
-            fingerprint: FocusedElementFingerprint(),
-            textBeforeCursor: baseline.previousTextBeforeCursor + acceptedText,
-            textAfterCursor: baseline.previousTextAfterCursor,
-            selectedText: "",
-            selectedTextLength: 0,
-            caretRect: nil,
-            elementRect: nil,
-            windowRect: nil,
-            windowIdentifier: nil,
-            textLineRect: nil,
-            textStyle: nil,
-            isSecure: false,
-            fieldClassification: AXFieldClassification(kind: baseline.fieldKind, reason: baseline.fieldKindReason),
-            caretIsSynthetic: true,
-            capabilities: FocusedTextCapabilities(
-                canReadValue: true,
-                canReadSelectedTextRange: true,
-                canReadBoundsForRange: false,
-                canReadAttributedText: false,
-                canSetSelectedText: true
-            )
-        )
+        return target.context
     }
 
     private func startAcceptanceSurvivalTracking(_ tracker: AcceptanceSurvivalTracker) {
@@ -6418,14 +6552,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func insertCodexProofText(_ acceptedText: String) -> Bool {
-        let bundleIdentifier = "com.openai.codex"
-        let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
+        let marker = CodexProofFocusedTargetPolicy.marker
         guard !acceptedText.isEmpty,
+              let currentProfile,
+              currentProfile.bundleIdentifier == bundleIdentifier,
+              let currentSuggestionFieldIdentity,
               let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
               lastTextSnapshot.textBeforeCursor.contains(marker),
               lastTextSnapshot.textAfterCursor.isEmpty,
               let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == bundleIdentifier else {
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
             DiagnosticsLog.shared.record(
                 "codex-proof-insert",
                 metadata: [
@@ -6440,25 +6579,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
         let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
         let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
-        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
-        guard let textArea = Self.axTextAreaDescendant(
-            in: appElement,
-            matchingValue: previousText,
-            containing: marker,
-            maxDepth: 32
+        guard let target = codexProofFocusedTarget(
+            app: frontmostApp,
+            profile: currentProfile,
+            suggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            requestMode: currentSuggestionRequestMode,
+            expectedFieldIdentity: currentSuggestionFieldIdentity,
+            snapshot: lastTextSnapshot,
+            expectedFocusedText: previousText
         ) else {
             DiagnosticsLog.shared.record(
                 "codex-proof-insert",
                 metadata: [
                     "app": bundleIdentifier,
                     "success": "false",
-                    "reason": "marked-text-area-not-found"
+                    "reason": "focused-target-mismatch"
                 ]
             )
             return false
         }
 
-        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard let textArea = Self.axFocusedTextArea(
+            in: appElement,
+            matchingValue: previousText,
+            containing: marker,
+            elementIdentifier: target.context.elementIdentifier
+        ) else {
+            DiagnosticsLog.shared.record(
+                "codex-proof-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "focused-text-area-not-found"
+                ]
+            )
+            return false
+        }
+
         let valueResult = AXUIElementSetAttributeValue(
             textArea,
             kAXValueAttribute as CFString,
@@ -6488,17 +6646,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
         let cursorMatches = Self.axSelectedTextRangeMatches(textArea, location: cursorUTF16Offset, length: 0)
         let succeeded = currentText == replacementText
+        let insertMetadata: [String: String] = [
+            "app": bundleIdentifier,
+            "success": String(succeeded),
+            "source": "focusedAXTextArea",
+            "cursorMatches": String(cursorMatches),
+            "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+            "acceptedChars": String(acceptedText.count),
+            "currentChars": String(currentText?.count ?? -1)
+        ]
         DiagnosticsLog.shared.record(
             "codex-proof-insert",
-            metadata: [
-                "app": bundleIdentifier,
-                "success": String(succeeded),
-                "source": "markedAXTextArea",
-                "cursorMatches": String(cursorMatches),
-                "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
-                "acceptedChars": String(acceptedText.count),
-                "currentChars": String(currentText?.count ?? -1)
-            ]
+            metadata: insertMetadata
         )
         return succeeded
     }
@@ -6742,6 +6901,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     nonisolated private static func axChildren(_ element: AXUIElement) -> [AXUIElement] {
         axAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+    }
+
+    nonisolated private static func axFocusedTextArea(
+        in appElement: AXUIElement,
+        matchingValue expectedValue: String,
+        containing marker: String,
+        elementIdentifier: Int
+    ) -> AXUIElement? {
+        guard let focusedValue = axAttribute(appElement, kAXFocusedUIElementAttribute),
+              CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+            return nil
+        }
+
+        let focusedElement = focusedValue as! AXUIElement
+        guard Int(CFHash(focusedElement)) == elementIdentifier,
+              axRole(focusedElement) == "AXTextArea",
+              let value = axStringAttribute(focusedElement, kAXValueAttribute),
+              value == expectedValue,
+              value.contains(marker) else {
+            return nil
+        }
+
+        return focusedElement
     }
 
     nonisolated private static func axTextAreaDescendant(
