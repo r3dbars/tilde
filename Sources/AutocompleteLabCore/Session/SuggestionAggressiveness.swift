@@ -97,7 +97,7 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
 public struct SuggestionTuning: Equatable, Sendable {
     public static let minimumAggressivenessLevel = 1
     public static let maximumAggressivenessLevel = 5
-    public static let defaultAggressivenessLevel = SuggestionAggressiveness.normal.defaultTuningLevel
+    public static let defaultAggressivenessLevel = 3
     public static let predictiveFallbackWritingApps: Set<String> = [
         "com.apple.TextEdit",
         "com.apple.Notes",

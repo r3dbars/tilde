@@ -8991,6 +8991,18 @@ private extension AppDelegate {
         "SuggestionMaxVisibleWords"
     }
 
+    static var suggestionTuningDefaultsVersionDefaultsKey: String {
+        "SuggestionTuningDefaultsVersion"
+    }
+
+    static var currentSuggestionTuningDefaultsVersion: Int {
+        2
+    }
+
+    static var previousDefaultSuggestionAggressivenessLevel: Int {
+        SuggestionAggressiveness.normal.defaultTuningLevel
+    }
+
     static var visiblePageContextEnabledDefaultsKey: String {
         "VisiblePageContextEnabled"
     }
@@ -9191,13 +9203,19 @@ private extension AppDelegate {
 
     func loadSuggestionTuning() {
         let defaults = UserDefaults.standard
-        let level: Int
+        var level: Int
+        let hasStoredLevel = defaults.object(forKey: Self.suggestionAggressivenessLevelDefaultsKey) != nil
         if defaults.object(forKey: Self.suggestionAggressivenessLevelDefaultsKey) != nil {
             level = defaults.integer(forKey: Self.suggestionAggressivenessLevelDefaultsKey)
         } else {
             level = SuggestionAggressiveness
                 .parsed(defaults.string(forKey: Self.suggestionAggressivenessDefaultsKey))
                 .defaultTuningLevel
+        }
+        if defaults.object(forKey: Self.suggestionTuningDefaultsVersionDefaultsKey) == nil,
+           hasStoredLevel,
+           level == Self.previousDefaultSuggestionAggressivenessLevel {
+            level = SuggestionTuning.defaultAggressivenessLevel
         }
 
         let maxVisibleWords: Int
@@ -9212,6 +9230,10 @@ private extension AppDelegate {
             maxVisibleWords: maxVisibleWords
         )
         persistSuggestionTuning()
+        defaults.set(
+            Self.currentSuggestionTuningDefaultsVersion,
+            forKey: Self.suggestionTuningDefaultsVersionDefaultsKey
+        )
     }
 
     func persistSuggestionTuning() {

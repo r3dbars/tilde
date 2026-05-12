@@ -3,6 +3,30 @@ import Testing
 
 @Suite("Suggestion aggressiveness")
 struct SuggestionAggressivenessTests {
+    @Test("default tuning starts proactive enough for first run")
+    func defaultTuningStartsProactiveEnoughForFirstRun() {
+        let tuning = SuggestionTuning()
+
+        #expect(tuning.aggressivenessLevel == 3)
+        #expect(tuning.displayName == "Proactive")
+        #expect(tuning.pace == .eager)
+
+        let activation = tuning.activationPolicy(supportPace: tuning.pace)
+        #expect(activation.decision(
+            textBeforeCursor: "I feel ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+
+        let trigger = tuning.triggerPolicy(supportPace: tuning.pace)
+        #expect(trigger.decision(
+            previousTextBeforeCursor: "I feel",
+            currentTextBeforeCursor: "I feel "
+        ) == .request(delayMilliseconds: 70))
+    }
+
     @Test("normal starts suggestions sooner without using the most eager thresholds")
     func normalStartsSuggestionsSooner() {
         let policy = SuggestionAggressiveness.normal.triggerPolicy

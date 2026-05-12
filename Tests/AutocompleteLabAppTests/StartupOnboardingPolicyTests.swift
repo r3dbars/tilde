@@ -6,9 +6,9 @@ import Testing
 struct StartupOnboardingPolicyTests {
     private let policy = StartupOnboardingPolicy()
 
-    @Test("Does not request Accessibility prompt automatically on launch")
-    func doesNotRequestAccessibilityPromptAutomaticallyOnLaunch() {
-        #expect(!policy.shouldRequestAccessibilityPromptOnLaunch(isTrusted: false))
+    @Test("Requests Accessibility prompt automatically when missing")
+    func requestsAccessibilityPromptAutomaticallyWhenMissing() {
+        #expect(policy.shouldRequestAccessibilityPromptOnLaunch(isTrusted: false))
         #expect(!policy.shouldRequestAccessibilityPromptOnLaunch(isTrusted: true))
     }
 
