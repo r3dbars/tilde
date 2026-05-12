@@ -6017,7 +6017,7 @@ obsidian_reset_text_for_variant() {
   fi
 
   local index
-  for index in $(seq 1 90); do
+  for index in $(seq 1 45); do
     printf 'AL scroll %s\n' "$index"
   done
   printf '%s' "$marker"
