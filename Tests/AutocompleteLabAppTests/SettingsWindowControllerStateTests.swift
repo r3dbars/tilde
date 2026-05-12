@@ -324,7 +324,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac."
+                == "Allow Accessibility in System Settings so SteadyType can see the focused text field, find the cursor, and insert text only when you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -332,8 +332,24 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Accessibility permission: allowed")
         #expect(
             allowed.detailText
-                == "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac."
+                == "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac. Normal setup does not need Screen Recording."
         )
+    }
+
+    @Test("First run trust copy explains placement controls privacy and app scope")
+    func firstRunTrustCopyExplainsPlacementControlsPrivacyAndAppScope() {
+        let state = SettingsFirstRunTrustState()
+
+        #expect(state.statusText == "First 10 minutes: start in TextEdit")
+        #expect(state.detailText.contains("near the cursor"))
+        #expect(state.detailText.contains("Tab accepts one word"))
+        #expect(state.detailText.contains("Esc dismisses"))
+        #expect(state.detailText.contains("Pause stops suggestions everywhere"))
+        #expect(state.detailText.contains("stay on this Mac"))
+        #expect(state.detailText.contains("redacted Privacy Bundle"))
+        #expect(state.appsText.contains("TextEdit, Notes, Obsidian, and Chrome local text fields"))
+        #expect(state.appsText.contains("Codex and Claude are proof targets"))
+        #expect(state.appsText.contains("Mail, Atlas, chat, search, login, payment, URL, and private fields stay off"))
     }
 
     @Test("Privacy copy exposes diagnostics and raw content state")
@@ -526,9 +542,11 @@ struct SettingsWindowControllerStateTests {
         #expect(ready.textEditText == "TextEdit: will be enabled for this practice")
         #expect(ready.primaryAction == .openTextEditPractice)
         #expect(ready.primaryButtonTitle == "Start TextEdit Practice")
+        #expect(ready.detailText.localizedCaseInsensitiveContains("near the cursor"))
         #expect(ready.detailText.localizedCaseInsensitiveContains("does not ask for Screen Recording"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Tab once"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Esc"))
+        #expect(ready.stepsText.localizedCaseInsensitiveContains("Delete Traces"))
     }
 
     @Test("Field control copy scopes silence to the current field")

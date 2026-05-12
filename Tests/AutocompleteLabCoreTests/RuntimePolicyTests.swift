@@ -228,11 +228,11 @@ struct RuntimePolicyTests {
             )
         )
 
-        #expect(missing.actionTitle == "Install Model")
+        #expect(missing.actionTitle == "Install Local Model")
         #expect(missing.isActionEnabled)
         #expect(missing.message.contains("download uses Hugging Face once"))
         #expect(missing.message.contains("You do not need Ollama or a model server"))
-        #expect(repair.actionTitle == "Repair Model")
+        #expect(repair.actionTitle == "Repair Local Model")
         #expect(repair.isActionEnabled)
         #expect(repair.message.contains("local model files look incomplete"))
         #expect(warming.actionTitle == "Warming...")
