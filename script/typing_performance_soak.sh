@@ -400,15 +400,27 @@ APPLESCRIPT
 
 focus_textedit_document() {
   local target_name="$1"
+  local target_file="${SOAK_TARGET_TEXT_FILE:-}"
 
-  open -a TextEdit >/dev/null 2>&1 || true
-  osascript - "$target_name" >/dev/null <<'APPLESCRIPT'
+  if [[ -n "$target_file" && -f "$target_file" ]]; then
+    open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
+  else
+    open -a TextEdit >/dev/null 2>&1 || true
+  fi
+  osascript - "$target_name" "$target_file" >/dev/null <<'APPLESCRIPT'
 on run argv
   set targetName to item 1 of argv
+  set targetPath to item 2 of argv
+
+  tell application "TextEdit"
+    activate
+    if targetPath is not "" then open (POSIX file targetPath)
+  end tell
 
 with timeout of 20 seconds
   tell application "System Events"
-    repeat 50 times
+    repeat 100 times
+      tell application "TextEdit" to activate
       if exists process "TextEdit" then
         tell process "TextEdit"
           set frontmost to true
