@@ -3675,6 +3675,78 @@ print("")
 SWIFT
 }
 
+textedit_document_caret_location() {
+  local window_title="$1"
+
+  swift - "$window_title" <<'SWIFT' 2>/dev/null || true
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth <= 8 else {
+        return nil
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    if role == kAXTextAreaRole as String || role == kAXTextFieldRole as String {
+        return element
+    }
+
+    for child in children(of: element) {
+        if let found = firstTextInput(in: child, depth: depth + 1) {
+            return found
+        }
+    }
+
+    return nil
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows {
+        guard (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle,
+              let textInput = firstTextInput(in: window),
+              let rangeValue = copyAttribute(textInput, kAXSelectedTextRangeAttribute as String) else {
+            continue
+        }
+
+        var range = CFRange()
+        if AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) {
+            print(range.location)
+            exit(0)
+        }
+    }
+}
+
+print("")
+SWIFT
+}
+
 textedit_document_exists() {
   local window_title="$1"
 
@@ -3902,6 +3974,33 @@ wait_for_textedit_document_exact() {
   exit 1
 }
 
+wait_for_textedit_document_exact_at_end() {
+  local window_title="$1"
+  local expected_text="$2"
+  local label="$3"
+  local timeout_seconds="${4:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local expected_caret
+  expected_caret="$(printf '%s' "$expected_text" | perl -CS -MEncode -ne 'print length(encode("UTF-16LE", $_)) / 2')"
+
+  while ((SECONDS <= deadline)); do
+    local current_text current_caret
+    current_text="$(textedit_document_text "$window_title")"
+    current_caret="$(textedit_document_caret_location "$window_title")"
+    if [[ "$current_text" == "$expected_text" && "$current_caret" == "$expected_caret" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for TextEdit setup during $label." >&2
+  echo "Expected exact text: $expected_text" >&2
+  echo "Actual exact text: $(textedit_document_text "$window_title")" >&2
+  echo "Expected caret: $expected_caret" >&2
+  echo "Actual caret: $(textedit_document_caret_location "$window_title")" >&2
+  return 1
+}
+
 set_textedit_document_text() {
   local window_title="$1"
   local replacement_text="$2"
@@ -3996,7 +4095,7 @@ reset_textedit_smoke_document() {
   local label="${2:-reset}"
 
   set_textedit_document_text "$window_title" ""
-  wait_for_textedit_document_exact "$window_title" "" "$label" 8
+  wait_for_textedit_document_exact_at_end "$window_title" "" "$label" 8
 }
 
 verify_textedit_native_undo() {
@@ -4051,9 +4150,12 @@ type_textedit_smoke_fragment_and_confirm() {
   local window_title="$1"
   local fragment="$2"
   local label="$3"
+  local before_text expected_text
+  before_text="$(textedit_document_text "$window_title")"
+  expected_text="${before_text}${fragment}"
 
   type_textedit_smoke_fragment "$window_title" "$fragment"
-  if wait_for_textedit_document_fragment "$window_title" "$fragment" "$label" 5; then
+  if wait_for_textedit_document_exact_at_end "$window_title" "$expected_text" "$label" 5; then
     return 0
   fi
 
@@ -4068,8 +4170,10 @@ tell application "System Events"
 end tell
 delay 0.2
 APPLESCRIPT
+  before_text="$(textedit_document_text "$window_title")"
+  expected_text="${before_text}${fragment}"
   type_textedit_smoke_fragment "$window_title" "$fragment"
-  wait_for_textedit_document_fragment "$window_title" "$fragment" "$label retry" 5
+  wait_for_textedit_document_exact_at_end "$window_title" "$expected_text" "$label retry" 5
 }
 
 wait_for_textedit_smoke_editor() {
