@@ -156,15 +156,21 @@ struct LocalModelAssetInstaller: Sendable {
         )
 
         await progressHandler?(.init(phase: .preparing))
+        let scratchURL = destinationURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".\(manifest.fileName).download-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
-            at: destinationURL,
+            at: scratchURL,
             withIntermediateDirectories: true
         )
+        defer {
+            try? FileManager.default.removeItem(at: scratchURL)
+        }
 
         let downloadedURL = try await HubClient.default.downloadSnapshot(
             of: repoID,
             kind: .model,
-            to: destinationURL,
+            to: scratchURL,
             revision: source.revision,
             matching: source.allowPatterns,
             maxConcurrentDownloads: 4
@@ -179,17 +185,23 @@ struct LocalModelAssetInstaller: Sendable {
         }
 
         await progressHandler?(.init(phase: .validating))
-        _ = try ModelAssetIntegrityReceiptWriter.write(
-            manifest: manifest,
-            modelDirectoryURL: destinationURL
-        )
+        do {
+            try ModelAssetInstaller.finalizeDownloadedSnapshot(
+                manifest: manifest,
+                snapshotURL: downloadedURL,
+                targetURL: destinationURL
+            )
+        } catch let error as ModelAssetInstallerError {
+            throw LocalModelAssetInstallerError.invalidAfterInstall(error.localizedDescription)
+        }
+
         let state = modelAssetState(at: destinationURL)
         guard state.isUsable else {
             throw LocalModelAssetInstallerError.invalidAfterInstall(state.statusSummary)
         }
 
         await progressHandler?(.init(phase: .installed))
-        return downloadedURL
+        return destinationURL
     }
 
     private func modelAssetState(at url: URL) -> LocalModelAssetState {
@@ -211,12 +223,25 @@ struct LocalModelAssetInstaller: Sendable {
             return total + size
         }
 
-        return manifest.validatedDirectoryState(
+        let structureState = manifest.validatedDirectoryState(
             path: path,
             isDirectory: isDirectory.boolValue,
             childFileNames: childFileNames,
             modelBytes: modelBytes
         )
+
+        guard structureState.isUsable else {
+            return structureState
+        }
+
+        if let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: url
+        ) {
+            return .invalid(path: path, reason: integrityError)
+        }
+
+        return structureState
     }
 
     private func availableBytesForInstallVolume() -> Int64? {

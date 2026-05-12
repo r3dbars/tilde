@@ -53,10 +53,89 @@ struct AppModelRuntimeFactoryTests {
         #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
     }
 
+    @Test("Rejects source-backed model folders without a valid integrity receipt")
+    func rejectsSourceBackedModelFoldersWithoutValidIntegrityReceipt() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("steadytype-runtime-integrity-\(UUID().uuidString)", isDirectory: true)
+        let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        try fileManager.createDirectory(at: modelURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: modelURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: modelURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifest = smallSourceBackedManifest()
+        let missingReceiptState = AppModelRuntimeFactory.modelAssetState(
+            for: manifest,
+            at: modelURL,
+            fileManager: fileManager
+        )
+        #expect(missingReceiptState == .invalid(
+            path: modelURL.path,
+            reason: "missing integrity receipt .steadytype-model-integrity.json"
+        ))
+
+        try ModelAssetIntegrityReceiptWriter.write(
+            manifest: manifest,
+            modelDirectoryURL: modelURL,
+            fileManager: fileManager
+        )
+
+        let validState = AppModelRuntimeFactory.modelAssetState(
+            for: manifest,
+            at: modelURL,
+            fileManager: fileManager
+        )
+        #expect(validState == .available(path: modelURL.path))
+
+        try "WEIGHTS".write(
+            to: modelURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let tamperedState = AppModelRuntimeFactory.modelAssetState(
+            for: manifest,
+            at: modelURL,
+            fileManager: fileManager
+        )
+        #expect(tamperedState == .invalid(
+            path: modelURL.path,
+            reason: "integrity receipt checksum mismatch for model.safetensors"
+        ))
+    }
+
     private func temporaryDefaults() -> UserDefaults {
         let suiteName = "autocomplete-app-model-runtime-factory-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
+    }
+
+    private func smallSourceBackedManifest() -> LocalModelAssetManifest {
+        LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: LocalModelAssetSource(
+                repoID: "mlx-community/Test",
+                revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                allowPatterns: ["*.safetensors", "config.json"]
+            ),
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json"]
+        )
     }
 }

@@ -129,7 +129,7 @@ enum AppModelRuntimeFactory {
             .isEmpty != false
     }
 
-    private static func modelAssetState(
+    static func modelAssetState(
         for manifest: LocalModelAssetManifest,
         at modelDirectoryURL: URL,
         fileManager: FileManager
@@ -155,12 +155,26 @@ enum AppModelRuntimeFactory {
             return total + size
         }
 
-        return manifest.validatedDirectoryState(
+        let structureState = manifest.validatedDirectoryState(
             path: path,
             isDirectory: isDirectory.boolValue,
             childFileNames: childFileNames,
             modelBytes: modelBytes
         )
+
+        guard structureState.isUsable else {
+            return structureState
+        }
+
+        if let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: modelDirectoryURL,
+            fileManager: fileManager
+        ) {
+            return .invalid(path: path, reason: integrityError)
+        }
+
+        return structureState
     }
 
     private static func modelAssetURL(
