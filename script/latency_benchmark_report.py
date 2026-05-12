@@ -447,6 +447,7 @@ def print_report(args, trace_data, diagnostics_data):
     print(f"Trace start line: {args.trace_start_line}")
     print(f"Trace end line: {args.trace_end_line or 'none'}")
     print(f"Line limit: {args.line_limit if args.line_limit > 0 else 'all'}")
+    print_latency_window_caveat()
     print()
     print(metric_line("First visible / keystroke-to-visible", first_visible, "ms"))
     print(metric_line("First token", first_token, "ms"))
@@ -477,6 +478,30 @@ def print_report(args, trace_data, diagnostics_data):
             buckets[(suppression.app, suppression.profile, suppression.reason)] += 1
         for (app, profile, reason), count in sorted(buckets.items()):
             print(f"  {app} / {profile} / {reason}: {count}")
+
+
+def print_latency_window_caveat():
+    if os.environ.get("AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE") != "1":
+        return
+
+    diagnostics_line = os.environ.get(
+        "AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_DIAGNOSTICS_LINE",
+        "unknown",
+    )
+    first_visible = os.environ.get(
+        "AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_FIRST_VISIBLE_SAMPLES",
+        "unknown",
+    )
+    model = os.environ.get(
+        "AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_MODEL_SAMPLES",
+        "unknown",
+    )
+    print(
+        "Latency window caveat: current default runtime launch is under-sampled; "
+        f"diagnosticsLine={diagnostics_line}; "
+        f"firstVisibleSamples={first_visible}; modelSamples={model}; "
+        "reporting latest older sampled default window"
+    )
 
 
 def enforce_gate(args, trace_data, diagnostics_data):
