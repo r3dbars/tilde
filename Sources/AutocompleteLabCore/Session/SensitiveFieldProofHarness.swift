@@ -188,6 +188,7 @@ public struct SensitiveFieldProofResult: Equatable, Sendable {
 
     public var traceMetadata: [String: String] {
         var metadata = assessment.traceMetadata
+        metadata["sensitivePolicyCategory"] = assessment.category?.rawValue ?? "none"
         metadata["sensitiveSuppressionCategory"] = fixture.category.rawValue
         metadata["sensitiveSuppressionProof"] = fixture.proofLevel.rawValue
         metadata["sensitiveSuppressionDecision"] = isSilent ? "blocked" : "presented"

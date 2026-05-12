@@ -70,6 +70,7 @@ public struct CompatibilityEvaluationContext: Equatable, Sendable {
     public let bundleIdentifier: String?
     public let elementRole: String?
     public let elementSubrole: String?
+    public let fieldClassifierInput: AXFieldClassifierInput?
     public let isSecureTextEntry: Bool
     public let textBeforeCursor: String
     public let hasCaretRect: Bool
@@ -78,6 +79,7 @@ public struct CompatibilityEvaluationContext: Equatable, Sendable {
         bundleIdentifier: String?,
         elementRole: String?,
         elementSubrole: String?,
+        fieldClassifierInput: AXFieldClassifierInput? = nil,
         isSecureTextEntry: Bool,
         textBeforeCursor: String,
         hasCaretRect: Bool
@@ -85,6 +87,7 @@ public struct CompatibilityEvaluationContext: Equatable, Sendable {
         self.bundleIdentifier = bundleIdentifier
         self.elementRole = elementRole
         self.elementSubrole = elementSubrole
+        self.fieldClassifierInput = fieldClassifierInput
         self.isSecureTextEntry = isSecureTextEntry
         self.textBeforeCursor = textBeforeCursor
         self.hasCaretRect = hasCaretRect
@@ -101,6 +104,7 @@ public enum CompatibilitySuppressionReason: Equatable, Sendable {
     case belowMinimumCharacters(required: Int, actual: Int)
     case missingCaretRect
     case detectOnly(String)
+    case unsafeFieldKind(String)
 }
 
 public struct CompatibilityDecision: Equatable, Sendable {
@@ -172,6 +176,32 @@ public struct CompatibilityRouter: Equatable, Sendable {
                 acceptMode: .none,
                 suppressionReason: .secureTextEntry
             )
+        }
+
+        let fieldClassification = AXFieldClassifier().classification(
+            for: context.fieldClassifierInput
+                ?? AXFieldClassifierInput(
+                    role: context.elementRole,
+                    subrole: context.elementSubrole,
+                    isSecure: context.isSecureTextEntry,
+                    textBeforeCursorLength: context.textBeforeCursor.count,
+                    lineCount: context.textBeforeCursor.split(
+                        omittingEmptySubsequences: false,
+                        whereSeparator: \.isNewline
+                    ).count
+                )
+        )
+        switch fieldClassification.kind {
+        case .secure, .search, .url, .form, .unprovenSurface, .unknown:
+            return CompatibilityDecision(
+                profile: profile,
+                rung: .blocked,
+                textPath: profile.textPath,
+                acceptMode: .none,
+                suppressionReason: .unsafeFieldKind(fieldClassification.reason)
+            )
+        case .multilineCompose, .singlelineCompose:
+            break
         }
 
         if settings.suppressEmptyText, context.textBeforeCursor.isEmpty {
@@ -280,6 +310,8 @@ public extension CompatibilitySuppressionReason {
             return "missing caret rect"
         case .detectOnly(let profileID):
             return "detect only \(profileID)"
+        case .unsafeFieldKind(let reason):
+            return "unsafe field kind \(reason)"
         }
     }
 }

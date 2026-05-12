@@ -9,6 +9,7 @@ mkdir -p "$TRACE_FOLDER/screenshots"
 mkdir -p "$TRACE_FOLDER/privacy-export"
 printf '{}\n' >"$TRACE_FOLDER/traces.jsonl"
 printf '{}\n' >"$TRACE_FOLDER/raw-traces.jsonl"
+printf 'diagnostics\n' >"$TRACE_FOLDER/diagnostics.log"
 printf '<html></html>\n' >"$TRACE_FOLDER/trace-report.html"
 printf '[]\n' >"$TRACE_FOLDER/survival-report.json"
 printf 'png\n' >"$TRACE_FOLDER/screenshots/sample.txt"
@@ -22,6 +23,7 @@ AUTOCOMPLETE_LAB_STATE_FOLDER="$STATE_FOLDER" \
 for path in \
   "$TRACE_FOLDER/traces.jsonl" \
   "$TRACE_FOLDER/raw-traces.jsonl" \
+  "$TRACE_FOLDER/diagnostics.log" \
   "$TRACE_FOLDER/trace-report.html" \
   "$TRACE_FOLDER/survival-report.json" \
   "$TRACE_FOLDER/privacy-export" \

@@ -86,7 +86,7 @@ def runtime_launches(path):
     return launches
 
 
-def trace_window(path, timestamp):
+def trace_window(path, timestamp, before_timestamp=None):
     trace_start_line = None
     first_visible_samples = 0
     model_samples = 0
@@ -106,6 +106,8 @@ def trace_window(path, timestamp):
             event_timestamp = str(event.get("timestamp") or "")
             if event_timestamp < timestamp:
                 continue
+            if before_timestamp and event_timestamp >= before_timestamp:
+                break
 
             if trace_start_line is None:
                 trace_start_line = max(0, line_number - 1)
@@ -180,7 +182,30 @@ def select_window(
         )
         return Selection(latest_launch, trace_window(trace_log, latest_launch.timestamp), reason, False)
 
-    window = trace_window(trace_log, latest_launch.timestamp)
+    undersampled_default_launches = 0
+    latest_undersampled_window = None
+    eligible_indexed_launches = [
+        (index, launch)
+        for index, launch in enumerate(launches)
+        if is_eligible_default_launch(launch, expected_asset)
+    ]
+    for index, launch in reversed(eligible_indexed_launches):
+        before_timestamp = launches[index + 1].timestamp if index + 1 < len(launches) else None
+        window = trace_window(trace_log, launch.timestamp, before_timestamp)
+        if (
+            window.first_visible_samples >= min_first_visible_samples
+            and window.model_samples >= min_model_samples
+        ):
+            reason = "selected latest sampled default runtime launch"
+            if undersampled_default_launches:
+                reason += f"; skippedUnsampledDefaultLaunches={undersampled_default_launches}"
+            return Selection(launch, window, reason, True)
+
+        undersampled_default_launches += 1
+        if latest_undersampled_window is None:
+            latest_undersampled_window = window
+
+    window = latest_undersampled_window or trace_window(trace_log, latest_launch.timestamp)
     if (
         window.first_visible_samples < min_first_visible_samples
         or window.model_samples < min_model_samples
@@ -188,11 +213,11 @@ def select_window(
         return Selection(
             latest_launch,
             window,
-            "latest default runtime launch has too few samples",
+            "no sampled default runtime launch meets sample requirements",
             False,
         )
 
-    return Selection(latest_launch, window, "selected latest default runtime launch", True)
+    return Selection(latest_launch, window, "selected latest sampled default runtime launch", True)
 
 
 def main():
