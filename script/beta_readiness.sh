@@ -104,15 +104,20 @@ latency_beta_gate() {
   local start_env=()
 
   if [[ -z "${AUTOCOMPLETE_LAB_LOG_START_LINE:-}" && -z "${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}" ]]; then
-    while IFS= read -r assignment; do
-      [[ -n "$assignment" ]] && start_env+=("$assignment")
-    done < <(./script/select_latency_window.py \
+    local selector_output
+    if ! selector_output="$(./script/select_latency_window.py \
       --diagnostics-log "${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}" \
       --trace-log "${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}" \
       --expected-asset "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
       --min-first-visible-samples "${AUTOCOMPLETE_LAB_BETA_MIN_FIRST_VISIBLE_SAMPLES:-5}" \
       --min-model-samples "${AUTOCOMPLETE_LAB_BETA_MIN_MODEL_SAMPLES:-5}"
-    )
+    )"; then
+      return 1
+    fi
+
+    while IFS= read -r assignment; do
+      [[ -n "$assignment" ]] && start_env+=("$assignment")
+    done <<<"$selector_output"
   fi
 
   if ((${#start_env[@]})); then

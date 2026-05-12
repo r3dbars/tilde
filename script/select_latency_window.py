@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import json
 import sys
@@ -24,6 +26,14 @@ class TraceWindow:
     start_line: int
     first_visible_samples: int
     model_samples: int
+
+
+@dataclass(frozen=True)
+class Selection:
+    launch: Launch | None
+    window: TraceWindow | None
+    reason: str
+    ok: bool
 
 
 def fields_from(parts):
@@ -113,6 +123,15 @@ def eligible_default_launches(launches, expected_asset):
     ]
 
 
+def is_eligible_default_launch(launch, expected_asset):
+    return (
+        launch.asset == expected_asset
+        and not launch.model_override
+        and launch.candidate == "mlx"
+        and launch.native_runtime_available == "true"
+    )
+
+
 def select_window(
     diagnostics_log,
     trace_log,
@@ -120,20 +139,35 @@ def select_window(
     min_first_visible_samples,
     min_model_samples,
 ):
-    launches = eligible_default_launches(runtime_launches(diagnostics_log), expected_asset)
-    if not launches:
-        return None, None, "no eligible default runtime launch"
+    launches = runtime_launches(diagnostics_log)
+    eligible_launches = eligible_default_launches(launches, expected_asset)
+    if not eligible_launches:
+        return Selection(None, None, "no eligible default runtime launch", False)
 
-    latest_window = trace_window(trace_log, launches[-1].timestamp)
-    for launch in reversed(launches):
-        window = trace_window(trace_log, launch.timestamp)
-        if (
-            window.first_visible_samples >= min_first_visible_samples
-            and window.model_samples >= min_model_samples
-        ):
-            return launch, window, "selected latest sampled default runtime launch"
+    latest_launch = launches[-1]
+    if not is_eligible_default_launch(latest_launch, expected_asset):
+        reason = (
+            "latest runtime launch is not the expected default runtime "
+            f"(diagnosticsLine={latest_launch.line}; asset={latest_launch.asset or 'unknown'}; "
+            f"candidate={latest_launch.candidate or 'unknown'}; "
+            f"modelOverride={latest_launch.model_override or 'none'}; "
+            f"nativeRuntimeAvailable={latest_launch.native_runtime_available or 'unknown'})"
+        )
+        return Selection(latest_launch, trace_window(trace_log, latest_launch.timestamp), reason, False)
 
-    return launches[-1], latest_window, "latest default runtime launch has too few samples"
+    window = trace_window(trace_log, latest_launch.timestamp)
+    if (
+        window.first_visible_samples < min_first_visible_samples
+        or window.model_samples < min_model_samples
+    ):
+        return Selection(
+            latest_launch,
+            window,
+            "latest default runtime launch has too few samples",
+            False,
+        )
+
+    return Selection(latest_launch, window, "selected latest default runtime launch", True)
 
 
 def main():
@@ -147,13 +181,16 @@ def main():
     parser.add_argument("--min-model-samples", type=int, default=5)
     args = parser.parse_args()
 
-    launch, window, reason = select_window(
+    selection = select_window(
         Path(args.diagnostics_log).expanduser(),
         Path(args.trace_log).expanduser(),
         args.expected_asset,
         args.min_first_visible_samples,
         args.min_model_samples,
     )
+    launch = selection.launch
+    window = selection.window
+    reason = selection.reason
 
     if launch is None or window is None:
         print(f"Latency window: {reason}", file=sys.stderr)
@@ -165,6 +202,9 @@ def main():
         f"firstVisibleSamples={window.first_visible_samples}; modelSamples={window.model_samples}",
         file=sys.stderr,
     )
+    if not selection.ok:
+        return 1
+
     print(f"AUTOCOMPLETE_LAB_LOG_START_LINE={max(0, launch.line - 1)}")
     print(f"AUTOCOMPLETE_LAB_TRACE_START_LINE={window.start_line}")
     return 0
