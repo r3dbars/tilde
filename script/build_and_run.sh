@@ -440,8 +440,15 @@ case "$MODE" in
             print_running_apps
             exit 1
           fi
-          current_bundle_is_running
-          exit 0
+          if current_bundle_is_running; then
+            exit 0
+          fi
+          if [[ "$attempt" == "1" ]]; then
+            stop_running_apps
+            break
+          fi
+          echo "$APP_NAME exited during the verification stability window; expected $APP_BINARY to keep running" >&2
+          exit 1
         fi
         sleep 1
       done
