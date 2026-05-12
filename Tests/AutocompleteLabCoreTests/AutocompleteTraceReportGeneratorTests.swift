@@ -16,10 +16,14 @@ struct AutocompleteTraceReportGeneratorTests {
                 textAfterCursor: "violet-draft-after",
                 displayedText: "violet-model-output",
                 acceptedText: "violet-accepted",
+                outcome: "violet-outcome-token",
+                reason: "violet-reason-token",
                 screenshotPath: "/tmp/violet-private.png",
                 metadata: [
                     "selectedText": "violet-selection",
-                    "fieldKind": "multilineCompose"
+                    "fieldKind": "multilineCompose",
+                    "fieldKindReason": "violet-field-reason-token",
+                    "suppressionOutcome": "violet-suppression-outcome-token"
                 ]
             )
         ]
@@ -27,18 +31,26 @@ struct AutocompleteTraceReportGeneratorTests {
         let jsonl = try generator.redactedJSONL(for: events)
         let decoded = try JSONDecoder().decode(
             AutocompleteTraceEvent.self,
-            from: Data(jsonl.trimmingCharacters(in: .whitespacesAndNewlines).utf8)
+            from: Data(jsonl.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).utf8)
         )
 
         #expect(decoded.displayedText.isEmpty)
         #expect(decoded.acceptedText.isEmpty)
         #expect(decoded.screenshotPath.isEmpty)
+        #expect(decoded.outcome == DiagnosticValueRedactor.stringSummary(length: "violet-outcome-token".count))
+        #expect(decoded.reason == DiagnosticValueRedactor.stringSummary(length: "violet-reason-token".count))
         #expect(decoded.metadata["displayedTextChars"] == "19")
         #expect(decoded.metadata["acceptedTextChars"] == "15")
         #expect(decoded.metadata["selectedText"] == "String(16 chars)")
+        #expect(decoded.metadata["fieldKindReason"] == DiagnosticValueRedactor.stringSummary(length: "violet-field-reason-token".count))
+        #expect(decoded.metadata["suppressionOutcome"] == DiagnosticValueRedactor.stringSummary(length: "violet-suppression-outcome-token".count))
         #expect(!jsonl.contains("violet-draft"))
         #expect(!jsonl.contains("violet-model-output"))
         #expect(!jsonl.contains("violet-accepted"))
+        #expect(!jsonl.contains("violet-reason-token"))
+        #expect(!jsonl.contains("violet-outcome-token"))
+        #expect(!jsonl.contains("violet-field-reason-token"))
+        #expect(!jsonl.contains("violet-suppression-outcome-token"))
         #expect(!jsonl.contains("/tmp/violet-private.png"))
     }
 
@@ -63,6 +75,8 @@ struct AutocompleteTraceReportGeneratorTests {
         #expect(!html.contains("violet-draft"))
         #expect(!html.contains("violet-model-output"))
         #expect(!html.contains("violet-accepted"))
+        #expect(!html.contains("violet-report-reason"))
+        #expect(!html.contains("violet-report-outcome"))
         #expect(!html.contains("/tmp/violet-private.png"))
     }
 
@@ -137,9 +151,12 @@ struct AutocompleteTraceReportGeneratorTests {
                 textBeforeCursor: "violet-draft-before",
                 textAfterCursor: "violet-draft-after",
                 displayedText: "violet-model-output",
+                outcome: "violet-report-outcome",
+                reason: "violet-report-reason",
                 screenshotPath: "/tmp/violet-private.png",
                 metadata: [
                     "fieldKind": "multilineCompose",
+                    "fieldKindReason": "violet-report-field-reason",
                     "effectiveRenderMode": "inlineAdjacent",
                     "hasCaretRect": "false",
                     "learningApplied": "true",
@@ -236,8 +253,9 @@ struct AutocompleteTraceReportGeneratorTests {
         textAfterCursor: String = "",
         displayedText: String = "",
         acceptedText: String = "",
-        screenshotPath: String = "",
+        outcome: String = "",
         reason: String = "",
+        screenshotPath: String = "",
         metadata: [String: String] = [:]
     ) -> AutocompleteTraceEvent {
         AutocompleteTraceEvent(
@@ -251,6 +269,7 @@ struct AutocompleteTraceReportGeneratorTests {
             textAfterCursor: textAfterCursor,
             displayedText: displayedText,
             acceptedText: acceptedText,
+            outcome: outcome,
             reason: reason,
             screenshotPath: screenshotPath,
             metadata: metadata
