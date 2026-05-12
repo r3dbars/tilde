@@ -5996,7 +5996,11 @@ tell application "System Events"
   if bundle identifier of frontApp is not "md.obsidian" then
     error "Obsidian is not frontmost for smoke-note reset."
   end if
-  key code 124 using command down
+  if (system attribute "AUTOCOMPLETE_LAB_OBSIDIAN_MOVE_TO_DOCUMENT_END") is "1" then
+    key code 125 using command down
+  else
+    key code 124 using command down
+  end if
   delay 0.2
   key code 36
 end tell
@@ -6078,7 +6082,13 @@ run_obsidian() {
   open_obsidian_smoke_note_if_configured
   wait_for_frontmost_app "Obsidian" 8
   assert_obsidian_initial_smoke_target "$manual_app"
-  AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" reset_obsidian_smoke_note
+  local obsidian_move_to_document_end=0
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    obsidian_move_to_document_end=1
+  fi
+  AUTOCOMPLETE_LAB_OBSIDIAN_MOVE_TO_DOCUMENT_END="$obsidian_move_to_document_end" \
+    AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" \
+    reset_obsidian_smoke_note
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
