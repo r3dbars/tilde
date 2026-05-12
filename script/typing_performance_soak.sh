@@ -19,6 +19,9 @@ TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.j
 SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
 LOG_SCAN_SELF_TEST=0
 LOG_SCAN_SELF_TEST_START_LINE=0
+RUNTIME_READY_SELF_TEST=0
+RUNTIME_READY_SELF_TEST_START_LINE=0
+RUNTIME_READY_SELF_TEST_ALLOW_EXISTING=0
 NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=0
 NORMALIZE_OSASCRIPT_STDOUT_INPUT=""
 NORMALIZE_OSASCRIPT_STDOUT_OUTPUT=""
@@ -143,6 +146,38 @@ has_focused_text_poll_summary_after_line() {
       }
     }
   ' "$LOG_PATH"
+}
+
+log_has_pattern_after_line() {
+  local start_line="$1"
+  local pattern="$2"
+  local first_new_line=$((start_line + 1))
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  awk -v first_new_line="$first_new_line" -v pattern="$pattern" '
+    NR < first_new_line { next }
+    $0 ~ pattern {
+      found = 1
+      exit
+    }
+    END {
+      if (found != 1) {
+        exit 1
+      }
+    }
+  ' "$LOG_PATH"
+}
+
+has_runtime_ready_after_line() {
+  local start_line="$1"
+  log_has_pattern_after_line "$start_line" " runtime .*readinessStage=ready"
+}
+
+has_runtime_start_after_line() {
+  local start_line="$1"
+  log_has_pattern_after_line \
+    "$start_line" \
+    "app-proof-mode-started|runtime-bootstrap|runtime-warm-start| runtime .*readinessStage=warming"
 }
 
 wait_for_focused_text_poll_summary_after_line() {
@@ -564,18 +599,40 @@ latest_runtime_is_ready() {
   [[ "$latest_runtime_line" == *"readinessStage=ready"* ]]
 }
 
+runtime_ready_available_now() {
+  local start_line="$1"
+  local allow_existing_ready="$2"
+
+  if has_runtime_ready_after_line "$start_line"; then
+    return 0
+  fi
+
+  if [[ "$allow_existing_ready" == "1" ]] \
+    && ! has_runtime_start_after_line "$start_line" \
+    && latest_runtime_is_ready; then
+    return 0
+  fi
+
+  return 1
+}
+
 wait_for_runtime_ready() {
   local start_line="$1"
   local allow_existing_ready="$2"
   local timeout_seconds="${AUTOCOMPLETE_LAB_SOAK_READY_TIMEOUT_SECONDS:-60}"
+  local existing_ready_grace_seconds="${AUTOCOMPLETE_LAB_SOAK_EXISTING_READY_GRACE_SECONDS:-3}"
   local deadline=$((SECONDS + timeout_seconds))
+  local existing_ready_allowed_at=$((SECONDS + existing_ready_grace_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E " runtime .*readinessStage=ready" >/dev/null; then
+    if has_runtime_ready_after_line "$start_line"; then
       return 0
     fi
 
-    if [[ "$allow_existing_ready" == "1" ]] && latest_runtime_is_ready; then
+    if [[ "$allow_existing_ready" == "1" ]] \
+      && ((SECONDS >= existing_ready_allowed_at)) \
+      && ! has_runtime_start_after_line "$start_line" \
+      && latest_runtime_is_ready; then
       return 0
     fi
 
@@ -852,6 +909,19 @@ while (($#)); do
       LOG_SCAN_SELF_TEST_START_LINE="$1"
       LOG_SCAN_SELF_TEST=1
       ;;
+    --self-test-runtime-ready)
+      shift
+      if (($# < 3)); then
+        usage >&2
+        exit 2
+      fi
+      LOG_PATH="$1"
+      shift
+      RUNTIME_READY_SELF_TEST_START_LINE="$1"
+      shift
+      RUNTIME_READY_SELF_TEST_ALLOW_EXISTING="$1"
+      RUNTIME_READY_SELF_TEST=1
+      ;;
     --self-test-normalize-osascript-stdout)
       shift
       if (($# < 2)); then
@@ -878,6 +948,15 @@ done
 if [[ "$LOG_SCAN_SELF_TEST" == "1" ]]; then
   require_non_negative_int "$LOG_SCAN_SELF_TEST_START_LINE" "--self-test-log-scan start-line"
   has_focused_text_poll_summary_after_line "$LOG_SCAN_SELF_TEST_START_LINE"
+  exit $?
+fi
+
+if [[ "$RUNTIME_READY_SELF_TEST" == "1" ]]; then
+  require_non_negative_int "$RUNTIME_READY_SELF_TEST_START_LINE" "--self-test-runtime-ready start-line"
+  require_non_negative_int "$RUNTIME_READY_SELF_TEST_ALLOW_EXISTING" "--self-test-runtime-ready allow-existing"
+  runtime_ready_available_now \
+    "$RUNTIME_READY_SELF_TEST_START_LINE" \
+    "$RUNTIME_READY_SELF_TEST_ALLOW_EXISTING"
   exit $?
 fi
 
