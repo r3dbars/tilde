@@ -411,7 +411,7 @@ final class AccessibilityClient: @unchecked Sendable {
         )
     }
 
-    func insertText(_ text: String) -> Bool {
+    func insertText(_ text: String, allowDescendantTextFallback: Bool = false) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
               let bundleIdentifier = app.bundleIdentifier,
               let focusedElement = focusedElement(
@@ -420,7 +420,7 @@ final class AccessibilityClient: @unchecked Sendable {
                       localizedName: app.localizedName ?? bundleIdentifier,
                       processIdentifier: app.processIdentifier
                   ),
-                  allowWindowDescendantFallback: false
+                  allowWindowDescendantFallback: allowDescendantTextFallback
               ) else {
             return false
         }
@@ -444,7 +444,7 @@ final class AccessibilityClient: @unchecked Sendable {
         return textAfterInsert != textBeforeInsert
     }
 
-    func replaceSelectedTextBySettingValue(_ text: String) -> Bool {
+    func replaceSelectedTextBySettingValue(_ text: String, allowDescendantTextFallback: Bool = false) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
               let bundleIdentifier = app.bundleIdentifier,
               let focusedElement = focusedElement(
@@ -453,7 +453,7 @@ final class AccessibilityClient: @unchecked Sendable {
                       localizedName: app.localizedName ?? bundleIdentifier,
                       processIdentifier: app.processIdentifier
                   ),
-                  allowWindowDescendantFallback: false
+                  allowWindowDescendantFallback: allowDescendantTextFallback
               ),
               let textBeforeInsert = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String,
               let selectedRange = selectedTextRange(in: focusedElement),

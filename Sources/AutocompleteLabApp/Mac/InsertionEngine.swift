@@ -1,6 +1,13 @@
 import AppKit
 import AutocompleteLabCore
 
+protocol TextInsertionClient: AnyObject {
+    func insertText(_ text: String, allowDescendantTextFallback: Bool) -> Bool
+    func replaceSelectedTextBySettingValue(_ text: String, allowDescendantTextFallback: Bool) -> Bool
+}
+
+extension AccessibilityClient: TextInsertionClient {}
+
 struct InsertionResult: Equatable {
     let succeeded: Bool
     let mode: InsertionMode
@@ -9,9 +16,9 @@ struct InsertionResult: Equatable {
 
 @MainActor
 final class InsertionEngine {
-    private let accessibilityClient: AccessibilityClient
+    private let accessibilityClient: TextInsertionClient
 
-    init(accessibilityClient: AccessibilityClient) {
+    init(accessibilityClient: TextInsertionClient) {
         self.accessibilityClient = accessibilityClient
     }
 
@@ -36,21 +43,30 @@ final class InsertionEngine {
     private func attempt(_ text: String, mode: InsertionMode, profile: CompatibilityProfile) -> InsertionResult? {
         switch mode {
         case .axSelectedText:
-            if accessibilityClient.insertText(text) {
+            if accessibilityClient.insertText(
+                text,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            ) {
                 return InsertionResult(succeeded: true, mode: .axSelectedText, message: "Inserted via AX selected text.")
             }
 
             return nil
 
         case .axValueReplacement:
-            if accessibilityClient.replaceSelectedTextBySettingValue(text) {
+            if accessibilityClient.replaceSelectedTextBySettingValue(
+                text,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            ) {
                 return InsertionResult(succeeded: true, mode: .axValueReplacement, message: "Inserted via AX value replacement.")
             }
 
             return nil
 
         case .axThenKeyEvents:
-            if accessibilityClient.insertText(text) {
+            if accessibilityClient.insertText(
+                text,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            ) {
                 return InsertionResult(succeeded: true, mode: .axSelectedText, message: "Inserted via verified AX selected text.")
             }
 
