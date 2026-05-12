@@ -59,7 +59,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 \(visiblePageGuidance)
                 If visible page context includes a matching local word, name, or term, prefer that word's missing suffix.
                 For partial product names, app names, permissions, people, project terms, and repeated OCR words, complete the visible local word before guessing a generic dictionary word.
-                Suffix examples: transi -> tion; configu -> rable; visi -> ble; redac -> ted.
+                Suffix examples: transi -> tion; configu -> rable; visi -> ble; redac -> ted. For "setting should be configu", return rable, not ration.
                 Only exception: return exactly \(Self.noSuggestionToken) when unsafe or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
@@ -109,6 +109,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         When the continuation is a common phrase, put that boring obvious phrase first.
         Avoid generic filler like "comes to life", "key features and benefits", "comprehensive plan", or "acknowledge the user's point".
         Shape examples: "The draft feels calmer when it" -> "stays short and specific"; "The review should focus on" -> "real user risk"; "A good reply here would be" -> "short, kind, and specific".
+        More examples: "quiet mode should stay quiet mode should stay" -> "calm in the background"; "Hold the risky path until" -> "proof exists"; "the next step is to" -> "write a small repro"; "autocomplete should" -> "stay silent".
         When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
         Do not repeat the Before cursor text.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.

@@ -30,6 +30,7 @@ DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
 TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
+SOAK_DOCUMENT_NAME_PREFIX="autocomplete-lab-typing-soak-"
 PAUSE_DEFAULTS_WAS_PREPARED=0
 PAUSE_DEFAULTS_PREVIOUS_EXISTS=0
 PAUSE_DEFAULTS_PREVIOUS=""
@@ -59,6 +60,9 @@ EOF
 cleanup_soak() {
   if [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
     close_textedit_document "$SOAK_TARGET_DOCUMENT_NAME" >/dev/null 2>&1 || true
+  fi
+  if [[ "$DRY_RUN" != "1" && ( -n "$SOAK_TARGET_DOCUMENT_NAME" || -n "$SOAK_TARGET_TEXT_FILE" ) ]]; then
+    close_stale_textedit_soak_documents "" >/dev/null 2>&1 || true
   fi
 
   if ((${#SOAK_TMP_DIRS[@]})); then
@@ -302,6 +306,35 @@ run_osascript_with_timeout() {
   return "$status"
 }
 
+close_stale_textedit_soak_documents() {
+  local keep_name="${1:-}"
+  local close_stdout close_stderr
+
+  close_stdout="$(make_tmp_dir)/textedit-close-stale-stdout.txt"
+  close_stderr="$(make_tmp_dir)/textedit-close-stale-stderr.txt"
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_SOAK_CLOSE_STALE_TIMEOUT_SECONDS:-10}" \
+    "$close_stdout" \
+    "$close_stderr" \
+    - "$SOAK_DOCUMENT_NAME_PREFIX" "$keep_name" <<'APPLESCRIPT' || true
+on run argv
+  set namePrefix to item 1 of argv
+  set keepName to item 2 of argv
+
+  tell application "TextEdit"
+    repeat with candidate in documents
+      try
+        set candidateName to name of candidate as text
+        if candidateName starts with namePrefix and candidateName is not keepName then
+          close candidate saving no
+        end if
+      end try
+    end repeat
+  end tell
+end run
+APPLESCRIPT
+}
+
 prepare_textedit_document() {
   local target_file="${1:-}"
   local target_name attempt actual_name open_stdout open_stderr actual_stdout actual_stderr retry_stdout retry_stderr
@@ -313,6 +346,7 @@ prepare_textedit_document() {
 
   target_name="$(basename "$target_file")"
   : >"$target_file"
+  close_stale_textedit_soak_documents "$target_name"
 
   for attempt in 1 2; do
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
@@ -865,7 +899,7 @@ type_textedit_fixture() {
   tmp_dir="$(make_tmp_dir)"
   text_file="$tmp_dir/autocomplete-lab-typing-soak-input.txt"
   actual_file="$tmp_dir/autocomplete-lab-typing-soak-actual.txt"
-  target_file="$tmp_dir/autocomplete-lab-typing-soak-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
+  target_file="$tmp_dir/$SOAK_DOCUMENT_NAME_PREFIX$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   SOAK_EXPECTED_TEXT_FILE="$text_file"
   SOAK_ACTUAL_TEXT_FILE="$actual_file"
   SOAK_TARGET_TEXT_FILE="$target_file"
