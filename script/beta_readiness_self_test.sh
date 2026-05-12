@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SCRIPT_TEXT="$(sed -n '1,340p' script/beta_readiness.sh)"
+SCRIPT_TEXT="$(sed -n '1,420p' script/beta_readiness.sh)"
 
 require_contains() {
   local expected="$1"
@@ -38,6 +38,8 @@ require_contains 'check_current_artifact_checksum'
 require_contains 'xcrun stapler validate "$PRIMARY_ARTIFACT"'
 require_contains 'spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"'
 require_contains 'spctl --assess --type execute --verbose=4 "$app_path"'
+require_contains 'AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE'
+require_contains './script/package_release.sh --notarize'
 reject_line './script/package_release.sh --check'
 reject_contains 'Notarization is still pending'
 
