@@ -2,7 +2,7 @@ import AutocompleteLabCore
 
 struct StartupOnboardingPolicy: Equatable {
     func shouldRequestAccessibilityPromptOnLaunch(isTrusted: Bool) -> Bool {
-        false
+        !isTrusted
     }
 
     func shouldShowSettingsOnLaunch(
