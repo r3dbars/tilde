@@ -350,6 +350,20 @@ if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/proces
   exit 1
 fi
 
+if ! AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID=123 \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 123 bash ./script/real_app_smoke.sh textedit\n1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/self-process.lock" \
+  script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/self-process.txt"; then
+  if grep -F "Another real app smoke process is already active" "$TMP_DIR/self-process.txt" >/dev/null; then
+    echo "real app smoke self-test should ignore the current smoke process" >&2
+    exit 1
+  fi
+fi
+if ! grep -F "requires --manual-gate" "$TMP_DIR/self-process.txt" >/dev/null; then
+  echo "real app smoke self-test expected the self-process path to reach the Codex safety gate" >&2
+  exit 1
+fi
+
 if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then
   echo "real app smoke self-test expected missing Chrome fixture values to fail" >&2
   exit 1
