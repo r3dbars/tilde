@@ -2,7 +2,7 @@
 
 Use this in the first 10 minutes of a private beta session.
 
-## What Will Happen
+## First Screen Must Say
 
 - Suggestions appear as a small floating suggestion next to the cursor in
   supported writing apps. They do not become document text until you accept
@@ -11,20 +11,25 @@ Use this in the first 10 minutes of a private beta session.
 - `Esc` dismisses the suggestion.
 - Pause Suggestions stops suggestions everywhere.
 - Pause Current App stops suggestions only in the frontmost app.
+- Typed text and model output stay on this Mac by default.
 
 ## Start In TextEdit
 
 1. Open SteadyType Settings.
-2. Confirm Accessibility is allowed.
-3. Confirm the local model is ready. If it is missing or broken, use
+2. Confirm the first screen explains the map above before any macOS prompt.
+3. Click `Allow Accessibility`, then grant Accessibility in System Settings.
+4. Return to SteadyType and confirm Accessibility shows as allowed without
+   restarting.
+5. Confirm the local model is ready. If it is missing or broken, use
    `Install Local Model` or `Repair Local Model` in Settings. Stop if in-app
    setup fails; do not run Ollama, Python, shell scripts, or a separate model
    server.
-4. Click `Start TextEdit Practice`.
-5. Type disposable text in the local TextEdit practice file.
-6. Press `Tab` once when the next word is clearly useful.
-7. Press `Esc` when a suggestion feels wrong.
-8. Export only the redacted Privacy Bundle if feedback needs diagnostics.
+6. Click `Start TextEdit Practice`.
+7. Type disposable text in the local TextEdit practice file.
+8. Confirm the floating suggestion appears next to the cursor.
+9. Press `Tab` once when the next word is clearly useful.
+10. Press `Esc` when a suggestion feels wrong.
+11. Export only the redacted Privacy Bundle if feedback needs diagnostics.
 
 ## What Stays Local
 
@@ -57,6 +62,15 @@ These stay off until proof says otherwise:
 - Discord
 - Notion
 - search, login, payment, address, URL, secure, and private fields
+
+## Proof Still Pending
+
+Do not describe first-run proof as complete yet.
+
+- [ ] Fresh clean-user install: first macOS Accessibility prompt appears only
+  after `Allow Accessibility`.
+- [ ] Accessibility denial and regrant: app stays calm while denied, shows no
+  suggestions while denied, and practice works again after regrant.
 
 ## Stop Immediately
 

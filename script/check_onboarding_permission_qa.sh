@@ -10,6 +10,7 @@ Usage: script/check_onboarding_permission_qa.sh [--check|--print]
 
 Checks the clean-user onboarding/permission QA checklist. This is a release
 gate for first-run trust, not a substitute for doing the manual clean-user run.
+It must keep unchecked proof gates visible until proof is actually recorded.
 EOF
 }
 
@@ -42,7 +43,11 @@ Checklist: $CHECKLIST_PATH
 Required before private beta:
 - every checklist item is checked,
 - the proof log has no Pending rows,
-- clean install and denied-permission recovery proof are both recorded.
+- clean install proof is recorded,
+- Accessibility denial/regrant proof is recorded.
+
+Do not describe onboarding proof as complete while unchecked boxes or Pending
+proof rows remain.
 EOF
   exit 0
 fi
