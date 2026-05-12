@@ -6123,8 +6123,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
+        let previousPasteboardItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restorePasteboard() {
+            pasteboard.clearContents()
+            if !previousPasteboardItems.isEmpty {
+                pasteboard.writeObjects(previousPasteboardItems)
+            }
+        }
         pasteboard.clearContents()
         guard pasteboard.setString(acceptedText, forType: .string) else {
+            restorePasteboard()
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
@@ -6140,6 +6150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let posted = Self.postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
             processIdentifier: frontmostApp.processIdentifier
         )
+        restorePasteboard()
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [

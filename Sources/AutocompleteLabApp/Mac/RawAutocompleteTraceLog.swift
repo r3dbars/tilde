@@ -110,7 +110,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         setRawContentTracingEnabled(false)
         setScreenshotTracingEnabled(false)
         queue.sync { [logURL, screenshotsURL] in
+            let folderURL = logURL.deletingLastPathComponent()
             try? FileManager.default.removeItem(at: logURL)
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("raw-traces.jsonl"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("trace-report.html"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("survival-report.json"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("privacy-export"))
             try? FileManager.default.removeItem(at: screenshotsURL)
         }
     }
@@ -169,6 +174,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         guard let expiresAt = expirationDate(forKey: expiryKey),
               expiresAt > now() else {
             clearExpiringDefaultFlag(flagKey: flagKey, expiryKey: expiryKey)
+            expireArtifacts(for: flagKey)
             return nil
         }
 
@@ -191,6 +197,51 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private func clearExpiringDefaultFlag(flagKey: String, expiryKey: String) {
         userDefaults.set(false, forKey: flagKey)
         userDefaults.removeObject(forKey: expiryKey)
+    }
+
+    private func expireArtifacts(for flagKey: String) {
+        if flagKey == rawContentDefaultsKey {
+            redactStoredTraceFile()
+        }
+        if flagKey == screenshotDefaultsKey {
+            queue.sync { [screenshotsURL] in
+                try? FileManager.default.removeItem(at: screenshotsURL)
+            }
+        }
+    }
+
+    private func redactStoredTraceFile() {
+        queue.sync { [logURL, decoder, encoder] in
+            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+                return
+            }
+
+            let redactedLines = contents
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .compactMap { line -> String? in
+                    guard let event = try? decoder.decode(
+                        AutocompleteTraceEvent.self,
+                        from: Data(line.utf8)
+                    ) else {
+                        return nil
+                    }
+                    guard let data = try? encoder.encode(RedactionLayer.redactedDefaultTrace(event)) else {
+                        return nil
+                    }
+                    return String(data: data, encoding: .utf8)
+                }
+
+            guard !redactedLines.isEmpty else {
+                try? FileManager.default.removeItem(at: logURL)
+                return
+            }
+
+            try? (redactedLines.joined(separator: "\n") + "\n").write(
+                to: logURL,
+                atomically: true,
+                encoding: .utf8
+            )
+        }
     }
 
     private func expirationDate(forKey key: String) -> Date? {
