@@ -551,6 +551,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let candidate = modelRuntimeBundle.activeCandidate
         let runtime = modelRuntime
 
+        guard modelRuntimeBundle.bootstrapPlan.canWarmPreferredRuntime else {
+            let reason = modelRuntimeBundle.bootstrapPlan.unavailableReason ?? "local model runtime is not ready"
+            applyRuntimeState(.unavailable(reason: reason))
+            DiagnosticsLog.shared.record(
+                "runtime-warm-skipped",
+                metadata: [
+                    "candidate": candidate.rawValue,
+                    "reason": reason,
+                    "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path
+                ]
+            )
+            return
+        }
+
         applyRuntimeState(.warming(candidate: candidate))
         DiagnosticsLog.shared.record(
             "runtime-warm-start",

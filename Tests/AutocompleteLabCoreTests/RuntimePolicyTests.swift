@@ -105,29 +105,32 @@ struct RuntimePolicyTests {
     @Test("Runtime states have short status summaries")
     func runtimeStatesHaveShortStatusSummaries() {
         #expect(CompletionRuntimeCandidate.mlx.displayName == "MLX")
+        #expect(CompletionRuntimeCandidate.unavailable.displayName == "unavailable")
         #expect(LocalRuntimeState.warming(candidate: .mlx).statusSummary == "warming MLX")
         #expect(LocalRuntimeState.ready(candidate: .mock).statusSummary == "ready (mock)")
         #expect(LocalRuntimeState.ready(candidate: .mock).isReady)
         #expect(!LocalRuntimeState.unavailable(reason: "not downloaded").isReady)
     }
 
-    @Test("Runtime bootstrap falls back to mock until native MLX and asset are ready")
-    func runtimeBootstrapFallsBackToMockUntilNativeReady() {
+    @Test("Runtime bootstrap stays unavailable until native MLX and asset are ready")
+    func runtimeBootstrapStaysUnavailableUntilNativeReady() {
         let missingPlan = RuntimeBootstrapPlan(
             assetState: .missing(expectedPath: "/tmp/gemma"),
             nativeRuntimeAvailable: true
         )
 
-        #expect(missingPlan.activeCandidate == .mock)
+        #expect(missingPlan.activeCandidate == .unavailable)
         #expect(missingPlan.fallbackReason == "missing model asset at /tmp/gemma")
+        #expect(!missingPlan.canWarmPreferredRuntime)
 
         let unlinkedPlan = RuntimeBootstrapPlan(
             assetState: .available(path: "/tmp/gemma"),
             nativeRuntimeAvailable: false
         )
 
-        #expect(unlinkedPlan.activeCandidate == .mock)
+        #expect(unlinkedPlan.activeCandidate == .unavailable)
         #expect(unlinkedPlan.fallbackReason == "MLX runtime is not linked yet")
+        #expect(!unlinkedPlan.canWarmPreferredRuntime)
 
         let readyPlan = RuntimeBootstrapPlan(
             assetState: .available(path: "/tmp/gemma"),
@@ -136,10 +139,11 @@ struct RuntimePolicyTests {
 
         #expect(readyPlan.activeCandidate == .mlx)
         #expect(readyPlan.fallbackReason == nil)
+        #expect(readyPlan.canWarmPreferredRuntime)
     }
 
-    @Test("Runtime readiness summary explains mock fallback")
-    func runtimeReadinessSummaryExplainsFallback() {
+    @Test("Runtime readiness summary stays honest when runtime is unavailable")
+    func runtimeReadinessSummaryExplainsUnavailableRuntime() {
         let plan = RuntimeBootstrapPlan(
             assetState: .available(path: "/tmp/gemma"),
             nativeRuntimeAvailable: false
@@ -148,7 +152,7 @@ struct RuntimePolicyTests {
         let report = plan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(report.stage == .runtimeUnavailable)
-        #expect(report.summary == "runtime unavailable (MLX); fallback: ready (mock)")
+        #expect(report.summary == "runtime unavailable (MLX)")
         #expect(report.detail == "This build is missing its local model engine. A separate model server will not fix it.")
         #expect(report.action == .none)
         #expect(!report.isReady)
@@ -165,7 +169,7 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Qwen3.5 4B); fallback: ready (mock)")
+        #expect(missingReport.summary == "download needed (Qwen3.5 4B)")
         #expect(missingReport.detail == "The local model is not installed yet. Expected folder: /tmp/gemma")
         #expect(missingReport.action == .installModel)
 
@@ -176,7 +180,7 @@ struct RuntimePolicyTests {
         let invalidReport = invalidPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(invalidReport.stage == .repairNeeded)
-        #expect(invalidReport.summary == "model folder needs repair; fallback: ready (mock)")
+        #expect(invalidReport.summary == "model folder needs repair")
         #expect(invalidReport.detail == "The local model folder is incomplete: missing config.json. Folder: /tmp/gemma")
         #expect(invalidReport.action == .repairModel)
 
@@ -230,7 +234,7 @@ struct RuntimePolicyTests {
 
         #expect(missing.actionTitle == "Install Local Model")
         #expect(missing.isActionEnabled)
-        #expect(missing.message.contains("download uses Hugging Face once"))
+        #expect(missing.message.contains("pinned Hugging Face revision"))
         #expect(missing.message.contains("You do not need Ollama or a model server"))
         #expect(repair.actionTitle == "Repair Local Model")
         #expect(repair.isActionEnabled)

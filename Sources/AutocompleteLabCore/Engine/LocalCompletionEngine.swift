@@ -26,6 +26,7 @@ public enum LocalCompletionRuntimeError: Error, Equatable, Sendable {
     case launchFailed
     case failed(exitCode: Int32, stderr: String)
     case invalidOutput
+    case unavailable(String)
 }
 
 public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner, @unchecked Sendable {
@@ -104,13 +105,13 @@ public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner,
 
 public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable {
     private let runner: any LocalCompletionRuntimeRunner
-    private let fallback: any CompletionEngine
+    private let fallback: (any CompletionEngine)?
     private let promptBuilder: CompletionPromptBuilder
     private let configuration: LocalCompletionRuntimeConfiguration
 
     public init(
         runner: any LocalCompletionRuntimeRunner,
-        fallback: any CompletionEngine = MockCompletionEngine(),
+        fallback: (any CompletionEngine)? = nil,
         promptBuilder: CompletionPromptBuilder = CompletionPromptBuilder(),
         configuration: LocalCompletionRuntimeConfiguration = LocalCompletionRuntimeConfiguration()
     ) {
@@ -128,10 +129,10 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
                 return cleaned
             }
         } catch {
-            return try await fallback.suggestion(for: request)
+            return try await fallback?.suggestion(for: request)
         }
 
-        return try await fallback.suggestion(for: request)
+        return try await fallback?.suggestion(for: request)
     }
 
     private func clean(_ rawOutput: String, request: CompletionRequest) -> CompletionSuggestion? {
@@ -147,7 +148,19 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
 
 public enum CompletionEngineSelection: Equatable, Sendable {
     case localGemma4E2B
-    case mockFallback
+    case unavailable
+}
+
+public final class UnavailableCompletionEngine: CompletionEngine, @unchecked Sendable {
+    private let reason: String
+
+    public init(reason: String) {
+        self.reason = reason
+    }
+
+    public func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
+        throw LocalCompletionRuntimeError.unavailable(reason)
+    }
 }
 
 public struct CompletionEngineFactory: Sendable {
@@ -162,7 +175,7 @@ public struct CompletionEngineFactory: Sendable {
     public func selection() -> CompletionEngineSelection {
         guard let runtimeExecutableURL,
               FileManager.default.isExecutableFile(atPath: runtimeExecutableURL.path) else {
-            return .mockFallback
+            return .unavailable
         }
 
         return .localGemma4E2B
@@ -171,7 +184,7 @@ public struct CompletionEngineFactory: Sendable {
     public func makeEngine() -> any CompletionEngine {
         guard let runtimeExecutableURL,
               FileManager.default.isExecutableFile(atPath: runtimeExecutableURL.path) else {
-            return MockCompletionEngine()
+            return UnavailableCompletionEngine(reason: "app-owned runtime executable is missing")
         }
 
         return LocalCompletionEngine(

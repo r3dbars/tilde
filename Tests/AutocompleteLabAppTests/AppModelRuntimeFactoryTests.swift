@@ -33,6 +33,26 @@ struct AppModelRuntimeFactoryTests {
         #expect(defaults.string(forKey: AppModelRuntimeFactory.experimentArmDefaultsKey) == "length_1_word")
     }
 
+    @Test("Uses SteadyType model root override and unavailable runtime for missing model")
+    func usesModelRootOverrideAndUnavailableRuntimeForMissingModel() async {
+        let defaults = temporaryDefaults()
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("steadytype-model-root-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        let bundle = AppModelRuntimeFactory.makeRuntime(
+            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path],
+            defaults: defaults
+        )
+
+        #expect(bundle.modelDirectoryURL.path.contains("/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"))
+        #expect(bundle.bootstrapPlan.activeCandidate == .unavailable)
+        #expect(bundle.bootstrapPlan.assetState.statusSummary.contains("missing model asset"))
+        #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
+    }
+
     private func temporaryDefaults() -> UserDefaults {
         let suiteName = "autocomplete-app-model-runtime-factory-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
