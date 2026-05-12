@@ -27,13 +27,13 @@ struct DescendantTextFallbackPolicyTests {
             bundleIdentifier: "com.google.Chrome",
             role: "AXWebArea",
             directText: nil,
-            windowTitle: "Autocomplete Lab Chrome Real Monaco Smoke [ready=1]"
+            windowTitle: "SteadyType Chrome Real Monaco Smoke [ready=1]"
         ))
         #expect(policy.allowsFallback(
             bundleIdentifier: "com.google.Chrome",
             role: "AXWebArea",
             directText: " ",
-            windowTitle: "Autocomplete Lab Chrome Real ProseMirror Smoke [ready=1]"
+            windowTitle: "SteadyType Chrome Real ProseMirror Smoke [ready=1]"
         ))
     }
 
@@ -43,7 +43,7 @@ struct DescendantTextFallbackPolicyTests {
             bundleIdentifier: "md.obsidian",
             role: "AXWebArea",
             directText: "",
-            windowTitle: "Autocomplete Lab Proof"
+            windowTitle: "SteadyType Proof"
         ))
     }
 
@@ -69,13 +69,13 @@ struct DescendantTextFallbackPolicyTests {
             bundleIdentifier: "com.google.Chrome",
             role: "AXTextArea",
             directText: "",
-            windowTitle: "Autocomplete Lab Chrome Textarea Smoke"
+            windowTitle: "SteadyType Chrome Textarea Smoke"
         ))
         #expect(!policy.allowsFallback(
             bundleIdentifier: "com.google.Chrome",
             role: "AXWebArea",
             directText: "already readable",
-            windowTitle: "Autocomplete Lab Chrome Textarea Smoke"
+            windowTitle: "SteadyType Chrome Textarea Smoke"
         ))
     }
 }

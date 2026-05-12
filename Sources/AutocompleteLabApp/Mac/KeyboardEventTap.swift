@@ -113,7 +113,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             CFRunLoopRun()
         }
 
-        thread.name = "AutocompleteLabKeyboardEventTap"
+        thread.name = "SteadyTypeKeyboardEventTap"
         lifecycleLock.lock()
         eventThread = thread
         lifecycleLock.unlock()
