@@ -5,6 +5,7 @@ public struct PromptAppNoSubmitMetrics: Equatable, Sendable {
     public let sendKeyCollisionCount: Int
     public let promptMutationWithoutUserIntentCount: Int
     public let wrongContextInsertionCount: Int
+    public let fullAcceptWithoutProofCount: Int
     public let suggestionContentViolationCount: Int
 
     public init(
@@ -12,12 +13,14 @@ public struct PromptAppNoSubmitMetrics: Equatable, Sendable {
         sendKeyCollisionCount: Int = 0,
         promptMutationWithoutUserIntentCount: Int = 0,
         wrongContextInsertionCount: Int = 0,
+        fullAcceptWithoutProofCount: Int = 0,
         suggestionContentViolationCount: Int = 0
     ) {
         self.accidentalSubmitCount = accidentalSubmitCount
         self.sendKeyCollisionCount = sendKeyCollisionCount
         self.promptMutationWithoutUserIntentCount = promptMutationWithoutUserIntentCount
         self.wrongContextInsertionCount = wrongContextInsertionCount
+        self.fullAcceptWithoutProofCount = fullAcceptWithoutProofCount
         self.suggestionContentViolationCount = suggestionContentViolationCount
     }
 
@@ -26,6 +29,7 @@ public struct PromptAppNoSubmitMetrics: Equatable, Sendable {
             && sendKeyCollisionCount == 0
             && promptMutationWithoutUserIntentCount == 0
             && wrongContextInsertionCount == 0
+            && fullAcceptWithoutProofCount == 0
             && suggestionContentViolationCount == 0
     }
 }
@@ -47,6 +51,7 @@ public struct PromptAppNoSubmitMetricsAnalyzer: Equatable, Sendable {
             sendKeyCollisionCount: promptEvents.filter(isSendKeyCollision).count,
             promptMutationWithoutUserIntentCount: promptEvents.filter(isPromptMutationWithoutUserIntent).count,
             wrongContextInsertionCount: promptEvents.filter(isWrongContextInsertion).count,
+            fullAcceptWithoutProofCount: promptEvents.filter(isFullAcceptWithoutProof).count,
             suggestionContentViolationCount: promptEvents.filter(isSuggestionContentViolation).count
         )
     }
@@ -92,6 +97,27 @@ public struct PromptAppNoSubmitMetricsAnalyzer: Equatable, Sendable {
         event.reason == "wrong-app-or-field-before-accept"
             || event.reason.contains("wrong-context")
             || event.metadata["acceptanceGuardReason"] != nil
+    }
+
+    private func isFullAcceptWithoutProof(_ event: AutocompleteTraceEvent) -> Bool {
+        let fields = [
+            event.outcome,
+            event.reason,
+            event.requestMode,
+            event.metadata["acceptMode"] ?? "",
+            event.metadata["keyboardAction"] ?? "",
+            event.metadata["action"] ?? "",
+            event.metadata["proofMode"] ?? ""
+        ].map { $0.lowercased() }
+
+        return fields.contains { field in
+            field.contains("acceptallvisible")
+                || field.contains("accept-all-visible")
+                || field.contains("fullaccept")
+                || field.contains("full-accept")
+                || field.contains("accept all")
+                || field.contains("acceptall")
+        }
     }
 
     private func isSuggestionContentViolation(_ event: AutocompleteTraceEvent) -> Bool {
