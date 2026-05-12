@@ -5,16 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 failures=0
+proof_output="$(mktemp -d)"
+LOG_DIR="$(mktemp -d)"
+SWIFT_TEST_ARGS=()
+CURRENT_BUILD_ENV=(AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_output")
+
 if [[ -n "${AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH:-}" ]]; then
   SWIFT_SCRATCH_PATH="$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
   mkdir -p "$SWIFT_SCRATCH_PATH"
-else
-  SWIFT_SCRATCH_PATH="$ROOT_DIR/.build/controls-diagnostics-readiness"
-  mkdir -p "$SWIFT_SCRATCH_PATH"
+  SWIFT_TEST_ARGS=(--scratch-path "$SWIFT_SCRATCH_PATH/swift-tests")
+  CURRENT_BUILD_ENV+=(AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH="$SWIFT_SCRATCH_PATH/current-build")
 fi
-proof_output="$(mktemp -d)"
-LOG_DIR="$(mktemp -d)"
-SWIFT_TEST_ARGS=(--scratch-path "$SWIFT_SCRATCH_PATH/swift-tests")
 
 cleanup() {
   rm -rf "$proof_output" "$LOG_DIR"
@@ -62,6 +63,16 @@ require_executable() {
   fi
 }
 
+run_swift_test() {
+  local filter="$1"
+
+  if ((${#SWIFT_TEST_ARGS[@]})); then
+    swift test "${SWIFT_TEST_ARGS[@]}" --filter "$filter"
+  else
+    swift test --filter "$filter"
+  fi
+}
+
 for script_path in \
   ./script/delete_local_traces.sh \
   ./script/delete_local_traces_self_test.sh \
@@ -80,7 +91,7 @@ for filter in \
   RawTracePrivacyExpiryTests \
   RawTraceReportExportTests \
   PrivacyExportProofCommandTests; do
-  run_logged_check "Swift test $filter" swift test "${SWIFT_TEST_ARGS[@]}" --filter "$filter" || failures=$((failures + 1))
+  run_logged_check "Swift test $filter" run_swift_test "$filter" || failures=$((failures + 1))
 done
 
 run_check "Delete local traces self-test" ./script/delete_local_traces_self_test.sh || failures=$((failures + 1))
@@ -88,9 +99,7 @@ run_check "Diagnostics log self-test" ./script/check_diagnostics_log_self_test.s
 run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
 
 run_logged_check "Current build privacy export proof" env \
-  AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_output" \
-  AUTOCOMPLETE_LAB_REBUILD_PRIVACY_PROOF=1 \
-  AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH="$SWIFT_SCRATCH_PATH/current-build" \
+  "${CURRENT_BUILD_ENV[@]}" \
   ./script/check_current_build_privacy_export.sh || failures=$((failures + 1))
 
 if ((failures > 0)); then
