@@ -11,6 +11,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
     case payment = "browser-payment"
     case passwordManager = "browser-password-manager"
     case privateSearch = "browser-private-search"
+    case browserSearchOrAddressBar = "browser-search-or-address-bar"
+    case browserDeveloperTool = "browser-developer-tool"
 
     public var displayName: String {
         switch self {
@@ -34,6 +36,10 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "This password manager page"
         case .privateSearch:
             return "This private search page"
+        case .browserSearchOrAddressBar:
+            return "This browser search or address bar"
+        case .browserDeveloperTool:
+            return "This browser developer tool"
         }
     }
 
@@ -45,7 +51,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "browser-unknown"
         case .googleDocs, .notion:
             return "browser-editor"
-        case .login, .payment, .passwordManager, .privateSearch:
+        case .login, .payment, .passwordManager, .privateSearch,
+             .browserSearchOrAddressBar, .browserDeveloperTool:
             return "browser-sensitive"
         }
     }
@@ -137,6 +144,12 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesPrivateSearch(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .privateSearch))
         }
+        if matchesBrowserSearchOrAddressBar(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .browserSearchOrAddressBar))
+        }
+        if matchesBrowserDeveloperTool(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .browserDeveloperTool))
+        }
         if matchesLogin(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .login))
         }
@@ -222,8 +235,16 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         searchableText.contains("checkout")
             || searchableText.contains("payment")
             || searchableText.contains("billing")
+            || searchableText.contains("apple pay")
             || searchableText.contains("credit card")
             || searchableText.contains("card number")
+            || searchableText.contains("card security code")
+            || searchableText.contains("cvv")
+            || searchableText.contains("cvc")
+            || searchableText.contains("paypal")
+            || searchableText.contains("iban")
+            || searchableText.contains("routing number")
+            || searchableText.contains("bank account")
             || searchableText.contains("stripe.com")
     }
 
@@ -233,6 +254,7 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("dashlane")
             || searchableText.contains("lastpass")
             || searchableText.contains("password manager")
+            || searchableText.contains("autofill")
     }
 
     private func matchesPrivateSearch(_ searchableText: String) -> Bool {
@@ -241,11 +263,48 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("private browsing")
     }
 
+    private func matchesBrowserSearchOrAddressBar(_ searchableText: String) -> Bool {
+        searchableText.contains("address bar")
+            || searchableText.contains("location bar")
+            || searchableText.contains("omnibox")
+            || searchableText.contains("search or type web address")
+            || searchableText.contains("search google or type a url")
+            || searchableText.contains("search or enter address")
+    }
+
+    private func matchesBrowserDeveloperTool(_ searchableText: String) -> Bool {
+        searchableText.contains("dev terminal")
+            || searchableText.contains("web terminal")
+            || searchableText.contains("terminal command")
+            || searchableText.contains("shell prompt")
+            || searchableText.contains("console input")
+            || searchableText.contains("console prompt")
+            || searchableText.contains("developer console")
+            || searchableText.contains("devtools console")
+            || searchableText.contains("browser console")
+            || searchableText.contains("bash prompt")
+            || searchableText.contains("zsh prompt")
+            || searchableText.contains("powershell prompt")
+            || searchableText.contains("sudo command")
+            || searchableText.contains("codespaces")
+            || searchableText.contains("github.dev")
+            || searchableText.contains("github dev")
+            || searchableText.contains("replit")
+            || searchableText.contains("stackblitz")
+    }
+
     private func matchesLogin(_ searchableText: String) -> Bool {
         searchableText.contains("login")
             || searchableText.contains("log in")
             || searchableText.contains("sign in")
+            || searchableText.contains("sign-in")
             || searchableText.contains("signin")
+            || searchableText.contains("passkey")
+            || searchableText.contains("sign in with")
+            || searchableText.contains("oauth")
+            || searchableText.contains("sso")
+            || searchableText.contains("one-time code")
+            || searchableText.contains("one time code")
             || searchableText.contains("authentication")
     }
 }
