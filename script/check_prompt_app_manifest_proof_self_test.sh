@@ -32,7 +32,7 @@ cat >"$MANIFEST_PATH" <<'JSON'
   "surfaces": [
     {
       "surface": "Codex",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Codex",
         "bundle": "com.openai.codex",
@@ -42,7 +42,29 @@ cat >"$MANIFEST_PATH" <<'JSON'
         "requiresVisualStrictComplete": true
       },
       "screenshots": ["docs/product/visual-placement-screenshots/codex-inline.png"],
-      "gaps": []
+      "gaps": [
+        "Default one-word no-submit proof exists, but full accept remains blocked."
+      ],
+      "requirements": [
+        {
+          "id": "codex-one-word-no-submit",
+          "status": "complete",
+          "summary": "Bounded one-word no-submit prompt proof is recorded.",
+          "manualSmoke": {
+            "app": "Codex",
+            "bundle": "com.openai.codex",
+            "proof": "default",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": true
+          }
+        },
+        {
+          "id": "codex-full-accept-no-submit",
+          "status": "pending",
+          "summary": "Full accept stays disabled until separately proven."
+        }
+      ]
     }
   ]
 }
@@ -54,7 +76,7 @@ AUTOCOMPLETE_LAB_MANUAL_SMOKE_RUNS="$SMOKE_PATH" \
 
 for expected in \
   "Prompt app manifest proof status" \
-  "Codex: com.openai.codex proof=default lines 1-5" \
+  "Codex / codex-one-word-no-submit: com.openai.codex proof=default lines 1-5" \
   "wrongContextInsertionCount: 0" \
   "Prompt app manifest proof gate passed with 1 bounded prompt slice(s)."; do
   if ! grep -F "$expected" "$TMP_DIR/pass.txt" >/dev/null; then
