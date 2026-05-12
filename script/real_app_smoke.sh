@@ -446,7 +446,7 @@ cleanup_smoke_http_pids() {
 
 cleanup_smoke_textedit_windows() {
   if ((${#SMOKE_TEXTEDIT_WINDOW_TITLES[@]})); then
-    osascript "${SMOKE_TEXTEDIT_WINDOW_TITLES[@]}" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+    osascript "${SMOKE_TEXTEDIT_WINDOW_TITLES[@]}" <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
   tell application "TextEdit"
     repeat with targetTitle in argv
@@ -461,11 +461,12 @@ on run argv
   end tell
 end run
 APPLESCRIPT
+    wait_for_background_process "$!" 5 "tracked TextEdit smoke window cleanup" >/dev/null 2>&1 || true
   fi
 }
 
 cleanup_stale_textedit_smoke_windows() {
-  osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1 &
 tell application "TextEdit"
   repeat with docRef in documents
     try
@@ -477,6 +478,7 @@ tell application "TextEdit"
   end repeat
 end tell
 APPLESCRIPT
+  wait_for_background_process "$!" 5 "stale TextEdit smoke window cleanup" >/dev/null 2>&1 || true
 }
 
 cleanup_smoke() {
