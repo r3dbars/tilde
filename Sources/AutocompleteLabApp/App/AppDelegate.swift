@@ -5781,7 +5781,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             until: Date().addingTimeInterval(
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
                     || shouldUseCodexProofDirectInsertion(profile: profile)
-                    || shouldUseChromeRichEditorProofPasteInsertion(profile: profile)
                     || shouldUseObsidianDirectValueInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
@@ -5812,30 +5811,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile) {
             let succeeded = insertClaudeCodeTerminalHostProofText(acceptedText)
-            DiagnosticsLog.shared.record(
-                "insert",
-                metadata: [
-                    "app": profile.bundleIdentifier,
-                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
-                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
-                    "success": String(succeeded),
-                    "skippedModes": skippedModes
-                        .map(\.rawValue)
-                        .sorted()
-                        .joined(separator: ",")
-                ]
-            )
-            if succeeded {
-                focusedTextPollingPause.pause(
-                    now: Date(),
-                    durationMilliseconds: postInsertionPollPauseMilliseconds
-                )
-            }
-            return succeeded
-        }
-
-        if shouldUseChromeRichEditorProofPasteInsertion(profile: profile) {
-            let succeeded = insertChromeRichEditorProofPasteText(acceptedText)
             DiagnosticsLog.shared.record(
                 "insert",
                 metadata: [
@@ -5932,67 +5907,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionAppBundleIdentifier == "md.obsidian"
             && profile.bundleIdentifier == "md.obsidian"
             && profile.insertionMode == .axValueReplacement
-    }
-
-    private func shouldUseChromeRichEditorProofPasteInsertion(profile: CompatibilityProfile) -> Bool {
-        guard currentSuggestionAppBundleIdentifier == "com.google.Chrome",
-              profile.bundleIdentifier == "com.google.Chrome",
-              activeAppProofBundleIdentifiers.contains("com.google.Chrome"),
-              currentSuggestionRequestMode == .wordCompletion,
-              let fingerprint = currentSuggestionAcceptanceSnapshot?.targetFingerprint.elementFingerprint
-        else {
-            return false
-        }
-
-        let searchable = fingerprint.searchableText
-        return searchable.contains("monaco") || searchable.contains("codemirror")
-    }
-
-    private func insertChromeRichEditorProofPasteText(_ acceptedText: String) -> Bool {
-        let bundleIdentifier = "com.google.Chrome"
-        guard !acceptedText.isEmpty,
-              let frontmostApp = accessibilityClient.frontmostApplication(),
-              frontmostApp.bundleIdentifier == bundleIdentifier else {
-            DiagnosticsLog.shared.record(
-                "chrome-rich-editor-proof-paste-insert",
-                metadata: [
-                    "app": bundleIdentifier,
-                    "success": "false",
-                    "reason": "precondition-failed"
-                ]
-            )
-            return false
-        }
-
-        let pasteboard = NSPasteboard.general
-        let preservedItems = Self.copyPasteboardItems(from: pasteboard)
-        pasteboard.clearContents()
-        guard pasteboard.setString(acceptedText, forType: .string) else {
-            Self.restorePasteboardItems(preservedItems, to: pasteboard)
-            DiagnosticsLog.shared.record(
-                "chrome-rich-editor-proof-paste-insert",
-                metadata: [
-                    "app": bundleIdentifier,
-                    "success": "false",
-                    "reason": "pasteboard-set-failed"
-                ]
-            )
-            return false
-        }
-
-        Self.postCommandVKey()
-        Thread.sleep(forTimeInterval: 0.18)
-        Self.restorePasteboardItems(preservedItems, to: pasteboard)
-        DiagnosticsLog.shared.record(
-            "chrome-rich-editor-proof-paste-insert",
-            metadata: [
-                "app": bundleIdentifier,
-                "success": "true",
-                "acceptedChars": String(acceptedText.count),
-                "restoredClipboardItems": String(preservedItems.count)
-            ]
-        )
-        return true
     }
 
     private func insertObsidianDirectValueText(_ acceptedText: String) -> Bool {
@@ -6373,42 +6287,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
-    }
-
-    nonisolated private static func postCommandVKey() {
-        let source = CGEventSource(stateID: .hidSystemState)
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
-            return
-        }
-
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-    }
-
-    private static func copyPasteboardItems(from pasteboard: NSPasteboard) -> [NSPasteboardItem] {
-        pasteboard.pasteboardItems?.map { item in
-            let copy = NSPasteboardItem()
-            for type in item.types {
-                if let data = item.data(forType: type) {
-                    copy.setData(data, forType: type)
-                }
-            }
-            return copy
-        } ?? []
-    }
-
-    private static func restorePasteboardItems(
-        _ items: [NSPasteboardItem],
-        to pasteboard: NSPasteboard
-    ) {
-        pasteboard.clearContents()
-        guard !items.isEmpty else {
-            return
-        }
-        pasteboard.writeObjects(items)
     }
 
     nonisolated private static func axDescendant(
