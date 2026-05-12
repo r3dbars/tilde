@@ -966,7 +966,9 @@ wait_for_background_process() {
 activate_process_id() {
   local target_pid="$1"
 
-  swift - "$target_pid" <<'SWIFT' >/dev/null
+  local swift_activation_pid
+  {
+    swift - "$target_pid" <<'SWIFT' >/dev/null
 import AppKit
 
 guard CommandLine.arguments.count == 2,
@@ -977,6 +979,9 @@ guard CommandLine.arguments.count == 2,
 
 app.activate(options: [.activateAllWindows])
 SWIFT
+  } &
+  swift_activation_pid="$!"
+  wait_for_background_process "$swift_activation_pid" 2 "Swift activation for pid $target_pid" >/dev/null 2>&1 || true
 
   local activation_pid
   osascript - "$target_pid" <<'APPLESCRIPT' >/dev/null 2>&1 &
