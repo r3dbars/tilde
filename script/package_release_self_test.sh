@@ -18,10 +18,12 @@ require_contains() {
 
 require_contains "$HELP_OUTPUT" "dist/SteadyType.zip plus preferred dist/SteadyType.dmg"
 require_contains "$HELP_OUTPUT" "--print-proof-template"
+require_contains "$HELP_OUTPUT" "--require-developer-id"
 require_contains "$HELP_OUTPUT" "Submit the DMG to Apple notarytool"
 
 require_contains "$PROOF_TEMPLATE" "Preferred artifact: dist/SteadyType.dmg"
 require_contains "$PROOF_TEMPLATE" "Secondary artifact: dist/SteadyType.zip"
+require_contains "$PROOF_TEMPLATE" "Developer ID archive signature: required before private-beta packet"
 require_contains "$PROOF_TEMPLATE" "Notarization status:"
 require_contains "$PROOF_TEMPLATE" "Stapler status:"
 require_contains "$PROOF_TEMPLATE" "Gatekeeper status:"
@@ -35,6 +37,6 @@ if env -u NOTARYTOOL_PROFILE ./script/package_release.sh --check --require-notar
   exit 1
 fi
 
-require_contains "$(cat /tmp/autocomplete-package-check.txt)" "Notary profile: missing"
+require_contains "$(cat /tmp/autocomplete-package-check.txt)" "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is missing"
 
 echo "Package release self-test passed."

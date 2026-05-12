@@ -330,6 +330,55 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorTextAfterGrowth)
     }
 
+    @Test("Repairs Obsidian CodeMirror stale cursor after end-of-document growth")
+    func repairsObsidianCodeMirrorEndOfDocumentGrowth() {
+        let policy = TextContextRepairPolicy()
+        let previous = [
+            "Autocomplete Lab Obsidian scroll filler line 89",
+            "Autocomplete Lab Obsidian scroll filler line 90",
+            "Autocomplete Lab Obsidian proof",
+            "Smoke proof feels instant"
+        ].joined(separator: "\n")
+        let current = previous + " and stays inst"
+        let staleBefore = [
+            "Autocomplete Lab Obsidian scroll filler line 89",
+            "Autocomplete Lab Obsidian scroll filler line 90"
+        ].joined(separator: "\n")
+        let staleAfter = String(current.dropFirst(staleBefore.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == current)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorEndOfDocumentGrowth)
+    }
+
+    @Test("Does not repair Obsidian stale cursor when prior snapshot was not at document end")
+    func doesNotRepairObsidianEndOfDocumentGrowthWithPreviousAfterText() {
+        let policy = TextContextRepairPolicy()
+        let previousBefore = "Draft section"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Draft",
+            textAfterCursor: " section\nSmoke proof feels instant",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previousBefore,
+            previousTextAfterCursor: "\nExisting later note"
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror trailing scaffold drift at visual line end")
     func repairsObsidianCodeMirrorTrailingScaffolding() {
         let policy = TextContextRepairPolicy()

@@ -88,7 +88,7 @@ for script_path in \
   run_check "Executable $(basename "$script_path")" require_executable "$script_path" || failures=$((failures + 1))
 done
 
-CONTROL_FILTER='SettingsWindowControllerStateTests|DiagnosticsWindowControllerStateTests|SuggestionControlPolicyTests|SuggestionPauseSchedulePolicyTests|DisabledAppSelectionTests|RawTracePrivacyExpiryTests|RawTraceReportExportTests|PrivacyExportProofCommandTests'
+CONTROL_FILTER='SettingsWindowControllerStateTests|DiagnosticsWindowControllerStateTests|DiagnosticsTypingHealthTests|SuggestionControlPolicyTests|SuggestionPauseSchedulePolicyTests|DisabledAppSelectionTests|RawTracePrivacyExpiryTests|RawTraceReportExportTests|PrivacyExportProofCommandTests'
 run_logged_check "Swift controls and diagnostics tests" run_swift_tests "$CONTROL_FILTER" || failures=$((failures + 1))
 
 run_logged_check "Delete local traces self-test" ./script/delete_local_traces_self_test.sh || failures=$((failures + 1))

@@ -92,15 +92,19 @@ Invite testers only when every applicable box is checked.
 
 ## Current Blockers - 2026-05-12
 
-- `./script/beta_readiness.sh --check-only` currently has 2 blockers: current
-  manual app proof refresh and notarized install proof.
+- `./script/beta_readiness.sh --check-only` currently has at least 3 blockers:
+  current manual app proof refresh, missing `NOTARYTOOL_PROFILE`, and
+  notarized install proof.
 - `./script/manual_smoke_status.sh --strict` still requires current-head proof
-  refresh for 29 target app rows. Do not treat stale screenshot-backed rows as
+  refresh for 30 target app rows. Do not treat stale screenshot-backed rows as
   beta-current.
-- Current local SteadyType artifacts are Developer ID signed, but not
-  notarized. No usable `NOTARYTOOL_PROFILE` is present in this environment.
-  The older 2026-05-07 `AutocompleteLab.zip` notarization does not count for
-  the current SteadyType artifact.
+- `./script/private_beta_packet.sh --check` currently verifies the local packet,
+  but must be rerun after any app-code or archive change.
+- Current local SteadyType artifacts are not beta-current until a Developer ID
+  archive, Apple notarization, stapling, and fresh-install Gatekeeper proof are
+  all regenerated. No usable `NOTARYTOOL_PROFILE` is present in this
+  environment. The older 2026-05-07 `AutocompleteLab.zip` notarization does not
+  count for the current SteadyType artifact.
 - Recreate `dist/SteadyType.zip` and `dist/private-beta/checksums.txt` if app
   code changes after the remaining proof blockers close.
 - All-history trace eval is diagnostic only; beta proof must use fresh marked

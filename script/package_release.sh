@@ -13,12 +13,13 @@ FRESH_INSTALL_PROOF_PATH="$PROOF_DIR/fresh-install-gatekeeper-proof.md"
 BUNDLE_ID="bar.r3d.steadytype"
 MODE="archive"
 REQUIRE_NOTARY_PROFILE=0
+REQUIRE_DEVELOPER_ID=0
 
 cd "$ROOT_DIR"
 
 usage() {
   cat <<'EOF'
-Usage: script/package_release.sh [archive|--check|--notarize] [--require-notary-profile]
+Usage: script/package_release.sh [archive|--check|--notarize] [--require-developer-id] [--require-notary-profile]
 
 archive    Build a release app, sign with Developer ID, validate, and create
            dist/SteadyType.zip plus preferred dist/SteadyType.dmg.
@@ -26,6 +27,8 @@ archive    Build a release app, sign with Developer ID, validate, and create
 --notarize Submit the DMG to Apple notarytool. This uploads the app to Apple.
 --require-notary-profile
            Make --check fail when NOTARYTOOL_PROFILE is missing.
+--require-developer-id
+           Make --check fail when a Developer ID Application identity is missing.
 --print-proof-template
            Print the saved release-proof checklist template.
 
@@ -41,6 +44,9 @@ while (($#)); do
       ;;
     --require-notary-profile)
       REQUIRE_NOTARY_PROFILE=1
+      ;;
+    --require-developer-id)
+      REQUIRE_DEVELOPER_ID=1
       ;;
     -h|--help|help)
       MODE="help"
@@ -101,6 +107,7 @@ print_proof_template() {
 - Preferred artifact: dist/SteadyType.dmg
 - Secondary artifact: dist/SteadyType.zip
 - Bundle ID: $BUNDLE_ID
+- Developer ID archive signature: required before private-beta packet
 - Notarization status: $notarization_status
 - Stapler status: $stapler_status
 - Gatekeeper status: $gatekeeper_status
@@ -254,20 +261,24 @@ case "$MODE" in
     exit 0
     ;;
   --check|check)
+    check_failed=0
     if [[ -n "$developer_id" ]]; then
       developer_id_name="$(security find-identity -p codesigning -v 2>/dev/null \
         | awk -v hash="$developer_id" '$2 == hash { sub(/^[^"]*"/, ""); sub(/"$/, ""); print; exit }')"
-      echo "Developer ID identity: $developer_id ${developer_id_name:+($developer_id_name)}"
+      echo "Developer ID signing identity: OK - $developer_id ${developer_id_name:+($developer_id_name)}"
     else
-      echo "Developer ID identity: missing"
+      echo "Developer ID signing identity: blocked - missing Developer ID Application identity"
+      if [[ "$REQUIRE_DEVELOPER_ID" == "1" ]]; then
+        check_failed=1
+      fi
     fi
 
     if [[ -n "${NOTARYTOOL_PROFILE:-}" ]]; then
-      echo "Notary profile: $NOTARYTOOL_PROFILE"
+      echo "Apple notary credentials: OK - NOTARYTOOL_PROFILE=$NOTARYTOOL_PROFILE"
     else
-      echo "Notary profile: missing (set NOTARYTOOL_PROFILE to submit)"
+      echo "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is missing (set it before notarization)"
       if [[ "$REQUIRE_NOTARY_PROFILE" == "1" ]]; then
-        exit 1
+        check_failed=1
       fi
     fi
 
@@ -276,7 +287,7 @@ case "$MODE" in
     else
       echo "Preferred MLX model: missing or invalid (run ./script/check_model_asset.py)"
     fi
-    exit 0
+    exit "$check_failed"
     ;;
   archive)
     if [[ -z "$developer_id" ]]; then

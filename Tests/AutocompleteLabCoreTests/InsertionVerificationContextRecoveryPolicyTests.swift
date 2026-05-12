@@ -55,6 +55,41 @@ struct InsertionVerificationContextRecoveryPolicyTests {
         )))
     }
 
+    @Test("Does not recover one-character Chrome text-area verification")
+    func rejectsOneCharacterChromeTextAreaVerification() {
+        #expect(!policy.canRecover(input(
+            profile: chromeProfile,
+            frontmostBundleIdentifier: "com.google.Chrome",
+            expectedField: FocusedFieldIdentity(
+                bundleIdentifier: "com.google.Chrome",
+                processIdentifier: 42,
+                elementIdentifier: 99
+            ),
+            contextRole: "AXTextArea",
+            verificationResult: .verified,
+            mismatch: .targetFingerprint,
+            previousTextBeforeCursorUTF16Length: 0,
+            acceptedTextUTF16Length: 1,
+            currentTextBeforeCursorUTF16Length: 1
+        )))
+
+        #expect(policy.canRecover(input(
+            profile: chromeProfile,
+            frontmostBundleIdentifier: "com.google.Chrome",
+            expectedField: FocusedFieldIdentity(
+                bundleIdentifier: "com.google.Chrome",
+                processIdentifier: 42,
+                elementIdentifier: 99
+            ),
+            contextRole: "AXTextArea",
+            verificationResult: .verified,
+            mismatch: .targetFingerprint,
+            previousTextBeforeCursorUTF16Length: 12,
+            acceptedTextUTF16Length: 4,
+            currentTextBeforeCursorUTF16Length: 16
+        )))
+    }
+
     @Test("Does not recover non-Obsidian or unverified context swaps")
     func rejectsUnsafeRecoveryCases() {
         #expect(!policy.canRecover(input(
@@ -113,7 +148,10 @@ struct InsertionVerificationContextRecoveryPolicyTests {
         expectedField: FocusedFieldIdentity? = nil,
         contextRole: String?,
         verificationResult: InsertionVerificationResult,
-        mismatch: InsertionVerificationContextMismatch
+        mismatch: InsertionVerificationContextMismatch,
+        previousTextBeforeCursorUTF16Length: Int? = nil,
+        acceptedTextUTF16Length: Int? = nil,
+        currentTextBeforeCursorUTF16Length: Int? = nil
     ) -> InsertionVerificationContextRecoveryInput {
         InsertionVerificationContextRecoveryInput(
             profile: profile ?? obsidianProfile,
@@ -122,7 +160,10 @@ struct InsertionVerificationContextRecoveryPolicyTests {
             expectedFieldIdentity: expectedField ?? self.expectedField,
             contextRole: contextRole,
             verificationResult: verificationResult,
-            mismatch: mismatch
+            mismatch: mismatch,
+            previousTextBeforeCursorUTF16Length: previousTextBeforeCursorUTF16Length,
+            acceptedTextUTF16Length: acceptedTextUTF16Length,
+            currentTextBeforeCursorUTF16Length: currentTextBeforeCursorUTF16Length
         )
     }
 }

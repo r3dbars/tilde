@@ -27,6 +27,7 @@ reject_contains() {
 
 require_contains "$READINESS_SCRIPT" 'run_logged_check "Current build privacy export proof"'
 require_contains "$READINESS_SCRIPT" 'check_controls_diagnostics_readiness_self_test.sh'
+require_contains "$READINESS_SCRIPT" 'DiagnosticsTypingHealthTests'
 reject_contains "$READINESS_SCRIPT" 'run_check "Current build privacy export proof"'
 
 require_contains "$PRIVACY_SCRIPT" 'BUILD_LOG=/tmp/autocomplete-current-build-privacy-build.log'
