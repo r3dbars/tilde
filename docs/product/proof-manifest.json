@@ -168,7 +168,7 @@
         "versionSource": "/Applications/Codex.app",
         "safetyMode": "wordOnly",
         "runtimeState": "userToggleAllowed",
-        "proofState": "partial",
+        "proofState": "complete",
         "killSwitch": "proofModeRequired",
         "proofArtifacts": [
           {
@@ -180,7 +180,7 @@
             "reference": "Codex/default"
           }
         ],
-        "notes": "Dogfood prompt support is word-only; historical no-submit proof exists, but the current app fingerprint needs a fresh same-slice no-submit row before support can be called complete."
+        "notes": "Dogfood prompt support is word-only; the current app fingerprint has same-slice strict visual proof, one-word Tab accept, insertion verification, no prompt submit, and private draft restoration."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -523,7 +523,7 @@
     },
     {
       "surface": "Codex",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Codex",
         "bundle": "com.openai.codex",
@@ -535,9 +535,7 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/codex-inline.png"
       ],
-      "gaps": [
-        "Historical Codex no-submit proof exists, but it is stale after the latest app fingerprint. The 2026-05-12 current-binary rerun restored the existing draft safely but failed before proof because Tab was rejected as focus-changed."
-      ]
+      "gaps": []
     },
     {
       "surface": "Obsidian",
@@ -940,9 +938,9 @@
       "displayName": "Codex",
       "supportLevel": "yellow",
       "surface": "Codex",
-      "status": "partial",
+      "status": "complete",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Screenshot proof exists, but support must stay yellow until one trace slice proves one-word accept with no prompt submit."
+      "safetyNote": "Current strict proof shows one-word Tab accept, insertion verification, no prompt submit, and private draft restoration. Full accept remains disabled until separate no-submit proof exists."
     },
     {
       "bundle": "com.anthropic.claude-code",
