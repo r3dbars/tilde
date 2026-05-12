@@ -17,6 +17,7 @@ struct LocalReportExporter {
         let redactedEvents = events.map(RedactionLayer.redactedDefaultTrace)
 
         do {
+            try? FileManager.default.removeItem(at: bundleURL)
             try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
             try redactedJSONL(for: redactedEvents).write(
                 to: bundleURL.appendingPathComponent("redacted-traces.jsonl"),
