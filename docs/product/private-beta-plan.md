@@ -29,6 +29,7 @@ That must create and verify:
 - `dist/private-beta/session-report.md`
 - `dist/private-beta/privacy-status.md`
 - `dist/private-beta/tester-docs/PRIVACY-BETA.md`
+- `dist/private-beta/tester-docs/FIRST-RUN-BETA.md`
 - `dist/private-beta/tester-docs/KNOWN-LIMITATIONS.md`
 - `dist/private-beta/tester-docs/UNINSTALL-DELETE-DATA.md`
 - `dist/private-beta/tester-docs/DIAGNOSTIC-EXPORT.md`
@@ -37,6 +38,7 @@ That must create and verify:
 
 Also read:
 
+- `FIRST-RUN-BETA.md`
 - `docs/product/beta-readiness-checklist.md`
 - `docs/product/private-beta-ops-loop.md`
 - `docs/product/compatibility-matrix.md`
@@ -80,12 +82,15 @@ until the compatibility gates say otherwise.
 
 Walk each tester through this in 15 minutes or less:
 
+- First-run map: suggestions appear near the cursor, `Tab` accepts one word,
+  `Esc` dismisses, Pause stops everything, and Disable Current App stops one
+  app.
 - Privacy promise: default traces are redacted and local; raw text and
   screenshots are debug-only opt-ins.
 - Pause/disable controls: menu bar `Disable <App Name>`, Diagnostics `Pause
   Tracing`, and Diagnostics `Delete Traces`.
-- Smoke check: open TextEdit, type a normal sentence, accept one word with
-  `Tab`, dismiss with `Esc`, then export the redacted report.
+- Smoke check: use `Start TextEdit Practice`, type disposable text, accept one
+  word with `Tab`, dismiss with `Esc`, then export the redacted report.
 - Stop rules: one wrong insertion, sensitive-field suggestion, unreliable
   `Tab`, mock fallback, failed in-app model setup, or tester-side shell/Python
   setup ends the beta.

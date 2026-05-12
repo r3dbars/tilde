@@ -11,6 +11,7 @@ EXPORT_TEMPLATE="$(./script/private_beta_packet.sh --print-redacted-export-templ
 TRIAGE_TEMPLATE="$(./script/private_beta_packet.sh --print-feedback-triage-template)"
 STOP_TEMPLATE="$(./script/private_beta_packet.sh --print-stop-dashboard-template)"
 MODEL_TEMPLATE="$(./script/private_beta_packet.sh --print-model-asset-template "/tmp/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit")"
+FIRST_RUN_DOC="$(cat FIRST-RUN-BETA.md)"
 
 require_contains() {
   local text="$1"
@@ -67,8 +68,10 @@ require_contains "$STOP_TEMPLATE" "Close a stop row only after the proof command
 
 require_contains "$MODEL_TEMPLATE" "The private beta is not ready if the app falls back to mock output."
 require_contains "$MODEL_TEMPLATE" "Confirm Settings says the model is ready."
-require_contains "$MODEL_TEMPLATE" 'use the Settings `Install'
-require_contains "$MODEL_TEMPLATE" "If that in-app setup"
+require_contains "$MODEL_TEMPLATE" '`Install'
+require_contains "$MODEL_TEMPLATE" 'Local Model`'
+require_contains "$MODEL_TEMPLATE" '`Repair Local Model`'
+require_contains "$MODEL_TEMPLATE" "in-app setup fails"
 require_contains "$MODEL_TEMPLATE" "stop the beta session"
 require_contains "$MODEL_TEMPLATE" "Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any"
 require_contains "$MODEL_TEMPLATE" "/tmp/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"
@@ -79,16 +82,27 @@ reject_contains "$MODEL_TEMPLATE" "./script/check_model_asset.py"
 reject_contains "$MODEL_TEMPLATE" "Developer fallback"
 reject_contains "$MODEL_TEMPLATE" "operator fixes"
 
+require_contains "$FIRST_RUN_DOC" "Suggestions appear near the cursor"
+require_contains "$FIRST_RUN_DOC" '`Tab` accepts one word'
+require_contains "$FIRST_RUN_DOC" '`Esc` dismisses'
+require_contains "$FIRST_RUN_DOC" "Pause Suggestions stops suggestions everywhere"
+require_contains "$FIRST_RUN_DOC" "Typed text, prompts, model output, accepted text, screenshots"
+require_contains "$FIRST_RUN_DOC" "TextEdit"
+require_contains "$FIRST_RUN_DOC" "Mail"
+require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
+
 SCRIPT_TEXT="$(sed -n '1,620p' script/private_beta_packet.sh)"
 
 for expected_doc in \
   "PRIVACY-BETA.md" \
+  "FIRST-RUN-BETA.md" \
   "KNOWN-LIMITATIONS.md" \
   "UNINSTALL-DELETE-DATA.md" \
   "DIAGNOSTIC-EXPORT.md" \
   "RELEASE-NOTES.md" \
   "docs/product/private-beta-ops-loop.md" \
   "tester-docs/private-beta-ops-loop.md" \
+  "tester-docs/FIRST-RUN-BETA.md" \
   "tester-docs/autocomplete-beta-feedback.yml" \
   ".github/labels.yml" \
   ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml"; do

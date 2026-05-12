@@ -250,8 +250,8 @@ Verify it in the app:
 3. Confirm Settings says the model is ready.
 
 If the model is missing, invalid, or needs repair, use the Settings \`Install
-Model\` or \`Repair Model\` button and wait for it to finish. If that in-app setup
-fails, stop the beta session.
+Local Model\` or \`Repair Local Model\` button and wait for it to finish. If
+that in-app setup fails, stop the beta session.
 
 Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any
 separate model server.
@@ -333,6 +333,7 @@ beta.
 - \`privacy-status.md\`
 - \`model-asset.md\`
 - \`tester-docs/PRIVACY-BETA.md\`
+- \`tester-docs/FIRST-RUN-BETA.md\`
 - \`tester-docs/KNOWN-LIMITATIONS.md\`
 - \`tester-docs/UNINSTALL-DELETE-DATA.md\`
 - \`tester-docs/DIAGNOSTIC-EXPORT.md\`
@@ -404,6 +405,7 @@ sanity check, not the main product loop.
 Read before inviting testers:
 
 - \`tester-docs/PRIVACY-BETA.md\`
+- \`tester-docs/FIRST-RUN-BETA.md\`
 - \`tester-docs/KNOWN-LIMITATIONS.md\`
 - \`tester-docs/UNINSTALL-DELETE-DATA.md\`
 - \`tester-docs/DIAGNOSTIC-EXPORT.md\`
@@ -446,13 +448,14 @@ EOF
 2. Open `SteadyType.app`.
 3. Grant Accessibility when macOS asks.
 4. Open Settings from the menu bar item.
-5. If the local model is not ready, use `Install Model` or `Repair Model` in Settings and wait for it to finish.
-6. Confirm Settings says the model is ready.
-7. Open TextEdit and type a normal sentence.
-8. Use Tab for one-word accept.
-9. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
-10. Press Esc if a suggestion feels wrong.
-11. Use Diagnostics -> Export to create the local redacted trace report and survival report.
+5. Read `tester-docs/FIRST-RUN-BETA.md`.
+6. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
+7. Confirm Settings says the model is ready.
+8. Click `Start TextEdit Practice`.
+9. Use Tab for one-word accept.
+10. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
+11. Press Esc if a suggestion feels wrong.
+12. Use Diagnostics -> Export to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
@@ -474,6 +477,7 @@ EOF
   write_issue_template_validation
 
   cp PRIVACY-BETA.md "$TESTER_DOCS_DIR/PRIVACY-BETA.md"
+  cp FIRST-RUN-BETA.md "$TESTER_DOCS_DIR/FIRST-RUN-BETA.md"
   cp KNOWN-LIMITATIONS.md "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md"
   cp UNINSTALL-DELETE-DATA.md "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md"
   cp DIAGNOSTIC-EXPORT.md "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md"
@@ -539,6 +543,7 @@ check_packet() {
     "$ISSUE_TEMPLATE_VALIDATION_PATH" \
     "$READINESS_SUMMARY_PATH" \
     "$TESTER_DOCS_DIR/PRIVACY-BETA.md" \
+    "$TESTER_DOCS_DIR/FIRST-RUN-BETA.md" \
     "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md" \
     "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md" \
     "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md" \

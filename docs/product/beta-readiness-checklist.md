@@ -42,6 +42,9 @@ Use this before inviting private beta testers.
 ## Privacy Gate
 
 - [ ] The tester hears the privacy promise in plain language.
+- [ ] The tester can repeat the first-run map: suggestions appear near the
+  cursor, `Tab` accepts one word, `Esc` dismisses, Pause stops everything, text
+  stays local, and supported apps are limited.
 - [ ] `docs/product/onboarding-permission-qa-checklist.md` passes on a clean
   macOS user account.
 - [ ] Raw debug tracing is off.
@@ -74,6 +77,8 @@ Use this before inviting private beta testers.
 
 ## Trust Gate
 
+- [ ] `FIRST-RUN-BETA.md` matches the current Settings first-run copy and
+  generated private-beta packet.
 - [ ] `Tab` accepts one word in TextEdit.
 - [ ] `Esc` dismisses the suggestion.
 - [ ] Search, login, URL, secure, payment, address, and short form fields are

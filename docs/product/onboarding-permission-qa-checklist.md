@@ -6,7 +6,9 @@ Use this before a private beta build. This is manual proof, not a code claim.
 
 - [ ] Install the app with Accessibility off.
 - [ ] Confirm the app opens its own Settings/onboarding surface before any macOS Accessibility prompt appears.
-- [ ] Confirm the first screen explains the value and local-first behavior in plain language.
+- [ ] Confirm the first screen explains where suggestions appear, what `Tab`
+  does, what `Esc` does, how to pause, what stays local, and which apps are
+  supported.
 - [ ] Click `Allow Accessibility`.
 - [ ] Confirm the app explains why System Settings is opening.
 - [ ] Grant Accessibility, return to the app, and confirm the status updates without restart.
@@ -18,6 +20,7 @@ Use this before a private beta build. This is manual proof, not a code claim.
 - [ ] Confirm Practice shows Accessibility status, local model readiness, and TextEdit enablement.
 - [ ] Click `Start TextEdit Practice`.
 - [ ] Confirm the app opens a disposable local TextEdit practice file.
+- [ ] Confirm the practice file repeats the safe first-run map in plain language.
 - [ ] Confirm TextEdit is enabled for suggestions.
 - [ ] Type disposable text in TextEdit.
 - [ ] Confirm a suggestion appears near the cursor.
@@ -56,10 +59,10 @@ Use this before a private beta build. This is manual proof, not a code claim.
 
 - [ ] Start without the local model installed.
 - [ ] Confirm Settings says the model download uses Hugging Face once and suggestions run locally after install.
-- [ ] Start the install and confirm progress is visible.
+- [ ] Start the install with `Install Local Model` and confirm progress is visible.
 - [ ] Confirm low disk space is caught before a network download starts, or record why the scenario could not be safely reproduced.
 - [ ] Cancel the install and confirm the app returns to a recoverable state.
-- [ ] Repair an incomplete model folder and confirm suggestions stay off until validation passes.
+- [ ] Repair an incomplete model folder with `Repair Local Model` and confirm suggestions stay off until validation passes.
 
 ## Release Rule
 

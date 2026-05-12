@@ -14,6 +14,9 @@ The app asks for Accessibility so it can:
 Suggestions stay off when Accessibility is denied or the focused field is not
 safe to inspect.
 
+Normal first-run setup does not need Screen Recording. Screen Recording is only
+for explicit local placement proof or visible-page-context debugging.
+
 ## What Stays On This Mac
 
 By default, typed text, nearby context, prompts, model output, accepted text,
