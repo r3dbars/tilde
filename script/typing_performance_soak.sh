@@ -25,6 +25,7 @@ RUNTIME_READY_SELF_TEST_ALLOW_EXISTING=0
 NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=0
 NORMALIZE_OSASCRIPT_STDOUT_INPUT=""
 NORMALIZE_OSASCRIPT_STDOUT_OUTPUT=""
+OSASCRIPT_TIMEOUT_SELF_TEST=0
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
@@ -254,9 +255,56 @@ normalize_osascript_stdout_text() {
   perl -0pe 's/\n\z//' "$source_file" >"$destination_file"
 }
 
+run_osascript_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+  local stdout_file="$1"
+  shift
+  local stderr_file="$1"
+  shift
+  local pid deadline status script_file
+
+  require_positive_int "$timeout_seconds" "osascript timeout"
+  if [[ "${1:-}" == "-" ]]; then
+    shift
+    script_file="$(make_tmp_dir)/osascript-timeout.applescript"
+    cat >"$script_file"
+    osascript "$script_file" "$@" >"$stdout_file" 2>"$stderr_file" &
+  else
+    osascript "$@" >"$stdout_file" 2>"$stderr_file" &
+  fi
+  pid=$!
+  deadline=$((SECONDS + timeout_seconds))
+
+  while kill -0 "$pid" 2>/dev/null; do
+    if ((SECONDS >= deadline)); then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      echo "osascript timed out after ${timeout_seconds}s" >&2
+      if [[ -s "$stderr_file" ]]; then
+        cat "$stderr_file" >&2
+      fi
+      return 124
+    fi
+    sleep 0.2
+  done
+
+  if wait "$pid"; then
+    return 0
+  fi
+
+  status=$?
+  if [[ -s "$stderr_file" ]]; then
+    cat "$stderr_file" >&2
+  fi
+  return "$status"
+}
+
 prepare_textedit_document() {
   local target_file="${1:-}"
-  local target_name attempt actual_name
+  local target_name attempt actual_name open_stdout open_stderr actual_stdout actual_stderr retry_stdout retry_stderr
 
   if [[ -z "$target_file" ]]; then
     echo "prepare_textedit_document needs a target file path" >&2
@@ -268,7 +316,13 @@ prepare_textedit_document() {
 
   for attempt in 1 2; do
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
-    osascript - "$target_file" "$target_name" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+    open_stdout="$(make_tmp_dir)/textedit-open-stdout.txt"
+    open_stderr="$(make_tmp_dir)/textedit-open-stderr.txt"
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_SOAK_SETUP_OPEN_TIMEOUT_SECONDS:-10}" \
+      "$open_stdout" \
+      "$open_stderr" \
+      - "$target_file" "$target_name" <<'APPLESCRIPT' || true
 on run argv
   set targetPath to item 1 of argv
   set targetName to item 2 of argv
@@ -279,8 +333,13 @@ on run argv
 end run
 APPLESCRIPT
     sleep 0.5
-    if actual_name="$(
-      osascript - "$target_name" <<'APPLESCRIPT'
+    actual_stdout="$(make_tmp_dir)/textedit-prepare-stdout.txt"
+    actual_stderr="$(make_tmp_dir)/textedit-prepare-stderr.txt"
+    if run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_SOAK_SETUP_TIMEOUT_SECONDS:-25}" \
+      "$actual_stdout" \
+      "$actual_stderr" \
+      - "$target_name" <<'APPLESCRIPT'
 on run argv
   set expectedName to item 1 of argv
   with timeout of 20 seconds
@@ -324,14 +383,21 @@ on run argv
   end timeout
 end run
 APPLESCRIPT
-    )"; then
+    then
+      actual_name="$(cat "$actual_stdout")"
       printf '%s\n' "$actual_name"
       return 0
     fi
 
     echo "TextEdit document setup attempt $attempt failed; retrying." >&2
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
-    osascript - "$target_file" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+    retry_stdout="$(make_tmp_dir)/textedit-retry-open-stdout.txt"
+    retry_stderr="$(make_tmp_dir)/textedit-retry-open-stderr.txt"
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_SOAK_SETUP_OPEN_TIMEOUT_SECONDS:-10}" \
+      "$retry_stdout" \
+      "$retry_stderr" \
+      - "$target_file" <<'APPLESCRIPT' || true
 on run argv
   tell application "TextEdit"
     activate
@@ -445,13 +511,20 @@ APPLESCRIPT
 focus_textedit_document() {
   local target_name="$1"
   local target_file="${SOAK_TARGET_TEXT_FILE:-}"
+  local focus_stdout focus_stderr
 
   if [[ -n "$target_file" && -f "$target_file" ]]; then
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
   else
     open -a TextEdit >/dev/null 2>&1 || true
   fi
-  osascript - "$target_name" "$target_file" >/dev/null <<'APPLESCRIPT'
+  focus_stdout="$(make_tmp_dir)/textedit-focus-stdout.txt"
+  focus_stderr="$(make_tmp_dir)/textedit-focus-stderr.txt"
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_SOAK_FOCUS_TIMEOUT_SECONDS:-25}" \
+    "$focus_stdout" \
+    "$focus_stderr" \
+    - "$target_name" "$target_file" <<'APPLESCRIPT'
 on run argv
   set targetName to item 1 of argv
   set targetPath to item 2 of argv
@@ -964,6 +1037,9 @@ while (($#)); do
       NORMALIZE_OSASCRIPT_STDOUT_OUTPUT="$1"
       NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=1
       ;;
+    --self-test-osascript-timeout)
+      OSASCRIPT_TIMEOUT_SELF_TEST=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -994,6 +1070,44 @@ fi
 if [[ "$NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST" == "1" ]]; then
   normalize_osascript_stdout_text "$NORMALIZE_OSASCRIPT_STDOUT_INPUT" "$NORMALIZE_OSASCRIPT_STDOUT_OUTPUT"
   exit $?
+fi
+
+if [[ "$OSASCRIPT_TIMEOUT_SELF_TEST" == "1" ]]; then
+  tmp_dir="$(make_tmp_dir)"
+  fast_stdout="$tmp_dir/fast.out"
+  fast_stderr="$tmp_dir/fast.err"
+  slow_stdout="$tmp_dir/slow.out"
+  slow_stderr="$tmp_dir/slow.err"
+
+  if ! run_osascript_with_timeout 5 "$fast_stdout" "$fast_stderr" - <<'APPLESCRIPT'
+return "ready"
+APPLESCRIPT
+  then
+    echo "osascript timeout self-test expected fast script to pass" >&2
+    exit 1
+  fi
+
+  if [[ "$(cat "$fast_stdout")" != "ready" ]]; then
+    echo "osascript timeout self-test did not capture stdout" >&2
+    exit 1
+  fi
+
+  if run_osascript_with_timeout 1 "$slow_stdout" "$slow_stderr" - <<'APPLESCRIPT'
+delay 5
+return "late"
+APPLESCRIPT
+  then
+    echo "osascript timeout self-test expected slow script to time out" >&2
+    exit 1
+  fi
+
+  if [[ -s "$slow_stdout" ]]; then
+    echo "osascript timeout self-test expected no late stdout" >&2
+    exit 1
+  fi
+
+  echo "osascript timeout self-test passed."
+  exit 0
 fi
 
 case "$APP" in
