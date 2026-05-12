@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 import datetime as dt
-import re
 import statistics
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
@@ -67,6 +65,25 @@ def metric_line(label, values, unit):
     )
 
 
+def duration_values(rows):
+    return [duration for _, _, _, duration in rows if duration is not None]
+
+
+def timing_metric_line(label, rows, unit="ms"):
+    if not rows:
+        return f"{label}: no events"
+
+    values = duration_values(rows)
+    if not values:
+        return f"{label}: no duration samples (events={len(rows)})"
+
+    line = metric_line(label, values, unit)
+    missing = len(rows) - len(values)
+    if missing:
+        line += f" (events={len(rows)}, missingDurations={missing})"
+    return line
+
+
 def fields_from(parts):
     fields = {}
     for part in parts:
@@ -112,7 +129,14 @@ def parse_diagnostics(path, line_limit):
         "launches": [],
         "warm_starts": [],
         "warm_results": [],
+        "warm_succeeded": [],
+        "warm_failed": [],
+        "warm_skipped": [],
         "model_loads": [],
+        "model_load_succeeded": [],
+        "model_load_failed": [],
+        "model_load_cancelled": [],
+        "model_load_reused": [],
         "first_token": [],
         "total_generation": [],
         "first_visible": [],
@@ -150,7 +174,14 @@ def parse_diagnostics(path, line_limit):
             candidate = fields.get("candidate", "unknown")
             if duration is None and timestamp and candidate in warm_start_by_candidate:
                 duration = max(0, round((timestamp - warm_start_by_candidate[candidate]).total_seconds() * 1000))
-            data["warm_results"].append((line_number, event, fields, duration))
+            row = (line_number, event, fields, duration)
+            data["warm_results"].append(row)
+            if event == "runtime-warm-succeeded":
+                data["warm_succeeded"].append(row)
+            elif event == "runtime-warm-failed":
+                data["warm_failed"].append(row)
+            elif event == "runtime-warm-skipped":
+                data["warm_skipped"].append(row)
             continue
 
         if event in {
@@ -160,7 +191,16 @@ def parse_diagnostics(path, line_limit):
             "mlx-model-load-reused",
         }:
             duration = int_value(fields.get("loadMilliseconds"))
-            data["model_loads"].append((line_number, event, fields, duration))
+            row = (line_number, event, fields, duration)
+            data["model_loads"].append(row)
+            if event == "mlx-model-load-succeeded":
+                data["model_load_succeeded"].append(row)
+            elif event == "mlx-model-load-failed":
+                data["model_load_failed"].append(row)
+            elif event == "mlx-model-load-cancelled":
+                data["model_load_cancelled"].append(row)
+            elif event == "mlx-model-load-reused":
+                data["model_load_reused"].append(row)
             continue
 
         if event == "mlx-completion-timing":
@@ -226,12 +266,43 @@ def format_latest_launch(launches):
     )
 
 
-def format_latest_timing(label, rows, duration_index=3):
+def format_latest_timing(label, rows):
     if not rows:
         return f"{label}: no samples"
     line, event, fields, duration = rows[-1]
     duration_text = f"{duration}ms" if duration is not None else "unknown"
     return f"{label}: {event} {duration_text} line={line}"
+
+
+def scorecard_caveats(data):
+    caveats = []
+    if not data["launches"]:
+        caveats.append(
+            "Missing runtime-bootstrap samples; do not score current runtime readiness from this report."
+        )
+    if not duration_values(data["warm_succeeded"]):
+        caveats.append(
+            "Missing runtime warm success duration samples; do not score warm readiness timing from this report."
+        )
+    if not duration_values(data["model_load_succeeded"]):
+        caveats.append(
+            "Missing cold model load samples; do not score cold-start load time from this report."
+        )
+    if not duration_values(data["model_load_reused"]):
+        caveats.append(
+            "Missing warm model reuse samples; do not claim warm-reuse speed from this report."
+        )
+    if not data["first_visible"]:
+        caveats.append(
+            "Missing first-visible samples; do not score keystroke-to-visible latency from this report."
+        )
+    if not data["first_token"]:
+        caveats.append("Missing first-token samples; do not score model response latency from this report.")
+    if not data["total_generation"]:
+        caveats.append(
+            "Missing total-generation samples; do not score generation completion latency from this report."
+        )
+    return caveats
 
 
 def directory_size_bytes(path):
@@ -352,8 +423,19 @@ def print_report(args, data, live_process, models):
     print(f"Diagnostics log: {args.diagnostics_log}")
     print(f"Line limit: {args.line_limit if args.line_limit > 0 else 'all'}")
     print(format_latest_launch(data["launches"]))
-    print(format_latest_timing("Warm time", data["warm_results"]))
-    print(format_latest_timing("Model load time", data["model_loads"]))
+    print(format_latest_timing("Latest warm event", data["warm_results"]))
+    print(timing_metric_line("Runtime warm succeeded", data["warm_succeeded"]))
+    if data["warm_failed"]:
+        print(timing_metric_line("Runtime warm failed", data["warm_failed"]))
+    if data["warm_skipped"]:
+        print(timing_metric_line("Runtime warm skipped", data["warm_skipped"]))
+    print(format_latest_timing("Latest model load event", data["model_loads"]))
+    print(timing_metric_line("Cold model load succeeded", data["model_load_succeeded"]))
+    if data["model_load_failed"]:
+        print(timing_metric_line("Cold model load failed", data["model_load_failed"]))
+    if data["model_load_cancelled"]:
+        print(timing_metric_line("Cold model load cancelled", data["model_load_cancelled"]))
+    print(timing_metric_line("Warm model reuse", data["model_load_reused"]))
     print(metric_line("First visible / keystroke-to-visible", data["first_visible"], "ms"))
     print(metric_line("First token", data["first_token"], "ms"))
     print(metric_line("Total generation", data["total_generation"], "ms"))
@@ -373,6 +455,15 @@ def print_report(args, data, live_process, models):
 
     risk, reasons = energy_risk(data, live_process)
     print(f"Battery/energy risk: {risk} ({'; '.join(reasons)})")
+    print()
+    print("Scorecard caveats")
+    caveats = scorecard_caveats(data)
+    if caveats:
+        for caveat in caveats:
+            print(f"  - {caveat}")
+    else:
+        print("  - No missing core timing samples in this log slice. Treat this as local diagnostics, not broad beta proof.")
+    print("Privacy: redacted timings/counts only; typed text, prompts, completions, screenshots, and per-event paths are not printed.")
     print()
     print("Supported local model assets")
     for name, installed, size in models:
