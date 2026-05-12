@@ -3066,29 +3066,118 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func codexProofSnapshotMatchesCurrentSuggestion() -> Bool {
         let bundleIdentifier = "com.openai.codex"
         let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
-        guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
-              currentSuggestionRequestMode == .wordCompletion,
-              let currentProfile,
-              currentProfile.bundleIdentifier == bundleIdentifier,
-              currentProfile.supportsOneWordAcceptance,
-              !currentProfile.supportsFullAcceptance,
-              currentProfile.requiresNoSubmitAcceptanceProof,
-              currentProfile.insertionMode == .axValueReplacement,
-              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
-              let currentSuggestionFieldIdentity,
-              let lastTextSnapshot,
-              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
-              lastTextSnapshot.textBeforeCursor.contains(marker),
-              lastTextSnapshot.textAfterCursor.isEmpty,
-              let frontmostApp = accessibilityClient.frontmostApplication(),
-              let profile = effectiveProfile(for: frontmostApp),
-              profile == currentProfile,
-              frontmostAppMatchesSuggestion(
-                  frontmostApp,
-                  expectedBundleIdentifier: bundleIdentifier,
-                  profile: profile
-              ),
-              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+        guard currentSuggestionAppBundleIdentifier == bundleIdentifier else {
+            recordCodexProofSnapshotFastPathBlock(reason: "suggestion-app-mismatch")
+            return false
+        }
+        guard currentSuggestionRequestMode == .wordCompletion else {
+            recordCodexProofSnapshotFastPathBlock(reason: "request-mode-mismatch")
+            return false
+        }
+        guard let currentProfile else {
+            recordCodexProofSnapshotFastPathBlock(reason: "missing-current-profile")
+            return false
+        }
+        guard currentProfile.bundleIdentifier == bundleIdentifier else {
+            recordCodexProofSnapshotFastPathBlock(reason: "profile-app-mismatch")
+            return false
+        }
+        guard currentProfile.supportsOneWordAcceptance else {
+            recordCodexProofSnapshotFastPathBlock(reason: "one-word-disabled")
+            return false
+        }
+        guard !currentProfile.supportsFullAcceptance else {
+            recordCodexProofSnapshotFastPathBlock(reason: "full-accept-enabled")
+            return false
+        }
+        guard currentProfile.requiresNoSubmitAcceptanceProof else {
+            recordCodexProofSnapshotFastPathBlock(reason: "no-submit-proof-disabled")
+            return false
+        }
+        guard currentProfile.insertionMode == .axValueReplacement else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "insertion-mode-mismatch",
+                metadata: ["insertionMode": currentProfile.insertionMode.rawValue]
+            )
+            return false
+        }
+        guard activeAppProofBundleIdentifiers.contains(bundleIdentifier) else {
+            recordCodexProofSnapshotFastPathBlock(reason: "proof-bundle-inactive")
+            return false
+        }
+        guard let currentSuggestionFieldIdentity else {
+            recordCodexProofSnapshotFastPathBlock(reason: "missing-suggestion-field")
+            return false
+        }
+        guard let lastTextSnapshot else {
+            recordCodexProofSnapshotFastPathBlock(reason: "missing-last-snapshot")
+            return false
+        }
+        guard lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "snapshot-field-mismatch",
+                metadata: [
+                    "snapshotFieldIdentity": lastTextSnapshot.fieldIdentity.traceDescription,
+                    "suggestionFieldIdentity": currentSuggestionFieldIdentity.traceDescription
+                ]
+            )
+            return false
+        }
+        guard lastTextSnapshot.textBeforeCursor.contains(marker) else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "marker-missing",
+                metadata: ["beforeChars": String(lastTextSnapshot.textBeforeCursor.count)]
+            )
+            return false
+        }
+        guard lastTextSnapshot.textAfterCursor.isEmpty else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "after-cursor-not-empty",
+                metadata: ["afterChars": String(lastTextSnapshot.textAfterCursor.count)]
+            )
+            return false
+        }
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+            recordCodexProofSnapshotFastPathBlock(reason: "missing-frontmost-app")
+            return false
+        }
+        guard let profile = effectiveProfile(for: frontmostApp) else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "missing-frontmost-profile",
+                metadata: ["frontmostApp": frontmostApp.bundleIdentifier]
+            )
+            return false
+        }
+        guard profile == currentProfile else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "frontmost-profile-mismatch",
+                metadata: [
+                    "frontmostApp": frontmostApp.bundleIdentifier,
+                    "frontmostProfile": profile.bundleIdentifier,
+                    "currentProfile": currentProfile.bundleIdentifier
+                ]
+            )
+            return false
+        }
+        guard frontmostAppMatchesSuggestion(
+            frontmostApp,
+            expectedBundleIdentifier: bundleIdentifier,
+            profile: profile
+        ) else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "frontmost-app-mismatch",
+                metadata: ["frontmostApp": frontmostApp.bundleIdentifier]
+            )
+            return false
+        }
+        guard frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "process-mismatch",
+                metadata: [
+                    "frontmostPID": String(frontmostApp.processIdentifier),
+                    "suggestionPID": String(currentSuggestionFieldIdentity.processIdentifier)
+                ]
+            )
             return false
         }
 
@@ -3100,6 +3189,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             containing: marker,
             maxDepth: 32
         ) != nil else {
+            recordCodexProofSnapshotFastPathBlock(
+                reason: "matching-text-area-missing",
+                metadata: [
+                    "expectedChars": String(expectedText.count),
+                    "beforeChars": String(lastTextSnapshot.textBeforeCursor.count)
+                ]
+            )
             return false
         }
 
@@ -3138,6 +3234,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "requestMode": currentSuggestionRequestMode?.rawValue ?? "",
                 "promptSafetyMode": currentProfile.promptAppSafetyMode.rawValue
             ]
+        )
+    }
+
+    private func recordCodexProofSnapshotFastPathBlock(
+        reason: String,
+        metadata: [String: String] = [:]
+    ) {
+        var payload = metadata
+        payload["app"] = "com.openai.codex"
+        payload["reason"] = reason
+        payload["activeProof"] = String(activeAppProofBundleIdentifiers.contains("com.openai.codex"))
+        payload["currentProfile"] = currentProfile?.bundleIdentifier ?? "none"
+        payload["currentSuggestionApp"] = currentSuggestionAppBundleIdentifier ?? "none"
+        payload["hasLastSnapshot"] = String(lastTextSnapshot != nil)
+        payload["requestMode"] = currentSuggestionRequestMode?.rawValue ?? "none"
+        if let currentSuggestionFieldIdentity {
+            payload["fieldIdentity"] = currentSuggestionFieldIdentity.traceDescription
+        }
+
+        DiagnosticsLog.shared.record(
+            "codex-proof-snapshot-fast-path-blocked",
+            metadata: payload
         )
     }
 
