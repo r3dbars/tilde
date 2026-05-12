@@ -111,7 +111,7 @@ def trace_window(path, timestamp):
                 trace_start_line = max(0, line_number - 1)
 
             event_type = event.get("type")
-            if event_type == "suggestionPresented" and event.get("latencyMilliseconds") is not None:
+            if event_type == "suggestionPresented":
                 key = suggestion_key(event, line_number)
                 if key in seen_presented:
                     continue

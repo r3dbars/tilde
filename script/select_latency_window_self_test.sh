@@ -27,6 +27,8 @@ cat >"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T10:10:03Z","sessionID":"session","suggestionID":"three","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose"}}
 {"timestamp":"2026-05-12T10:10:04Z","sessionID":"session","suggestionID":"four","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"140"}}
 {"timestamp":"2026-05-12T10:10:05Z","sessionID":"session","suggestionID":"four","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"behaviorProfile":"docs_prose"}}
+{"timestamp":"2026-05-12T10:10:06Z","sessionID":"session","suggestionID":"four","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":151,"metadata":{"behaviorProfile":"docs_prose"}}
+{"timestamp":"2026-05-12T10:10:07Z","sessionID":"session","suggestionID":"token-only","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"110"}}
 LOG
 
 WINDOW="$(
@@ -63,18 +65,39 @@ env $WINDOW \
     --max-first-token-p95-ms 650 \
     --max-total-generation-p95-ms 850 >/dev/null
 
-if ! script/select_latency_window.py \
+if script/select_latency_window.py \
   --diagnostics-log "$DIAGNOSTICS_LOG" \
   --trace-log "$TRACE_LOG" \
   --min-first-visible-samples 3 \
-  --min-model-samples 3 2>"$TMP_DIR/undersampled.err" >/dev/null; then
-  if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/undersampled.err" >/dev/null; then
-    echo "latency window self-test did not explain the undersampled latest launch" >&2
-    cat "$TMP_DIR/undersampled.err" >&2
-    exit 1
-  fi
-else
-  echo "latency window self-test expected undersampled latest launch to fail" >&2
+  --min-model-samples 2 2>"$TMP_DIR/duplicate-presented.err" >/dev/null; then
+  echo "latency window self-test expected duplicate presented rows not to inflate first-visible samples" >&2
+  exit 1
+fi
+
+if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/duplicate-presented.err" >/dev/null; then
+  echo "latency window self-test did not report benchmark-equivalent first-visible samples" >&2
+  cat "$TMP_DIR/duplicate-presented.err" >&2
+  exit 1
+fi
+
+if script/select_latency_window.py \
+  --diagnostics-log "$DIAGNOSTICS_LOG" \
+  --trace-log "$TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 3 2>"$TMP_DIR/token-only-model.err" >/dev/null; then
+  echo "latency window self-test expected first-token-only model rows not to inflate model samples" >&2
+  exit 1
+fi
+
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/token-only-model.err" >/dev/null; then
+  echo "latency window self-test did not explain the undersampled latest launch" >&2
+  cat "$TMP_DIR/token-only-model.err" >&2
+  exit 1
+fi
+
+if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/token-only-model.err" >/dev/null; then
+  echo "latency window self-test did not report benchmark-equivalent model samples" >&2
+  cat "$TMP_DIR/token-only-model.err" >&2
   exit 1
 fi
 
