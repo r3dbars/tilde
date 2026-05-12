@@ -74,6 +74,10 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("That makes a lot of sense I would") == nil)
         #expect(cleaner.clean("Absolutely, I can help with that") == nil)
+        #expect(cleaner.clean("comes to life", after: "The draft feels calmer when it") == nil)
+        #expect(cleaner.clean("the key features and benefits", after: "The review should focus on") == nil)
+        #expect(cleaner.clean("implement a comprehensive recovery plan", after: "The next step is to") == nil)
+        #expect(cleaner.clean("to acknowledge the user's point", after: "A good reply here would be") == nil)
         #expect(cleaner.clean("Of course, here is a cleaner version") == nil)
         #expect(cleaner.clean("I would like to help with that") == nil)
         #expect(cleaner.clean("I will do that now.") == nil)
