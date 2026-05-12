@@ -2,7 +2,7 @@
 
 Current score: 91/100.
 
-This is a progress score, not a release claim. The deterministic 500-case prediction harness is green, and TextEdit, Notes title/body/checklist, Notes title/body/checklist undo, Notes short/long/checked variants, Chrome local fixtures, Chrome chat-like, and public Chrome text-field lanes now have fresh strict proof rows on the same current app binary. Normal-Chrome default AX proof for the pinned real Monaco and ProseMirror fixtures is stale after the latest rebuild. The Obsidian rerun failed closed before typing because the focused editor was not readable through AX. The strict target gate still fails because Obsidian, prompt no-submit variants, default AX real-editor lanes, and production official editor variants are not complete.
+This is a progress score, not a release claim. The deterministic 500-case prediction harness is green, and TextEdit, Notes title/body/checklist, Notes title/body/checklist undo, Notes short/long/checked variants, Chrome local fixtures, Chrome chat-like, public Chrome text-field lanes, and normal-Chrome ProseMirror now have fresh strict proof rows on the same current app binary. Normal-Chrome default AX proof for pinned real Monaco still fails closed before proof. The Obsidian rerun failed closed before typing because the focused editor was not readable through AX. The strict target gate still fails because Obsidian, prompt no-submit variants, default AX Monaco, and production official editor variants are not complete.
 
 ## Prompt-To-Artifact Checklist
 
@@ -16,7 +16,7 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 | Notes proof | Fresh strict rows at `2026-05-12T05:04:49Z`, `2026-05-12T05:05:56Z`, and `2026-05-12T05:06:15Z` for title/body/checklist; undo rows at `2026-05-12T05:20:17Z`, `2026-05-12T05:20:38Z`, and `2026-05-12T05:22:39Z`; short/long/checked variant rows from `2026-05-12T05:31:38Z` through `2026-05-12T05:34:10Z` | Passed for defined Notes lanes |
 | Chrome textarea/contenteditable/editor fixtures | Fresh strict rows from `2026-05-12T05:07:16Z` through `2026-05-12T05:09:04Z` on the same app binary | Passed |
 | Online notepad and MediumEditor-style public text fields | Fresh `textarea-public` and `contenteditable-public` rows at `2026-05-12T05:09:32Z` and `2026-05-12T05:09:52Z` | Passed |
-| Normal-Chrome Monaco/ProseMirror default AX | Last green rows are from `2026-05-12T04:35:02Z` and `2026-05-12T04:36:10Z`, but they are stale against the current app fingerprint; the latest current-binary proof is the isolated forced-renderer lane | Blocked |
+| Normal-Chrome Monaco/ProseMirror default AX | `prosemirror-real-default` passed at `2026-05-12T05:38:52Z` with 2 verified accepts and strict visual trace evidence. `monaco-real-default` still fails closed before proof because Chrome exposes Monaco's hidden textarea without a stable editable value path. | Partial |
 | Obsidian | Current rerun failed closed before typing because AX exposed only the whole web area, not a readable focused editor | Blocked by host AX exposure |
 | Codex, Claude Code, Claude desktop | Existing stale/manual-gated rows only; not rerun unattended | Blocked by manual gate |
 | Privacy of reports | Manual rows store redacted log/trace slices and proof fingerprints, not raw user text | Passed |
@@ -38,6 +38,6 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 
 - Obsidian default, theme, pane, and long-note lanes need current proof after the host exposes a focused editable AX surface.
 - Codex and Claude lanes need manual no-submit confirmation on the current app binary.
-- Normal-Chrome default AX proof for local real Monaco and ProseMirror needs a fresh current-binary rerun.
+- Normal-Chrome default AX proof for local real Monaco still needs a stable setup path; ProseMirror default AX is now current.
 - Production official CodeMirror, Monaco, and ProseMirror site variants still need bounded screenshot-backed traces. `codemirror-official` was attempted on 2026-05-12 and failed closed before typing because Chrome's Allow JavaScript from Apple Events setting is disabled.
 - `./script/check_score_targets.sh` should keep failing until those proof gates close.

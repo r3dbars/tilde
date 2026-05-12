@@ -414,7 +414,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is stale after the latest rebuild, and broad production-site proof remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for ProseMirror, but Monaco default AX and broad production-site proof remain open."
       ],
       "requirements": [
         {
@@ -470,7 +470,7 @@
     },
     {
       "surface": "Chrome real ProseMirror",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -481,14 +481,12 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
-      "gaps": [
-        "The isolated renderer-accessibility real ProseMirror lane is current, but normal Chrome default AX proof is stale after the latest rebuild."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "default-chrome-prosemirror-ax",
-          "status": "pending",
-          "summary": "Refresh normal Chrome default AX ProseMirror proof on the current app fingerprint; keep it separate from the isolated forced-renderer proof lane.",
+          "status": "complete",
+          "summary": "Normal Chrome default AX ProseMirror proof is current on the latest app fingerprint and remains separate from the isolated forced-renderer proof lane.",
           "manualSmoke": {
             "app": "Chrome",
             "bundle": "com.google.Chrome",
