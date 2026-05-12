@@ -74,6 +74,22 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(decision.canSuggest)
     }
 
+    @Test("Chrome unknown browser pages fail closed until proofed")
+    func blocksUnknownChromePages() throws {
+        let decision = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(
+                title: "Draft",
+                windowTitle: "Private writing app"
+            )
+        )
+
+        let block = try #require(blockedSurface(from: decision))
+        #expect(block.surface == .unproven)
+        #expect(block.userFacingReason == "This browser page needs proof first")
+        #expect(block.traceMetadata["browserSurfaceSafetyClass"] == "browser-unknown")
+    }
+
     @Test("Non-browser apps are not filtered by hosted surface fingerprints")
     func allowsNonBrowserApps() {
         let decision = policy.decision(

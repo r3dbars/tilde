@@ -149,10 +149,13 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return .blocked(.proofModeRequired)
         }
 
-        if looksLikeMarkedMultilineBuffer(
-            textBeforeCursor: context.rawTextBeforeCursor,
-            textAfterCursor: context.rawTextAfterCursor
-        ) {
+        let focusedTextHasProofMarker = context.focusedText.localizedCaseInsensitiveContains(proofMarker)
+
+        if !focusedTextHasProofMarker,
+           looksLikeMarkedMultilineBuffer(
+               textBeforeCursor: context.rawTextBeforeCursor,
+               textAfterCursor: context.rawTextAfterCursor
+           ) {
             return .blocked(.multilineCommandDetected)
         }
 

@@ -8,6 +8,7 @@ fi
 
 MODE="run"
 NOTES_SURFACE=""
+NOTES_PROOF_LABEL=""
 TEXTEDIT_VARIANT=""
 OBSIDIAN_VARIANT=""
 REQUIRES_UNDO_ACCEPT=0
@@ -25,14 +26,14 @@ CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-body|notes-checklist|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
 a pass row to docs/product/manual-smoke-runs.md.
 
 Notes proof must be recorded as notes-title, notes-body, notes-checklist,
-or their notes-*-undo variants.
+their notes-*-undo variants, or explicit Notes variant lanes.
 Obsidian proof must keep default, theme, pane, and long-note variants separate
 before the app can graduate past partial proof.
 Use --visual when the trace slice must include strict screenshot evidence.
@@ -67,6 +68,10 @@ case "$APP" in
     APP="textedit"
     TEXTEDIT_VARIANT="narrow"
     ;;
+  textedit-scrolled)
+    APP="textedit"
+    TEXTEDIT_VARIANT="scrolled"
+    ;;
   textedit-selected-suppression)
     APP="textedit"
     TEXTEDIT_VARIANT="selected-suppression"
@@ -87,6 +92,16 @@ case "$APP" in
     APP="notes"
     NOTES_SURFACE="title"
     ;;
+  notes-title-short)
+    APP="notes"
+    NOTES_SURFACE="title"
+    NOTES_PROOF_LABEL="notes-title-short"
+    ;;
+  notes-title-long)
+    APP="notes"
+    NOTES_SURFACE="title"
+    NOTES_PROOF_LABEL="notes-title-long"
+    ;;
   notes-title-undo)
     APP="notes"
     NOTES_SURFACE="title"
@@ -96,6 +111,16 @@ case "$APP" in
     APP="notes"
     NOTES_SURFACE="body"
     ;;
+  notes-body-short)
+    APP="notes"
+    NOTES_SURFACE="body"
+    NOTES_PROOF_LABEL="notes-body-short"
+    ;;
+  notes-body-long)
+    APP="notes"
+    NOTES_SURFACE="body"
+    NOTES_PROOF_LABEL="notes-body-long"
+    ;;
   notes-body-undo)
     APP="notes"
     NOTES_SURFACE="body"
@@ -104,6 +129,16 @@ case "$APP" in
   notes-checklist)
     APP="notes"
     NOTES_SURFACE="checklist"
+    ;;
+  notes-checklist-checked)
+    APP="notes"
+    NOTES_SURFACE="checklist"
+    NOTES_PROOF_LABEL="notes-checklist-checked"
+    ;;
+  notes-checklist-long)
+    APP="notes"
+    NOTES_SURFACE="checklist"
+    NOTES_PROOF_LABEL="notes-checklist-long"
     ;;
   notes-checklist-undo)
     APP="notes"
@@ -312,6 +347,11 @@ case "$APP" in
         SESSION_NAME="TextEdit narrow window"
         STEPS=$'- Open a disposable narrow TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
         ;;
+      scrolled)
+        PROOF_LABEL="textedit-scrolled"
+        SESSION_NAME="TextEdit scrolled document"
+        STEPS=$'- Open a disposable narrow TextEdit document prefilled with enough lines to scroll.\n- Move the caret to the bottom and type `Smoke proof feels inst`.\n- Wait for a suggestion at the scrolled caret.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
+        ;;
       selected-suppression)
         PROOF_LABEL="textedit-selected-suppression"
         SESSION_NAME="TextEdit selected-text suppression"
@@ -386,10 +426,20 @@ case "$APP" in
         if (( REQUIRES_UNDO_ACCEPT == 1 )); then
           PROOF_LABEL="notes-title-undo"
           SESSION_NAME="Notes title undo"
-          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels inst` in the title only.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels` in the title only.\n- Press Tab once and expect ` instant`.\n- Press Command-Z and confirm only the accepted ` instant` insertion is removed.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         else
-          PROOF_LABEL="notes-title"
-          SESSION_NAME="Notes title"
+          PROOF_LABEL="${NOTES_PROOF_LABEL:-notes-title}"
+          case "$PROOF_LABEL" in
+            notes-title-short)
+              SESSION_NAME="Notes title short"
+              ;;
+            notes-title-long)
+              SESSION_NAME="Notes title long"
+              ;;
+            *)
+              SESSION_NAME="Notes title"
+              ;;
+          esac
           STEPS=$'- Open the disposable autocomplete smoke note.\n- Put the caret in the note title.\n- Type `Smoke proof feels` in the title only.\n- Press Tab once and expect ` instant`.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         fi
         ;;
@@ -399,8 +449,18 @@ case "$APP" in
           SESSION_NAME="Notes body undo"
           STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels`.\n- Press Tab once and expect ` instant`.\n- Press Command-Z and confirm only the accepted ` instant` insertion is removed.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         else
-          PROOF_LABEL="notes-body"
-          SESSION_NAME="Notes body"
+          PROOF_LABEL="${NOTES_PROOF_LABEL:-notes-body}"
+          case "$PROOF_LABEL" in
+            notes-body-short)
+              SESSION_NAME="Notes body short"
+              ;;
+            notes-body-long)
+              SESSION_NAME="Notes body long"
+              ;;
+            *)
+              SESSION_NAME="Notes body"
+              ;;
+          esac
           STEPS=$'- Open the disposable autocomplete smoke note.\n- Put `Autocomplete smoke` on the first body line.\n- Put the caret on the next body line and type `Smoke proof feels`.\n- Press Tab once and expect ` instant`.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         fi
         ;;
@@ -408,10 +468,20 @@ case "$APP" in
         if (( REQUIRES_UNDO_ACCEPT == 1 )); then
           PROOF_LABEL="notes-checklist-undo"
           SESSION_NAME="Notes checklist undo"
-          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels inst` in that checklist row.\n- Press Tab once and expect `instant`.\n- Press Command-Z and confirm only the accepted `ant` suffix is removed.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Use --visual when screenshot-backed placement must be proven.'
+          STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels` in that checklist row.\n- Press Tab once and expect ` instant`.\n- Press Command-Z and confirm only the accepted ` instant` insertion is removed.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         else
-          PROOF_LABEL="notes-checklist"
-          SESSION_NAME="Notes checklist"
+          PROOF_LABEL="${NOTES_PROOF_LABEL:-notes-checklist}"
+          case "$PROOF_LABEL" in
+            notes-checklist-checked)
+              SESSION_NAME="Notes checklist checked"
+              ;;
+            notes-checklist-long)
+              SESSION_NAME="Notes checklist long"
+              ;;
+            *)
+              SESSION_NAME="Notes checklist"
+              ;;
+          esac
           STEPS=$'- Open the disposable autocomplete smoke note.\n- Toggle Checklist and create a disposable checklist row.\n- Type `Smoke proof feels` in that checklist row.\n- Press Tab once and expect ` instant`.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and expect another ` instant` prediction.\n- Use --visual when screenshot-backed placement must be proven.'
         fi
         ;;
@@ -459,7 +529,7 @@ case "$APP" in
         OBSIDIAN_VARIANT="long-note"
         PROOF_LABEL="obsidian-long-note"
         SESSION_NAME="Obsidian long-note variant"
-        STEPS=$'- Use a disposable proof vault with a long note of at least 80 lines.\n- Scroll so the target writing line is not near the top of the note.\n- Put the caret on a visible scrolled line and type `Smoke proof feels inst`.\n- Confirm the ghost anchors to the visible scrolled caret, not the unscrolled editor origin.\n- Press Tab once and expect `instant` on that visible line.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion lands on the visible scrolled line.'
+        STEPS=$'- Use a disposable proof vault with a note that visibly scrolls.\n- Scroll so the target writing line is not near the top of the note.\n- Put the caret on a visible scrolled line and type `Smoke proof feels inst`.\n- Confirm the ghost anchors to the visible scrolled caret, not the unscrolled editor origin.\n- Press Tab once and expect `instant` on that visible line.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion lands on the visible scrolled line.'
         ;;
       *)
         echo "unknown Obsidian variant: $OBSIDIAN_VARIANT" >&2
@@ -473,7 +543,7 @@ case "$APP" in
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}}"
-    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, real Monaco editor, real ProseMirror editor, public text-field demo, official public editor demo, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Forced Chrome proof uses an isolated temp-profile Chrome with renderer accessibility enabled for local fixtures.\n- For default Chrome AX exposure proof, add `--chrome-accessibility default` and keep that proof label distinct.\n- For public text-field proof, use `textarea-public`, `contenteditable-public`, or `production-text-fields` and keep those proof labels distinct from local fixtures.\n- For public official editor demo proof, use `codemirror-official`, `monaco-official`, or `prosemirror-official` and keep those proof labels distinct from local fixtures.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
+    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, real Monaco editor, real ProseMirror editor, public text-field demo, official public editor demo, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field. The `codemirror-official` lane uses `Smoke proof feels dicta` to avoid CodeMirror built-in JavaScript keyword completion.\n- Confirm focus stays in the field.\n- Use Tab once and expect a one-word/suffix accept.\n- Type ` and stays inst`. The `codemirror-official` lane uses ` and stays dicta`.\n- Press the configured full-accept shortcut and expect another completion.\n- Forced Chrome proof uses an isolated temp-profile Chrome with renderer accessibility enabled for local fixtures.\n- For default Chrome AX exposure proof, add `--chrome-accessibility default` and keep that proof label distinct.\n- For public text-field proof, use `textarea-public`, `contenteditable-public`, or `production-text-fields` and keep those proof labels distinct from local fixtures.\n- For public official editor demo proof, use `codemirror-official`, `monaco-official`, or `prosemirror-official` and keep those proof labels distinct from local fixtures.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
     if [[ "$PROOF_LABEL" == "browser-chat-harness" ]]; then
       SESSION_NAME="Chrome browser-chat no-submit harness"
       REQUIRES_FULL_ACCEPT=0

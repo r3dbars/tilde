@@ -41,6 +41,11 @@ document.addEventListener("keydown", event => {
 }, true);
 
 function scheduleCompletion() {
+  if (!isAllowedLocation(window.location)) {
+    hideGhost();
+    return;
+  }
+
   const element = activeEditable();
   if (!element) {
     hideGhost();
@@ -60,7 +65,7 @@ function scheduleCompletion() {
       type: "completion-request",
       textBeforeCursor: context.textBeforeCursor,
       textAfterCursor: context.textAfterCursor,
-      location: window.location.href
+      location: safeLocation(window.location)
     }, response => {
       if (requestID !== state.requestID) return;
       const suggestion = trimPrefix(response?.text || "", context.textBeforeCursor);
@@ -84,10 +89,18 @@ function activeEditable() {
 function isEditable(element) {
   if (!element || element.disabled || element.readOnly) return false;
   if (element instanceof HTMLInputElement) {
-    return ["text", "search", "email", "url", "tel"].includes(element.type || "text");
+    return (element.type || "text") === "text";
   }
   if (element instanceof HTMLTextAreaElement) return true;
   return element.isContentEditable;
+}
+
+function isAllowedLocation(location) {
+  return ["localhost", "127.0.0.1", "[::1]", "::1"].includes(location.hostname);
+}
+
+function safeLocation(location) {
+  return `${location.protocol}//${location.host}`;
 }
 
 function readContext(element) {

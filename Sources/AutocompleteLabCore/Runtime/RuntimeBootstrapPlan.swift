@@ -272,7 +272,7 @@ public struct LocalModelAssetSource: Equatable, Sendable {
 
     public init(
         repoID: String,
-        revision: String = "main",
+        revision: String,
         allowPatterns: [String],
         estimatedBytes: Int64? = nil,
         licenseURL: String? = nil
@@ -303,6 +303,7 @@ public struct LocalModelAssetSource: Equatable, Sendable {
 
     public static let qwen35FourBMLX4Bit = LocalModelAssetSource(
         repoID: "mlx-community/Qwen3.5-4B-MLX-4bit",
+        revision: "32f3e8ecf65426fc3306969496342d504bfa13f3",
         allowPatterns: defaultMLXAllowPatterns,
         estimatedBytes: 3_030_000_000,
         licenseURL: "https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit"

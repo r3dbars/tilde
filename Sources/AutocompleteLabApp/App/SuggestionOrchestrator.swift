@@ -5,6 +5,7 @@ import AutocompleteLabCore
 final class SuggestionOrchestrator {
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
+    private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private let suggestionPresentationGate: SuggestionPresentationGate
     private let suggestionReplacementPolicy: SuggestionReplacementPolicy
@@ -16,12 +17,14 @@ final class SuggestionOrchestrator {
     init(
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
+        commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
         prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
+        self.commonPhrasePredictor = commonPhrasePredictor
         self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
         self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
@@ -387,6 +390,28 @@ final class SuggestionOrchestrator {
             for: textBeforeCursor,
             recentWords: recentWords,
             allowPredictiveFallback: allowPredictiveFallback
+        )
+    }
+
+    nonisolated func fastPhraseSelection(
+        for textBeforeCursor: String,
+        behaviorProfileID: AutocompleteBehaviorProfileID?,
+        maxVisibleWords: Int,
+        allowPredictiveFallback: Bool = false
+    ) -> CommonPhraseContinuationSelection {
+        guard allowPredictiveFallback else {
+            return CommonPhraseContinuationSelection(
+                suggestion: nil,
+                matchedContextSuffix: nil,
+                score: nil,
+                suppressionReason: "disabled"
+            )
+        }
+
+        return commonPhrasePredictor.selection(
+            for: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID,
+            maxVisibleWords: maxVisibleWords
         )
     }
 

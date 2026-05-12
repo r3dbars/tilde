@@ -122,7 +122,7 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/textedit-inline.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "TextEdit/default")
             ],
-            notes: "Reference native target with current strict visual and insertion proof."
+            notes: "Reference native target with recorded strict visual and insertion proof; current-head freshness is checked separately."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.Notes",
