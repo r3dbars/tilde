@@ -6008,6 +6008,15 @@ obsidian_reset_text_for_variant() {
   printf '%s' "$marker"
 }
 
+seed_obsidian_proof_vault_note() {
+  local reset_text="$1"
+  local proof_vault="$HOME/Library/Application Support/AutocompleteLab/ObsidianProofVault"
+  local proof_note="$proof_vault/Proof/placement-proof.md"
+
+  mkdir -p "$(dirname "$proof_note")"
+  printf '%s\n' "$reset_text" >"$proof_note"
+}
+
 open_obsidian_smoke_note_if_configured() {
   local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
   if [[ -n "$smoke_uri" ]]; then
@@ -6052,11 +6061,12 @@ run_obsidian() {
 
   full_accept_key="$(accept_all_shortcut)"
 
+  local obsidian_reset_text
+  obsidian_reset_text="$(obsidian_reset_text_for_variant "$manual_app")"
+  seed_obsidian_proof_vault_note "$obsidian_reset_text"
   open_obsidian_smoke_note_if_configured
   wait_for_frontmost_app "Obsidian" 8
   assert_obsidian_smoke_target
-  local obsidian_reset_text
-  obsidian_reset_text="$(obsidian_reset_text_for_variant "$manual_app")"
   AUTOCOMPLETE_LAB_OBSIDIAN_RESET_TEXT="$obsidian_reset_text" reset_obsidian_smoke_note
 
   start_line="$(line_count "$LOG_PATH")"
