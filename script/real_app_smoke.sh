@@ -6659,11 +6659,9 @@ describe_plan() {
 build_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
+      AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
     )
-    if [[ "$APP" == "codex" ]] || screenshot_trace_requested; then
-      build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)
-    fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
     wait_for_current_autocomplete_lab_process
   fi

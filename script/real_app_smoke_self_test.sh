@@ -51,12 +51,12 @@ if ! grep -F "Chrome setup text first tries DevTools/DOM or AX value replacement
   exit 1
 fi
 
-if ! grep -F 'build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Codex proof to direct-launch the current app bundle" >&2
+if ! grep -F 'AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof runs to direct-launch the current app bundle" >&2
   exit 1
 fi
-if ! grep -F '|| screenshot_trace_requested' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected screenshot proof to direct-launch the current app bundle" >&2
+if grep -F '|| screenshot_trace_requested' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected direct launch to be unconditional for proof runs" >&2
   exit 1
 fi
 if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev/null; then
