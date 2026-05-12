@@ -77,7 +77,7 @@ if ! grep -F "Typing focus guard: verifies TextEdit is frontmost before each gen
   exit 1
 fi
 
-if ! grep -F "Concurrency guard: serializes TextEdit soak runs with a setup lock" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Concurrency guard: serializes TextEdit soak build, launch, setup, and typing" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain the TextEdit soak lock" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1

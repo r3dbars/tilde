@@ -883,7 +883,7 @@ describe_plan() {
   echo "Typing driver: CGEvent Unicode key events after target-window focus"
   echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
   echo "Typing focus guard: verifies TextEdit is frontmost before each generated key"
-  echo "Concurrency guard: serializes TextEdit soak runs with a setup lock"
+  echo "Concurrency guard: serializes TextEdit soak build, launch, setup, and typing"
   echo "Setup cleanup: closes old generated TextEdit soak documents before typing"
   echo "AX warmup: waits for a focused-text poll summary before typing"
   echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay and ${KEY_DELAY_US}us key spacing"
@@ -919,7 +919,6 @@ type_textedit_fixture() {
   SOAK_TARGET_TEXT_FILE="$target_file"
   SOAK_TARGET_DOCUMENT_NAME=""
   generate_soak_text "$TARGET_CHARS" >"$text_file"
-  acquire_soak_lock
   SOAK_TARGET_DOCUMENT_NAME="$(prepare_textedit_document "$SOAK_TARGET_TEXT_FILE")"
   wait_for_stable_textedit_focus "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1
@@ -1207,6 +1206,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
 
+acquire_soak_lock
 runtime_start_line="$(line_count "$LOG_PATH")"
 prepare_temporary_textedit_enablement
 prepare_temporary_suggestions_resume
