@@ -424,7 +424,7 @@ for app_entry in "${APPS[@]}"; do
     if line_has_current_build_proof "$pass_line"; then
       echo "- $display_name: passed$pass_suffix"
     else
-      echo "- $display_name: stale pass (needs current commit/archive proof; run $run_hint)"
+      echo "- $display_name: stale pass (needs current app/source proof; run $run_hint)"
       missing=$((missing + 1))
       pending_apps+=("$display_name - $run_hint")
     fi

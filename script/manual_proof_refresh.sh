@@ -21,8 +21,8 @@ Usage: script/manual_proof_refresh.sh [--print|--dry-run|--run] [--target SLUG|-
        script/manual_proof_refresh.sh --verify-target SLUG
 
 Prints exact stale/pending proof refresh commands, runs selected recorder
-commands, and verifies that the latest proof row uses the current commit or
-archive checksum.
+commands, and verifies that the latest proof row matches the current app,
+archive, commit, or source-compatible commit fingerprint.
 
 Examples:
   script/manual_proof_refresh.sh --print
@@ -247,10 +247,44 @@ line_has_current_commit_or_archive() {
   return 1
 }
 
+line_commit_proof_token() {
+  local line="$1"
+
+  if [[ "$line" =~ commit:([0-9a-fA-F]{7,40}) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
+line_has_source_compatible_commit_proof() {
+  local line="$1"
+  local proof_token
+  proof_token="$(line_commit_proof_token "$line")"
+  [[ -n "$proof_token" ]] || return 1
+
+  local proof_commit
+  proof_commit="$(git rev-parse --verify --quiet "$proof_token^{commit}" 2>/dev/null || true)"
+  [[ -n "$proof_commit" ]] || return 1
+
+  local current_commit
+  current_commit="$(git rev-parse --verify --quiet HEAD^{commit} 2>/dev/null || true)"
+  [[ -n "$current_commit" ]] || return 1
+
+  if [[ "$proof_commit" == "$current_commit" ]]; then
+    return 0
+  fi
+
+  local source_paths_raw="${AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS:-Package.swift Package.resolved Sources}"
+  local -a source_paths=()
+  read -r -a source_paths <<<"$source_paths_raw"
+  (( ${#source_paths[@]} > 0 )) || return 1
+
+  git diff --quiet "$proof_commit".."$current_commit" -- "${source_paths[@]}"
+}
+
 classify_current_commit_or_archive() {
   local line="$1"
   TARGET_STATUS="stale"
-  TARGET_STATUS_REASON="missing current commit/archive fingerprint"
+  TARGET_STATUS_REASON="missing current app/source proof fingerprint"
 
   if [[ -n "$CURRENT_COMMIT_PROOF" && "$line" == *"$CURRENT_COMMIT_PROOF"* ]]; then
     TARGET_STATUS="current"
@@ -267,6 +301,12 @@ classify_current_commit_or_archive() {
   if [[ -n "$CURRENT_ARCHIVE_PROOF" && "$line" == *"$CURRENT_ARCHIVE_PROOF"* ]]; then
     TARGET_STATUS="current"
     TARGET_STATUS_REASON="current archive fingerprint"
+    return 0
+  fi
+
+  if line_has_source_compatible_commit_proof "$line"; then
+    TARGET_STATUS="current"
+    TARGET_STATUS_REASON="source-compatible commit fingerprint"
     return 0
   fi
 

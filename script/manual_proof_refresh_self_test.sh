@@ -83,6 +83,31 @@ if ! grep -F "stale commit fingerprint" "$OUTPUT" >/dev/null; then
   exit 1
 fi
 
+SOURCE_COMPATIBLE_COMMIT="$(git rev-parse --short=12 HEAD~1 2>/dev/null || true)"
+if [[ -n "$SOURCE_COMPATIBLE_COMMIT" ]]; then
+  write_report_header "$STALE_REPORT"
+  cat >>"$STALE_REPORT" <<EOF
+| 2026-05-09T00:00:00Z | TextEdit | \`com.apple.TextEdit\` | \`default\` | 2 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$SOURCE_COMPATIBLE_COMMIT\` |
+EOF
+
+  if ! AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS="__manual_proof_refresh_self_test_no_source_path__" \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+    script/manual_proof_refresh.sh --verify-target textedit >"$OUTPUT" 2>&1; then
+    echo "manual proof refresh self-test should accept source-compatible commit proof" >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_PROOF_SOURCE_PATHS="__manual_proof_refresh_self_test_no_source_path__" \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$STALE_REPORT" \
+    script/manual_proof_refresh.sh --print --target textedit >"$OUTPUT"
+
+  if ! grep -F -- "- TextEdit: current (source-compatible commit fingerprint)" "$OUTPUT" >/dev/null; then
+    echo "manual proof refresh self-test did not summarize source-compatible commit proof" >&2
+    cat "$OUTPUT" >&2
+    exit 1
+  fi
+fi
+
 printf 'same app binary\n' >"$APP_BINARY"
 APP_SHA="$(shasum -a 256 "$APP_BINARY" | awk '{print $1}')"
 write_report_header "$STALE_REPORT"
@@ -165,7 +190,7 @@ if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
   exit 1
 fi
 
-if ! grep -F "missing current commit/archive fingerprint" "$OUTPUT" >/dev/null; then
+if ! grep -F "missing current app/source proof fingerprint" "$OUTPUT" >/dev/null; then
   echo "manual proof refresh self-test did not explain missing proof fingerprint" >&2
   exit 1
 fi
