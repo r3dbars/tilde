@@ -8219,7 +8219,9 @@ run_textedit() {
   focus_textedit_smoke_editor "$textedit_window_title"
   click_textedit_smoke_editor "$textedit_window_title"
   set_textedit_document_text "$textedit_window_title" ""
+  wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit initial reset" 5
   click_textedit_smoke_editor "$textedit_window_title"
+  move_textedit_caret_to_document_end "$textedit_window_title"
 
   if [[ "$TEXTEDIT_VARIANT" == "scrolled" ]]; then
     local scrolled_prefill
@@ -8245,6 +8247,8 @@ run_textedit() {
   manual_app="$(textedit_smoke_session_app)"
 
   type_textedit_smoke_fragment_and_confirm "$textedit_window_title" "$first_fragment" "first typed"
+  wait_for_textedit_document_exact "$textedit_window_title" "$first_fragment" "TextEdit first typed exact" 5
+  move_textedit_caret_to_document_end "$textedit_window_title"
 
   if [[ "$TEXTEDIT_VARIANT" == "selected-suppression" ]]; then
     set_textedit_selected_range "$textedit_window_title" 0 8
