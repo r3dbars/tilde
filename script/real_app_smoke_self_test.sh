@@ -278,7 +278,15 @@ fi
 
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
   script/real_app_smoke.sh "$obsidian_variant" --dry-run >"$TMP_DIR/$obsidian_variant.txt"
-  if ! grep -F "manual-gated Obsidian" "$TMP_DIR/$obsidian_variant.txt" >/dev/null; then
+  case "$obsidian_variant" in
+    obsidian-theme)
+      expected_plan="guarded Obsidian non-default theme proof"
+      ;;
+    *)
+      expected_plan="manual-gated Obsidian"
+      ;;
+  esac
+  if ! grep -F "$expected_plan" "$TMP_DIR/$obsidian_variant.txt" >/dev/null; then
     echo "real app smoke self-test did not print the $obsidian_variant proof plan" >&2
     exit 1
   fi
