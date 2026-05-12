@@ -2793,7 +2793,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 handled: false,
                 reason: "focus-changed"
             )
-            return .replayOriginalKey(.focusChanged)
+            return keyboardCaptureSafetyPolicy.handlingResultForFocusMismatch(key: key)
         }
         recordClaudeCodeTerminalHostProofKeyboardProgress(
             stage: "focus-check-passed",
@@ -2849,7 +2849,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
                 recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason)
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason, key: key)
             }
 
             let acceptanceID = UUID().uuidString
@@ -2947,7 +2947,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
                 recordKeyboardAction(key: key, action: action, handled: false, reason: blockReason.rawValue)
-                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason)
+                return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceBlock: blockReason, key: key)
             }
 
             let acceptanceID = UUID().uuidString
@@ -3101,6 +3101,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        guard browserHostedSurfacePolicy.decision(
+            bundleIdentifier: frontmostApp.bundleIdentifier,
+            fingerprint: rawContext.fingerprint
+        ).canSuggest else {
+            blockReason = .currentBecameSuppressedField
+            return nil
+        }
+
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
@@ -3208,6 +3216,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               promptTextAreaMatch(
                   for: frontmostApp.bundleIdentifier,
                   context: rawContext
+              ).canSuggest,
+              browserHostedSurfacePolicy.decision(
+                  bundleIdentifier: frontmostApp.bundleIdentifier,
+                  fingerprint: rawContext.fingerprint
               ).canSuggest else {
             return false
         }

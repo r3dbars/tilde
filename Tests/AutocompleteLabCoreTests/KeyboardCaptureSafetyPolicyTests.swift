@@ -19,10 +19,55 @@ struct KeyboardCaptureSafetyPolicyTests {
 
         for reason in blockReasons {
             #expect(
-                policy.handlingResult(forAcceptanceBlock: reason)
+                policy.handlingResult(forAcceptanceBlock: reason, key: .other)
                     == .replayOriginalKey(.acceptanceTargetChanged)
             )
         }
+    }
+
+    @Test("Ordinary acceptance blocks drop consumed accept keys")
+    func ordinaryAcceptanceBlocksDropConsumedAcceptKeys() {
+        let policy = KeyboardCaptureSafetyPolicy()
+        let blockReasons: [SuggestionAcceptanceBlockReason] = [
+            .appChanged,
+            .fieldChanged,
+            .selectedTextChanged,
+            .textBeforeCursorChanged,
+            .textAfterCursorChanged,
+            .missingShownSnapshot,
+            .missingCurrentSnapshot,
+            .targetFingerprintChanged
+        ]
+
+        for key in [AutocompleteKey.tab, .backtick, .optionTab] {
+            for reason in blockReasons {
+                #expect(
+                    policy.handlingResult(forAcceptanceBlock: reason, key: key)
+                        == .dropOriginalKey(.acceptanceTargetChangedBeforeAccept)
+                )
+            }
+        }
+    }
+
+    @Test("Focus mismatch before accept drops consumed accept keys")
+    func focusMismatchBeforeAcceptDropsConsumedAcceptKeys() {
+        let policy = KeyboardCaptureSafetyPolicy()
+
+        for key in [AutocompleteKey.tab, .backtick, .optionTab] {
+            #expect(
+                policy.handlingResultForFocusMismatch(key: key)
+                    == .dropOriginalKey(.acceptanceTargetChangedBeforeAccept)
+            )
+        }
+
+        #expect(
+            policy.handlingResultForFocusMismatch(key: .escape)
+                == .replayOriginalKey(.focusChanged)
+        )
+        #expect(
+            policy.handlingResultForFocusMismatch(key: .other)
+                == .replayOriginalKey(.focusChanged)
+        )
     }
 
     @Test("Sensitive acceptance blocks drop the captured key")
