@@ -75,6 +75,17 @@ Overall score: $score/100
 EOF
 }
 
+write_onboarding_permission() {
+  local path="$1"
+  local score="$2"
+
+  cat >"$path" <<EOF
+# Onboarding Permission UX Scorecard
+
+Overall score: **$score/100**
+EOF
+}
+
 write_app_proof() {
   local path="$1"
   local grade="$2"
@@ -91,23 +102,27 @@ EOF
 PASSING_DEEP="$TMP_DIR/deep-pass.md"
 PASSING_RESEARCH="$TMP_DIR/research-pass.md"
 PASSING_OVERALL="$TMP_DIR/overall-pass.md"
+PASSING_ONBOARDING="$TMP_DIR/onboarding-pass.md"
 PASSING_APPLE="$TMP_DIR/apple-pass.md"
 PASSING_PROOF="$TMP_DIR/proof-pass.md"
 FAILING_DEEP="$TMP_DIR/deep-fail.md"
 FAILING_RESEARCH="$TMP_DIR/research-fail.md"
 FAILING_OVERALL="$TMP_DIR/overall-fail.md"
+FAILING_ONBOARDING="$TMP_DIR/onboarding-fail.md"
 FAILING_APPLE="$TMP_DIR/apple-fail.md"
 FAILING_PROOF="$TMP_DIR/proof-fail.md"
 
 write_deep_dive "$PASSING_DEEP" 10 10
 write_deep_research "$PASSING_RESEARCH" 100 complete
 write_overall_excellence "$PASSING_OVERALL" 100
+write_onboarding_permission "$PASSING_ONBOARDING" 100
 write_apple_native "$PASSING_APPLE" 100 100
 write_app_proof "$PASSING_PROOF" A
 
 AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD="$PASSING_DEEP" \
 AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD="$PASSING_RESEARCH" \
 AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD="$PASSING_OVERALL" \
+AUTOCOMPLETE_LAB_ONBOARDING_PERMISSION_SCORECARD="$PASSING_ONBOARDING" \
 AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST="$PASSING_APPLE" \
 AUTOCOMPLETE_LAB_APP_PROOF_MATRIX="$PASSING_PROOF" \
   script/check_score_targets.sh >"$TMP_DIR/passing.txt"
@@ -128,6 +143,7 @@ chmod +x "$GATE_FAIL_SCRIPT"
 if AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD="$PASSING_DEEP" \
   AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD="$PASSING_RESEARCH" \
   AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD="$PASSING_OVERALL" \
+  AUTOCOMPLETE_LAB_ONBOARDING_PERMISSION_SCORECARD="$PASSING_ONBOARDING" \
   AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST="$PASSING_APPLE" \
   AUTOCOMPLETE_LAB_APP_PROOF_MATRIX="$PASSING_PROOF" \
   AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES=always \
@@ -157,12 +173,14 @@ done
 write_deep_dive "$FAILING_DEEP" 8.9 9.7
 write_deep_research "$FAILING_RESEARCH" 99 "not complete"
 write_overall_excellence "$FAILING_OVERALL" 75
+write_onboarding_permission "$FAILING_ONBOARDING" 92
 write_apple_native "$FAILING_APPLE" 82 92
 write_app_proof "$FAILING_PROOF" B-
 
 if AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD="$FAILING_DEEP" \
   AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD="$FAILING_RESEARCH" \
   AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD="$FAILING_OVERALL" \
+  AUTOCOMPLETE_LAB_ONBOARDING_PERMISSION_SCORECARD="$FAILING_ONBOARDING" \
   AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST="$FAILING_APPLE" \
   AUTOCOMPLETE_LAB_APP_PROOF_MATRIX="$FAILING_PROOF" \
   script/check_score_targets.sh >"$TMP_DIR/failing.txt" 2>&1; then
@@ -176,6 +194,7 @@ for expected in \
   "$FAILING_RESEARCH: Current implementation score is 99/100" \
   "$FAILING_RESEARCH: Proof status is not complete" \
   "$FAILING_OVERALL: Overall excellence score is 75/100" \
+  "$FAILING_ONBOARDING: Onboarding permission score is 92/100" \
   "$FAILING_APPLE: Overall Apple-native feel is 82/100" \
   "$FAILING_APPLE: Typing must feel untouched is 92/100" \
   "$FAILING_APPLE: Category 1 current score is 92/100" \
@@ -193,7 +212,7 @@ for expected in \
   "Finish remaining prompt-app layout and full-accept proof without counting stale trace history." \
   "Real-app variant proof: 2 issue(s)" \
   "Typing restraint and noise: 2 issue(s)" \
-  "Release and architecture polish: 6 issue(s)"; do
+  "Release and architecture polish: 7 issue(s)"; do
   if ! grep -F -- "$expected" "$TMP_DIR/failing.txt" >/dev/null; then
     echo "score target self-test missing expected blocker summary: $expected" >&2
     cat "$TMP_DIR/failing.txt" >&2
