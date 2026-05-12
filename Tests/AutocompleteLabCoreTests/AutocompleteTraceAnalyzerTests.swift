@@ -937,7 +937,9 @@ struct AutocompleteTraceAnalyzerTests {
             event(
                 .suggestionPresented,
                 suggestionID: "normal",
-                metadata: ["fieldKind": "multilineCompose"]
+                metadata: [
+                    "fieldKind": "body"
+                ]
             )
         ]
 

@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-DEFAULT_TRACE = Path.home() / "Library/Logs/AutocompleteLab/traces.jsonl"
+DEFAULT_TRACE = Path.home() / "Library/Logs/SteadyType/traces.jsonl"
 
 
 def percentile(values, fraction):
@@ -200,7 +200,7 @@ def read_events(path, start_line):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Print a local Autocomplete Lab experiment report.")
+    parser = argparse.ArgumentParser(description="Print a local SteadyType experiment report.")
     parser.add_argument("--trace", default=str(DEFAULT_TRACE), help="trace JSONL path")
     parser.add_argument("--start-line", type=int, default=0, help="skip events through this line")
     parser.add_argument("--tester", help="show deterministic counterbalanced order for this tester")

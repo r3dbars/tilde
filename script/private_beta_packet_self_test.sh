@@ -10,7 +10,7 @@ DAILY_TEMPLATE="$(./script/private_beta_packet.sh --print-daily-checklist-templa
 EXPORT_TEMPLATE="$(./script/private_beta_packet.sh --print-redacted-export-template)"
 TRIAGE_TEMPLATE="$(./script/private_beta_packet.sh --print-feedback-triage-template)"
 STOP_TEMPLATE="$(./script/private_beta_packet.sh --print-stop-dashboard-template)"
-MODEL_TEMPLATE="$(./script/private_beta_packet.sh --print-model-asset-template "/tmp/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit")"
+MODEL_TEMPLATE="$(./script/private_beta_packet.sh --print-model-asset-template "/tmp/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit")"
 
 require_contains() {
   local text="$1"
@@ -71,7 +71,7 @@ require_contains "$MODEL_TEMPLATE" 'use the Settings `Install'
 require_contains "$MODEL_TEMPLATE" "If that in-app setup"
 require_contains "$MODEL_TEMPLATE" "stop the beta session"
 require_contains "$MODEL_TEMPLATE" "Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any"
-require_contains "$MODEL_TEMPLATE" "/tmp/AutocompleteLab/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"
+require_contains "$MODEL_TEMPLATE" "/tmp/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"
 
 reject_contains "$MODEL_TEMPLATE" "python3 -m pip install"
 reject_contains "$MODEL_TEMPLATE" "./script/download_mlx_model.py"

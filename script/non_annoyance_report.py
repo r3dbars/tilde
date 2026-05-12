@@ -23,7 +23,7 @@ TEXT_KEYS = {
 def parse_args():
     default_trace = os.environ.get(
         "AUTOCOMPLETE_LAB_TRACE_PATH",
-        str(Path.home() / "Library/Logs/AutocompleteLab/traces.jsonl"),
+        str(Path.home() / "Library/Logs/SteadyType/traces.jsonl"),
     )
     parser = argparse.ArgumentParser(description="Gate redacted autocomplete non-annoyance rates.")
     parser.add_argument("trace", nargs="?", default=default_trace)

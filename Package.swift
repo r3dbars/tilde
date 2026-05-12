@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "TranscriptedAutocompleteLab",
+    name: "SteadyType",
     platforms: [
         .macOS(.v26)
     ],
@@ -13,7 +13,7 @@ let package = Package(
             targets: ["AutocompleteLabCore"]
         ),
         .executable(
-            name: "AutocompleteLab",
+            name: "SteadyType",
             targets: ["AutocompleteLabApp"]
         ),
         .executable(

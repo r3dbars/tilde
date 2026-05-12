@@ -67,7 +67,7 @@ struct BrowserHostedSurfacePolicyTests {
             fingerprint: FocusedElementFingerprint(
                 title: "Local ProseMirror-like smoke fixture",
                 description: "Real ProseMirror smoke editor",
-                windowTitle: "Autocomplete Lab Chrome Real ProseMirror Smoke [ready=1]"
+                windowTitle: "SteadyType Chrome Real ProseMirror Smoke [ready=1]"
             )
         )
 

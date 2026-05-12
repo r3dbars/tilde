@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
 START_LINE="${AUTOCOMPLETE_LAB_LOG_START_LINE:-0}"
 LINE_LIMIT="${AUTOCOMPLETE_LAB_TYPING_PERF_LOG_LINES:-5000}"
 MAX_SAMPLE_MICROS="${AUTOCOMPLETE_LAB_EVENT_TAP_MAX_MICROS:-8000}"
