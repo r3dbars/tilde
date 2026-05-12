@@ -168,7 +168,7 @@ def event_mode(event):
     return event.get("requestMode") or metadata_value(event, "requestMode", "unknown")
 
 
-def line_slice(path, start_line, line_limit):
+def line_slice(path, start_line, line_limit, end_line=None):
     if not path.exists():
         return []
 
@@ -177,6 +177,8 @@ def line_slice(path, start_line, line_limit):
         for line_number, line in enumerate(handle, start=1):
             if line_number <= start_line:
                 continue
+            if end_line is not None and line_number > end_line:
+                break
             stripped = line.strip()
             if stripped:
                 selected.append((line_number, stripped))
@@ -186,7 +188,7 @@ def line_slice(path, start_line, line_limit):
     return selected
 
 
-def parse_trace_log(path, start_line, line_limit, late_visible_budget_ms):
+def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_ms):
     first_visible = []
     first_token = []
     total_generation = []
@@ -196,7 +198,7 @@ def parse_trace_log(path, start_line, line_limit, late_visible_budget_ms):
     seen_model = set()
     malformed = []
 
-    for line_number, line in line_slice(path, start_line, line_limit):
+    for line_number, line in line_slice(path, start_line, line_limit, end_line):
         try:
             event = json.loads(line)
         except json.JSONDecodeError as error:
@@ -272,7 +274,7 @@ def is_stale_late_suppression(suppression, late_visible_budget_ms, metadata):
     return any("too-slow" in str(value).lower() for value in metadata.values())
 
 
-def parse_diagnostics_log(path, start_line, line_limit):
+def parse_diagnostics_log(path, start_line, end_line, line_limit):
     presented = []
     first_token = []
     total_generation = []
@@ -287,7 +289,7 @@ def parse_diagnostics_log(path, start_line, line_limit):
     malformed = []
     seen_presented = set()
 
-    for line_number, line in line_slice(path, start_line, line_limit):
+    for line_number, line in line_slice(path, start_line, line_limit, end_line):
         parts = line.split()
         if len(parts) < 2:
             continue
@@ -441,7 +443,9 @@ def print_report(args, trace_data, diagnostics_data):
     print(f"Diagnostics log: {args.diagnostics_log}")
     print(f"Trace log: {args.trace_log}")
     print(f"Diagnostics start line: {args.diagnostics_start_line}")
+    print(f"Diagnostics end line: {args.diagnostics_end_line or 'none'}")
     print(f"Trace start line: {args.trace_start_line}")
+    print(f"Trace end line: {args.trace_end_line or 'none'}")
     print(f"Line limit: {args.line_limit if args.line_limit > 0 else 'all'}")
     print()
     print(metric_line("First visible / keystroke-to-visible", first_visible, "ms"))
@@ -734,6 +738,27 @@ def env_start_line(name):
         raise SystemExit(f"{name} must be an integer line number, got {value!r}")
 
 
+def env_end_line(name):
+    value = os.environ.get(name, "")
+    if not value:
+        return None
+    try:
+        line = int(value)
+    except ValueError:
+        raise SystemExit(f"{name} must be an integer line number, got {value!r}")
+    if line < 0:
+        raise SystemExit(f"{name} must be a non-negative line number, got {value!r}")
+    return line
+
+
+def validate_end_line(label, start_line, end_line):
+    if end_line is None:
+        return None
+    if end_line < start_line:
+        raise SystemExit(f"{label} end line {end_line} is before start line {start_line}")
+    return end_line
+
+
 def should_enforce(args):
     if args.beta_gate:
         return True
@@ -771,10 +796,22 @@ def main():
         help="ignore diagnostics lines at or before this 1-based line number",
     )
     parser.add_argument(
+        "--diagnostics-end-line",
+        type=int,
+        default=env_end_line("AUTOCOMPLETE_LAB_LOG_END_LINE"),
+        help="ignore diagnostics lines after this 1-based line number",
+    )
+    parser.add_argument(
         "--trace-start-line",
         type=int,
         default=env_start_line("AUTOCOMPLETE_LAB_TRACE_START_LINE"),
         help="ignore trace lines at or before this 1-based line number",
+    )
+    parser.add_argument(
+        "--trace-end-line",
+        type=int,
+        default=env_end_line("AUTOCOMPLETE_LAB_TRACE_END_LINE"),
+        help="ignore trace lines after this 1-based line number",
     )
     parser.add_argument(
         "--line-limit",
@@ -860,15 +897,28 @@ def main():
             f"missing latency inputs: {diagnostics_path} and {trace_path}"
         )
 
+    args.diagnostics_end_line = validate_end_line(
+        "diagnostics",
+        max(0, args.diagnostics_start_line),
+        args.diagnostics_end_line,
+    )
+    args.trace_end_line = validate_end_line(
+        "trace",
+        max(0, args.trace_start_line),
+        args.trace_end_line,
+    )
+
     trace_data = parse_trace_log(
         trace_path,
         max(0, args.trace_start_line),
+        args.trace_end_line,
         max(0, args.line_limit),
         args.late_visible_budget_ms,
     )
     diagnostics_data = parse_diagnostics_log(
         diagnostics_path,
         max(0, args.diagnostics_start_line),
+        args.diagnostics_end_line,
         max(0, args.line_limit),
     )
 
