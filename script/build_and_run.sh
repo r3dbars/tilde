@@ -110,6 +110,10 @@ stop_running_apps() {
 }
 
 current_bundle_is_running() {
+  [[ -n "$(current_bundle_pid)" ]]
+}
+
+current_bundle_pid() {
   local command
   local pid
 
@@ -117,11 +121,19 @@ current_bundle_is_running() {
     [[ -z "$pid" ]] && continue
     command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
     if [[ "$command" == "$APP_BINARY" ]]; then
+      echo "$pid"
       return 0
     fi
   done < <(running_app_pids)
 
   return 1
+}
+
+pid_is_current_bundle() {
+  local pid="$1"
+  local command
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ "$command" == "$APP_BINARY" ]]
 }
 
 stale_bundle_is_running() {
@@ -418,6 +430,7 @@ case "$MODE" in
     for attempt in {1..2}; do
       open_app
       for _ in {1..30}; do
+        current_pid=""
         if stale_bundle_is_running; then
           if [[ "$attempt" == "1" ]]; then
             stop_running_apps
@@ -428,7 +441,8 @@ case "$MODE" in
           print_running_apps
           exit 1
         fi
-        if current_bundle_is_running; then
+        current_pid="$(current_bundle_pid || true)"
+        if [[ -n "$current_pid" ]]; then
           sleep "${AUTOCOMPLETE_LAB_VERIFY_STABILITY_SECONDS:-20}"
           if stale_bundle_is_running; then
             if [[ "$attempt" == "1" ]]; then
@@ -440,14 +454,14 @@ case "$MODE" in
             print_running_apps
             exit 1
           fi
-          if current_bundle_is_running; then
+          if pid_is_current_bundle "$current_pid"; then
             exit 0
           fi
           if [[ "$attempt" == "1" ]]; then
             stop_running_apps
             break
           fi
-          echo "$APP_NAME exited during the verification stability window; expected $APP_BINARY to keep running" >&2
+          echo "$APP_NAME exited or restarted during the verification stability window; expected pid $current_pid at $APP_BINARY to keep running" >&2
           exit 1
         fi
         sleep 1
