@@ -18,7 +18,7 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 | Online notepad and MediumEditor-style public text fields | Fresh `textarea-public` and `contenteditable-public` rows at `2026-05-12T05:09:32Z` and `2026-05-12T05:09:52Z` | Passed |
 | Normal-Chrome Monaco/ProseMirror default AX | `prosemirror-real-default` passed at `2026-05-12T05:38:52Z` with 2 verified accepts and strict visual trace evidence. `monaco-real-default` still fails closed before proof because Chrome exposes Monaco's hidden textarea without a stable editable value path. | Partial |
 | Obsidian | Default proof passed at `2026-05-12T05:42:47Z` and theme proof passed at `2026-05-12T05:44:48Z` with 2 verified accepts after opening the dedicated proof-vault note by URI; pane and long-note variants remain pending | Partial |
-| Codex, Claude Code, Claude desktop | Existing stale/manual-gated rows only; not rerun unattended | Blocked by manual gate |
+| Codex, Claude Code, Claude desktop | Codex current-binary rerun reached visible suggestion proof but failed before accept because Tab was rejected as `focus-changed`; Claude Code and Claude desktop still have stale/manual-gated rows only | Blocked by prompt proof |
 | Privacy of reports | Manual rows store redacted log/trace slices and proof fingerprints, not raw user text | Passed |
 | Verification commands | `bash -n`; `./script/real_app_smoke_self_test.sh`; `./script/manual_smoke_self_test.sh`; `./script/check_proof_manifest.sh`; `./script/manual_proof_refresh_self_test.sh`; `swift test --filter CompletionPredictionQualityEvalTests --jobs 1`; `./script/check_quality_eval.sh`; `git diff --check`; targeted manual proof verifies; `./script/check_score_targets.sh` | Passed for changed slices; score target still fails honestly with 57 issues |
 
@@ -37,7 +37,8 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 ## Remaining Blockers
 
 - Obsidian pane and long-note lanes need current proof after the dedicated proof-vault setup is adapted to each variant.
-- Codex and Claude lanes need manual no-submit confirmation on the current app binary.
+- Codex needs a focus-stability fix before current-binary one-word no-submit proof can pass.
+- Claude Code and Claude desktop lanes need manual no-submit confirmation on the current app binary.
 - Normal-Chrome default AX proof for local real Monaco still needs a stable setup path; ProseMirror default AX is now current.
 - Production official CodeMirror, Monaco, and ProseMirror site variants still need bounded screenshot-backed traces. `codemirror-official` was attempted on 2026-05-12 and failed closed before typing because Chrome's Allow JavaScript from Apple Events setting is disabled.
 - `./script/check_score_targets.sh` should keep failing until those proof gates close.

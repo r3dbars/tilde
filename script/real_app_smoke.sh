@@ -4004,7 +4004,7 @@ codex_proof_text() {
 
 seed_codex_proof_prompt() {
   local proof_text="$1"
-  local backup_path="$2"
+  local backup_path="${2:-}"
 
   swift - "$proof_text" "$backup_path" <<'SWIFT'
 import AppKit

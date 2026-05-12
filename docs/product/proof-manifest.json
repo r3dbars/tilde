@@ -536,7 +536,7 @@
         "docs/product/visual-placement-screenshots/codex-inline.png"
       ],
       "gaps": [
-        "Historical Codex no-submit proof exists, but it is stale after the latest app fingerprint and needs a fresh current-binary manual-gated row."
+        "Historical Codex no-submit proof exists, but it is stale after the latest app fingerprint. The 2026-05-12 current-binary rerun restored the existing draft safely but failed before proof because Tab was rejected as focus-changed."
       ]
     },
     {
