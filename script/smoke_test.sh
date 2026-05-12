@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
 LOG_START_LINE=0
 if [[ -f "$LOG_PATH" ]]; then
   LOG_START_LINE="$(wc -l <"$LOG_PATH" | tr -d ' ')"
@@ -52,4 +52,4 @@ echo "Manual app smoke checklist: docs/product/manual-smoke-checklist.md"
 echo "Manual app smoke recorder: script/manual_smoke_session.sh <textedit|notes|obsidian|chrome|codex|claude>"
 echo "Claude Code remains diagnostics-only until terminal-host proof exists."
 echo "Manual app smoke status: script/manual_smoke_status.sh"
-echo "Diagnostics log: $HOME/Library/Logs/AutocompleteLab/diagnostics.log"
+echo "Diagnostics log: $HOME/Library/Logs/SteadyType/diagnostics.log"

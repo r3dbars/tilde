@@ -25,7 +25,7 @@ struct DiagnosticsNativeAppearanceSnapshotTests {
                 isReady: true
             ),
             runtimeTargetSummary: "Qwen local • short completions • normal",
-            modelDirectoryPath: "/Users/example/Library/Application Support/AutocompleteLab/Models",
+            modelDirectoryPath: "/Users/example/Library/Application Support/SteadyType/Models",
             recentEvents: [
                 "launch accessibility=true",
                 "suggestion-panel-frame renderMode=inlineAdjacent",
@@ -47,10 +47,10 @@ struct DiagnosticsNativeAppearanceSnapshotTests {
                 topMisses: []
             ),
             recentTraceEvents: [],
-            tracePath: "/Users/example/Library/Logs/AutocompleteLab/events.jsonl",
+            tracePath: "/Users/example/Library/Logs/SteadyType/events.jsonl",
             tracingPaused: false,
             screenshotTracingEnabled: false,
-            compatibilityLearningPath: "/Users/example/Library/Application Support/AutocompleteLab/learning.json",
+            compatibilityLearningPath: "/Users/example/Library/Application Support/SteadyType/learning.json",
             compatibilityLearningProfile: nil,
             refreshAction: {},
             toggleTracingAction: {},

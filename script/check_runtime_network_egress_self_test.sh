@@ -10,6 +10,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 NO_EGRESS="$TMP_DIR/no-egress.lsof"
 REMOTE_EGRESS="$TMP_DIR/remote-egress.lsof"
 MODEL_SETUP="$TMP_DIR/model-setup.lsof"
+MODEL_SETUP_UNEXPECTED="$TMP_DIR/model-setup-unexpected.lsof"
 
 cat >"$NO_EGRESS" <<'EOF'
 COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
@@ -26,6 +27,11 @@ cat >"$MODEL_SETUP" <<'EOF'
 COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
 Autocomplete 42 user   12u  IPv4 0xabc      0t0  TCP 192.168.1.10:50100->huggingface.co:443 (ESTABLISHED)
 Autocomplete 42 user   13u  IPv4 0xdef      0t0  TCP 192.168.1.10:50101->cdn-lfs.huggingface.co:443 (ESTABLISHED)
+EOF
+
+cat >"$MODEL_SETUP_UNEXPECTED" <<'EOF'
+COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+Autocomplete 42 user   12u  IPv4 0xabc      0t0  TCP 192.168.1.10:50100->example.com:443 (ESTABLISHED)
 EOF
 
 ./script/check_runtime_network_egress.py \
@@ -77,9 +83,24 @@ for expected in \
   fi
 done
 
-if ! grep -F "Remote endpoints are classified as model setup/update traffic" "$TMP_DIR/model-setup.md" >/dev/null; then
+if ! grep -F "Only allowlisted model setup/update endpoints are permitted" "$TMP_DIR/model-setup.md" >/dev/null; then
   echo "runtime network self-test expected model setup proof to distinguish allowed setup traffic" >&2
   cat "$TMP_DIR/model-setup.md" >&2
+  exit 1
+fi
+
+if ./script/check_runtime_network_egress.py \
+  --sample "$MODEL_SETUP_UNEXPECTED" \
+  --phase model-setup \
+  --no-proof \
+  >"$TMP_DIR/model-setup-unexpected.out" 2>"$TMP_DIR/model-setup-unexpected.err"; then
+  echo "runtime network self-test expected non-allowlisted model setup fixture to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Unexpected model setup/update egress" "$TMP_DIR/model-setup-unexpected.err" >/dev/null; then
+  echo "runtime network self-test expected failure to name model setup/update egress" >&2
+  cat "$TMP_DIR/model-setup-unexpected.err" >&2
   exit 1
 fi
 

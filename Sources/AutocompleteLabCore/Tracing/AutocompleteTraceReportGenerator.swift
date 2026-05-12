@@ -115,7 +115,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
         <html>
         <head>
           <meta charset="utf-8">
-          <title>Autocomplete Lab Redacted Trace Report</title>
+          <title>SteadyType Redacted Trace Report</title>
           <style>
             body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 28px; color: #1d1d1f; }
             h1 { font-size: 24px; }
@@ -129,7 +129,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
           </style>
         </head>
         <body>
-          <h1>Autocomplete Lab Redacted Trace Report</h1>
+          <h1>SteadyType Redacted Trace Report</h1>
           <p>Generated locally from the default redacted trace. Nothing was uploaded.</p>
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>

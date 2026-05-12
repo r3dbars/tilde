@@ -240,12 +240,12 @@ def main():
     )
     parser.add_argument(
         "--log",
-        default="~/Library/Logs/AutocompleteLab/traces.jsonl",
+        default="~/Library/Logs/SteadyType/traces.jsonl",
         help="Trace JSONL path. Defaults to the local redacted trace.",
     )
     parser.add_argument(
         "--diagnostics-log",
-        default="~/Library/Logs/AutocompleteLab/diagnostics.log",
+        default="~/Library/Logs/SteadyType/diagnostics.log",
         help="Diagnostics log path used for geometry-only screenshot correction proof.",
     )
     parser.add_argument("--start-line", type=int, default=0)

@@ -8,7 +8,7 @@ struct MenuBarStatusItemTests {
         let configuration = MenuBarStatusItemConfiguration.autocompleteLab
 
         #expect(configuration.symbolName == "text.cursor")
-        #expect(configuration.fallbackTitle == "Autocomplete")
-        #expect(configuration.accessibilityLabel == "Autocomplete Lab")
+        #expect(configuration.fallbackTitle == "SteadyType")
+        #expect(configuration.accessibilityLabel == "SteadyType")
     }
 }

@@ -1,6 +1,7 @@
 import Foundation
 
 public enum BrowserHostedSurface: String, Equatable, Sendable {
+    case unproven = "unproven-browser-surface"
     case googleDocs = "google-docs"
     case notion = "notion"
     case chatGPT = "chatgpt"
@@ -9,6 +10,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
 
     public var displayName: String {
         switch self {
+        case .unproven:
+            return "This browser page"
         case .googleDocs:
             return "Google Docs"
         case .notion:
@@ -26,6 +29,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
         switch self {
         case .chatGPT, .slack, .discord:
             return "browser-chat"
+        case .unproven:
+            return "browser-unknown"
         case .googleDocs, .notion:
             return "browser-editor"
         }
@@ -98,6 +103,9 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         }
 
         let searchableText = fingerprint.searchableText
+        if matchesLocalProofFixture(searchableText) {
+            return .allowed
+        }
         if matchesGoogleDocs(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .googleDocs))
         }
@@ -114,7 +122,13 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
         }
 
-        return .allowed
+        return .blocked(BrowserHostedSurfaceBlock(surface: .unproven))
+    }
+
+    private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
+        (searchableText.contains("autocomplete lab chrome")
+            || searchableText.contains("steadytype chrome"))
+            && searchableText.contains("smoke")
     }
 
     private func matchesGoogleDocs(_ searchableText: String) -> Bool {

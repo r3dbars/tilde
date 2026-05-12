@@ -14,7 +14,7 @@ struct MenuBarIconTests {
 
         #expect(presentation.state == .ready)
         #expect(presentation.symbolName == "text.cursor")
-        #expect(presentation.accessibilityDescription == "Autocomplete Lab ready")
+        #expect(presentation.accessibilityDescription == "SteadyType ready")
     }
 
     @Test("Paused state uses pause symbol")
@@ -27,7 +27,7 @@ struct MenuBarIconTests {
 
         #expect(presentation.state == .paused)
         #expect(presentation.symbolName == "pause.circle")
-        #expect(presentation.accessibilityDescription == "Autocomplete Lab paused")
+        #expect(presentation.accessibilityDescription == "SteadyType paused")
     }
 
     @Test("Missing permission or model uses attention symbol")
@@ -50,7 +50,7 @@ struct MenuBarIconTests {
         #expect(missingPermission.state == .needsAttention)
         #expect(missingModel.state == .needsAttention)
         #expect(missingModel.symbolName == "exclamationmark.triangle")
-        #expect(missingModel.accessibilityDescription == "Autocomplete Lab needs attention")
+        #expect(missingModel.accessibilityDescription == "SteadyType needs attention")
     }
 }
 

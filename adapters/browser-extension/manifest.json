@@ -4,13 +4,21 @@
   "version": "0.1.0",
   "description": "Prototype DOM adapter for local inline autocomplete.",
   "permissions": ["nativeMessaging"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://[::1]/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "http://[::1]/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

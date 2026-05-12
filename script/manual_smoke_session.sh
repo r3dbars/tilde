@@ -15,8 +15,8 @@ REQUIRES_UNDO_ACCEPT=0
 TEXTEDIT_SELECTED_SUPPRESSION_PROOF=0
 TEXTEDIT_FAST_TYPING_PROOF=0
 STRICT_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_SMOKE_REQUIRE_VISUAL_EVIDENCE:-${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}}"
-LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/AutocompleteLab/diagnostics.log}"
-TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/AutocompleteLab/traces.jsonl}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
 ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
@@ -26,7 +26,7 @@ CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -67,6 +67,10 @@ case "$APP" in
   textedit-narrow)
     APP="textedit"
     TEXTEDIT_VARIANT="narrow"
+    ;;
+  textedit-scrolled)
+    APP="textedit"
+    TEXTEDIT_VARIANT="scrolled"
     ;;
   textedit-selected-suppression)
     APP="textedit"
@@ -343,6 +347,11 @@ case "$APP" in
         SESSION_NAME="TextEdit narrow window"
         STEPS=$'- Open a disposable narrow TextEdit document.\n- Type `Smoke proof feels inst`.\n- Wait for a suggestion.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
         ;;
+      scrolled)
+        PROOF_LABEL="textedit-scrolled"
+        SESSION_NAME="TextEdit scrolled document"
+        STEPS=$'- Open a disposable narrow TextEdit document prefilled with enough lines to scroll.\n- Move the caret to the bottom and type `Smoke proof feels inst`.\n- Wait for a suggestion at the scrolled caret.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.'
+        ;;
       selected-suppression)
         PROOF_LABEL="textedit-selected-suppression"
         SESSION_NAME="TextEdit selected-text suppression"
@@ -350,7 +359,7 @@ case "$APP" in
         REQUIRES_FULL_ACCEPT=0
         MIN_VERIFIED_ACCEPTS=0
         TEXTEDIT_SELECTED_SUPPRESSION_PROOF=1
-        STEPS=$'- Open a disposable TextEdit document.\n- Type disposable text.\n- Select part of the text.\n- Confirm Autocomplete Lab suppresses suggestions and records no insertion while text is selected.'
+        STEPS=$'- Open a disposable TextEdit document.\n- Type disposable text.\n- Select part of the text.\n- Confirm SteadyType suppresses suggestions and records no insertion while text is selected.'
         ;;
       undo-one-word)
         PROOF_LABEL="textedit-undo-one-word"
@@ -534,7 +543,7 @@ case "$APP" in
     DISPLAY_NAME="Chrome"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
     PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-$PROOF_LABEL}}"
-    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, real Monaco editor, real ProseMirror editor, public text-field demo, official public editor demo, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field.\n- Confirm focus stays in the field.\n- Use Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and expect another `instant` completion.\n- Forced Chrome proof uses an isolated temp-profile Chrome with renderer accessibility enabled for local fixtures.\n- For default Chrome AX exposure proof, add `--chrome-accessibility default` and keep that proof label distinct.\n- For public text-field proof, use `textarea-public`, `contenteditable-public`, or `production-text-fields` and keep those proof labels distinct from local fixtures.\n- For public official editor demo proof, use `codemirror-official`, `monaco-official`, or `prosemirror-official` and keep those proof labels distinct from local fixtures.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
+    STEPS=$'- Open a local fixture page with a textarea, contenteditable field, editor-like field, Monaco-like editor, ProseMirror-like editor, real Monaco editor, real ProseMirror editor, public text-field demo, official public editor demo, or chat-style composer.\n- Type `Smoke proof feels inst` in the focused field. The `codemirror-official` lane uses `Smoke proof feels dicta` to avoid CodeMirror built-in JavaScript keyword completion.\n- Confirm focus stays in the field.\n- Use Tab once and expect a one-word/suffix accept.\n- Type ` and stays inst`. The `codemirror-official` lane uses ` and stays dicta`.\n- Press the configured full-accept shortcut and expect another completion.\n- Forced Chrome proof uses an isolated temp-profile Chrome with renderer accessibility enabled for local fixtures.\n- For default Chrome AX exposure proof, add `--chrome-accessibility default` and keep that proof label distinct.\n- For public text-field proof, use `textarea-public`, `contenteditable-public`, or `production-text-fields` and keep those proof labels distinct from local fixtures.\n- For public official editor demo proof, use `codemirror-official`, `monaco-official`, or `prosemirror-official` and keep those proof labels distinct from local fixtures.\n- For chat-like proof, prefer `script/real_app_smoke.sh chrome --fixture chat-like` so the no-submit guard is checked.'
     if [[ "$PROOF_LABEL" == "browser-chat-harness" ]]; then
       SESSION_NAME="Chrome browser-chat no-submit harness"
       REQUIRES_FULL_ACCEPT=0
@@ -906,7 +915,7 @@ current_build_proof_summary() {
     proofs+=("commit:$commit")
   fi
 
-  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab}"
+  local app_binary="${AUTOCOMPLETE_LAB_APP_BINARY:-dist/SteadyType.app/Contents/MacOS/SteadyType}"
   if [[ -s "$app_binary" ]]; then
     local app_sha
     app_sha="$(shasum -a 256 "$app_binary" | awk '{print $1}')"
@@ -915,7 +924,7 @@ current_build_proof_summary() {
     fi
   fi
 
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/AutocompleteLab.zip}"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip}"
   if [[ -s "$archive_path" ]]; then
     local archive_sha
     archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"

@@ -75,8 +75,8 @@ Recorder:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-multiline
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-wrapped
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-long-wrap
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-narrow
 ```
 
 - Type `Smoke proof feels inst`.
@@ -85,7 +85,7 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-wrapped
 - Type ` and stays inst`.
 - Press the configured full-accept shortcut and expect another `instant` completion.
 - Confirm `insert-verification result=verified`.
-- Run the multiline and wrapped-line variants before treating TextEdit as fully current.
+- Run the wrapped-line and narrow-window variants before treating TextEdit as fully current.
 
 ## Notes
 

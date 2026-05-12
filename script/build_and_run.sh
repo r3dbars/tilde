@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="AutocompleteLab"
-BUNDLE_ID="bar.r3d.autocomplete-lab"
+APP_NAME="SteadyType"
+BUNDLE_ID="bar.r3d.steadytype"
 MIN_SYSTEM_VERSION="26.0"
 BUILD_CONFIGURATION="${AUTOCOMPLETE_LAB_BUILD_CONFIGURATION:-debug}"
 APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
@@ -322,7 +322,7 @@ cat >"$INFO_PLIST" <<PLIST
   <key>NSSupportsAutomaticTermination</key>
   <false/>
   <key>NSAccessibilityUsageDescription</key>
-  <string>AutocompleteLab needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
+  <string>SteadyType needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>

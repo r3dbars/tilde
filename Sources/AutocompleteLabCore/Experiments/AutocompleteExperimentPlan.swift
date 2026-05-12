@@ -176,8 +176,8 @@ public enum AutocompleteExperimentPlanner {
         )
         let shown = presentedByID.count
         let acceptedAndKept = Set(events
-            .filter { $0.type == .acceptedTextEdited && isAcceptedAndKeptEvent($0) }
-            .map { $0.metadata["acceptanceID"] ?? $0.suggestionID })
+            .filter { $0.type == .acceptedTextEdited && $0.isAcceptedAndKeptSignal }
+            .map(\.acceptanceIdentifier))
             .count
         let shownRate = shown == 0 ? 0 : Double(acceptedAndKept) / Double(shown)
         let latencies = presentedByID.values.compactMap(\.latencyMilliseconds).sorted()
@@ -187,7 +187,7 @@ public enum AutocompleteExperimentPlanner {
         let insertionSuccess = insertionAttempts == 0
             ? 0
             : Double(insertionVerified) / Double(insertionAttempts)
-        let duplicateCount = insertionFailed.filter(isDuplicateTextEvent).count
+        let duplicateCount = insertionFailed.filter(\.isDuplicateInsertionSignal).count
         let duplicateRate = shown == 0 ? 0 : Double(duplicateCount) / Double(shown)
         let appDisableRate = shown == 0
             ? 0
@@ -282,25 +282,6 @@ public enum AutocompleteExperimentPlanner {
     private static func experimentArm(_ event: AutocompleteTraceEvent) -> String {
         let arm = event.experimentArm.isEmpty ? event.metadata["experimentArm"] ?? "" : event.experimentArm
         return arm.isEmpty ? "unknown" : arm
-    }
-
-    private static func isAcceptedAndKeptEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        if event.metadata["strongAcceptedAndKept"] == "true"
-            || event.metadata["finalAcceptedAndKept"] == "true" {
-            return true
-        }
-
-        guard ["10s", "30s", "fieldBlur", "fieldSend"].contains(event.metadata["checkpoint"] ?? "") else {
-            return false
-        }
-
-        return ["exactKept", "lightlyEditedKept", "partiallyKept"].contains(event.metadata["survivalClass"] ?? "")
-    }
-
-    private static func isDuplicateTextEvent(_ event: AutocompleteTraceEvent) -> Bool {
-        event.metadata["duplicateDetected"] == "true"
-            || event.reason.localizedCaseInsensitiveContains("duplicate")
-            || event.outcome.localizedCaseInsensitiveContains("duplicate")
     }
 
     private static func percentile(_ fraction: Double, in values: [Int]) -> Int? {
