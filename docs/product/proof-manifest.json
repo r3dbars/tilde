@@ -157,7 +157,7 @@
             "reference": "docs/product/visual-placement-screenshots/chrome-chat-like.png"
           }
         ],
-        "notes": "Local fixtures and public text fields are proven on the current app fingerprint; default AX editor variants are stale after the latest rebuild, and production official editor sites remain open."
+        "notes": "Local fixtures and the public textarea lane are proven on the current app fingerprint; public contenteditable is stale after the latest rerun could not find the AX editor, default AX ProseMirror is current, default AX Monaco is pending after setup verification stayed unchanged, and production official Monaco remains open."
       },
       {
         "bundle": "com.openai.codex",
@@ -352,7 +352,7 @@
     },
     {
       "surface": "Chrome text fields",
-      "status": "complete",
+      "status": "partial",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-textarea.png",
         "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
@@ -364,42 +364,33 @@
           "proof": "textarea-public",
           "minVerifiedAccepts": 2,
           "requiresVisualStrictComplete": true
-        },
-        {
-          "app": "Chrome",
-          "bundle": "com.google.Chrome",
-          "proof": "contenteditable-public",
-          "minVerifiedAccepts": 2,
-          "requiresVisualStrictComplete": true
         }
       ],
-      "gaps": [],
+      "gaps": [
+        "Public contenteditable proof is stale: the current MediumEditor page rerun could focus an AXTextArea once, then failed to find a stable web-backed editable target for setup."
+      ],
       "requirements": [
         {
-          "id": "production-chrome-text-fields",
+          "id": "production-chrome-textarea",
           "status": "complete",
-          "summary": "Bounded screenshot-backed smoke proof now covers representative production Chrome text fields beyond local fixtures.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture production-text-fields",
+          "summary": "Bounded screenshot-backed smoke proof covers the public EditPad textarea lane beyond local fixtures.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public",
           "safePath": [
-            "textarea-public: https://www.editpad.org/",
-            "contenteditable-public: https://yabwe.github.io/medium-editor/"
+            "textarea-public: https://www.editpad.org/"
           ],
-          "proofRows": [
-            {
-              "app": "Chrome",
-              "bundle": "com.google.Chrome",
-              "proof": "textarea-public",
-              "minVerifiedAccepts": 2,
-              "requiresVisualStrictComplete": true
-            },
-            {
-              "app": "Chrome",
-              "bundle": "com.google.Chrome",
-              "proof": "contenteditable-public",
-              "minVerifiedAccepts": 2,
-              "requiresVisualStrictComplete": true
-            }
-          ]
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "textarea-public",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          }
+        },
+        {
+          "id": "production-chrome-contenteditable",
+          "status": "pending",
+          "summary": "Refresh bounded screenshot-backed proof for a public contenteditable or rich-editor page. The current MediumEditor page rerun could not keep a stable web-backed AX editor target.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public"
         }
       ]
     },
@@ -414,7 +405,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror. The official ProseMirror and CodeMirror pages now have strict screenshot-backed isolated-CDP proof. Monaco production-site display reaches floatingMirror after cramped inline placement, but verified accept remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for ProseMirror only; Monaco default AX exposes too little verified text context. The official ProseMirror and CodeMirror pages now have strict screenshot-backed isolated-CDP proof. Monaco production-site display reaches floatingMirror after cramped inline placement, but verified accept remains open."
       ],
       "requirements": [
         {
@@ -453,7 +444,7 @@
     },
     {
       "surface": "Chrome real Monaco",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -464,19 +455,15 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
-      "gaps": [],
+      "gaps": [
+        "Normal Chrome default AX Monaco remains pending because setup text could not be verified against the focused Monaco editor."
+      ],
       "requirements": [
         {
           "id": "default-chrome-monaco-ax",
-          "status": "complete",
-          "summary": "Normal Chrome default AX Monaco proof is current enough for the current app fingerprint and remains separate from the isolated forced-renderer proof lane.",
-          "manualSmoke": {
-            "app": "Chrome",
-            "bundle": "com.google.Chrome",
-            "proof": "monaco-real-default",
-            "minVerifiedAccepts": 2,
-            "requiresVisualStrictComplete": true
-          }
+          "status": "pending",
+          "summary": "Normal Chrome default AX Monaco proof is not claimed. Current reruns expose a one-character AX text area and setup verification stays unchanged after AX value replacement, targeted text events, selected-text fallback, foreground text events, and guarded paste.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default"
         }
       ]
     },
