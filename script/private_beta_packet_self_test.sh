@@ -92,8 +92,15 @@ require_contains "$FIRST_RUN_DOC" "Mail"
 require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
 
 SCRIPT_TEXT="$(sed -n '1,620p' script/private_beta_packet.sh)"
-require_contains "$SCRIPT_TEXT" "Developer ID archive signature blocked"
+require_contains "$SCRIPT_TEXT" "Primary artifact: ../SteadyType.dmg"
+require_contains "$SCRIPT_TEXT" "Send testers the DMG, not the ZIP."
+require_contains "$SCRIPT_TEXT" "xcrun stapler validate"
+require_contains "$SCRIPT_TEXT" "spctl -a -t open --context context:primary-signature"
+require_contains "$SCRIPT_TEXT" "spctl --assess --type execute --verbose=4"
+require_contains "$SCRIPT_TEXT" "SteadyType.dmg"
+require_contains "$SCRIPT_TEXT" "Developer ID DMG signature blocked"
 require_contains "$SCRIPT_TEXT" "This is separate from Apple notarization credentials."
+reject_contains "$SCRIPT_TEXT" '1. Unzip `SteadyType.zip`.'
 
 for expected_doc in \
   "PRIVACY-BETA.md" \

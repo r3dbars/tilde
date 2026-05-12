@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 MODE="full"
+PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"
+SECONDARY_ARCHIVE="$ROOT_DIR/dist/SteadyType.zip"
 
 usage() {
   cat <<'EOF'
@@ -71,9 +73,81 @@ check_clipboard_fallback_disabled() {
   echo "clipboard fallback insertion disabled"
 }
 
+check_current_artifact_checksum() {
+  local checksums_path="$ROOT_DIR/dist/release-proof/checksums.txt"
+  local expected_sha actual_sha
+
+  if [[ ! -s "$PRIMARY_ARTIFACT" ]]; then
+    echo "missing primary beta artifact: $PRIMARY_ARTIFACT"
+    return 1
+  fi
+
+  if [[ ! -s "$checksums_path" ]]; then
+    echo "missing release proof checksum file: $checksums_path"
+    return 1
+  fi
+
+  expected_sha="$(shasum -a 256 "$PRIMARY_ARTIFACT" | awk '{print $1}')"
+  actual_sha="$(awk '/SteadyType\.dmg/ {print $2; exit}' "$checksums_path")"
+
+  if [[ -z "$actual_sha" ]]; then
+    echo "missing SteadyType.dmg checksum in $checksums_path"
+    return 1
+  fi
+
+  if [[ "$expected_sha" != "$actual_sha" ]]; then
+    echo "release proof checksum is stale for SteadyType.dmg"
+    echo "expected: $expected_sha"
+    echo "actual:   $actual_sha"
+    return 1
+  fi
+
+  echo "current DMG checksum matches release proof"
+}
+
+check_release_dmg_signature() {
+  local verify_dir mount_path app_path
+
+  if [[ ! -s "$PRIMARY_ARTIFACT" ]]; then
+    echo "missing primary beta artifact: $PRIMARY_ARTIFACT"
+    return 1
+  fi
+
+  verify_dir="$(mktemp -d)"
+  mount_path="$verify_dir/mount"
+  app_path="$verify_dir/SteadyType.app"
+  mkdir -p "$mount_path"
+
+  if ! hdiutil attach "$PRIMARY_ARTIFACT" -mountpoint "$mount_path" -nobrowse -quiet; then
+    rm -rf "$verify_dir"
+    echo "Developer ID DMG signature blocked: could not mount $PRIMARY_ARTIFACT"
+    return 1
+  fi
+
+  cp -R "$mount_path/SteadyType.app" "$app_path" 2>/dev/null || true
+  hdiutil detach "$mount_path" -quiet || true
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir"
+    echo "Developer ID DMG signature blocked: DMG does not contain SteadyType.app"
+    return 1
+  fi
+
+  if ! ./script/check_app_bundle.sh --release "$app_path"; then
+    rm -rf "$verify_dir"
+    echo "Developer ID DMG signature blocked: DMG app is not signed with Developer ID Application"
+    echo "This is separate from Apple notarization credentials."
+    return 1
+  fi
+
+  rm -rf "$verify_dir"
+  echo "Developer ID DMG app signature: OK"
+}
+
 check_notarized_install_proof() {
   local proof_dir="$ROOT_DIR/dist/release-proof"
   local blocker_path="$proof_dir/notarization-blocker.txt"
+  local verify_dir mount_path app_path
   local failed=0
 
   if [[ -s "$blocker_path" ]]; then
@@ -97,7 +171,46 @@ check_notarized_install_proof() {
     return 1
   fi
 
-  echo "notarization, stapling, and fresh-install proof files are present"
+  check_current_artifact_checksum || return 1
+
+  if ! xcrun stapler validate "$PRIMARY_ARTIFACT"; then
+    echo "current DMG stapler validation failed"
+    return 1
+  fi
+
+  if ! spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"; then
+    echo "current DMG Gatekeeper assessment failed"
+    return 1
+  fi
+
+  verify_dir="$(mktemp -d)"
+  mount_path="$verify_dir/mount"
+  app_path="$verify_dir/SteadyType.app"
+  mkdir -p "$mount_path"
+
+  if ! hdiutil attach "$PRIMARY_ARTIFACT" -mountpoint "$mount_path" -nobrowse -quiet; then
+    rm -rf "$verify_dir"
+    echo "current DMG install proof failed: could not mount $PRIMARY_ARTIFACT"
+    return 1
+  fi
+
+  cp -R "$mount_path/SteadyType.app" "$app_path" 2>/dev/null || true
+  hdiutil detach "$mount_path" -quiet || true
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir"
+    echo "current DMG install proof failed: DMG does not contain SteadyType.app"
+    return 1
+  fi
+
+  if ! spctl --assess --type execute --verbose=4 "$app_path"; then
+    rm -rf "$verify_dir"
+    echo "current installed-app Gatekeeper assessment failed"
+    return 1
+  fi
+
+  rm -rf "$verify_dir"
+  echo "current DMG notarization, stapling, and Gatekeeper proof: OK"
 }
 
 check_release_archive_signature() {
@@ -183,23 +296,23 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile || failures=$((failures + 1))
 
   echo
-  echo "== Private beta archive =="
-  if [[ -s "$ROOT_DIR/dist/SteadyType.zip" ]]; then
-    echo "Private beta archive: OK"
-    run_check "Developer ID archive signature" check_release_archive_signature || failures=$((failures + 1))
+  echo "== Private beta artifact =="
+  if [[ -s "$PRIMARY_ARTIFACT" ]]; then
+    echo "Private beta artifact: OK - $PRIMARY_ARTIFACT"
+    run_check "Developer ID DMG signature" check_release_dmg_signature || failures=$((failures + 1))
     run_check "Notarized install proof" check_notarized_install_proof || failures=$((failures + 1))
   else
-    echo "Private beta archive: blocked"
-    echo "missing archive: $ROOT_DIR/dist/SteadyType.zip"
+    echo "Private beta artifact: blocked"
+    echo "missing primary beta artifact: $PRIMARY_ARTIFACT"
     failures=$((failures + 1))
   fi
 
-  if [[ -s "$ROOT_DIR/dist/SteadyType.zip" ]]; then
+  if [[ -s "$PRIMARY_ARTIFACT" ]]; then
     run_check "Private beta packet" ./script/private_beta_packet.sh --check || failures=$((failures + 1))
   else
     echo
     echo "== Private beta packet =="
-    echo "Private beta packet: skipped until archive exists"
+    echo "Private beta packet: skipped until primary DMG exists"
   fi
 
   if ((failures > 0)); then
@@ -262,7 +375,7 @@ echo
 echo "== Release package =="
 ./script/package_release.sh --check --require-developer-id --require-notary-profile
 ./script/package_release.sh archive
-check_release_archive_signature
+check_release_dmg_signature
 check_notarized_install_proof
 
 echo
@@ -272,5 +385,6 @@ echo "== Private beta packet =="
 
 echo
 echo "Beta readiness passed."
-echo "Archive: $ROOT_DIR/dist/SteadyType.zip"
+echo "Primary artifact: $PRIMARY_ARTIFACT"
+echo "Secondary archive: $SECONDARY_ARCHIVE"
 echo "Private beta packet: $ROOT_DIR/dist/private-beta"

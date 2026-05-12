@@ -7,8 +7,8 @@ Use this before inviting private beta testers.
 - [ ] `./script/beta_readiness.sh --check-only` reports only expected external
   blockers before the full gate.
 - [ ] `./script/beta_readiness.sh` passes.
-- [ ] `dist/SteadyType.zip` exists.
-- [ ] `dist/private-beta/checksums.txt` matches the archive.
+- [ ] `dist/SteadyType.dmg` exists as the primary tester artifact.
+- [ ] `dist/private-beta/checksums.txt` matches the current DMG.
 - [ ] The app is signed and the package check passes.
 - [x] Notarization status is known before sending the build.
 
@@ -71,7 +71,7 @@ Use this before inviting private beta testers.
   redacted export, triage labels, stop dashboard, and readiness summary
   together.
 - [ ] `dist/private-beta/beta-readiness-summary.md` is regenerated from the
-  exact tester archive after the next app-code change.
+  exact tester DMG after the next app-code change.
 - [ ] The first real tester feedback issue has been triaged with the new labels
   and a redacted report, or there are no tester issues yet.
 
@@ -98,14 +98,15 @@ Invite testers only when every applicable box is checked.
 - `./script/manual_smoke_status.sh --strict` still requires current-head proof
   refresh for 30 target app rows. Do not treat stale screenshot-backed rows as
   beta-current.
-- `./script/private_beta_packet.sh --check` currently verifies the local packet,
-  but must be rerun after any app-code or archive change.
+- `./script/private_beta_packet.sh --check` must be rerun after any app-code or
+  artifact change and now validates the current DMG with stapler and spctl.
 - Current local SteadyType artifacts are not beta-current until a Developer ID
-  archive, Apple notarization, stapling, and fresh-install Gatekeeper proof are
-  all regenerated. A stored notarytool profile may exist under a shared product
-  alias such as `Transcripted`, but the older 2026-05-07 `AutocompleteLab.zip`
-  notarization does not count for the current SteadyType artifact.
-- Recreate `dist/SteadyType.zip` and `dist/private-beta/checksums.txt` if app
-  code changes after the remaining proof blockers close.
+  signed DMG, Apple notarization, stapling, and fresh-install Gatekeeper proof
+  are all regenerated. A stored notarytool profile may exist under a shared
+  product alias such as `Transcripted`, but older `AutocompleteLab.zip`
+  notarization does not count for the current SteadyType DMG.
+- Recreate `dist/SteadyType.dmg`, the secondary `dist/SteadyType.zip`, and
+  `dist/private-beta/checksums.txt` if app code changes after the remaining
+  proof blockers close.
 - All-history trace eval is diagnostic only; beta proof must use fresh marked
   slices from disposable text.

@@ -22,7 +22,7 @@ usage() {
 Usage: script/package_release.sh [archive|--check|--notarize] [--require-developer-id] [--require-notary-profile]
 
 archive    Build a release app, sign with Developer ID, validate, and create
-           dist/SteadyType.zip plus preferred dist/SteadyType.dmg.
+           primary dist/SteadyType.dmg plus secondary dist/SteadyType.zip.
 --check    Report whether local signing/notary prerequisites are present.
 --notarize Submit the DMG to Apple notarytool. This uploads the app to Apple.
 --require-notary-profile
@@ -171,7 +171,7 @@ print_proof_template() {
 - Preferred artifact: dist/SteadyType.dmg
 - Secondary artifact: dist/SteadyType.zip
 - Bundle ID: $BUNDLE_ID
-- Developer ID archive signature: required before private-beta packet
+- Developer ID app signature: required before private-beta packet
 - Notarization status: $notarization_status
 - Stapler status: $stapler_status
 - Gatekeeper status: $gatekeeper_status
@@ -247,7 +247,7 @@ write_notary_blocker() {
   cat >"$NOTARY_BLOCKER_PATH" <<EOF
 Notarization blocked: no usable notarytool keychain profile was resolved.
 
-The release archive exists locally, but private beta readiness must remain
+The release artifacts exist locally, but private beta readiness must remain
 blocked until the DMG is submitted to Apple, stapled, and fresh-install
 Gatekeeper proof is saved.
 
@@ -410,8 +410,8 @@ case "$MODE" in
     else
       clear_notary_blocker
     fi
-    echo "Release archive created: $ZIP_PATH"
-    echo "Preferred beta artifact created: $DMG_PATH"
+    echo "Primary beta artifact created: $DMG_PATH"
+    echo "Secondary archive created: $ZIP_PATH"
     echo "Release proof checklist: $PROOF_DIR/release-proof-checklist.md"
     ;;
   --notarize|notarize)

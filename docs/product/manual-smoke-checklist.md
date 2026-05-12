@@ -38,7 +38,7 @@ manual proof pass.
 
 ## Setup
 
-- Launch `dist/AutocompleteLab.app`.
+- Launch `dist/SteadyType.app`.
 - Prefer `./script/build_and_run.sh --verify` before using `--skip-build`; the
   recorder rejects stale app processes from other checkouts.
 - Confirm the menu says `AX ok`.
