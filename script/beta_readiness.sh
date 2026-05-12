@@ -376,6 +376,13 @@ echo "== Release package =="
 ./script/package_release.sh --check --require-developer-id --require-notary-profile
 ./script/package_release.sh archive
 check_release_dmg_signature
+if [[ "${AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+  ./script/package_release.sh --notarize
+else
+  echo "Apple notarization not run by default."
+  echo "Set AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE=1 to let this full gate submit the current DMG to Apple, then rerun."
+  exit 1
+fi
 check_notarized_install_proof
 
 echo
