@@ -247,6 +247,10 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def string_summary(value: str) -> str:
+    return f"String({len(value)} chars)"
+
+
 def process_details(pids: list[int]) -> list[dict[str, object]]:
     details: list[dict[str, object]] = []
     for pid in pids:
@@ -269,8 +273,9 @@ def process_details(pids: list[int]) -> list[dict[str, object]]:
                 executable_sha256 = sha256_file(executable_path)
         details.append({
             "pid": pid,
-            "command": command,
-            "executable": executable,
+            "command_redacted": bool(command),
+            "command_summary": string_summary(command) if command else "",
+            "executable_name": Path(executable).name if executable else "",
             "executable_sha256": executable_sha256,
         })
     return details
@@ -334,7 +339,8 @@ def build_summary(
         "allowed_model_endpoint_count": len(allowed_model),
         "unexpected_remote_endpoints": [endpoint.safe_remote for endpoint in unexpected],
         "allowed_model_endpoints": sorted({endpoint.safe_remote for endpoint in allowed_model}),
-        "activity_note": args.activity_note,
+        "activity_note": string_summary(args.activity_note) if args.activity_note else "",
+        "activity_note_chars": len(args.activity_note),
         "privacy_note": "No typed text, prompts, model output, screenshots, URLs, document names, or trace lines are captured.",
     }
 
@@ -360,10 +366,12 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     processes = summary["processes"]
     if processes:
         for process in processes:
-            if process["executable"]:
-                lines.append(f"- Executable: `{process['executable']}`")
+            if process["executable_name"]:
+                lines.append(f"- Executable name: `{process['executable_name']}`")
             if process["executable_sha256"]:
                 lines.append(f"- Executable SHA-256: `{process['executable_sha256']}`")
+            if process["command_summary"]:
+                lines.append(f"- Command line: `{process['command_summary']}`")
     lines.extend([
         "",
         "Privacy note: this proof stores only process/socket metadata. It does not store typed text, prompts, model output, screenshots, document names, URLs, or trace lines.",
@@ -422,7 +430,7 @@ def main() -> int:
     out_path = proof_path(args)
     if out_path is not None:
         write_markdown(out_path, summary)
-        summary["proof_path"] = str(out_path)
+        summary["proof_artifact"] = out_path.name
 
     if args.json_out:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
