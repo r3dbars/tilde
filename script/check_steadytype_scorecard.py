@@ -202,6 +202,13 @@ def validate_scorecard(path: Path) -> list[str]:
     return failures
 
 
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT_DIR))
+    except ValueError:
+        return str(path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate the SteadyType product scorecard.")
     parser.add_argument(
@@ -222,7 +229,7 @@ def main() -> int:
             print(f"- {failure}", file=sys.stderr)
         return 1
 
-    print(f"SteadyType scorecard verified: {path.relative_to(ROOT_DIR)}")
+    print(f"SteadyType scorecard verified: {display_path(path)}")
     return 0
 
 

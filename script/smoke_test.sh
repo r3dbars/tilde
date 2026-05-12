@@ -19,7 +19,10 @@ swift test
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
 ./script/manual_proof_queue_self_test.sh
+./script/manual_proof_refresh_self_test.sh
 ./script/check_score_targets_self_test.sh
+./script/check_steadytype_scorecard_self_test.sh
+./script/check_graduation_score_self_test.sh
 ./script/check_prompt_app_proof_self_test.sh
 ./script/check_prompt_app_manifest_proof_self_test.sh
 ./script/check_diagnostics_log_self_test.sh

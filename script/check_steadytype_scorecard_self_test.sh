@@ -18,7 +18,7 @@ if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/pass.txt" >/dev/null; the
 fi
 
 BAD_SCORE="$TMP_DIR/bad-score.md"
-sed 's#| Latency | 52/100 |#| Latency | 101/100 |#' "$SCORECARD" >"$BAD_SCORE"
+sed 's#| Latency | 84/100 |#| Latency | 101/100 |#' "$SCORECARD" >"$BAD_SCORE"
 
 if python3 script/check_steadytype_scorecard.py --scorecard "$BAD_SCORE" >"$TMP_DIR/bad-score.txt" 2>&1; then
   echo "scorecard self-test expected invalid score to fail" >&2
