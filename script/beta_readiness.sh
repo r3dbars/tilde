@@ -100,6 +100,62 @@ check_notarized_install_proof() {
   echo "notarization, stapling, and fresh-install proof files are present"
 }
 
+latency_beta_gate() {
+  local start_env=()
+
+  if [[ -z "${AUTOCOMPLETE_LAB_LOG_START_LINE:-}" && -z "${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}" ]]; then
+    while IFS= read -r assignment; do
+      [[ -n "$assignment" ]] && start_env+=("$assignment")
+    done < <(python3 - \
+      "${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}" \
+      "${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+diagnostics_path = Path(sys.argv[1])
+trace_path = Path(sys.argv[2])
+
+latest_launch_line = 0
+latest_launch_timestamp = ""
+
+if diagnostics_path.exists():
+    with diagnostics_path.open("r", encoding="utf-8", errors="ignore") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if "launch accessibility=" not in line:
+                continue
+            latest_launch_line = line_number
+            latest_launch_timestamp = line.split(maxsplit=1)[0]
+
+if latest_launch_line:
+    print(f"AUTOCOMPLETE_LAB_LOG_START_LINE={max(0, latest_launch_line - 1)}")
+
+if latest_launch_timestamp and trace_path.exists():
+    trace_start_line = 0
+    with trace_path.open("r", encoding="utf-8", errors="ignore") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            try:
+                timestamp = json.loads(line).get("timestamp", "")
+            except json.JSONDecodeError:
+                continue
+            if timestamp >= latest_launch_timestamp:
+                trace_start_line = max(0, line_number - 1)
+                break
+    if trace_start_line:
+        print(f"AUTOCOMPLETE_LAB_TRACE_START_LINE={trace_start_line}")
+PY
+    )
+  fi
+
+  if ((${#start_env[@]})); then
+    echo "Latency window: ${start_env[*]}"
+    env "${start_env[@]}" ./script/latency_benchmark_report.py --beta-gate
+    return
+  fi
+
+  ./script/latency_benchmark_report.py --beta-gate
+}
+
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
 
@@ -108,7 +164,7 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
-  run_check "Latency beta gate" ./script/latency_benchmark_report.py --beta-gate || failures=$((failures + 1))
+  run_check "Latency beta gate" latency_beta_gate || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
@@ -161,7 +217,7 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   ./script/check_diagnostics_log.sh
 echo
 echo "== Latency beta gate =="
-./script/latency_benchmark_report.py --beta-gate
+latency_beta_gate
 
 
 echo
