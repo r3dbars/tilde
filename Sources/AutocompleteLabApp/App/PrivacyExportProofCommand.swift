@@ -14,6 +14,9 @@ enum PrivacyExportProofCommand {
         "proof-private-visible-suggestion-redbars",
         "proof-private-accepted-redbars",
         "proof-private-remaining-redbars",
+        "proof-private-context-preview-redbars",
+        "proof-private-neighbor-text-redbars",
+        "proof-private-innocent-note-redbars",
         "https://private.example/redbars",
         "/tmp/proof-private-screenshot-redbars.png",
         "proof private document title redbars",
@@ -114,6 +117,9 @@ enum PrivacyExportProofCommand {
                 metadata: [
                     "documentTitle": "proof private document title redbars",
                     "fieldKind": "multilineCompose",
+                    "contextPreview": "proof-private-context-preview-redbars",
+                    "neighborText": "proof-private-neighbor-text-redbars",
+                    "innocentNote": "proof-private-innocent-note-redbars",
                     "recipientEmail": "proof-private-recipient@example.com",
                     "subjectLine": "proof private subject redbars",
                     "visibleURL": "https://private.example/redbars"
