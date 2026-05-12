@@ -52,6 +52,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Recommendation: keep this smaller", after: "Can we") == nil)
         #expect(cleaner.clean("Rewrite: keep this smaller", after: "Can we") == nil)
         #expect(cleaner.clean("Next action: open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("return the exact same question", after: "Can we") == nil)
         #expect(cleaner.clean("try saying this more clearly", after: "Can we") == nil)
         #expect(cleaner.clean("rewrite this as a calmer sentence", after: "Can we") == nil)
         #expect(cleaner.clean("next step is to open the logs", after: "Can we") == nil)
@@ -80,6 +81,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("integrate it seamlessly.") == nil)
         #expect(cleaner.clean("enhance the experience") == nil)
         #expect(cleaner.clean("boost productivity across the team") == nil)
+        #expect(cleaner.clean("like a formal announcement") == nil)
         #expect(cleaner.clean("streamline the workflow for everyone") == nil)
         #expect(cleaner.clean("unlock efficiency at scale") == nil)
         #expect(cleaner.clean("make users more productive") == nil)
@@ -140,6 +142,14 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " ship this today")
     }
 
+    @Test("Suppresses candidates that start another sentence")
+    func suppressesCandidatesThatStartAnotherSentence() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("ready. Then we can send it", after: "The draft is") == nil)
+        #expect(cleaner.clean("ready.", after: "The draft is")?.visibleText == " ready.")
+    }
+
     @Test("Cleans numbered multiline candidates")
     func cleansNumberedMultilineCandidates() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 5)
@@ -192,6 +202,14 @@ struct CompletionOutputCleanerTests {
         )
 
         #expect(suggestions.isEmpty)
+    }
+
+    @Test("Suppresses repeated list marker candidates")
+    func suppressesRepeatedListMarkerCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("[ ] Review all reports", after: "- [ ] Keep every quality check") == nil)
+        #expect(cleaner.clean("Review all reports", after: "- [ ] Keep every quality check")?.visibleText == " Review all reports")
     }
 
     @Test("Strips echoed prompt labels")

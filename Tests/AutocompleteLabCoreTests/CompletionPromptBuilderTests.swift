@@ -12,6 +12,8 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Inline autocomplete"))
         #expect(prompt.system.contains("Return only the suffix after the Before cursor text"))
         #expect(prompt.system.contains("boring connective tissue"))
+        #expect(prompt.system.contains("Prefer 3 to 5 useful words"))
+        #expect(prompt.system.contains("full-sentence continuation"))
         #expect(prompt.system.contains("common phrase"))
         #expect(prompt.system.contains("Do not answer, explain"))
         #expect(prompt.system.contains("repeat the Before cursor text"))
@@ -301,7 +303,7 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(builder.maxVisibleWords == 8)
-        #expect(prompt.system.contains("next 8 words or fewer"))
+        #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 
@@ -463,7 +465,7 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
-        #expect(prompt.system.contains("Behavior profile: ai_chat, max 8 visible words / 12 generated tokens"))
+        #expect(prompt.system.contains("Behavior profile: ai_chat, max 5 visible words / 9 generated tokens"))
         #expect(prompt.system.contains("Never suggest sending, submitting"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
     }

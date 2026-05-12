@@ -127,6 +127,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if mode.isContinuation,
+           looksLikeRepeatedListMarker(withoutPromptEchoLabel) {
+            return nil
+        }
+
         guard !looksLikeAssistantMeta(withoutPromptEchoLabel) else {
             return nil
         }
@@ -136,6 +141,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         guard !looksLikeUnsafePromptAction(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        if mode.isContinuation,
+           startsSecondSentence(withoutPromptEchoLabel) {
             return nil
         }
 
@@ -321,6 +331,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("recommendation:")
             || normalized.hasPrefix("return only")
             || normalized.hasPrefix("return exactly")
+            || normalized.hasPrefix("return the exact")
+            || normalized.hasPrefix("return the same")
             || normalized.hasPrefix("rewrite:")
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
@@ -357,6 +369,13 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return Self.genericFillerPrefixes.contains { normalized.hasPrefix($0) }
+    }
+
+    private func looksLikeRepeatedListMarker(_ text: String) -> Bool {
+        text.range(
+            of: #"^\s*(?:[-*+]|\d+[\.\)]|\[[ xX]\])\s+"#,
+            options: .regularExpression
+        ) != nil
     }
 
     private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
@@ -492,6 +511,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return Self.adviceOrToneDriftStarters.contains { starter in
             words.starts(with: starter)
         }
+    }
+
+    private func startsSecondSentence(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for index in trimmed.indices where ".!?".contains(trimmed[index]) {
+            let afterBoundary = trimmed.index(after: index)
+            guard afterBoundary < trimmed.endIndex else {
+                continue
+            }
+
+            let remaining = trimmed[afterBoundary...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !remaining.isEmpty {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func looksLikeVisibleUIChromeCandidate(_ text: String, mode: CompletionRequestMode) -> Bool {
@@ -744,6 +781,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "i will do that",
         "i'll do that",
         "let me know",
+        "like a formal announcement",
         "leverage the system",
         "make users more productive",
         "maximize efficiency",
@@ -783,6 +821,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["it's", "important"],
         ["let's"],
         ["lets"],
+        ["like", "a", "formal", "announcement"],
         ["make", "sure", "to"],
         ["make", "users", "more", "productive"],
         ["maximize", "efficiency"],

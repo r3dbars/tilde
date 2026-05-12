@@ -19,6 +19,25 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.last?.suggestion.visibleText == " are you sure?")
     }
 
+    @Test("Phrase mode treats five words as useful but downranks longer continuations")
+    func phraseModeTreatsFiveWordsAsUsefulButDownranksLongerContinuations() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " feel quiet and useful today", maxVisibleWords: 8),
+            CompletionSuggestion(text: " feel quiet and useful without getting in the way", maxVisibleWords: 8)
+        ]
+
+        let ranked = ranker.ranked(suggestions, mode: .phraseContinuation)
+        let longSelection = ranker.selection(
+            [CompletionSuggestion(text: " feel quiet and useful without getting in the way", maxVisibleWords: 8)],
+            mode: .phraseContinuation
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == " feel quiet and useful today")
+        #expect(longSelection.suggestion == nil)
+        #expect(longSelection.suppressionReason == .lowTopScore)
+    }
+
     @Test("Sentence mode prefers sentence-length continuations over questions")
     func sentenceModePrefersSentenceLengthContinuationsOverQuestions() {
         let ranker = CompletionCandidateRanker()
