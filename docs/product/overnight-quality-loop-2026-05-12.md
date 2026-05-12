@@ -37,5 +37,5 @@ This is a progress score, not a release claim. The deterministic 500-case predic
 - Notes title/body/checklist need manual-gated current proof.
 - Obsidian default, theme, pane, and long-note lanes need manual-gated current proof.
 - Codex and Claude lanes need manual no-submit confirmation on the current app binary.
-- Production official CodeMirror, Monaco, and ProseMirror site variants still need bounded screenshot-backed traces.
+- Production official CodeMirror, Monaco, and ProseMirror site variants still need bounded screenshot-backed traces. `codemirror-official` was attempted on 2026-05-12 and failed closed before typing because Chrome's Allow JavaScript from Apple Events setting is disabled.
 - `./script/check_score_targets.sh` should keep failing until those proof gates close.

@@ -420,17 +420,20 @@
         {
           "id": "production-chrome-monaco",
           "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production Monaco editor surface."
+          "summary": "Add bounded default-Chrome proof against a production Monaco editor surface; official-demo lanes need Chrome's Allow JavaScript from Apple Events setting before the script can focus and verify the editor.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-official"
         },
         {
           "id": "production-chrome-prosemirror",
           "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production ProseMirror editor surface."
+          "summary": "Add bounded default-Chrome proof against a production ProseMirror editor surface; official-demo lanes need Chrome's Allow JavaScript from Apple Events setting before the script can focus and verify the editor.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-official"
         },
         {
           "id": "production-chrome-codemirror",
           "status": "pending",
-          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface."
+          "summary": "Add bounded default-Chrome proof against a production CodeMirror editor surface; `codemirror-official` was attempted on 2026-05-12 and failed closed before typing because Chrome's Allow JavaScript from Apple Events setting is disabled.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official"
         }
       ]
     },
