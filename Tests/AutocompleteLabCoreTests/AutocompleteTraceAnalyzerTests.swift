@@ -933,6 +933,11 @@ struct AutocompleteTraceAnalyzerTests {
                     "sensitiveSuppressionCategory": "payment",
                     "fieldKind": "form"
                 ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "normal",
+                metadata: ["fieldKind": "multilineCompose"]
             )
         ]
 
@@ -941,6 +946,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.sensitiveSuppressedByCategory["password"] == 1)
         #expect(summary.sensitiveSuppressedByCategory["otp"] == 1)
         #expect(summary.sensitivePresentedByCategory["payment"] == 1)
+        #expect(summary.sensitivePresentedByCategory["unknown"] == nil)
         #expect(summary.doNotShipCounters["sensitive-category-suggestion"] == 1)
         #expect(summary.doNotShipCounters["sensitive-field-suggestion"] == 1)
     }

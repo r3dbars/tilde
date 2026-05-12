@@ -281,6 +281,63 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
     }
 }
 
+extension AutocompleteTraceEvent {
+    var acceptanceIdentifier: String {
+        metadata["acceptanceID"] ?? suggestionID
+    }
+
+    var isAcceptedAndKeptSignal: Bool {
+        if metadata["strongAcceptedAndKept"] == "true"
+            || metadata["finalAcceptedAndKept"] == "true" {
+            return true
+        }
+
+        guard let checkpointValue = metadata["checkpoint"],
+              let checkpoint = AcceptanceSurvivalCheckpoint(rawValue: checkpointValue),
+              checkpoint != .twoSeconds,
+              let survivalClassValue = metadata["survivalClass"],
+              let survivalClass = AcceptanceSurvivalClass(rawValue: survivalClassValue) else {
+            return false
+        }
+
+        return survivalClass.countsAsKept
+    }
+
+    var isDuplicateInsertionSignal: Bool {
+        metadata["duplicateDetected"] == "true"
+            || reason.localizedCaseInsensitiveContains("duplicate")
+            || outcome.localizedCaseInsensitiveContains("duplicate")
+    }
+
+    var isTabConflictSignal: Bool {
+        metadata["tabConflict"] == "true"
+            || traceTextSignalContains("tab-conflict")
+            || traceTextSignalContains("tab conflict")
+    }
+
+    var isFocusStealSignal: Bool {
+        metadata["focusStealing"] == "true"
+            || metadata["focusSteal"] == "true"
+            || traceTextSignalContains("focus-steal")
+            || traceTextSignalContains("focus steal")
+    }
+
+    var isAcceptedThenDeletedWithinTwoSecondsSignal: Bool {
+        guard type == .acceptedTextEdited,
+              metadata["survivalClass"] == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue else {
+            return false
+        }
+
+        return (Int(metadata["firstEditDelayMs"] ?? "") ?? Int.max) <= 2_000
+            || metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue
+    }
+
+    private func traceTextSignalContains(_ token: String) -> Bool {
+        reason.localizedCaseInsensitiveContains(token)
+            || outcome.localizedCaseInsensitiveContains(token)
+    }
+}
+
 public struct RedactedAutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let timestamp: String
