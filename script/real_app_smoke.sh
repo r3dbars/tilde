@@ -6018,7 +6018,7 @@ obsidian_reset_text_for_variant() {
 
   local index
   for index in $(seq 1 90); do
-    printf 'Autocomplete Lab Obsidian scroll filler line %s\n' "$index"
+    printf 'AL scroll %s\n' "$index"
   done
   printf '%s' "$marker"
 }
