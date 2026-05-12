@@ -607,7 +607,7 @@ struct SuggestionOrchestratorTests {
         let context = makeContext(
             textBeforeCursor: "const value = mon",
             textAfterCursor: "",
-            windowTitle: "Autocomplete Lab Chrome Real Monaco Smoke",
+            windowTitle: "SteadyType Chrome Real Monaco Smoke",
             caretIsSynthetic: true
         )
 

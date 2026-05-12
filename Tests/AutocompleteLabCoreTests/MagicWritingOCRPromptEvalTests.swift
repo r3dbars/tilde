@@ -149,7 +149,7 @@ private struct MagicWritingScenario {
         ("Reply draft", "Jordan: Is this good enough to ship?", "I think it", .phraseContinuation, nil),
         ("Prompt draft", "Do not change the AI model", "Keep the current", .phraseContinuation, nil),
         ("Field test", "User is typing around a visible checklist", "This should predict", .phraseContinuation, nil),
-        ("Partial word", "Autocomplete Lab should recognize Obsidian context", "Obsid", .wordCompletion, "ian"),
+        ("Partial word", "SteadyType should recognize Obsidian context", "Obsid", .wordCompletion, "ian"),
         ("Partial word", "Transcripted is the product name on the page", "Transcrip", .wordCompletion, "ted"),
         ("Partial word", "Screen Recording permission appears in Settings", "permis", .wordCompletion, "sion")
     ]

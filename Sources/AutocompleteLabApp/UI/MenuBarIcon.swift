@@ -38,11 +38,11 @@ struct MenuBarIconPresentation: Equatable {
     var accessibilityDescription: String {
         switch state {
         case .ready:
-            return "Autocomplete Lab ready"
+            return "SteadyType ready"
         case .paused:
-            return "Autocomplete Lab paused"
+            return "SteadyType paused"
         case .needsAttention:
-            return "Autocomplete Lab needs attention"
+            return "SteadyType needs attention"
         }
     }
 }
