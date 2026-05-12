@@ -70,6 +70,44 @@ struct SuggestionGeometryChangePolicyTests {
         #expect(decision.metadata["geometryInvalidationReason"] == "text-line-changed")
     }
 
+    @Test("Caller-approved caret churn keeps visible suggestion")
+    func callerApprovedCaretChurnKeepsVisibleSuggestion() {
+        let previous = snapshot(caretRect: CGRect(x: 260, y: 445, width: 0, height: 20))
+        let current = snapshot(caretRect: CGRect(x: 260, y: 230, width: 0, height: 20))
+
+        let decision = policy.invalidationDecision(
+            hasVisibleSuggestion: true,
+            hasPendingSuggestionRequest: false,
+            previousSnapshot: previous,
+            currentSnapshot: current,
+            allowsCaretRectChange: true
+        )
+
+        #expect(decision == .keep)
+    }
+
+    @Test("Caller-approved caret churn still blocks text line movement")
+    func callerApprovedCaretChurnStillBlocksTextLineMovement() {
+        let previous = snapshot(
+            caretRect: CGRect(x: 260, y: 445, width: 0, height: 20),
+            textLineRect: CGRect(x: 120, y: 600, width: 480, height: 22)
+        )
+        let current = snapshot(
+            caretRect: CGRect(x: 260, y: 230, width: 0, height: 20),
+            textLineRect: CGRect(x: 120, y: 548, width: 480, height: 22)
+        )
+
+        let decision = policy.invalidationDecision(
+            hasVisibleSuggestion: true,
+            hasPendingSuggestionRequest: false,
+            previousSnapshot: previous,
+            currentSnapshot: current,
+            allowsCaretRectChange: true
+        )
+
+        #expect(decision == .invalidate(.textLineChanged))
+    }
+
     @Test("Window moves invalidate visible geometry")
     func windowMovesInvalidateVisibleGeometry() {
         let previous = snapshot(windowRect: CGRect(x: 40, y: 80, width: 900, height: 700))
