@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Optional
 
 
-DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/AutocompleteLab/diagnostics.log"
-DEFAULT_TRACE_LOG = Path.home() / "Library/Logs/AutocompleteLab/traces.jsonl"
+DEFAULT_DIAGNOSTICS_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
+DEFAULT_TRACE_LOG = Path.home() / "Library/Logs/SteadyType/traces.jsonl"
 DEFAULT_LINE_LIMIT = 5000
 DEFAULT_LATE_VISIBLE_BUDGET_MS = 750
 DEFAULT_EXPECTED_ASSET = "Qwen3.5-4B-4bit"
@@ -747,7 +747,7 @@ def should_enforce(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Report and gate Autocomplete Lab latency from diagnostics and redacted trace logs."
+        description="Report and gate SteadyType latency from diagnostics and redacted trace logs."
     )
     parser.add_argument("--diagnostics-log", default=str(DEFAULT_DIAGNOSTICS_LOG))
     parser.add_argument("--trace-log", default=str(DEFAULT_TRACE_LOG))

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-public enum InlineGhostPlacementStrategy: String, Equatable, Sendable {
+public enum InlineGhostPlacementStrategy: String, CaseIterable, Equatable, Sendable {
     case caretAnchored
     case lineAnchored
     case clippedCaretAnchored
@@ -9,7 +9,7 @@ public enum InlineGhostPlacementStrategy: String, Equatable, Sendable {
     case hiddenNoRoom
 }
 
-public enum LineRectValidationStatus: String, Equatable, Sendable {
+public enum LineRectValidationStatus: String, CaseIterable, Equatable, Sendable {
     case used
     case missing
     case ignoredByProfile
@@ -19,7 +19,7 @@ public enum LineRectValidationStatus: String, Equatable, Sendable {
     case horizontallyDetached
 }
 
-public enum BoundaryValidationStatus: String, Equatable, Sendable {
+public enum BoundaryValidationStatus: String, CaseIterable, Equatable, Sendable {
     case used
     case missing
     case ignoredByProfile

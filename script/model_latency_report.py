@@ -5,7 +5,7 @@ import statistics
 from pathlib import Path
 
 
-DEFAULT_LOG = Path.home() / "Library/Logs/AutocompleteLab/diagnostics.log"
+DEFAULT_LOG = Path.home() / "Library/Logs/SteadyType/diagnostics.log"
 DEFAULT_MODEL_ASSET = "Qwen3.5-4B-4bit"
 DEFAULT_PHRASE_MAX_TOKENS = 9
 DEFAULT_PROOF_MIN_SAMPLES = 5
@@ -236,7 +236,7 @@ def enforce_phrase_max_tokens(launches, expected):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Summarize local Autocomplete Lab model latency logs.")
+    parser = argparse.ArgumentParser(description="Summarize local SteadyType model latency logs.")
     parser.add_argument("--log", default=str(DEFAULT_LOG), help="diagnostics.log path")
     parser.add_argument("--latest", action="store_true", help="show only the latest model launch")
     parser.add_argument("--asset", help="show only launches whose asset contains this text")

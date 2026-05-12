@@ -9,8 +9,8 @@ struct MenuBarStatusItemConfiguration: Equatable {
 
     static let autocompleteLab = MenuBarStatusItemConfiguration(
         symbolName: "text.cursor",
-        fallbackTitle: "Autocomplete",
-        accessibilityLabel: "Autocomplete Lab"
+        fallbackTitle: "SteadyType",
+        accessibilityLabel: "SteadyType"
     )
 }
 
@@ -258,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var visiblePageContextEnabled = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        ProcessInfo.processInfo.disableAutomaticTermination("AutocompleteLab runs as a persistent menu bar agent.")
+        ProcessInfo.processInfo.disableAutomaticTermination("SteadyType runs as a persistent menu bar agent.")
         NSApp.setActivationPolicy(.accessory)
         loadPauseState()
         loadDisabledApps()
@@ -430,7 +430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         let debugMenu = NSMenu()
 
-        menu.addItem(NSMenuItem(title: "Autocomplete Lab", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: ""))
         menu.addItem(statusMenu)
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
@@ -8650,13 +8650,13 @@ private extension AppDelegate {
 
     static var textEditPracticeDocumentText: String {
         """
-        Autocomplete Lab practice
+        SteadyType practice
 
         This is a disposable local TextEdit file.
         Type one short sentence below.
         When a suggestion appears, press Tab once to accept one word.
         Type again, then press Esc to dismiss the next suggestion.
-        Return to Autocomplete Lab Settings to pause suggestions or delete traces.
+        Return to SteadyType Settings to pause suggestions or delete traces.
 
         Practice here:
 
