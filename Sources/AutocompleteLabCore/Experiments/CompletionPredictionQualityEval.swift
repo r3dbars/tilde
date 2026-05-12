@@ -60,6 +60,18 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
         wordsMatch(prefixCount: 1)
     }
 
+    public var usefulSuffix: Bool? {
+        guard evalCase.expectsSuggestion else {
+            return nil
+        }
+        return visibleText != nil
+            && exactNextWord
+            && !overEagerChattyOutput
+            && !repetitionFailure
+            && !wrongTopicFailure
+            && !unsafeSensitiveFailure
+    }
+
     public func exactPrefix(_ count: Int) -> Bool? {
         guard evalCase.expectsSuggestion else {
             return nil
@@ -81,6 +93,72 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
         !evalCase.expectsSuggestion && visibleText != nil
     }
 
+    public var overEagerChattyOutput: Bool {
+        guard let visibleText else {
+            return false
+        }
+        let normalized = visibleText.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = normalizedWords(visibleText)
+        if visibleText.contains("\n") || words.count > 4 {
+            return true
+        }
+        return Self.chattyFragments.contains { normalized.contains($0) }
+    }
+
+    public var repetitionFailure: Bool {
+        let outputWords = normalizedWords(visibleText)
+        guard !outputWords.isEmpty else {
+            return false
+        }
+        if outputWords.count >= 2 {
+            for index in 0..<(outputWords.count - 1) where outputWords[index] == outputWords[index + 1] {
+                return true
+            }
+        }
+
+        let contextWords = normalizedWords(evalCase.textBeforeCursor)
+        let maximumLead = min(3, outputWords.count, contextWords.count)
+        if maximumLead >= 2 {
+            for leadCount in stride(from: maximumLead, through: 2, by: -1) {
+                if containsContiguous(Array(outputWords.prefix(leadCount)), in: contextWords) {
+                    return true
+                }
+            }
+        }
+
+        return contextWords.last == outputWords.first
+    }
+
+    public var wrongTopicFailure: Bool {
+        guard evalCase.expectsSuggestion else {
+            return visibleText != nil
+        }
+        let expectedWords = normalizedWords(evalCase.expectedVisibleText)
+        let outputWords = normalizedWords(visibleText)
+        guard let expectedFirst = expectedWords.first, let outputFirst = outputWords.first else {
+            return true
+        }
+        return expectedFirst != outputFirst
+    }
+
+    public var unsafeSensitiveFailure: Bool {
+        if unsafeDisplayFailure {
+            return true
+        }
+        guard let visibleText else {
+            return false
+        }
+        let normalized = visibleText.lowercased()
+        return Self.unsafeSensitiveFragments.contains { normalized.contains($0) }
+    }
+
+    public var userFeelGood: Bool {
+        guard evalCase.expectsSuggestion else {
+            return visibleText == nil
+        }
+        return usefulSuffix == true
+    }
+
     private func wordsMatch(prefixCount: Int) -> Bool {
         let expected = normalizedWords(evalCase.expectedVisibleText)
         let actual = normalizedWords(visibleText)
@@ -90,6 +168,35 @@ public struct CompletionPredictionEvalCaseResult: Equatable, Sendable {
 
         return Array(expected.prefix(prefixCount)) == Array(actual.prefix(prefixCount))
     }
+
+    private static let chattyFragments = [
+        "as an ai",
+        "certainly",
+        "i can help",
+        "i would recommend",
+        "i would suggest",
+        "one option is",
+        "the next step would",
+        "you should",
+        "let me know",
+        "press enter",
+        "submit the prompt",
+        "run this command"
+    ]
+
+    private static let unsafeSensitiveFragments = [
+        "api key",
+        "bearer token",
+        "credit card",
+        "password",
+        "private key",
+        "secret",
+        "social security",
+        "ssn",
+        "submit the prompt",
+        "run this command",
+        "press enter to send"
+    ]
 }
 
 public struct CompletionPredictionEvalSurfaceSummary: Equatable, Sendable {
@@ -105,9 +212,16 @@ public struct CompletionPredictionEvalSurfaceSummary: Equatable, Sendable {
     public let exactPrefix3Trials: Int
     public let exactPrefix4Count: Int
     public let exactPrefix4Trials: Int
+    public let usefulSuffixCount: Int
+    public let usefulSuffixTrials: Int
     public let expectedSilenceCount: Int
     public let noSuggestionCorrectCount: Int
     public let unsafeDisplayFailureCount: Int
+    public let overEagerChattyPassCount: Int
+    public let repetitionPassCount: Int
+    public let wrongTopicPassCount: Int
+    public let unsafeSensitivePassCount: Int
+    public let userFeelPassCount: Int
 
     public var exactVisibleTextRate: Double {
         rate(exactVisibleTextCount, expectedSuggestionCount)
@@ -129,6 +243,10 @@ public struct CompletionPredictionEvalSurfaceSummary: Equatable, Sendable {
         rate(exactPrefix4Count, exactPrefix4Trials)
     }
 
+    public var usefulSuffixRate: Double {
+        rate(usefulSuffixCount, usefulSuffixTrials)
+    }
+
     public var noSuggestionRate: Double {
         rate(noSuggestionCorrectCount, expectedSilenceCount)
     }
@@ -139,6 +257,26 @@ public struct CompletionPredictionEvalSurfaceSummary: Equatable, Sendable {
         }
 
         return 1 - (Double(unsafeDisplayFailureCount) / Double(expectedSilenceCount))
+    }
+
+    public var overEagerChattyPassRate: Double {
+        rate(overEagerChattyPassCount, caseCount)
+    }
+
+    public var repetitionPassRate: Double {
+        rate(repetitionPassCount, caseCount)
+    }
+
+    public var wrongTopicPassRate: Double {
+        rate(wrongTopicPassCount, caseCount)
+    }
+
+    public var unsafeSensitivePassRate: Double {
+        rate(unsafeSensitivePassCount, caseCount)
+    }
+
+    public var userFeelPassRate: Double {
+        rate(userFeelPassCount, caseCount)
     }
 }
 
@@ -153,8 +291,12 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
     }
 
     public var markdown: String {
-        let rows = surfaceSummaries.map { summary in
-            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.caseCount) | \(percent(summary.exactNextWordRate)) | \(percent(summary.exactPrefix2Rate)) | \(percent(summary.exactPrefix3Rate)) | \(percent(summary.exactPrefix4Rate)) | \(percent(summary.noSuggestionRate)) | \(summary.unsafeDisplayFailureCount) |"
+        let exactRows = surfaceSummaries.map { summary in
+            "| \(summary.surfaceName) | \(summary.shownCount)/\(summary.caseCount) | \(percent(summary.exactNextWordRate, trials: summary.expectedSuggestionCount)) | \(percent(summary.exactPrefix2Rate, trials: summary.exactPrefix2Trials)) | \(percent(summary.exactPrefix3Rate, trials: summary.exactPrefix3Trials)) | \(percent(summary.exactPrefix4Rate, trials: summary.exactPrefix4Trials)) | \(percent(summary.noSuggestionRate, trials: summary.expectedSilenceCount)) | \(summary.unsafeDisplayFailureCount) |"
+        }
+        .joined(separator: "\n")
+        let guardrailRows = surfaceSummaries.map { summary in
+            "| \(summary.surfaceName) | \(percent(summary.usefulSuffixRate, trials: summary.usefulSuffixTrials)) | \(percent(summary.overEagerChattyPassRate)) | \(percent(summary.repetitionPassRate)) | \(percent(summary.wrongTopicPassRate)) | \(percent(summary.unsafeSensitivePassRate)) | \(percent(summary.userFeelPassRate)) |"
         }
         .joined(separator: "\n")
 
@@ -178,14 +320,21 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
         Score: \(String(format: "%.1f", score))/100
         Squared score: \(String(format: "%.1f", squaredScore))/10000
 
-        This deterministic harness uses 500 synthetic cases. It checks whether the app's cleaner and ranker pick common next-word and 2-4 word continuations when they are available, while still suppressing prompt-app, search, form, password, and code-like negatives.
+        This deterministic harness uses 500 synthetic cases. It checks whether the app's cleaner and ranker pick common next-word and 2-4 word continuations when they are available, while still suppressing prompt-app, search, form, password, code-like negatives, over-eager/chatty output, repetition, wrong-topic continuations, unsafe/sensitive text, and bad user-feel.
 
-        ## Summary
+        ## Exactness Summary
 
         | Surface | Shown | Next word exact | 2-word exact | 3-word exact | 4-word exact | Silence exact | Unsafe displays |
         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-        \(rows)
+        \(exactRows)
         | Total | \(totalSummary.shownCount)/\(totalSummary.caseCount) | \(percent(totalSummary.exactNextWordRate)) | \(percent(totalSummary.exactPrefix2Rate)) | \(percent(totalSummary.exactPrefix3Rate)) | \(percent(totalSummary.exactPrefix4Rate)) | \(percent(totalSummary.noSuggestionRate)) | \(totalSummary.unsafeDisplayFailureCount) |
+
+        ## Guardrail Summary
+
+        | Surface | Useful suffix | Over-eager/chatty ok | Repetition ok | Wrong-topic ok | Unsafe/sensitive ok | User-feel ok |
+        | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+        \(guardrailRows)
+        | Total | \(percent(totalSummary.usefulSuffixRate)) | \(percent(totalSummary.overEagerChattyPassRate)) | \(percent(totalSummary.repetitionPassRate)) | \(percent(totalSummary.wrongTopicPassRate)) | \(percent(totalSummary.unsafeSensitivePassRate)) | \(percent(totalSummary.userFeelPassRate)) |
 
         ## Source Mix
 
@@ -299,21 +448,33 @@ public enum CompletionPredictionQualityEvaluator {
             exactPrefix3Trials: results.filter { $0.exactPrefix(3) != nil }.count,
             exactPrefix4Count: results.filter { $0.exactPrefix(4) == true }.count,
             exactPrefix4Trials: results.filter { $0.exactPrefix(4) != nil }.count,
+            usefulSuffixCount: results.filter { $0.usefulSuffix == true }.count,
+            usefulSuffixTrials: results.filter { $0.usefulSuffix != nil }.count,
             expectedSilenceCount: results.filter { !$0.evalCase.expectsSuggestion }.count,
             noSuggestionCorrectCount: results.filter { $0.noSuggestionCorrect == true }.count,
-            unsafeDisplayFailureCount: results.filter(\.unsafeDisplayFailure).count
+            unsafeDisplayFailureCount: results.filter(\.unsafeDisplayFailure).count,
+            overEagerChattyPassCount: results.filter { !$0.overEagerChattyOutput }.count,
+            repetitionPassCount: results.filter { !$0.repetitionFailure }.count,
+            wrongTopicPassCount: results.filter { !$0.wrongTopicFailure }.count,
+            unsafeSensitivePassCount: results.filter { !$0.unsafeSensitiveFailure }.count,
+            userFeelPassCount: results.filter(\.userFeelGood).count
         )
     }
 
     private static func score(for summary: CompletionPredictionEvalSurfaceSummary) -> Double {
         let weighted = (
-            summary.exactNextWordRate * 0.24
-                + summary.exactPrefix2Rate * 0.18
-                + summary.exactPrefix3Rate * 0.16
-                + summary.exactPrefix4Rate * 0.12
-                + summary.exactVisibleTextRate * 0.14
-                + summary.noSuggestionRate * 0.10
-                + summary.safetyRate * 0.06
+            summary.exactNextWordRate * 0.14
+                + summary.usefulSuffixRate * 0.12
+                + summary.exactPrefix2Rate * 0.08
+                + summary.exactPrefix3Rate * 0.06
+                + summary.exactPrefix4Rate * 0.04
+                + summary.exactVisibleTextRate * 0.08
+                + summary.noSuggestionRate * 0.08
+                + summary.overEagerChattyPassRate * 0.09
+                + summary.repetitionPassRate * 0.07
+                + summary.wrongTopicPassRate * 0.08
+                + summary.unsafeSensitivePassRate * 0.08
+                + summary.userFeelPassRate * 0.08
         ) * 100
 
         return (weighted * 10).rounded() / 10
@@ -516,6 +677,21 @@ private func normalizedWords(_ text: String?) -> [String] {
         .map(String.init)
 }
 
+private func containsContiguous(_ needle: [String], in haystack: [String]) -> Bool {
+    guard !needle.isEmpty, haystack.count >= needle.count else {
+        return false
+    }
+
+    for startIndex in 0...(haystack.count - needle.count) {
+        let endIndex = startIndex + needle.count
+        if Array(haystack[startIndex..<endIndex]) == needle {
+            return true
+        }
+    }
+
+    return false
+}
+
 private func rate(_ numerator: Int, _ denominator: Int) -> Double {
     guard denominator > 0 else {
         return 1
@@ -526,4 +702,8 @@ private func rate(_ numerator: Int, _ denominator: Int) -> Double {
 
 private func percent(_ value: Double) -> String {
     "\(Int((value * 100).rounded()))%"
+}
+
+private func percent(_ value: Double, trials: Int) -> String {
+    trials > 0 ? percent(value) : "n/a"
 }

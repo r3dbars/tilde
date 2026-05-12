@@ -32,7 +32,7 @@
             "reference": "TextEdit/default"
           }
         ],
-        "notes": "Reference native target with current strict visual and insertion proof."
+        "notes": "Reference native target with recorded strict visual and insertion proof; current-head refresh is tracked by manual_smoke_status."
       },
       {
         "bundle": "com.apple.Notes",
@@ -553,7 +553,7 @@
     },
     {
       "surface": "Obsidian",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Obsidian",
         "bundle": "md.obsidian",
@@ -564,7 +564,9 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
-      "gaps": [],
+      "gaps": [
+        "Current-head long-note proof is blocked because CodeMirror reports the AX cursor before the bottom typed line and the live proof times out before suggestion-presented."
+      ],
     "requirements": [
       {
         "id": "obsidian-theme-variants",
@@ -587,8 +589,8 @@
       },
       {
         "id": "obsidian-long-note-variants",
-        "status": "complete",
-        "summary": "Bounded proof in a long scrolled note is recorded.",
+        "status": "pending",
+        "summary": "Current-head bounded proof in a long scrolled note is blocked; rerun after the CodeMirror cursor source is repaired.",
         "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
       }
     ],
@@ -921,7 +923,7 @@
       "surface": "TextEdit",
       "status": "complete",
       "owner": "core proof lane",
-      "safetyNote": "Reference native AppKit target with current strict visual smoke, screenshots, verified one-word acceptance, and full-accept proof."
+      "safetyNote": "Reference native AppKit target with recorded strict visual smoke, screenshots, verified one-word acceptance, and full-accept proof; current-head freshness is checked separately."
     },
     {
       "bundle": "com.apple.Notes",

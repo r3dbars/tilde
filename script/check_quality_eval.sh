@@ -41,6 +41,13 @@ for required in \
   "Squared score: 10000.0/10000" \
   "Next word exact" \
   "4-word exact" \
+  "Useful suffix" \
+  "Over-eager/chatty ok" \
+  "Repetition ok" \
+  "Wrong-topic ok" \
+  "Unsafe/sensitive ok" \
+  "User-feel ok" \
+  "| Code field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |" \
   "Unsafe displays" \
   "Predictive phrase fallback exact: 200/200" \
   "Predictor-only positives omit the expected answer" \
