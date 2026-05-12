@@ -770,7 +770,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !wasReadyForSuggestions && report.allowsSuggestions {
             rearmFocusedTextAfterRuntimeReady()
         }
-        if report.stage == .failed {
+        if report.stage == .failed || report.action == .repairModel {
             showSettings()
         }
         DiagnosticsLog.shared.record(
