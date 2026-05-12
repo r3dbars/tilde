@@ -74,6 +74,10 @@ if ! grep -F 'Swift activation for pid $target_pid' script/real_app_smoke.sh >/d
   echo "real app smoke self-test expected process activation Swift helper to be timeout-bounded" >&2
   exit 1
 fi
+if ! grep -F 'AUTOCOMPLETE_LAB_SYSTEM_EVENTS_PROCESS_ACTIVATION' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected System Events process activation to be opt-in" >&2
+  exit 1
+fi
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Codex seeding to allow refocus-step verification" >&2
