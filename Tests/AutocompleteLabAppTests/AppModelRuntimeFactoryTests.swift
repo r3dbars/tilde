@@ -53,6 +53,39 @@ struct AppModelRuntimeFactoryTests {
         #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
     }
 
+    @Test("Uses unavailable runtime and repair state for invalid model folder")
+    func usesUnavailableRuntimeAndRepairStateForInvalidModelFolder() async throws {
+        let defaults = temporaryDefaults()
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("steadytype-invalid-model-root-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        let initialBundle = AppModelRuntimeFactory.makeRuntime(
+            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path],
+            defaults: defaults
+        )
+        try FileManager.default.createDirectory(
+            at: initialBundle.modelDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        try Data("{}".utf8).write(to: initialBundle.modelDirectoryURL.appendingPathComponent("config.json"))
+
+        let bundle = AppModelRuntimeFactory.makeRuntime(
+            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path],
+            defaults: defaults
+        )
+        let state = await bundle.runtime.state
+        let report = bundle.bootstrapPlan.readinessReport(for: state)
+
+        #expect(bundle.bootstrapPlan.activeCandidate == .unavailable)
+        #expect(report.stage == .repairNeeded)
+        #expect(report.action == .repairModel)
+        #expect(bundle.bootstrapPlan.assetState.statusSummary.contains("model asset invalid"))
+        #expect(state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
+    }
+
     private func temporaryDefaults() -> UserDefaults {
         let suiteName = "autocomplete-app-model-runtime-factory-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

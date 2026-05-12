@@ -16,7 +16,7 @@ Run the full gate:
 
 That must create and verify:
 
-- `dist/AutocompleteLab.zip`
+- `dist/SteadyType.zip`
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
 - `dist/private-beta/daily-tester-checklist.md`
@@ -49,7 +49,7 @@ Ollama, llama.cpp, or mock fallback, do not invite testers.
 
 The generated private-beta packet must also keep tester model setup inside the
 app. If the model is missing or invalid, testers should use Settings
-`Install Model` or `Repair Model`; if that in-app setup fails, stop the session
+`Install Local Model` or `Repair Local Model`; if that in-app setup fails, stop the session
 instead of giving testers shell commands.
 
 The tester install path is inside Settings. If the model is missing, use
@@ -83,7 +83,7 @@ until the compatibility gates say otherwise.
 Walk each tester through this in 15 minutes or less:
 
 - First-run map: suggestions appear near the cursor, `Tab` accepts one word,
-  `Esc` dismisses, Pause stops everything, and Disable Current App stops one
+  `Esc` dismisses, Pause stops everything, and Pause Current App stops one
   app.
 - Privacy promise: default traces are redacted and local; raw text and
   screenshots are debug-only opt-ins.

@@ -86,7 +86,7 @@ recipients, subject lines, or trace excerpts into the report.
 
 ```bash
 ./script/check_trace_eval.sh
-./script/latency_benchmark_report.py --beta-gate
+./script/beta_readiness.sh --check-only
 ./script/model_latency_report.py --latest
 ./script/model_latency_report.py --latest --require-shown-samples 5
 ./script/check_redacted_report_export.sh
@@ -116,7 +116,7 @@ Use this once per beta day. It should take about 2 minutes.
   for a debug session.
 - Use only the apps listed in the beta packet for that day.
 - Know the exits: `Esc` dismisses, menu bar pause stops suggestions, and
-  `Disable <App>` stops the current app.
+  `Pause Current App` stops the current app.
 
 ## During Writing
 
@@ -311,6 +311,7 @@ SHA-256: $sha
 ./script/private_beta_packet_self_test.sh
 ./script/validate_beta_issue_template.sh
 ./script/beta_readiness.sh --check-only
+./script/check_current_build_privacy_export.sh
 ./script/check_redacted_report_export.sh
 ./script/private_beta_packet.sh --check
 \`\`\`
@@ -379,6 +380,38 @@ check_archive_app() {
   rm -rf "$verify_dir"
 }
 
+check_archive_privacy_export() {
+  local verify_dir proof_dir app_path
+  verify_dir="$(mktemp -d)"
+  proof_dir="$(mktemp -d)"
+
+  ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
+  app_path="$verify_dir/SteadyType.app"
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir" "$proof_dir"
+    echo "archive does not contain SteadyType.app" >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_APP_BUNDLE="$app_path" \
+  AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_dir" \
+    ./script/check_current_build_privacy_export.sh >/tmp/autocomplete-private-beta-privacy-proof.txt
+
+  rm -rf "$verify_dir" "$proof_dir"
+}
+
+require_same_file() {
+  local source_path="$1"
+  local packet_path="$2"
+
+  if ! cmp -s "$source_path" "$packet_path"; then
+    echo "beta packet doc is stale: $packet_path" >&2
+    echo "Regenerate with ./script/private_beta_packet.sh create" >&2
+    exit 1
+  fi
+}
+
 create_packet() {
   require_archive
   ./script/check_model_asset.py
@@ -399,8 +432,13 @@ SHA-256: $sha
 This is a local-only packet for a tiny private beta. Nothing here uploads
 traces, screenshots, prompts, or typed text anywhere.
 
-Start with TextEdit. Then try Notes. Then try Obsidian. Chrome textarea is a
-sanity check, not the main product loop.
+Tester path:
+
+1. Start with TextEdit.
+2. Try Notes only after TextEdit feels predictable.
+3. Try Obsidian only as a disposable writing note.
+4. Use Chrome local text fields as a sanity check, not the main product loop.
+5. Do not write-test Codex, Claude, or Claude Code. Those are proof targets.
 
 Read before inviting testers:
 
@@ -427,8 +465,9 @@ Useful commands:
 ./script/manual_smoke_status.sh --require-all
 ./script/manual_proof_queue.sh --print
 ./script/check_trace_eval.sh
-./script/latency_benchmark_report.py --beta-gate
+./script/beta_readiness.sh --check-only
 ./script/model_latency_report.py --latest
+./script/check_current_build_privacy_export.sh
 ./script/check_redacted_report_export.sh
 open "\$HOME/Library/Logs/SteadyType"
 \`\`\`
@@ -453,9 +492,8 @@ EOF
 7. Confirm Settings says the model is ready.
 8. Click `Start TextEdit Practice`.
 9. Use Tab for one-word accept.
-10. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
-11. Press Esc if a suggestion feels wrong.
-12. Use Diagnostics -> Export to create the local redacted trace report and survival report.
+10. Press Esc if a suggestion feels wrong.
+11. Use Diagnostics -> Export to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
@@ -532,6 +570,7 @@ check_packet() {
     echo "Run ./script/check_model_asset.py for the exact fix." >&2
     exit 1
   }
+  check_archive_privacy_export
 
   for path in \
     "$README_PATH" \
@@ -572,6 +611,16 @@ check_packet() {
     echo "actual:   $actual_sha" >&2
     exit 1
   fi
+
+  require_same_file "PRIVACY-BETA.md" "$TESTER_DOCS_DIR/PRIVACY-BETA.md"
+  require_same_file "FIRST-RUN-BETA.md" "$TESTER_DOCS_DIR/FIRST-RUN-BETA.md"
+  require_same_file "KNOWN-LIMITATIONS.md" "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md"
+  require_same_file "UNINSTALL-DELETE-DATA.md" "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md"
+  require_same_file "DIAGNOSTIC-EXPORT.md" "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md"
+  require_same_file "RELEASE-NOTES.md" "$TESTER_DOCS_DIR/RELEASE-NOTES.md"
+  require_same_file "docs/product/private-beta-ops-loop.md" "$TESTER_DOCS_DIR/private-beta-ops-loop.md"
+  require_same_file ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml" "$TESTER_DOCS_DIR/autocomplete-beta-feedback.yml"
+  require_same_file ".github/labels.yml" "$TESTER_DOCS_DIR/labels.yml"
 
   echo "Private beta packet verified: $PACKET_DIR"
 }

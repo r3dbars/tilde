@@ -50,7 +50,7 @@ an explicit local debug session, and turn them off afterward.
 ## Pause, Quit, Disable, And Delete
 
 - Pause suggestions from the menu bar.
-- Disable the current app from the menu bar.
+- Pause the current app from the menu bar.
 - Quiet the current field from Settings.
 - Export or delete local traces from Diagnostics.
 - Quit from the menu bar when you do not want the app watching typing.

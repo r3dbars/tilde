@@ -100,6 +100,25 @@ check_notarized_install_proof() {
   echo "notarization, stapling, and fresh-install proof files are present"
 }
 
+latency_beta_gate() {
+  local args=(--beta-gate)
+  local trace_start="${AUTOCOMPLETE_LAB_LATENCY_TRACE_START_LINE:-${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}}"
+  local diagnostics_start="${AUTOCOMPLETE_LAB_LATENCY_DIAGNOSTICS_START_LINE:-${AUTOCOMPLETE_LAB_LOG_START_LINE:-}}"
+
+  if [[ -n "$trace_start" ]]; then
+    args+=(--trace-start-line "$trace_start")
+  fi
+  if [[ -n "$diagnostics_start" ]]; then
+    args+=(--diagnostics-start-line "$diagnostics_start")
+  fi
+
+  if [[ -z "$trace_start" && -z "$diagnostics_start" ]]; then
+    args+=(--line-limit "${AUTOCOMPLETE_LAB_LATENCY_LINE_LIMIT:-1000}")
+  fi
+
+  ./script/latency_benchmark_report.py "${args[@]}"
+}
+
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
 
@@ -108,7 +127,7 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
-  run_check "Latency beta gate" ./script/latency_benchmark_report.py --beta-gate || failures=$((failures + 1))
+  run_check "Latency beta gate" latency_beta_gate || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
@@ -161,7 +180,7 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   ./script/check_diagnostics_log.sh
 echo
 echo "== Latency beta gate =="
-./script/latency_benchmark_report.py --beta-gate
+latency_beta_gate
 
 
 echo
