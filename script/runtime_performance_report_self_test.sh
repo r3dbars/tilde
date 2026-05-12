@@ -99,4 +99,33 @@ grep -F "Missing cold model load samples; do not score cold-start load time from
 grep -F "Missing first-visible samples; do not score keystroke-to-visible latency from this report." "$MISSING_OUTPUT" >/dev/null
 grep -F "Missing first-token samples; do not score model response latency from this report." "$MISSING_OUTPUT" >/dev/null
 
+ENERGY_OUTPUT="$TMP_DIR/energy-report.txt"
+./script/runtime_performance_report.py \
+  --diagnostics-log "$LOG_PATH" \
+  --model-root "$MODEL_ROOT" \
+  --pid "$$" \
+  --energy-gate \
+  --sample-duration-seconds 0 \
+  --max-average-cpu 100 \
+  --max-p95-cpu 100 \
+  --max-rss-mb 999999 \
+  --max-rss-growth-mb 999999 \
+  >"$ENERGY_OUTPUT"
+
+grep -F "Energy sample gate: pass" "$ENERGY_OUTPUT" >/dev/null
+
+if ./script/runtime_performance_report.py \
+  --diagnostics-log "$LOG_PATH" \
+  --model-root "$MODEL_ROOT" \
+  --pid "$$" \
+  --energy-gate \
+  --sample-duration-seconds 0 \
+  --max-average-cpu -1 \
+  >"$TMP_DIR/energy-fail.txt" 2>/dev/null; then
+  echo "runtime performance report self-test expected energy gate to fail" >&2
+  exit 1
+fi
+
+grep -F "Energy sample gate: fail" "$TMP_DIR/energy-fail.txt" >/dev/null
+
 echo "Runtime performance report self-test passed."

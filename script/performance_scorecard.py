@@ -218,7 +218,10 @@ def latest_slice(records: list[Record]) -> list[Record]:
         for record in records
         if record.event == "runtime-bootstrap"
     ]
-    start_line = launch_lines[-1] if launch_lines else (bootstrap_lines[-1] if bootstrap_lines else 0)
+    start_line = max(
+        launch_lines[-1] if launch_lines else 0,
+        bootstrap_lines[-1] if bootstrap_lines else 0,
+    )
     return [record for record in records if record.line >= start_line]
 
 
@@ -255,6 +258,7 @@ def metric_summary(values: list[int]) -> dict[str, int] | None:
 
 def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dict[str, Any]:
     current = latest_slice(records)
+    current_or_all = current if current else records
     bootstraps = [record for record in current if record.event == "runtime-bootstrap"]
     if not bootstraps:
         bootstraps = [record for record in records if record.event == "runtime-bootstrap"]
@@ -287,14 +291,14 @@ def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dic
 
     model_first = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "mlx-completion-timing"
         for value in [int_field(record.fields, "firstChunkMilliseconds")]
         if value is not None
     ]
     model_total = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "mlx-completion-timing"
         for value in [
             int_field(record.fields, "totalMilliseconds")
@@ -304,63 +308,63 @@ def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dic
     ]
     event_tap_raw = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "keyboard-event-tap-latency"
         for value in [int_field(record.fields, "durationMicros")]
         if value is not None
     ]
     event_tap_summary_counts = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "keyboard-event-tap-latency-summary"
         for value in [int_field(record.fields, "count")]
         if value is not None
     ]
     event_tap_summary_p95 = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "keyboard-event-tap-latency-summary"
         for value in [int_field(record.fields, "p95Micros")]
         if value is not None
     ]
     event_tap_summary_max = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "keyboard-event-tap-latency-summary"
         for value in [int_field(record.fields, "maxMicros")]
         if value is not None
     ]
     ax_summary_counts = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "focused-text-poll-latency-summary"
         for value in [int_field(record.fields, "count")]
         if value is not None
     ]
     ax_summary_p95 = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "focused-text-poll-latency-summary"
         for value in [int_field(record.fields, "p95Milliseconds")]
         if value is not None
     ]
     ax_summary_max = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "focused-text-poll-latency-summary"
         for value in [int_field(record.fields, "maxMilliseconds")]
         if value is not None
     ]
     warm_times = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "runtime-warm-succeeded"
         for value in [int_field(record.fields, "warmMilliseconds")]
         if value is not None
     ]
     model_load_times = [
         value
-        for record in records
+        for record in current_or_all
         if record.event == "mlx-model-load-succeeded"
         for value in [int_field(record.fields, "loadMilliseconds")]
         if value is not None
@@ -390,8 +394,8 @@ def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dic
         "latest_warm_succeeded": any(record.event == "runtime-warm-succeeded" for record in current),
         "assets": assets,
         "candidates": candidates,
-        "shown": deduped_shown_latencies(records),
-        "shown_summary": metric_summary(deduped_shown_latencies(records)),
+        "shown": deduped_shown_latencies(current_or_all),
+        "shown_summary": metric_summary(deduped_shown_latencies(current_or_all)),
         "model_first": model_first,
         "model_first_summary": metric_summary(model_first),
         "model_total": model_total,
@@ -400,17 +404,17 @@ def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dic
         "event_tap_summary_counts": event_tap_summary_counts,
         "event_tap_summary_p95": event_tap_summary_p95,
         "event_tap_summary_max": event_tap_summary_max,
-        "event_tap_slow_markers": sum(1 for record in records if record.event == "keyboard-event-tap-latency-slow"),
-        "event_tap_disabled": sum(1 for record in records if record.event == "keyboard-event-tap-disabled"),
-        "event_tap_start_failed": sum(1 for record in records if record.event == "keyboard-event-tap-start-failed"),
-        "event_tap_failed_closed": sum(1 for record in records if record.event == "keyboard-event-tap-failed-closed"),
-        "event_tap_dropped": sum(1 for record in records if record.event == "keyboard-event-tap-unhandled-consumed-key-dropped"),
+        "event_tap_slow_markers": sum(1 for record in current_or_all if record.event == "keyboard-event-tap-latency-slow"),
+        "event_tap_disabled": sum(1 for record in current_or_all if record.event == "keyboard-event-tap-disabled"),
+        "event_tap_start_failed": sum(1 for record in current_or_all if record.event == "keyboard-event-tap-start-failed"),
+        "event_tap_failed_closed": sum(1 for record in current_or_all if record.event == "keyboard-event-tap-failed-closed"),
+        "event_tap_dropped": sum(1 for record in current_or_all if record.event == "keyboard-event-tap-unhandled-consumed-key-dropped"),
         "ax_summary_counts": ax_summary_counts,
         "ax_summary_p95": ax_summary_p95,
         "ax_summary_max": ax_summary_max,
-        "ax_slow_markers": sum(1 for record in records if record.event == "focused-text-poll-latency-slow"),
-        "ax_skipped": sum((int_field(record.fields, "count") or 1) for record in records if record.event == "focused-text-poll-skipped"),
-        "cancellations": sum(1 for record in records if record.event == "suggestion-request-cancelled"),
+        "ax_slow_markers": sum(1 for record in current_or_all if record.event == "focused-text-poll-latency-slow"),
+        "ax_skipped": sum((int_field(record.fields, "count") or 1) for record in current_or_all if record.event == "focused-text-poll-skipped"),
+        "cancellations": sum(1 for record in current_or_all if record.event == "suggestion-request-cancelled"),
         "warm_times": warm_times,
         "model_load_times": model_load_times,
         "cpu_samples": cpu_samples,

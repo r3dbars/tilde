@@ -20,13 +20,15 @@ cat >"$LOG_PATH" <<'LOG'
 2026-05-12T20:00:02Z runtime-warm-succeeded candidate=mlx state=ready warmMilliseconds=2100
 2026-05-12T20:00:02Z runtime readinessAction=none readinessStage=ready state=ready (MLX)
 2026-05-12T20:00:03Z diagnostic textBeforeCursor=SECRET-SHOULD-NOT-APPEAR
+2026-05-12T20:00:03Z focused-text-poll-latency-slow durationMilliseconds=600
+2026-05-12T20:00:03Z keyboard-event-tap-latency-slow durationMicros=20000
 2026-05-12T20:00:04Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Gemma4E4B/MLX/gemma-4-e4b-4bit nativeRuntimeAvailable=true preferredCandidate=mlx
 LOG
 
 for index in 1 2 3 4 5; do
   first=$((70 + index))
   total=$((160 + index * 5))
-  shown=$((180 + index * 20))
+  shown=$((100 + index * 10))
   tap=$((80 + index))
   {
     echo "2026-05-12T20:00:1${index}Z mlx-completion-timing firstChunkMilliseconds=$first generationMilliseconds=$total maxTokens=9 mode=phraseContinuation totalMilliseconds=$total"
@@ -83,6 +85,8 @@ for expected in \
   "Runtime readiness + no egress: 100/100" \
   "Privacy: metadata-only parse; ignored sensitive field values=1" \
   "Latency sample depth: 100/100" \
+  "Typing responsiveness: 100/100" \
+  "Event-tap latency: 100/100" \
   "Multi-model evidence: 100/100"; do
   if ! grep -F "$expected" "$TMP_DIR/pass.txt" >/dev/null; then
     echo "performance scorecard self-test missing expected output: $expected" >&2
