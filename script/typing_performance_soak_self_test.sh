@@ -77,6 +77,18 @@ if ! grep -F "Typing focus guard: verifies TextEdit is frontmost before each gen
   exit 1
 fi
 
+if ! grep -F "Concurrency guard: serializes TextEdit soak runs with a setup lock" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the TextEdit soak lock" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Setup cleanup: closes old generated TextEdit soak documents before typing" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain generated TextEdit cleanup" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
 if ! grep -F "AX warmup: waits for a focused-text poll summary before typing" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain the AX warmup flush" >&2
   cat "$TMP_DIR/default.txt" >&2
