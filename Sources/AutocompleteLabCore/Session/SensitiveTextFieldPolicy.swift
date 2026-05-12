@@ -56,15 +56,16 @@ public struct SensitiveTextFieldPolicy: Equatable, Sendable {
     }
 
     public func assessment(
-        role _: String?,
+        role: String?,
         subrole: String?,
         fingerprint: FocusedElementFingerprint
     ) -> SensitiveTextFieldAssessment {
-        if (subrole ?? "").caseInsensitiveCompare("AXSecureTextField") == .orderedSame {
+        if (role ?? "").caseInsensitiveCompare("AXSecureTextField") == .orderedSame
+            || (subrole ?? "").caseInsensitiveCompare("AXSecureTextField") == .orderedSame {
             return SensitiveTextFieldAssessment(
                 isSensitive: true,
                 category: .password,
-                reason: "secureSubrole"
+                reason: "secureAXRole"
             )
         }
 
