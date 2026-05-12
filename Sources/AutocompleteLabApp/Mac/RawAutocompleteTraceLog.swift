@@ -203,11 +203,21 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private func expireArtifacts(for flagKey: String) {
         if flagKey == rawContentDefaultsKey {
             redactStoredTraceFile()
+            removeSurvivalInspectorDebugFile()
         }
         if flagKey == screenshotDefaultsKey {
             queue.sync { [screenshotsURL] in
                 try? FileManager.default.removeItem(at: screenshotsURL)
             }
+        }
+    }
+
+    private func removeSurvivalInspectorDebugFile() {
+        queue.sync { [logURL] in
+            let folderURL = logURL.deletingLastPathComponent()
+            try? FileManager.default.removeItem(
+                at: folderURL.appendingPathComponent("survival-inspector-debug.json")
+            )
         }
     }
 

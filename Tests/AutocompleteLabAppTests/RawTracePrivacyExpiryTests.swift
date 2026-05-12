@@ -59,6 +59,7 @@ struct RawTracePrivacyExpiryTests {
             .appendingPathComponent("RawTracePrivacyExpiryTests-\(UUID().uuidString)")
         let screenshots = temporaryFolder.appendingPathComponent("screenshots")
         let screenshotFile = screenshots.appendingPathComponent("debug.png")
+        let survivalInspectorDebug = temporaryFolder.appendingPathComponent("survival-inspector-debug.json")
         let clock = TestClock(Date(timeIntervalSince1970: 2_000))
         let log = RawAutocompleteTraceLog(
             logURL: temporaryFolder.appendingPathComponent("traces.jsonl"),
@@ -82,9 +83,14 @@ struct RawTracePrivacyExpiryTests {
         )
         try FileManager.default.createDirectory(at: screenshots, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: screenshotFile.path, contents: Data("png".utf8))
+        FileManager.default.createFile(
+            atPath: survivalInspectorDebug.path,
+            contents: Data(#"{"acceptedText":"private draft text"}"#.utf8)
+        )
 
         #expect(log.recentEvents(limit: 1).first?.textBeforeCursor == "private draft text")
         #expect(FileManager.default.fileExists(atPath: screenshotFile.path))
+        #expect(FileManager.default.fileExists(atPath: survivalInspectorDebug.path))
 
         clock.current = Date(timeIntervalSince1970: 2_061)
 
@@ -94,6 +100,7 @@ struct RawTracePrivacyExpiryTests {
         #expect(redacted.textBeforeCursor == "")
         #expect(redacted.metadata["textBeforeCursorChars"] == "18")
         #expect(!FileManager.default.fileExists(atPath: screenshotFile.path))
+        #expect(!FileManager.default.fileExists(atPath: survivalInspectorDebug.path))
     }
 
     @Test("Delete all removes generated local report artifacts too")
