@@ -5999,6 +5999,13 @@ open_obsidian_smoke_note_if_configured() {
     return 0
   fi
 
+  local proof_vault="$HOME/Library/Application Support/AutocompleteLab/ObsidianProofVault"
+  if [[ -f "$proof_vault/Proof/placement-proof.md" ]]; then
+    open "obsidian://open?vault=ObsidianProofVault&file=Proof%2Fplacement-proof"
+    sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
+    return 0
+  fi
+
   open -a Obsidian
 }
 
