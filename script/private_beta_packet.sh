@@ -4,7 +4,8 @@ set -euo pipefail
 MODE="${1:-create}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
-ARCHIVE_PATH="$DIST_DIR/SteadyType.zip"
+DMG_PATH="$DIST_DIR/SteadyType.dmg"
+ZIP_PATH="$DIST_DIR/SteadyType.zip"
 PACKET_DIR="$DIST_DIR/private-beta"
 README_PATH="$PACKET_DIR/README.md"
 INSTALL_PATH="$PACKET_DIR/install-checklist.md"
@@ -27,8 +28,8 @@ usage() {
   cat <<'EOF'
 Usage: script/private_beta_packet.sh [create|--check]
 
-create   Create a local private-beta packet beside dist/SteadyType.zip.
---check  Validate that the packet exists and points at the current archive.
+create   Create a local private-beta packet beside dist/SteadyType.dmg.
+--check  Validate that the packet exists and points at the current DMG.
 --print-feedback-template
          Print the no-raw-text feedback template used in the packet.
 --print-session-report-template
@@ -45,8 +46,10 @@ create   Create a local private-beta packet beside dist/SteadyType.zip.
          Print the tester-safe model asset template used in the packet.
 
 This script only writes local files. It never uploads or sends beta data.
-By default it requires the archive to contain a Developer ID signed app. Set
+By default it requires the DMG to contain a Developer ID signed app and to pass
+current stapler and Gatekeeper checks. Set
 AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE=0 only for local script tests.
+Set AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_NOTARIZED_DMG=0 only for local script tests.
 EOF
 }
 
@@ -295,14 +298,15 @@ write_readiness_summary() {
 
 Generated: $generated_at
 Commit: $commit
-Archive: ../SteadyType.zip
+Primary artifact: ../SteadyType.dmg
+Secondary archive: ../SteadyType.zip
 SHA-256: $sha
 
 ## Current Readiness
 
 - Docs and feedback operations: 10/10 when this packet validates.
-- Private beta readiness: improved by ops clarity, but external beta still
-  requires current artifact proof.
+- Private beta readiness depends on the current DMG passing stapler, spctl, and
+  install proof. Saved proof files alone do not count.
 - Do not invite testers unless the stop dashboard has no open stop rows.
 
 ## Required Checks
@@ -345,35 +349,51 @@ beta.
 EOF
 }
 
-archive_sha() {
-  shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}'
+primary_artifact_sha() {
+  shasum -a 256 "$DMG_PATH" | awk '{print $1}'
 }
 
-require_archive() {
-  if [[ ! -s "$ARCHIVE_PATH" ]]; then
-    echo "missing archive: $ARCHIVE_PATH" >&2
-    echo "Run ./script/beta_readiness.sh first." >&2
+secondary_archive_sha() {
+  if [[ -s "$ZIP_PATH" ]]; then
+    shasum -a 256 "$ZIP_PATH" | awk '{print $1}'
+  fi
+  return 0
+}
+
+require_primary_artifact() {
+  if [[ ! -s "$DMG_PATH" ]]; then
+    echo "missing primary beta artifact: $DMG_PATH" >&2
+    echo "Run ./script/package_release.sh archive, then ./script/package_release.sh --notarize." >&2
     exit 1
   fi
 }
 
-check_archive_app() {
-  local verify_dir app_path
+check_primary_artifact_app() {
+  local verify_dir mount_path app_path
   verify_dir="$(mktemp -d)"
-
-  ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
+  mount_path="$verify_dir/mount"
   app_path="$verify_dir/SteadyType.app"
+  mkdir -p "$mount_path"
+
+  if ! hdiutil attach "$DMG_PATH" -mountpoint "$mount_path" -nobrowse -quiet; then
+    rm -rf "$verify_dir"
+    echo "could not mount primary beta artifact: $DMG_PATH" >&2
+    exit 1
+  fi
+
+  cp -R "$mount_path/SteadyType.app" "$app_path" 2>/dev/null || true
+  hdiutil detach "$mount_path" -quiet || true
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "archive does not contain SteadyType.app" >&2
+    echo "primary beta artifact does not contain SteadyType.app" >&2
     exit 1
   fi
 
   if [[ "${AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE:-1}" == "1" ]]; then
     if ! ./script/check_app_bundle.sh --release "$app_path"; then
       rm -rf "$verify_dir"
-      echo "Developer ID archive signature blocked: $ARCHIVE_PATH does not contain a Developer ID signed SteadyType.app" >&2
+      echo "Developer ID DMG signature blocked: $DMG_PATH does not contain a Developer ID signed SteadyType.app" >&2
       echo "This is separate from Apple notarization credentials. Rebuild the archive with ./script/package_release.sh archive before checking the beta packet." >&2
       exit 1
     fi
@@ -381,28 +401,54 @@ check_archive_app() {
     ./script/check_app_bundle.sh "$app_path"
   fi
 
+  if [[ "${AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_NOTARIZED_DMG:-1}" == "1" ]]; then
+    if ! xcrun stapler validate "$DMG_PATH"; then
+      rm -rf "$verify_dir"
+      echo "notarized DMG blocked: current stapler validation failed for $DMG_PATH" >&2
+      exit 1
+    fi
+
+    if ! spctl -a -t open --context context:primary-signature -v "$DMG_PATH"; then
+      rm -rf "$verify_dir"
+      echo "notarized DMG blocked: current Gatekeeper assessment failed for $DMG_PATH" >&2
+      exit 1
+    fi
+
+    if ! spctl --assess --type execute --verbose=4 "$app_path"; then
+      rm -rf "$verify_dir"
+      echo "notarized DMG blocked: installed app Gatekeeper assessment failed for the current DMG" >&2
+      exit 1
+    fi
+  fi
+
   rm -rf "$verify_dir"
 }
 
 create_packet() {
-  require_archive
+  require_primary_artifact
   ./script/check_model_asset.py
   ./script/validate_beta_issue_template.sh --quiet
-  check_archive_app
+  check_primary_artifact_app
   mkdir -p "$PACKET_DIR"
   mkdir -p "$TESTER_DOCS_DIR"
 
-  local sha
-  sha="$(archive_sha)"
+  local sha zip_sha
+  sha="$(primary_artifact_sha)"
+  zip_sha="$(secondary_archive_sha)"
 
   cat >"$README_PATH" <<EOF
 # SteadyType Private Beta Packet
 
-Archive: ../SteadyType.zip
+Primary artifact: ../SteadyType.dmg
+Secondary archive: ../SteadyType.zip
 SHA-256: $sha
 
 This is a local-only packet for a tiny private beta. Nothing here uploads
 traces, screenshots, prompts, or typed text anywhere.
+
+Send testers the DMG, not the ZIP. The DMG is the notarized artifact and the
+packet checker revalidates the current DMG with stapler and spctl instead of
+trusting old proof files.
 
 Start with TextEdit. Then try Notes. Then try Obsidian. Chrome textarea is a
 sanity check, not the main product loop.
@@ -449,18 +495,19 @@ EOF
   cat >"$INSTALL_PATH" <<'EOF'
 # Install Checklist
 
-1. Unzip `SteadyType.zip`.
-2. Open `SteadyType.app`.
-3. Grant Accessibility when macOS asks.
-4. Open Settings from the menu bar item.
-5. Read `tester-docs/FIRST-RUN-BETA.md`.
-6. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
-7. Confirm Settings says the model is ready.
-8. Click `Start TextEdit Practice`.
-9. Use Tab for one-word accept.
-10. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
-11. Press Esc if a suggestion feels wrong.
-12. Use Diagnostics -> Export to create the local redacted trace report and survival report.
+1. Open `SteadyType.dmg`.
+2. Drag `SteadyType.app` to `Applications`.
+3. Open `SteadyType.app`.
+4. Grant Accessibility when macOS asks.
+5. Open Settings from the menu bar item.
+6. Read `tester-docs/FIRST-RUN-BETA.md`.
+7. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
+8. Confirm Settings says the model is ready.
+9. Click `Start TextEdit Practice`.
+10. Use Tab for one-word accept.
+11. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
+12. Press Esc if a suggestion feels wrong.
+13. Use Diagnostics -> Export to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
@@ -522,14 +569,17 @@ Use raw text or screenshots only for an explicit debug session, and write that
 consent in the session notes before collecting them.
 EOF
 
-  printf 'SteadyType.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
+  printf 'SteadyType.dmg  %s\n' "$sha" >"$CHECKSUM_PATH"
+  if [[ -n "$zip_sha" ]]; then
+    printf 'SteadyType.zip  %s\n' "$zip_sha" >>"$CHECKSUM_PATH"
+  fi
   write_readiness_summary "$sha"
   echo "Private beta packet created: $PACKET_DIR"
 }
 
 check_packet() {
-  require_archive
-  check_archive_app
+  require_primary_artifact
+  check_primary_artifact_app
   ./script/validate_beta_issue_template.sh --quiet
 
   ./script/check_model_asset.py --quiet || {
@@ -568,11 +618,11 @@ check_packet() {
   done
 
   local expected_sha actual_sha
-  expected_sha="$(archive_sha)"
-  actual_sha="$(awk '/SteadyType.zip/ {print $2; exit}' "$CHECKSUM_PATH")"
+  expected_sha="$(primary_artifact_sha)"
+  actual_sha="$(awk '/SteadyType\.dmg/ {print $2; exit}' "$CHECKSUM_PATH")"
 
   if [[ "$expected_sha" != "$actual_sha" ]]; then
-    echo "beta packet checksum is stale" >&2
+    echo "beta packet checksum is stale for SteadyType.dmg" >&2
     echo "expected: $expected_sha" >&2
     echo "actual:   $actual_sha" >&2
     exit 1

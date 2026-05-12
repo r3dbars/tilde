@@ -16,7 +16,7 @@ require_contains() {
   fi
 }
 
-require_contains "$HELP_OUTPUT" "dist/SteadyType.zip plus preferred dist/SteadyType.dmg"
+require_contains "$HELP_OUTPUT" "primary dist/SteadyType.dmg plus secondary dist/SteadyType.zip"
 require_contains "$HELP_OUTPUT" "--print-proof-template"
 require_contains "$HELP_OUTPUT" "--require-developer-id"
 require_contains "$HELP_OUTPUT" "Submit the DMG to Apple notarytool"
@@ -24,7 +24,7 @@ require_contains "$HELP_OUTPUT" "AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES"
 
 require_contains "$PROOF_TEMPLATE" "Preferred artifact: dist/SteadyType.dmg"
 require_contains "$PROOF_TEMPLATE" "Secondary artifact: dist/SteadyType.zip"
-require_contains "$PROOF_TEMPLATE" "Developer ID archive signature: required before private-beta packet"
+require_contains "$PROOF_TEMPLATE" "Developer ID app signature: required before private-beta packet"
 require_contains "$PROOF_TEMPLATE" "Notarization status:"
 require_contains "$PROOF_TEMPLATE" "Stapler status:"
 require_contains "$PROOF_TEMPLATE" "Gatekeeper status:"

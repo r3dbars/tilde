@@ -31,8 +31,13 @@ reject_line() {
 }
 
 require_contains './script/package_release.sh --check --require-developer-id --require-notary-profile'
-require_contains 'check_release_archive_signature'
+require_contains 'PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"'
+require_contains 'check_release_dmg_signature'
 require_contains 'check_notarized_install_proof'
+require_contains 'check_current_artifact_checksum'
+require_contains 'xcrun stapler validate "$PRIMARY_ARTIFACT"'
+require_contains 'spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"'
+require_contains 'spctl --assess --type execute --verbose=4 "$app_path"'
 reject_line './script/package_release.sh --check'
 reject_contains 'Notarization is still pending'
 

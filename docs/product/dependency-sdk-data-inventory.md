@@ -27,11 +27,11 @@ This inventory is built from `Package.swift`, the current app bundle,
 ## Built App Bundle
 
 `script/check_dependency_inventory.sh` inspects the current
-`dist/AutocompleteLab.app` bundle.
+`dist/SteadyType.app` bundle.
 
 Expected bundle contents:
 
-- `Contents/MacOS/AutocompleteLab`
+- `Contents/MacOS/SteadyType`
 - `Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib`
 - system-linked Apple and Swift libraries from the executable
 
