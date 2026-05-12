@@ -722,6 +722,10 @@ def optional_int_arg(value):
     return int(value)
 
 
+def default_if_none(value, default):
+    return default if value is None else value
+
+
 def env_start_line(name):
     value = os.environ.get(name, "0") or "0"
     try:
@@ -801,32 +805,50 @@ def main():
     args = parser.parse_args()
 
     if args.beta_gate:
-        args.require_first_visible_samples = (
-            args.require_first_visible_samples or BETA_MIN_FIRST_VISIBLE_SAMPLES
+        args.require_first_visible_samples = default_if_none(
+            args.require_first_visible_samples,
+            BETA_MIN_FIRST_VISIBLE_SAMPLES,
         )
-        args.require_model_samples = args.require_model_samples or BETA_MIN_MODEL_SAMPLES
-        args.require_event_tap_samples = (
-            args.require_event_tap_samples or BETA_MIN_EVENT_TAP_SAMPLES
+        args.require_model_samples = default_if_none(
+            args.require_model_samples,
+            BETA_MIN_MODEL_SAMPLES,
         )
-        args.require_ax_samples = args.require_ax_samples or BETA_MIN_AX_SAMPLES
-        args.max_first_visible_p95_ms = (
-            args.max_first_visible_p95_ms or BETA_MAX_FIRST_VISIBLE_P95_MS
+        args.require_event_tap_samples = default_if_none(
+            args.require_event_tap_samples,
+            BETA_MIN_EVENT_TAP_SAMPLES,
         )
-        args.max_first_visible_p99_ms = (
-            args.max_first_visible_p99_ms or BETA_MAX_FIRST_VISIBLE_P99_MS
+        args.require_ax_samples = default_if_none(
+            args.require_ax_samples,
+            BETA_MIN_AX_SAMPLES,
         )
-        args.max_first_token_p95_ms = (
-            args.max_first_token_p95_ms or BETA_MAX_FIRST_TOKEN_P95_MS
+        args.max_first_visible_p95_ms = default_if_none(
+            args.max_first_visible_p95_ms,
+            BETA_MAX_FIRST_VISIBLE_P95_MS,
         )
-        args.max_total_generation_p95_ms = (
-            args.max_total_generation_p95_ms or BETA_MAX_TOTAL_GENERATION_P95_MS
+        args.max_first_visible_p99_ms = default_if_none(
+            args.max_first_visible_p99_ms,
+            BETA_MAX_FIRST_VISIBLE_P99_MS,
         )
-        args.max_event_tap_p95_us = args.max_event_tap_p95_us or BETA_MAX_EVENT_TAP_P95_US
-        args.max_event_tap_max_us = args.max_event_tap_max_us or BETA_MAX_EVENT_TAP_MAX_US
-        args.max_ax_p95_ms = args.max_ax_p95_ms or BETA_MAX_AX_P95_MS
-        args.max_ax_p99_ms = args.max_ax_p99_ms or BETA_MAX_AX_P99_MS
-        args.max_ax_max_ms = args.max_ax_max_ms or BETA_MAX_AX_MAX_MS
-        args.expected_asset = args.expected_asset or DEFAULT_EXPECTED_ASSET
+        args.max_first_token_p95_ms = default_if_none(
+            args.max_first_token_p95_ms,
+            BETA_MAX_FIRST_TOKEN_P95_MS,
+        )
+        args.max_total_generation_p95_ms = default_if_none(
+            args.max_total_generation_p95_ms,
+            BETA_MAX_TOTAL_GENERATION_P95_MS,
+        )
+        args.max_event_tap_p95_us = default_if_none(
+            args.max_event_tap_p95_us,
+            BETA_MAX_EVENT_TAP_P95_US,
+        )
+        args.max_event_tap_max_us = default_if_none(
+            args.max_event_tap_max_us,
+            BETA_MAX_EVENT_TAP_MAX_US,
+        )
+        args.max_ax_p95_ms = default_if_none(args.max_ax_p95_ms, BETA_MAX_AX_P95_MS)
+        args.max_ax_p99_ms = default_if_none(args.max_ax_p99_ms, BETA_MAX_AX_P99_MS)
+        args.max_ax_max_ms = default_if_none(args.max_ax_max_ms, BETA_MAX_AX_MAX_MS)
+        args.expected_asset = default_if_none(args.expected_asset, DEFAULT_EXPECTED_ASSET)
 
     diagnostics_path = Path(args.diagnostics_log).expanduser()
     trace_path = Path(args.trace_log).expanduser()
