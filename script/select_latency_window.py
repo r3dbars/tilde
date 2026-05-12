@@ -24,6 +24,7 @@ class Launch:
 @dataclass(frozen=True)
 class TraceWindow:
     start_line: int
+    end_line: int | None
     first_visible_samples: int
     model_samples: int
 
@@ -34,6 +35,7 @@ class Selection:
     window: TraceWindow | None
     reason: str
     ok: bool
+    diagnostics_end_line: int | None = None
 
 
 def fields_from(parts):
@@ -88,16 +90,19 @@ def runtime_launches(path):
 
 def trace_window(path, timestamp, before_timestamp=None):
     trace_start_line = None
+    trace_end_line = None
     first_visible_samples = 0
     model_samples = 0
     seen_presented = set()
     seen_model = set()
+    last_line_number = 0
 
     if not timestamp or not path.exists():
-        return TraceWindow(0, first_visible_samples, model_samples)
+        return TraceWindow(0, trace_end_line, first_visible_samples, model_samples)
 
     with path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line_number, line in enumerate(handle, start=1):
+            last_line_number = line_number
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
@@ -107,6 +112,7 @@ def trace_window(path, timestamp, before_timestamp=None):
             if event_timestamp < timestamp:
                 continue
             if before_timestamp and event_timestamp >= before_timestamp:
+                trace_end_line = max(0, line_number - 1)
                 break
 
             if trace_start_line is None:
@@ -136,7 +142,15 @@ def trace_window(path, timestamp, before_timestamp=None):
                 if generation_latency is not None:
                     model_samples += 1
 
-    return TraceWindow(trace_start_line or 0, first_visible_samples, model_samples)
+    if before_timestamp and trace_end_line is None:
+        trace_end_line = last_line_number
+
+    return TraceWindow(
+        trace_start_line or 0,
+        trace_end_line,
+        first_visible_samples,
+        model_samples,
+    )
 
 
 def eligible_default_launches(launches, expected_asset):
@@ -189,7 +203,9 @@ def select_window(
         if is_eligible_default_launch(launch, expected_asset)
     ]
     for index, launch in reversed(eligible_indexed_launches):
-        before_timestamp = launches[index + 1].timestamp if index + 1 < len(launches) else None
+        next_launch = launches[index + 1] if index + 1 < len(launches) else None
+        before_timestamp = next_launch.timestamp if next_launch else None
+        diagnostics_end_line = max(0, next_launch.line - 1) if next_launch else None
         window = trace_window(trace_log, launch.timestamp, before_timestamp)
         if (
             window.first_visible_samples >= min_first_visible_samples
@@ -200,7 +216,7 @@ def select_window(
                 reason += (
                     f"; skippedEmptyDefaultRelaunches={skipped_empty_default_relaunches}"
                 )
-            return Selection(launch, window, reason, True)
+            return Selection(launch, window, reason, True, diagnostics_end_line)
 
         if window.first_visible_samples == 0 and window.model_samples == 0:
             skipped_empty_default_relaunches += 1
@@ -211,6 +227,7 @@ def select_window(
             window,
             "latest default runtime launch has too few samples",
             False,
+            diagnostics_end_line,
         )
 
     window = trace_window(trace_log, latest_launch.timestamp)
@@ -251,6 +268,8 @@ def main():
     print(
         "Latency window: "
         f"{reason}; diagnosticsLine={launch.line}; traceStartLine={window.start_line}; "
+        f"diagnosticsEndLine={selection.diagnostics_end_line or 'none'}; "
+        f"traceEndLine={window.end_line or 'none'}; "
         f"firstVisibleSamples={window.first_visible_samples}; modelSamples={window.model_samples}",
         file=sys.stderr,
     )
@@ -259,6 +278,10 @@ def main():
 
     print(f"AUTOCOMPLETE_LAB_LOG_START_LINE={max(0, launch.line - 1)}")
     print(f"AUTOCOMPLETE_LAB_TRACE_START_LINE={window.start_line}")
+    if selection.diagnostics_end_line is not None:
+        print(f"AUTOCOMPLETE_LAB_LOG_END_LINE={selection.diagnostics_end_line}")
+    if window.end_line is not None:
+        print(f"AUTOCOMPLETE_LAB_TRACE_END_LINE={window.end_line}")
     return 0
 
 

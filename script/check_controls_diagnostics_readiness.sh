@@ -4,22 +4,99 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-swift test --filter SettingsWindowControllerStateTests
-swift test --filter DiagnosticsWindowControllerStateTests
-swift test --filter SuggestionControlPolicyTests
-swift test --filter SuggestionPauseSchedulePolicyTests
-swift test --filter DisabledAppSelectionTests
-swift test --filter RawTracePrivacyExpiryTests
-swift test --filter RawTraceReportExportTests
-swift test --filter PrivacyExportProofCommandTests
-
-./script/delete_local_traces_self_test.sh
-./script/check_diagnostics_log_self_test.sh
-./script/check_redacted_report_export.sh
-
+failures=0
+if [[ -n "${AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH:-}" ]]; then
+  SWIFT_SCRATCH_PATH="$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
+  mkdir -p "$SWIFT_SCRATCH_PATH"
+else
+  SWIFT_SCRATCH_PATH="$ROOT_DIR/.build/controls-diagnostics-readiness"
+  mkdir -p "$SWIFT_SCRATCH_PATH"
+fi
 proof_output="$(mktemp -d)"
-trap 'rm -rf "$proof_output"' EXIT
-AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_output" \
-  ./script/check_current_build_privacy_export.sh >/tmp/autocomplete-current-build-privacy-export-proof.txt
+LOG_DIR="$(mktemp -d)"
+SWIFT_TEST_ARGS=(--scratch-path "$SWIFT_SCRATCH_PATH/swift-tests")
+
+cleanup() {
+  rm -rf "$proof_output" "$LOG_DIR"
+}
+trap cleanup EXIT
+
+run_check() {
+  local label="$1"
+  shift
+
+  echo
+  echo "== $label =="
+  if "$@"; then
+    echo "$label: OK"
+    return 0
+  fi
+
+  echo "$label: blocked" >&2
+  return 1
+}
+
+run_logged_check() {
+  local label="$1"
+  shift
+  local log_path="$LOG_DIR/$(printf '%s' "$label" | tr -c 'A-Za-z0-9._-' '_').log"
+
+  echo
+  echo "== $label =="
+  if "$@" >"$log_path" 2>&1; then
+    echo "$label: OK"
+    return 0
+  fi
+
+  echo "$label: blocked" >&2
+  cat "$log_path" >&2
+  return 1
+}
+
+require_executable() {
+  local path="$1"
+
+  if [[ ! -x "$path" ]]; then
+    echo "required readiness script is missing or not executable: $path" >&2
+    return 1
+  fi
+}
+
+for script_path in \
+  ./script/delete_local_traces.sh \
+  ./script/delete_local_traces_self_test.sh \
+  ./script/check_diagnostics_log_self_test.sh \
+  ./script/check_redacted_report_export.sh \
+  ./script/check_current_build_privacy_export.sh; do
+  run_check "Executable $(basename "$script_path")" require_executable "$script_path" || failures=$((failures + 1))
+done
+
+for filter in \
+  SettingsWindowControllerStateTests \
+  DiagnosticsWindowControllerStateTests \
+  SuggestionControlPolicyTests \
+  SuggestionPauseSchedulePolicyTests \
+  DisabledAppSelectionTests \
+  RawTracePrivacyExpiryTests \
+  RawTraceReportExportTests \
+  PrivacyExportProofCommandTests; do
+  run_logged_check "Swift test $filter" swift test "${SWIFT_TEST_ARGS[@]}" --filter "$filter" || failures=$((failures + 1))
+done
+
+run_check "Delete local traces self-test" ./script/delete_local_traces_self_test.sh || failures=$((failures + 1))
+run_check "Diagnostics log self-test" ./script/check_diagnostics_log_self_test.sh || failures=$((failures + 1))
+run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+
+run_logged_check "Current build privacy export proof" env \
+  AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_output" \
+  AUTOCOMPLETE_LAB_REBUILD_PRIVACY_PROOF=1 \
+  AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH="$SWIFT_SCRATCH_PATH/current-build" \
+  ./script/check_current_build_privacy_export.sh || failures=$((failures + 1))
+
+if ((failures > 0)); then
+  echo
+  echo "Controls and diagnostics readiness found $failures blocker(s)." >&2
+  exit 1
+fi
 
 echo "Controls and diagnostics readiness passed."

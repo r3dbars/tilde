@@ -138,6 +138,7 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
   run_check "Latency beta gate" latency_beta_gate || failures=$((failures + 1))
+  run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
@@ -192,6 +193,10 @@ echo
 echo "== Latency beta gate =="
 latency_beta_gate
 
+
+echo
+echo "== Controls and diagnostics readiness =="
+./script/check_controls_diagnostics_readiness.sh
 
 echo
 echo "== Redacted report export =="

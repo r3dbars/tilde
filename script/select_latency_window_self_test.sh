@@ -120,9 +120,43 @@ if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=3" <<<"$WINDOW_WITH_EMPTY_LATEST" 
   exit 1
 fi
 
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_END_LINE=5" <<<"$WINDOW_WITH_EMPTY_LATEST" >/dev/null; then
+  echo "latency window self-test did not emit a diagnostics end line for the selected older launch" >&2
+  cat "$TMP_DIR/empty-latest.err" >&2
+  echo "$WINDOW_WITH_EMPTY_LATEST" >&2
+  exit 1
+fi
+
+if ! grep -F "AUTOCOMPLETE_LAB_TRACE_END_LINE=10" <<<"$WINDOW_WITH_EMPTY_LATEST" >/dev/null; then
+  echo "latency window self-test did not emit a trace end line for the selected older launch" >&2
+  cat "$TMP_DIR/empty-latest.err" >&2
+  echo "$WINDOW_WITH_EMPTY_LATEST" >&2
+  exit 1
+fi
+
 if ! grep -F "skippedEmptyDefaultRelaunches=1" "$TMP_DIR/empty-latest.err" >/dev/null; then
   echo "latency window self-test did not explain the skipped unsampled launch" >&2
   cat "$TMP_DIR/empty-latest.err" >&2
+  exit 1
+fi
+
+cat >>"$TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T10:12:01Z","sessionID":"session","suggestionID":"future-slow","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":2000,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"1800","totalGenerationLatencyMilliseconds":"2000"}}
+{"timestamp":"2026-05-12T10:12:02Z","sessionID":"session","suggestionID":"future-slow","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":2000,"metadata":{"behaviorProfile":"docs_prose"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$DIAGNOSTICS_LOG" \
+  --trace-log "$TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 2>"$TMP_DIR/partial-latest.err" >/dev/null; then
+  echo "latency window self-test expected partial latest launch samples to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/partial-latest.err" >/dev/null; then
+  echo "latency window self-test did not explain the partial latest launch" >&2
+  cat "$TMP_DIR/partial-latest.err" >&2
   exit 1
 fi
 
