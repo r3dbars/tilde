@@ -4212,7 +4212,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 expectedFieldIdentity: baseline.fieldIdentity,
                 contextRole: context.role,
                 verificationResult: result,
-                mismatch: mismatch
+                mismatch: mismatch,
+                previousTextBeforeCursorUTF16Length: baseline.previousTextBeforeCursor.utf16.count,
+                acceptedTextUTF16Length: acceptedText.utf16.count,
+                currentTextBeforeCursorUTF16Length: context.textBeforeCursor.utf16.count
             )
         ) else {
             return nil

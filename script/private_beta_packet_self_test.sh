@@ -92,6 +92,8 @@ require_contains "$FIRST_RUN_DOC" "Mail"
 require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
 
 SCRIPT_TEXT="$(sed -n '1,620p' script/private_beta_packet.sh)"
+require_contains "$SCRIPT_TEXT" "Developer ID archive signature blocked"
+require_contains "$SCRIPT_TEXT" "This is separate from Apple notarization credentials."
 
 for expected_doc in \
   "PRIVACY-BETA.md" \

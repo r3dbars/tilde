@@ -100,6 +100,41 @@ check_notarized_install_proof() {
   echo "notarization, stapling, and fresh-install proof files are present"
 }
 
+check_release_archive_signature() {
+  local archive_path="$ROOT_DIR/dist/SteadyType.zip"
+  local verify_dir app_path
+
+  if [[ ! -s "$archive_path" ]]; then
+    echo "missing archive: $archive_path"
+    return 1
+  fi
+
+  verify_dir="$(mktemp -d)"
+  app_path="$verify_dir/SteadyType.app"
+
+  if ! ditto -x -k "$archive_path" "$verify_dir"; then
+    rm -rf "$verify_dir"
+    echo "Developer ID archive signature blocked: could not expand $archive_path"
+    return 1
+  fi
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir"
+    echo "Developer ID archive signature blocked: archive does not contain SteadyType.app"
+    return 1
+  fi
+
+  if ! ./script/check_app_bundle.sh --release "$app_path"; then
+    rm -rf "$verify_dir"
+    echo "Developer ID archive signature blocked: archive app is not signed with Developer ID Application"
+    echo "This is separate from Apple notarization credentials."
+    return 1
+  fi
+
+  rm -rf "$verify_dir"
+  echo "Developer ID archive signature: OK"
+}
+
 latency_beta_gate() {
   local start_env=()
 
@@ -145,12 +180,13 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
-  run_check "Release package prerequisites" ./script/package_release.sh --check || failures=$((failures + 1))
+  run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile || failures=$((failures + 1))
 
   echo
   echo "== Private beta archive =="
   if [[ -s "$ROOT_DIR/dist/SteadyType.zip" ]]; then
     echo "Private beta archive: OK"
+    run_check "Developer ID archive signature" check_release_archive_signature || failures=$((failures + 1))
     run_check "Notarized install proof" check_notarized_install_proof || failures=$((failures + 1))
   else
     echo "Private beta archive: blocked"

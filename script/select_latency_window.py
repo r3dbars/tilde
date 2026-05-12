@@ -36,6 +36,8 @@ class Selection:
     reason: str
     ok: bool
     diagnostics_end_line: int | None = None
+    stale_launch: Launch | None = None
+    stale_window: TraceWindow | None = None
 
 
 def fields_from(parts):
@@ -202,6 +204,8 @@ def select_window(
             current_segment_start = index + 1
 
     skipped_unsampled_default_launches = 0
+    stale_launch = None
+    stale_window = None
     eligible_indexed_launches = [
         (index, launch)
         for index, launch in enumerate(launches[current_segment_start:], start=current_segment_start)
@@ -219,10 +223,30 @@ def select_window(
             reason = "selected latest sampled default runtime launch"
             if skipped_unsampled_default_launches:
                 reason += f"; skippedUnsampledDefaultLaunches={skipped_unsampled_default_launches}"
-            return Selection(launch, window, reason, True, diagnostics_end_line)
+            if stale_launch and stale_window:
+                reason += (
+                    "; currentDefaultRuntimeUnderSampled=true"
+                    f"; currentDiagnosticsLine={stale_launch.line}"
+                    f"; currentFirstVisibleSamples={stale_window.first_visible_samples}"
+                    f"; currentModelSamples={stale_window.model_samples}"
+                )
+            return Selection(
+                launch,
+                window,
+                reason,
+                True,
+                diagnostics_end_line,
+                stale_launch,
+                stale_window,
+            )
 
         if window.first_visible_samples == 0 and window.model_samples == 0:
             skipped_unsampled_default_launches += 1
+            continue
+
+        if index == len(launches) - 1 or skipped_unsampled_default_launches > 0:
+            stale_launch = launch
+            stale_window = window
             continue
 
         return Selection(
@@ -285,6 +309,20 @@ def main():
         print(f"AUTOCOMPLETE_LAB_LOG_END_LINE={selection.diagnostics_end_line}")
     if window.end_line is not None:
         print(f"AUTOCOMPLETE_LAB_TRACE_END_LINE={window.end_line}")
+    if selection.stale_launch and selection.stale_window:
+        print("AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE=1")
+        print(
+            "AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_DIAGNOSTICS_LINE="
+            f"{selection.stale_launch.line}"
+        )
+        print(
+            "AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_FIRST_VISIBLE_SAMPLES="
+            f"{selection.stale_window.first_visible_samples}"
+        )
+        print(
+            "AUTOCOMPLETE_LAB_LATENCY_WINDOW_STALE_MODEL_SAMPLES="
+            f"{selection.stale_window.model_samples}"
+        )
     return 0
 
 

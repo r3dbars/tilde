@@ -371,7 +371,12 @@ check_archive_app() {
   fi
 
   if [[ "${AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE:-1}" == "1" ]]; then
-    ./script/check_app_bundle.sh --release "$app_path"
+    if ! ./script/check_app_bundle.sh --release "$app_path"; then
+      rm -rf "$verify_dir"
+      echo "Developer ID archive signature blocked: $ARCHIVE_PATH does not contain a Developer ID signed SteadyType.app" >&2
+      echo "This is separate from Apple notarization credentials. Rebuild the archive with ./script/package_release.sh archive before checking the beta packet." >&2
+      exit 1
+    fi
   else
     ./script/check_app_bundle.sh "$app_path"
   fi
