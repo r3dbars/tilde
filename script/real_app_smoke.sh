@@ -1168,6 +1168,17 @@ chrome_fixture_is_public_text_field_demo() {
   esac
 }
 
+chrome_fixture_is_official_rich_editor_demo() {
+  case "$1" in
+    codemirror-official|monaco-official|prosemirror-official)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 chrome_fixture_url() {
   local fixture="$1"
   local local_html_file="$2"
@@ -1316,6 +1327,20 @@ wait_for_chrome_smoke_ready() {
       return 0
     fi
 
+    if [[ -n "$CHROME_REMOTE_DEBUGGING_PORT" ]]; then
+      while ((SECONDS <= deadline)); do
+        local ready
+        ready="$(chrome_official_demo_ready_with_devtools "$fixture" | tr -d '[:space:]')"
+        if [[ "$ready" == "true" ]]; then
+          return 0
+        fi
+        sleep 0.3
+      done
+
+      echo "Timed out waiting for Chrome $fixture official demo readiness through DevTools." >&2
+      exit 1
+    fi
+
     require_chrome_javascript_from_apple_events "$fixture"
     while ((SECONDS <= deadline)); do
       local ready
@@ -1364,12 +1389,308 @@ APPLESCRIPT
   exit 1
 }
 
+chrome_official_demo_devtools_action() {
+  local fixture="$1"
+  local mode="$2"
+  local text="${3:-}"
+
+  if [[ -z "$CHROME_REMOTE_DEBUGGING_PORT" ]]; then
+    return 1
+  fi
+
+  node - "$CHROME_REMOTE_DEBUGGING_PORT" "$fixture" "$mode" "$text" <<'NODE'
+const port = process.argv[2];
+const fixture = process.argv[3];
+const mode = process.argv[4];
+const text = process.argv[5] || "";
+
+const urlMarkers = new Map([
+  ["codemirror-official", "codemirror.net/try"],
+  ["monaco-official", "microsoft.github.io/monaco-editor/playground"],
+  ["prosemirror-official", "prosemirror.net/examples/basic"],
+]);
+
+async function fetchJSON(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
+  return response.json();
+}
+
+async function tabWebSocketURL() {
+  const marker = urlMarkers.get(fixture) || "";
+  const deadline = Date.now() + 10000;
+  while (Date.now() <= deadline) {
+    try {
+      const tabs = await fetchJSON(`http://127.0.0.1:${port}/json`);
+      const pages = tabs.filter((tab) => tab.type === "page" && !String(tab.url || "").startsWith("devtools://"));
+      const page = pages.find((tab) => String(tab.url || "").includes(marker)) || pages[0];
+      if (page?.webSocketDebuggerUrl) {
+        return page.webSocketDebuggerUrl;
+      }
+    } catch {
+      // Chrome may still be bringing up the DevTools endpoint.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error("Timed out waiting for Chrome DevTools page target.");
+}
+
+function readyExpression() {
+  switch (fixture) {
+    case "codemirror-official":
+      return `Boolean(document.querySelector('.cm-content'))`;
+    case "monaco-official":
+      return `Boolean(document.querySelector('.monaco-editor textarea') || document.querySelector('.monaco-editor .inputarea'))`;
+    case "prosemirror-official":
+      return `Boolean(document.querySelector('.ProseMirror'))`;
+    default:
+      return `false`;
+  }
+}
+
+function focusExpression() {
+  switch (fixture) {
+    case "codemirror-official":
+      return `(() => {
+        const editor = document.querySelector('.cm-content');
+        if (!editor) return { ok: false, reason: 'missing codemirror editor' };
+        editor.setAttribute('aria-label', 'Official CodeMirror proof editor');
+        editor.scrollIntoView({ block: 'center', inline: 'center' });
+        editor.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return { ok: true, role: 'codemirror' };
+      })()`;
+    case "monaco-official":
+      return `(() => {
+        const input = document.querySelector('.monaco-editor textarea') || document.querySelector('.monaco-editor .inputarea');
+        const editor = document.querySelector('.monaco-editor');
+        if (!input || !editor) return { ok: false, reason: 'missing monaco editor' };
+        input.setAttribute('aria-label', 'Official Monaco proof editor');
+        editor.scrollIntoView({ block: 'center', inline: 'center' });
+        input.focus();
+        return { ok: true, role: 'monaco' };
+      })()`;
+    case "prosemirror-official":
+      return `(() => {
+        const editor = document.querySelector('.ProseMirror');
+        if (!editor) return { ok: false, reason: 'missing prosemirror editor' };
+        editor.setAttribute('aria-label', 'Official ProseMirror proof editor');
+        editor.scrollIntoView({ block: 'center', inline: 'center' });
+        editor.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return { ok: true, role: 'prosemirror' };
+      })()`;
+    default:
+      return `({ ok: false, reason: 'unsupported fixture' })`;
+  }
+}
+
+function readExpression() {
+  const encodedText = JSON.stringify(text);
+  switch (fixture) {
+    case "codemirror-official":
+      return `(() => {
+        const editor = document.querySelector('.cm-content');
+        const value = String(editor?.textContent || '');
+        return { ok: value.includes(${encodedText}), role: 'codemirror', valueLength: value.length };
+      })()`;
+    case "monaco-official":
+      return `(() => {
+        const expected = ${encodedText};
+        const modelValue = Array.from((window.monaco?.editor?.getModels?.() || []))
+          .map((model) => String(model.getValue?.() || ''))
+          .join('\\n');
+        const visibleValue = String(document.querySelector('.monaco-editor .view-lines')?.textContent || '');
+        const inputValue = String((document.querySelector('.monaco-editor textarea') || document.querySelector('.monaco-editor .inputarea'))?.value || '');
+        const value = [modelValue, visibleValue, inputValue].join('\\n');
+        return { ok: value.includes(expected), role: 'monaco', valueLength: value.length };
+      })()`;
+    case "prosemirror-official":
+      return `(() => {
+        const editor = document.querySelector('.ProseMirror');
+        const value = String(editor?.textContent || '');
+        return { ok: value.includes(${encodedText}), role: 'prosemirror', valueLength: value.length };
+      })()`;
+    default:
+      return `({ ok: false, reason: 'unsupported fixture' })`;
+  }
+}
+
+async function withSocket(wsURL, callback) {
+  const socket = new WebSocket(wsURL);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+
+  let nextID = 1;
+  function send(method, params = {}) {
+    const id = nextID++;
+    const responsePromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${method}.`)), 10000);
+      const handler = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.id !== id) return;
+        clearTimeout(timeout);
+        socket.removeEventListener("message", handler);
+        resolve(message);
+      };
+      socket.addEventListener("message", handler);
+    });
+    socket.send(JSON.stringify({ id, method, params }));
+    return responsePromise;
+  }
+
+  try {
+    return await callback(send);
+  } finally {
+    socket.close();
+  }
+}
+
+function valueFromEvaluate(message) {
+  if (message.error) {
+    throw new Error(message.error.message || "Runtime.evaluate failed.");
+  }
+  if (message.result?.exceptionDetails) {
+    throw new Error(message.result.exceptionDetails.text || "Runtime.evaluate exception.");
+  }
+  return message.result?.result?.value;
+}
+
+async function evaluate(send, expression) {
+  return valueFromEvaluate(await send("Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  }));
+}
+
+try {
+  const wsURL = await tabWebSocketURL();
+  const result = await withSocket(wsURL, async (send) => {
+    if (mode === "ready") {
+      return Boolean(await evaluate(send, readyExpression()));
+    }
+
+    if (mode === "contains") {
+      const value = await evaluate(send, readExpression());
+      return Boolean(value?.ok);
+    }
+
+    const focused = await evaluate(send, focusExpression());
+    if (!focused?.ok) {
+      return { ok: false, reason: focused?.reason || "focus failed" };
+    }
+
+    if (mode === "focus") {
+      return { ok: true, role: focused.role || "official" };
+    }
+
+    if (mode === "insert") {
+      if (fixture === "monaco-official") {
+        const encodedText = JSON.stringify(text);
+        const value = await evaluate(send, `(() => {
+          const text = ${encodedText};
+          const editors = Array.from(window.monaco?.editor?.getEditors?.() || [])
+            .filter((editor) => editor?.getModel?.());
+          const editor = editors[0];
+          if (!editor) return { ok: false, reason: 'missing monaco editor instance' };
+          editor.setValue(text);
+          const model = editor.getModel();
+          const position = model.getPositionAt(text.length);
+          editor.setPosition(position);
+          editor.focus();
+          return { ok: String(model.getValue()).includes(text), role: 'monaco', valueLength: model.getValue().length };
+        })()`);
+        if (!value?.ok) {
+          return { ok: false, reason: "monaco model setup failed", role: "monaco", valueLength: value?.valueLength || 0 };
+        }
+        return { ok: true, role: "monaco", valueLength: value.valueLength || 0 };
+      }
+
+      await send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: "a",
+        code: "KeyA",
+        windowsVirtualKeyCode: 65,
+        nativeVirtualKeyCode: 0,
+        modifiers: 4,
+      });
+      await send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "a",
+        code: "KeyA",
+        windowsVirtualKeyCode: 65,
+        nativeVirtualKeyCode: 0,
+        modifiers: 4,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await send("Input.insertText", { text });
+      await evaluate(send, focusExpression());
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const value = await evaluate(send, readExpression());
+      if (!value?.ok) {
+        return { ok: false, reason: "inserted text not observed", role: value?.role || focused.role, valueLength: value?.valueLength || 0 };
+      }
+      return { ok: true, role: value.role || focused.role || "official", valueLength: value.valueLength || 0 };
+    }
+
+    return { ok: false, reason: "unsupported mode" };
+  });
+
+  if (mode === "ready" || mode === "contains") {
+    console.log(result ? "true" : "false");
+  } else if (result?.ok) {
+    console.log(`${mode}:${result.role || "official"}:${result.valueLength || 0}`);
+  } else {
+    console.error(`Chrome ${fixture} DevTools ${mode} failed: ${result?.reason || "unknown"}`);
+    process.exit(1);
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+NODE
+}
+
+chrome_official_demo_ready_with_devtools() {
+  chrome_official_demo_devtools_action "$1" ready
+}
+
+chrome_focus_official_demo_editor_with_devtools() {
+  chrome_official_demo_devtools_action "$1" focus >/dev/null
+}
+
+chrome_official_demo_text_contains_with_devtools() {
+  local fixture="$1"
+  local text="$2"
+  chrome_official_demo_devtools_action "$fixture" contains "$text"
+}
+
 chrome_public_setup_text_with_devtools() {
   local fixture="$1"
   local text="$2"
 
   if [[ -z "$CHROME_REMOTE_DEBUGGING_PORT" ]]; then
     return 1
+  fi
+
+  if chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+    chrome_official_demo_devtools_action "$fixture" insert "$text"
+    return $?
   fi
 
   node - "$CHROME_REMOTE_DEBUGGING_PORT" "$fixture" "$text" <<'NODE'
@@ -1657,6 +1978,11 @@ chrome_focus_official_demo_editor() {
       ;;
   esac
 
+  if [[ -n "$CHROME_REMOTE_DEBUGGING_PORT" ]] && chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+    chrome_focus_official_demo_editor_with_devtools "$fixture"
+    return 0
+  fi
+
   local result
   result="$(chrome_active_tab_javascript "$javascript" | tr -d '[:space:]')"
   if [[ "$result" != "ok" ]]; then
@@ -1670,7 +1996,7 @@ chrome_fixture_uses_isolated_accessibility_chrome() {
     return 1
   fi
 
-  if chrome_fixture_is_official_demo "$1" && ! chrome_fixture_is_public_text_field_demo "$1"; then
+  if chrome_fixture_is_public_text_field_demo "$1"; then
     return 1
   fi
 
@@ -2220,6 +2546,12 @@ focus_chrome_smoke_editor() {
     else
       wait_for_frontmost_app "Google Chrome" 5
     fi
+    return 0
+  fi
+
+  if [[ -n "$chrome_pid" ]] && [[ -n "$CHROME_REMOTE_DEBUGGING_PORT" ]] && chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+    focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
+    chrome_focus_official_demo_editor_with_devtools "$fixture"
     return 0
   fi
 
@@ -3874,6 +4206,17 @@ wait_for_chrome_focused_text_contains() {
   local timeout_seconds="${5:-8}"
   local deadline=$((SECONDS + timeout_seconds))
 
+  if [[ -n "$CHROME_REMOTE_DEBUGGING_PORT" ]] && chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+    while ((SECONDS <= deadline)); do
+      local devtools_contains
+      devtools_contains="$(chrome_official_demo_text_contains_with_devtools "$fixture" "$expected_fragment" | tr -d '[:space:]')"
+      if [[ "$devtools_contains" == "true" ]]; then
+        return 0
+      fi
+      sleep 0.2
+    done
+  fi
+
   while ((SECONDS <= deadline)); do
     local current_text
     current_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
@@ -5219,7 +5562,7 @@ describe_plan() {
         echo "Proof path: public text-field proof uses guarded coordinate focus and AX verification; Chrome JavaScript-from-Apple-Events is not required for this lane."
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
         echo "Plan: build/relaunch AutocompleteLab, open the public official $CHROME_FIXTURE demo page in Chrome, type a disposable test fragment, then validate logs and traces."
-        echo "Requirement: official Chrome demo lanes need Chrome's View > Developer > Allow JavaScript from Apple Events setting so the script can focus and verify the editor."
+        echo "Proof path: official rich-editor demo lanes use an isolated temporary Chrome profile plus localhost DevTools focus/setup; the user's live Chrome profile is not touched."
       elif [[ "$CHROME_FIXTURE" == "browser-chat-harness" ]]; then
         echo "Plan: build/relaunch AutocompleteLab, serve the bounded HTTP browser-chat no-submit proof harness on 127.0.0.1, type disposable text, then validate trace and harness counters."
         echo "Scope: this proves only the disposable harness surface. It does not enable Slack, Discord, ChatGPT, or broad browser chat support."
@@ -6617,7 +6960,9 @@ run_chrome_fixture() {
     launch_isolated_chrome_fixture "$chrome_url" "$tmp_dir"
     chrome_pid="$CHROME_LAST_LAUNCHED_PID"
     wait_for_chrome_expected_tab "$fixture" "$chrome_url" "initial isolated fixture load" "$chrome_pid" 12
-    focus_chrome_smoke_editor "$fixture" "$chrome_pid"
+    if ! chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+      focus_chrome_smoke_editor "$fixture" "$chrome_pid"
+    fi
   else
     osascript >/dev/null <<APPLESCRIPT
 tell application "Google Chrome"
