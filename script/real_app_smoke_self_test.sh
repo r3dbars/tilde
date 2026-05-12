@@ -22,6 +22,10 @@ if ! grep -F "Proof mode bundle(s): com.apple.TextEdit" "$TMP_DIR/textedit.txt" 
   echo "real app smoke self-test did not print the TextEdit proof mode bundle" >&2
   exit 1
 fi
+if ! grep -F "proof fragments are typed through System Events key events" "$TMP_DIR/textedit.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain TextEdit proof typing uses live key events" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
 if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/null; then
@@ -61,6 +65,11 @@ if grep -F '|| screenshot_trace_requested' script/real_app_smoke.sh >/dev/null; 
 fi
 if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit proof to stop the old app before opening its disposable target" >&2
+  exit 1
+fi
+if ! grep -F 'textedit_smoke_allows_ax_proof_typing' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof fragments to default to System Events key typing" >&2
   exit 1
 fi
 if ! grep -F 'launch_steadytype_after_chrome_setup' script/real_app_smoke.sh >/dev/null ||

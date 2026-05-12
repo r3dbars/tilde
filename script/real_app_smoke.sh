@@ -4160,24 +4160,30 @@ exit(1)
 SWIFT
 }
 
+textedit_smoke_allows_ax_proof_typing() {
+  [[ "${AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION:-0}" =~ ^(1|true|yes|on)$ ]]
+}
+
 type_textedit_smoke_fragment() {
   local window_title="$1"
   local fragment="$2"
 
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
-  if insert_textedit_smoke_fragment "$window_title" "$fragment"; then
+  if textedit_smoke_allows_ax_proof_typing && insert_textedit_smoke_fragment "$window_title" "$fragment"; then
     return 0
   fi
 
-  osascript - "$fragment" <<'APPLESCRIPT'
-on run argv
-  set smokeText to item 1 of argv
-  tell application "System Events"
-    keystroke smokeText
-    key code 53
-  end tell
-end run
+  assert_textedit_frontmost_window "$window_title" "TextEdit proof typing"
+  AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
+set smokeText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.apple.TextEdit" then
+    error "TextEdit is not frontmost for proof typing."
+  end if
+  keystroke smokeText
+end tell
 APPLESCRIPT
 }
 
@@ -6504,6 +6510,7 @@ describe_plan() {
           ;;
       esac
       echo "Safety: the smoke launch temporarily enables TextEdit only for this proof pass."
+      echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
