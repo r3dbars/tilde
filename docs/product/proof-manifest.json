@@ -744,7 +744,7 @@
     },
     {
       "surface": "Codex",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Codex",
         "bundle": "com.openai.codex",
@@ -756,7 +756,21 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/codex-inline.png"
       ],
-      "gaps": []
+      "gaps": [
+        "Default one-word no-submit proof exists, but broader Codex prompt layouts and full-accept no-submit proof remain gated."
+      ],
+      "requirements": [
+        {
+          "id": "codex-layout-variants",
+          "status": "pending",
+          "summary": "Refresh current-head Codex proof across more prompt layouts before raising this above A-."
+        },
+        {
+          "id": "codex-full-accept-no-submit",
+          "status": "pending",
+          "summary": "Keep full accept disabled until a dedicated Codex no-submit full-accept lane exists."
+        }
+      ]
     },
     {
       "surface": "Obsidian",

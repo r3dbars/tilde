@@ -95,7 +95,7 @@ Invite testers only when every applicable box is checked.
 - `./script/beta_readiness.sh --check-only` currently has 2 blockers: current
   manual app proof refresh and notarized install proof.
 - `./script/manual_smoke_status.sh --strict` still requires current-head proof
-  refresh for 30 target app rows. Do not treat stale screenshot-backed rows as
+  refresh for 29 target app rows. Do not treat stale screenshot-backed rows as
   beta-current.
 - Current local SteadyType artifacts are Developer ID signed, but not
   notarized. No usable `NOTARYTOOL_PROFILE` is present in this environment.
