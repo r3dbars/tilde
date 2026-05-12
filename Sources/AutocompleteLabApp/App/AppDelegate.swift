@@ -5901,6 +5901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             until: Date().addingTimeInterval(
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
                     || shouldUseCodexProofDirectInsertion(profile: profile)
+                    || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
                     || shouldUseObsidianDirectValueInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
@@ -5936,6 +5937,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": profile.bundleIdentifier,
                     "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
+                    "success": String(succeeded),
+                    "skippedModes": skippedModes
+                        .map(\.rawValue)
+                        .sorted()
+                        .joined(separator: ",")
+                ]
+            )
+            if succeeded {
+                focusedTextPollingPause.pause(
+                    now: Date(),
+                    durationMilliseconds: postInsertionPollPauseMilliseconds
+                )
+            }
+            return succeeded
+        }
+
+        if shouldUseClaudeDesktopProofDirectInsertion(profile: profile) {
+            let succeeded = insertClaudeDesktopProofText(acceptedText)
+            DiagnosticsLog.shared.record(
+                "insert",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "mode": InsertionMode.axValueReplacement.rawValue,
                     "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
                     "success": String(succeeded),
                     "skippedModes": skippedModes
@@ -6021,6 +6046,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile.insertionMode == .axValueReplacement
             && profile.requiresNoSubmitAcceptanceProof
             && activeAppProofBundleIdentifiers.contains("com.openai.codex")
+    }
+
+    private func shouldUseClaudeDesktopProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
+        currentSuggestionAppBundleIdentifier == "com.anthropic.claudefordesktop"
+            && profile.bundleIdentifier == "com.anthropic.claudefordesktop"
+            && currentSuggestionRequestMode == .wordCompletion
+            && profile.insertionMode == .axValueReplacement
+            && profile.requiresNoSubmitAcceptanceProof
+            && profile.promptAppSafetyMode == .wordOnly
     }
 
     private func shouldUseObsidianDirectValueInsertion(profile: CompatibilityProfile) -> Bool {
@@ -6205,6 +6239,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": bundleIdentifier,
                 "success": String(succeeded),
                 "source": "markedAXTextArea",
+                "cursorMatches": String(cursorMatches),
+                "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentText?.count ?? -1)
+            ]
+        )
+        return succeeded
+    }
+
+    private func insertClaudeDesktopProofText(_ acceptedText: String) -> Bool {
+        let bundleIdentifier = "com.anthropic.claudefordesktop"
+        guard !acceptedText.isEmpty,
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              !lastTextSnapshot.textBeforeCursor.isEmpty,
+              lastTextSnapshot.textAfterCursor.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            DiagnosticsLog.shared.record(
+                "claude-desktop-proof-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
+        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard let textArea = Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: previousText,
+            containing: lastTextSnapshot.textBeforeCursor,
+            maxDepth: 32
+        ) else {
+            DiagnosticsLog.shared.record(
+                "claude-desktop-proof-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "text-area-not-found"
+                ]
+            )
+            return false
+        }
+
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let valueResult = AXUIElementSetAttributeValue(
+            textArea,
+            kAXValueAttribute as CFString,
+            replacementText as CFTypeRef
+        )
+        guard valueResult == .success else {
+            DiagnosticsLog.shared.record(
+                "claude-desktop-proof-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "set-value-failed",
+                    "axResult": String(valueResult.rawValue)
+                ]
+            )
+            return false
+        }
+
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+        if !Self.axSelectedTextRangeMatches(textArea, location: cursorUTF16Offset, length: 0) {
+            Self.postCommandRightKey()
+            Thread.sleep(forTimeInterval: 0.05)
+            Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        }
+
+        let currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
+        let cursorMatches = Self.axSelectedTextRangeMatches(textArea, location: cursorUTF16Offset, length: 0)
+        let succeeded = currentText == replacementText && cursorMatches
+        DiagnosticsLog.shared.record(
+            "claude-desktop-proof-insert",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "source": "promptAXTextArea",
                 "cursorMatches": String(cursorMatches),
                 "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
                 "acceptedChars": String(acceptedText.count),
