@@ -1465,6 +1465,21 @@ chrome_fixture_is_official_rich_editor_demo() {
   esac
 }
 
+chrome_fixture_requires_ax_readable_setup() {
+  case "$1" in
+    monaco-official)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+chrome_fixture_requires_default_ax_official_focus() {
+  [[ "$CHROME_ACCESSIBILITY_MODE" == "default" && "$1" == "monaco-official" ]]
+}
+
 chrome_fixture_url() {
   local fixture="$1"
   local local_html_file="$2"
@@ -1624,6 +1639,20 @@ wait_for_chrome_smoke_ready() {
       done
 
       echo "Timed out waiting for Chrome $fixture official demo readiness through DevTools." >&2
+      exit 1
+    fi
+
+    if chrome_fixture_requires_default_ax_official_focus "$fixture"; then
+      while ((SECONDS <= deadline)); do
+        if chrome_focus_official_demo_editor_with_ax "$fixture" "$chrome_pid" >/dev/null 2>&1; then
+          return 0
+        fi
+        sleep 0.3
+      done
+
+      echo "Chrome $fixture default-AX proof could not focus the official editor through macOS Accessibility." >&2
+      echo "No Chrome typing was attempted. This lane needs normal Chrome to expose the Monaco editor as a focused AXTextArea/AXTextField before it can claim default AX proof." >&2
+      echo "Use the isolated forced-renderer lane for current Monaco proof, or rerun after Chrome exposes page editor AX content." >&2
       exit 1
     fi
 
@@ -2294,6 +2323,12 @@ chrome_focus_official_demo_editor() {
     return 0
   fi
 
+  if chrome_fixture_requires_default_ax_official_focus "$fixture"; then
+    echo "Chrome $fixture default-AX proof could not refocus the official editor through macOS Accessibility." >&2
+    echo "No Apple Events JavaScript fallback was used because this lane is specifically proving normal Chrome AX exposure." >&2
+    exit 1
+  fi
+
   case "$fixture" in
     textarea-public)
       javascript="(() => { const editor = document.querySelector('textarea'); if (!editor) return 'missing'; editor.setAttribute('aria-label', 'Public textarea proof field'); editor.scrollIntoView({block: 'center', inline: 'center'}); editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length); return 'ok'; })()"
@@ -2588,7 +2623,7 @@ chrome_fixture_uses_default_browser_accessibility() {
     return 1
   fi
 
-  if chrome_fixture_is_official_demo "$1"; then
+  if chrome_fixture_is_official_demo "$1" && [[ "$1" != "monaco-official" ]]; then
     return 1
   fi
 
@@ -5089,6 +5124,37 @@ if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
 SWIFT
 }
 
+wait_for_chrome_setup_text_visible_to_ax() {
+  local fixture="$1"
+  local chrome_pid="$2"
+  local expected_fragment="$3"
+  local label="$4"
+  local timeout_seconds="${5:-4}"
+
+  if ! chrome_fixture_requires_ax_readable_setup "$fixture"; then
+    return 0
+  fi
+
+  if chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+    chrome_focus_official_demo_editor_with_ax "$fixture" "$chrome_pid" >/dev/null 2>&1 || true
+  fi
+
+  local deadline=$((SECONDS + timeout_seconds))
+  local current_text=""
+  while ((SECONDS <= deadline)); do
+    current_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
+    if [[ "$current_text" == *"$expected_fragment"* ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Chrome $fixture setup text reached the page model during $label, but the focused macOS Accessibility editor did not expose it." >&2
+  echo "Expected AX fragment chars: ${#expected_fragment}; observed AX chars: ${#current_text}." >&2
+  echo "No keyboard, paste, or screenshot fallback was attempted. Failing closed because Monaco official/default proof requires AX-readable setup text before SteadyType can claim an accept." >&2
+  exit 1
+}
+
 wait_for_chrome_focused_text_contains() {
   local fixture="$1"
   local chrome_pid="$2"
@@ -5102,6 +5168,7 @@ wait_for_chrome_focused_text_contains() {
       local devtools_contains
       devtools_contains="$(chrome_official_demo_text_contains_with_devtools "$fixture" "$expected_fragment" | tr -d '[:space:]')"
       if [[ "$devtools_contains" == "true" ]]; then
+        wait_for_chrome_setup_text_visible_to_ax "$fixture" "$chrome_pid" "$expected_fragment" "$label"
         return 0
       fi
       sleep 0.2
@@ -5821,6 +5888,12 @@ type_chrome_smoke_text() {
     return 0
   fi
   if chrome_fixture_is_official_rich_editor_demo "$fixture"; then
+    if [[ -z "$CHROME_REMOTE_DEBUGGING_PORT" ]]; then
+      echo "Chrome $fixture setup text has no isolated DevTools channel during $label." >&2
+      echo "No keyboard or paste fallback was attempted for this official public editor lane." >&2
+      echo "Use the isolated forced-renderer lane, or a default-AX lane that can expose AX-readable setup text before typing." >&2
+      exit 1
+    fi
     echo "Chrome $fixture setup text failed through isolated DevTools during $label; refusing guarded global typing fallback for an official public editor lane." >&2
     exit 1
   fi
@@ -6456,6 +6529,12 @@ describe_plan() {
       elif chrome_fixture_is_official_demo "$CHROME_FIXTURE"; then
         echo "Plan: build the app bundle, open the public official $CHROME_FIXTURE demo page in Chrome, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
         echo "Proof path: official rich-editor demo lanes use an isolated temporary Chrome profile plus localhost DevTools focus/setup when available; otherwise they try Accessibility editor focus before the Apple Events fallback."
+        if [[ "$CHROME_FIXTURE" == "monaco-official" ]]; then
+          echo "Proof gate: Monaco official must expose setup text through the focused macOS AX editor before SteadyType can accept; otherwise the lane fails closed without keyboard, paste, or screenshot fallback."
+          if [[ "$CHROME_ACCESSIBILITY_MODE" == "default" ]]; then
+            echo "Proof path: monaco-official default AX uses normal Chrome AX focus only for the proof claim, with no DevTools or Apple Events fallback."
+          fi
+        fi
         echo "Requirement: SteadyType must already be allowed in macOS Accessibility; the lane fails closed before typing if AX is missing."
         echo "Runtime: official demo lanes allow up to $(chrome_runtime_ready_timeout_seconds)s for cold current-build MLX warmup before touching Chrome."
       elif [[ "$CHROME_FIXTURE" == "browser-chat-harness" ]]; then
