@@ -558,7 +558,7 @@ these are true.
 - Chrome text fields and local editor fixtures stay screenshot-backed.
 - Real CodeMirror, Monaco, and ProseMirror now have bounded proof; add
   production editor variants beyond the local real-engine fixtures.
-- Obsidian has disposable-vault screenshot plus same-slice accepts; expand it across themes, panes, and long notes.
+- Obsidian has disposable-vault screenshot plus same-slice accepts across default, theme, pane, and long-note lanes; expand later only for broader vault layouts and hidden-caret edge cases.
 - Notes title, body, and checklist are green with separate bounded proof rows.
 - Codex still needs screenshot plus one-word accept plus no-submit in one strict slice.
 - Claude Code has safe live terminal-host prompt proof through the proof-only adapter.

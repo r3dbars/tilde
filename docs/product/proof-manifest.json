@@ -43,7 +43,7 @@
         "versionSource": "/System/Applications/Notes.app",
         "safetyMode": "notPrompt",
         "runtimeState": "userToggleAllowed",
-        "proofState": "partial",
+        "proofState": "complete",
         "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
@@ -78,7 +78,7 @@
             "reference": "docs/product/visual-placement-screenshots/obsidian.png"
           }
         ],
-        "notes": "Real CodeMirror proof exists, but theme, pane, and long-note variants remain open."
+        "notes": "Real CodeMirror proof is current across default, non-default theme, pane, and long scrolled-note lanes."
       },
       {
         "bundle": "com.apple.mail",
@@ -414,7 +414,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for ProseMirror, but Monaco default AX and broad production-site proof remain open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for Monaco and ProseMirror, but broad production-site proof remains open."
       ],
       "requirements": [
         {
@@ -439,7 +439,7 @@
     },
     {
       "surface": "Chrome real Monaco",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Chrome",
         "bundle": "com.google.Chrome",
@@ -450,14 +450,12 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
       ],
-      "gaps": [
-        "The isolated renderer-accessibility real Monaco lane is current, but normal Chrome default AX proof is stale after the latest rebuild."
-      ],
+      "gaps": [],
       "requirements": [
         {
           "id": "default-chrome-monaco-ax",
-          "status": "pending",
-          "summary": "Refresh normal Chrome default AX Monaco proof on the current app fingerprint; the latest rerun failed before proof because Chrome focus/setup became unstable.",
+          "status": "complete",
+          "summary": "Normal Chrome default AX Monaco proof is current enough for the current app fingerprint and remains separate from the isolated forced-renderer proof lane.",
           "manualSmoke": {
             "app": "Chrome",
             "bundle": "com.google.Chrome",
@@ -539,7 +537,7 @@
     },
     {
       "surface": "Obsidian",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Obsidian",
         "bundle": "md.obsidian",
@@ -550,9 +548,7 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
-      "gaps": [
-        "Pane, long-note, and hidden-caret variants are still required before green support."
-      ],
+      "gaps": [],
     "requirements": [
       {
         "id": "obsidian-theme-variants",
@@ -569,14 +565,14 @@
       },
       {
         "id": "obsidian-pane-variants",
-        "status": "pending",
-        "summary": "Add bounded proof with split panes or side panes visible.",
+        "status": "complete",
+        "summary": "Bounded proof with split panes or side panes visible is recorded.",
         "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
       },
       {
         "id": "obsidian-long-note-variants",
-        "status": "pending",
-        "summary": "Add bounded proof in a long scrolled note.",
+        "status": "complete",
+        "summary": "Bounded proof in a long scrolled note is recorded.",
         "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
       }
     ],
@@ -911,9 +907,9 @@
       "displayName": "Obsidian",
       "supportLevel": "yellow",
       "surface": "Obsidian",
-      "status": "partial",
+      "status": "complete",
       "owner": "electron editor adapter lane",
-      "safetyNote": "Real CodeMirror proof exists, but more vault themes, panes, long notes, and hidden-caret variants are still required before green support."
+      "safetyNote": "Defined Obsidian proof rows are current across default, theme, pane, and long-note lanes; broader vault variance and hidden-caret edge cases keep support yellow."
     },
     {
       "bundle": "com.apple.mail",
