@@ -214,7 +214,13 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "cvc",
         "private prompt",
         "private browsing",
-        "incognito"
+        "incognito",
+        "api key",
+        "apikey",
+        "access token",
+        "auth token",
+        "bearer token",
+        "personal access token"
     ]
 
     private static let urlNeedles: [String] = [
@@ -250,6 +256,10 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "credit card",
         "card number",
         "cardholder",
+        "street address",
+        "shipping address",
+        "mailing address",
+        "address line",
         "expiration",
         "expiry",
         "name on card",
@@ -284,6 +294,11 @@ public struct AXFieldClassifier: Equatable, Sendable {
         "google docs",
         "notion",
         "slack",
-        "discord"
+        "discord",
+        "terminal",
+        "command line",
+        "command-line",
+        "shell prompt",
+        "console"
     ]
 }

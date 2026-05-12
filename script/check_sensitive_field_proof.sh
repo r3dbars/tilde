@@ -20,6 +20,8 @@ required = {
     "login",
     "search",
     "url-address",
+    "address",
+    "command-line",
     "api-key-like-text",
     "password-manager",
     "private-prompt",
@@ -31,6 +33,8 @@ raw_needles = [
     "123456",
     "correct horse",
     "example.invalid",
+    "1600 Amphitheatre",
+    "rm -rf",
 ]
 
 seen = set()

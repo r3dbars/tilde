@@ -7,6 +7,8 @@ public enum SensitiveFieldProofCategory: String, Codable, CaseIterable, Equatabl
     case login
     case search
     case urlAddress = "url-address"
+    case address
+    case commandLine = "command-line"
     case apiKeyLikeText = "api-key-like-text"
     case passwordManager = "password-manager"
     case privatePrompt = "private-prompt"
@@ -150,6 +152,14 @@ public struct SensitiveTextFieldPolicy: Equatable, Sendable {
         ]),
         (.urlAddress, [
             "url", "address bar", "location bar", "web address", "website"
+        ]),
+        (.address, [
+            "street address", "shipping address", "mailing address", "home address",
+            "work address", "address line", "city state zip"
+        ]),
+        (.commandLine, [
+            "command line", "command-line", "terminal command", "shell command",
+            "shell prompt", "bash prompt", "zsh prompt", "console input"
         ]),
         (.search, [
             "search", "search query", "find", "filter"

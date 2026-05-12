@@ -67,6 +67,8 @@ struct SensitiveTextFieldPolicyTests {
             (.otp, FocusedElementFingerprint(placeholder: "One time code", windowTitle: "Sign in")),
             (.payment, FocusedElementFingerprint(identifier: "card-number", placeholder: "Credit card", windowTitle: "Checkout")),
             (.login, FocusedElementFingerprint(identifier: "username", placeholder: "Username", windowTitle: "Login")),
+            (.address, FocusedElementFingerprint(identifier: "shipping-address", placeholder: "Shipping address", windowTitle: "Checkout")),
+            (.commandLine, FocusedElementFingerprint(identifier: "terminal-command", placeholder: "Command line", windowTitle: "Web terminal")),
             (.passwordManager, FocusedElementFingerprint(title: "1Password", placeholder: "Search 1Password", windowTitle: "1Password")),
             (.privatePrompt, FocusedElementFingerprint(placeholder: "Private prompt", windowTitle: "Private chat")),
             (.privateSearch, FocusedElementFingerprint(placeholder: "Private search", windowTitle: "Private Browsing"))

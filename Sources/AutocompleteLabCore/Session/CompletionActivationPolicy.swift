@@ -396,6 +396,9 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         "authenticator", "2fa", "mfa", "expiration",
         "recovery code", "seed phrase", "social security", "ssn", "card number",
         "credit card", "debit card", "security code", "cvv", "cvc", "expiry",
-        "routing number", "account number"
+        "routing number", "account number", "street address", "shipping address",
+        "mailing address", "home address", "work address", "address line",
+        "email address", "phone number", "username", "login", "web address",
+        "command line", "terminal command", "shell command", "shell prompt"
     ]
 }

@@ -15,6 +15,7 @@ struct KeyboardCaptureSafetyPolicyTests {
             .missingShownSnapshot,
             .missingCurrentSnapshot,
             .currentBecameSecure,
+            .currentBecameSuppressedField,
             .promptTargetChanged,
             .targetFingerprintChanged
         ]

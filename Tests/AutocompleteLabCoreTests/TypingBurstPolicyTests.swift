@@ -43,7 +43,11 @@ struct TypingBurstPolicyTests {
         )
 
         #expect(decision == .burst(insertedCharacterCount: 4, eventCount: 4))
+        #expect(decision.shouldSuppressSuggestions)
         #expect(decision.shouldSuppressPhraseContinuation)
+        #expect(decision.traceMetadata["typingBurst"] == "true")
+        #expect(decision.traceMetadata["typingBurstInsertedCharacters"] == "4")
+        #expect(decision.traceMetadata["typingBurstEvents"] == "4")
     }
 
     @Test("Deletion resets burst tracking")

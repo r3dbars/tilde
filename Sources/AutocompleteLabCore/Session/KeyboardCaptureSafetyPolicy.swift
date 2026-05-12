@@ -46,6 +46,7 @@ public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
              .missingShownSnapshot,
              .missingCurrentSnapshot,
              .currentBecameSecure,
+             .currentBecameSuppressedField,
              .promptTargetChanged,
              .targetFingerprintChanged:
             .replayOriginalKey(.acceptanceTargetChanged)

@@ -18,6 +18,8 @@ categories = [
     "login",
     "search",
     "url-address",
+    "address",
+    "command-line",
     "api-key-like-text",
     "password-manager",
     "private-prompt",
