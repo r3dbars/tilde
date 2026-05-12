@@ -36,6 +36,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.actionableSuppressedByApp["com.apple.TextEdit"] == 2)
         #expect(summary.actionableSuppressedByMode["wordCompletion"] == 2)
         #expect(summary.insertionFailureCount == 1)
+        #expect(summary.doNotShipCounters["insertion-failed"] == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
@@ -46,6 +47,66 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.topMisses.count == 2)
         #expect(summary.topMisses.contains { $0.fixCategory == "word-completion issue" })
         #expect(summary.topMisses.contains { $0.fixCategory == "insertion bug" })
+    }
+
+    @Test("counts wrong-app acceptance blocks as do-not-ship blockers")
+    func countsWrongAppAcceptanceBlocksAsDoNotShipBlockers() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "one",
+                reason: "wrong-app-or-field-before-accept",
+                metadata: [
+                    "acceptanceGuardReason": "app-changed-before-accept",
+                    "doNotShip": "true",
+                    "focusMismatch": "true",
+                    "severe": "true"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.doNotShipCounters["wrong-app-or-field-before-accept"] == 1)
+        #expect(summary.dailySummaries.first?.severeFailures == 1)
+        #expect(summary.annoyanceSignalCounts["focusMismatch"] == 1)
+    }
+
+    @Test("surfaces prompt and browser chat no-submit metrics as do-not-ship counters")
+    func surfacesPromptAndBrowserChatNoSubmitMetricsAsDoNotShipCounters() {
+        let events = [
+            event(
+                .acceptedTextEdited,
+                suggestionID: "submit",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "field-send-finalized",
+                metadata: [
+                    "checkpoint": "fieldSend",
+                    "browserSurface": "chatgpt",
+                    "browserSurfaceSafetyClass": "browser-chat"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "collision",
+                appBundleIdentifier: "com.google.Chrome",
+                reason: "send-key-collision",
+                metadata: ["browserChatProofSurface": "browser-chat-harness"]
+            ),
+            event(
+                .insertionFailed,
+                suggestionID: "mutation",
+                appBundleIdentifier: "com.openai.codex",
+                reason: "prompt-mutation-outside-accepted-span",
+                metadata: ["promptMutationWithoutUserIntent": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.doNotShipCounters["prompt-accidental-submit"] == 1)
+        #expect(summary.doNotShipCounters["prompt-send-key-collision"] == 1)
+        #expect(summary.doNotShipCounters["prompt-mutation-without-user-intent"] == 1)
     }
 
     @Test("Streaming updates count as one shown suggestion")
@@ -362,6 +423,7 @@ struct AutocompleteTraceAnalyzerTests {
                 ]
             ),
             event(.suggestionPresented, suggestionID: "four", metadata: ["fieldKind": "search"]),
+            event(.suggestionPresented, suggestionID: "four-b", metadata: ["fieldKind": "unprovenSurface"]),
             event(.suggestionSuppressed, suggestionID: "five", reason: "repeated-miss"),
             event(.insertionFailed, suggestionID: "six", reason: "insert-verification-failed"),
             event(.appDisabled, suggestionID: "seven", reason: "manual"),
@@ -373,12 +435,65 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["rapidEscDismissal"] == 1)
         #expect(summary.annoyanceSignalCounts["typedOverWithinOneSecond"] == 1)
         #expect(summary.annoyanceSignalCounts["acceptedThenDeleted"] == 1)
-        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 1)
+        #expect(summary.annoyanceSignalCounts["searchOrFormLeakage"] == 2)
         #expect(summary.annoyanceSignalCounts["repeatedRejection"] == 1)
         #expect(summary.annoyanceSignalCounts["wrongInsertion"] == 1)
         #expect(summary.annoyanceSignalCounts["appDisable"] == 1)
         #expect(summary.annoyanceSignalCounts["overlayFlicker"] == 1)
         #expect(summary.annoyanceScore > 0)
+    }
+
+    @Test("summarizes non-annoyance rates and visible lifetimes")
+    func summarizesNonAnnoyanceRatesAndVisibleLifetimes() {
+        let events = [
+            event(.suggestionPresented, suggestionID: "one", timestamp: "2026-05-08T10:00:00Z"),
+            event(
+                .suggestionHidden,
+                suggestionID: "one",
+                timestamp: "2026-05-08T10:00:01Z",
+                outcome: "ignored",
+                reason: "escape",
+                metadata: ["lifetimeMs": "900", "hideLatencyMs": "12"]
+            ),
+            event(.suggestionPresented, suggestionID: "two", timestamp: "2026-05-08T10:01:00Z"),
+            event(.suggestionTypedOver, suggestionID: "two", timestamp: "2026-05-08T10:01:02Z"),
+            event(.suggestionPresented, suggestionID: "three", timestamp: "2026-05-08T10:02:00Z"),
+            event(
+                .suggestionHidden,
+                suggestionID: "three",
+                timestamp: "2026-05-08T10:02:01Z",
+                reason: "stale-after-keydown",
+                metadata: ["hideLatencyMs": "31"]
+            ),
+            event(
+                .suggestionHidden,
+                suggestionID: "three-b",
+                timestamp: "2026-05-08T10:02:01Z",
+                reason: "hidden",
+                metadata: ["hideLatencyMs": "4"]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "four",
+                timestamp: "2026-05-08T10:02:02Z",
+                reason: "wrong-app-or-field-before-accept",
+                metadata: ["focusMismatch": "true"]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.activeWritingMinutes == 3)
+        #expect(summary.shownPerActiveMinute == 1)
+        #expect(summary.explicitDismissalCount == 1)
+        #expect(summary.explicitDismissalsPerShown == 1.0 / 3.0)
+        #expect(summary.typedOverRate == 1.0 / 3.0)
+        #expect(summary.staleOrWrongContextCount == 2)
+        #expect(summary.staleOrWrongContextRate == 2.0 / 3.0)
+        #expect(summary.p50VisibleLifetimeMilliseconds == 900)
+        #expect(summary.p95VisibleLifetimeMilliseconds == 900)
+        #expect(summary.p50HideLatencyMilliseconds == 12)
+        #expect(summary.p95HideLatencyMilliseconds == 31)
     }
 
     @Test("summarizes field-kind slices")
@@ -513,7 +628,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.acceptedAndKeptRateByRenderMode["inlineAdjacent"] == 1.0)
         #expect(summary.acceptedAndKeptRateByRenderMode["floatingMirror"] == 0.0)
         #expect(summary.acceptedAndKeptRateByInsertionMode["axSelectedText"] == 1.0)
-        #expect(summary.acceptedAndKeptRateByInsertionMode["axThenKeyEvents"] == 0.0)
+        #expect(summary.acceptedAndKeptRateByInsertionMode["axValueReplacement"] == 0.0)
         #expect(summary.acceptedAndKeptRateByRequestMode["wordCompletion"] == 1.0)
         #expect(summary.acceptedAndKeptRateByRequestMode["phraseContinuation"] == 0.0)
         #expect(summary.acceptedAndKeptRateByModel["qwen35-4b"] == 0.5)
@@ -650,6 +765,100 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.annoyanceSignalCounts["focusStealing"] == 1)
     }
 
+    @Test("summarizes undo recoverability proof by app")
+    func summarizesUndoRecoverabilityProofByApp() {
+        let events = [
+            event(
+                .suggestionAccepted,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptNextWord",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .acceptedInsertionUndone,
+                suggestionID: "one",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptNextWord",
+                metadata: [
+                    "acceptMode": "acceptNextWord",
+                    "undoMechanism": "nativeSingleEdit",
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true"
+                ]
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "two",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptAllVisible",
+                metadata: ["acceptMode": "acceptAllVisible"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "two",
+                appBundleIdentifier: "com.apple.TextEdit",
+                metadata: ["acceptMode": "acceptAllVisible"]
+            ),
+            event(
+                .acceptedInsertionUndone,
+                suggestionID: "two",
+                appBundleIdentifier: "com.apple.TextEdit",
+                outcome: "acceptAllVisible",
+                metadata: [
+                    "acceptMode": "acceptAllVisible",
+                    "undoMechanism": "nativeSingleEdit",
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true"
+                ]
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.Notes",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .insertionVerified,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.Notes",
+                metadata: ["acceptMode": "acceptNextWord"]
+            ),
+            event(
+                .acceptedInsertionUndone,
+                suggestionID: "three",
+                appBundleIdentifier: "com.apple.Notes",
+                metadata: [
+                    "acceptMode": "acceptNextWord",
+                    "undoMechanism": "appRollback",
+                    "sameSliceUndoProof": "true",
+                    "restoredOriginalTarget": "true"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.undoRecoverabilityByApp.contains { row in
+            row.appBundleIdentifier == "com.apple.TextEdit"
+                && row.status == "nativeSingleEdit"
+                && row.nativeSingleEditCount == 2
+                && row.oneWordNativeCount == 1
+                && row.fullNativeCount == 1
+        })
+        #expect(summary.undoRecoverabilityByApp.contains { row in
+            row.appBundleIdentifier == "com.apple.Notes"
+                && row.status == "appRollback"
+                && row.appRollbackCount == 1
+        })
+    }
+
     @Test("summarizes model quality tracking buckets")
     func summarizesModelQualityTrackingBuckets() {
         let events = [
@@ -692,6 +901,56 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.modelFirstVisibleLatencyBuckets["51-100ms"] == 1)
         #expect(summary.modelTotalGenerationLatencyBuckets["101-250ms"] == 1)
         #expect(summary.modelTotalGenerationLatencyBuckets["501-1000ms"] == 1)
+    }
+
+    @Test("summarizes sensitive suppression categories and leaks")
+    func summarizesSensitiveSuppressionCategoriesAndLeaks() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "password",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "password",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "secure"
+                ]
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "otp",
+                reason: "sensitive-field",
+                metadata: [
+                    "sensitiveSuppressionCategory": "otp",
+                    "sensitiveSuppressionDecision": "blocked",
+                    "fieldKind": "form"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "leak",
+                metadata: [
+                    "sensitiveSuppressionCategory": "payment",
+                    "fieldKind": "form"
+                ]
+            ),
+            event(
+                .suggestionPresented,
+                suggestionID: "normal",
+                metadata: [
+                    "fieldKind": "body"
+                ]
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.sensitiveSuppressedByCategory["password"] == 1)
+        #expect(summary.sensitiveSuppressedByCategory["otp"] == 1)
+        #expect(summary.sensitivePresentedByCategory["payment"] == 1)
+        #expect(summary.sensitivePresentedByCategory["unknown"] == nil)
+        #expect(summary.doNotShipCounters["sensitive-category-suggestion"] == 1)
+        #expect(summary.doNotShipCounters["sensitive-field-suggestion"] == 1)
     }
 
     private func event(

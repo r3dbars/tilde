@@ -29,7 +29,7 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 
 public struct CompletionModelPolicy: Equatable, Sendable {
     public static let minimumVisibleWords = 1
-    public static let maximumVisibleWords = 7
+    public static let maximumVisibleWords = 8
     public static let minimumGeneratedTokens = 3
     public static let maximumGeneratedTokens = 16
 
@@ -66,8 +66,8 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         model: .qwen35FourB,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
-        maxGeneratedTokens: 10,
-        maxVisibleWords: 5,
+        maxGeneratedTokens: 14,
+        maxVisibleWords: 8,
         debounceMilliseconds: 15,
         targetLatencyMilliseconds: 50,
         reasoningEnabled: false
@@ -164,7 +164,7 @@ public enum AutocompleteExperimentArm: String, Codable, Equatable, Sendable, Cas
     public var defaultMaxVisibleWords: Int {
         switch self {
         case .length3Word:
-            3
+            8
         case .length1Word:
             1
         }
@@ -173,7 +173,7 @@ public enum AutocompleteExperimentArm: String, Codable, Equatable, Sendable, Cas
     public var defaultMaxGeneratedTokens: Int {
         switch self {
         case .length3Word:
-            9
+            14
         case .length1Word:
             4
         }

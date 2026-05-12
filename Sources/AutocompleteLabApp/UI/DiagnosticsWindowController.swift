@@ -1,6 +1,68 @@
 import AppKit
 import AutocompleteLabCore
 
+private extension Collection where Element == AutocompleteTraceEvent {
+    func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
+        reversed().first { event in
+            !keys.isDisjoint(with: Set(event.metadata.keys))
+        }
+    }
+}
+
+struct DiagnosticsInspectorState: Equatable {
+    let appTrusted: Bool
+    let appEnabled: Bool
+    let compatibilityStatus: CompatibilitySupportStatus
+    let lastSuggestionDecision: String
+    let runtimeReport: RuntimeReadinessReport
+    let runtimeTargetSummary: String
+    var pauseControl: ControlPauseState = ControlPauseState(isPaused: false, pausedUntil: nil)
+    let tracePath: String
+    let tracingPaused: Bool
+    let screenshotTracingEnabled: Bool
+    let compatibilityLearningPath: String
+    let compatibilityLearningProfile: CompatibilityLearningProfile?
+
+    var summaryText: String {
+        """
+        Current state:
+          Accessibility: \(appTrusted ? "allowed" : "needed")
+          Suggestions: \(lastSuggestionDecision)
+          \(pauseControl.statusText)
+          App: \(compatibilityStatus.userFacingSummary), \(appEnabled ? "allowed" : "blocked")
+          Mode: \(Self.modeText(for: compatibilityStatus))
+          Local model: \(runtimeReport.summary)
+          Runtime target: \(runtimeTargetSummary)
+          Next action: \(runtimeReport.action.displayName)
+          Traces: \(tracingPaused ? "paused" : "recording")
+          Screenshots: \(screenshotTracingEnabled ? "on" : "off")
+          Trace file: \(tracePath)
+          Learning file: \(compatibilityLearningPath)
+          Learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
+        """
+    }
+
+    private static func modeText(for status: CompatibilitySupportStatus) -> String {
+        guard case let .supported(profile) = status else {
+            return "off"
+        }
+
+        if profile.supportLevel == .yellow,
+           profile.fallbackRenderMode == .floatingMirror {
+            return "mirror"
+        }
+
+        switch profile.renderMode {
+        case .inlineAdjacent:
+            return "inline"
+        case .floatingMirror:
+            return "mirror"
+        case .disabled:
+            return "off"
+        }
+    }
+}
+
 @MainActor
 final class DiagnosticsWindowController {
     private let window: NSWindow
@@ -121,6 +183,7 @@ final class DiagnosticsWindowController {
         lastSuggestionDecision: String,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        pauseControl: ControlPauseState = ControlPauseState(isPaused: false, pausedUntil: nil),
         modelDirectoryPath: String,
         recentEvents: [String],
         traceSummary: AutocompleteTraceSummary,
@@ -154,6 +217,7 @@ final class DiagnosticsWindowController {
             lastSuggestionDecision: lastSuggestionDecision,
             runtimeReport: runtimeReport,
             runtimeTargetSummary: runtimeTargetSummary,
+            pauseControl: pauseControl,
             compatibilityStatus: compatibilityStatus,
             diagnostics: diagnostics,
             traceSummary: traceSummary,
@@ -414,6 +478,7 @@ struct DiagnosticsOverviewState: Equatable {
     let accessibilityText: String
     let suggestionText: String
     let localModelText: String
+    let pauseText: String
     let currentAppText: String
     let tracingText: String
 
@@ -423,6 +488,7 @@ struct DiagnosticsOverviewState: Equatable {
         lastSuggestionDecision: String,
         runtimeReport: RuntimeReadinessReport,
         runtimeTargetSummary: String,
+        pauseControl: ControlPauseState = ControlPauseState(isPaused: false, pausedUntil: nil),
         compatibilityStatus: CompatibilitySupportStatus,
         diagnostics: FocusedTextDiagnostics?,
         traceSummary: AutocompleteTraceSummary,
@@ -435,6 +501,7 @@ struct DiagnosticsOverviewState: Equatable {
             "\(runtimeReport.summary) | stage \(runtimeReport.stage.rawValue) | action \(runtimeReport.action.displayName) | target \(runtimeTargetSummary)",
             maxLength: 140
         )
+        pauseText = pauseControl.statusText
 
         let appName = diagnostics?.localizedAppName ?? "No focused app"
         let bundle = diagnostics?.bundleIdentifier.map { " (\($0))" } ?? ""
@@ -454,6 +521,7 @@ struct DiagnosticsOverviewState: Equatable {
             "Overview",
             "Accessibility: \(accessibilityText)",
             "Suggestion: \(suggestionText)",
+            "Suggestions control: \(pauseText)",
             "Local model: \(localModelText)",
             "Current app: \(currentAppText)",
             "Tracing: \(tracingText)"
@@ -495,6 +563,145 @@ struct DiagnosticsOverviewState: Equatable {
     }
 }
 
+struct DiagnosticsPlacementEvidence {
+    let rows: [Row]
+
+    init(events: [AutocompleteTraceEvent]) {
+        rows = events.suffix(16).compactMap(Row.init(event:))
+    }
+
+    var summaryText: String {
+        guard !rows.isEmpty else {
+            return "Placement confidence: none yet"
+        }
+
+        return """
+        Placement confidence:
+        \(rows.map(\.description).joined(separator: "\n"))
+        """
+    }
+
+    struct Row: Equatable {
+        let timestamp: String
+        let type: String
+        let app: String
+        let mode: String
+        let confidence: String
+        let score: String
+        let anchor: String
+        let health: String
+        let action: String
+        let screenshot: String
+        let shownChars: Int
+        let acceptedChars: Int
+
+        init?(event: AutocompleteTraceEvent) {
+            guard event.metadata["placementConfidenceBand"] != nil
+                || event.metadata["placementConfidenceScore"] != nil
+                || event.metadata["placementHealthReason"] != nil
+                || event.metadata["placementEffectiveRenderMode"] != nil
+                || event.metadata["effectiveRenderMode"] != nil else {
+                return nil
+            }
+
+            timestamp = event.timestamp
+            type = event.type.rawValue
+            app = event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier
+            mode = Self.modeText(event)
+            confidence = event.metadata["placementConfidenceBand"] ?? "unknown"
+            score = event.metadata["placementConfidenceScore"] ?? "n/a"
+            anchor = event.metadata["placementAnchorSource"] ?? "unknown"
+            health = event.metadata["placementHealthReason"] ?? (event.reason.isEmpty ? "n/a" : event.reason)
+            action = event.metadata["placementSelfHealingAction"] ?? "none"
+            screenshot = event.screenshotPath.isEmpty ? "none" : "captured"
+            shownChars = DiagnosticsTraceHistory.textLength(
+                event,
+                text: event.displayedText,
+                metadataKeys: ["visibleChars", "displayedTextChars"]
+            )
+            acceptedChars = DiagnosticsTraceHistory.textLength(
+                event,
+                text: event.acceptedText,
+                metadataKeys: ["acceptedTextChars"]
+            )
+        }
+
+        var description: String {
+            "  \(timestamp) \(type) app=\(app) mode=\(mode) confidence=\(confidence) score=\(score) anchor=\(anchor) health=\(health) action=\(action) screenshot=\(screenshot) shownChars=\(shownChars) acceptedChars=\(acceptedChars)"
+        }
+
+        private static func modeText(_ event: AutocompleteTraceEvent) -> String {
+            let requested = event.metadata["placementRequestedRenderMode"]
+            let effective = event.metadata["placementEffectiveRenderMode"]
+                ?? event.metadata["effectiveRenderMode"]
+                ?? (event.requestMode.isEmpty ? nil : event.requestMode)
+                ?? "unknown"
+
+            guard let requested, requested != effective else {
+                return effective
+            }
+
+            return "\(requested)->\(effective)"
+        }
+    }
+}
+
+struct DiagnosticsTraceHistory {
+    let events: [AutocompleteTraceEvent]
+
+    init(events: [AutocompleteTraceEvent]) {
+        self.events = Array(events.suffix(16))
+    }
+
+    var summaryText: String {
+        guard !events.isEmpty else {
+            return "Recent trace events: none yet"
+        }
+
+        return """
+        Recent trace events:
+        \(events.map(Self.rowText).joined(separator: "\n"))
+        """
+    }
+
+    static func rowText(_ event: AutocompleteTraceEvent) -> String {
+        let shownChars = textLength(
+            event,
+            text: event.displayedText,
+            metadataKeys: ["visibleChars", "displayedTextChars"]
+        )
+        let acceptedChars = textLength(
+            event,
+            text: event.acceptedText,
+            metadataKeys: ["acceptedTextChars"]
+        )
+        let confidence = event.metadata["placementConfidenceBand"] ?? "n/a"
+        let renderMode = event.metadata["placementEffectiveRenderMode"]
+            ?? event.metadata["effectiveRenderMode"]
+            ?? "n/a"
+
+        return "  \(event.timestamp) \(event.type.rawValue) mode=\(event.requestMode) app=\(event.appBundleIdentifier) shownChars=\(shownChars) acceptedChars=\(acceptedChars) confidence=\(confidence) render=\(renderMode) reason=\(event.reason) latency=\(latency(event.latencyMilliseconds))"
+    }
+
+    static func textLength(
+        _ event: AutocompleteTraceEvent,
+        text: String,
+        metadataKeys: [String]
+    ) -> Int {
+        for key in metadataKeys {
+            if let value = event.metadata[key], let length = Int(value) {
+                return length
+            }
+        }
+
+        return text.count
+    }
+
+    private static func latency(_ value: Int?) -> String {
+        value.map { "\($0)ms" } ?? "n/a"
+    }
+}
+
 struct PromptContextDiagnostics: Equatable {
     let recentEvents: [AutocompleteTraceEvent]
 
@@ -512,7 +719,7 @@ struct PromptContextDiagnostics: Equatable {
     }
 
     private var latestDocumentTitleShapeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "documentTitleWordCount",
             "documentTitleLengthBucket"
         ]) else {
@@ -528,7 +735,7 @@ struct PromptContextDiagnostics: Equatable {
     }
 
     private var latestPartialWordShapeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "partialWordCharacters",
             "partialWordLetters"
         ]) else {
@@ -545,7 +752,7 @@ struct PromptContextDiagnostics: Equatable {
     }
 
     private var latestCurrentLineShapeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "currentLineStructure",
             "currentLineMarkerStyle"
         ]) else {
@@ -566,12 +773,6 @@ struct PromptContextDiagnostics: Equatable {
                     || key.hasPrefix("partialWord")
                     || key.hasPrefix("currentLine")
             }
-        }
-    }
-
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
         }
     }
 }
@@ -606,7 +807,7 @@ struct PlacementDiagnostics: Equatable {
     }
 
     private var latestPlacementText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "placementConfidenceScore",
             "placementConfidenceBand",
             "placementAnchorSource",
@@ -657,12 +858,6 @@ struct PlacementDiagnostics: Equatable {
 
             return "\(requested)->\(effective)"
         })
-    }
-
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
-        }
     }
 
     private func clippingDescription(for event: AutocompleteTraceEvent) -> String {
@@ -777,7 +972,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentDisplayAffinityText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "displayScoreAcceptedAndKeptProbability",
             "displayScoreAcceptedAndKeptSamples"
         ]) else {
@@ -791,7 +986,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentQuietModeText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "quietMode",
             "quietReason",
             "quietScore",
@@ -809,7 +1004,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentRepeatedMissText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "repetitionMissTotal",
             "repetitionMissSuppressed"
         ]) else {
@@ -825,7 +1020,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentPrefixCooldownText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "prefixCooldownReason",
             "prefixCooldownDurationMilliseconds"
         ]) else {
@@ -841,7 +1036,7 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private var recentStyleSketchText: String {
-        guard let event = latestEvent(containingAny: [
+        guard let event = recentEvents.latestEvent(containingAny: [
             "styleSketchSamples",
             "styleSketchAverageWords"
         ]) else {
@@ -888,12 +1083,6 @@ struct SuggestionLearningDiagnostics: Equatable {
         """
     }
 
-    private func latestEvent(containingAny keys: Set<String>) -> AutocompleteTraceEvent? {
-        recentEvents.reversed().first { event in
-            !keys.isDisjoint(with: Set(event.metadata.keys))
-        }
-    }
-
     private static func percent(_ value: Double) -> String {
         "\(Int((value * 100).rounded()))%"
     }
@@ -912,6 +1101,8 @@ struct DiagnosticsTypingHealth {
     private var disabledKeyEvents = 0
     private var startFailedKeyEvents = 0
     private var failedClosedKeyEvents = 0
+    private var replayedCapturedKeyEvents = 0
+    private var droppedCapturedKeyEvents = 0
 
     private var axSummarySamples = 0
     private var axP95Milliseconds: Int?
@@ -943,6 +1134,10 @@ struct DiagnosticsTypingHealth {
             return "needs attention - slow key capture \(slowKeyMarkers)x"
         }
 
+        if droppedCapturedKeyEvents > 0 {
+            return "needs attention - captured key dropped \(droppedCapturedKeyEvents)x"
+        }
+
         if keySamples + keySummarySamples == 0 {
             return "no recent key samples"
         }
@@ -951,7 +1146,7 @@ struct DiagnosticsTypingHealth {
     }
 
     var keySampleDescription: String {
-        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros))"
+        "raw=\(keySamples), summary=\(keySummarySamples), p95=\(microseconds(keyP95Micros)), max=\(microseconds(keyMaxMicros)), replayed=\(replayedCapturedKeyEvents), dropped=\(droppedCapturedKeyEvents)"
     }
 
     var axPollingStatus: String {
@@ -1000,6 +1195,10 @@ struct DiagnosticsTypingHealth {
             startFailedKeyEvents += 1
         case "keyboard-event-tap-failed-closed":
             failedClosedKeyEvents += 1
+        case "keyboard-event-tap-replayed-captured-key":
+            replayedCapturedKeyEvents += 1
+        case "keyboard-event-tap-unhandled-consumed-key-dropped":
+            droppedCapturedKeyEvents += 1
         case "focused-text-poll-latency-summary":
             axSummarySamples += fields.intValue(for: "count") ?? 0
             axP95Milliseconds = maxOptional(axP95Milliseconds, fields.intValue(for: "p95Milliseconds"))

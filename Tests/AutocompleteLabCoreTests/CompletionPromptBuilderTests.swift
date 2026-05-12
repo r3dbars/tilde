@@ -3,19 +3,18 @@ import Testing
 
 @Suite("Completion prompt builder")
 struct CompletionPromptBuilderTests {
-    @Test("Prompt asks for a tiny continuation only")
-    func promptAsksForTinyContinuationOnly() {
+    @Test("Prompt asks for a bounded continuation only")
+    func promptAsksForBoundedContinuationOnly() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Inline autocomplete"))
-        #expect(prompt.system.contains("Return 1 to 3 candidate suffixes"))
-        #expect(prompt.system.contains("best first"))
-        #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
-        #expect(prompt.system.contains("confidence is low"))
+        #expect(prompt.system.contains("Return only the suffix after the Before cursor text"))
         #expect(prompt.system.contains("boring connective tissue"))
+        #expect(prompt.system.contains("common phrase"))
         #expect(prompt.system.contains("Do not answer, explain"))
+        #expect(prompt.system.contains("repeat the Before cursor text"))
         #expect(prompt.system.contains("Do not brainstorm, rewrite"))
         #expect(prompt.system.contains("reason"))
         #expect(prompt.user.contains("Before cursor:\nI think we should"))
@@ -73,6 +72,62 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("weak genre context"))
         #expect(!prompt.system.contains("Launch"))
         #expect(!prompt.system.contains("Plan"))
+    }
+
+    @Test("Prompt can include opt-in visible page context")
+    func promptCanIncludeVisiblePageContext() throws {
+        let pageContext = try #require(VisiblePageContext(text: """
+        Launch Plan
+        - Keep OCR local
+        Untitled 13
+        Save
+        Save
+        !!!
+        """))
+        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "We should",
+            visiblePageContext: pageContext
+        ))
+
+        #expect(prompt.system.contains("Visible page context source: screen_ocr, scope: visible_screen"))
+        #expect(prompt.system.contains("Use it to infer the active app"))
+        #expect(prompt.system.contains("Prefer a useful best guess"))
+        #expect(prompt.system.contains("Never output visible window titles"))
+        #expect(prompt.user.contains("Visible page context:\nOCR scope: visible_screen\nLaunch Plan"))
+        #expect(prompt.user.contains("OCR scope: visible_screen"))
+        #expect(prompt.user.contains("- Keep OCR local"))
+        #expect(!prompt.user.contains("Untitled 13"))
+        #expect(prompt.user.contains("Before cursor:\nWe should"))
+        #expect(prompt.user.hasSuffix("Next words:"))
+        #expect(!prompt.user.contains("!!!"))
+    }
+
+    @Test("Prompt uses active app screen context as reply evidence")
+    func promptUsesActiveAppScreenContextAsReplyEvidence() throws {
+        let pageContext = try #require(VisiblePageContext(
+            captureScope: .visibleScreen,
+            activeApplicationName: "Obsidian",
+            text: """
+            Inbox
+            Sam: Can you send the launch note today?
+            Draft
+            Yeah I can
+            """
+        ))
+        let builder = CompletionPromptBuilder(maxVisibleWords: 8)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "Yeah I can",
+            appBundleIdentifier: "md.obsidian",
+            visiblePageContext: pageContext,
+            maxVisibleWords: 8
+        ))
+
+        #expect(prompt.system.contains("what the user is replying to"))
+        #expect(prompt.system.contains("local writing companion"))
+        #expect(prompt.user.contains("Active app: Obsidian"))
+        #expect(prompt.user.contains("Sam: Can you send the launch note today?"))
+        #expect(prompt.user.contains("Before cursor:\nYeah I can"))
     }
 
     @Test("Word prompt includes trace safe document title shape")
@@ -233,8 +288,9 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("Inline word completion"))
         #expect(prompt.system.contains("missing suffix"))
+        #expect(prompt.system.contains("complete the visible local word"))
         #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
-        #expect(prompt.system.contains("confidence is low"))
+        #expect(prompt.system.contains("suffix would complete the wrong word"))
         #expect(prompt.system.contains("No spaces"))
         #expect(prompt.user.hasSuffix("Suffix:"))
     }
@@ -244,8 +300,8 @@ struct CompletionPromptBuilderTests {
         let builder = CompletionPromptBuilder(maxVisibleWords: 20)
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
-        #expect(builder.maxVisibleWords == 7)
-        #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(builder.maxVisibleWords == 8)
+        #expect(prompt.system.contains("next 8 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 
@@ -393,7 +449,7 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("Sentence mode: start only the next sentence's first few words"))
-        #expect(prompt.system.contains("Require higher confidence"))
+        #expect(prompt.system.contains("make the best short guess"))
         #expect(prompt.system.contains("Start the next sentence naturally"))
         #expect(!prompt.system.contains("Phrase mode: continue only the current local thought"))
     }
@@ -406,8 +462,8 @@ struct CompletionPromptBuilderTests {
             appBundleIdentifier: "com.openai.codex"
         ))
 
-        #expect(prompt.system.contains("next 1 words or fewer"))
-        #expect(prompt.system.contains("Behavior profile: ai_chat, max 1 visible words / 4 generated tokens"))
+        #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(prompt.system.contains("Behavior profile: ai_chat, max 8 visible words / 12 generated tokens"))
         #expect(prompt.system.contains("Never suggest sending, submitting"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
     }

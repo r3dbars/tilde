@@ -5,10 +5,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     static let shared = RawAutocompleteTraceLog(
         logURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/AutocompleteLab/traces.jsonl"),
+            .appendingPathComponent("Library/Logs/SteadyType/traces.jsonl"),
         screenshotsURL: FileManager.default
             .homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/AutocompleteLab/screenshots")
+            .appendingPathComponent("Library/Logs/SteadyType/screenshots")
     )
 
     private let queue = DispatchQueue(label: "app.transcripted.autocomplete.raw-trace-log")
@@ -110,7 +110,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         setRawContentTracingEnabled(false)
         setScreenshotTracingEnabled(false)
         queue.sync { [logURL, screenshotsURL] in
+            let folderURL = logURL.deletingLastPathComponent()
             try? FileManager.default.removeItem(at: logURL)
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("raw-traces.jsonl"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("trace-report.html"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("survival-report.json"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("privacy-export"))
             try? FileManager.default.removeItem(at: screenshotsURL)
         }
     }
@@ -169,6 +174,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         guard let expiresAt = expirationDate(forKey: expiryKey),
               expiresAt > now() else {
             clearExpiringDefaultFlag(flagKey: flagKey, expiryKey: expiryKey)
+            expireArtifacts(for: flagKey)
             return nil
         }
 
@@ -191,6 +197,51 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private func clearExpiringDefaultFlag(flagKey: String, expiryKey: String) {
         userDefaults.set(false, forKey: flagKey)
         userDefaults.removeObject(forKey: expiryKey)
+    }
+
+    private func expireArtifacts(for flagKey: String) {
+        if flagKey == rawContentDefaultsKey {
+            redactStoredTraceFile()
+        }
+        if flagKey == screenshotDefaultsKey {
+            queue.sync { [screenshotsURL] in
+                try? FileManager.default.removeItem(at: screenshotsURL)
+            }
+        }
+    }
+
+    private func redactStoredTraceFile() {
+        queue.sync { [logURL, decoder, encoder] in
+            guard let contents = try? String(contentsOf: logURL, encoding: .utf8) else {
+                return
+            }
+
+            let redactedLines = contents
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .compactMap { line -> String? in
+                    guard let event = try? decoder.decode(
+                        AutocompleteTraceEvent.self,
+                        from: Data(line.utf8)
+                    ) else {
+                        return nil
+                    }
+                    guard let data = try? encoder.encode(RedactionLayer.redactedDefaultTrace(event)) else {
+                        return nil
+                    }
+                    return String(data: data, encoding: .utf8)
+                }
+
+            guard !redactedLines.isEmpty else {
+                try? FileManager.default.removeItem(at: logURL)
+                return
+            }
+
+            try? (redactedLines.joined(separator: "\n") + "\n").write(
+                to: logURL,
+                atomically: true,
+                encoding: .utf8
+            )
+        }
     }
 
     private func expirationDate(forKey key: String) -> Date? {
@@ -425,6 +476,12 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
     }
 
+    func exportRedactedSurvivalReport(limit: Int = 2_000) -> URL? {
+        queue.sync { [folderURL] in
+            LocalReportExporter(folderURL: folderURL).exportRedactedSurvivalReport(limit: limit)
+        }
+    }
+
     private static func htmlReport(
         summary: AutocompleteTraceSummary,
         events: [AutocompleteTraceEvent]
@@ -484,7 +541,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         <html>
         <head>
           <meta charset="utf-8">
-          <title>Autocomplete Lab Trace Report</title>
+          <title>SteadyType Trace Report</title>
           <style>
             body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 28px; color: #1d1d1f; }
             h1 { font-size: 24px; }
@@ -498,7 +555,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
           </style>
         </head>
         <body>
-          <h1>Autocomplete Lab Trace Report</h1>
+          <h1>SteadyType Trace Report</h1>
           <p>Generated locally. Nothing was uploaded.</p>
           <div class="grid">
             <div class="metric"><b>\(summary.totalEvents)</b>events</div>

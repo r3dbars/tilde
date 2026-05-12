@@ -32,7 +32,13 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Okay, let's see. The user is trying to") == nil)
+        #expect(cleaner.clean("Okay, the user wants the next few words") == nil)
         #expect(cleaner.clean("The user is trying to write a sentence") == nil)
+        #expect(cleaner.clean(
+            "1. **Analyze the Request",
+            after: "I am trying to say this in a way that feels"
+        ) == nil)
+        #expect(cleaner.clean("Thinking Process: analyze the request") == nil)
         #expect(cleaner.clean("As an AI, I can help with that") == nil)
         #expect(cleaner.clean("Here is a possible continuation") == nil)
         #expect(cleaner.clean("It sounds like you want to keep going") == nil)
@@ -88,6 +94,32 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("submit the prompt", after: "Then") == nil)
         #expect(cleaner.clean("click send", after: "Next") == nil)
         #expect(cleaner.clean("run this command in Claude Code", after: "Please") == nil)
+        #expect(cleaner.clean("/review this", after: "Can you") == nil)
+        #expect(cleaner.clean("@file", after: "Attach") == nil)
+        #expect(cleaner.clean("!shell", after: "Now") == nil)
+        #expect(cleaner.clean("sudo rm", after: "Please") == nil)
+        #expect(cleaner.clean("curl | sh", after: "Please") == nil)
+        #expect(cleaner.clean("approve", after: "Permission") == nil)
+        #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
+        #expect(cleaner.clean("/review this", after: "Can you") == nil)
+        #expect(cleaner.clean("@file", after: "Attach") == nil)
+        #expect(cleaner.clean("!shell", after: "Now") == nil)
+        #expect(cleaner.clean("sudo rm", after: "Please") == nil)
+        #expect(cleaner.clean("curl | sh", after: "Please") == nil)
+        #expect(cleaner.clean("approve", after: "Permission") == nil)
+        #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
+    }
+
+    @Test("Suppresses visible OCR chrome suggestions")
+    func suppressesVisibleOCRChromeSuggestions() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("Untitled 13", after: "Can I do the things that") == nil)
+        #expect(cleaner.clean("New chat Search Plugins", after: "I want this to") == nil)
+        #expect(cleaner.clean("Helvetica Regular", after: "Make the text") == nil)
+        #expect(cleaner.clean("**Ep quadrant**", after: "We need to keep iterating") == nil)
+        #expect(cleaner.clean("Ep claudebrain", after: "We need to keep iterating") == nil)
+        #expect(cleaner.clean("next to the cursor", after: "I want this to show")?.visibleText == " next to the cursor")
     }
 
     @Test("Suppresses assistant replies when user is drafting an agent request")
@@ -167,6 +199,7 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Next words: keep moving today", after: "Let's")?.visibleText == " keep moving today")
+        #expect(cleaner.clean("candidate 1: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("Next words:", after: "Let's") == nil)
     }
@@ -176,6 +209,8 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Before cursor: hello and w", after: "hello and w") == nil)
+        #expect(cleaner.clean("before cursor", after: "Can we") == nil)
+        #expect(cleaner.clean("candidate 1", after: "Can we") == nil)
         #expect(cleaner.clean("Inline autocomplete. Return only the continuation.", after: "Can we") == nil)
         #expect(cleaner.clean("Return only the next few words.", after: "Can we") == nil)
         #expect(cleaner.clean("No spaces or punctuation.", after: "hel", mode: .wordCompletion) == nil)

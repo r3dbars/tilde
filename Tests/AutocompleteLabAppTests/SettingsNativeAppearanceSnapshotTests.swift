@@ -23,11 +23,13 @@ struct SettingsNativeAppearanceSnapshotTests {
             toggleTracingPaused: {},
             toggleRawContentTracing: {},
             toggleScreenshotTracing: {},
+            toggleVisiblePageContext: {},
             deleteLocalLogs: {},
             clearLearningData: {},
             cycleAcceptAllShortcut: {},
             setAcceptAllShortcut: { _ in },
-            cycleSuggestionAggressiveness: {}
+            setSuggestionAggressivenessLevel: { _ in },
+            setSuggestionMaxVisibleWords: { _ in }
         )
         controller.refresh(
             isTrusted: true,
@@ -39,7 +41,7 @@ struct SettingsNativeAppearanceSnapshotTests {
                 isReady: true
             ),
             runtimeTargetSummary: "Qwen local • short completions • normal",
-            modelDirectoryPath: "/Users/example/Library/Application Support/AutocompleteLab/Models",
+            modelDirectoryPath: "/Users/example/Library/Application Support/SteadyType/Models",
             modelInstallStatusText: nil,
             isModelInstallInProgress: false,
             currentApp: SettingsCurrentAppState(
@@ -61,11 +63,13 @@ struct SettingsNativeAppearanceSnapshotTests {
                 rawContentTracingExpiresAt: nil,
                 screenshotTracingEnabled: false,
                 screenshotTracingExpiresAt: nil,
-                diagnosticsPath: "/Users/example/Library/Logs/AutocompleteLab/diagnostics.log",
-                tracePath: "/Users/example/Library/Logs/AutocompleteLab/events.jsonl"
+                visiblePageContextEnabled: false,
+                screenCaptureAccessGranted: false,
+                diagnosticsPath: "/Users/example/Library/Logs/SteadyType/diagnostics.log",
+                tracePath: "/Users/example/Library/Logs/SteadyType/events.jsonl"
             ),
             keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
-            suggestionAggressiveness: SettingsSuggestionAggressivenessState(aggressiveness: .normal),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
             lastSuggestionDecision: "Shown"
         )
 

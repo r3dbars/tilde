@@ -37,6 +37,20 @@ struct WordCompletionCandidateRankerTests {
         #expect(suggestion?.visibleText == "umentary")
     }
 
+    @Test("uses visible page words as instant partial word context")
+    func usesVisiblePageWordsAsInstantPartialWordContext() throws {
+        let context = try #require(VisiblePageContext(text: """
+        SteadyType should recognize Obsidian context
+        Transcripted is the product name on the page
+        Screen Recording permission appears in Settings
+        """))
+        let ranker = WordCompletionCandidateRanker(staticWords: [])
+
+        #expect(ranker.suggestion(for: "Obsid", recentWords: context.completionCandidateWords)?.visibleText == "ian")
+        #expect(ranker.suggestion(for: "Transcrip", recentWords: context.completionCandidateWords)?.visibleText == "ted")
+        #expect(ranker.suggestion(for: "permis", recentWords: context.completionCandidateWords)?.visibleText == "sion")
+    }
+
     @Test("Suppresses ambiguous two-letter static and recent fragments")
     func suppressesAmbiguousTwoLetterStaticAndRecentFragments() {
         let ranker = WordCompletionCandidateRanker(staticWords: ["there", "their", "thing"])
@@ -58,6 +72,41 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "It seems to be dec")?.visibleText == "ent")
         #expect(ranker.suggestion(for: "I wri")?.visibleText == "ting")
         #expect(ranker.suggestion(for: "hey tryin")?.visibleText == "g")
+    }
+
+    @Test("Predictive fallback can suggest the next word before a prefix is typed")
+    func predictiveFallbackSuggestsNextWord() {
+        let ranker = WordCompletionCandidateRanker()
+
+        #expect(ranker.suggestion(for: "Smoke proof feels") == nil)
+        #expect(
+            ranker.suggestion(
+                for: "Smoke proof feels",
+                allowPredictiveFallback: true
+            )?.visibleText == " instant"
+        )
+        #expect(
+            ranker.suggestion(
+                for: "and stays",
+                allowPredictiveFallback: true
+            )?.visibleText == " instant"
+        )
+    }
+
+    @Test("Predictive fallback records trace-safe source metadata")
+    func predictiveFallbackMetadata() {
+        let ranker = WordCompletionCandidateRanker()
+
+        let selection = ranker.selection(
+            for: "Smoke proof feels",
+            allowPredictiveFallback: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " instant")
+        #expect(selection.candidateCount == 1)
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-word-fallback")
+        #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        #expect(selection.traceMetadata.values.contains("feels") == false)
     }
 
     @Test("suppresses low value static suffixes")

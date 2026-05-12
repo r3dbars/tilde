@@ -1,21 +1,38 @@
 import Foundation
 
 public enum BrowserHostedSurface: String, Equatable, Sendable {
+    case unproven = "unproven-browser-surface"
     case googleDocs = "google-docs"
     case notion = "notion"
+    case chatGPT = "chatgpt"
     case slack = "slack"
     case discord = "discord"
 
     public var displayName: String {
         switch self {
+        case .unproven:
+            return "This browser page"
         case .googleDocs:
             return "Google Docs"
         case .notion:
             return "Notion"
+        case .chatGPT:
+            return "ChatGPT"
         case .slack:
             return "Slack"
         case .discord:
             return "Discord"
+        }
+    }
+
+    public var safetyClass: String {
+        switch self {
+        case .chatGPT, .slack, .discord:
+            return "browser-chat"
+        case .unproven:
+            return "browser-unknown"
+        case .googleDocs, .notion:
+            return "browser-editor"
         }
     }
 }
@@ -49,7 +66,9 @@ public struct BrowserHostedSurfaceBlock: Equatable, Sendable {
             "reason": traceReason,
             "browserSurface": surface.rawValue,
             "browserSurfaceDecision": "blocked",
-            "browserSurfaceReason": reason.rawValue
+            "browserSurfaceReason": reason.rawValue,
+            "browserSurfaceSafetyClass": surface.safetyClass,
+            "promptSafetyMetricSurface": surface.safetyClass
         ]
     }
 }
@@ -84,11 +103,17 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         }
 
         let searchableText = fingerprint.searchableText
+        if matchesLocalProofFixture(searchableText) {
+            return .allowed
+        }
         if matchesGoogleDocs(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .googleDocs))
         }
         if matchesNotion(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .notion))
+        }
+        if matchesChatGPT(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .chatGPT))
         }
         if matchesSlack(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .slack))
@@ -97,7 +122,13 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
         }
 
-        return .allowed
+        return .blocked(BrowserHostedSurfaceBlock(surface: .unproven))
+    }
+
+    private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
+        (searchableText.contains("autocomplete lab chrome")
+            || searchableText.contains("steadytype chrome"))
+            && searchableText.contains("smoke")
     }
 
     private func matchesGoogleDocs(_ searchableText: String) -> Bool {
@@ -111,6 +142,16 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("notion -")
             || searchableText.contains("- notion")
             || searchableText == "notion"
+    }
+
+    private func matchesChatGPT(_ searchableText: String) -> Bool {
+        searchableText.contains("chatgpt.com")
+            || searchableText.contains("chat.openai.com")
+            || searchableText.contains("chatgpt |")
+            || searchableText.contains("| chatgpt")
+            || searchableText.contains("chatgpt -")
+            || searchableText.contains("- chatgpt")
+            || searchableText == "chatgpt"
     }
 
     private func matchesSlack(_ searchableText: String) -> Bool {

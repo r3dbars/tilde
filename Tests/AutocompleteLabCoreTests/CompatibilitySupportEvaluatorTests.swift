@@ -46,8 +46,8 @@ struct CompatibilitySupportEvaluatorTests {
         #expect(evaluation.reasons.contains("Needs 15 shown suggestions for supported."))
     }
 
-    @Test("Low sample dogfood traces stay experimental")
-    func lowSampleDogfoodTracesStayExperimental() {
+    @Test("Codex dogfood traces can become experimental")
+    func codexDogfoodTracesCanBecomeExperimental() {
         let events = cleanEvents(
             appBundleIdentifier: "com.openai.codex",
             shown: 4,
@@ -59,6 +59,8 @@ struct CompatibilitySupportEvaluatorTests {
 
         #expect(evaluation.state == .experimental)
         #expect(evaluation.reasons.contains("Needs 10 shown suggestions for caveated."))
+        #expect(!evaluation.reasons.contains("Codex is diagnostics-only because it is sensitive."))
+        #expect(!evaluation.reasons.contains("Codex cannot present suggestions safely yet."))
     }
 
     @Test("Blocked apps stay blocked")
@@ -86,12 +88,16 @@ struct CompatibilitySupportEvaluatorTests {
         let sensitiveField = base + [
             event(.suggestionPresented, suggestionID: "search", metadata: ["fieldKind": "search"])
         ]
+        let unprovenSurface = base + [
+            event(.suggestionPresented, suggestionID: "docs", metadata: ["fieldKind": "unprovenSurface"])
+        ]
 
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: duplicate).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: wrongInsertion).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: focusSteal).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: tabConflict).state == .blocked)
         #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: sensitiveField).state == .blocked)
+        #expect(evaluator.evaluate(bundleIdentifier: "com.apple.TextEdit", events: unprovenSurface).state == .blocked)
     }
 
     @Test("Obsidian detached suppression is a caveat, but detached display is blocked")

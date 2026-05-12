@@ -11,9 +11,9 @@ usage() {
 Usage: script/scorecard_goal_loop.sh [--iterations N]
 
 Runs the scorecard target gate, strict manual smoke status, strict visual
-evidence gate, and strict proof manifest gate repeatedly. This is intentionally
-a proof loop, not a score inflator: it exits 1 until every score and required
-app proof is actually complete.
+evidence gate, strict proof manifest gate, and prompt-app proof gate
+repeatedly. This is intentionally a proof loop, not a score inflator: it exits
+1 until every score and required app proof is actually complete.
 EOF
 }
 
@@ -68,6 +68,10 @@ run_iteration() {
     failed=1
   fi
 
+  if ! ./script/check_prompt_app_proof.sh >"$prefix-prompt-app-proof.txt" 2>&1; then
+    failed=1
+  fi
+
   return "$failed"
 }
 
@@ -90,6 +94,10 @@ print_final_output() {
   echo
   echo "Final proof manifest output:"
   sed -n '1,220p' "$prefix-proof-manifest.txt"
+
+  echo
+  echo "Final prompt app proof output:"
+  sed -n '1,220p' "$prefix-prompt-app-proof.txt"
 }
 
 for ((iteration = 1; iteration <= ITERATIONS; iteration++)); do

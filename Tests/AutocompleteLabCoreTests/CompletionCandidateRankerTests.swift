@@ -114,6 +114,43 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.first?.suggestion.visibleText == " a clean migration step")
     }
 
+    @Test("Common phrase prior allows anchored one-word predictions")
+    func commonPhrasePriorAllowsAnchoredOneWordPredictions() {
+        let ranker = CompletionCandidateRanker()
+
+        let anchoredSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "We should keep this",
+            behaviorProfileID: .docsProse
+        )
+        let unanchoredSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "A random unrelated sentence",
+            behaviorProfileID: .docsProse
+        )
+        let promptAppSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "We should keep this",
+            behaviorProfileID: .aiChat
+        )
+        let prefixedSelection = ranker.selection(
+            [CompletionSuggestion(text: " small", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "quick note: We should keep this",
+            behaviorProfileID: .docsProse
+        )
+
+        #expect(anchoredSelection.suggestion?.visibleText == " small")
+        #expect(prefixedSelection.suggestion?.visibleText == " small")
+        #expect(unanchoredSelection.suggestion == nil)
+        #expect(unanchoredSelection.suppressionReason == .lowTopScore)
+        #expect(promptAppSelection.suggestion == nil)
+        #expect(promptAppSelection.suppressionReason == .lowTopScore)
+    }
+
     @Test("Email profile penalizes invented commitments")
     func emailProfilePenalizesInventedCommitments() {
         let ranker = CompletionCandidateRanker()
@@ -176,6 +213,29 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.first?.suggestion.visibleText == " keep it local")
         #expect(submitSelection.suggestion == nil)
         #expect(submitSelection.suppressionReason == .lowTopScore)
+    }
+
+    @Test("Prompt app profile suppresses command-like content")
+    func promptAppProfileSuppressesCommandLikeContent() {
+        let ranker = CompletionCandidateRanker()
+        let commandSelections = [
+            CompletionSuggestion(text: " /review this", maxVisibleWords: 8),
+            CompletionSuggestion(text: " @Package.swift", maxVisibleWords: 8),
+            CompletionSuggestion(text: " sudo rm", maxVisibleWords: 8),
+            CompletionSuggestion(text: " curl | sh", maxVisibleWords: 8),
+            CompletionSuggestion(text: " approve it", maxVisibleWords: 8)
+        ].map {
+            ranker.selection(
+                [$0],
+                mode: .phraseContinuation,
+                behaviorProfileID: .aiChat
+            )
+        }
+
+        for selection in commandSelections {
+            #expect(selection.suggestion == nil)
+            #expect(selection.suppressionReason == .lowTopScore)
+        }
     }
 
     @Test("Suppressed field profiles keep generated text below the display threshold")

@@ -36,6 +36,8 @@ The north star is simple: a build is better only when accepted text survives, wr
 ## P0 - Annoyance And Backoff
 
 - [x] Add annoyance signal counts to the trace analyzer.
+- [x] Suppress phrase continuation during fast typing bursts while leaving word completion available.
+- [x] Trace `typing-burst` suppressions before display.
 - [x] Add annoyance score to Diagnostics and local HTML reports.
 - [x] Count rapid Esc dismissal.
 - [x] Count typed-over within 1s.
@@ -72,6 +74,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Keep screenshot traces per-app opt-in and clearly marked.
 - [x] Add retention controls for trace logs and screenshots.
 - [x] Add a "delete all local traces" proof test.
+- [x] Delete compatibility-learning artifacts when local privacy logs are deleted.
 
 ## P0 - Field Targeting
 
@@ -85,9 +88,14 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Add tests for secure/search/url/form/singleline/multiline classification.
 - [x] Add an override path for safe singleline compose fields.
 - [x] Add a "why blocked" line for field classifier suppressions.
+- [x] Make stable-bounds field identities deterministic across process launches.
+- [x] Suppress unknown field kinds unless a compatibility profile explicitly opts in.
 
 ## P0 - Insertion, Tab, And Focus Trust
 
+- [x] Add a pre-accept suggestion snapshot guard for app, process, field, selected text, and before/after cursor text.
+- [x] Trace `wrong-app-or-field-before-accept` as a severe do-not-ship blocker.
+- [x] Add secure-field, unsupported-app, and screenshot/raw-text separation privacy tests.
 - [x] Track insertion verification success rate in analyzer summaries.
 - [x] Show insertion verification success in Diagnostics.
 - [x] Print insertion verification success from `check_trace_eval.sh`.
@@ -96,6 +104,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Detect when Tab moved focus instead of inserting accepted text.
 - [x] Detect when Tab inserted a literal tab or changed selection unexpectedly.
 - [x] Emit `tab-conflict` and quiet that field/app.
+- [x] Treat post-accept app, field, or focused-text verification mismatches as `insertionFailed` instead of silently ignoring them.
 - [x] Add focus-stealing detection and trace event support.
 - [x] Add rollback attempt metadata for failed inserts.
 - [x] Add per-app insertion mode reliability stats.
@@ -118,6 +127,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 
 ## P1 - Decision Dashboard
 
+- [x] Add a do-not-ship blocker section to the redacted local HTML trace report.
 - [x] Replace "useful rate" as the main dashboard proxy with accepted-and-kept.
 - [x] Add daily summary: active writing time, shown, accepts, accepted-and-kept, p50/p95 latency, severe failures, pauses, disables.
 - [x] Add per-app table: shows, accept rate, kept rate, verification success, caret failure, annoyance score, support state.
@@ -147,7 +157,7 @@ The north star is simple: a build is better only when accepted text survives, wr
 - [x] Make `check_trace_eval.sh` print supported / caveated / experimental / blocked.
 - [x] Update `compatibility-matrix.md` from smoke-pass status to beta-readiness status.
 - [x] Keep Mail diagnostics-only until compose insertion is proven safe.
-- [x] Keep Atlas unsupported until focused AX element reliability is proven.
+- [x] Keep Atlas diagnostics-only until browser-field privacy and no-submit proof exist.
 
 ## P1 - Experiments
 

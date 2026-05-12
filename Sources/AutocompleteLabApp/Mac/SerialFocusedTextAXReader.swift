@@ -1,9 +1,11 @@
 import Foundation
+import AutocompleteLabCore
 
 protocol FocusedTextContextReading: AnyObject, Sendable {
     func focusedTextContext(
         for app: RunningApplicationInfo,
-        allowDescendantTextFallback: Bool
+        allowDescendantTextFallback: Bool,
+        options: FocusedTextReadOptions
     ) -> FocusedTextContext?
 }
 
@@ -13,15 +15,31 @@ struct FocusedTextAXReadResult: Equatable, Sendable {
     let requestID: UInt64
     let app: RunningApplicationInfo
     let allowDescendantTextFallback: Bool
+    let options: FocusedTextReadOptions
     let context: FocusedTextContext?
     let queueDelayMilliseconds: Int
     let readDurationMilliseconds: Int
 }
 
+enum FocusedTextReadOptionsPolicy {
+    static func options(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile
+    ) -> FocusedTextReadOptions {
+        if app.bundleIdentifier == "com.openai.codex",
+           profile.bundleIdentifier == "com.openai.codex" {
+            return .syntheticTextAreaFastPath
+        }
+
+        return .standard
+    }
+}
+
 final class SerialFocusedTextAXReader: @unchecked Sendable {
     typealias Read = @Sendable (
         _ app: RunningApplicationInfo,
-        _ allowDescendantTextFallback: Bool
+        _ allowDescendantTextFallback: Bool,
+        _ options: FocusedTextReadOptions
     ) -> FocusedTextContext?
     typealias Completion = @Sendable (FocusedTextAXReadResult) -> Void
 
@@ -47,10 +65,11 @@ final class SerialFocusedTextAXReader: @unchecked Sendable {
         accessibilityClient: FocusedTextContextReading,
         callbackQueue: DispatchQueue = .main
     ) {
-        self.init(callbackQueue: callbackQueue) { app, allowDescendantTextFallback in
+        self.init(callbackQueue: callbackQueue) { app, allowDescendantTextFallback, options in
             accessibilityClient.focusedTextContext(
                 for: app,
-                allowDescendantTextFallback: allowDescendantTextFallback
+                allowDescendantTextFallback: allowDescendantTextFallback,
+                options: options
             )
         }
     }
@@ -59,6 +78,7 @@ final class SerialFocusedTextAXReader: @unchecked Sendable {
     func readFocusedTextContext(
         for app: RunningApplicationInfo,
         allowDescendantTextFallback: Bool,
+        options: FocusedTextReadOptions = .standard,
         completion: @escaping Completion
     ) -> UInt64 {
         let requestID = state.nextRequestID()
@@ -66,12 +86,13 @@ final class SerialFocusedTextAXReader: @unchecked Sendable {
 
         workQueue.async { [callbackQueue, read] in
             let startedAt = DispatchTime.now().uptimeNanoseconds
-            let context = read(app, allowDescendantTextFallback)
+            let context = read(app, allowDescendantTextFallback, options)
             let finishedAt = DispatchTime.now().uptimeNanoseconds
             let result = FocusedTextAXReadResult(
                 requestID: requestID,
                 app: app,
                 allowDescendantTextFallback: allowDescendantTextFallback,
+                options: options,
                 context: context,
                 queueDelayMilliseconds: Self.milliseconds(from: enqueuedAt, to: startedAt),
                 readDurationMilliseconds: Self.milliseconds(from: startedAt, to: finishedAt)

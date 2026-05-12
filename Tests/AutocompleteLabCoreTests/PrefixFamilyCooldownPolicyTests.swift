@@ -4,8 +4,8 @@ import Testing
 
 @Suite("Prefix family cooldown policy")
 struct PrefixFamilyCooldownPolicyTests {
-    @Test("Typed over starts a five second app field prefix cooldown")
-    func typedOverStartsFiveSecondCooldown() {
+    @Test("Typed over starts a short app field prefix cooldown")
+    func typedOverStartsShortCooldown() {
         var policy = PrefixFamilyCooldownPolicy()
         let now = Date(timeIntervalSince1970: 1_000)
         let input = input(textBeforeCursor: "I think this works")
@@ -13,10 +13,10 @@ struct PrefixFamilyCooldownPolicyTests {
         let cooldown = policy.record(.typedOver, input: input, now: now)
 
         #expect(cooldown?.reason == .typedOver)
-        #expect(cooldown?.durationMilliseconds == 5_000)
+        #expect(cooldown?.durationMilliseconds == 750)
         #expect(cooldown?.prefixTokenCount == 3)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(4.9)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(5.1)) == .allowed)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(0.7)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(0.8)) == .allowed)
     }
 
     @Test("Repeated typed over escalates to a longer cooldown")
@@ -29,16 +29,16 @@ struct PrefixFamilyCooldownPolicyTests {
         let maybeRepeated = policy.record(
             .typedOver,
             input: input,
-            now: now.addingTimeInterval(2)
+            now: now.addingTimeInterval(0.5)
         )
         let repeated = try #require(maybeRepeated)
 
         #expect(repeated.reason == .typedOver)
-        #expect(repeated.durationMilliseconds == 30_000)
+        #expect(repeated.durationMilliseconds == 5_000)
         #expect(repeated.isEscalated)
         #expect(repeated.metadata["prefixCooldownEscalated"] == "true")
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(31.9)).canRequest == false)
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(32.1)) == .allowed)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(5.4)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(5.6)) == .allowed)
     }
 
     @Test("One typed over miss does not make future suggestions less eager")
@@ -48,7 +48,7 @@ struct PrefixFamilyCooldownPolicyTests {
         let input = input(textBeforeCursor: "I think this works")
 
         _ = policy.record(.typedOver, input: input, now: now)
-        let adjustment = policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(6))
+        let adjustment = policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(1))
 
         #expect(!adjustment.isActive)
         #expect(adjustment.thresholdAdjustment == 0)
@@ -62,10 +62,10 @@ struct PrefixFamilyCooldownPolicyTests {
         let input = input(textBeforeCursor: "I think this works")
 
         _ = policy.record(.typedOver, input: input, now: now)
-        _ = policy.record(.typedOver, input: input, now: now.addingTimeInterval(2))
+        _ = policy.record(.typedOver, input: input, now: now.addingTimeInterval(0.5))
 
-        #expect(policy.decision(for: input, now: now.addingTimeInterval(32.1)) == .allowed)
-        let adjustment = policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(32.1))
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(5.6)) == .allowed)
+        let adjustment = policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(5.6))
 
         #expect(adjustment.isActive)
         #expect(adjustment.thresholdAdjustment > 0.15)
@@ -171,6 +171,22 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(policy.decision(for: input, now: now.addingTimeInterval(0.3)) == .allowed)
     }
 
+    @Test("Accepted then deleted starts a long prefix cooldown")
+    func acceptedThenDeletedStartsLongPrefixCooldown() throws {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        let recordedCooldown = policy.record(.acceptedThenDeleted, input: input, now: now)
+        let cooldown = try #require(recordedCooldown)
+
+        #expect(cooldown.reason == .acceptedThenDeleted)
+        #expect(cooldown.durationMilliseconds == 60_000)
+        #expect(cooldown.metadata["prefixCooldownReason"] == "acceptedThenDeleted")
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(59.9)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(60.1)) == .allowed)
+    }
+
     @Test("Cooldowns are scoped by app field mode and prefix family")
     func scopedByAppFieldModeAndPrefixFamily() {
         var policy = PrefixFamilyCooldownPolicy()
@@ -197,7 +213,7 @@ struct PrefixFamilyCooldownPolicyTests {
         let cooldown = try #require(recordedCooldown)
 
         #expect(cooldown.metadata["prefixCooldownReason"] == "typedOver")
-        #expect(cooldown.metadata["prefixCooldownDurationMilliseconds"] == "5000")
+        #expect(cooldown.metadata["prefixCooldownDurationMilliseconds"] == "750")
         #expect(cooldown.metadata["prefixFamilyTokenCount"] == "3")
         #expect(cooldown.metadata["prefixCooldownEscalated"] == "false")
         #expect(cooldown.metadata["prefixFamilyFingerprintVersion"] == TracePrivacyFingerprint.prefixFamilyVersion)

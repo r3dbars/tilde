@@ -45,14 +45,18 @@ Open `Show Diagnostics` from the menu bar item.
 
 - `Pause Tracing` stops default redacted trace writes.
 - `Resume Tracing` turns them back on.
-- `Export Privacy Bundle` creates a local folder with the redacted HTML report,
-  redacted JSONL, survival report, visual calibration report, manifest, and a
-  checklist.
+- `Export Report` creates the local redacted HTML report and survival report.
+- Exported reports include a short privacy checklist before the metrics.
 - `Delete Traces` deletes local trace files.
 - `Open Trace Folder` reveals the local trace folder.
 
 Open Settings to see the current sharing status. If raw text or screenshots are
 enabled for debugging, Settings says to share only the redacted privacy bundle.
+
+For the full field map, see
+[`beta-privacy-data-checklist.md`](beta-privacy-data-checklist.md). For the
+SDK/dependency inventory, see
+[`dependency-sdk-data-inventory.md`](dependency-sdk-data-inventory.md).
 
 The command-line delete path is:
 

@@ -18,6 +18,7 @@ struct DiagnosticsWindowControllerStateTests {
                 isReady: true
             ),
             runtimeTargetSummary: "MLX local model",
+            pauseControl: ControlPauseState(isPaused: false, pausedUntil: nil),
             compatibilityStatus: .unsupported,
             diagnostics: nil,
             traceSummary: AutocompleteTraceSummary(
@@ -40,10 +41,11 @@ struct DiagnosticsWindowControllerStateTests {
         )
 
         let lines = overview.text.split(separator: "\n").map(String.init)
-        #expect(lines.count == 6)
+        #expect(lines.count == 7)
         #expect(overview.text.contains("Overview"))
         #expect(overview.text.contains("Accessibility: On"))
         #expect(overview.text.contains("Suggestion: Shown"))
+        #expect(overview.text.contains("Suggestions control: Global pause: off"))
         #expect(overview.text.contains("Local model: ready | stage ready | action None | target MLX local model"))
         #expect(overview.text.contains("Current app: No focused app | blocked: no MVP compatibility profile | disabled"))
         #expect(overview.text.contains("Tracing: traces on | screenshots on | events 12 | accept 50% | useful 25%"))

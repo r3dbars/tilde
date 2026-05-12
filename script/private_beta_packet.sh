@@ -4,12 +4,19 @@ set -euo pipefail
 MODE="${1:-create}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
-ARCHIVE_PATH="$DIST_DIR/AutocompleteLab.zip"
+ARCHIVE_PATH="$DIST_DIR/SteadyType.zip"
 PACKET_DIR="$DIST_DIR/private-beta"
 README_PATH="$PACKET_DIR/README.md"
 INSTALL_PATH="$PACKET_DIR/install-checklist.md"
 FEEDBACK_PATH="$PACKET_DIR/feedback-log.md"
 SESSION_REPORT_PATH="$PACKET_DIR/session-report.md"
+DAILY_CHECKLIST_PATH="$PACKET_DIR/daily-tester-checklist.md"
+REDACTED_EXPORT_PATH="$PACKET_DIR/redacted-report-export-flow.md"
+FEEDBACK_TRIAGE_PATH="$PACKET_DIR/feedback-triage.md"
+STOP_DASHBOARD_PATH="$PACKET_DIR/stop-condition-dashboard.md"
+ISSUE_TEMPLATE_VALIDATION_PATH="$PACKET_DIR/issue-template-validation.md"
+READINESS_SUMMARY_PATH="$PACKET_DIR/beta-readiness-summary.md"
+TESTER_DOCS_DIR="$PACKET_DIR/tester-docs"
 MODEL_ASSET_PATH="$PACKET_DIR/model-asset.md"
 PRIVACY_STATUS_PATH="$PACKET_DIR/privacy-status.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
@@ -20,12 +27,320 @@ usage() {
   cat <<'EOF'
 Usage: script/private_beta_packet.sh [create|--check]
 
-create   Create a local private-beta packet beside dist/AutocompleteLab.zip.
+create   Create a local private-beta packet beside dist/SteadyType.zip.
 --check  Validate that the packet exists and points at the current archive.
+--print-feedback-template
+         Print the no-raw-text feedback template used in the packet.
+--print-session-report-template
+         Print the one-row session report template used in the packet.
+--print-daily-checklist-template
+         Print the tester daily checklist used in the packet.
+--print-redacted-export-template
+         Print the redacted report export flow used in the packet.
+--print-feedback-triage-template
+         Print the feedback triage label flow used in the packet.
+--print-stop-dashboard-template
+         Print the stop-condition dashboard used in the packet.
+--print-model-asset-template [expected-model-path]
+         Print the tester-safe model asset template used in the packet.
 
 This script only writes local files. It never uploads or sends beta data.
 By default it requires the archive to contain a Developer ID signed app. Set
 AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_RELEASE_SIGNATURE=0 only for local script tests.
+EOF
+}
+
+print_feedback_template() {
+  cat <<'EOF'
+# Feedback Log
+
+Use one short row per real writing session.
+
+Do not include raw typed text, prompts, screenshots, document names, URLs,
+recipients, subject lines, or trace excerpts. Use plain labels like
+`wrong app`, `late`, `too much`, or `good word finish`.
+
+| Date | Tester | App | Minutes | Tab predictable? | Placement sane? | Helped? | Annoyed? | Broke trust? | Redacted report exported? | Notes (no private text) |
+| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- |
+|  |  | TextEdit / Notes / Obsidian / Chrome |  | yes/no | yes/no | yes/no | yes/no | yes/no | yes/no |  |
+
+Questions to answer after each session:
+
+- Did Tab feel predictable?
+- Did the suggestion appear in a sane place?
+- Did it finish words you were already typing?
+- Did it suggest weird repeated phrases?
+- Did it ever insert text you did not expect?
+EOF
+}
+
+print_session_report_template() {
+  cat <<'EOF'
+# Session Report
+
+Use one short row in `feedback-log.md` after each real beta writing session.
+Do not paste raw typed text, prompts, screenshots, document names, URLs,
+recipients, subject lines, or trace excerpts into the report.
+
+## Commands
+
+```bash
+./script/check_trace_eval.sh
+./script/latency_benchmark_report.py --beta-gate
+./script/model_latency_report.py --latest
+./script/model_latency_report.py --latest --require-shown-samples 5
+./script/check_redacted_report_export.sh
+```
+
+## Notes
+
+- Record the app, minutes, Tab predictability, placement sanity, and whether trust broke.
+- Export the redacted local report from Diagnostics.
+- Copy only redacted repeated-miss titles or failure reason labels from Diagnostics or the trace eval report.
+- If the latency report has no samples, type one short disposable sentence, wait for a phrase suggestion, and rerun it.
+- Fix the top repeated trust miss before inviting more testers.
+EOF
+}
+
+print_daily_checklist_template() {
+  cat <<'EOF'
+# Daily Tester Checklist
+
+Use this once per beta day. It should take about 2 minutes.
+
+## Before Writing
+
+- Open SteadyType from the menu bar.
+- Confirm the local model is ready in Settings.
+- Confirm raw text tracing and screenshot tracing are off unless Justin asked
+  for a debug session.
+- Use only the apps listed in the beta packet for that day.
+- Know the exits: `Esc` dismisses, menu bar pause stops suggestions, and
+  `Disable <App>` stops the current app.
+
+## During Writing
+
+- Write normally for 5 to 20 minutes.
+- Accept only with `Tab` when the next word is clearly wanted.
+- Press `Esc` when a suggestion feels wrong.
+- Stop immediately if a suggestion appears in a search, login, payment,
+  address, URL, private, or secure field.
+- Stop immediately if text inserts in the wrong app, wrong field, wrong spot,
+  duplicates, submits a prompt, or makes `Tab` feel unsafe.
+
+## After Writing
+
+- Open Diagnostics.
+- Export the Privacy Bundle.
+- Add one short row to `feedback-log.md`.
+- File a beta feedback issue only when something broke trust, repeated, or
+  should change before the next tester.
+- Do not include raw typed text, prompts, screenshots, document names, URLs,
+  recipients, subject lines, or trace excerpts.
+EOF
+}
+
+print_redacted_export_template() {
+  cat <<'EOF'
+# Redacted Report Export Flow
+
+The default beta report is local and redacted.
+
+## Tester Path
+
+1. Open the SteadyType menu bar item.
+2. Open `Debug` -> `Diagnostics`.
+3. Choose `Export Privacy Bundle`.
+4. Share only the exported privacy bundle when filing feedback.
+5. If the issue form asks for details, use labels like `wrong app`, `late`,
+   `too much`, `good word finish`, or `Tab surprised me`.
+
+Do not attach raw traces, screenshots, typed text, prompts, model output,
+accepted text, document names, URLs, recipients, or subject lines unless there
+is a separate explicit debug session.
+
+## Operator Proof
+
+Run this before trusting the export flow for a new artifact:
+
+```bash
+./script/check_redacted_report_export.sh
+```
+
+The beta stops if the redacted export fails or asks for private content by
+default.
+EOF
+}
+
+print_feedback_triage_template() {
+  cat <<'EOF'
+# Feedback Triage
+
+Every beta issue starts with:
+
+- `beta feedback`
+- `needs triage`
+
+Use these labels after the first read:
+
+| Label | Use when | Action |
+| --- | --- | --- |
+| `beta stop` | A hard stop condition happened. | Stop the beta until proof shows it is fixed. |
+| `beta trust blocker` | Wrong insertion, prompt submit, secure/private field, data loss, or unsafe Tab. | Fix before more testers. |
+| `beta high` | Repeated interruption or broken core flow. | Fix before expanding the beta. |
+| `beta needs report` | The issue needs a redacted Privacy Bundle. | Ask only for the redacted export. |
+| `beta docs` | Install, privacy, export, or uninstall copy is confusing. | Patch the packet before the next invite. |
+| `beta ready to close` | The fix has proof and the tester confirmed the outcome. | Close after the proof link is attached. |
+
+Triage order:
+
+1. Check whether a stop condition is selected.
+2. Confirm build, macOS/hardware, app, permission state, expected behavior,
+   actual behavior, repro steps, and redacted diagnostics status are present.
+3. Add the severity label.
+4. Link the proof command or report that will close the issue.
+5. Remove `needs triage` only after the next action is clear.
+
+Never ask for raw typed text, prompts, screenshots, URLs, recipients, subject
+lines, or trace excerpts in normal beta feedback.
+EOF
+}
+
+print_stop_dashboard_template() {
+  cat <<'EOF'
+# Stop-Condition Dashboard
+
+If any stop condition is `yes`, stop the beta before inviting or continuing
+with testers.
+
+| Stop condition | Proof command or check | Feedback label | Current status |
+| --- | --- | --- | --- |
+| Wrong app, wrong field, wrong spot, duplicate insertion, or focus steal | `./script/check_trace_eval.sh` plus the session Privacy Bundle | `beta stop`, `beta trust blocker` | open |
+| Prompt/chat submitted from Tab or full accept | `./script/manual_proof_queue.sh --print` and same-slice no-submit proof | `beta stop`, `beta trust blocker` | open |
+| Suggestion appeared in search, login, payment, address, URL, private, or secure field | `./script/beta_readiness.sh --check-only` plus the forced edge-case row | `beta stop`, `beta trust blocker` | open |
+| `Tab` felt unreliable or surprising | `./script/manual_smoke_status.sh --require-all` and the tester repro | `beta stop`, `beta high` | open |
+| Accepted text was deleted within 2 seconds repeatedly | `./script/check_trace_eval.sh` accepted-and-kept / annoyance section | `beta high` | open |
+| Mock fallback, manual model server, Ollama, llama.cpp, Python, or shell setup was needed | `./script/beta_readiness.sh --check-only` and `./script/check_diagnostics_log.sh` | `beta stop`, `beta trust blocker` | open |
+| Redacted report export failed or requested private content | `./script/check_redacted_report_export.sh` | `beta stop`, `beta needs report` | open |
+| Packet checksum is stale for the tester artifact | `./script/private_beta_packet.sh --check` | `beta stop`, `beta docs` | open |
+
+Close a stop row only after the proof command passes for the affected artifact
+or the affected app is removed from beta coverage.
+EOF
+}
+
+print_model_asset_template() {
+  local expected_model_path="${1:-<model folder shown in SteadyType Settings>}"
+
+  cat <<EOF
+# Model Asset Check
+
+The private beta is not ready if the app falls back to mock output.
+
+Expected model:
+
+\`\`\`text
+$expected_model_path
+\`\`\`
+
+Verify it in the app:
+
+1. Open SteadyType Settings.
+2. Check \`Local model\`.
+3. Confirm Settings says the model is ready.
+
+If the model is missing, invalid, or needs repair, use the Settings \`Install
+Model\` or \`Repair Model\` button and wait for it to finish. If that in-app setup
+fails, stop the beta session.
+
+Do not ask testers to run Python, shell scripts, Ollama, llama.cpp, or any
+separate model server.
+EOF
+}
+
+write_issue_template_validation() {
+  cat >"$ISSUE_TEMPLATE_VALIDATION_PATH" <<'EOF'
+# Issue Template Validation
+
+The structured beta issue form is part of the beta gate.
+
+Validate it with:
+
+```bash
+./script/validate_beta_issue_template.sh
+```
+
+The validator checks that the issue form:
+
+- starts with `beta feedback` and `needs triage`,
+- requires build, macOS/hardware, target app, permission state, severity,
+  stop condition, expected behavior, actual behavior, reproduction steps, and
+  redacted diagnostics status,
+- offers the required trust-blocker severity,
+- asks for redacted diagnostics instead of raw private content,
+- has matching feedback triage labels in `.github/labels.yml`.
+
+Status at packet generation: passed.
+EOF
+}
+
+write_readiness_summary() {
+  local sha="$1"
+  local generated_at commit
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  commit="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+
+  cat >"$READINESS_SUMMARY_PATH" <<EOF
+# Beta Readiness Summary
+
+Generated: $generated_at
+Commit: $commit
+Archive: ../SteadyType.zip
+SHA-256: $sha
+
+## Current Readiness
+
+- Docs and feedback operations: 10/10 when this packet validates.
+- Private beta readiness: improved by ops clarity, but external beta still
+  requires current artifact proof.
+- Do not invite testers unless the stop dashboard has no open stop rows.
+
+## Required Checks
+
+\`\`\`bash
+./script/private_beta_packet_self_test.sh
+./script/validate_beta_issue_template.sh
+./script/beta_readiness.sh --check-only
+./script/check_redacted_report_export.sh
+./script/private_beta_packet.sh --check
+\`\`\`
+
+Expected remaining blockers must be named in
+\`docs/product/beta-readiness-checklist.md\`. Wrong insertion, sensitive-field
+suggestion, unreliable Tab, mock fallback, manual model setup, stale packet
+checksum, or failed redacted export are not acceptable blockers; they stop the
+beta.
+
+## Packet Files
+
+- \`install-checklist.md\`
+- \`daily-tester-checklist.md\`
+- \`redacted-report-export-flow.md\`
+- \`feedback-log.md\`
+- \`feedback-triage.md\`
+- \`stop-condition-dashboard.md\`
+- \`issue-template-validation.md\`
+- \`privacy-status.md\`
+- \`model-asset.md\`
+- \`tester-docs/PRIVACY-BETA.md\`
+- \`tester-docs/KNOWN-LIMITATIONS.md\`
+- \`tester-docs/UNINSTALL-DELETE-DATA.md\`
+- \`tester-docs/DIAGNOSTIC-EXPORT.md\`
+- \`tester-docs/RELEASE-NOTES.md\`
+- \`tester-docs/private-beta-ops-loop.md\`
+- \`tester-docs/autocomplete-beta-feedback.yml\`
+- \`tester-docs/labels.yml\`
+- \`checksums.txt\`
 EOF
 }
 
@@ -46,11 +361,11 @@ check_archive_app() {
   verify_dir="$(mktemp -d)"
 
   ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
-  app_path="$verify_dir/AutocompleteLab.app"
+  app_path="$verify_dir/SteadyType.app"
 
   if [[ ! -d "$app_path" ]]; then
     rm -rf "$verify_dir"
-    echo "archive does not contain AutocompleteLab.app" >&2
+    echo "archive does not contain SteadyType.app" >&2
     exit 1
   fi
 
@@ -66,16 +381,18 @@ check_archive_app() {
 create_packet() {
   require_archive
   ./script/check_model_asset.py
+  ./script/validate_beta_issue_template.sh --quiet
   check_archive_app
   mkdir -p "$PACKET_DIR"
+  mkdir -p "$TESTER_DOCS_DIR"
 
   local sha
   sha="$(archive_sha)"
 
   cat >"$README_PATH" <<EOF
-# Autocomplete Lab Private Beta Packet
+# SteadyType Private Beta Packet
 
-Archive: ../AutocompleteLab.zip
+Archive: ../SteadyType.zip
 SHA-256: $sha
 
 This is a local-only packet for a tiny private beta. Nothing here uploads
@@ -84,112 +401,86 @@ traces, screenshots, prompts, or typed text anywhere.
 Start with TextEdit. Then try Notes. Then try Obsidian. Chrome textarea is a
 sanity check, not the main product loop.
 
+Read before inviting testers:
+
+- \`tester-docs/PRIVACY-BETA.md\`
+- \`tester-docs/KNOWN-LIMITATIONS.md\`
+- \`tester-docs/UNINSTALL-DELETE-DATA.md\`
+- \`tester-docs/DIAGNOSTIC-EXPORT.md\`
+- \`tester-docs/RELEASE-NOTES.md\`
+- \`tester-docs/private-beta-ops-loop.md\`
+- \`tester-docs/autocomplete-beta-feedback.yml\`
+- \`tester-docs/labels.yml\`
+- \`daily-tester-checklist.md\`
+- \`redacted-report-export-flow.md\`
+- \`stop-condition-dashboard.md\`
+
 Useful commands:
 
 \`\`\`bash
 ./script/check_model_asset.py
+./script/private_beta_packet_self_test.sh
+./script/validate_beta_issue_template.sh
 ./script/beta_readiness.sh
 ./script/manual_smoke_status.sh --require-all
+./script/manual_proof_queue.sh --print
 ./script/check_trace_eval.sh
+./script/latency_benchmark_report.py --beta-gate
 ./script/model_latency_report.py --latest
-open "\$HOME/Library/Logs/AutocompleteLab"
+./script/check_redacted_report_export.sh
+open "\$HOME/Library/Logs/SteadyType"
 \`\`\`
 
 Default beta feedback uses only the redacted privacy bundle. Do not ask testers
 for raw traces, screenshots, prompts, typed text, or accepted text by default.
+
+If a tester needs to report something from inside the app, use the menu bar
+\`Submit Feedback...\` path. It opens the structured GitHub issue form and does
+not attach diagnostics or typed content automatically.
 EOF
 
   cat >"$INSTALL_PATH" <<'EOF'
 # Install Checklist
 
-1. Unzip `AutocompleteLab.zip`.
-2. Open `AutocompleteLab.app`.
+1. Unzip `SteadyType.zip`.
+2. Open `SteadyType.app`.
 3. Grant Accessibility when macOS asks.
 4. Open Settings from the menu bar item.
-5. If the local model is not ready, use the Local model action and follow the shown model folder path.
+5. If the local model is not ready, use `Install Model` or `Repair Model` in Settings and wait for it to finish.
 6. Confirm Settings says the model is ready.
 7. Open TextEdit and type a normal sentence.
 8. Use Tab for one-word accept.
 9. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
 10. Press Esc if a suggestion feels wrong.
-11. After the session, open Diagnostics and choose `Export Privacy Bundle`.
+11. Use Diagnostics -> Export to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
+
+For rollback, removal, or a clean reset, use `UNINSTALL-DELETE-DATA.md`.
 EOF
 
   local expected_model_path
   expected_model_path="$(./script/check_model_asset.py --print-path)"
 
-  cat >"$MODEL_ASSET_PATH" <<EOF
-# Model Asset Check
+  print_model_asset_template "$expected_model_path" >"$MODEL_ASSET_PATH"
 
-The private beta is not ready if the app falls back to mock output.
+  print_feedback_template >"$FEEDBACK_PATH"
+  print_session_report_template >"$SESSION_REPORT_PATH"
+  print_daily_checklist_template >"$DAILY_CHECKLIST_PATH"
+  print_redacted_export_template >"$REDACTED_EXPORT_PATH"
+  print_feedback_triage_template >"$FEEDBACK_TRIAGE_PATH"
+  print_stop_dashboard_template >"$STOP_DASHBOARD_PATH"
+  write_issue_template_validation
 
-Expected model:
-
-\`\`\`text
-$expected_model_path
-\`\`\`
-
-Verify it:
-
-\`\`\`bash
-./script/check_model_asset.py
-\`\`\`
-
-Fix a missing or invalid model:
-
-Open Autocomplete Lab Settings and use the Local model action. Developer fallback:
-
-\`\`\`bash
-python3 -m pip install --user huggingface_hub
-./script/download_mlx_model.py --model qwen35-4b
-./script/check_model_asset.py
-\`\`\`
-EOF
-
-  cat >"$FEEDBACK_PATH" <<'EOF'
-# Feedback Log
-
-Use one short row per real writing session.
-Do not paste typed text, prompts, model output, accepted text, screenshots, URLs,
-document names, recipients, or subject lines into this file.
-
-| Date | Tester | App | Minutes | Privacy bundle exported? | Helped? | Annoyed? | Broke trust? | Notes |
-| --- | --- | --- | ---: | --- | --- | --- | --- | --- |
-|  |  | TextEdit / Notes / Obsidian / Chrome |  | yes/no | yes/no | yes/no | yes/no |  |
-
-Questions to answer after each session:
-
-- Did Tab feel predictable?
-- Did the suggestion appear in a sane place?
-- Did it finish words you were already typing?
-- Did it suggest weird repeated phrases?
-- Did it ever insert text you did not expect?
-EOF
-
-  cat >"$SESSION_REPORT_PATH" <<'EOF'
-# Session Report
-
-Use this after each real beta writing session.
-
-## Commands
-
-```bash
-./script/check_trace_eval.sh
-./script/model_latency_report.py --latest
-./script/model_latency_report.py --latest --require-shown-samples 5
-```
-
-## Notes
-
-- Record the app, minutes, and whether Tab felt predictable.
-- Attach or review only the redacted privacy bundle from Diagnostics.
-- Copy the top repeated misses from Diagnostics or the trace eval report.
-- If the latency report has no samples, type one short sentence, wait for a phrase suggestion, and rerun it.
-- Fix the top repeated miss before inviting more testers.
-EOF
+  cp PRIVACY-BETA.md "$TESTER_DOCS_DIR/PRIVACY-BETA.md"
+  cp KNOWN-LIMITATIONS.md "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md"
+  cp UNINSTALL-DELETE-DATA.md "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md"
+  cp DIAGNOSTIC-EXPORT.md "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md"
+  cp RELEASE-NOTES.md "$TESTER_DOCS_DIR/RELEASE-NOTES.md"
+  cp docs/product/private-beta-ops-loop.md "$TESTER_DOCS_DIR/private-beta-ops-loop.md"
+  cp .github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml "$TESTER_DOCS_DIR/autocomplete-beta-feedback.yml"
+  cp .github/labels.yml "$TESTER_DOCS_DIR/labels.yml"
 
   cat >"$PRIVACY_STATUS_PATH" <<'EOF'
 # Privacy Status
@@ -222,13 +513,15 @@ Use raw text or screenshots only for an explicit debug session, and write that
 consent in the session notes before collecting them.
 EOF
 
-  printf 'AutocompleteLab.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
+  printf 'SteadyType.zip  %s\n' "$sha" >"$CHECKSUM_PATH"
+  write_readiness_summary "$sha"
   echo "Private beta packet created: $PACKET_DIR"
 }
 
 check_packet() {
   require_archive
   check_archive_app
+  ./script/validate_beta_issue_template.sh --quiet
 
   ./script/check_model_asset.py --quiet || {
     echo "preferred MLX model is missing or invalid" >&2
@@ -236,7 +529,28 @@ check_packet() {
     exit 1
   }
 
-  for path in "$README_PATH" "$INSTALL_PATH" "$MODEL_ASSET_PATH" "$FEEDBACK_PATH" "$SESSION_REPORT_PATH" "$PRIVACY_STATUS_PATH" "$CHECKSUM_PATH"; do
+  for path in \
+    "$README_PATH" \
+    "$INSTALL_PATH" \
+    "$DAILY_CHECKLIST_PATH" \
+    "$REDACTED_EXPORT_PATH" \
+    "$FEEDBACK_TRIAGE_PATH" \
+    "$STOP_DASHBOARD_PATH" \
+    "$ISSUE_TEMPLATE_VALIDATION_PATH" \
+    "$READINESS_SUMMARY_PATH" \
+    "$TESTER_DOCS_DIR/PRIVACY-BETA.md" \
+    "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md" \
+    "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md" \
+    "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md" \
+    "$TESTER_DOCS_DIR/RELEASE-NOTES.md" \
+    "$TESTER_DOCS_DIR/private-beta-ops-loop.md" \
+    "$TESTER_DOCS_DIR/autocomplete-beta-feedback.yml" \
+    "$TESTER_DOCS_DIR/labels.yml" \
+    "$MODEL_ASSET_PATH" \
+    "$FEEDBACK_PATH" \
+    "$SESSION_REPORT_PATH" \
+    "$PRIVACY_STATUS_PATH" \
+    "$CHECKSUM_PATH"; do
     if [[ ! -s "$path" ]]; then
       echo "missing beta packet file: $path" >&2
       exit 1
@@ -245,7 +559,7 @@ check_packet() {
 
   local expected_sha actual_sha
   expected_sha="$(archive_sha)"
-  actual_sha="$(awk '/AutocompleteLab.zip/ {print $2; exit}' "$CHECKSUM_PATH")"
+  actual_sha="$(awk '/SteadyType.zip/ {print $2; exit}' "$CHECKSUM_PATH")"
 
   if [[ "$expected_sha" != "$actual_sha" ]]; then
     echo "beta packet checksum is stale" >&2
@@ -266,6 +580,27 @@ case "$MODE" in
     ;;
   --check|check)
     check_packet
+    ;;
+  --print-feedback-template)
+    print_feedback_template
+    ;;
+  --print-session-report-template)
+    print_session_report_template
+    ;;
+  --print-daily-checklist-template)
+    print_daily_checklist_template
+    ;;
+  --print-redacted-export-template)
+    print_redacted_export_template
+    ;;
+  --print-feedback-triage-template)
+    print_feedback_triage_template
+    ;;
+  --print-stop-dashboard-template)
+    print_stop_dashboard_template
+    ;;
+  --print-model-asset-template)
+    print_model_asset_template "${2:-}"
     ;;
   *)
     usage >&2

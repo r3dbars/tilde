@@ -51,7 +51,33 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return suggestions
     }
 
+    public func cleanBestCandidate(
+        _ rawOutput: String,
+        after textBeforeCursor: String?,
+        mode: CompletionRequestMode,
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        limit: Int = 3,
+        ranker: CompletionCandidateRanker = CompletionCandidateRanker()
+    ) -> CompletionCandidateSelection {
+        let candidates = cleanCandidates(
+            rawOutput,
+            after: textBeforeCursor,
+            mode: mode,
+            limit: limit
+        )
+        return ranker.selection(
+            candidates,
+            mode: mode,
+            textBeforeCursor: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID
+        )
+    }
+
     public func clean(_ rawOutput: String, after textBeforeCursor: String?, mode: CompletionRequestMode) -> CompletionSuggestion? {
+        guard !containsUnsafePromptHiddenOrControlCharacter(rawOutput) else {
+            return nil
+        }
+
         let withoutThinking = rawOutput
             .replacingOccurrences(
                 of: #"<think>[\s\S]*?</think>"#,
@@ -110,6 +136,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         guard !looksLikeUnsafePromptAction(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        guard !looksLikeVisibleUIChromeCandidate(withoutPromptEchoLabel, mode: mode) else {
             return nil
         }
 
@@ -179,6 +209,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if looksLikeVisibleUIChromeCandidate(suggestion.visibleText, mode: mode) {
+            return nil
+        }
+
         return suggestion
     }
 
@@ -206,11 +240,17 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     private func strippingCandidatePrefix(from text: String) -> String {
-        text.replacingOccurrences(
-            of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
-            with: "",
-            options: .regularExpression
-        )
+        text
+            .replacingOccurrences(
+                of: #"^\s*candidate\s+\d+\s*[\).:-]?\s*"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"^\s*(?:[-*•]|\d+[\).:]|[A-Za-z][\).:])\s+"#,
+                with: "",
+                options: .regularExpression
+            )
     }
 
     private func normalizedCandidateKey(_ text: String) -> String {
@@ -234,7 +274,9 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return normalized.hasPrefix("okay, let's see")
+            || normalized.hasPrefix("okay, the user")
             || normalized.hasPrefix("let's see")
+            || normalized.hasPrefix("analyze the request")
             || normalized.hasPrefix("as an ai")
             || normalized.hasPrefix("happy to")
             || normalized.hasPrefix("here's")
@@ -256,6 +298,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("you might ")
             || normalized.hasPrefix("assistant:")
             || normalized.hasPrefix("system:")
+            || normalized.range(of: #"^\d+[\.\)]\s*[*_]*\s*analy[sz]e\b"#, options: .regularExpression) != nil
+            || normalized.hasPrefix("thinking process")
     }
 
     private func looksLikePromptInstructionEcho(_ text: String) -> Bool {
@@ -264,8 +308,13 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return normalized.hasPrefix("before cursor:")
+            || normalized == "before cursor"
+            || normalized.hasPrefix("before cursor ")
             || normalized.hasPrefix("after cursor:")
+            || normalized == "after cursor"
+            || normalized.hasPrefix("after cursor ")
             || normalized.hasPrefix("action:")
+            || normalized.range(of: #"^candidate\s+\d+\s*[\).:-]?\s*$"#, options: .regularExpression) != nil
             || normalized.hasPrefix("inline autocomplete")
             || normalized.hasPrefix("inline word completion")
             || normalized.hasPrefix("next action:")
@@ -280,6 +329,15 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
 
     private func strippingPromptEchoLabel(from text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutCandidateLabel = trimmed.replacingOccurrences(
+            of: #"^\s*candidate\s+\d+\s*[\).:-]\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        if withoutCandidateLabel != trimmed {
+            return withoutCandidateLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
 
         for label in Self.promptEchoLabels {
             guard trimmed.lowercased().hasPrefix(label) else {
@@ -302,9 +360,21 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     }
 
     private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
+        if containsUnsafePromptHiddenOrControlCharacter(text) {
+            return true
+        }
+
         let normalized = text
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if Self.unsafePromptCommandPrefixes.contains(where: { normalized.hasPrefix($0) }) {
+            return true
+        }
+
+        if normalized.hasPrefix("```") || normalized.hasPrefix("$ ") || normalized.hasPrefix("> ") {
+            return true
+        }
 
         return normalized.hasPrefix("press enter")
             || normalized.hasPrefix("press return")
@@ -316,6 +386,19 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("run this command")
             || normalized.hasPrefix("execute this command")
             || normalized.hasPrefix("execute the command")
+            || Self.unsafePromptActionWords.contains(normalized)
+    }
+
+    private func containsUnsafePromptHiddenOrControlCharacter(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            if Self.unsafePromptHiddenScalars.contains(scalar) {
+                return true
+            }
+            if scalar == "\n" || scalar == "\r" {
+                return false
+            }
+            return CharacterSet.controlCharacters.contains(scalar)
+        }
     }
 
     private func looksLikeAssistantResponseToPrompt(_ text: String, after textBeforeCursor: String) -> Bool {
@@ -409,6 +492,42 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return Self.adviceOrToneDriftStarters.contains { starter in
             words.starts(with: starter)
         }
+    }
+
+    private func looksLikeVisibleUIChromeCandidate(_ text: String, mode: CompletionRequestMode) -> Bool {
+        guard mode.isContinuation else {
+            return false
+        }
+
+        let words = normalizedWords(in: text)
+        guard !words.isEmpty else {
+            return false
+        }
+
+        if isWrappedInMarkdownEmphasis(text), words.count <= 4 {
+            return true
+        }
+
+        if words[0] == "untitled" {
+            return words.count == 1
+                || words.dropFirst().allSatisfy { $0.allSatisfy(\.isNumber) || Self.visibleUIChromeTokens.contains($0) }
+        }
+
+        if words[0] == "ep", words.count <= 3 {
+            return true
+        }
+
+        guard words.count >= 2, words.count <= 5 else {
+            return false
+        }
+
+        return words.allSatisfy { Self.visibleUIChromeTokens.contains($0) || $0.allSatisfy(\.isNumber) }
+    }
+
+    private func isWrappedInMarkdownEmphasis(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed.hasPrefix("**") && trimmed.hasSuffix("**"))
+            || (trimmed.hasPrefix("__") && trimmed.hasSuffix("__"))
     }
 
     private func repeatsEarlierContext(_ suggestion: String, after textBeforeCursor: String) -> Bool {
@@ -519,6 +638,23 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
     private static let commonWholeWords = Set(WordCompletionCandidateRanker.defaultWords)
         .union(lowValueSingleWordPhrases)
 
+    private static let visibleUIChromeTokens: Set<String> = [
+        "automations",
+        "chat",
+        "chats",
+        "edited",
+        "font",
+        "format",
+        "helvetica",
+        "new",
+        "plugins",
+        "projects",
+        "regular",
+        "search",
+        "settings",
+        "untitled"
+    ]
+
     private static let assistantResponsePrefixes: Set<String> = [
         "first,",
         "i can ",
@@ -543,6 +679,34 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "please ",
         "run ",
         "write "
+    ]
+
+    private static let unsafePromptCommandPrefixes = [
+        "/", "!", "@", "--", "sudo ", "curl ", "bash ", "sh ", "rm "
+    ]
+
+    private static let unsafePromptActionWords: Set<String> = [
+        "allow",
+        "approve",
+        "click",
+        "delete",
+        "deploy",
+        "enter",
+        "execute",
+        "merge",
+        "return",
+        "run",
+        "send",
+        "ship",
+        "submit"
+    ]
+
+    private static let unsafePromptHiddenScalars: Set<Unicode.Scalar> = [
+        "\u{200B}",
+        "\u{200C}",
+        "\u{200D}",
+        "\u{2060}",
+        "\u{FEFF}"
     ]
 
     private static let lowSignalWords: Set<String> = [
@@ -600,6 +764,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["a", "good", "way"],
         ["a", "better", "approach"],
         ["absolutely"],
+        ["analyze", "the", "request"],
         ["boost", "productivity"],
         ["drive", "better", "outcomes"],
         ["great", "question"],
@@ -635,6 +800,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["the", "best", "way"],
         ["the", "next", "step"],
         ["the", "best", "approach"],
+        ["the", "user", "wants"],
         ["this", "is", "a", "great"],
         ["this", "is", "exciting"],
         ["try", "saying"],

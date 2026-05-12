@@ -68,15 +68,19 @@ deeper invalidation: strict proof still fails for Codex same-slice no-submit
 proof and some partial browser/editor manifest gates, and the app still lacks full window/scroll/display revision
 tokens. A later hardening pass also made stable-bounds field identity
 deterministic instead of process-random, which makes replay and trace evidence
-more comparable across lab app launches.
+more comparable across lab app launches. The merge also keeps the stricter
+trust gate from the branch: an anchor that cannot map to a known display
+suppresses instead of falling back to the main display, and post-accept
+verification mismatches trace as insertion failures rather than silently
+passing.
 
 ## Score
 
-Starting score: 82/100
+Starting score: 85/100
 
-Overall score: 85/100
+Overall score: 91/100
 
-Current score after this pass: 85/100
+Current score after this pass: 91/100
 
 ## Score Breakdown
 
@@ -350,9 +354,44 @@ then update this scorecard with the new score and remaining manual proof.
   bounded trace slice.
 - Claude Code needs terminal-host screenshot/no-submit proof.
 - Production browser/editor variants remain intentionally blocked or partial.
-- Vertical/mirrored/fullscreen multi-display proof is incomplete.
+- Vertical/mirrored/fullscreen multi-display proof now has policy lanes, but
+  still needs broader live manual proof across real Spaces arrangements.
 - Host-native editor geometry APIs are not integrated.
 - Current proof manifest source commit is stale against the inspected commit.
+
+## Implementation Pass - 2026-05-09
+
+Score movement: 85/100 to 91/100.
+
+What changed:
+
+- Added `SuggestionGeometrySnapshot` and stale-geometry invalidation reasons for
+  field, caret, text-line, element, window, and screen layout changes.
+- Wired visible suggestions to hide on stale geometry before repositioning.
+- Added a screen-geometry observer so display changes invalidate pending
+  requests and hide visible suggestions.
+- Suppressed ambiguous mirrored-display selection instead of choosing the first
+  matching screen.
+- Added tests for vertical display selection, mirrored-display ambiguity,
+  upper vertical display panel placement, wrapped-line placement, scroll-like
+  line movement, window moves, and multiple editable areas.
+- Moved overlay collection behavior into a tested helper for separate Spaces
+  and fullscreen auxiliary panels.
+- Expanded geometry and visual calibration reports with layout lanes and
+  stale-geometry hidden evidence, without printing raw typed text.
+
+Verification:
+
+- `./script/visual_calibration_report_self_test.sh` passed.
+- `./script/geometry_trace_report_self_test.sh` passed.
+- `./script/check_visual_placement_evidence.sh --require-all` passed with 16
+  screenshots verified.
+- `git diff --check` passed.
+- `swift test --jobs 1 --filter 'SuggestionGeometryChangePolicyTests|SuggestionDisplaySelectionPolicyTests|SuggestionPanelFrameCalculatorTests|OverlayDesktopBehaviorTests'`
+  passed 44 tests.
+- Full `swift test --jobs 1` built successfully but failed an existing
+  `AcceptedAndKeptLearningTests` expectation unrelated to placement:
+  negative samples were `10` instead of the expected `11`.
 
 ## Implementation Pass - 2026-05-08
 

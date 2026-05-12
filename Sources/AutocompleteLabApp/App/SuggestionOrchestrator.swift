@@ -5,6 +5,7 @@ import AutocompleteLabCore
 final class SuggestionOrchestrator {
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
+    private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private let suggestionPresentationGate: SuggestionPresentationGate
     private let suggestionReplacementPolicy: SuggestionReplacementPolicy
@@ -16,12 +17,14 @@ final class SuggestionOrchestrator {
     init(
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
+        commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
         prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
+        self.commonPhrasePredictor = commonPhrasePredictor
         self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
         self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
@@ -82,6 +85,7 @@ final class SuggestionOrchestrator {
             ),
             acceptedTextStyleSketch: input.acceptedTextStyleSketch,
             documentTitleShape: DocumentTitleShape.from(windowTitle: input.context.fingerprint.windowTitle),
+            visiblePageContext: input.visiblePageContext,
             maxVisibleWords: input.maxVisibleWords,
             mode: input.requestMode,
             suggestionID: suggestionID
@@ -89,7 +93,7 @@ final class SuggestionOrchestrator {
         return beginRequest(
             request,
             fieldClassification: input.fieldClassification,
-            suggestionAggressiveness: input.suggestionAggressiveness
+            suggestionTuning: input.suggestionTuning
         )
     }
 
@@ -97,14 +101,14 @@ final class SuggestionOrchestrator {
         beginRequest(
             request,
             fieldClassification: nil,
-            suggestionAggressiveness: nil
+            suggestionTuning: nil
         )
     }
 
     private func beginRequest(
         _ request: CompletionRequest,
         fieldClassification: AXFieldClassification?,
-        suggestionAggressiveness: SuggestionAggressiveness?
+        suggestionTuning: SuggestionTuning?
     ) -> SuggestionOrchestration {
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
             previous: currentRequestStorage,
@@ -115,8 +119,8 @@ final class SuggestionOrchestrator {
         if let fieldClassification {
             requestMetadata.merge(fieldClassification.traceMetadata) { current, _ in current }
         }
-        if let suggestionAggressiveness {
-            requestMetadata.merge(suggestionAggressiveness.traceMetadata) { current, _ in current }
+        if let suggestionTuning {
+            requestMetadata.merge(suggestionTuning.traceMetadata) { current, _ in current }
         }
 
         currentRequestStorage = request
@@ -167,6 +171,19 @@ final class SuggestionOrchestrator {
             failedRequestFieldIdentity: failedRequestFieldIdentity,
             currentFieldIdentity: currentFieldIdentity
         )
+    }
+
+    func shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+        suggestionID: String,
+        currentSuggestionID: String?,
+        ticket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
+        hasVisibleSuggestion
+            && currentSuggestionID == suggestionID
+            && allows(ticket, fieldIdentity: fieldIdentity, currentFieldIdentity: currentFieldIdentity)
     }
 
     func invalidate() {
@@ -354,21 +371,47 @@ final class SuggestionOrchestrator {
 
     nonisolated func fastWordSuggestion(
         for textBeforeCursor: String,
-        recentWords: [String]
+        recentWords: [String],
+        allowPredictiveFallback: Bool = false
     ) -> CompletionSuggestion? {
         fastWordSelection(
             for: textBeforeCursor,
-            recentWords: recentWords
+            recentWords: recentWords,
+            allowPredictiveFallback: allowPredictiveFallback
         ).suggestion
     }
 
     nonisolated func fastWordSelection(
         for textBeforeCursor: String,
-        recentWords: [String]
+        recentWords: [String],
+        allowPredictiveFallback: Bool = false
     ) -> WordCompletionCandidateSelection {
         wordCompletionRanker.selection(
             for: textBeforeCursor,
-            recentWords: recentWords
+            recentWords: recentWords,
+            allowPredictiveFallback: allowPredictiveFallback
+        )
+    }
+
+    nonisolated func fastPhraseSelection(
+        for textBeforeCursor: String,
+        behaviorProfileID: AutocompleteBehaviorProfileID?,
+        maxVisibleWords: Int,
+        allowPredictiveFallback: Bool = false
+    ) -> CommonPhraseContinuationSelection {
+        guard allowPredictiveFallback else {
+            return CommonPhraseContinuationSelection(
+                suggestion: nil,
+                matchedContextSuffix: nil,
+                score: nil,
+                suppressionReason: "disabled"
+            )
+        }
+
+        return commonPhrasePredictor.selection(
+            for: textBeforeCursor,
+            behaviorProfileID: behaviorProfileID,
+            maxVisibleWords: maxVisibleWords
         )
     }
 
@@ -539,7 +582,7 @@ final class SuggestionOrchestrator {
             return 0.40
         case .unknown:
             return 0.32
-        case .search, .form, .secure, .url:
+        case .search, .form, .secure, .url, .unprovenSurface:
             return 0.05
         }
     }
@@ -690,7 +733,8 @@ struct SuggestionRequestInput: Sendable {
     let fieldIdentity: FocusedFieldIdentity
     let fieldClassification: AXFieldClassification
     let acceptedTextStyleSketch: AcceptedTextStyleSketch?
+    let visiblePageContext: VisiblePageContext?
     let maxVisibleWords: Int
     let requestMode: CompletionRequestMode
-    let suggestionAggressiveness: SuggestionAggressiveness
+    let suggestionTuning: SuggestionTuning
 }

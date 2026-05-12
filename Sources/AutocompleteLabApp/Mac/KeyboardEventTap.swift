@@ -3,7 +3,7 @@ import AutocompleteLabCore
 import Foundation
 
 final class KeyboardEventTap: @unchecked Sendable {
-    typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> Bool
+    typealias Handler = @MainActor @Sendable (AutocompleteKey, Bool, Bool) -> KeyboardEventTapHandlingResult
     typealias PassthroughKeyDownObserver = @MainActor @Sendable () -> Void
     typealias DisabledObserver = @MainActor @Sendable (_ reason: String) -> Void
 
@@ -11,6 +11,8 @@ final class KeyboardEventTap: @unchecked Sendable {
     private let passthroughKeyDownObserver: PassthroughKeyDownObserver?
     private let disabledObserver: DisabledObserver?
     private let keyMapper = AutocompleteKeyMapper()
+    private let consumptionPolicy = KeyboardEventTapConsumptionPolicy()
+    private let repeatSuppressionPolicy = KeyboardCaptureRepeatSuppressionPolicy()
     private let lifecycleLock = NSLock()
     private let snapshotLock = NSLock()
     private let passthroughLock = NSLock()
@@ -28,7 +30,6 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
     private var latencyStats = KeyboardEventTapLatencyStats()
     private let slowEventTapLatencyMicros = 8_000
-    private let keySuppressDurationNanos: UInt64 = 250_000_000
     private let replayExpirationNanos: UInt64 = 1_000_000_000
 
     init(
@@ -112,7 +113,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             CFRunLoopRun()
         }
 
-        thread.name = "AutocompleteLabKeyboardEventTap"
+        thread.name = "SteadyTypeKeyboardEventTap"
         lifecycleLock.lock()
         eventThread = thread
         lifecycleLock.unlock()
@@ -199,7 +200,9 @@ final class KeyboardEventTap: @unchecked Sendable {
             DiagnosticsLog.shared.record(
                 "keyboard-event-tap-disabled",
                 metadata: [
-                    "reason": type == .tapDisabledByTimeout ? "timeout" : "user-input"
+                    "reason": type == .tapDisabledByTimeout ? "timeout" : "user-input",
+                    "diagnosticLayer": "keyCapture",
+                    "safetyFailure": "true"
                 ]
             )
 
@@ -288,9 +291,31 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         Task { @MainActor in
-            let handled = handler(key, isAutorepeat, hadPassthroughKeyDown)
-            if !handled {
+            let result = handler(key, isAutorepeat, hadPassthroughKeyDown)
+            switch result {
+            case .handled:
+                break
+            case let .replayOriginalKey(reason):
+                DiagnosticsLog.shared.record(
+                    "keyboard-event-tap-replayed-captured-key",
+                    metadata: [
+                        "key": key.diagnosticName,
+                        "reason": reason.rawValue,
+                        "diagnosticLayer": "keyCapture",
+                        "safetyFailure": "false"
+                    ]
+                )
                 replayKey(replay)
+            case let .dropOriginalKey(reason):
+                DiagnosticsLog.shared.record(
+                    "keyboard-event-tap-unhandled-consumed-key-dropped",
+                    metadata: [
+                        "key": key.diagnosticName,
+                        "reason": reason.rawValue,
+                        "diagnosticLayer": "keyCapture",
+                        "safetyFailure": "true"
+                    ]
+                )
             }
         }
         return finish(nil, key: key, decision: "consume", startedAt: startedAt)
@@ -363,6 +388,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 "reason": reason,
                 "count": String(summary.count),
                 "p50Micros": String(summary.p50Micros),
+                "p90Micros": String(summary.p90Micros),
                 "p95Micros": String(summary.p95Micros),
                 "p99Micros": String(summary.p99Micros),
                 "maxMicros": String(summary.maxMicros)
@@ -375,40 +401,47 @@ final class KeyboardEventTap: @unchecked Sendable {
         snapshotLock.lock()
         let snapshot = self.snapshot
 
-        let canHandleUndo = key == .commandZ && snapshot.hasPendingAcceptedInsertionUndo
-        guard snapshot.hasVisibleSuggestion || canHandleUndo,
+        if key == .commandZ,
+           snapshot.hasPendingAcceptedInsertionUndo,
+           !snapshot.isInvalidatedByUserTyping {
+            snapshotLock.unlock()
+            return true
+        }
+
+        guard snapshot.hasVisibleSuggestion,
               !snapshot.isInvalidatedByUserTyping else {
             suppressKeyUntilNanos.removeAll(keepingCapacity: true)
             snapshotLock.unlock()
             return false
         }
 
-        if isAutorepeat,
-           let suppressUntil = suppressKeyUntilNanos[key],
-           suppressUntil > nowNanos {
+        if repeatSuppressionPolicy.shouldSuppressAutorepeat(
+            key: key,
+            isAutorepeat: isAutorepeat,
+            suppressedUntilNanos: suppressKeyUntilNanos[key],
+            nowNanos: nowNanos
+        ) {
             snapshotLock.unlock()
             return true
         }
         suppressKeyUntilNanos[key] = nil
 
-        let shouldConsume: Bool
-        switch key {
-        case .tab:
-            shouldConsume = snapshot.supportsOneWordAcceptance
-        case .backtick:
-            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .backtick
-        case .commandZ:
-            shouldConsume = snapshot.hasPendingAcceptedInsertionUndo
-        case .escape:
-            shouldConsume = true
-        case .optionTab:
-            shouldConsume = snapshot.supportsFullAcceptance && snapshot.acceptAllShortcut == .optionTab
-        case .other:
-            shouldConsume = false
-        }
+        let shouldConsume = consumptionPolicy.shouldConsume(KeyboardEventTapConsumptionInput(
+            key: key,
+            hasVisibleSuggestion: snapshot.hasVisibleSuggestion,
+            supportsOneWordAcceptance: snapshot.supportsOneWordAcceptance,
+            supportsFullAcceptance: snapshot.supportsFullAcceptance,
+            isInvalidatedByUserTyping: snapshot.isInvalidatedByUserTyping,
+            hasPendingAcceptedInsertionUndo: snapshot.hasPendingAcceptedInsertionUndo,
+            acceptAllShortcut: snapshot.acceptAllShortcut
+        ))
 
-        if shouldConsume, !isAutorepeat {
-            suppressKeyUntilNanos[key] = nowNanos + keySuppressDurationNanos
+        if let deadline = repeatSuppressionPolicy.suppressionDeadline(
+            shouldConsume: shouldConsume,
+            isAutorepeat: isAutorepeat,
+            nowNanos: nowNanos
+        ) {
+            suppressKeyUntilNanos[key] = deadline
         }
         snapshotLock.unlock()
         return shouldConsume
@@ -580,6 +613,7 @@ private struct KeyboardEventTapLatencyStats: Sendable {
         let summary = KeyboardEventTapLatencySummary(
             count: sorted.count,
             p50Micros: percentile(0.50, in: sorted),
+            p90Micros: percentile(0.90, in: sorted),
             p95Micros: percentile(0.95, in: sorted),
             p99Micros: percentile(0.99, in: sorted),
             maxMicros: sorted.last ?? 0
@@ -601,6 +635,7 @@ private struct KeyboardEventTapLatencyStats: Sendable {
 private struct KeyboardEventTapLatencySummary: Sendable {
     let count: Int
     let p50Micros: Int
+    let p90Micros: Int
     let p95Micros: Int
     let p99Micros: Int
     let maxMicros: Int
@@ -620,20 +655,24 @@ private func keyboardEventTapCallback(
     return eventTap.handle(type: type, event: event)
 }
 
+func autocompletePhysicalKey(forMacVirtualKeyCode keyCode: Int64) -> AutocompletePhysicalKey {
+    switch keyCode {
+    case 6:
+        .z
+    case 48:
+        .tab
+    case 50:
+        .backtick
+    case 53:
+        .escape
+    default:
+        .other
+    }
+}
+
 private extension AutocompletePhysicalKey {
     init(keyCode: Int64) {
-        switch keyCode {
-        case 48:
-            self = .tab
-        case 50:
-            self = .backtick
-        case 6:
-            self = .z
-        case 53:
-            self = .escape
-        default:
-            self = .other
-        }
+        self = autocompletePhysicalKey(forMacVirtualKeyCode: keyCode)
     }
 }
 

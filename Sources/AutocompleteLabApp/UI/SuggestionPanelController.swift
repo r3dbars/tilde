@@ -32,7 +32,7 @@ final class SuggestionPanelController {
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = OverlayDesktopBehavior.collectionBehavior
 
         let container = NSView(frame: panel.contentView?.bounds ?? .zero)
         container.autoresizingMask = [.width, .height]
@@ -91,9 +91,20 @@ final class SuggestionPanelController {
             width: max(ceil(textSize.width + textPadding.width), minimumSize.width),
             height: max(ceil(textSize.height + textPadding.height), minimumSize.height)
         )
-        let screen = screen(containing: anchorRect) ?? NSScreen.main
-        let screenFrame = screen?.frame ?? .zero
         let screenHeight = Self.accessibilityScreenHeight()
+        guard let screen = screen(containing: anchorRect, screenHeight: screenHeight) else {
+            hide()
+            DiagnosticsLog.shared.record(
+                "suggestion-panel-frame-suppressed",
+                metadata: [
+                    "reason": "anchor-outside-active-display",
+                    "renderMode": renderMode.rawValue,
+                    "anchor": compactFrameDescription(anchorRect)
+                ]
+            )
+            return nil
+        }
+        let screenFrame = screen.frame
         let appKitAnchorRect = AccessibilityCoordinateConverter.appKitRect(
             fromAccessibilityRect: anchorRect,
             screenHeight: screenHeight
@@ -218,18 +229,17 @@ final class SuggestionPanelController {
         return view.pngData()
     }
 
-    private func screen(containing accessibilityRect: CGRect) -> NSScreen? {
-        let screenHeight = Self.accessibilityScreenHeight()
+    private func screen(containing accessibilityRect: CGRect, screenHeight: CGFloat) -> NSScreen? {
         let screens = NSScreen.screens
-        guard let bestFrame = AccessibilityCoordinateConverter.bestScreenFrame(
+        guard let index = SuggestionDisplaySelectionPolicy.selectedScreenIndex(
             containingAccessibilityRect: accessibilityRect,
             screenFrames: screens.map(\.frame),
-            screenHeight: screenHeight
-        ) else {
+            accessibilityScreenHeight: screenHeight
+        ), screens.indices.contains(index) else {
             return nil
         }
 
-        return screens.first { $0.frame == bestFrame }
+        return screens[index]
     }
 
     private static func accessibilityScreenHeight() -> CGFloat {
@@ -279,6 +289,49 @@ final class SuggestionPanelController {
 
     private func compactFrameDescription(_ rect: CGRect) -> String {
         "x=\(Int(rect.origin.x.rounded())),y=\(Int(rect.origin.y.rounded())),w=\(Int(rect.width.rounded())),h=\(Int(rect.height.rounded()))"
+    }
+}
+
+enum GhostTextColorPolicy {
+    static func color(
+        matching foregroundColor: NSColor?,
+        renderMode: SuggestionRenderMode
+    ) -> NSColor {
+        switch renderMode {
+        case .floatingMirror:
+            return NSColor.labelColor
+        case .inlineAdjacent:
+            return inlineColor(matching: foregroundColor)
+        case .disabled:
+            return NSColor.secondaryLabelColor
+        }
+    }
+
+    private static func inlineColor(matching foregroundColor: NSColor?) -> NSColor {
+        guard let luminance = relativeLuminance(of: foregroundColor) else {
+            return NSColor(calibratedWhite: 0.58, alpha: 0.82)
+        }
+
+        if luminance >= 0.62 {
+            return NSColor(calibratedWhite: 0.82, alpha: 0.88)
+        }
+
+        if luminance <= 0.25 {
+            return NSColor(calibratedWhite: 0.52, alpha: 0.78)
+        }
+
+        return NSColor(calibratedWhite: 0.62, alpha: 0.82)
+    }
+
+    private static func relativeLuminance(of color: NSColor?) -> CGFloat? {
+        guard let color,
+              let rgbColor = color.usingColorSpace(.deviceRGB) else {
+            return nil
+        }
+
+        return (0.2126 * rgbColor.redComponent)
+            + (0.7152 * rgbColor.greenComponent)
+            + (0.0722 * rgbColor.blueComponent)
     }
 }
 
