@@ -131,6 +131,8 @@ def runtime_launches(path):
                     executable_sha256=pending_executable_sha256,
                 )
             )
+            current_proof_app = ""
+            current_proof_scenario = ""
             pending_executable_sha256 = ""
     return launches
 

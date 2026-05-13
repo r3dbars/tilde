@@ -5022,6 +5022,7 @@ textedit_smoke_allows_ax_proof_typing() {
 type_textedit_smoke_fragment() {
   local window_title="$1"
   local fragment="$2"
+  local attempt
 
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
@@ -5031,9 +5032,13 @@ type_textedit_smoke_fragment() {
     return 0
   fi
 
-  assert_textedit_frontmost_window "$window_title" "TextEdit proof typing"
-  (
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
+  for attempt in 1 2; do
+    focus_textedit_smoke_editor "$window_title"
+    click_textedit_smoke_editor "$window_title"
+    move_textedit_caret_to_document_end "$window_title"
+    assert_textedit_frontmost_window "$window_title" "TextEdit proof typing"
+    (
+      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
 set smokeText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT"
 set keyDelayText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS"
 set keyDelay to 0
@@ -5055,9 +5060,18 @@ tell application "System Events"
   end if
 end tell
 APPLESCRIPT
-  ) &
-  local osascript_pid="$!"
-  wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"
+    ) &
+    local osascript_pid="$!"
+    if wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"; then
+      return 0
+    fi
+    if ((attempt == 1)); then
+      echo "TextEdit proof typing lost focus; refocusing smoke window and retrying once." >&2
+      sleep 0.25
+      continue
+    fi
+    return 1
+  done
 }
 
 press_textedit_event_tap_probe_key() {
