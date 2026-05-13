@@ -162,9 +162,12 @@ if "nudge_textedit_frontmost" not in wait_for_open:
 
 run_textedit = function_body("run_textedit")
 fallback = run_textedit.index("export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1")
+skip_system_events = run_textedit.index("export AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1")
 open_document = run_textedit.index('open_textedit_smoke_document "$textedit_file" "$textedit_window_title"')
 if fallback > open_document:
     raise SystemExit("TextEdit smoke must enable single-window fallback before opening/focusing the proof document")
+if skip_system_events > fallback:
+    raise SystemExit("TextEdit smoke must disable System Events process activation before focus retries")
 PY
 
 if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
@@ -329,6 +332,8 @@ if ! grep -F 'wait_for_textedit_document_exact "$textedit_window_title" "" "Text
   exit 1
 fi
 if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'dismiss_textedit_modal_panels' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'run_osascript_with_timeout 2 "TextEdit modal cleanup"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'docName starts with "textedit-model-latency-"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected stale TextEdit proof windows to be cleaned before opening a new disposable document" >&2
