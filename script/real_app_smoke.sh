@@ -495,7 +495,7 @@ on run argv
     repeat with docRef in documents
       try
         set docName to name of docRef
-        if docName starts with "textedit-smoke-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
+        if docName starts with "textedit-smoke-" or docName starts with "textedit-model-latency-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
           close docRef saving no
         end if
       end try
@@ -6862,20 +6862,37 @@ build_bundle_if_needed() {
   refresh_build_archive_proof
 }
 
-stop_current_steadytype_app_bundle() {
+current_steadytype_app_bundle_pids() {
   local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local current_pgid
+  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+
+  ps ax -o pid=,pgid=,command= |
+    awk -v app_binary="$app_binary" -v self="$$" -v selfPGID="$current_pgid" '
+      {
+        pid = $1
+        pgid = $2
+        command = $0
+        sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
+      }
+      pid != self &&
+        (selfPGID == "" || pgid != selfPGID) &&
+        index(command, app_binary) > 0 {
+          print pid
+      }
+    '
+}
+
+stop_current_steadytype_app_bundle() {
   local pid
 
   while IFS= read -r pid; do
     [[ -z "$pid" ]] && continue
     kill "$pid" >/dev/null 2>&1 || true
-  done < <(
-    ps ax -o pid=,command= |
-      awk -v app_binary="$app_binary" 'index($0, app_binary) > 0 { print $1 }'
-  )
+  done < <(current_steadytype_app_bundle_pids)
 
   for _ in {1..20}; do
-    if ! ps ax -o command= | grep -F "$app_binary" >/dev/null 2>&1; then
+    if [[ -z "$(current_steadytype_app_bundle_pids)" ]]; then
       return 0
     fi
     sleep 0.1
@@ -8549,7 +8566,12 @@ run_textedit_model_latency() {
     fi
     wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index" 5
     move_textedit_caret_to_document_end "$textedit_window_title"
-    if wait_for_log_fields_optional "$seed_start" 4 \
+    if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
+      wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed $sample_index" 8 \
+        "phrase-continuation-disabled" \
+        "app=com.apple.TextEdit"
+      echo "TextEdit model latency seed settled by disabled phrase continuation $sample_index."
+    elif wait_for_log_fields_optional "$seed_start" 4 \
       "mlx-completion-timing" \
       "app=com.apple.TextEdit" \
       "mode=phraseContinuation"; then
