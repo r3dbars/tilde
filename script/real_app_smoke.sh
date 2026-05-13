@@ -861,6 +861,8 @@ other_autocomplete_proof_pgids() {
 
 terminate_other_autocomplete_proof_runs() {
   local pgid pgids=()
+  terminate_stale_steadytype_app_bundles
+
   while IFS= read -r pgid; do
     [[ -z "$pgid" ]] && continue
     pgids+=("$pgid")
@@ -7835,6 +7837,38 @@ stop_current_steadytype_app_bundle() {
   done
 }
 
+stale_steadytype_app_bundle_pids() {
+  local expected_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local pid command
+
+  while IFS=$'\t' read -r pid _pgid command; do
+    [[ -z "$pid" ]] && continue
+    [[ -z "$command" ]] && continue
+    command_matches_steadytype_binary "$command" "$expected_binary" && continue
+    printf '%s\n' "$pid"
+  done < <(steadytype_app_process_rows)
+}
+
+terminate_stale_steadytype_app_bundles() {
+  local pid
+  local stale_pids=()
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    stale_pids+=("$pid")
+    kill "$pid" >/dev/null 2>&1 || true
+  done < <(stale_steadytype_app_bundle_pids)
+
+  ((${#stale_pids[@]} == 0)) && return 0
+  sleep 0.2
+
+  for pid in "${stale_pids[@]}"; do
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 pause_steadytype_for_chrome_setup() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
@@ -7901,6 +7935,8 @@ wait_for_current_autocomplete_lab_process() {
   local deadline=$((SECONDS + 20))
 
   while ((SECONDS <= deadline)); do
+    terminate_stale_steadytype_app_bundles
+
     local found_current=0
     local current_pids=()
     local stale_processes=""

@@ -744,6 +744,23 @@ if ! grep -F 'wait_for_frontmost_app "Obsidian" "${AUTOCOMPLETE_LAB_OBSIDIAN_ACT
   exit 1
 fi
 
+if ! grep -F 'AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-optionTab}"' script/obsidian_deep_sweep.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.4}"' script/obsidian_deep_sweep.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian deep sweep to inherit the proven shortcut and focus settle defaults" >&2
+  exit 1
+fi
+
+if grep -F 'AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$lock_dir"' script/obsidian_deep_sweep.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian deep sweep to use the shared real-app smoke lock" >&2
+  exit 1
+fi
+
+if ! grep -F "terminate_stale_steadytype_app_bundles" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "stale_steadytype_app_bundle_pids" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected exclusive proof runs to terminate stale SteadyType apps from other worktrees" >&2
+  exit 1
+fi
+
 python3 - <<'PY'
 from pathlib import Path
 

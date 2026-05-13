@@ -17,7 +17,7 @@ Current branch: `codex/obsidian-deep-proof-390d`
 | Font/zoom/dynamic layout | 96 | Current-branch `obsidian-font-zoom` passed at 09:56 UTC with 2 verified insertions and strict screenshots; it still needs fresh repeat rows after the post-accept settle fix. |
 | Markdown formatting stress | 96 | Current-branch bold, list, multiline, and run-on lanes all passed strict screenshot proof after the reset/exclusive-run fixes. Needs repeats after the settle fix before 100. |
 | Stale/wrong-context suppression | 88 | The 11:20 UTC theme proof recorded `obsidian-post-acceptance-settle` after full accept, blocking the stale same-text suggestion that broke earlier runs. Needs broad repeat proof before 100. |
-| Deep repeat reliability | 48 | The wrapper started a 1-iteration sweep but produced no trustworthy rows. The delayed theme lane is green now, but the requested 150+ Obsidian attempt sample is not complete. |
+| Deep repeat reliability | 45 | The delayed theme lane is green, but the latest subset sweep was interrupted by a stale `25ed` SteadyType app instance and produced no trustworthy rows. The requested 150+ Obsidian attempt sample is not complete. |
 
 ## Fixes Landed In This Pass
 
@@ -57,6 +57,8 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Strict visual trace eval now deduplicates repeated same-geometry presentations across timestamp-second boundaries when one matching event has screenshot evidence.
 - Obsidian now arms a short post-acceptance settle gate after verified accepted text so the same just-accepted text does not immediately trigger another stale word completion before the user types more.
 - Obsidian smoke activation now waits until Obsidian is actually frontmost, then settles focus before Tab/full-accept actions and before second-phrase typing.
+- Exclusive proof runs now terminate stale SteadyType app bundles from other worktrees while waiting for the current app and while the interference guard is active.
+- The Obsidian deep sweep wrapper now uses the shared real-app smoke lock instead of creating a per-lane lock that lets overlapping proof lanes kill each other.
 
 ## Fresh Findings This Pass
 
@@ -131,12 +133,15 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - `AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BEFORE_TYPING=1` cleared stale visuals but triggered `suppressedField` / quiet mode, so it is not a valid default workaround.
 - Fresh delayed `obsidian-theme` proof passed strictly at `2026-05-13T11:20:27Z` on commit `cb7501272349`, diagnostics lines 62255-62331 and trace lines 14562-14576.
 - That 11:20 UTC theme proof verified both accepted insertions, recorded screenshot-backed suggestions `A8AD538A-2173-40F6-803A-33CD3676B644.png` and `E1D3CA67-B06C-4B31-8BDB-7AFF7C916C02.png`, and logged `obsidian-post-acceptance-settle` after full accept.
+- The 11:36 UTC default/theme/pane subset sweep is red as runner evidence: it reached `obsidian-theme`, then a stale `25ed` SteadyType app instance entered the proof process group and the lane fell into focus/quiet-mode behavior instead of producing a clean row.
+- A post-guard default rerun was also killed during build/relaunch because older theme proof processes were still bypassing the shared smoke lock. The per-lane lock override is now removed, but this has not yet been re-proven green.
+- The lingering old `25ed` `manual_proof_refresh.sh --run --target obsidian-theme` process group was terminated, and this checkout rebuilt `dist/SteadyType.app` successfully afterward.
 
 ## Remaining Gates To Reach 100
 
 - Repeat the Obsidian post-acceptance settle gate across default/theme/pane/long-note/font/bold/list/multiline/run-on lanes, not just the one fresh theme pass.
 - Repeat split-pane proof enough times to prove the quiet marker plus visual-shadow handling is stable and not a one-off pass.
-- Keep the test runner resilient to stale `25ed` / watchdog process cleanup so it cannot SIGTERM current Obsidian proof runs after verification.
+- Prove the new stale-app guard with fresh default/theme/pane rows before trusting the matrix runner again.
 - Keep Obsidian post-insert verification tolerant of the exact "accepted text landed, but focus moved to another Obsidian tab" shape without recording a false `wrongInsertion`.
 - Keep hardening end-of-document caret placement across wrapped lines, split panes, and different zoom levels.
 - Repeat default/theme/pane/long-note/font/bold/list/multiline/run-on 150+ times with screenshot traces to turn this from smoke proof into a real reliability sample.

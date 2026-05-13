@@ -96,18 +96,18 @@ first_run=1
 for iteration in $(seq 1 "$ITERATIONS"); do
   for lane in "${LANES[@]}"; do
     attempts=$((attempts + 1))
-    lock_dir="${TMPDIR:-/tmp}/autocomplete-lab-obsidian-deep-sweep-${lane}-${iteration}.lock"
     cmd=(script/real_app_smoke.sh "$lane" --manual-gate)
     if (( first_run == 0 && SKIP_BUILD_AFTER_FIRST == 1 )); then
       cmd+=(--skip-build)
     fi
 
     echo "[$iteration/$ITERATIONS] Running $lane"
-    if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$lock_dir" \
-      AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS=md.obsidian \
+    if AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS=md.obsidian \
       AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS=md.obsidian \
       AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN=1 \
       AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 \
+      AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-optionTab}" \
+      AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.4}" \
       AUTOCOMPLETE_LAB_VERIFY_STABILITY_SECONDS=1 \
       "${cmd[@]}"; then
       passes=$((passes + 1))
