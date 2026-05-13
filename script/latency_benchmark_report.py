@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import re
 import statistics
 from collections import defaultdict
@@ -117,6 +118,16 @@ def summary_window_line(label, windows, unit):
     )
 
 
+def trace_evidence_line(samples):
+    if not samples:
+        return "Model-backed visible trace evidence: n=0"
+    lines = [sample.line for sample in samples]
+    return (
+        f"Model-backed visible trace evidence: n={len(samples)} "
+        f"firstLine={min(lines)} latestLine={max(lines)}"
+    )
+
+
 def compact_metric(values):
     clean = [value for value in values if value is not None]
     if not clean:
@@ -167,7 +178,7 @@ def event_mode(event):
     return event.get("requestMode") or metadata_value(event, "requestMode", "unknown")
 
 
-def line_slice(path, start_line, line_limit):
+def line_slice(path, start_line, line_limit, end_line=None):
     if not path.exists():
         return []
 
@@ -176,6 +187,8 @@ def line_slice(path, start_line, line_limit):
         for line_number, line in enumerate(handle, start=1):
             if line_number <= start_line:
                 continue
+            if end_line is not None and line_number > end_line:
+                break
             stripped = line.strip()
             if stripped:
                 selected.append((line_number, stripped))
@@ -185,7 +198,7 @@ def line_slice(path, start_line, line_limit):
     return selected
 
 
-def parse_trace_log(path, start_line, line_limit, late_visible_budget_ms):
+def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_ms):
     first_visible = []
     first_token = []
     total_generation = []
@@ -193,9 +206,11 @@ def parse_trace_log(path, start_line, line_limit, late_visible_budget_ms):
     late_visible = []
     seen_presented = set()
     seen_model = set()
+    model_backed_suggestion_ids = set()
+    presented_samples = []
     malformed = []
 
-    for line_number, line in line_slice(path, start_line, line_limit):
+    for line_number, line in line_slice(path, start_line, line_limit, end_line):
         try:
             event = json.loads(line)
         except json.JSONDecodeError as error:
@@ -218,6 +233,7 @@ def parse_trace_log(path, start_line, line_limit, late_visible_budget_ms):
                 continue
             sample = Sample(latency, app, profile, mode, "trace", line_number, suggestion_id)
             first_visible.append(sample)
+            presented_samples.append(sample)
             if latency > late_visible_budget_ms:
                 late_visible.append(sample)
             continue
@@ -240,6 +256,7 @@ def parse_trace_log(path, start_line, line_limit, late_visible_budget_ms):
             if generation_latency is None:
                 generation_latency = int_value(event.get("latencyMilliseconds"))
             if generation_latency is not None:
+                model_backed_suggestion_ids.add(suggestion_id)
                 total_generation.append(
                     Sample(generation_latency, app, profile, mode, "trace", line_number, suggestion_id)
                 )
@@ -252,8 +269,15 @@ def parse_trace_log(path, start_line, line_limit, late_visible_budget_ms):
             if is_stale_late_suppression(suppression, late_visible_budget_ms, metadata):
                 stale_late_suppressed.append(suppression)
 
+    model_backed_first_visible = [
+        sample
+        for sample in presented_samples
+        if sample.label in model_backed_suggestion_ids
+    ]
+
     return {
         "first_visible": first_visible,
+        "model_backed_first_visible": model_backed_first_visible,
         "first_token": first_token,
         "total_generation": total_generation,
         "stale_late_suppressed": stale_late_suppressed,
@@ -271,7 +295,7 @@ def is_stale_late_suppression(suppression, late_visible_budget_ms, metadata):
     return any("too-slow" in str(value).lower() for value in metadata.values())
 
 
-def parse_diagnostics_log(path, start_line, line_limit):
+def parse_diagnostics_log(path, start_line, end_line, line_limit):
     presented = []
     first_token = []
     total_generation = []
@@ -286,7 +310,7 @@ def parse_diagnostics_log(path, start_line, line_limit):
     malformed = []
     seen_presented = set()
 
-    for line_number, line in line_slice(path, start_line, line_limit):
+    for line_number, line in line_slice(path, start_line, line_limit, end_line):
         parts = line.split()
         if len(parts) < 2:
             continue
@@ -440,12 +464,15 @@ def print_report(args, trace_data, diagnostics_data):
     print(f"Diagnostics log: {args.diagnostics_log}")
     print(f"Trace log: {args.trace_log}")
     print(f"Diagnostics start line: {args.diagnostics_start_line}")
+    print(f"Diagnostics end line: {args.diagnostics_end_line or 'none'}")
     print(f"Trace start line: {args.trace_start_line}")
+    print(f"Trace end line: {args.trace_end_line or 'none'}")
     print(f"Line limit: {args.line_limit if args.line_limit > 0 else 'all'}")
     print()
     print(metric_line("First visible / keystroke-to-visible", first_visible, "ms"))
     print(metric_line("First token", first_token, "ms"))
     print(metric_line("Total generation", total_generation, "ms"))
+    print(trace_evidence_line(trace_data["model_backed_first_visible"]))
     print(runtime_proof_line(diagnostics_data["runtime_launches"]))
     print(metric_line("Event-tap overhead raw", diagnostics_data["event_tap"], "us"))
     print(summary_window_line("Event-tap overhead summaries", diagnostics_data["event_tap_windows"], "us"))
@@ -486,6 +513,7 @@ def enforce_gate(args, trace_data, diagnostics_data):
         diagnostics_data["runtime_launches"],
         args.expected_asset,
     )
+    enforce_bounded_trace_evidence(failures, args, trace_data)
 
     require_count(failures, "first-visible samples", first_visible, args.require_first_visible_samples)
     require_count(failures, "model timing samples", total_generation, args.require_model_samples)
@@ -563,11 +591,11 @@ def enforce_gate(args, trace_data, diagnostics_data):
         )
 
     if failures:
-        shown = "; ".join(failures[:10])
+        shown = "\n".join(f"- {failure}" for failure in failures[:10])
         extra = len(failures) - 10
         if extra > 0:
-            shown = f"{shown}; +{extra} more"
-        raise SystemExit(f"latency beta gate failed: {shown}")
+            shown = f"{shown}\n- +{extra} more"
+        raise SystemExit(f"latency beta gate failed:\n{shown}")
 
     print()
     print("Latency beta gate passed.")
@@ -579,6 +607,35 @@ def require_count(failures, label, samples, expected):
     actual = len(samples)
     if actual < expected:
         failures.append(f"expected at least {expected} {label}, found {actual}")
+
+
+def has_bounded_latency_window(args):
+    return (
+        args.diagnostics_start_line > 0
+        or args.trace_start_line > 0
+        or args.diagnostics_end_line is not None
+        or args.trace_end_line is not None
+    )
+
+
+def enforce_bounded_trace_evidence(failures, args, trace_data):
+    if not args.beta_gate or not has_bounded_latency_window(args):
+        return
+
+    expected = max(1, args.require_first_visible_samples or 0)
+    actual = len(trace_data["model_backed_first_visible"])
+    if actual >= expected:
+        return
+
+    failures.append(
+        "bounded beta gate needs fresh model-backed visible trace evidence: "
+        f"expected at least {expected} paired modelResult/suggestionPresented trace samples, found {actual} "
+        f"(traceVisible={len(trace_data['first_visible'])}; "
+        f"traceModelTiming={len(trace_data['total_generation'])}; "
+        f"traceStartLine={args.trace_start_line}; "
+        f"traceEndLine={args.trace_end_line or 'none'}). "
+        "Diagnostics-only suggestion-presented rows cannot prove current model latency."
+    )
 
 
 def runtime_proof_line(runtime_launches):
@@ -721,6 +778,39 @@ def optional_int_arg(value):
     return int(value)
 
 
+def default_if_none(value, default):
+    return default if value is None else value
+
+
+def env_start_line(name):
+    value = os.environ.get(name, "0") or "0"
+    try:
+        return max(0, int(value))
+    except ValueError:
+        raise SystemExit(f"{name} must be an integer line number, got {value!r}")
+
+
+def env_end_line(name):
+    value = os.environ.get(name, "")
+    if not value:
+        return None
+    try:
+        line = int(value)
+    except ValueError:
+        raise SystemExit(f"{name} must be an integer line number, got {value!r}")
+    if line < 0:
+        raise SystemExit(f"{name} must be a non-negative line number, got {value!r}")
+    return line
+
+
+def validate_end_line(label, start_line, end_line):
+    if end_line is None:
+        return None
+    if end_line < start_line:
+        raise SystemExit(f"{label} end line {end_line} is before start line {start_line}")
+    return end_line
+
+
 def should_enforce(args):
     if args.beta_gate:
         return True
@@ -754,14 +844,26 @@ def main():
     parser.add_argument(
         "--diagnostics-start-line",
         type=int,
-        default=0,
+        default=env_start_line("AUTOCOMPLETE_LAB_LOG_START_LINE"),
         help="ignore diagnostics lines at or before this 1-based line number",
+    )
+    parser.add_argument(
+        "--diagnostics-end-line",
+        type=int,
+        default=env_end_line("AUTOCOMPLETE_LAB_LOG_END_LINE"),
+        help="ignore diagnostics lines after this 1-based line number",
     )
     parser.add_argument(
         "--trace-start-line",
         type=int,
-        default=0,
+        default=env_start_line("AUTOCOMPLETE_LAB_TRACE_START_LINE"),
         help="ignore trace lines at or before this 1-based line number",
+    )
+    parser.add_argument(
+        "--trace-end-line",
+        type=int,
+        default=env_end_line("AUTOCOMPLETE_LAB_TRACE_END_LINE"),
+        help="ignore trace lines after this 1-based line number",
     )
     parser.add_argument(
         "--line-limit",
@@ -792,32 +894,50 @@ def main():
     args = parser.parse_args()
 
     if args.beta_gate:
-        args.require_first_visible_samples = (
-            args.require_first_visible_samples or BETA_MIN_FIRST_VISIBLE_SAMPLES
+        args.require_first_visible_samples = default_if_none(
+            args.require_first_visible_samples,
+            BETA_MIN_FIRST_VISIBLE_SAMPLES,
         )
-        args.require_model_samples = args.require_model_samples or BETA_MIN_MODEL_SAMPLES
-        args.require_event_tap_samples = (
-            args.require_event_tap_samples or BETA_MIN_EVENT_TAP_SAMPLES
+        args.require_model_samples = default_if_none(
+            args.require_model_samples,
+            BETA_MIN_MODEL_SAMPLES,
         )
-        args.require_ax_samples = args.require_ax_samples or BETA_MIN_AX_SAMPLES
-        args.max_first_visible_p95_ms = (
-            args.max_first_visible_p95_ms or BETA_MAX_FIRST_VISIBLE_P95_MS
+        args.require_event_tap_samples = default_if_none(
+            args.require_event_tap_samples,
+            BETA_MIN_EVENT_TAP_SAMPLES,
         )
-        args.max_first_visible_p99_ms = (
-            args.max_first_visible_p99_ms or BETA_MAX_FIRST_VISIBLE_P99_MS
+        args.require_ax_samples = default_if_none(
+            args.require_ax_samples,
+            BETA_MIN_AX_SAMPLES,
         )
-        args.max_first_token_p95_ms = (
-            args.max_first_token_p95_ms or BETA_MAX_FIRST_TOKEN_P95_MS
+        args.max_first_visible_p95_ms = default_if_none(
+            args.max_first_visible_p95_ms,
+            BETA_MAX_FIRST_VISIBLE_P95_MS,
         )
-        args.max_total_generation_p95_ms = (
-            args.max_total_generation_p95_ms or BETA_MAX_TOTAL_GENERATION_P95_MS
+        args.max_first_visible_p99_ms = default_if_none(
+            args.max_first_visible_p99_ms,
+            BETA_MAX_FIRST_VISIBLE_P99_MS,
         )
-        args.max_event_tap_p95_us = args.max_event_tap_p95_us or BETA_MAX_EVENT_TAP_P95_US
-        args.max_event_tap_max_us = args.max_event_tap_max_us or BETA_MAX_EVENT_TAP_MAX_US
-        args.max_ax_p95_ms = args.max_ax_p95_ms or BETA_MAX_AX_P95_MS
-        args.max_ax_p99_ms = args.max_ax_p99_ms or BETA_MAX_AX_P99_MS
-        args.max_ax_max_ms = args.max_ax_max_ms or BETA_MAX_AX_MAX_MS
-        args.expected_asset = args.expected_asset or DEFAULT_EXPECTED_ASSET
+        args.max_first_token_p95_ms = default_if_none(
+            args.max_first_token_p95_ms,
+            BETA_MAX_FIRST_TOKEN_P95_MS,
+        )
+        args.max_total_generation_p95_ms = default_if_none(
+            args.max_total_generation_p95_ms,
+            BETA_MAX_TOTAL_GENERATION_P95_MS,
+        )
+        args.max_event_tap_p95_us = default_if_none(
+            args.max_event_tap_p95_us,
+            BETA_MAX_EVENT_TAP_P95_US,
+        )
+        args.max_event_tap_max_us = default_if_none(
+            args.max_event_tap_max_us,
+            BETA_MAX_EVENT_TAP_MAX_US,
+        )
+        args.max_ax_p95_ms = default_if_none(args.max_ax_p95_ms, BETA_MAX_AX_P95_MS)
+        args.max_ax_p99_ms = default_if_none(args.max_ax_p99_ms, BETA_MAX_AX_P99_MS)
+        args.max_ax_max_ms = default_if_none(args.max_ax_max_ms, BETA_MAX_AX_MAX_MS)
+        args.expected_asset = default_if_none(args.expected_asset, DEFAULT_EXPECTED_ASSET)
 
     diagnostics_path = Path(args.diagnostics_log).expanduser()
     trace_path = Path(args.trace_log).expanduser()
@@ -829,15 +949,28 @@ def main():
             f"missing latency inputs: {diagnostics_path} and {trace_path}"
         )
 
+    args.diagnostics_end_line = validate_end_line(
+        "diagnostics",
+        max(0, args.diagnostics_start_line),
+        args.diagnostics_end_line,
+    )
+    args.trace_end_line = validate_end_line(
+        "trace",
+        max(0, args.trace_start_line),
+        args.trace_end_line,
+    )
+
     trace_data = parse_trace_log(
         trace_path,
         max(0, args.trace_start_line),
+        args.trace_end_line,
         max(0, args.line_limit),
         args.late_visible_budget_ms,
     )
     diagnostics_data = parse_diagnostics_log(
         diagnostics_path,
         max(0, args.diagnostics_start_line),
+        args.diagnostics_end_line,
         max(0, args.line_limit),
     )
 

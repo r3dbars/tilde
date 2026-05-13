@@ -11,7 +11,16 @@ from typing import Optional
 
 DEFAULT_LITERT_REPO = "litert-community/gemma-4-E2B-it-litert-lm"
 DEFAULT_LITERT_MODEL = "gemma-4-E2B-it.litertlm"
-DEFAULT_MLX_MODEL = "mlx-community/gemma-4-E2B-it-4bit"
+DEFAULT_MODEL_NAME = "Qwen3.5 4B"
+DEFAULT_MLX_MODEL = "mlx-community/Qwen3.5-4B-MLX-4bit"
+MLX_MODEL_BY_NAME = {
+    "gemma 4 e2b": "mlx-community/gemma-4-E2B-it-4bit",
+    "gemma 4 e4b": "mlx-community/gemma-4-e4b-4bit",
+    "qwen3 0.6b": "mlx-community/Qwen3-0.6B-4bit",
+    "qwen3 1.7b": "mlx-community/Qwen3-1.7B-4bit",
+    "qwen3.5 4b": "mlx-community/Qwen3.5-4B-MLX-4bit",
+    "qwen3.5 9b": "mlx-community/Qwen3.5-9B-MLX-4bit",
+}
 
 
 def repo_root() -> Path:
@@ -40,19 +49,88 @@ def candidate_executable(env_key: str, names: list) -> Optional[str]:
     return None
 
 
+def candidate_python_with_module(env_key: str, module_name: str) -> Optional[str]:
+    explicit = os.environ.get(env_key)
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+
+    candidates.extend([
+        str(repo_root() / ".venv" / "bin" / "python3"),
+        "/opt/homebrew/bin/python3",
+        "/opt/homebrew/bin/python3.14",
+        sys.executable,
+        shutil.which("python3") or "",
+        "/usr/bin/python3",
+    ])
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen or not os.access(candidate, os.X_OK):
+            continue
+        seen.add(candidate)
+        completed = subprocess.run(
+            [candidate, "-c", f"import {module_name}"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return candidate
+
+    return None
+
+
+def mlx_model_name(requested_model: str) -> str:
+    explicit = os.environ.get("AUTOCOMPLETE_LAB_MLX_MODEL")
+    if explicit:
+        return explicit
+
+    key = requested_model.strip().lower()
+    return MLX_MODEL_BY_NAME.get(key, DEFAULT_MLX_MODEL)
+
+
 def prompt_text(payload: dict[str, str]) -> str:
     user = payload.get("user", "").strip()
-    return f"Before cursor:\n{user}\n\nNext words:"
+    if bool(payload.get("promptIsBuilt") or payload.get("prompt_is_built")):
+        return user
+
+    mode = payload.get("mode", "").strip().lower()
+    suffix = "Suffix:" if mode in {"word", "word_completion", "wordCompletion"} else "Next words:"
+    return f"Before cursor:\n{user}\n\n{suffix}"
 
 
 def system_prompt_text(payload: dict[str, str]) -> str:
     system = payload.get("system", "").strip()
-    rules = [
-        "Return exactly the next few words after the Before cursor text.",
-        "No explanation, labels, quotes, reasoning, or mention of the user.",
-        "Never repeat the Before cursor text.",
-        "If unsure, return <NO_SUGGESTION>.",
-    ]
+    if bool(payload.get("promptIsBuilt") or payload.get("prompt_is_built")):
+        return system
+
+    mode = payload.get("mode", "").strip().lower()
+    if mode in {"word", "word_completion", "wordCompletion"}:
+        rules = [
+            "Return only the missing suffix for the current word.",
+            "No spaces, punctuation, explanation, labels, quotes, reasoning, or mention of the user.",
+            "Examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For privacy note should stay redac, return ted, not tion. Never return tion unless it completes the visible word.",
+            "If the suffix is not obvious, return <NO_SUGGESTION>.",
+        ]
+    else:
+        rules = [
+            "Act as inline autocomplete, not as a chat assistant.",
+            "Return exactly one short continuation after the Before cursor text.",
+            "Prefer 3 to 5 useful words, or fewer when fewer words are enough.",
+            "No explanation, labels, quotes, reasoning, or mention of the user.",
+            "Never repeat the Before cursor text.",
+            "Never suggest pressing Enter or Return, sending, submitting, clicking, running, or approving.",
+            "Never use generic filler like comes to life, key features and benefits, comprehensive plan, or acknowledge the user's point.",
+            "When the text discusses Tab or acceptance behavior, continue the safety rule itself; never suggest accepting terms.",
+            "If the best continuation sounds like advice, a plan, a command, or a reply to the user, return <NO_SUGGESTION>.",
+            "Examples: The draft feels calmer when it -> stays short and specific; The review should focus on -> real user risk; A good reply here would be -> short, kind, and specific.",
+            "More examples: The quiet mode should stay quiet mode should stay -> calm in the background; Hold the risky path until -> proof exists; the next step is to -> write a small repro; autocomplete should -> stay silent.",
+            "More examples: This bug is easiest to test with -> small fixture case; After the demo, capture the -> open questions quickly; tested the button, tested the button, and now need -> one fresh check; should not echo -> new detail; next words should -> move forward; starts repeating the model starts repeating, prefer -> noisy output blocked; product update should mention -> one clear change; press Tab and confirm -> next word only.",
+            "Return <NO_SUGGESTION> for passwords, secrets, private fields, search fields, terminal punctuation, weak guesses, new topics, full-sentence answers, or list markers.",
+        ]
     return "\n".join([system, *rules]).strip()
 
 
@@ -118,9 +196,9 @@ def run_litert(prompt: str, max_tokens: int, timeout: float) -> str:
     )
 
 
-def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) -> str:
+def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float, requested_model: str) -> str:
     executable = candidate_executable("AUTOCOMPLETE_LAB_MLX_BIN", ["mlx_lm.generate"])
-    model = os.environ.get("AUTOCOMPLETE_LAB_MLX_MODEL", DEFAULT_MLX_MODEL)
+    model = mlx_model_name(requested_model)
 
     if executable:
         command = [
@@ -131,6 +209,8 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) ->
             prompt,
             "--system-prompt",
             system_prompt,
+            "--chat-template-config",
+            json.dumps({"enable_thinking": False}),
             "--max-tokens",
             str(max_tokens),
             "--temp",
@@ -139,9 +219,9 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) ->
             "False",
         ]
     else:
-        python = candidate_executable("AUTOCOMPLETE_LAB_PYTHON", ["python3"])
+        python = candidate_python_with_module("AUTOCOMPLETE_LAB_PYTHON", "mlx_lm")
         if not python:
-            raise RuntimeError("python3 not installed")
+            raise RuntimeError("mlx_lm is not installed in an available python")
 
         command = [
             python,
@@ -153,6 +233,8 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) ->
             prompt,
             "--system-prompt",
             system_prompt,
+            "--chat-template-config",
+            json.dumps({"enable_thinking": False}),
             "--max-tokens",
             str(max_tokens),
             "--temp",
@@ -166,7 +248,7 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float) ->
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="Gemma 4 E2B")
+    parser.add_argument("--model", default=DEFAULT_MODEL_NAME)
     parser.add_argument("--max-tokens", type=int, default=16)
     parser.add_argument("--max-words", type=int, default=8)
     parser.add_argument("--reasoning", choices=["on", "off"], default="off")
@@ -191,7 +273,7 @@ def main() -> int:
                 print(run_litert(prompt, args.max_tokens, timeout))
                 return 0
             if candidate == "mlx":
-                print(run_mlx(prompt, system_prompt, args.max_tokens, timeout))
+                print(run_mlx(prompt, system_prompt, args.max_tokens, timeout, args.model))
                 return 0
             errors.append(f"{candidate}: unsupported backend")
         except Exception as error:

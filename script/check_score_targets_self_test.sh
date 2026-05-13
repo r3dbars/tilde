@@ -151,6 +151,7 @@ if AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD="$PASSING_DEEP" \
   AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT="$GATE_FAIL_SCRIPT" \
   AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT="$GATE_FAIL_SCRIPT" \
   AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT="$GATE_FAIL_SCRIPT" \
+  AUTOCOMPLETE_LAB_SCORE_TARGET_BETA_READINESS_GATE_SCRIPT="$GATE_FAIL_SCRIPT" \
   script/check_score_targets.sh >"$TMP_DIR/strict-proof-failing.txt" 2>&1; then
   echo "score target self-test expected failing strict proof gates to fail" >&2
   exit 1
@@ -161,8 +162,9 @@ for expected in \
   "Strict proof gate failed: visual placement evidence" \
   "Strict proof gate failed: proof manifest" \
   "Strict proof gate failed: prompt app proof" \
-  "Strict proof gates: 4 issue(s)" \
-  "Score target check failed with 4 issue(s)."; do
+  "Strict proof gate failed: beta readiness" \
+  "Strict proof gates: 5 issue(s)" \
+  "Score target check failed with 5 issue(s)."; do
   if ! grep -F -- "$expected" "$TMP_DIR/strict-proof-failing.txt" >/dev/null; then
     echo "score target self-test missing expected strict proof gate failure: $expected" >&2
     cat "$TMP_DIR/strict-proof-failing.txt" >&2

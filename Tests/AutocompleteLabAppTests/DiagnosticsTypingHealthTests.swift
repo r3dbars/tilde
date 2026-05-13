@@ -147,6 +147,7 @@ struct DiagnosticsTypingHealthTests {
             acceptedText: "private",
             latencyMilliseconds: 24,
             reason: "shown",
+            screenshotPath: "/tmp/private-proof.png",
             metadata: [
                 "effectiveRenderMode": "inlineAdjacent",
                 "placementConfidenceBand": "high",
@@ -162,6 +163,7 @@ struct DiagnosticsTypingHealthTests {
         #expect(text.contains("render=inlineAdjacent"))
         #expect(!text.contains("private client sentence"))
         #expect(!text.contains("private"))
+        #expect(!text.contains("/tmp/private-proof.png"))
     }
 
     @Test("Diagnostics placement evidence shows confidence without raw text")

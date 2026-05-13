@@ -13,24 +13,30 @@ FRESH_INSTALL_PROOF_PATH="$PROOF_DIR/fresh-install-gatekeeper-proof.md"
 BUNDLE_ID="bar.r3d.steadytype"
 MODE="archive"
 REQUIRE_NOTARY_PROFILE=0
+REQUIRE_DEVELOPER_ID=0
 
 cd "$ROOT_DIR"
 
 usage() {
   cat <<'EOF'
-Usage: script/package_release.sh [archive|--check|--notarize] [--require-notary-profile]
+Usage: script/package_release.sh [archive|--check|--notarize] [--require-developer-id] [--require-notary-profile]
 
 archive    Build a release app, sign with Developer ID, validate, and create
-           dist/SteadyType.zip plus preferred dist/SteadyType.dmg.
+           primary dist/SteadyType.dmg plus secondary dist/SteadyType.zip.
 --check    Report whether local signing/notary prerequisites are present.
 --notarize Submit the DMG to Apple notarytool. This uploads the app to Apple.
 --require-notary-profile
-           Make --check fail when NOTARYTOOL_PROFILE is missing.
+           Make --check fail when no usable notarytool profile is available.
+--require-developer-id
+           Make --check fail when a Developer ID Application identity is missing.
 --print-proof-template
            Print the saved release-proof checklist template.
 
 For --notarize, set NOTARYTOOL_PROFILE to a keychain profile created with:
   xcrun notarytool store-credentials <profile-name>
+If NOTARYTOOL_PROFILE is unset, the script tries stored profile aliases from
+AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES, then SteadyType, AutocompleteLab,
+and Transcripted.
 EOF
 }
 
@@ -41,6 +47,9 @@ while (($#)); do
       ;;
     --require-notary-profile)
       REQUIRE_NOTARY_PROFILE=1
+      ;;
+    --require-developer-id)
+      REQUIRE_DEVELOPER_ID=1
       ;;
     -h|--help|help)
       MODE="help"
@@ -55,8 +64,20 @@ done
 
 developer_id_identity() {
   if [[ -n "${SIGN_IDENTITY:-}" ]]; then
-    echo "$SIGN_IDENTITY"
-    return 0
+    security find-identity -p codesigning -v 2>/dev/null \
+      | awk -v wanted="$SIGN_IDENTITY" '
+          /Developer ID Application/ {
+            hash = $2
+            name = $0
+            sub(/^[^"]*"/, "", name)
+            sub(/".*$/, "", name)
+            if (hash == wanted || name == wanted || index($0, wanted) > 0) {
+              print hash
+              exit
+            }
+          }
+        '
+    return
   fi
 
   security find-identity -p codesigning -v 2>/dev/null \
@@ -64,6 +85,60 @@ developer_id_identity() {
 }
 
 developer_id="$(developer_id_identity)"
+
+validate_notary_profile() {
+  local profile="$1"
+  local quiet="${2:-0}"
+  local output
+
+  if [[ "$quiet" == "1" ]]; then
+    xcrun notarytool history \
+      --keychain-profile "$profile" \
+      --output-format json >/dev/null 2>&1
+    return
+  fi
+
+  if output="$(xcrun notarytool history \
+    --keychain-profile "$profile" \
+    --output-format json 2>&1)"; then
+    return 0
+  fi
+
+  printf '%s\n' "$output" >&2
+  return 1
+}
+
+notary_profile_candidates() {
+  if [[ -n "${AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES+x}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES" | tr ',' '\n'
+    return
+  fi
+
+  printf '%s\n' \
+    "SteadyType" \
+    "AutocompleteLab" \
+    "Transcripted"
+}
+
+resolve_notary_profile() {
+  if [[ -n "${NOTARYTOOL_PROFILE:-}" ]]; then
+    printf '%s' "$NOTARYTOOL_PROFILE"
+    return 0
+  fi
+
+  local candidate
+  while IFS= read -r candidate; do
+    candidate="${candidate#"${candidate%%[![:space:]]*}"}"
+    candidate="${candidate%"${candidate##*[![:space:]]}"}"
+    [[ -n "$candidate" ]] || continue
+    if validate_notary_profile "$candidate" 1; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done < <(notary_profile_candidates)
+
+  return 1
+}
 
 artifact_sha() {
   local artifact_path="$1"
@@ -101,6 +176,7 @@ print_proof_template() {
 - Preferred artifact: dist/SteadyType.dmg
 - Secondary artifact: dist/SteadyType.zip
 - Bundle ID: $BUNDLE_ID
+- Developer ID app signature: required before private-beta packet
 - Notarization status: $notarization_status
 - Stapler status: $stapler_status
 - Gatekeeper status: $gatekeeper_status
@@ -146,7 +222,7 @@ xattr -w com.apple.quarantine "0081;\$(printf '%x' "\$(date +%s)");SteadyType;$(
 hdiutil attach dist/SteadyType.dmg -mountpoint "\$verify_dir/mount" -nobrowse -quiet
 cp -R "\$verify_dir/mount/SteadyType.app" "\$verify_dir/SteadyType.app"
 hdiutil detach "\$verify_dir/mount" -quiet
-spctl --assess --type execute --verbose=4 "\$verify_dir/SteadyType.app" | tee dist/release-proof/spctl-installed-app.txt
+spctl --assess --type execute --verbose=4 "\$verify_dir/SteadyType.app" 2>&1 | tee dist/release-proof/spctl-installed-app.txt
 rm -rf "\$verify_dir"
 \`\`\`
 
@@ -165,8 +241,8 @@ xattr -p com.apple.quarantine SteadyType.dmg
 6. Run:
 
 \`\`\`bash
-spctl --assess --type execute --verbose=4 /Applications/SteadyType.app | tee dist/release-proof/spctl-installed-app.txt
-xcrun stapler validate dist/SteadyType.dmg | tee dist/release-proof/stapler-validate.txt
+spctl --assess --type execute --verbose=4 /Applications/SteadyType.app 2>&1 | tee dist/release-proof/spctl-installed-app.txt
+xcrun stapler validate dist/SteadyType.dmg 2>&1 | tee dist/release-proof/stapler-validate.txt
 \`\`\`
 EOF
 }
@@ -174,13 +250,14 @@ EOF
 write_notary_blocker() {
   mkdir -p "$PROOF_DIR"
   cat >"$NOTARY_BLOCKER_PATH" <<EOF
-Notarization blocked: NOTARYTOOL_PROFILE is not set in this environment.
+Notarization blocked: no usable notarytool keychain profile was resolved.
 
-The release archive exists locally, but private beta readiness must remain
+The release artifacts exist locally, but private beta readiness must remain
 blocked until the DMG is submitted to Apple, stapled, and fresh-install
 Gatekeeper proof is saved.
 
-Set a stored notary profile and rerun:
+Set a stored notary profile or add its alias to
+AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES, then rerun:
 
   export NOTARYTOOL_PROFILE=<profile-name>
   ./script/package_release.sh --notarize
@@ -227,11 +304,7 @@ record_command_allow_failure() {
 }
 
 create_zip() {
-  create_zip_from_app "$APP_BUNDLE"
-}
-
-create_zip_from_app() {
-  local source_app="$1"
+  local source_app="${1:-$APP_BUNDLE}"
   rm -f "$ZIP_PATH"
   ditto -c -k --keepParent "$source_app" "$ZIP_PATH"
 }
@@ -267,29 +340,53 @@ case "$MODE" in
     exit 0
     ;;
   --check|check)
+    check_failed=0
+    resolved_notary_profile=""
+    notary_profile_source=""
     if [[ -n "$developer_id" ]]; then
       developer_id_name="$(security find-identity -p codesigning -v 2>/dev/null \
         | awk -v hash="$developer_id" '$2 == hash { sub(/^[^"]*"/, ""); sub(/"$/, ""); print; exit }')"
-      echo "Developer ID identity: $developer_id ${developer_id_name:+($developer_id_name)}"
+      echo "Developer ID signing identity: OK - $developer_id ${developer_id_name:+($developer_id_name)}"
     else
-      echo "Developer ID identity: missing"
+      echo "Developer ID signing identity: blocked - missing Developer ID Application identity"
+      if [[ "$REQUIRE_DEVELOPER_ID" == "1" ]]; then
+        check_failed=1
+      fi
     fi
 
     if [[ -n "${NOTARYTOOL_PROFILE:-}" ]]; then
-      echo "Notary profile: $NOTARYTOOL_PROFILE"
-    else
-      echo "Notary profile: missing (set NOTARYTOOL_PROFILE to submit)"
+      resolved_notary_profile="$NOTARYTOOL_PROFILE"
+      notary_profile_source="NOTARYTOOL_PROFILE"
+    elif resolved_notary_profile="$(resolve_notary_profile)"; then
+      notary_profile_source="stored keychain profile"
+    fi
+
+    if [[ -n "$resolved_notary_profile" ]]; then
       if [[ "$REQUIRE_NOTARY_PROFILE" == "1" ]]; then
-        exit 1
+        if validate_notary_profile "$resolved_notary_profile"; then
+          echo "Apple notary credentials: OK - $notary_profile_source=$resolved_notary_profile"
+        else
+          echo "Apple notary credentials: blocked - $notary_profile_source is not usable"
+          check_failed=1
+        fi
+      else
+        echo "Apple notary credentials: present - $notary_profile_source=$resolved_notary_profile (not verified without --require-notary-profile)"
+      fi
+    else
+      echo "Apple notary credentials: blocked - no usable NOTARYTOOL_PROFILE or stored profile alias was found"
+      if [[ "$REQUIRE_NOTARY_PROFILE" == "1" ]]; then
+        check_failed=1
       fi
     fi
 
     if ./script/check_model_asset.py --quiet; then
       echo "Preferred MLX model: ready"
     else
-      echo "Preferred MLX model: missing or invalid (run ./script/check_model_asset.py)"
+      echo "Preferred MLX model: blocked - required app-owned model is missing, invalid, corrupt, or not checksum-verified"
+      echo "Run ./script/check_model_asset.py for the exact fix."
+      check_failed=1
     fi
-    exit 0
+    exit "$check_failed"
     ;;
   archive)
     if [[ -z "$developer_id" ]]; then
@@ -324,35 +421,45 @@ case "$MODE" in
     write_checksums
     write_proof_checklist "archive" "pending" "pending" "pending"
     write_fresh_install_proof_instructions
-    write_notary_blocker
-    echo "Notarization blocked: run ./script/package_release.sh --notarize after setting NOTARYTOOL_PROFILE"
-    echo "Release archive created: $ZIP_PATH"
-    echo "Preferred beta artifact created: $DMG_PATH"
+    if ! resolve_notary_profile >/dev/null; then
+      write_notary_blocker
+      echo "Notarization blocked: set NOTARYTOOL_PROFILE or a stored profile alias and run ./script/package_release.sh --notarize"
+    else
+      clear_notary_blocker
+    fi
+    echo "Primary beta artifact created: $DMG_PATH"
+    echo "Secondary archive created: $ZIP_PATH"
     echo "Release proof checklist: $PROOF_DIR/release-proof-checklist.md"
     ;;
   --notarize|notarize)
+    resolved_notary_profile=""
+    gatekeeper_failed=0
     if [[ ! -f "$DMG_PATH" ]]; then
       echo "missing preferred artifact: $DMG_PATH" >&2
       echo "Run script/package_release.sh archive first." >&2
       exit 1
     fi
 
-    if [[ -z "${NOTARYTOOL_PROFILE:-}" ]]; then
-      echo "missing NOTARYTOOL_PROFILE" >&2
+    if ! resolved_notary_profile="$(resolve_notary_profile)"; then
+      echo "missing usable NOTARYTOOL_PROFILE or stored notarytool keychain profile" >&2
       exit 1
     fi
 
     mkdir -p "$PROOF_DIR"
-    echo "Submitting $DMG_PATH to Apple notarization for $BUNDLE_ID..."
+    echo "Submitting $DMG_PATH to Apple notarization for $BUNDLE_ID with keychain profile $resolved_notary_profile..."
     record_command "$PROOF_DIR/notarytool-submit.txt" \
       xcrun notarytool submit "$DMG_PATH" \
-      --keychain-profile "$NOTARYTOOL_PROFILE" \
+      --keychain-profile "$resolved_notary_profile" \
       --wait
-    xcrun stapler staple "$DMG_PATH"
+    record_command "$PROOF_DIR/stapler-staple.txt" \
+      xcrun stapler staple "$DMG_PATH"
+    write_checksums
     record_command "$PROOF_DIR/stapler-validate.txt" \
       xcrun stapler validate "$DMG_PATH"
-    record_command "$PROOF_DIR/spctl-dmg.txt" \
-      spctl -a -t open --context context:primary-signature -v "$DMG_PATH"
+    if ! record_command "$PROOF_DIR/spctl-dmg.txt" \
+      spctl -a -t open --context context:primary-signature -v "$DMG_PATH"; then
+      gatekeeper_failed=1
+    fi
 
     verify_dir="$(mktemp -d)"
     trap 'rm -rf "$verify_dir"' EXIT
@@ -360,9 +467,16 @@ case "$MODE" in
     hdiutil attach "$DMG_PATH" -mountpoint "$verify_dir/mount" -nobrowse -quiet
     cp -R "$verify_dir/mount/SteadyType.app" "$verify_dir/SteadyType.app"
     hdiutil detach "$verify_dir/mount" -quiet
-    create_zip_from_app "$verify_dir/SteadyType.app"
-    record_command "$PROOF_DIR/spctl-installed-app.txt" \
-      spctl --assess --type execute --verbose=4 "$verify_dir/SteadyType.app"
+    if ! record_command "$PROOF_DIR/spctl-installed-app.txt" \
+      spctl --assess --type execute --verbose=4 "$verify_dir/SteadyType.app"; then
+      gatekeeper_failed=1
+    fi
+    if ((gatekeeper_failed > 0)); then
+      write_proof_checklist "notarized" "accepted" "validated" "blocked"
+      echo "Gatekeeper assessment failed; saved spctl output in $PROOF_DIR" >&2
+      exit 1
+    fi
+    create_zip "$verify_dir/SteadyType.app"
     write_checksums
     write_proof_checklist "notarized" "accepted" "validated" "accepted"
     write_fresh_install_proof_instructions

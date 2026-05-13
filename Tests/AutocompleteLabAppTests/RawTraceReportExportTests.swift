@@ -123,6 +123,46 @@ struct RawTraceReportExportTests {
         #expect(!survivalJSON.contains("private-accepted"))
     }
 
+    @Test("Privacy bundle export clears stale private files first")
+    func privacyBundleExportClearsStalePrivateFilesFirst() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTraceReportExportTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+        }
+
+        let traceURL = temporaryFolder.appendingPathComponent("traces.jsonl")
+        let bundleURL = temporaryFolder.appendingPathComponent("privacy-export", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        try "private raw trace\n".write(
+            to: bundleURL.appendingPathComponent("raw-traces.jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "private screenshot path\n".write(
+            to: bundleURL.appendingPathComponent("private-screenshot.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try writeEvents(
+            [
+                event(
+                    .suggestionPresented,
+                    suggestionID: "one",
+                    displayedText: "private-model-output"
+                )
+            ],
+            to: traceURL
+        )
+
+        let exportURL = try #require(LocalReportExporter(folderURL: temporaryFolder).exportPrivacyBundle(limit: 10))
+
+        #expect(exportURL == bundleURL)
+        #expect(FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent("redacted-traces.jsonl").path))
+        #expect(!FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent("raw-traces.jsonl").path))
+        #expect(!FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent("private-screenshot.txt").path))
+    }
+
     private func writeEvents(
         _ events: [AutocompleteTraceEvent],
         to url: URL

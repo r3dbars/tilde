@@ -17,10 +17,23 @@ MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_SOAK_MIN_AX_SAMPLES:-0}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 SEGMENT_CHARS="${AUTOCOMPLETE_LAB_SOAK_SEGMENT_CHARS:-250}"
+LOG_SCAN_SELF_TEST=0
+LOG_SCAN_SELF_TEST_START_LINE=0
+RUNTIME_READY_SELF_TEST=0
+RUNTIME_READY_SELF_TEST_START_LINE=0
+RUNTIME_READY_SELF_TEST_ALLOW_EXISTING=0
+NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=0
+NORMALIZE_OSASCRIPT_STDOUT_INPUT=""
+NORMALIZE_OSASCRIPT_STDOUT_OUTPUT=""
+OSASCRIPT_TIMEOUT_SELF_TEST=0
+SOAK_LOCK_SELF_TEST=0
 DEFAULTS_DOMAIN="${AUTOCOMPLETE_LAB_DEFAULTS_DOMAIN:-bar.r3d.steadytype}"
 PAUSE_DEFAULTS_KEY="SuggestionsPaused"
 DISABLED_APPS_DEFAULTS_KEY="DisabledBundleIdentifiers"
 TEXTEDIT_BUNDLE_ID="com.apple.TextEdit"
+SOAK_DOCUMENT_NAME_PREFIX="autocomplete-lab-typing-soak-"
+SOAK_LOCK_DIR="${AUTOCOMPLETE_LAB_SOAK_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-typing-soak.lock}"
+SOAK_LOCK_HELD=0
 PAUSE_DEFAULTS_WAS_PREPARED=0
 PAUSE_DEFAULTS_PREVIOUS_EXISTS=0
 PAUSE_DEFAULTS_PREVIOUS=""
@@ -48,8 +61,16 @@ EOF
 }
 
 cleanup_soak() {
-  if [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
+  if [[ "$SOAK_LOCK_HELD" == "1" && ( -n "$SOAK_TARGET_DOCUMENT_NAME" || -n "$SOAK_TARGET_TEXT_FILE" ) ]]; then
+    close_stale_textedit_soak_documents "" >/dev/null 2>&1 || true
+  elif [[ -n "$SOAK_TARGET_DOCUMENT_NAME" ]]; then
     close_textedit_document "$SOAK_TARGET_DOCUMENT_NAME" >/dev/null 2>&1 || true
+  fi
+
+  if [[ "$SOAK_LOCK_HELD" == "1" ]]; then
+    rm -f "$SOAK_LOCK_DIR/owner" >/dev/null 2>&1 || true
+    rmdir "$SOAK_LOCK_DIR" >/dev/null 2>&1 || true
+    SOAK_LOCK_HELD=0
   fi
 
   if ((${#SOAK_TMP_DIRS[@]})); then
@@ -73,13 +94,41 @@ cleanup_soak() {
   fi
 }
 
-trap cleanup_soak EXIT
+trap cleanup_soak EXIT INT TERM HUP
 
 make_tmp_dir() {
   local tmp_dir
   tmp_dir="$(mktemp -d)"
   SOAK_TMP_DIRS+=("$tmp_dir")
   printf '%s\n' "$tmp_dir"
+}
+
+acquire_soak_lock() {
+  local timeout_seconds="${AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS:-90}"
+  local deadline owner_pid
+
+  require_positive_int "$timeout_seconds" "AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS"
+  deadline=$((SECONDS + timeout_seconds))
+
+  while ! mkdir "$SOAK_LOCK_DIR" 2>/dev/null; do
+    owner_pid="$(awk -F= '/^pid=/{print $2; exit}' "$SOAK_LOCK_DIR/owner" 2>/dev/null || true)"
+    if [[ -n "$owner_pid" ]] && ! kill -0 "$owner_pid" 2>/dev/null; then
+      rm -f "$SOAK_LOCK_DIR/owner" >/dev/null 2>&1 || true
+      rmdir "$SOAK_LOCK_DIR" >/dev/null 2>&1 || true
+      continue
+    fi
+
+    if ((SECONDS >= deadline)); then
+      echo "Timed out waiting for another TextEdit typing soak to finish." >&2
+      echo "Lock: $SOAK_LOCK_DIR" >&2
+      echo "Remove the lock only after confirming no typing_performance_soak.sh is running." >&2
+      return 75
+    fi
+    sleep 0.5
+  done
+
+  SOAK_LOCK_HELD=1
+  printf 'pid=%s\nstarted=%s\n' "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$SOAK_LOCK_DIR/owner"
 }
 
 is_truthy() {
@@ -121,21 +170,88 @@ textedit_is_disabled_by_defaults() {
   printf '%s\n' "$disabled_bundles" | grep -F "com.apple.TextEdit" >/dev/null
 }
 
+has_focused_text_poll_summary_after_line() {
+  local start_line="$1"
+  local first_new_line=$((start_line + 1))
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  awk -v first_new_line="$first_new_line" '
+    NR < first_new_line { next }
+    /focused-text-poll-latency-summary/ {
+      found = 1
+      exit
+    }
+    END {
+      if (found != 1) {
+        exit 1
+      }
+    }
+  ' "$LOG_PATH"
+}
+
+log_has_pattern_after_line() {
+  local start_line="$1"
+  local pattern="$2"
+  local first_new_line=$((start_line + 1))
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  awk -v first_new_line="$first_new_line" -v pattern="$pattern" '
+    NR < first_new_line { next }
+    $0 ~ pattern {
+      found = 1
+      exit
+    }
+    END {
+      if (found != 1) {
+        exit 1
+      }
+    }
+  ' "$LOG_PATH"
+}
+
+has_runtime_ready_after_line() {
+  local start_line="$1"
+  log_has_pattern_after_line "$start_line" " runtime .*readinessStage=ready"
+}
+
+has_runtime_start_after_line() {
+  local start_line="$1"
+  log_has_pattern_after_line \
+    "$start_line" \
+    "app-proof-mode-started|runtime-bootstrap|runtime-warm-start| runtime .*readinessStage=warming"
+}
+
 wait_for_focused_text_poll_summary_after_line() {
   local start_line="$1"
   local timeout_seconds="${2:-15}"
   local deadline=$((SECONDS + timeout_seconds))
-  local first_new_line=$((start_line + 1))
 
   while ((SECONDS < deadline)); do
-    if [[ -f "$LOG_PATH" ]] &&
-      sed -n "${first_new_line},\$p" "$LOG_PATH" | grep -q "focused-text-poll-latency-summary"; then
+    if has_focused_text_poll_summary_after_line "$start_line"; then
       return 0
     fi
     sleep 0.25
   done
 
   echo "Note: no focused-text poll summary arrived during the pre-typing warmup window." >&2
+}
+
+wait_for_required_focused_text_poll_summary_after_line() {
+  local start_line="$1"
+  local timeout_seconds="${2:-20}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS < deadline)); do
+    if has_focused_text_poll_summary_after_line "$start_line"; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "Timed out waiting for a focused-text poll summary in the typing proof window." >&2
+  echo "Log: $LOG_PATH" >&2
+  echo "Start line: $start_line" >&2
+  return 1
 }
 
 computed_typing_budget_seconds() {
@@ -155,7 +271,7 @@ expected_path, actual_path = sys.argv[1:3]
 with open(expected_path, "r", encoding="utf-8") as handle:
     expected = handle.read()
 with open(actual_path, "r", encoding="utf-8") as handle:
-    actual = handle.read().rstrip("\n")
+    actual = handle.read()
 
 if actual != expected:
     mismatch = next(
@@ -172,9 +288,101 @@ print(f"Typed text verified: {len(expected)} chars matched TextEdit exactly.")
 PY
 }
 
+normalize_osascript_stdout_text() {
+  local source_file="$1"
+  local destination_file="$2"
+
+  perl -0pe 's/\n\z//' "$source_file" >"$destination_file"
+}
+
+run_osascript_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+  local stdout_file="$1"
+  shift
+  local stderr_file="$1"
+  shift
+  local pid deadline status script_file
+
+  require_positive_int "$timeout_seconds" "osascript timeout"
+  if [[ "${1:-}" == "-" ]]; then
+    shift
+    script_file="$(make_tmp_dir)/osascript-timeout.applescript"
+    cat >"$script_file"
+    osascript "$script_file" "$@" >"$stdout_file" 2>"$stderr_file" &
+  else
+    osascript "$@" >"$stdout_file" 2>"$stderr_file" &
+  fi
+  pid=$!
+  deadline=$((SECONDS + timeout_seconds))
+
+  while kill -0 "$pid" 2>/dev/null; do
+    if ((SECONDS >= deadline)); then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.2
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      echo "osascript timed out after ${timeout_seconds}s" >&2
+      if [[ -s "$stderr_file" ]]; then
+        cat "$stderr_file" >&2
+      fi
+      return 124
+    fi
+    sleep 0.2
+  done
+
+  if wait "$pid"; then
+    return 0
+  fi
+
+  status=$?
+  if [[ -s "$stderr_file" ]]; then
+    cat "$stderr_file" >&2
+  fi
+  return "$status"
+}
+
+close_stale_textedit_soak_documents() {
+  local keep_name="${1:-}"
+  local close_stdout close_stderr
+
+  close_stdout="$(make_tmp_dir)/textedit-close-stale-stdout.txt"
+  close_stderr="$(make_tmp_dir)/textedit-close-stale-stderr.txt"
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_SOAK_CLOSE_STALE_TIMEOUT_SECONDS:-10}" \
+    "$close_stdout" \
+    "$close_stderr" \
+    - "$SOAK_DOCUMENT_NAME_PREFIX" "$keep_name" <<'APPLESCRIPT' || true
+on run argv
+  set namePrefix to item 1 of argv
+  set keepName to item 2 of argv
+  set namesToClose to {}
+
+  tell application "TextEdit"
+    repeat with candidate in documents
+      try
+        set candidateName to name of candidate as text
+        if candidateName starts with namePrefix and candidateName is not keepName then
+          set end of namesToClose to candidateName
+        end if
+      end try
+    end repeat
+
+    repeat with candidateName in namesToClose
+      try
+        close document (candidateName as text) saving no
+      end try
+    end repeat
+  end tell
+
+  return count of namesToClose
+end run
+APPLESCRIPT
+}
+
 prepare_textedit_document() {
   local target_file="${1:-}"
-  local target_name attempt actual_name
+  local target_name attempt actual_name actual_stdout actual_stderr
 
   if [[ -z "$target_file" ]]; then
     echo "prepare_textedit_document needs a target file path" >&2
@@ -183,22 +391,18 @@ prepare_textedit_document() {
 
   target_name="$(basename "$target_file")"
   : >"$target_file"
+  close_stale_textedit_soak_documents "$target_name"
 
   for attempt in 1 2; do
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
-    osascript - "$target_file" "$target_name" <<'APPLESCRIPT' >/dev/null 2>&1 || true
-on run argv
-  set targetPath to item 1 of argv
-  set targetName to item 2 of argv
-  tell application "TextEdit"
-    activate
-    open (POSIX file targetPath)
-  end tell
-end run
-APPLESCRIPT
     sleep 0.5
-    if actual_name="$(
-      osascript - "$target_name" <<'APPLESCRIPT'
+    actual_stdout="$(make_tmp_dir)/textedit-prepare-stdout.txt"
+    actual_stderr="$(make_tmp_dir)/textedit-prepare-stderr.txt"
+    if run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_SOAK_SETUP_TIMEOUT_SECONDS:-25}" \
+      "$actual_stdout" \
+      "$actual_stderr" \
+      - "$target_name" <<'APPLESCRIPT'
 on run argv
   set expectedName to item 1 of argv
   with timeout of 20 seconds
@@ -231,10 +435,12 @@ on run argv
         perform action "AXRaise" of window targetName
         delay 0.1
         if exists text area 1 of scroll area 1 of window targetName then
+          set value of text area 1 of scroll area 1 of window targetName to ""
+          set clearedValue to value of text area 1 of scroll area 1 of window targetName
+          if clearedValue is missing value then set clearedValue to ""
+          if clearedValue is not "" then error "TextEdit soak target did not clear"
           click text area 1 of scroll area 1 of window targetName
         end if
-        keystroke "a" using {command down}
-        key code 51
         key code 53
       end tell
     end tell
@@ -243,21 +449,14 @@ on run argv
   end timeout
 end run
 APPLESCRIPT
-    )"; then
+    then
+      actual_name="$(cat "$actual_stdout")"
       printf '%s\n' "$actual_name"
       return 0
     fi
 
     echo "TextEdit document setup attempt $attempt failed; retrying." >&2
     open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
-    osascript - "$target_file" <<'APPLESCRIPT' >/dev/null 2>&1 || true
-on run argv
-  tell application "TextEdit"
-    activate
-    open (POSIX file (item 1 of argv))
-  end tell
-end run
-APPLESCRIPT
     sleep 1
   done
 
@@ -268,17 +467,11 @@ APPLESCRIPT
 capture_typed_text() {
   local actual_file="$1"
   local target_name="$2"
-  local clipboard_file
-  clipboard_file="$(make_tmp_dir)/previous-clipboard.txt"
-
-  pbpaste >"$clipboard_file" 2>/dev/null || true
 
   if capture_typed_text_with_textedit_timeout "$actual_file" "$target_name" 45; then
-    pbcopy <"$clipboard_file" 2>/dev/null || true
     return 0
   fi
 
-  pbcopy <"$clipboard_file" 2>/dev/null || true
   echo "TextEdit document read timed out." >&2
   return 1
 }
@@ -287,9 +480,11 @@ capture_typed_text_with_textedit_timeout() {
   local actual_file="$1"
   local target_name="$2"
   local timeout_seconds="$3"
-  local pid deadline status
+  local raw_file pid deadline status
 
-  osascript - "$target_name" >/dev/null <<'APPLESCRIPT' &
+  raw_file="$(make_tmp_dir)/textedit-ax-value-stdout.txt"
+
+  osascript - "$target_name" >"$raw_file" <<'APPLESCRIPT' &
 on run argv
   set targetName to item 1 of argv
 
@@ -301,11 +496,11 @@ on run argv
       delay 0.1
       if exists text area 1 of scroll area 1 of window targetName then
         click text area 1 of scroll area 1 of window targetName
+        set targetValue to value of text area 1 of scroll area 1 of window targetName
+        if targetValue is missing value then set targetValue to ""
+        return targetValue
       end if
-      keystroke "a" using {command down}
-      delay 0.8
-      keystroke "c" using {command down}
-      delay 0.8
+      error "missing TextEdit soak text area " & targetName
     end tell
   end tell
 end run
@@ -322,13 +517,17 @@ APPLESCRIPT
     sleep 0.2
   done
 
-  wait "$pid"
-  status=$?
+  if wait "$pid"; then
+    status=0
+  else
+    status=$?
+  fi
   if ((status != 0)); then
     return "$status"
   fi
 
-  pbpaste >"$actual_file"
+  normalize_osascript_stdout_text "$raw_file" "$actual_file"
+  return 0
 }
 
 close_textedit_document() {
@@ -363,15 +562,28 @@ APPLESCRIPT
 
 focus_textedit_document() {
   local target_name="$1"
+  local target_file="${SOAK_TARGET_TEXT_FILE:-}"
+  local focus_stdout focus_stderr
 
-  open -a TextEdit >/dev/null 2>&1 || true
-  osascript - "$target_name" >/dev/null <<'APPLESCRIPT'
+  if [[ -n "$target_file" && -f "$target_file" ]]; then
+    open -F -a TextEdit "$target_file" >/dev/null 2>&1 || true
+  else
+    open -a TextEdit >/dev/null 2>&1 || true
+  fi
+  focus_stdout="$(make_tmp_dir)/textedit-focus-stdout.txt"
+  focus_stderr="$(make_tmp_dir)/textedit-focus-stderr.txt"
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_SOAK_FOCUS_TIMEOUT_SECONDS:-25}" \
+    "$focus_stdout" \
+    "$focus_stderr" \
+    - "$target_name" "$target_file" <<'APPLESCRIPT'
 on run argv
   set targetName to item 1 of argv
+  set targetPath to item 2 of argv
 
 with timeout of 20 seconds
   tell application "System Events"
-    repeat 50 times
+    repeat 100 times
       if exists process "TextEdit" then
         tell process "TextEdit"
           set frontmost to true
@@ -399,6 +611,37 @@ end run
 APPLESCRIPT
 }
 
+wait_for_stable_textedit_focus() {
+  local target_name="$1"
+  local stable_checks="${AUTOCOMPLETE_LAB_SOAK_FOCUS_STABLE_CHECKS:-4}"
+  local attempts="${AUTOCOMPLETE_LAB_SOAK_FOCUS_ATTEMPTS:-5}"
+  local attempt check frontmost_name
+
+  require_positive_int "$stable_checks" "AUTOCOMPLETE_LAB_SOAK_FOCUS_STABLE_CHECKS"
+  require_positive_int "$attempts" "AUTOCOMPLETE_LAB_SOAK_FOCUS_ATTEMPTS"
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if ! focus_textedit_document "$target_name"; then
+      sleep 0.25
+      continue
+    fi
+    for ((check = 1; check <= stable_checks; check++)); do
+      frontmost_name="$(osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null || true)"
+      if [[ "$frontmost_name" != "TextEdit" ]]; then
+        break
+      fi
+      sleep 0.15
+    done
+
+    if ((check > stable_checks)); then
+      return 0
+    fi
+  done
+
+  echo "TextEdit typing target did not keep focus before generated key." >&2
+  return 73
+}
+
 type_text_with_cgevents() {
   local text_file="$1"
   local text total_length offset segment segment_file segment_length segment_dir
@@ -413,7 +656,7 @@ type_text_with_cgevents() {
     segment_file="$segment_dir/segment-$offset.txt"
     printf '%s' "$segment" >"$segment_file"
     segment_length="${#segment}"
-    focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
+    wait_for_stable_textedit_focus "$SOAK_TARGET_DOCUMENT_NAME"
     type_text_segment_with_cgevents "$segment_file"
     offset=$((offset + segment_length))
     sleep 0.3
@@ -423,7 +666,8 @@ type_text_with_cgevents() {
 type_text_segment_with_cgevents() {
   local text_file="$1"
 
-  swift - "$text_file" "$CHUNK_SIZE" "$DELAY_MS" "$KEY_DELAY_US" <<'SWIFT'
+swift - "$text_file" "$CHUNK_SIZE" "$DELAY_MS" "$KEY_DELAY_US" <<'SWIFT'
+import AppKit
 import ApplicationServices
 import Foundation
 
@@ -442,9 +686,19 @@ let text = try String(contentsOfFile: textPath, encoding: .utf8)
 let source = CGEventSource(stateID: .hidSystemState)
 source?.localEventsSuppressionInterval = 0
 let delayMicros = useconds_t(delayMilliseconds * 1_000)
+let targetBundleIdentifier = "com.apple.TextEdit"
+
+func textEditIsFrontmost() -> Bool {
+    NSWorkspace.shared.frontmostApplication?.bundleIdentifier == targetBundleIdentifier
+}
 
 var typedScalars = 0
 for scalar in text.unicodeScalars {
+    guard textEditIsFrontmost() else {
+        FileHandle.standardError.write(Data("TextEdit typing target lost focus before generated key\n".utf8))
+        exit(73)
+    }
+
     var units = Array(String(scalar).utf16)
     guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
           let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
@@ -495,18 +749,40 @@ latest_runtime_is_ready() {
   [[ "$latest_runtime_line" == *"readinessStage=ready"* ]]
 }
 
+runtime_ready_available_now() {
+  local start_line="$1"
+  local allow_existing_ready="$2"
+
+  if has_runtime_ready_after_line "$start_line"; then
+    return 0
+  fi
+
+  if [[ "$allow_existing_ready" == "1" ]] \
+    && ! has_runtime_start_after_line "$start_line" \
+    && latest_runtime_is_ready; then
+    return 0
+  fi
+
+  return 1
+}
+
 wait_for_runtime_ready() {
   local start_line="$1"
   local allow_existing_ready="$2"
   local timeout_seconds="${AUTOCOMPLETE_LAB_SOAK_READY_TIMEOUT_SECONDS:-60}"
+  local existing_ready_grace_seconds="${AUTOCOMPLETE_LAB_SOAK_EXISTING_READY_GRACE_SECONDS:-3}"
   local deadline=$((SECONDS + timeout_seconds))
+  local existing_ready_allowed_at=$((SECONDS + existing_ready_grace_seconds))
 
   while ((SECONDS <= deadline)); do
-    if tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -E " runtime .*readinessStage=ready" >/dev/null; then
+    if has_runtime_ready_after_line "$start_line"; then
       return 0
     fi
 
-    if [[ "$allow_existing_ready" == "1" ]] && latest_runtime_is_ready; then
+    if [[ "$allow_existing_ready" == "1" ]] \
+      && ((SECONDS >= existing_ready_allowed_at)) \
+      && ! has_runtime_start_after_line "$start_line" \
+      && latest_runtime_is_ready; then
       return 0
     fi
 
@@ -602,9 +878,13 @@ describe_plan() {
     echo "Build: ./script/build_and_run.sh --verify"
   fi
   echo "Synthetic text: $TARGET_CHARS generated chars from a built-in neutral fixture"
-  echo "Typed text proof: exact TextEdit clipboard capture match required"
+  echo "Typed text proof: exact TextEdit target capture match required"
+  echo "Typed text capture: direct AX value read from the target TextEdit window; no clipboard read/write"
   echo "Typing driver: CGEvent Unicode key events after target-window focus"
   echo "Typing batches: up to $SEGMENT_CHARS chars per Swift process"
+  echo "Typing focus guard: verifies TextEdit is frontmost before each generated key"
+  echo "Concurrency guard: serializes TextEdit soak build, launch, setup, and typing"
+  echo "Setup cleanup: closes old generated TextEdit soak documents before typing"
   echo "AX warmup: waits for a focused-text poll summary before typing"
   echo "Typing: $CHUNK_SIZE-char chunks with ${DELAY_MS}ms delay and ${KEY_DELAY_US}us key spacing"
   echo "Typing duration budget: $(computed_typing_budget_seconds)s"
@@ -633,20 +913,25 @@ type_textedit_fixture() {
   tmp_dir="$(make_tmp_dir)"
   text_file="$tmp_dir/autocomplete-lab-typing-soak-input.txt"
   actual_file="$tmp_dir/autocomplete-lab-typing-soak-actual.txt"
-  target_file="$tmp_dir/autocomplete-lab-typing-soak-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
+  target_file="$tmp_dir/$SOAK_DOCUMENT_NAME_PREFIX$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   SOAK_EXPECTED_TEXT_FILE="$text_file"
   SOAK_ACTUAL_TEXT_FILE="$actual_file"
   SOAK_TARGET_TEXT_FILE="$target_file"
   SOAK_TARGET_DOCUMENT_NAME=""
   generate_soak_text "$TARGET_CHARS" >"$text_file"
   SOAK_TARGET_DOCUMENT_NAME="$(prepare_textedit_document "$SOAK_TARGET_TEXT_FILE")"
-  focus_textedit_document "$SOAK_TARGET_DOCUMENT_NAME"
+  wait_for_stable_textedit_focus "$SOAK_TARGET_DOCUMENT_NAME"
   sleep 1
-  wait_for_focused_text_poll_summary_after_line "$(line_count "$LOG_PATH")" 15
   SOAK_TYPING_START_LINE="$(line_count "$LOG_PATH")"
+  wait_for_focused_text_poll_summary_after_line "$SOAK_TYPING_START_LINE" 15
   SOAK_TRACE_START_LINE="$(line_count "$TRACE_PATH")"
   type_text_with_cgevents "$text_file"
   sleep 2
+  if ((MIN_AX_SAMPLES > 0)); then
+    wait_for_required_focused_text_poll_summary_after_line \
+      "$SOAK_TYPING_START_LINE" \
+      "${AUTOCOMPLETE_LAB_SOAK_POST_TYPE_AX_WAIT_SECONDS:-20}"
+  fi
   capture_typed_text "$SOAK_ACTUAL_TEXT_FILE" "$SOAK_TARGET_DOCUMENT_NAME"
   verify_typed_text "$SOAK_EXPECTED_TEXT_FILE" "$SOAK_ACTUAL_TEXT_FILE"
 }
@@ -765,6 +1050,47 @@ while (($#)); do
     --strict-ax)
       STRICT_AX=1
       ;;
+    --self-test-log-scan)
+      shift
+      if (($# < 2)); then
+        usage >&2
+        exit 2
+      fi
+      LOG_PATH="$1"
+      shift
+      LOG_SCAN_SELF_TEST_START_LINE="$1"
+      LOG_SCAN_SELF_TEST=1
+      ;;
+    --self-test-runtime-ready)
+      shift
+      if (($# < 3)); then
+        usage >&2
+        exit 2
+      fi
+      LOG_PATH="$1"
+      shift
+      RUNTIME_READY_SELF_TEST_START_LINE="$1"
+      shift
+      RUNTIME_READY_SELF_TEST_ALLOW_EXISTING="$1"
+      RUNTIME_READY_SELF_TEST=1
+      ;;
+    --self-test-normalize-osascript-stdout)
+      shift
+      if (($# < 2)); then
+        usage >&2
+        exit 2
+      fi
+      NORMALIZE_OSASCRIPT_STDOUT_INPUT="$1"
+      shift
+      NORMALIZE_OSASCRIPT_STDOUT_OUTPUT="$1"
+      NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=1
+      ;;
+    --self-test-osascript-timeout)
+      OSASCRIPT_TIMEOUT_SELF_TEST=1
+      ;;
+    --self-test-soak-lock)
+      SOAK_LOCK_SELF_TEST=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -776,6 +1102,74 @@ while (($#)); do
   esac
   shift
 done
+
+if [[ "$LOG_SCAN_SELF_TEST" == "1" ]]; then
+  require_non_negative_int "$LOG_SCAN_SELF_TEST_START_LINE" "--self-test-log-scan start-line"
+  has_focused_text_poll_summary_after_line "$LOG_SCAN_SELF_TEST_START_LINE"
+  exit $?
+fi
+
+if [[ "$RUNTIME_READY_SELF_TEST" == "1" ]]; then
+  require_non_negative_int "$RUNTIME_READY_SELF_TEST_START_LINE" "--self-test-runtime-ready start-line"
+  require_non_negative_int "$RUNTIME_READY_SELF_TEST_ALLOW_EXISTING" "--self-test-runtime-ready allow-existing"
+  runtime_ready_available_now \
+    "$RUNTIME_READY_SELF_TEST_START_LINE" \
+    "$RUNTIME_READY_SELF_TEST_ALLOW_EXISTING"
+  exit $?
+fi
+
+if [[ "$NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST" == "1" ]]; then
+  normalize_osascript_stdout_text "$NORMALIZE_OSASCRIPT_STDOUT_INPUT" "$NORMALIZE_OSASCRIPT_STDOUT_OUTPUT"
+  exit $?
+fi
+
+if [[ "$OSASCRIPT_TIMEOUT_SELF_TEST" == "1" ]]; then
+  tmp_dir="$(make_tmp_dir)"
+  fast_stdout="$tmp_dir/fast.out"
+  fast_stderr="$tmp_dir/fast.err"
+  slow_stdout="$tmp_dir/slow.out"
+  slow_stderr="$tmp_dir/slow.err"
+
+  if ! run_osascript_with_timeout 5 "$fast_stdout" "$fast_stderr" - <<'APPLESCRIPT'
+return "ready"
+APPLESCRIPT
+  then
+    echo "osascript timeout self-test expected fast script to pass" >&2
+    exit 1
+  fi
+
+  if [[ "$(cat "$fast_stdout")" != "ready" ]]; then
+    echo "osascript timeout self-test did not capture stdout" >&2
+    exit 1
+  fi
+
+  if run_osascript_with_timeout 1 "$slow_stdout" "$slow_stderr" - <<'APPLESCRIPT'
+delay 5
+return "late"
+APPLESCRIPT
+  then
+    echo "osascript timeout self-test expected slow script to time out" >&2
+    exit 1
+  fi
+
+  if [[ -s "$slow_stdout" ]]; then
+    echo "osascript timeout self-test expected no late stdout" >&2
+    exit 1
+  fi
+
+  echo "osascript timeout self-test passed."
+  exit 0
+fi
+
+if [[ "$SOAK_LOCK_SELF_TEST" == "1" ]]; then
+  acquire_soak_lock
+  if [[ ! -s "$SOAK_LOCK_DIR/owner" ]]; then
+    echo "soak lock self-test did not write an owner file" >&2
+    exit 1
+  fi
+  echo "soak lock self-test passed."
+  exit 0
+fi
 
 case "$APP" in
   textedit)
@@ -812,6 +1206,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
 
+acquire_soak_lock
 runtime_start_line="$(line_count "$LOG_PATH")"
 prepare_temporary_textedit_enablement
 prepare_temporary_suggestions_resume

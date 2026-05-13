@@ -5,7 +5,27 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+DIRTY_PROOF_PATH=""
+DIRTY_TRACKED_PROOF_SCRIPT=""
+DIRTY_TRACKED_PROOF_SCRIPT_BACKUP=""
+
+restore_dirty_tracked_proof_script() {
+  if [[ -n "${DIRTY_TRACKED_PROOF_SCRIPT:-}" && -n "${DIRTY_TRACKED_PROOF_SCRIPT_BACKUP:-}" && -f "$DIRTY_TRACKED_PROOF_SCRIPT_BACKUP" ]]; then
+    cp -p "$DIRTY_TRACKED_PROOF_SCRIPT_BACKUP" "$DIRTY_TRACKED_PROOF_SCRIPT"
+  fi
+  DIRTY_TRACKED_PROOF_SCRIPT=""
+  DIRTY_TRACKED_PROOF_SCRIPT_BACKUP=""
+}
+
+cleanup() {
+  restore_dirty_tracked_proof_script
+  if [[ -n "${DIRTY_PROOF_PATH:-}" ]]; then
+    rm -f "$DIRTY_PROOF_PATH"
+  fi
+  rm -rf "$TMP_DIR"
+}
+
+trap cleanup EXIT
 
 TRACE_PROOF_VERSION="$(awk -F '"' '/traceProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
 PLACEMENT_PROOF_VERSION="$(awk -F '"' '/placementProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
@@ -613,6 +633,8 @@ PROMPT_FULL_ACCEPT_MANIFEST="$TMP_DIR/prompt-full-accept.json"
 CHROME_CHAT_SUBMIT_MANIFEST="$TMP_DIR/chrome-chat-submit.json"
 PARTIAL_MANIFEST="$TMP_DIR/partial.json"
 PENDING_MANIFEST="$TMP_DIR/pending.json"
+UNAVAILABLE_BLOCKER_MANIFEST="$TMP_DIR/unavailable-blocker.json"
+UNAVAILABLE_COMPLETE_MANIFEST="$TMP_DIR/unavailable-complete.json"
 A_MINUS_COMPLETE_MANIFEST="$TMP_DIR/a-minus-complete.json"
 STALE_MANIFEST="$TMP_DIR/stale.json"
 MISSING_SMOKE_MANIFEST="$TMP_DIR/missing-smoke.json"
@@ -643,6 +665,39 @@ write_manifest "$PROMPT_FULL_ACCEPT_MANIFEST" complete "docs/product/visual-plac
 write_manifest "$CHROME_CHAT_SUBMIT_MANIFEST" complete "docs/product/visual-placement-screenshots/chrome-chat-like.png" "$TRACE_PROOF_VERSION" "Chrome" "com.google.Chrome" "chat-like" 1 "Chrome chat-like composer"
 write_manifest "$PARTIAL_MANIFEST" partial "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$PENDING_MANIFEST" pending "docs/product/visual-placement-screenshots/textedit-inline.png"
+cp "$PARTIAL_MANIFEST" "$UNAVAILABLE_BLOCKER_MANIFEST"
+python3 - "$UNAVAILABLE_BLOCKER_MANIFEST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+manifest = json.loads(path.read_text(encoding="utf-8"))
+requirement = manifest["surfaces"][0]["requirements"][0]
+requirement["status"] = "blocked"
+requirement["blockerType"] = "unavailable-host"
+requirement["summary"] = "This host is not installed here."
+requirement.pop("smokeCommand", None)
+path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
+cp "$PASS_MANIFEST" "$UNAVAILABLE_COMPLETE_MANIFEST"
+python3 - "$UNAVAILABLE_COMPLETE_MANIFEST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+manifest = json.loads(path.read_text(encoding="utf-8"))
+manifest["surfaces"][0]["requirements"] = [
+    {
+        "id": "unavailable-host-proof",
+        "status": "blocked",
+        "blockerType": "unavailable-host",
+        "summary": "This host is not installed here."
+    }
+]
+path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
 write_manifest "$A_MINUS_COMPLETE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "$TRACE_PROOF_VERSION" "TextEdit" "com.apple.TextEdit" "default" 2 "Obsidian"
 write_manifest "$STALE_MANIFEST" complete "docs/product/visual-placement-screenshots/textedit-inline.png" "old-proof"
 write_manifest "$MISSING_SMOKE_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 2
@@ -665,6 +720,159 @@ if ! grep -F "Proof manifest verified." "$TMP_DIR/pass.out" >/dev/null; then
   cat "$TMP_DIR/pass.out" >&2
   exit 1
 fi
+
+BROKEN_GRADUATION_MANIFEST="$TMP_DIR/proof-manifest.json"
+cp docs/product/proof-manifest.json "$BROKEN_GRADUATION_MANIFEST"
+python3 - "$BROKEN_GRADUATION_MANIFEST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+manifest = json.loads(path.read_text(encoding="utf-8"))
+for row in manifest["graduationDecisions"]:
+    if row["surface"] == "Google Docs in Chrome":
+        row["decision"] = "supported"
+        break
+path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
+
+if script/check_proof_manifest.sh \
+  --manifest "$BROKEN_GRADUATION_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage >"$TMP_DIR/broken-graduation.out" 2>&1; then
+  echo "proof manifest self-test expected changed graduation decision to fail" >&2
+  cat "$TMP_DIR/broken-graduation.out" >&2
+  exit 1
+fi
+
+if ! grep -F "graduationDecisions Google Docs in Chrome: decision is 'supported'; expected 'blocked'" "$TMP_DIR/broken-graduation.out" >/dev/null; then
+  echo "proof manifest self-test did not explain changed graduation decision" >&2
+  cat "$TMP_DIR/broken-graduation.out" >&2
+  exit 1
+fi
+
+DIRTY_PROOF_PATH="Sources/.proof-manifest-self-test-dirty"
+rm -f "$DIRTY_PROOF_PATH"
+printf 'dirty proof source\n' >"$DIRTY_PROOF_PATH"
+
+if script/check_proof_manifest.sh \
+  --manifest docs/product/proof-manifest.json \
+  --skip-profile-coverage \
+  --require-current-commit >"$TMP_DIR/dirty-proof-source.out" 2>&1; then
+  echo "proof manifest self-test expected dirty proof-sensitive source paths to fail current-commit validation" >&2
+  cat "$TMP_DIR/dirty-proof-source.out" >&2
+  rm -f "$DIRTY_PROOF_PATH"
+  exit 1
+fi
+
+if ! grep -F "proof-sensitive source paths have uncommitted changes" "$TMP_DIR/dirty-proof-source.out" >/dev/null; then
+  echo "proof manifest self-test did not explain dirty proof-sensitive source path failure" >&2
+  cat "$TMP_DIR/dirty-proof-source.out" >&2
+  rm -f "$DIRTY_PROOF_PATH"
+  exit 1
+fi
+rm -f "$DIRTY_PROOF_PATH"
+DIRTY_PROOF_PATH=""
+
+DIRTY_TRACKED_PROOF_SCRIPT="script/fresh_latency_proof.sh"
+DIRTY_TRACKED_PROOF_SCRIPT_BACKUP="$TMP_DIR/fresh_latency_proof.sh.backup"
+cp -p "$DIRTY_TRACKED_PROOF_SCRIPT" "$DIRTY_TRACKED_PROOF_SCRIPT_BACKUP"
+printf '\n# proof manifest self-test dirty proof script\n' >>"$DIRTY_TRACKED_PROOF_SCRIPT"
+
+if script/check_proof_manifest.sh \
+  --manifest docs/product/proof-manifest.json \
+  --skip-profile-coverage \
+  --require-current-commit >"$TMP_DIR/dirty-proof-script.out" 2>&1; then
+  echo "proof manifest self-test expected dirty proof loop scripts to fail current-commit validation" >&2
+  cat "$TMP_DIR/dirty-proof-script.out" >&2
+  exit 1
+fi
+
+if ! grep -F "script/fresh_latency_proof.sh" "$TMP_DIR/dirty-proof-script.out" >/dev/null; then
+  echo "proof manifest self-test did not explain dirty proof loop script failure" >&2
+  cat "$TMP_DIR/dirty-proof-script.out" >&2
+  exit 1
+fi
+restore_dirty_tracked_proof_script
+
+python3 - "$TMP_DIR" <<'PY'
+import importlib.util
+import subprocess
+import sys
+from pathlib import Path
+
+tmp_dir = Path(sys.argv[1])
+module_path = Path("script/check_proof_manifest.py").resolve()
+spec = importlib.util.spec_from_file_location("check_proof_manifest", module_path)
+checker = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(checker)
+
+proof_scripts = [
+    "script/fresh_latency_proof.sh",
+    "script/fresh_latency_proof_self_test.sh",
+    "script/beta_readiness.sh",
+    "script/check_score_targets.sh",
+    "script/scorecard_goal_loop.sh",
+]
+
+
+def git(repo: Path, *args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=repo, text=True).strip()
+
+
+def commit_all(repo: Path, message: str) -> str:
+    subprocess.check_call(["git", "add", "."], cwd=repo)
+    subprocess.check_call(
+        [
+            "git",
+            "-c",
+            "user.name=Proof Manifest Self Test",
+            "-c",
+            "user.email=proof-manifest@example.invalid",
+            "commit",
+            "-m",
+            message,
+        ],
+        cwd=repo,
+        stdout=subprocess.DEVNULL,
+    )
+    return git(repo, "rev-parse", "HEAD")
+
+
+def write_base_repo(repo: Path) -> str:
+    subprocess.check_call(["git", "init", "-q"], cwd=repo)
+    for path in proof_scripts:
+        file_path = repo / path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (repo / "docs").mkdir()
+    (repo / "docs/not-proof-sensitive.md").write_text("base\n", encoding="utf-8")
+    return commit_all(repo, "base")
+
+
+docs_repo = tmp_dir / "commit-proof-docs-only"
+docs_repo.mkdir()
+base = write_base_repo(docs_repo)
+(docs_repo / "docs/not-proof-sensitive.md").write_text("updated\n", encoding="utf-8")
+docs_head = commit_all(docs_repo, "docs only")
+checker.ROOT_DIR = docs_repo
+if not checker.source_commit_is_current_compatible(base, docs_head):
+    raise SystemExit("docs-only changes should remain current-proof compatible")
+
+for proof_script in proof_scripts:
+    repo = tmp_dir / ("commit-proof-" + proof_script.replace("/", "-"))
+    repo.mkdir()
+    base = write_base_repo(repo)
+    script_path = repo / proof_script
+    script_path.write_text(script_path.read_text(encoding="utf-8") + "echo changed\n", encoding="utf-8")
+    head = commit_all(repo, f"change {proof_script}")
+    checker.ROOT_DIR = repo
+    if checker.source_commit_is_current_compatible(base, head):
+        raise SystemExit(f"{proof_script} changes should not be current-proof compatible")
+PY
 
 script/check_proof_manifest.sh \
   --manifest "$VARIANT_MANIFEST" \
@@ -898,6 +1106,47 @@ fi
 if ! grep -F "Pending requirements:" "$TMP_DIR/partial-strict.out" >/dev/null; then
   echo "proof manifest self-test did not print pending requirements" >&2
   cat "$TMP_DIR/partial-strict.out" >&2
+  exit 1
+fi
+
+if script/check_proof_manifest.sh \
+  --manifest "$UNAVAILABLE_BLOCKER_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/unavailable-partial-strict.out" 2>&1; then
+  echo "proof manifest self-test expected strict unavailable-host partial proof to fail" >&2
+  cat "$TMP_DIR/unavailable-partial-strict.out" >&2
+  exit 1
+fi
+
+if grep -F "pending requirement(s): variant-proof - This host is not installed here." "$TMP_DIR/unavailable-partial-strict.out" >/dev/null; then
+  echo "proof manifest self-test should not count unavailable hosts as actionable pending proof" >&2
+  cat "$TMP_DIR/unavailable-partial-strict.out" >&2
+  exit 1
+fi
+
+if ! grep -F "Unavailable host requirements:" "$TMP_DIR/unavailable-partial-strict.out" >/dev/null; then
+  echo "proof manifest self-test did not keep unavailable host requirements visible" >&2
+  cat "$TMP_DIR/unavailable-partial-strict.out" >&2
+  exit 1
+fi
+
+if script/check_proof_manifest.sh \
+  --manifest "$UNAVAILABLE_COMPLETE_MANIFEST" \
+  --manual-smoke "$MANUAL_SMOKE" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/unavailable-complete.out" 2>&1; then
+  echo "proof manifest self-test expected complete proof with unavailable host requirement to fail" >&2
+  cat "$TMP_DIR/unavailable-complete.out" >&2
+  exit 1
+fi
+
+if ! grep -F "complete proof still has pending requirement(s): unavailable-host-proof - This host is not installed here." "$TMP_DIR/unavailable-complete.out" >/dev/null; then
+  echo "proof manifest self-test did not block complete proof with unavailable host requirement" >&2
+  cat "$TMP_DIR/unavailable-complete.out" >&2
   exit 1
 fi
 

@@ -108,4 +108,35 @@ struct AutocompleteTracePrivacyTests {
         #expect(!json.contains("private unknown text"))
         #expect(!json.contains("/tmp/private-screenshot.png"))
     }
+
+    @Test("Redacted traces summarize freeform reason and outcome channels")
+    func redactedTraceSummarizesFreeformReasonAndOutcomeChannels() throws {
+        let event = AutocompleteTraceEvent(
+            timestamp: "2026-05-07T00:00:00Z",
+            sessionID: "session-1",
+            suggestionID: "suggestion-1",
+            type: .suggestionSuppressed,
+            appBundleIdentifier: "com.apple.TextEdit",
+            triggerReason: "private-trigger-token",
+            outcome: "private-outcome-token",
+            reason: "private-reason-token",
+            metadata: [
+                "fieldKindReason": "private-field-reason",
+                "suppressionOutcome": "private suppression outcome",
+                "finishReason": "field-blur-finalized"
+            ]
+        )
+
+        let redacted = event.redacted(privacyMode: .customer)
+        let encoded = try JSONEncoder().encode(redacted)
+        let json = String(decoding: encoded, as: UTF8.self)
+
+        #expect(redacted.triggerReason == DiagnosticValueRedactor.stringSummary(length: "private-trigger-token".count))
+        #expect(redacted.outcome == DiagnosticValueRedactor.stringSummary(length: "private-outcome-token".count))
+        #expect(redacted.reason == DiagnosticValueRedactor.stringSummary(length: "private-reason-token".count))
+        #expect(redacted.metadata["fieldKindReason"] == DiagnosticValueRedactor.stringSummary(length: "private-field-reason".count))
+        #expect(redacted.metadata["suppressionOutcome"] == DiagnosticValueRedactor.stringSummary(length: "private suppression outcome".count))
+        #expect(redacted.metadata["finishReason"] == "field-blur-finalized")
+        #expect(!json.contains("private"))
+    }
 }

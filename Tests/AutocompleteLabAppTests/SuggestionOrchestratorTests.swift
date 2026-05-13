@@ -85,7 +85,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["fieldKindReason"] == "test-compose")
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
         #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
-        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "5")
         #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
         #expect(orchestration.requestMetadata["visiblePageContextCaptureScope"] == "visible_screen")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
@@ -438,6 +438,97 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Late final model results are suppressed before display")
+    func lateFinalModelResultsAreSuppressedBeforeDisplay() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can you send the notes",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: "Can you send the notes", textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 900,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+    }
+
+    @MainActor
+    @Test("Late streaming partials are not hard suppressed by the final latency cutoff")
+    func lateStreamingPartialsAreNotHardSuppressedByFinalLatencyCutoff() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can you send the notes",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "late-stream"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+            request: request,
+            context: makeContext(textBeforeCursor: "Can you send the notes", textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-stream",
+            latencyMilliseconds: 900,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+    }
+
+    @MainActor
     @Test("Prefix cooldown and display threshold adjustment are orchestrated")
     func prefixCooldownAndDisplayThresholdAdjustmentAreOrchestrated() throws {
         let now = Date(timeIntervalSince1970: 100)
@@ -612,8 +703,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Streaming partial pacing is scoped by suggestion")
-    func streamingPartialPacingIsScopedBySuggestion() {
+    @Test("Streaming partial pacing requires an active suggestion stream")
+    func streamingPartialPacingRequiresActiveSuggestionStream() {
         let orchestrator = SuggestionOrchestrator(
             engine: EchoCompletionEngine(),
             suggestionPresentationGate: SuggestionPresentationGate(
@@ -651,19 +742,52 @@ struct SuggestionOrchestratorTests {
         ))
 
         orchestrator.finishStreamingPresentation(suggestionID: "stream")
-        #expect(orchestrator.shouldPresentStreamingPartial(
+        #expect(!orchestrator.shouldPresentStreamingPartial(
             CompletionSuggestion(text: " make this", maxVisibleWords: 3),
             suggestionID: "stream",
             mode: .phraseContinuation,
             nowMilliseconds: 300
         ))
 
-        orchestrator.clearStreamingPresentations()
+        orchestrator.startStreamingPresentation(suggestionID: "stream")
         #expect(orchestrator.shouldPresentStreamingPartial(
             CompletionSuggestion(text: " make this", maxVisibleWords: 3),
             suggestionID: "stream",
             mode: .phraseContinuation,
+            nowMilliseconds: 320
+        ))
+
+        orchestrator.clearStreamingPresentations()
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
             nowMilliseconds: 360
+        ))
+    }
+
+    @MainActor
+    @Test("Beginning a new request clears older streaming state")
+    func beginningNewRequestClearsOlderStreamingState() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        orchestrator.startStreamingPresentation(suggestionID: "old-stream")
+
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            suggestionID: "old-stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 100
+        ))
+
+        _ = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "Can we make", suggestionID: "new-stream")
+        )
+
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            suggestionID: "old-stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 200
         ))
     }
 

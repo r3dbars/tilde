@@ -115,6 +115,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("raw-traces.jsonl"))
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("trace-report.html"))
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("survival-report.json"))
+            try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("survival-inspector-debug.json"))
             try? FileManager.default.removeItem(at: folderURL.appendingPathComponent("privacy-export"))
             try? FileManager.default.removeItem(at: screenshotsURL)
         }
@@ -202,11 +203,21 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
     private func expireArtifacts(for flagKey: String) {
         if flagKey == rawContentDefaultsKey {
             redactStoredTraceFile()
+            removeSurvivalInspectorDebugFile()
         }
         if flagKey == screenshotDefaultsKey {
             queue.sync { [screenshotsURL] in
                 try? FileManager.default.removeItem(at: screenshotsURL)
             }
+        }
+    }
+
+    private func removeSurvivalInspectorDebugFile() {
+        queue.sync { [logURL] in
+            let folderURL = logURL.deletingLastPathComponent()
+            try? FileManager.default.removeItem(
+                at: folderURL.appendingPathComponent("survival-inspector-debug.json")
+            )
         }
     }
 

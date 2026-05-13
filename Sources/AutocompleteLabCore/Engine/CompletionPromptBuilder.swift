@@ -11,7 +11,7 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "screen-aware-continuation-v6"
+    public static let promptStyleIdentifier = "screen-aware-continuation-v7"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -52,12 +52,14 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
+                Tab inserts only this visible suffix; full accept is separate and must never be implied.
                 \(titleShapeGuidance)
                 \(partialWordGuidance)
                 \(lineStructureGuidance)
                 \(visiblePageGuidance)
                 If visible page context includes a matching local word, name, or term, prefer that word's missing suffix.
                 For partial product names, app names, permissions, people, project terms, and repeated OCR words, complete the visible local word before guessing a generic dictionary word.
+                Suffix examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For "privacy note should stay redac", return ted, not tion. Never return tion unless it completes the visible word.
                 Only exception: return exactly \(Self.noSuggestionToken) when unsafe or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
@@ -91,6 +93,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Return only the suffix after the Before cursor text.
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
         Only exception: return exactly \(Self.noSuggestionToken) when unsafe, chatty, or likely to answer the prompt instead of continuing it.
+        Never suggest pressing Tab, Option-Tab, Backtick, or accepting all visible text.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(styleGuidance)
         \(titleShapeGuidance)
@@ -100,7 +103,15 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer the next word or short phrase the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
+        Prefer 3 to 5 useful words for phrase suggestions; use fewer words when fewer are enough.
+        Return \(Self.noSuggestionToken) instead of a full-sentence continuation, weak guess, new topic, or action instruction.
+        If the user is writing about Tab, acceptance behavior, or shortcuts, continue the safety rule itself; do not suggest accepting terms or permissions.
         When the continuation is a common phrase, put that boring obvious phrase first.
+        If the best continuation sounds like advice, a plan, a command, or a reply to the user, return \(Self.noSuggestionToken).
+        Avoid generic filler like "comes to life", "key features and benefits", "comprehensive plan", or "acknowledge the user's point".
+        Shape examples: "The draft feels calmer when it" -> "stays short and specific"; "The review should focus on" -> "real user risk"; "A good reply here would be" -> "short, kind, and specific".
+        More examples: "quiet mode should stay quiet mode should stay" -> "calm in the background"; "Hold the risky path until" -> "proof exists"; "the next step is to" -> "write a small repro"; "autocomplete should" -> "stay silent".
+        More examples: "This bug is easiest to test with" -> "small fixture case"; "After the demo, capture the" -> "open questions quickly"; "tested the button, tested the button, and now need" -> "one fresh check"; "should not echo" -> "new detail"; "next words should" -> "move forward"; "starts repeating the model starts repeating, prefer" -> "noisy output blocked"; "product update should mention" -> "one clear change"; "press Tab and confirm" -> "next word only".
         When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
         Do not repeat the Before cursor text.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.

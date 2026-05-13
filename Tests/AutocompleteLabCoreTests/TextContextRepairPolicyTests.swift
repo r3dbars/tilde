@@ -330,6 +330,205 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorTextAfterGrowth)
     }
 
+    @Test("Repairs Obsidian CodeMirror typing growth reported after a stable cursor")
+    func repairsObsidianCodeMirrorTextAfterTypingGrowth() {
+        let policy = TextContextRepairPolicy()
+        let before = "Smoke proof"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: before,
+            textAfterCursor: " feels inst",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: before,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == "Smoke proof feels inst")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTextAfterTypingGrowth)
+    }
+
+    @Test("Repairs Obsidian long-note active line reported after the prior line")
+    func repairsObsidianCodeMirrorLongNoteActiveLineAfterStableCursor() {
+        let policy = TextContextRepairPolicy()
+        let before = [
+            "Autocomplete Lab Obsidian scroll filler line 90",
+            "AL scroll 45"
+        ].joined(separator: "\n")
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: before,
+            textAfterCursor: "Smoke proof feels inst",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: before,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == before + "\nSmoke proof feels inst")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTextAfterTypingGrowth)
+    }
+
+    @Test("Does not repair Obsidian typing growth when later content remains")
+    func doesNotRepairObsidianTextAfterTypingGrowthWithLaterContent() {
+        let policy = TextContextRepairPolicy()
+        let before = "Smoke proof"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: before,
+            textAfterCursor: " feels inst\nExisting note content",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: before,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Repairs Obsidian CodeMirror stale cursor after end-of-document growth")
+    func repairsObsidianCodeMirrorEndOfDocumentGrowth() {
+        let policy = TextContextRepairPolicy()
+        let previous = [
+            "Autocomplete Lab Obsidian scroll filler line 89",
+            "Autocomplete Lab Obsidian scroll filler line 90",
+            "Autocomplete Lab Obsidian proof",
+            "Smoke proof feels instant"
+        ].joined(separator: "\n")
+        let current = previous + " and stays inst"
+        let staleBefore = [
+            "Autocomplete Lab Obsidian scroll filler line 89",
+            "Autocomplete Lab Obsidian scroll filler line 90"
+        ].joined(separator: "\n")
+        let staleAfter = String(current.dropFirst(staleBefore.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == current)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorEndOfDocumentGrowth)
+    }
+
+    @Test("Repairs Obsidian CodeMirror capped end-of-document text window")
+    func repairsObsidianCodeMirrorCappedEndOfDocumentGrowth() {
+        let policy = TextContextRepairPolicy()
+        let previousHead = (1...18)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n")
+        let overlappingTail = [
+            "Autocomplete Lab Obsidian scroll filler line 89",
+            "Autocomplete Lab Obsidian scroll filler line 90",
+            "Autocomplete Lab Obsidian proof",
+            "Smoke proof feels instant"
+        ].joined(separator: "\n")
+        let previous = previousHead + "\n" + overlappingTail
+        let cappedWindow = overlappingTail + " and stays inst"
+        let staleBefore = String(cappedWindow.prefix(11))
+        let staleAfter = String(cappedWindow.dropFirst(staleBefore.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == cappedWindow)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorEndOfDocumentGrowth)
+    }
+
+    @Test("Does not repair Obsidian capped window without document-end overlap")
+    func doesNotRepairObsidianCappedEndOfDocumentGrowthWithoutOverlap() {
+        let policy = TextContextRepairPolicy()
+        let previous = (1...18)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n") + "\nSmoke proof feels instant"
+        let cappedWindow = [
+            "Different Obsidian scroll filler line 89",
+            "Different Obsidian scroll filler line 90",
+            "Different Obsidian proof",
+            "Smoke proof feels instant and stays inst"
+        ].joined(separator: "\n")
+        let staleBefore = String(cappedWindow.prefix(11))
+        let staleAfter = String(cappedWindow.dropFirst(staleBefore.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Does not repair Obsidian capped window without new document-end growth")
+    func doesNotRepairObsidianCappedEndOfDocumentGrowthWithoutGrowth() {
+        let policy = TextContextRepairPolicy()
+        let previousHead = (1...18)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n")
+        let overlappingTail = [
+            "Autocomplete Lab Obsidian scroll filler line 89",
+            "Autocomplete Lab Obsidian scroll filler line 90",
+            "Autocomplete Lab Obsidian proof",
+            "Smoke proof feels instant"
+        ].joined(separator: "\n")
+        let previous = previousHead + "\n" + overlappingTail
+        let staleBefore = String(overlappingTail.prefix(11))
+        let staleAfter = String(overlappingTail.dropFirst(staleBefore.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Does not repair Obsidian stale cursor when prior snapshot was not at document end")
+    func doesNotRepairObsidianEndOfDocumentGrowthWithPreviousAfterText() {
+        let policy = TextContextRepairPolicy()
+        let previousBefore = "Draft section"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Draft",
+            textAfterCursor: " section\nSmoke proof feels instant",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previousBefore,
+            previousTextAfterCursor: "\nExisting later note"
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror trailing scaffold drift at visual line end")
     func repairsObsidianCodeMirrorTrailingScaffolding() {
         let policy = TextContextRepairPolicy()

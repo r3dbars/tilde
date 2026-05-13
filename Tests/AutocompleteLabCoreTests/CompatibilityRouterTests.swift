@@ -50,6 +50,11 @@ struct CompatibilityRouterTests {
                 bundleIdentifier: "com.google.Chrome",
                 elementRole: "AXWebArea",
                 elementSubrole: nil,
+                fieldClassifierInput: AXFieldClassifierInput(
+                    role: "AXWebArea",
+                    placeholder: "Write a reply",
+                    textBeforeCursorLength: 11
+                ),
                 isSecureTextEntry: false,
                 textBeforeCursor: "This should",
                 hasCaretRect: true
@@ -103,5 +108,41 @@ struct CompatibilityRouterTests {
         #expect(!secure.shouldRequestSuggestion)
         #expect(missingCaret.suppressionReason == .missingCaretRect)
         #expect(!missingCaret.shouldRequestSuggestion)
+    }
+
+    @Test("Unsafe field kinds are blocked before suggestions")
+    func unsafeFieldKindsAreBlocked() {
+        let router = CompatibilityRouter()
+        let cases: [(AXFieldClassifierInput, AXFieldKind)] = [
+            (AXFieldClassifierInput(role: "AXSearchField"), .search),
+            (AXFieldClassifierInput(role: "AXURLField"), .url),
+            (AXFieldClassifierInput(role: "AXTextField", identifier: "username", placeholder: "Username"), .form),
+            (AXFieldClassifierInput(role: "AXTextField", identifier: "card-number", placeholder: "Card number"), .form),
+            (AXFieldClassifierInput(role: "AXTextField", identifier: "shipping-address", placeholder: "Shipping address"), .form),
+            (AXFieldClassifierInput(role: "AXTextField", identifier: "terminal-command", placeholder: "Command line"), .unprovenSurface)
+        ]
+
+        for (input, expectedKind) in cases {
+            let decision = router.decision(
+                for: CompatibilityEvaluationContext(
+                    bundleIdentifier: "com.apple.TextEdit",
+                    elementRole: input.role,
+                    elementSubrole: input.subrole,
+                    fieldClassifierInput: input,
+                    isSecureTextEntry: false,
+                    textBeforeCursor: "safe fixture text",
+                    hasCaretRect: true
+                )
+            )
+
+            #expect(!decision.shouldRequestSuggestion)
+            #expect(decision.rung == .blocked)
+            guard case let .unsafeFieldKind(reason) = decision.suppressionReason else {
+                Issue.record("Expected unsafe field suppression, got \(String(describing: decision.suppressionReason))")
+                continue
+            }
+            #expect(AXFieldClassifier().classification(for: input).kind == expectedKind)
+            #expect(!reason.isEmpty)
+        }
     }
 }

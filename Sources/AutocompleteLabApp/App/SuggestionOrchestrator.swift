@@ -3,6 +3,8 @@ import AutocompleteLabCore
 
 @MainActor
 final class SuggestionOrchestrator {
+    private static let maximumFinalModelDisplayLatencyMilliseconds = 750
+
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
@@ -113,6 +115,7 @@ final class SuggestionOrchestrator {
         fieldClassification: AXFieldClassification?,
         suggestionTuning: SuggestionTuning?
     ) -> SuggestionOrchestration {
+        clearStreamingPresentations()
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
             previous: currentRequestStorage,
             current: request
@@ -227,7 +230,9 @@ final class SuggestionOrchestrator {
         mode: CompletionRequestMode,
         nowMilliseconds: Int
     ) -> Bool {
-        var state = streamingPresentationStates[suggestionID] ?? StreamingPresentationState()
+        guard var state = streamingPresentationStates[suggestionID] else {
+            return false
+        }
         guard suggestionPresentationGate.shouldPresentStreamingPartial(
             suggestion,
             mode: mode,
@@ -528,7 +533,11 @@ final class SuggestionOrchestrator {
             "completionConfidenceScore": String(confidenceDecision.score),
             "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
         ]
-        if confidenceDecision.reasons.contains("too-slow-to-display") {
+        let shouldSuppressFinalLatency = triggerReason != "model-stream"
+            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
+        let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
+            && confidenceDecision.reasons.contains("too-slow-to-display")
+        if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,
                 mode: request.mode,
@@ -539,27 +548,23 @@ final class SuggestionOrchestrator {
                     behaviorProfileID: request.behaviorProfile.id
                 )
             )
+            let suppression = DisplayScoreSuppression(
+                reason: .tooSlowToDisplay,
+                trace: trace
+            )
             return SuggestionDisplayScoreDecision(
-                decision: .suppress(
-                    DisplayScoreSuppression(
-                        reason: .tooSlowToDisplay,
-                        trace: trace
-                    )
-                ),
-                metadata: DisplayScoreSuppression(
-                    reason: .tooSlowToDisplay,
-                    trace: trace
-                ).metadata
+                decision: .suppress(suppression),
+                metadata: suppression.metadata
                     .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
                     .merging(confidenceMetadata) { current, _ in current }
             )
         }
 
         let decision = adjustedPolicy.decision(
-                for: score,
-                mode: request.mode,
-                behaviorProfileID: request.behaviorProfile.id
-            )
+            for: score,
+            mode: request.mode,
+            behaviorProfileID: request.behaviorProfile.id
+        )
         return SuggestionDisplayScoreDecision(
             decision: decision,
             metadata: decision.metadata

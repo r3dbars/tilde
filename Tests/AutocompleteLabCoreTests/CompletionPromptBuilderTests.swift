@@ -12,7 +12,18 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Inline autocomplete"))
         #expect(prompt.system.contains("Return only the suffix after the Before cursor text"))
         #expect(prompt.system.contains("boring connective tissue"))
+        #expect(prompt.system.contains("Prefer 3 to 5 useful words"))
+        #expect(prompt.system.contains("full-sentence continuation"))
+        #expect(prompt.system.contains("Never suggest pressing Tab, Option-Tab, Backtick"))
+        #expect(prompt.system.contains("do not suggest accepting terms or permissions"))
+        #expect(prompt.system.contains("Avoid generic filler"))
+        #expect(prompt.system.contains("The review should focus on"))
+        #expect(prompt.system.contains("This bug is easiest to test with"))
+        #expect(prompt.system.contains("Hold the risky path until"))
+        #expect(prompt.system.contains("tested the button, tested the button"))
+        #expect(prompt.system.contains("press Tab and confirm"))
         #expect(prompt.system.contains("common phrase"))
+        #expect(prompt.system.contains("advice, a plan, a command"))
         #expect(prompt.system.contains("Do not answer, explain"))
         #expect(prompt.system.contains("repeat the Before cursor text"))
         #expect(prompt.system.contains("Do not brainstorm, rewrite"))
@@ -140,6 +151,11 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("Document/window title shape"))
+        #expect(prompt.system.contains("Tab inserts only this visible suffix"))
+        #expect(prompt.system.contains("transi -> tion"))
+        #expect(prompt.system.contains("qui -> etly"))
+        #expect(prompt.system.contains("privacy note should stay redac"))
+        #expect(prompt.system.contains("Never return tion unless it completes the visible word"))
         #expect(prompt.system.contains("file extension md"))
         #expect(!prompt.system.contains("Launch"))
         #expect(!prompt.system.contains("Plan"))
@@ -301,7 +317,7 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(builder.maxVisibleWords == 8)
-        #expect(prompt.system.contains("next 8 words or fewer"))
+        #expect(prompt.system.contains("next 5 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 
@@ -463,7 +479,7 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
-        #expect(prompt.system.contains("Behavior profile: ai_chat, max 8 visible words / 12 generated tokens"))
+        #expect(prompt.system.contains("Behavior profile: ai_chat, max 5 visible words / 9 generated tokens"))
         #expect(prompt.system.contains("Never suggest sending, submitting"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
     }

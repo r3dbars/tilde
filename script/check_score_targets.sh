@@ -10,6 +10,7 @@ DEFAULT_OVERALL_EXCELLENCE_PATH="docs/product/deep-research-overall-excellence-s
 DEFAULT_ONBOARDING_PERMISSION_PATH="docs/product/deep-research-onboarding-permission-ux-scorecard-2026-05-08.md"
 DEFAULT_APPLE_NATIVE_PATH="docs/product/apple-native-experience-checklist.md"
 DEFAULT_APP_PROOF_PATH="docs/product/app-proof-matrix.md"
+DEFAULT_STEADYTYPE_SCORECARD_PATH="docs/product/steadytype-product-scorecard.md"
 
 DEEP_DIVE_PATH="${AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD:-$DEFAULT_DEEP_DIVE_PATH}"
 DEEP_RESEARCH_PATH="${AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD:-$DEFAULT_DEEP_RESEARCH_PATH}"
@@ -17,11 +18,14 @@ OVERALL_EXCELLENCE_PATH="${AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD:-$DEFAU
 ONBOARDING_PERMISSION_PATH="${AUTOCOMPLETE_LAB_ONBOARDING_PERMISSION_SCORECARD:-$DEFAULT_ONBOARDING_PERMISSION_PATH}"
 APPLE_NATIVE_PATH="${AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST:-$DEFAULT_APPLE_NATIVE_PATH}"
 APP_PROOF_PATH="${AUTOCOMPLETE_LAB_APP_PROOF_MATRIX:-$DEFAULT_APP_PROOF_PATH}"
+STEADYTYPE_SCORECARD_PATH="${AUTOCOMPLETE_LAB_STEADYTYPE_SCORECARD:-$DEFAULT_STEADYTYPE_SCORECARD_PATH}"
 STRICT_PROOF_GATES="${AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES:-auto}"
+STEADYTYPE_SCORECARD_GATE_SCRIPT="${AUTOCOMPLETE_LAB_STEADYTYPE_SCORECARD_GATE_SCRIPT:-./script/check_steadytype_scorecard.py}"
 MANUAL_SMOKE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT:-./script/manual_smoke_status.sh}"
 VISUAL_EVIDENCE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT:-./script/check_visual_placement_evidence.sh}"
 PROOF_MANIFEST_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT:-./script/check_proof_manifest.sh}"
 PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_manifest_proof.sh}"
+BETA_READINESS_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_BETA_READINESS_GATE_SCRIPT:-./script/beta_readiness.sh}"
 
 ISSUES=0
 LIVE_PROMPT_PROOF_ISSUES=0
@@ -30,6 +34,7 @@ VARIANT_PROOF_ISSUES=0
 TYPING_RESTRAINT_ISSUES=0
 RELEASE_ARCHITECTURE_ISSUES=0
 STRICT_PROOF_GATE_ISSUES=0
+STEADYTYPE_SCORECARD_ISSUES=0
 
 record_blocker_theme() {
   local file="$1"
@@ -96,6 +101,9 @@ record_issue() {
 print_blocker_summary() {
   echo
   echo "Blocking themes"
+  if ((STEADYTYPE_SCORECARD_ISSUES > 0)); then
+    echo "- SteadyType scorecard: $STEADYTYPE_SCORECARD_ISSUES issue(s). Keep the single scorecard parseable and evidence-backed before changing target docs."
+  fi
   if ((LIVE_PROMPT_PROOF_ISSUES > 0)); then
     echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish remaining prompt-app layout and full-accept proof without counting stale trace history."
   fi
@@ -112,7 +120,7 @@ print_blocker_summary() {
     echo "- Release and architecture polish: $RELEASE_ARCHITECTURE_ISSUES issue(s). Keep aggregate scores below target until proof gates and shared orchestration gaps close."
   fi
   if ((STRICT_PROOF_GATE_ISSUES > 0)); then
-    echo "- Strict proof gates: $STRICT_PROOF_GATE_ISSUES issue(s). Do not allow Markdown scores to reach target until manual smoke, visual evidence, proof manifest, and prompt-app proof gates pass."
+    echo "- Strict proof gates: $STRICT_PROOF_GATE_ISSUES issue(s). Do not allow Markdown scores to reach target until manual smoke, visual evidence, proof manifest, prompt-app proof, and beta readiness gates pass."
   fi
 }
 
@@ -291,6 +299,22 @@ check_strict_proof_gates() {
   run_strict_proof_gate "visual placement evidence" "$VISUAL_EVIDENCE_GATE_SCRIPT" --require-all
   run_strict_proof_gate "proof manifest" "$PROOF_MANIFEST_GATE_SCRIPT" --require-all
   run_strict_proof_gate "prompt app proof" "$PROMPT_APP_PROOF_GATE_SCRIPT"
+  run_strict_proof_gate "beta readiness" "$BETA_READINESS_GATE_SCRIPT" --check-only
+}
+
+check_steadytype_scorecard() {
+  local output_path
+  output_path="$(mktemp)"
+
+  if ! "$STEADYTYPE_SCORECARD_GATE_SCRIPT" --scorecard "$STEADYTYPE_SCORECARD_PATH" >"$output_path" 2>&1; then
+    echo "- SteadyType scorecard gate failed; target is parseable evidence-backed scorecard"
+    sed -n '1,18p' "$output_path" | sed 's/^/  /'
+    STEADYTYPE_SCORECARD_ISSUES=$((STEADYTYPE_SCORECARD_ISSUES + 1))
+    RELEASE_ARCHITECTURE_ISSUES=$((RELEASE_ARCHITECTURE_ISSUES + 1))
+    ISSUES=$((ISSUES + 1))
+  fi
+
+  rm -f "$output_path"
 }
 
 require_file "$DEEP_DIVE_PATH"
@@ -299,8 +323,10 @@ require_file "$OVERALL_EXCELLENCE_PATH"
 require_file "$ONBOARDING_PERMISSION_PATH"
 require_file "$APPLE_NATIVE_PATH"
 require_file "$APP_PROOF_PATH"
+require_file "$STEADYTYPE_SCORECARD_PATH"
 
 echo "Score target status"
+echo "SteadyType product scorecard: $STEADYTYPE_SCORECARD_PATH"
 echo "Deep dive: $DEEP_DIVE_PATH"
 echo "Deep research: $DEEP_RESEARCH_PATH"
 echo "Overall excellence: $OVERALL_EXCELLENCE_PATH"
@@ -309,6 +335,7 @@ echo "Apple-native checklist: $APPLE_NATIVE_PATH"
 echo "App proof matrix: $APP_PROOF_PATH"
 echo
 
+check_steadytype_scorecard
 check_deep_dive "$DEEP_DIVE_PATH"
 check_deep_research "$DEEP_RESEARCH_PATH"
 check_overall_excellence "$OVERALL_EXCELLENCE_PATH"

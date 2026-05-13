@@ -47,6 +47,7 @@ struct LocalModelInstallProgress: Equatable, Sendable {
 
 enum LocalModelAssetInstallerError: LocalizedError, Equatable {
     case missingSource(model: String)
+    case sourceRevisionNotImmutable(String)
     case invalidRepository(String)
     case insufficientDiskSpace(requiredBytes: Int64, availableBytes: Int64)
     case invalidAfterInstall(String)
@@ -55,6 +56,8 @@ enum LocalModelAssetInstallerError: LocalizedError, Equatable {
         switch self {
         case let .missingSource(model):
             return "This model cannot be installed in the app yet: \(model). Open the model folder or choose the default model."
+        case let .sourceRevisionNotImmutable(reason):
+            return "This model cannot be installed safely: \(reason)."
         case let .invalidRepository(repoID):
             return "The model download address is invalid: \(repoID)."
         case let .insufficientDiskSpace(requiredBytes, availableBytes):
@@ -145,6 +148,9 @@ struct LocalModelAssetInstaller: Sendable {
         guard let source = manifest.source else {
             throw LocalModelAssetInstallerError.missingSource(model: manifest.model.rawValue)
         }
+        if let sourceRevisionError = source.immutableRevisionError {
+            throw LocalModelAssetInstallerError.sourceRevisionNotImmutable(sourceRevisionError)
+        }
 
         guard let repoID = Repo.ID(rawValue: source.repoID) else {
             throw LocalModelAssetInstallerError.invalidRepository(source.repoID)
@@ -156,15 +162,21 @@ struct LocalModelAssetInstaller: Sendable {
         )
 
         await progressHandler?(.init(phase: .preparing))
+        let scratchURL = destinationURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".\(manifest.fileName).download-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
-            at: destinationURL,
+            at: scratchURL,
             withIntermediateDirectories: true
         )
+        defer {
+            try? FileManager.default.removeItem(at: scratchURL)
+        }
 
         let downloadedURL = try await HubClient.default.downloadSnapshot(
             of: repoID,
             kind: .model,
-            to: destinationURL,
+            to: scratchURL,
             revision: source.revision,
             matching: source.allowPatterns,
             maxConcurrentDownloads: 4
@@ -178,14 +190,26 @@ struct LocalModelAssetInstaller: Sendable {
             )
         }
 
+        try Self.checkCancellationBeforeFinalizing()
         await progressHandler?(.init(phase: .validating))
+        try Self.checkCancellationBeforeFinalizing()
+        do {
+            try ModelAssetInstaller.finalizeDownloadedSnapshot(
+                manifest: manifest,
+                snapshotURL: downloadedURL,
+                targetURL: destinationURL
+            )
+        } catch let error as ModelAssetInstallerError {
+            throw LocalModelAssetInstallerError.invalidAfterInstall(error.localizedDescription)
+        }
+
         let state = modelAssetState(at: destinationURL)
         guard state.isUsable else {
             throw LocalModelAssetInstallerError.invalidAfterInstall(state.statusSummary)
         }
 
         await progressHandler?(.init(phase: .installed))
-        return downloadedURL
+        return destinationURL
     }
 
     private func modelAssetState(at url: URL) -> LocalModelAssetState {
@@ -207,15 +231,32 @@ struct LocalModelAssetInstaller: Sendable {
             return total + size
         }
 
-        return manifest.validatedDirectoryState(
+        let structureState = manifest.validatedDirectoryState(
             path: path,
             isDirectory: isDirectory.boolValue,
             childFileNames: childFileNames,
             modelBytes: modelBytes
         )
+
+        guard structureState.isUsable else {
+            return structureState
+        }
+
+        if let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: url
+        ) {
+            return .invalid(path: path, reason: integrityError)
+        }
+
+        return structureState
     }
 
     private func availableBytesForInstallVolume() -> Int64? {
         capacityResolver.availableBytes(for: destinationURL)
+    }
+
+    static func checkCancellationBeforeFinalizing() throws {
+        try Task.checkCancellation()
     }
 }

@@ -17,6 +17,152 @@ DEFAULT_APP_PROOF_MATRIX = ROOT_DIR / "docs/product/app-proof-matrix.md"
 DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
 PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
 HOST_POLICY_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift"
+CURRENT_PROOF_SOURCE_PATHS = (
+    "Package.swift",
+    "Package.resolved",
+    "Sources",
+    "script/build_and_run.sh",
+    "script/beta_readiness.sh",
+    "script/check_score_targets.sh",
+    "script/fresh_latency_proof.sh",
+    "script/fresh_latency_proof_self_test.sh",
+    "script/local_completion_runtime.py",
+    "script/real_app_smoke.sh",
+    "script/scorecard_goal_loop.sh",
+)
+EXPECTED_GRADUATION_DECISIONS = {
+    "Google Docs in Chrome": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture google-docs",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Notion browser or desktop": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture notion",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Slack browser or desktop": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-slack",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Discord browser or desktop": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-discord",
+        "requiredProof": {
+            "correct placement",
+            "safe Tab",
+            "no submit/send",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Mail compose": {
+        "decision": "diagnostics-only",
+        "proofState": "blocked",
+        "smokeCommand": None,
+        "requiredProof": {
+            "compose-body-only placement",
+            "safe Tab",
+            "no recipient/search/account-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Browser ChatGPT": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-chatgpt",
+        "requiredProof": {
+            "correct placement",
+            "safe one-word Tab",
+            "no submit/send",
+            "no tool/context side effect",
+            "no sensitive-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Claude desktop layouts": {
+        "decision": "word-only",
+        "proofState": "partial",
+        "smokeCommand": "script/real_app_smoke.sh claude-empty --manual-gate",
+        "requiredProof": {
+            "empty prompt layout",
+            "long prompt layout",
+            "wrapped prompt layout",
+            "narrow window layout",
+            "context layout",
+            "light appearance",
+            "dark appearance",
+        },
+    },
+    "Codex layouts": {
+        "decision": "word-only",
+        "proofState": "complete",
+        "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
+        "requiredProof": {
+            "more prompt layouts before raising beyond word-only",
+            "separate full-accept no-submit proof before enabling full accept",
+        },
+    },
+    "Obsidian long notes": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh obsidian-long-note --manual-gate",
+        "requiredProof": {
+            "correct scrolled CodeMirror caret source",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+    "Real Monaco and CodeMirror editors": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture monaco-official",
+        "requiredProof": {
+            "official CodeMirror proof",
+            "official Monaco proof",
+            "default-AX Monaco proof",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
+}
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 TRACE_REFERENCE_PATTERN = re.compile(
     r"lines\s+(\d+)(?:\s*-\s*(\d+)|\+)?\s+in\s+`?([^`;\s]+)`?"
@@ -65,6 +211,7 @@ SUBMIT_SIGNAL_METADATA_KEYS = {
     "reason",
     "result",
 }
+NON_ACTIONABLE_BLOCKER_TYPES = {"unavailable-host"}
 
 
 def fail(message: str) -> None:
@@ -117,6 +264,60 @@ def current_commit() -> str:
         ).strip()
     except subprocess.CalledProcessError:
         return ""
+
+
+def source_commit_is_current_compatible(source_commit: str, head: str) -> bool:
+    if not source_commit or not head:
+        return False
+    try:
+        proof_commit = subprocess.check_output(
+            ["git", "rev-parse", "--verify", f"{source_commit}^{{commit}}"],
+            cwd=ROOT_DIR,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return False
+
+    if proof_commit == head:
+        return True
+
+    try:
+        subprocess.check_call(
+            ["git", "diff", "--quiet", f"{proof_commit}..{head}", "--", *CURRENT_PROOF_SOURCE_PATHS],
+            cwd=ROOT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def proof_sensitive_worktree_changes() -> list[str]:
+    try:
+        output = subprocess.check_output(
+            [
+                "git",
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                *CURRENT_PROOF_SOURCE_PATHS,
+            ],
+            cwd=ROOT_DIR,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return ["unable to inspect proof-sensitive worktree paths"]
+
+    changes: list[str] = []
+    for line in output.splitlines():
+        path = line[3:].strip() if len(line) > 3 else line.strip()
+        if path:
+            changes.append(path)
+    return changes
 
 
 def compatibility_profiles(path: Path) -> dict[str, dict[str, str]]:
@@ -272,6 +473,7 @@ def validate_requirements(name: str, surface: dict, failures: list[str]) -> list
         requirement_id = str(requirement.get("id", "")).strip()
         status = str(requirement.get("status", "")).strip()
         summary = str(requirement.get("summary", "")).strip()
+        blocker_type = str(requirement.get("blockerType", "")).strip()
         if not requirement_id:
             failures.append(f"{name}: requirement {index} is missing id")
         elif requirement_id in seen:
@@ -281,6 +483,16 @@ def validate_requirements(name: str, surface: dict, failures: list[str]) -> list
             failures.append(
                 f"{name}: requirement {requirement_id or index} status must be complete, pending, or blocked"
             )
+        if blocker_type:
+            if blocker_type not in NON_ACTIONABLE_BLOCKER_TYPES:
+                failures.append(
+                    f"{name}: requirement {requirement_id or index} blockerType must be one of "
+                    + ", ".join(sorted(NON_ACTIONABLE_BLOCKER_TYPES))
+                )
+            if status != "blocked":
+                failures.append(
+                    f"{name}: requirement {requirement_id or index} blockerType is only valid on blocked requirements"
+                )
         if not summary:
             failures.append(f"{name}: requirement {requirement_id or index} is missing summary")
         valid.append(requirement)
@@ -315,11 +527,31 @@ def validate_required_manual_smokes(name: str, surface: dict, failures: list[str
     return valid
 
 
-def pending_requirement_labels(requirements: list[dict]) -> list[str]:
+def requirement_is_unavailable_host_blocker(requirement: dict) -> bool:
+    return (
+        str(requirement.get("status", "")).strip() == "blocked"
+        and str(requirement.get("blockerType", "")).strip() == "unavailable-host"
+    )
+
+
+def pending_requirement_labels(
+    requirements: list[dict],
+    *,
+    include_unavailable_host: bool = True,
+) -> list[str]:
     return [
         requirement_label(requirement)
         for requirement in requirements
         if str(requirement.get("status", "")).strip() in {"pending", "blocked"}
+        and (include_unavailable_host or not requirement_is_unavailable_host_blocker(requirement))
+    ]
+
+
+def unavailable_host_requirement_labels(requirements: list[dict]) -> list[str]:
+    return [
+        requirement_label(requirement)
+        for requirement in requirements
+        if requirement_is_unavailable_host_blocker(requirement)
     ]
 
 
@@ -671,6 +903,12 @@ def verify_manifest(
             failures,
         )
     host_policy_count = verify_host_policy(manifest, expected_profiles, failures)
+    graduation_decision_count = verify_graduation_decisions(
+        manifest,
+        failures,
+        require_graduation_decisions=manifest_path.name == DEFAULT_MANIFEST.name
+        or "graduationDecisions" in manifest,
+    )
 
     proof_fingerprint = manifest.get("proofFingerprint", {})
     current_versions = current_proof_versions()
@@ -681,8 +919,18 @@ def verify_manifest(
 
     manifest_commit = str(manifest.get("sourceCommit", ""))
     head = current_commit()
-    if require_current_commit and head and manifest_commit != head:
-        failures.append(f"sourceCommit is {manifest_commit or 'missing'}; expected current HEAD {head}")
+    if require_current_commit and head and not source_commit_is_current_compatible(manifest_commit, head):
+        failures.append(
+            f"sourceCommit is {manifest_commit or 'missing'}; expected current HEAD {head} "
+            "or a source-compatible commit with no changes in proof-sensitive app/smoke paths"
+        )
+    if require_current_commit:
+        dirty_proof_paths = proof_sensitive_worktree_changes()
+        if dirty_proof_paths:
+            failures.append(
+                "proof-sensitive source paths have uncommitted changes: "
+                + ", ".join(dirty_proof_paths[:8])
+            )
 
     surfaces = manifest.get("surfaces")
     if not isinstance(surfaces, list) or not surfaces:
@@ -723,7 +971,10 @@ def verify_manifest(
         gaps = surface.get("gaps", [])
         requirements = validate_requirements(name, surface, failures)
         required_manual_smokes = validate_required_manual_smokes(name, surface, failures)
-        pending_requirements = pending_requirement_labels(requirements)
+        pending_requirements = pending_requirement_labels(
+            requirements,
+            include_unavailable_host=status == "complete",
+        )
         if status == "complete":
             complete += 1
             if gaps:
@@ -898,6 +1149,7 @@ def verify_manifest(
     if not skip_profile_coverage:
         print(f"Profile coverage rows: {profile_coverage_count}")
     print(f"Host policy rows: {host_policy_count}")
+    print(f"Graduation decision rows: {graduation_decision_count}")
     if verify_trace_slices:
         print(f"Verified trace slices: {verified_trace_slices}")
     if partial:
@@ -909,18 +1161,31 @@ def verify_manifest(
         for name in pending:
             print(f"- {name}")
     requirement_rows: list[tuple[str, list[str]]] = []
+    unavailable_requirement_rows: list[tuple[str, list[str]]] = []
     for surface in surfaces:
         if not isinstance(surface, dict):
             continue
         name = str(surface.get("surface", "")).strip()
         if not name:
             continue
-        labels = pending_requirement_labels(validate_requirements(name, surface, []))
+        labels = pending_requirement_labels(
+            validate_requirements(name, surface, []),
+            include_unavailable_host=False,
+        )
         if labels:
             requirement_rows.append((name, labels))
+        unavailable_labels = unavailable_host_requirement_labels(validate_requirements(name, surface, []))
+        if unavailable_labels:
+            unavailable_requirement_rows.append((name, unavailable_labels))
     if requirement_rows:
         print("Pending requirements:")
         for name, labels in requirement_rows:
+            print(f"- {name}")
+            for label in labels:
+                print(f"  - {label}")
+    if unavailable_requirement_rows:
+        print("Unavailable host requirements:")
+        for name, labels in unavailable_requirement_rows:
             print(f"- {name}")
             for label in labels:
                 print(f"  - {label}")
@@ -1132,6 +1397,72 @@ def verify_host_policy(
     missing = sorted(set(expected_profiles) - set(seen))
     if missing:
         failures.append("hostPolicy missing bundle(s): " + ", ".join(missing))
+
+    return len(seen)
+
+
+def verify_graduation_decisions(
+    manifest: dict,
+    failures: list[str],
+    require_graduation_decisions: bool,
+) -> int:
+    rows = manifest.get("graduationDecisions")
+    if not isinstance(rows, list) or not rows:
+        if require_graduation_decisions:
+            failures.append("graduationDecisions must list focused high-value surface decisions")
+        return 0
+
+    seen: dict[str, dict] = {}
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            failures.append(f"graduationDecisions entry {index} must be an object")
+            continue
+        surface = str(row.get("surface", "")).strip()
+        if not surface:
+            failures.append(f"graduationDecisions entry {index} is missing surface")
+            continue
+        if surface in seen:
+            failures.append(f"graduationDecisions duplicate surface: {surface}")
+        seen[surface] = row
+
+    expected_surfaces = set(EXPECTED_GRADUATION_DECISIONS)
+    missing = sorted(expected_surfaces - set(seen))
+    extra = sorted(set(seen) - expected_surfaces)
+    if missing:
+        failures.append("graduationDecisions missing surface(s): " + ", ".join(missing))
+    if extra:
+        failures.append("graduationDecisions unexpected surface(s): " + ", ".join(extra))
+
+    for surface, expected in EXPECTED_GRADUATION_DECISIONS.items():
+        row = seen.get(surface)
+        if row is None:
+            continue
+
+        for key in ["decision", "proofState", "smokeCommand"]:
+            actual = row.get(key)
+            if actual != expected[key]:
+                failures.append(
+                    f"graduationDecisions {surface}: {key} is {actual!r}; expected {expected[key]!r}"
+                )
+
+        required_proof = row.get("requiredProof")
+        if not isinstance(required_proof, list):
+            failures.append(f"graduationDecisions {surface}: requiredProof must be a list")
+            continue
+        missing_proof = sorted(set(expected["requiredProof"]) - set(required_proof))
+        if missing_proof:
+            failures.append(
+                f"graduationDecisions {surface}: missing requiredProof item(s): "
+                + ", ".join(missing_proof)
+            )
+
+        decision = str(row.get("decision", "")).strip()
+        if decision in {"blocked", "diagnostics-only"}:
+            notes = str(row.get("notes", "")).strip().lower()
+            if "until" not in notes and "disabled" not in notes and "diagnosed" not in notes:
+                failures.append(
+                    f"graduationDecisions {surface}: blocked/diagnostics row needs a concrete blocked-until note"
+                )
 
     return len(seen)
 

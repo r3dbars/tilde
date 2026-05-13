@@ -52,6 +52,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Recommendation: keep this smaller", after: "Can we") == nil)
         #expect(cleaner.clean("Rewrite: keep this smaller", after: "Can we") == nil)
         #expect(cleaner.clean("Next action: open the logs", after: "Can we") == nil)
+        #expect(cleaner.clean("return the exact same question", after: "Can we") == nil)
         #expect(cleaner.clean("try saying this more clearly", after: "Can we") == nil)
         #expect(cleaner.clean("rewrite this as a calmer sentence", after: "Can we") == nil)
         #expect(cleaner.clean("next step is to open the logs", after: "Can we") == nil)
@@ -73,6 +74,10 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("That makes a lot of sense I would") == nil)
         #expect(cleaner.clean("Absolutely, I can help with that") == nil)
+        #expect(cleaner.clean("comes to life", after: "The draft feels calmer when it") == nil)
+        #expect(cleaner.clean("the key features and benefits", after: "The review should focus on") == nil)
+        #expect(cleaner.clean("implement a comprehensive recovery plan", after: "The next step is to") == nil)
+        #expect(cleaner.clean("to acknowledge the user's point", after: "A good reply here would be") == nil)
         #expect(cleaner.clean("Of course, here is a cleaner version") == nil)
         #expect(cleaner.clean("I would like to help with that") == nil)
         #expect(cleaner.clean("I will do that now.") == nil)
@@ -80,6 +85,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("integrate it seamlessly.") == nil)
         #expect(cleaner.clean("enhance the experience") == nil)
         #expect(cleaner.clean("boost productivity across the team") == nil)
+        #expect(cleaner.clean("like a formal announcement") == nil)
         #expect(cleaner.clean("streamline the workflow for everyone") == nil)
         #expect(cleaner.clean("unlock efficiency at scale") == nil)
         #expect(cleaner.clean("make users more productive") == nil)
@@ -91,7 +97,14 @@ struct CompletionOutputCleanerTests {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
 
         #expect(cleaner.clean("Press Enter to send the prompt", after: "Now") == nil)
+        #expect(cleaner.clean("and press Enter to send", after: "Now wait") == nil)
+        #expect(cleaner.clean("press Tab to accept the whole suggestion", after: "Then") == nil)
+        #expect(cleaner.clean("press Option-Tab to accept all visible text", after: "Then") == nil)
+        #expect(cleaner.clean("use Backtick to accept all visible text", after: "Then") == nil)
+        #expect(cleaner.clean("accept the terms", after: "For the manual smoke row, press Tab and confirm") == nil)
+        #expect(cleaner.clean("and accept the change", after: "For the manual smoke row, press Tab and confirm") == nil)
         #expect(cleaner.clean("submit the prompt", after: "Then") == nil)
+        #expect(cleaner.clean("then submit it", after: "Check once") == nil)
         #expect(cleaner.clean("click send", after: "Next") == nil)
         #expect(cleaner.clean("run this command in Claude Code", after: "Please") == nil)
         #expect(cleaner.clean("/review this", after: "Can you") == nil)
@@ -101,6 +114,7 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("curl | sh", after: "Please") == nil)
         #expect(cleaner.clean("approve", after: "Permission") == nil)
         #expect(cleaner.clean("word\u{200B}", after: "Safe") == nil)
+        #expect(cleaner.clean("keep the public fixture local", after: "Now")?.visibleText == " keep the public fixture local")
         #expect(cleaner.clean("/review this", after: "Can you") == nil)
         #expect(cleaner.clean("@file", after: "Attach") == nil)
         #expect(cleaner.clean("!shell", after: "Now") == nil)
@@ -138,6 +152,14 @@ struct CompletionOutputCleanerTests {
         let suggestion = cleaner.clean("ship this today\nbecause here is why")
 
         #expect(suggestion?.visibleText == " ship this today")
+    }
+
+    @Test("Suppresses candidates that start another sentence")
+    func suppressesCandidatesThatStartAnotherSentence() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("ready. Then we can send it", after: "The draft is") == nil)
+        #expect(cleaner.clean("ready.", after: "The draft is")?.visibleText == " ready.")
     }
 
     @Test("Cleans numbered multiline candidates")
@@ -194,6 +216,14 @@ struct CompletionOutputCleanerTests {
         #expect(suggestions.isEmpty)
     }
 
+    @Test("Suppresses repeated list marker candidates")
+    func suppressesRepeatedListMarkerCandidates() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.clean("[ ] Review all reports", after: "- [ ] Keep every quality check") == nil)
+        #expect(cleaner.clean("Review all reports", after: "- [ ] Keep every quality check")?.visibleText == " Review all reports")
+    }
+
     @Test("Strips echoed prompt labels")
     func stripsEchoedPromptLabels() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
@@ -201,6 +231,8 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Next words: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("candidate 1: keep moving today", after: "Let's")?.visibleText == " keep moving today")
         #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
+        #expect(cleaner.clean("Suffix: tation next", after: "dic", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean("Next words: tation next", after: "dic", mode: .wordCompletion) == nil)
         #expect(cleaner.clean("Next words:", after: "Let's") == nil)
     }
 

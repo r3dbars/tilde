@@ -99,6 +99,12 @@ struct AutocompleteTraceAnalyzerTests {
                 appBundleIdentifier: "com.openai.codex",
                 reason: "prompt-mutation-outside-accepted-span",
                 metadata: ["promptMutationWithoutUserIntent": "true"]
+            ),
+            event(
+                .suggestionAccepted,
+                suggestionID: "full-accept",
+                appBundleIdentifier: "com.anthropic.claudefordesktop",
+                metadata: ["acceptMode": "acceptAllVisible"]
             )
         ]
 
@@ -107,6 +113,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.doNotShipCounters["prompt-accidental-submit"] == 1)
         #expect(summary.doNotShipCounters["prompt-send-key-collision"] == 1)
         #expect(summary.doNotShipCounters["prompt-mutation-without-user-intent"] == 1)
+        #expect(summary.doNotShipCounters["prompt-full-accept-without-proof"] == 1)
     }
 
     @Test("Streaming updates count as one shown suggestion")

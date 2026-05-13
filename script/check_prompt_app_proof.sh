@@ -290,6 +290,30 @@ def wrong_context(event: dict) -> bool:
     )
 
 
+def full_accept_without_proof(event: dict) -> bool:
+    metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+    event_text = " ".join(
+        lower_text(event.get(field))
+        for field in ["type", "outcome", "reason", "triggerReason", "requestMode"]
+    )
+    metadata_text = " ".join(
+        lower_text(metadata.get(key))
+        for key in ["acceptMode", "keyboardAction", "action", "proofMode"]
+    )
+    combined = f"{event_text} {metadata_text}"
+    return any(
+        token in combined
+        for token in [
+            "acceptallvisible",
+            "accept-all-visible",
+            "fullaccept",
+            "full-accept",
+            "accept all",
+            "acceptall"
+        ]
+    )
+
+
 def suggestion_content_violation(event: dict) -> bool:
     metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
     if is_true(metadata.get("contentPolicyViolation")):
@@ -309,6 +333,7 @@ metric_checks = [
     ("sendKeyCollisionCount", send_key_collision),
     ("promptMutationWithoutUserIntentCount", prompt_mutation),
     ("wrongContextInsertionCount", wrong_context),
+    ("fullAcceptWithoutProofCount", full_accept_without_proof),
     ("suggestionContentViolationCount", suggestion_content_violation),
 ]
 

@@ -8,6 +8,8 @@ import Tokenizers
 
 public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let modelDirectoryURL: URL
+    private let modelManifest: LocalModelAssetManifest?
+    private let fileManager: FileManager
     private let usesVisionLanguageFactory: Bool
     private let promptBuilder: CompletionPromptBuilder
     private let cleaner: CompletionOutputCleaner
@@ -22,6 +24,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public init(
         modelDirectoryURL: URL,
+        modelManifest: LocalModelAssetManifest? = nil,
+        fileManager: FileManager = .default,
         usesVisionLanguageFactory: Bool = false,
         lengthConfiguration: CompletionLengthConfiguration = .default,
         promptBuilder: CompletionPromptBuilder? = nil,
@@ -29,6 +33,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
     ) {
         self.modelDirectoryURL = modelDirectoryURL
+        self.modelManifest = modelManifest
+        self.fileManager = fileManager
         self.usesVisionLanguageFactory = usesVisionLanguageFactory
         self.lengthConfiguration = lengthConfiguration
         self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
@@ -46,9 +52,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func warm() async throws {
+        let startedAt = Date()
+        var integrityValidationCache = ModelAssetIntegrityValidationCache()
+        try verifyModelAssetIntegrity(startedAt: startedAt, cache: &integrityValidationCache)
+        var didReuseLoadedContainer = false
         let warmGeneration = stateQueue.sync {
             if container != nil {
                 storedState = .ready(candidate: .mlx)
+                didReuseLoadedContainer = true
                 return generation
             }
 
@@ -57,19 +68,76 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return generation
         }
 
-        let loadedContainer: ModelContainer
-        if usesVisionLanguageFactory {
-            loadedContainer = try await VLMModelFactory.shared.loadContainer(
-                from: modelDirectoryURL,
-                using: #huggingFaceTokenizerLoader()
+        if didReuseLoadedContainer {
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-reused",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
             )
-        } else {
-            loadedContainer = try await LLMModelFactory.shared.loadContainer(
-                from: modelDirectoryURL,
-                using: #huggingFaceTokenizerLoader()
-            )
+            return
         }
 
+        DiagnosticsLog.shared.record(
+            "mlx-model-load-start",
+            metadata: [
+                "assetDirectory": modelDirectoryURL.path,
+                "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+            ]
+        )
+
+        let loadedContainer: ModelContainer
+        do {
+            if usesVisionLanguageFactory {
+                loadedContainer = try await VLMModelFactory.shared.loadContainer(
+                    from: modelDirectoryURL,
+                    using: #huggingFaceTokenizerLoader()
+                )
+            } else {
+                loadedContainer = try await LLMModelFactory.shared.loadContainer(
+                    from: modelDirectoryURL,
+                    using: #huggingFaceTokenizerLoader()
+                )
+            }
+        } catch is CancellationError {
+            stateQueue.sync {
+                if warmGeneration == generation {
+                    storedState = .unavailable(reason: "MLX runtime was canceled.")
+                }
+            }
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-cancelled",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
+            )
+            throw CancellationError()
+        } catch {
+            stateQueue.sync {
+                if warmGeneration == generation {
+                    container = nil
+                    staticPromptCache = RuntimeStaticPromptCache()
+                    storedState = .failed(candidate: .mlx, reason: error.localizedDescription)
+                }
+            }
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-failed",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "reason": error.localizedDescription,
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
+            )
+            throw error
+        }
+
+        try Task.checkCancellation()
+        try verifyModelAssetIntegrity(startedAt: startedAt, cache: &integrityValidationCache)
         try Task.checkCancellation()
 
         let wasCancelled = stateQueue.sync {
@@ -77,6 +145,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         guard !wasCancelled else {
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-cancelled",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
+            )
             throw CancellationError()
         }
 
@@ -84,6 +160,112 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             container = loadedContainer
             storedState = .ready(candidate: .mlx)
         }
+        DiagnosticsLog.shared.record(
+            "mlx-model-load-succeeded",
+            metadata: [
+                "assetDirectory": modelDirectoryURL.path,
+                "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+            ]
+        )
+    }
+
+    private func verifyModelAssetIntegrity(
+        startedAt: Date,
+        cache: inout ModelAssetIntegrityValidationCache
+    ) throws {
+        guard let modelManifest else {
+            return
+        }
+
+        guard let integrityError = cache.validate(
+            manifest: modelManifest,
+            modelDirectoryURL: modelDirectoryURL,
+            fileManager: fileManager
+        ) else {
+            return
+        }
+
+        let error = MLXModelRuntimeError.modelAssetIntegrityFailed(reason: integrityError)
+        let failureDescription = error.errorDescription ?? "Model asset integrity failed."
+        stateQueue.sync {
+            generation += 1
+            container = nil
+            staticPromptCache = RuntimeStaticPromptCache()
+            storedState = .failed(candidate: .mlx, reason: failureDescription)
+        }
+        DiagnosticsLog.shared.record(
+            "mlx-model-integrity-failed",
+            metadata: [
+                "assetDirectory": modelDirectoryURL.path,
+                "integrityCode": Self.integrityFailureCode(for: integrityError),
+                "integrityFile": Self.integrityFailureFile(for: integrityError) ?? "unknown",
+                "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                "reason": integrityError,
+                "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+            ]
+        )
+        throw error
+    }
+
+    static func integrityFailureCode(for reason: String) -> String {
+        if reason.contains("checksum mismatch") {
+            return "checksum-mismatch"
+        }
+        if reason.contains("byte count mismatch") {
+            return "byte-count-mismatch"
+        }
+        if reason.contains("missing expected file") ||
+            reason.contains("references missing model file") ||
+            reason.contains("missing integrity receipt") {
+            return "missing-file"
+        }
+        if reason.contains("unexpected file") ||
+            reason.contains("not in integrity receipt") {
+            return "unexpected-file"
+        }
+        if reason.contains("unsafe file path") {
+            return "unsafe-path"
+        }
+        if reason.contains("duplicate file") {
+            return "duplicate-file"
+        }
+        if reason.contains("model mismatch") ||
+            reason.contains("repo mismatch") ||
+            reason.contains("revision mismatch") {
+            return "receipt-mismatch"
+        }
+        if reason.contains("source revision") ||
+            reason.contains("commit SHA") {
+            return "mutable-revision"
+        }
+        if reason.contains("invalid integrity receipt") ||
+            reason.contains("unsupported integrity receipt schema") {
+            return "invalid-receipt"
+        }
+        return "unknown"
+    }
+
+    static func integrityFailureFile(for reason: String) -> String? {
+        let markers = [
+            " for ",
+            " file ",
+            " checksum ",
+            " references missing model file: ",
+            "not in integrity receipt: "
+        ]
+        for marker in markers {
+            guard let range = reason.range(of: marker) else {
+                continue
+            }
+            let suffix = reason[range.upperBound...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,:;"))
+            if !suffix.isEmpty && !suffix.contains(" ") {
+                return String(suffix)
+            }
+        }
+        return nil
     }
 
     public func cancel() {
@@ -285,11 +467,19 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     private func readyContainer() async throws -> ModelContainer {
-        if let existing = stateQueue.sync(execute: { container }) {
+        let initialSnapshot = stateQueue.sync {
+            (storedState, container)
+        }
+
+        if case let .failed(_, reason) = initialSnapshot.0 {
+            throw MLXModelRuntimeError.runtimeFailed(reason: reason)
+        }
+
+        if let existing = initialSnapshot.1 {
             return existing
         }
 
-        for _ in 0..<600 {
+        for _ in 0..<3_000 {
             let isWarming = stateQueue.sync {
                 if case .warming = storedState {
                     return true
@@ -303,7 +493,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             }
 
             try Task.checkCancellation()
-            try await Task.sleep(for: .milliseconds(50))
+            try await Task.sleep(for: .milliseconds(10))
 
             if let existing = stateQueue.sync(execute: { container }) {
                 return existing
@@ -320,13 +510,19 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 }
 
-public enum MLXModelRuntimeError: LocalizedError {
+public enum MLXModelRuntimeError: LocalizedError, Equatable {
     case warmCompletedWithoutContainer
+    case modelAssetIntegrityFailed(reason: String)
+    case runtimeFailed(reason: String)
 
     public var errorDescription: String? {
         switch self {
         case .warmCompletedWithoutContainer:
             return "MLX warm completed without a loaded model container."
+        case let .modelAssetIntegrityFailed(reason):
+            return "Model asset integrity failed: \(reason)"
+        case let .runtimeFailed(reason):
+            return reason
         }
     }
 }

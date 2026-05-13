@@ -21,6 +21,7 @@ struct PromptAppNoSubmitMetricsTests {
             event(app: "com.anthropic.claude-code", reason: "tab-conflict"),
             event(app: "com.anthropic.claudefordesktop", reason: "prompt-mutation-outside-accepted-span"),
             event(app: "com.openai.chat", reason: "wrong-app-or-field-before-accept"),
+            event(app: "com.openai.codex", type: .suggestionAccepted, metadata: ["acceptMode": "acceptAllVisible"]),
             event(app: "ru.keepcoder.Telegram", reason: "accepted-text-prompt-command-prefix")
         ])
 
@@ -28,6 +29,7 @@ struct PromptAppNoSubmitMetricsTests {
         #expect(metrics.sendKeyCollisionCount == 1)
         #expect(metrics.promptMutationWithoutUserIntentCount == 1)
         #expect(metrics.wrongContextInsertionCount == 1)
+        #expect(metrics.fullAcceptWithoutProofCount == 1)
         #expect(metrics.suggestionContentViolationCount == 1)
         #expect(!metrics.passesReleaseGate)
     }

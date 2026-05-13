@@ -1,27 +1,27 @@
 {
-  "activity_note": "Disposable TextEdit typing session ran during observation; typed content was not captured or saved.",
+  "activity_note": "fresh launch after performance typing soak",
   "allowed_model_endpoint_count": 0,
   "allowed_model_endpoints": [],
-  "generated_at": "2026-05-09T01:00:15+00:00",
+  "generated_at": "2026-05-12T20:35:36+00:00",
   "network_assertion": "No non-loopback remote endpoints during autocomplete.",
   "phase": "autocomplete",
   "pids": [
-    35528
+    13267
   ],
   "privacy_note": "No typed text, prompts, model output, screenshots, URLs, document names, or trace lines are captured.",
-  "process_name": "AutocompleteLab",
+  "process_name": "SteadyType",
   "processes": [
     {
-      "command": "/Users/redbars/.codex/worktrees/6f99/transcripted-autocomplete-lab/dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab",
-      "executable": "/Users/redbars/.codex/worktrees/6f99/transcripted-autocomplete-lab/dist/AutocompleteLab.app/Contents/MacOS/AutocompleteLab",
-      "executable_sha256": "daed4dab226429dd20c112f2e7aaba1b9faaf47cd4ff459bdea1b0efc4e31479",
-      "pid": 35528
+      "command": "/Users/redbars/.codex/worktrees/25ed/transcripted-autocomplete-lab/dist/SteadyType.app/Contents/MacOS/SteadyType",
+      "executable": "/Users/redbars/.codex/worktrees/25ed/transcripted-autocomplete-lab/dist/SteadyType.app/Contents/MacOS/SteadyType",
+      "executable_sha256": "f43639d3714a07f468711c278344bab21b47021ff43874ad1f382b11f69984d1",
+      "pid": 13267
     }
   ],
   "proof_path": "docs/product/runtime-network-egress-latest.md",
   "remote_endpoint_count": 0,
   "result": "pass",
-  "samples": 17,
+  "samples": 11,
   "unexpected_remote_endpoint_count": 0,
   "unexpected_remote_endpoints": []
 }

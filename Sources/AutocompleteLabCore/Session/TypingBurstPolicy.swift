@@ -26,12 +26,31 @@ public enum TypingBurstDecision: Equatable, Sendable {
     case idle
     case burst(insertedCharacterCount: Int, eventCount: Int)
 
-    public var shouldSuppressPhraseContinuation: Bool {
+    public var shouldSuppressSuggestions: Bool {
         switch self {
         case .idle:
             false
         case .burst:
             true
+        }
+    }
+
+    public var shouldSuppressPhraseContinuation: Bool {
+        shouldSuppressSuggestions
+    }
+
+    public var traceMetadata: [String: String] {
+        switch self {
+        case .idle:
+            return [
+                "typingBurst": "false"
+            ]
+        case let .burst(insertedCharacterCount, eventCount):
+            return [
+                "typingBurst": "true",
+                "typingBurstInsertedCharacters": String(insertedCharacterCount),
+                "typingBurstEvents": String(eventCount)
+            ]
         }
     }
 }

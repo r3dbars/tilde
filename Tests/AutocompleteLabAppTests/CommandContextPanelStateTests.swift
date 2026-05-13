@@ -142,7 +142,32 @@ struct CommandContextPanelStateTests {
         )
 
         #expect(!missingModel.canRequestSuggestion)
-        #expect(missingModel.requestUnavailableReason == "Local model needs setup: download needed.")
+        #expect(missingModel.requestUnavailableReason == "Local model is download needed.")
+    }
+
+    @Test("Runtime detail appears in command context blocked reason")
+    func runtimeDetailAppearsInCommandContextBlockedReason() {
+        let state = CommandContextPanelState(
+            appDisplayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+            isAppEnabled: true,
+            runtimeReport: RuntimeReadinessReport(
+                stage: .repairNeeded,
+                summary: "model folder needs repair",
+                detail: "The local model folder is incomplete: missing tokenizer.json. Folder: /tmp/SteadyType/model",
+                action: .repairModel
+            ),
+            context: editableContext,
+            suggestionText: nil,
+            isLoading: false,
+            statusMessage: ""
+        )
+
+        #expect(!state.canRequestSuggestion)
+        #expect(state.requestUnavailableReason?.contains("model folder needs repair") == true)
+        #expect(state.requestUnavailableReason?.contains("missing tokenizer.json") == true)
+        #expect(state.statusText.contains("Runtime detail:"))
     }
 
     @Test("Selected text is treated as panel context")

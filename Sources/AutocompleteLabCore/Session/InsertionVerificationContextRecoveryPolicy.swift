@@ -13,6 +13,9 @@ public struct InsertionVerificationContextRecoveryInput: Equatable, Sendable {
     public let contextRole: String?
     public let verificationResult: InsertionVerificationResult
     public let mismatch: InsertionVerificationContextMismatch
+    public let previousTextBeforeCursorUTF16Length: Int?
+    public let acceptedTextUTF16Length: Int?
+    public let currentTextBeforeCursorUTF16Length: Int?
 
     public init(
         profile: CompatibilityProfile,
@@ -21,7 +24,10 @@ public struct InsertionVerificationContextRecoveryInput: Equatable, Sendable {
         expectedFieldIdentity: FocusedFieldIdentity,
         contextRole: String?,
         verificationResult: InsertionVerificationResult,
-        mismatch: InsertionVerificationContextMismatch
+        mismatch: InsertionVerificationContextMismatch,
+        previousTextBeforeCursorUTF16Length: Int? = nil,
+        acceptedTextUTF16Length: Int? = nil,
+        currentTextBeforeCursorUTF16Length: Int? = nil
     ) {
         self.profile = profile
         self.frontmostBundleIdentifier = frontmostBundleIdentifier
@@ -30,6 +36,9 @@ public struct InsertionVerificationContextRecoveryInput: Equatable, Sendable {
         self.contextRole = contextRole
         self.verificationResult = verificationResult
         self.mismatch = mismatch
+        self.previousTextBeforeCursorUTF16Length = previousTextBeforeCursorUTF16Length
+        self.acceptedTextUTF16Length = acceptedTextUTF16Length
+        self.currentTextBeforeCursorUTF16Length = currentTextBeforeCursorUTF16Length
     }
 }
 
@@ -69,11 +78,27 @@ public struct InsertionVerificationContextRecoveryPolicy: Equatable, Sendable {
         }
 
         switch normalizedRole(input.contextRole) {
-        case "axtextarea", "axtextfield":
+        case "axtextarea":
+            guard !isOneCharacterChromiumTextAreaProof(input) else {
+                return false
+            }
+            return true
+
+        case "axtextfield":
             return true
         default:
             return false
         }
+    }
+
+    private func isOneCharacterChromiumTextAreaProof(_ input: InsertionVerificationContextRecoveryInput) -> Bool {
+        guard input.currentTextBeforeCursorUTF16Length == 1,
+              let previousLength = input.previousTextBeforeCursorUTF16Length,
+              let acceptedLength = input.acceptedTextUTF16Length else {
+            return false
+        }
+
+        return previousLength + acceptedLength == 1
     }
 
     private func normalizedRole(_ role: String?) -> String? {

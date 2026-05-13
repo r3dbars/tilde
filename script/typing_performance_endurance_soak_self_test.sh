@@ -14,8 +14,10 @@ for expected in \
   "Duration target: 10 minute(s)" \
   "Computed text: 9090 generated chars" \
   "Underlying command: script/typing_performance_soak.sh --characters 9090 --chunk-size 5 --delay-ms 250 --require-event-tap-samples 0 --require-ax-samples 0" \
+  "Post-run energy gate: enabled; samples live SteadyType process for 15s after typing" \
+  "Energy thresholds: average CPU <=10%, p95 CPU <=25%, RSS <=6144MB, RSS growth <=512MB" \
   "Synthetic text: 9090 generated chars from a built-in neutral fixture" \
-  "Typed text proof: exact TextEdit clipboard capture match required" \
+  "Typed text proof: exact TextEdit target capture match required" \
   "Typing driver: CGEvent Unicode key events after target-window focus" \
   "Typing batches: up to 250 chars per Swift process" \
   "AX warmup: waits for a focused-text poll summary before typing"; do
@@ -30,6 +32,7 @@ script/typing_performance_endurance_soak.sh \
   --dry-run \
   --skip-build \
   --strict-ax \
+  --skip-energy-gate \
   --minutes 1 \
   --chunk-size 10 \
   --delay-ms 100 \
@@ -39,6 +42,7 @@ script/typing_performance_endurance_soak.sh \
 for expected in \
   "Duration target: 1 minute(s)" \
   "Computed text: 3330 generated chars" \
+  "Post-run energy gate: disabled" \
   "Build: skipped; using an already-running app" \
   "AX warnings: strict; threshold-exceeding or skipped focused-text polling fails the soak" \
   "AX sample proof: require at least 5 focused-text poll samples"; do

@@ -7,6 +7,14 @@ public enum SensitiveFieldProofCategory: String, Codable, CaseIterable, Equatabl
     case login
     case search
     case urlAddress = "url-address"
+    case address
+    case governmentID = "government-id"
+    case dateOfBirth = "date-of-birth"
+    case tax
+    case insurance
+    case medical
+    case cryptoWallet = "crypto-wallet"
+    case commandLine = "command-line"
     case apiKeyLikeText = "api-key-like-text"
     case passwordManager = "password-manager"
     case privatePrompt = "private-prompt"
@@ -127,29 +135,73 @@ public struct SensitiveTextFieldPolicy: Equatable, Sendable {
             "1password", "bitwarden", "dashlane", "lastpass", "password manager"
         ]),
         (.privatePrompt, [
-            "private prompt", "private chat", "confidential prompt", "private note"
+            "private prompt", "private chat", "confidential prompt",
+            "confidential instructions", "internal only prompt", "private note"
         ]),
         (.privateSearch, [
             "private search", "incognito search", "private browsing search"
         ]),
+        (.cryptoWallet, [
+            "seed phrase", "wallet seed", "mnemonic phrase", "crypto wallet",
+            "wallet address", "recovery seed", "secret recovery phrase",
+            "metamask", "coinbase wallet", "phantom wallet"
+        ]),
         (.password, [
-            "password", "passcode", "passphrase", "pin", "recovery phrase",
-            "seed phrase", "private key", "secret key", "client secret"
+            "password", "passkey", "passcode", "passphrase", "pin",
+            "recovery key", "recovery phrase",
+            "private key", "ssh private key", "secret key",
+            "client secret"
         ]),
         (.otp, [
             "2fa", "mfa", "otp", "auth code", "authentication code",
             "one time code", "one time password", "verification code",
-            "security code"
+            "security code", "sign in code", "sso code", "oauth code"
         ]),
         (.payment, [
             "card number", "credit card", "debit card", "cvc", "cvv",
-            "expiration", "expiry", "payment", "billing"
+            "expiration", "expiry", "payment", "billing", "apple pay",
+            "paypal", "iban", "routing number", "bank account", "account number"
         ]),
         (.login, [
-            "login", "sign in", "signin", "username", "account password"
+            "login", "sign in", "sign in with", "sign-in", "signin",
+            "username", "account password", "oauth", "sso"
         ]),
         (.urlAddress, [
             "url", "address bar", "location bar", "web address", "website"
+        ]),
+        (.address, [
+            "street address", "shipping address", "mailing address", "home address",
+            "work address", "address line", "address line 2", "city state zip",
+            "postal code", "zip code", "email address", "phone number"
+        ]),
+        (.tax, [
+            "tax id", "tax identification", "tax return", "tax form",
+            "taxpayer id", "irs", "w2", "w 2", "w9", "w 9", "1099",
+            "ein", "itin", "tin"
+        ]),
+        (.governmentID, [
+            "ssn", "social security", "social security number",
+            "passport", "passport number", "drivers license", "driver license",
+            "driver license number", "license number", "state id",
+            "government id", "national id", "identity number"
+        ]),
+        (.dateOfBirth, [
+            "date of birth", "birth date", "birthday", "dob"
+        ]),
+        (.insurance, [
+            "insurance", "insurance id", "insurance number", "policy number",
+            "member id", "group number", "subscriber id", "rxbin", "rx bin"
+        ]),
+        (.medical, [
+            "medical", "health record", "medical record", "patient id",
+            "patient number", "diagnosis", "prescription", "medication",
+            "allergies", "hipaa", "health history"
+        ]),
+        (.commandLine, [
+            "command line", "command-line", "terminal command", "shell command",
+            "shell prompt", "bash prompt", "zsh prompt", "powershell prompt",
+            "console input", "sudo command", "ssh command", "web terminal",
+            "dev terminal", "codespaces", "github dev", "replit", "stackblitz"
         ]),
         (.search, [
             "search", "search query", "find", "filter"

@@ -50,11 +50,21 @@ declare -a QUEUE=(
   "Notes body|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
   "Notes checklist|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
   "Obsidian disposable note|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+  "Obsidian non-default theme|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+  "Obsidian split panes|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+  "Obsidian long note|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
   "Codex one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
   "Claude Code Terminal one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host terminal --manual-gate"
   "Claude Code iTerm2 one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate"
   "Claude Code Ghostty one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate"
   "Claude desktop one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
+  "Claude desktop empty composer one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-empty --manual-gate"
+  "Claude desktop long prompt one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-long --manual-gate"
+  "Claude desktop wrapped prompt one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-wrapped --manual-gate"
+  "Claude desktop narrow window one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-narrow --manual-gate"
+  "Claude desktop context layout one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-context --manual-gate"
+  "Claude desktop light appearance one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-light --manual-gate"
+  "Claude desktop dark appearance one-word no-submit|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"
 )
 
 print_header() {

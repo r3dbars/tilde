@@ -44,4 +44,44 @@ struct AutocompleteTracePrivacyFilterTests {
         ])
         #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: true) == metadata)
     }
+
+    @Test("Redacts freeform reason and outcome signals unless raw content is enabled")
+    func redactsFreeformReasonAndOutcomeSignalsUnlessRawContentIsEnabled() {
+        #expect(
+            AutocompleteTracePrivacyFilter.traceSignalValue(
+                "wrong-app-or-field-before-accept",
+                rawContentEnabled: false
+            ) == "wrong-app-or-field-before-accept"
+        )
+        #expect(
+            AutocompleteTracePrivacyFilter.traceSignalValue(
+                "private-draft-before",
+                rawContentEnabled: false
+            ) == DiagnosticValueRedactor.stringSummary(length: "private-draft-before".count)
+        )
+        #expect(
+            AutocompleteTracePrivacyFilter.traceSignalValue(
+                "private-draft-before",
+                rawContentEnabled: true
+            ) == "private-draft-before"
+        )
+    }
+
+    @Test("Redacts freeform reason and outcome metadata by default")
+    func redactsFreeformReasonAndOutcomeMetadataByDefault() {
+        let metadata = [
+            "fieldKindReason": "private-field-reason",
+            "suppressionOutcome": "secret customer phrase",
+            "finishReason": "thirty-second-finalized",
+            "visibleChars": "12"
+        ]
+
+        let redacted = AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: false)
+
+        #expect(redacted["fieldKindReason"] == DiagnosticValueRedactor.stringSummary(length: "private-field-reason".count))
+        #expect(redacted["suppressionOutcome"] == DiagnosticValueRedactor.stringSummary(length: "secret customer phrase".count))
+        #expect(redacted["finishReason"] == "thirty-second-finalized")
+        #expect(redacted["visibleChars"] == "12")
+        #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: true) == metadata)
+    }
 }

@@ -35,9 +35,12 @@ Autocomplete 42 user   12u  IPv4 0xabc      0t0  TCP 192.168.1.10:50100->example
 EOF
 
 ./script/check_runtime_network_egress.py \
+  --pid "$$" \
   --sample "$NO_EGRESS" \
   --phase autocomplete \
   --proof-out "$TMP_DIR/no-egress.md" \
+  --json-out "$TMP_DIR/no-egress.json" \
+  --activity-note "typed from /Users/redbars/private-draft.md with secret note" \
   >"$TMP_DIR/no-egress.out"
 
 if ! grep -F "Runtime network egress proof: PASS" "$TMP_DIR/no-egress.out" >/dev/null; then
@@ -49,6 +52,32 @@ fi
 if ! grep -F "Unexpected remote endpoints: \`0\`" "$TMP_DIR/no-egress.md" >/dev/null; then
   echo "runtime network self-test expected proof artifact to record zero unexpected endpoints" >&2
   cat "$TMP_DIR/no-egress.md" >&2
+  exit 1
+fi
+
+for artifact in "$TMP_DIR/no-egress.md" "$TMP_DIR/no-egress.json"; do
+  for forbidden in \
+    "/Users/redbars/private-draft.md" \
+    "typed from" \
+    "$ROOT_DIR" \
+    "check_runtime_network_egress_self_test.sh"; do
+    if grep -F "$forbidden" "$artifact" >/dev/null; then
+      echo "runtime network self-test found unredacted proof metadata in $artifact: $forbidden" >&2
+      cat "$artifact" >&2
+      exit 1
+    fi
+  done
+done
+
+if ! grep -F "Command line: \`String(" "$TMP_DIR/no-egress.md" >/dev/null; then
+  echo "runtime network self-test expected command line to be summarized in markdown" >&2
+  cat "$TMP_DIR/no-egress.md" >&2
+  exit 1
+fi
+
+if ! grep -F '"command_summary": "String(' "$TMP_DIR/no-egress.json" >/dev/null; then
+  echo "runtime network self-test expected command line to be summarized in json" >&2
+  cat "$TMP_DIR/no-egress.json" >&2
   exit 1
 fi
 

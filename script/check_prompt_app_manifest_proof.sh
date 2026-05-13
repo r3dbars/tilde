@@ -93,12 +93,37 @@ def is_prompt_claim(surface: dict, claim: dict) -> bool:
     )
 
 
+def prompt_claims_from_complete_requirements(surface_name: str, surface: dict) -> list[tuple[str, dict]]:
+    claims: list[tuple[str, dict]] = []
+    requirements = surface.get("requirements")
+    if not isinstance(requirements, list):
+        return claims
+
+    for requirement in requirements:
+        if not isinstance(requirement, dict) or requirement.get("status") != "complete":
+            continue
+        requirement_name = str(requirement.get("id") or requirement.get("summary") or "requirement")
+        manual_smoke = requirement.get("manualSmoke")
+        if isinstance(manual_smoke, dict) and is_prompt_claim(surface, manual_smoke):
+            claims.append((f"{surface_name} / {requirement_name}", manual_smoke))
+        variants = requirement.get("manualSmokeVariants")
+        if isinstance(variants, list):
+            for variant in variants:
+                if isinstance(variant, dict) and is_prompt_claim(surface, variant):
+                    claims.append((f"{surface_name} / {requirement_name}", variant))
+
+    return claims
+
+
 def complete_prompt_claims(manifest: dict) -> list[tuple[str, dict]]:
     claims: list[tuple[str, dict]] = []
     for surface in manifest.get("surfaces", []):
-        if not isinstance(surface, dict) or surface.get("status") != "complete":
+        if not isinstance(surface, dict):
             continue
         surface_name = str(surface.get("surface", "unnamed surface"))
+        claims.extend(prompt_claims_from_complete_requirements(surface_name, surface))
+        if surface.get("status") != "complete":
+            continue
         manual_smoke = surface.get("manualSmoke")
         if isinstance(manual_smoke, dict) and is_prompt_claim(surface, manual_smoke):
             claims.append((surface_name, manual_smoke))

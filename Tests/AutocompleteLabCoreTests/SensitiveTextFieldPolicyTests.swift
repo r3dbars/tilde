@@ -67,9 +67,52 @@ struct SensitiveTextFieldPolicyTests {
             (.otp, FocusedElementFingerprint(placeholder: "One time code", windowTitle: "Sign in")),
             (.payment, FocusedElementFingerprint(identifier: "card-number", placeholder: "Credit card", windowTitle: "Checkout")),
             (.login, FocusedElementFingerprint(identifier: "username", placeholder: "Username", windowTitle: "Login")),
+            (.address, FocusedElementFingerprint(identifier: "shipping-address", placeholder: "Shipping address", windowTitle: "Checkout")),
+            (.governmentID, FocusedElementFingerprint(identifier: "ssn", placeholder: "Social security number", windowTitle: "Identity verification")),
+            (.dateOfBirth, FocusedElementFingerprint(identifier: "dob", placeholder: "Date of birth", windowTitle: "Identity verification")),
+            (.tax, FocusedElementFingerprint(identifier: "tax-id", placeholder: "Tax ID", windowTitle: "Tax form")),
+            (.insurance, FocusedElementFingerprint(identifier: "insurance-member-id", placeholder: "Insurance member ID", windowTitle: "Coverage")),
+            (.medical, FocusedElementFingerprint(identifier: "medical-history", placeholder: "Medical history", windowTitle: "Patient intake")),
+            (.cryptoWallet, FocusedElementFingerprint(identifier: "seed-phrase", placeholder: "Secret recovery phrase", windowTitle: "Crypto wallet")),
+            (.commandLine, FocusedElementFingerprint(identifier: "terminal-command", placeholder: "Command line", windowTitle: "Web terminal")),
             (.passwordManager, FocusedElementFingerprint(title: "1Password", placeholder: "Search 1Password", windowTitle: "1Password")),
             (.privatePrompt, FocusedElementFingerprint(placeholder: "Private prompt", windowTitle: "Private chat")),
             (.privateSearch, FocusedElementFingerprint(placeholder: "Private search", windowTitle: "Private Browsing"))
+        ]
+
+        for (category, fingerprint) in cases {
+            let assessment = policy.assessment(role: "AXTextField", subrole: nil, fingerprint: fingerprint)
+            #expect(assessment.isSensitive)
+            #expect(assessment.category == category)
+        }
+    }
+
+    @Test("Classifies expanded sensitive label variants")
+    func classifiesExpandedSensitiveLabelVariants() {
+        let cases: [(SensitiveFieldProofCategory, FocusedElementFingerprint)] = [
+            (.password, FocusedElementFingerprint(placeholder: "Passkey", windowTitle: "Sign in")),
+            (.password, FocusedElementFingerprint(help: "Paste recovery key", windowTitle: "Wallet")),
+            (.password, FocusedElementFingerprint(title: "SSH private key", windowTitle: "Deploy key")),
+            (.otp, FocusedElementFingerprint(placeholder: "SSO code", windowTitle: "Identity provider")),
+            (.otp, FocusedElementFingerprint(placeholder: "OAuth code", windowTitle: "Authorize app")),
+            (.payment, FocusedElementFingerprint(placeholder: "IBAN", windowTitle: "Bank transfer")),
+            (.payment, FocusedElementFingerprint(help: "Routing number", windowTitle: "Payment")),
+            (.payment, FocusedElementFingerprint(title: "PayPal", windowTitle: "Checkout")),
+            (.address, FocusedElementFingerprint(placeholder: "Address line 2", windowTitle: "Shipping")),
+            (.address, FocusedElementFingerprint(placeholder: "Postal code", windowTitle: "Address")),
+            (.address, FocusedElementFingerprint(placeholder: "Email address", windowTitle: "Contact")),
+            (.address, FocusedElementFingerprint(placeholder: "Phone number", windowTitle: "Contact")),
+            (.governmentID, FocusedElementFingerprint(placeholder: "Passport number", windowTitle: "Identity check")),
+            (.governmentID, FocusedElementFingerprint(placeholder: "Driver license number", windowTitle: "Identity check")),
+            (.dateOfBirth, FocusedElementFingerprint(placeholder: "DOB", windowTitle: "Profile")),
+            (.tax, FocusedElementFingerprint(placeholder: "Taxpayer ID", windowTitle: "Tax form")),
+            (.insurance, FocusedElementFingerprint(placeholder: "Policy number", windowTitle: "Insurance")),
+            (.medical, FocusedElementFingerprint(placeholder: "Prescription", windowTitle: "Patient intake")),
+            (.cryptoWallet, FocusedElementFingerprint(help: "Paste wallet seed", windowTitle: "Wallet")),
+            (.commandLine, FocusedElementFingerprint(placeholder: "sudo command", windowTitle: "Web terminal")),
+            (.commandLine, FocusedElementFingerprint(placeholder: "SSH command", windowTitle: "Codespaces")),
+            (.commandLine, FocusedElementFingerprint(windowTitle: "StackBlitz terminal")),
+            (.privatePrompt, FocusedElementFingerprint(placeholder: "Confidential instructions", windowTitle: "Internal prompt"))
         ]
 
         for (category, fingerprint) in cases {
@@ -87,6 +130,16 @@ struct SensitiveTextFieldPolicyTests {
         #expect(results.allSatisfy { $0.isSilent })
         #expect(categories == Set(SensitiveFieldProofCategory.allCases))
         #expect(results.allSatisfy { $0.traceMetadata["rawTextIncluded"] == "false" })
+        #expect(results.allSatisfy {
+            $0.assessment.category == $0.fixture.category
+                || $0.fieldClassification.suppressesSuggestionsByDefault
+        })
+        #expect(results.allSatisfy {
+            guard let policyCategory = $0.assessment.category else {
+                return $0.traceMetadata["sensitivePolicyCategory"] == "none"
+            }
+            return $0.traceMetadata["sensitivePolicyCategory"] == policyCategory.rawValue
+        })
     }
 
     @Test("Allows ordinary writing fields")

@@ -141,4 +141,48 @@ struct DiagnosticValueRedactorTests {
             ) == "String(20 chars)"
         )
     }
+
+    @Test("Diagnostics metadata redacts local paths and directories by value")
+    func diagnosticsMetadataRedactsLocalPathValues() {
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "runtimeCacheDirectory",
+                value: "/Users/redbars/Library/Application Support/SteadyType/cache"
+            ) == "String(59 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "activityNote",
+                value: "loaded file:///Users/redbars/private/draft.md"
+            ) == "String(45 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "runtimeLabel",
+                value: "bundle=/Applications/SteadyType.app/Contents/MacOS/SteadyType"
+            ) == "String(61 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "hasLocalPath",
+                value: "/Users/redbars/private/shape.txt"
+            ) == "String(32 chars)"
+        )
+    }
+
+    @Test("Diagnostics metadata redacts freeform reasons")
+    func diagnosticsMetadataRedactsFreeformReasons() {
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "suppressionReason",
+                value: "user had /Users/redbars/private notes open"
+            ) == "String(42 chars)"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "suppressionReason",
+                value: "blocked-field-kind"
+            ) == "blocked-field-kind"
+        )
+    }
 }
