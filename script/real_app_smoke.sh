@@ -876,6 +876,24 @@ describe_textedit_model_latency_seed_miss() {
     tail -n 40 >&2 || true
 }
 
+assert_no_runtime_relaunch_since() {
+  local guard_line="$1"
+  local label="$2"
+
+  if ! log_since_matches "$guard_line" "runtime-bootstrap"; then
+    return 0
+  fi
+
+  echo "TextEdit model latency proof lost its tagged runtime before $label." >&2
+  echo "A newer SteadyType runtime-bootstrap appeared after this proof launch began sampling, probably from another build/run or smoke process." >&2
+  echo "Rerun textedit-model-latency when no other SteadyType build/run/smoke lane is active." >&2
+  echo "Newer runtime launches:" >&2
+  tail -n +"$((guard_line + 1))" "$LOG_PATH" 2>/dev/null |
+    grep -F "runtime-bootstrap" |
+    tail -n 5 >&2 || true
+  exit 1
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -8816,7 +8834,7 @@ APPLESCRIPT
 }
 
 run_textedit_model_latency() {
-  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
+  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line proof_runtime_guard_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
@@ -8825,6 +8843,7 @@ run_textedit_model_latency() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(line_count "$LOG_PATH")"
 
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
@@ -8855,6 +8874,7 @@ run_textedit_model_latency() {
       exit 1
     fi
 
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency seed $sample_index"
     clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"
     move_textedit_caret_to_document_end "$textedit_window_title"
     seed_start="$(line_count "$LOG_PATH")"
@@ -8882,6 +8902,7 @@ run_textedit_model_latency() {
     fi
     move_textedit_caret_to_document_end "$textedit_window_title"
 
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index"
     sample_start="$(line_count "$LOG_PATH")"
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
