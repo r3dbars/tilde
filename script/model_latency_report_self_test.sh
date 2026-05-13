@@ -4,7 +4,8 @@ set -euo pipefail
 LOG_FILE="$(mktemp)"
 DEFAULT_PROOF_LOG_FILE="$(mktemp)"
 EMPTY_LOG_FILE="$(mktemp)"
-trap 'rm -f "$LOG_FILE" "$DEFAULT_PROOF_LOG_FILE" "$EMPTY_LOG_FILE"' EXIT
+RESOURCE_LOG_FILE="$(mktemp)"
+trap 'rm -f "$LOG_FILE" "$DEFAULT_PROOF_LOG_FILE" "$EMPTY_LOG_FILE" "$RESOURCE_LOG_FILE"' EXIT
 
 cat >"$LOG_FILE" <<'LOG'
 2026-04-26T18:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-9B-MLX-4bit
@@ -64,6 +65,15 @@ cat >"$EMPTY_LOG_FILE" <<'LOG'
 2026-04-26T18:10:00Z runtime-bootstrap activeCandidate=mlx asset=gemma-4-e4b-4bit
 LOG
 
+cat >"$RESOURCE_LOG_FILE" <<'LOG'
+2026-04-26T18:20:00Z launch accessibility=true executableSHA256=abc
+2026-04-26T18:20:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
+2026-04-26T18:20:00Z runtime-resource-sample cpuPercent=0.0 rssMB=3000 thermalState=nominal
+2026-04-26T18:20:02Z runtime-warm-succeeded candidate=mlx state=ready warmMilliseconds=2000
+2026-04-26T18:20:03Z runtime-resource-sample cpuPercent=4.0 rssMB=5500 thermalState=nominal
+2026-04-26T18:20:08Z runtime-resource-sample cpuPercent=1.0 rssMB=5510 thermalState=nominal
+LOG
+
 EMPTY_REPORT="$(script/model_latency_report.py --log "$EMPTY_LOG_FILE" --latest)"
 
 if ! grep -F "try: type one short sentence in TextEdit or Codex" <<<"$EMPTY_REPORT" >/dev/null; then
@@ -75,6 +85,18 @@ fi
 if ! grep -F "instant word-completion may bypass the model" <<<"$EMPTY_REPORT" >/dev/null; then
   echo "latency report self-test did not explain fast-path timing" >&2
   echo "$EMPTY_REPORT" >&2
+  exit 1
+fi
+
+RESOURCE_REPORT="$(script/model_latency_report.py \
+  --log "$RESOURCE_LOG_FILE" \
+  --latest \
+  --require-resource-samples 2 \
+  --max-rss-growth-mb 512)"
+
+if ! grep -F "rssModelLoadDelta=2510MB rssPostReadyGrowth=10MB" <<<"$RESOURCE_REPORT" >/dev/null; then
+  echo "latency report self-test did not split model-load RSS from post-ready growth" >&2
+  echo "$RESOURCE_REPORT" >&2
   exit 1
 fi
 
