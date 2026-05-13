@@ -74,6 +74,10 @@ if "describe_textedit_model_latency_seed_miss" not in block:
     raise SystemExit("model-latency proof must diagnose missing seed logs before the measured sample")
 if 'wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed' in block:
     raise SystemExit("model-latency proof must not hard-fail before typing the measured trigger")
+if 'proof_runtime_guard_line="$(line_count "$LOG_PATH")"' not in block:
+    raise SystemExit("model-latency proof must remember the tagged runtime launch before opening TextEdit")
+if block.count('assert_no_runtime_relaunch_since "$proof_runtime_guard_line"') < 2:
+    raise SystemExit("model-latency proof must fail clearly if another runtime relaunches before sampling")
 if "dismiss_textedit_smoke_suggestion" in block or "key code 53" in block:
     raise SystemExit("model-latency proof must not press Escape after seeding context")
 runtime_ready = block.index('"TextEdit model latency runtime readiness"')
@@ -685,10 +689,25 @@ fi
 
 if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null; then
+   ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F "focusAtEnd(editor, text: textValue(of: editor))" script/obsidian_ax_editor.swift >/dev/null; then
   echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note through the helper" >&2
   exit 1
 fi
+
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('append_obsidian_smoke_note_file_text " and stays inst"'))
+end = source.index('else', start)
+block = source[start:end]
+watch = block.index('second_start_line="$(line_count "$LOG_PATH")"')
+focus = block.index('move_obsidian_caret_to_document_end')
+assertion = block.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"')
+if not (watch < focus < assertion):
+    raise SystemExit("Obsidian long-note proof must start watching before focus/assert can trigger the second suggestion")
+PY
 
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
   script/real_app_smoke.sh "$obsidian_variant" --dry-run >"$TMP_DIR/$obsidian_variant.txt"
