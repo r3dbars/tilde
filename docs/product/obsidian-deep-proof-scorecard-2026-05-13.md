@@ -8,14 +8,14 @@ Current branch: `codex/obsidian-deep-proof-390d`
 
 | Category | Grade | Evidence |
 | --- | ---: | --- |
-| Default note writing | 94 | Default-note smoke has multiple strict screenshot-backed passes with two verified insertions. Needs repetition across many notes before 100. |
-| Non-default theme | 100 | `obsidian-theme` smoke passed with 2 verified insertions and strict screenshots. |
+| Default note writing | 96 | Current-branch default-note smoke passed at 09:53 UTC with 2 verified insertions and strict screenshots. Needs high-repeat sampling before 100. |
+| Non-default theme | 100 | Current-branch `obsidian-theme` smoke passed at 09:51 UTC with 2 verified insertions and strict screenshots after the Escape/reset fixes. |
 | Split pane / same-pane insertion | 100 | `obsidian-pane` smoke passed after focused-editor insertion fix. |
-| Accepted words appear on screen | 96 | Default/theme/pane/font/bold/list/multiline/run-on have green strict screenshot-backed passes. The latest current-branch long-note proof accepted text by Tab and Option-Tab, diagnostics/traces marked both insertions verified, the Markdown file ended with the expected text, and Computer Use saw the same text on screen. Needs high-repeat sampling before 100. |
+| Accepted words appear on screen | 97 | Current-branch default/theme/font/bold plus long-note proofs have strict screenshot-backed passes with 2 verified insertions. List placement reached a suggestion, but current strict list proof was blocked by runner/TCC interference. |
 | CodeMirror stale cursor repair | 98 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, long-note viewport-tail repair reaches suggestion presentation, and the latest long-note proof verified insertion without the stale AX reread. Needs clean runner exits and broader repeats before 100. |
-| Long scrolled note | 92 | Historical `obsidian-long-note` pass exists with strict screenshots and preserved line 01/90. The latest current-branch proof showed correct tail insertion on screen and in file, including full-accept, but the wrapper still exited with SIGTERM after proof instead of ending cleanly. |
-| Font/zoom/dynamic layout | 90 | `obsidian-font-zoom` has a green strict screenshot-backed pass. Needs repeat after the latest Obsidian accept/insertion changes before 100. |
-| Markdown formatting stress | 92 | Bold, dash-list, multiline, and run-on lanes have green strict screenshot-backed passes. Needs repeated mixed-format notes and clean long-note coexistence before 100. |
+| Long scrolled note | 96 | Current-branch `obsidian-long-note` passed at 09:34 UTC with strict visual trace, 2 verified insertions, and preserved long-note file content. Needs repeated clean matrix runs before 100. |
+| Font/zoom/dynamic layout | 100 | Current-branch `obsidian-font-zoom` passed at 09:56 UTC with 2 verified insertions and strict screenshots after the reset/pane cleanup fixes. |
+| Markdown formatting stress | 90 | Current-branch bold passed at 09:58 UTC with strict screenshots. Dash-list placement reached a suggestion, but current strict list proof was interrupted or blocked by LaunchServices screen-recording permission; multiline/run-on still need current reruns after reset changes. |
 
 ## Fixes Landed In This Pass
 
@@ -91,6 +91,15 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - The latest screenshot trace artifacts for that proof are `/Users/redbars/Library/Logs/SteadyType/screenshots/4855D777-547F-4D04-86E8-B65B272B99DC.png` and `/Users/redbars/Library/Logs/SteadyType/screenshots/C67D31F4-6965-4EE3-955C-13AC2539E97B.png`.
 - Computer Use inspected the live Obsidian editor after that proof and saw filler lines 68-90 plus `Smoke proof feels instant and stays instant`, matching `/Users/redbars/Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md`.
 - The proof wrapper still exited 143/SIGTERM after product verification, so this is product-behavior proof, not a clean strict-runner pass.
+- Current-branch default proof passed cleanly at `2026-05-13T09:53:53Z`, diagnostics lines 51464-51533, trace lines 12066-12077.
+- Current-branch theme proof passed cleanly at `2026-05-13T09:51:37Z`, diagnostics lines 51119-51188, trace lines 11984-11995.
+- Current-branch font/zoom proof passed cleanly at `2026-05-13T09:56:01Z`, diagnostics lines 51920-52015, trace lines 12182-12207.
+- Current-branch bold Markdown proof passed cleanly at `2026-05-13T09:58:59Z`, diagnostics lines 52541-52597, trace lines 12313-12321.
+- The reset harness now closes duplicate Obsidian proof panes before non-pane lanes, because Computer Use showed two `placement-proof` panes and text landing inside `Autocomplete Lab Obsidian proof` instead of after it.
+- The reset harness now writes the intended reset text and caret position through AX instead of using Cmd-Right plus Return, because Cmd-Right can stop at a visual wrap in narrow CodeMirror panes.
+- Obsidian Escape before typing and between acceptances is now opt-in for proof runs, because Escape can put the active CodeMirror field into `suppressedField` and block the next suggestion.
+- The one-pass sweep wrapper is still not trustworthy in this desktop session: abandoned `25ed`/`390d` proof lanes and a Chrome proof lane spawned from old sessions and SIGTERMed fresh Obsidian runs.
+- LaunchServices-mode list proof reached `suggestion-presented ... app=md.obsidian ... afterChars=0`, but strict visual proof failed there because screenshot capture was blocked by Screen Recording permission.
 
 ## Remaining Gates To Reach 100
 

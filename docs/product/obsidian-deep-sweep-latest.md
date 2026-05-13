@@ -1,20 +1,24 @@
 # Obsidian Deep Sweep Latest
 
-- Started UTC: 2026-05-13T07:46:39Z
-- Recorded attempts: 7
-- Lanes: obsidian obsidian-theme obsidian-pane obsidian-long-note obsidian-font-zoom obsidian-markdown-bold obsidian-markdown-list obsidian-multiline obsidian-run-on
+- Started UTC: 2026-05-13T09:52:28Z
+- Mode: one-pass sweep attempted, then direct-lane fallback because stale proof jobs kept sending SIGTERM
+- Lanes: obsidian obsidian-theme obsidian-long-note obsidian-font-zoom obsidian-markdown-bold obsidian-markdown-list obsidian-multiline obsidian-run-on obsidian-pane
 
 | Iteration | Lane | Result | Command |
 | ---: | --- | --- | --- |
-| 1 | `obsidian` | `pass` | `script/real_app_smoke.sh obsidian --manual-gate` |
-| 1 | `obsidian-theme` | `pass` | `script/real_app_smoke.sh obsidian-theme --manual-gate --skip-build` |
-| 1 | `obsidian-pane` | `pass` | `script/real_app_smoke.sh obsidian-pane --manual-gate --skip-build` |
-| 1 | `obsidian-long-note` | `fail` | `script/real_app_smoke.sh obsidian-long-note --manual-gate --skip-build` |
-| 2 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR=/tmp/autocomplete-lab-obsidian-long-note-clean2.lock script/real_app_smoke.sh obsidian-long-note --manual-gate` |
-| 3 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_DIRECT_LAUNCH=0 script/real_app_smoke.sh obsidian-long-note --manual-gate` |
-| 4 | `obsidian-long-note` | `fail` | `script/real_app_smoke.sh obsidian-long-note --manual-gate --skip-build` |
-| 5 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR=/tmp/autocomplete-lab-obsidian-long-note-resume.lock script/real_app_smoke.sh obsidian-long-note --manual-gate` |
-| 6 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR=/tmp/autocomplete-lab-obsidian-long-note-after-tab-close.lock script/real_app_smoke.sh obsidian-long-note --manual-gate` |
-| 7 | `obsidian-long-note` | `core-pass-runner-sigterm` | `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR=/tmp/autocomplete-lab-obsidian-long-note-optiontab-proof4.lock script/real_app_smoke.sh obsidian-long-note --manual-gate` |
+| 1 | `obsidian` | `wrapper-sigterm; direct-pass` | `script/obsidian_deep_sweep.sh --iterations 1`; fallback `script/real_app_smoke.sh obsidian --manual-gate` |
+| 1 | `obsidian-theme` | `direct-pass` | `script/real_app_smoke.sh obsidian-theme --manual-gate` |
+| 1 | `obsidian-long-note` | `direct-pass` | `script/real_app_smoke.sh obsidian-long-note --manual-gate` |
+| 1 | `obsidian-font-zoom` | `direct-pass` | `script/real_app_smoke.sh obsidian-font-zoom --manual-gate` |
+| 1 | `obsidian-markdown-bold` | `direct-pass` | `script/real_app_smoke.sh obsidian-markdown-bold --manual-gate` |
+| 1 | `obsidian-markdown-list` | `runner-blocked` | `script/real_app_smoke.sh obsidian-markdown-list --manual-gate` |
+| 1 | `obsidian-multiline` | `not-rerun-after-reset-fix` | `script/real_app_smoke.sh obsidian-multiline --manual-gate` |
+| 1 | `obsidian-run-on` | `not-rerun-after-reset-fix` | `script/real_app_smoke.sh obsidian-run-on --manual-gate` |
+| 1 | `obsidian-pane` | `historical-pass; moved-last` | `script/real_app_smoke.sh obsidian-pane --manual-gate` |
 
-Latest note: current branch reaches Obsidian visible-tail suggestion presentation and screenshot capture, and logs verified insertions for Tab and Option-Tab full accept. Iteration 7 ended with `/Users/redbars/Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md` and the live Computer Use view both showing `Smoke proof feels instant and stays instant`. The wrapper still exited 143/SIGTERM after proof, so this is recorded as a core behavior pass with a runner blocker, not a clean strict pass.
+## Summary
+
+- Direct strict passes recorded this pass: default, theme, font/zoom, bold Markdown.
+- Current-branch long-note strict pass recorded earlier in this pass at 09:34 UTC.
+- List reached `suggestion-presented ... app=md.obsidian ... afterChars=0` in LaunchServices mode, but strict screenshot proof failed there because Screen Recording was blocked.
+- The matrix is not 100/100 yet. The next loop should first eliminate stale `25ed`/abandoned proof runners, then rerun list, multiline, run-on, pane-last, and repeated sweeps.

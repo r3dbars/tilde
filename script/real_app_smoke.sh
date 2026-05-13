@@ -1749,6 +1749,28 @@ APPLESCRIPT
   fi
 }
 
+restore_obsidian_single_pane_if_needed() {
+  activate_obsidian_for_smoke
+
+  local pane_count attempt
+  pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+  attempt=0
+  while (( pane_count > 1 && attempt < 4 )); do
+    osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "System Events"
+  tell application process "Obsidian"
+    set frontmost to true
+    key code 13 using command down
+  end tell
+end tell
+APPLESCRIPT
+    sleep 0.5
+    activate_obsidian_for_smoke
+    pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+    attempt=$((attempt + 1))
+  done
+}
+
 set_obsidian_zoom_for_font_proof() {
   activate_obsidian_for_smoke
   osascript <<'APPLESCRIPT' >/dev/null
@@ -8694,6 +8716,9 @@ import ApplicationServices
 import Foundation
 
 let markerText = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? "SteadyType Obsidian proof"
+let appendNewlineFallback = (ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN"] == "1") ? 0 : 1
+let appendNewlines = max(0, Int(ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES"] ?? "") ?? appendNewlineFallback)
+let resetText = markerText + String(repeating: "\n", count: appendNewlines)
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -8718,21 +8743,22 @@ AXUIElementSetMessagingTimeout(focused, 1.0)
 guard AXUIElementSetAttributeValue(
     focused,
     kAXValueAttribute as CFString,
-    markerText as CFTypeRef
+    resetText as CFTypeRef
 ) == .success else {
     fputs("Could not reset the disposable Obsidian smoke note text.\n", stderr)
     exit(3)
 }
 
 AXUIElementSetAttributeValue(focused, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-var endRange = CFRange(location: markerText.utf16.count, length: 0)
+var endRange = CFRange(location: resetText.utf16.count, length: 0)
 if let rangeValue = AXValueCreate(.cfRange, &endRange) {
     AXUIElementSetAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, rangeValue)
 }
 SWIFT
 
   activate_obsidian_for_smoke
-  osascript <<'APPLESCRIPT'
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_LEGACY_RESET_KEYS:-0}" == "1" ]]; then
+    osascript <<'APPLESCRIPT'
 tell application "System Events"
   tell application process "Obsidian" to set frontmost to true
   set frontApp to first application process whose frontmost is true
@@ -8750,6 +8776,7 @@ tell application "System Events"
   end if
 end tell
 APPLESCRIPT
+  fi
   set_obsidian_caret_to_value_end
 }
 
@@ -8934,8 +8961,16 @@ run_obsidian() {
   fi
   if [[ "$manual_app" == "obsidian-markdown-bold" ]]; then
     export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=0
+  elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=0
+  elif [[ "$manual_app" == "obsidian-multiline" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=3
   else
     unset AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=1
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
@@ -8952,6 +8987,11 @@ run_obsidian() {
   seed_obsidian_proof_vault_note "$obsidian_reset_text"
   open_obsidian_smoke_note_if_configured
   wait_for_frontmost_app "Obsidian" 8
+  if [[ "$manual_app" != "obsidian-pane" ]]; then
+    restore_obsidian_single_pane_if_needed
+    open_obsidian_smoke_note_if_configured
+    wait_for_frontmost_app "Obsidian" 8
+  fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     reset_obsidian_smoke_note_file "$obsidian_marker"
     open_obsidian_smoke_note_if_configured
@@ -8963,8 +9003,12 @@ run_obsidian() {
     reset_obsidian_smoke_note
   fi
   prepare_obsidian_variant_state "$manual_app"
-  press_key_code 53
-  sleep 0.35
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BEFORE_TYPING:-0}" == "1" ]]; then
+    press_key_code 53
+    sleep 0.35
+  else
+    sleep 0.15
+  fi
   prepare_obsidian_variant_state "$manual_app"
 
   start_line="$(line_count "$LOG_PATH")"
@@ -9012,8 +9056,14 @@ run_obsidian() {
     elif [[ "$manual_app" == "obsidian-multiline" ]]; then
       set_obsidian_caret_to_value_end
     fi
-    press_key_code 53
-    sleep 0.25
+    # In Obsidian/CodeMirror, Escape can mark the focused editor as suppressed.
+    # Let normal typing invalidate the previous suggestion unless we are explicitly testing Escape.
+    if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BETWEEN_ACCEPTS:-0}" == "1" ]]; then
+      press_key_code 53
+      sleep 0.25
+    else
+      sleep 0.15
+    fi
     second_start_line="$(line_count "$LOG_PATH")"
     type_obsidian_raw_smoke_text " and stays"
   fi
