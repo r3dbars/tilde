@@ -4968,6 +4968,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
         )
+        let disablesPhraseContinuationForProof = runtimeProofOptions.disablesPhraseContinuation(
+            appBundleIdentifier: appBundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        )
 
         if requestMode == .wordCompletion,
            !disablesFastWordCompletionForProof {
@@ -5085,6 +5089,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             setSuggestionDecision("Queued: proof model word completion")
+        }
+
+        if requestMode == .phraseContinuation,
+           disablesPhraseContinuationForProof {
+            DiagnosticsLog.shared.record(
+                "phrase-continuation-disabled",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "reason": RuntimeProofOptions.disablePhraseContinuationEnvironmentKey
+                ]
+            )
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentityDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: "proof-phrase-continuation-disabled",
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                reason: "proof-phrase-continuation-disabled",
+                metadata: [
+                    "renderMode": renderMode.rawValue,
+                    "proofDisableReason": RuntimeProofOptions.disablePhraseContinuationEnvironmentKey
+                ]
+                .merging(requestMetadata) { current, _ in current }
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "proof-phrase-continuation-disabled"
+                ]
+            )
+            setSuggestionDecision("Blocked: proof phrase continuation disabled")
+            hideSuggestion()
+            return
         }
 
         if requestMode == .phraseContinuation {
