@@ -101,6 +101,38 @@ if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/token-only-model.
   exit 1
 fi
 
+DUPLICATE_MODEL_DIAGNOSTICS_LOG="$TMP_DIR/duplicate-model-diagnostics.log"
+DUPLICATE_MODEL_TRACE_LOG="$TMP_DIR/duplicate-model-traces.jsonl"
+
+cat >"$DUPLICATE_MODEL_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T10:08:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$DUPLICATE_MODEL_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T10:08:01Z","sessionID":"session","suggestionID":"duplicate-model","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T10:08:02Z","sessionID":"session","suggestionID":"duplicate-model","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T10:08:03Z","sessionID":"session","suggestionID":"duplicate-model","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"behaviorProfile":"docs_prose","totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T10:08:04Z","sessionID":"session","suggestionID":"duplicate-model","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$DUPLICATE_MODEL_DIAGNOSTICS_LOG" \
+  --trace-log "$DUPLICATE_MODEL_TRACE_LOG" \
+  --min-first-visible-samples 1 \
+  --min-model-samples 2 \
+  --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
+  --require-model-backed-visible 2>"$TMP_DIR/duplicate-model.err" >/dev/null; then
+  echo "latency window self-test expected duplicate modelResult rows not to inflate model samples" >&2
+  exit 1
+fi
+
+if ! grep -F "firstVisibleSamples=1; modelSamples=1" "$TMP_DIR/duplicate-model.err" >/dev/null; then
+  echo "latency window self-test did not dedupe model samples by suggestion ID" >&2
+  cat "$TMP_DIR/duplicate-model.err" >&2
+  exit 1
+fi
+
 cat >>"$DIAGNOSTICS_LOG" <<'LOG'
 2026-05-12T10:12:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 LOG
