@@ -172,6 +172,10 @@ if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in run_textedit:
 model_latency = function_body("run_textedit_model_latency")
 if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in model_latency:
     raise SystemExit("TextEdit model-latency proof must allow bounded System Events activation for focus recovery")
+model_build = model_latency.index("build_if_needed")
+model_open = model_latency.index('open_textedit_smoke_document "$textedit_file" "$textedit_window_title"')
+if model_build > model_open:
+    raise SystemExit("TextEdit model-latency proof must relaunch SteadyType before opening the disposable TextEdit window")
 activate_process_id_block = source[
     source.index("activate_process_id()"):
     source.index("activate_process_id_osascript()", source.index("activate_process_id()"))

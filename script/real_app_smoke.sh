@@ -9016,14 +9016,17 @@ run_textedit_model_latency() {
   runtime_start_line="$(line_count "$LOG_PATH")"
   export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
+  prepare_temporary_app_enablement
+  prepare_model_latency_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   textedit_window_title="$(basename "$textedit_file")"
   SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
   : >"$textedit_file"
-  if [[ "$SKIP_BUILD" != "1" ]]; then
-    stop_current_steadytype_app_bundle
-  fi
   cleanup_stale_textedit_smoke_windows
   open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
   sleep 0.8
@@ -9032,15 +9035,6 @@ run_textedit_model_latency() {
   focus_textedit_smoke_editor "$textedit_window_title"
   click_textedit_smoke_editor "$textedit_window_title"
   clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency initial reset"
-  move_textedit_caret_to_document_end "$textedit_window_title"
-
-  prepare_temporary_app_enablement
-  prepare_model_latency_runtime_options
-  build_if_needed
-  wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
-  wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
-  focus_textedit_smoke_editor "$textedit_window_title"
-  click_textedit_smoke_editor "$textedit_window_title"
   move_textedit_caret_to_document_end "$textedit_window_title"
 
   start_line="$(line_count "$LOG_PATH")"
