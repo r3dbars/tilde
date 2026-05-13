@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "76ac537d87b9c1dcd73b546f70f1f3cc2e2bd5d4",
+  "sourceCommit": "5c7ad9485b1d70022fd14486e494f0eabc6598f3",
   "proofFingerprint": {
     "traceProofVersion": "2026-05-07.1",
     "placementProofVersion": "placement-v4",
@@ -70,15 +70,19 @@
         "versionSource": "/Applications/Obsidian.app",
         "safetyMode": "notPrompt",
         "runtimeState": "userToggleAllowed",
-        "proofState": "partial",
+        "proofState": "complete",
         "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
             "kind": "screenshot",
             "reference": "docs/product/visual-placement-screenshots/obsidian.png"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "Obsidian/obsidian-long-note"
           }
         ],
-        "notes": "Real CodeMirror proof is current across default, non-default theme, and pane lanes; long-note current-head proof remains blocked."
+        "notes": "Real CodeMirror proof is current across default, non-default theme, pane, and long-note lanes; broader vault variance still keeps support yellow."
       },
       {
         "bundle": "com.apple.mail",
@@ -353,7 +357,15 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Hosted Google Docs remains blocked by unsupported-browser-surface policy until a disposable document proof exists."
+      "scoreCap": {
+        "localFixtureProofCounts": false,
+        "browserChatHarnessCounts": false,
+        "requiresDisposableRealService": true,
+        "requiresScreenshot": true,
+        "requiresVerifiedInsertion": true,
+        "requiresNoSubmitOrPublish": true
+      },
+      "notes": "Hosted Google Docs remains blocked by unsupported-browser-surface policy until a disposable real-service document proof exists. Local fixture or editor-harness proof must not graduate this row."
     },
     {
       "surface": "Notion browser or desktop",
@@ -374,7 +386,15 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Browser Notion and desktop Notion stay blocked until a disposable ProseMirror page proof exists."
+      "scoreCap": {
+        "localFixtureProofCounts": false,
+        "browserChatHarnessCounts": false,
+        "requiresDisposableRealService": true,
+        "requiresScreenshot": true,
+        "requiresVerifiedInsertion": true,
+        "requiresNoSubmitOrPublish": true
+      },
+      "notes": "Browser Notion and desktop Notion stay blocked until a disposable real-service ProseMirror page proof exists. Local fixture or editor-harness proof must not graduate this row."
     },
     {
       "surface": "Slack browser or desktop",
@@ -395,7 +415,16 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Slack message composition stays blocked until disposable-channel no-send proof exists."
+      "scoreCap": {
+        "localFixtureProofCounts": false,
+        "browserChatHarnessCounts": false,
+        "requiresDisposableRealService": true,
+        "requiresScreenshot": true,
+        "requiresVerifiedInsertion": true,
+        "requiresNoSubmitOrPublish": true,
+        "allowsFullAccept": false
+      },
+      "notes": "Slack message composition stays blocked until disposable real-service channel no-send proof exists. Local fixture or browser-chat harness proof must not graduate this row."
     },
     {
       "surface": "Discord browser or desktop",
@@ -418,7 +447,16 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Discord message composition stays blocked until disposable-server no-send proof exists."
+      "scoreCap": {
+        "localFixtureProofCounts": false,
+        "browserChatHarnessCounts": false,
+        "requiresDisposableRealService": true,
+        "requiresScreenshot": true,
+        "requiresVerifiedInsertion": true,
+        "requiresNoSubmitOrPublish": true,
+        "allowsFullAccept": false
+      },
+      "notes": "Discord message composition stays blocked until disposable real-service server/channel no-send proof exists. Local fixture or browser-chat harness proof must not graduate this row."
     },
     {
       "surface": "Mail compose",
@@ -461,7 +499,16 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "The local browser-chat harness is not real-service ChatGPT proof; keep Browser ChatGPT blocked until real-service no-submit proof exists."
+      "scoreCap": {
+        "localFixtureProofCounts": false,
+        "browserChatHarnessCounts": false,
+        "requiresDisposableRealService": true,
+        "requiresScreenshot": true,
+        "requiresVerifiedInsertion": true,
+        "requiresNoSubmitOrPublish": true,
+        "allowsFullAccept": false
+      },
+      "notes": "The local browser-chat harness is not real-service ChatGPT proof; keep Browser ChatGPT blocked until disposable real-service no-submit proof exists."
     },
     {
       "surface": "Claude desktop layouts",
@@ -500,12 +547,12 @@
     },
     {
       "surface": "Obsidian long notes",
-      "decision": "blocked",
+      "decision": "word-only",
       "profileBundles": [
         "md.obsidian"
       ],
       "policySource": "script/real_app_smoke.sh",
-      "proofState": "blocked",
+      "proofState": "complete",
       "smokeCommand": "script/real_app_smoke.sh obsidian-long-note --manual-gate",
       "requiredProof": [
         "correct scrolled CodeMirror caret source",
@@ -513,7 +560,7 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "General Obsidian support remains yellow; the long-note lane is blocked until current-head proof passes."
+      "notes": "Fresh current-head long-note proof at 2026-05-13T02:53:49Z recorded the CodeMirror viewport repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior. General Obsidian support remains yellow for broader vault variance."
     },
     {
       "surface": "Real Monaco and CodeMirror editors",
@@ -738,7 +785,16 @@
         {
           "id": "production-chrome-chat-no-submit",
           "status": "pending",
-          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact no-submit proof. The browser-chat harness is disposable proof only, and the existing local chat-like fixture still includes full-accept-without-proof events."
+          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact disposable no-submit screenshot and insertion proof. The browser-chat harness is disposable fixture proof only, and the existing local chat-like fixture still includes full-accept-without-proof events.",
+          "scoreCap": {
+            "localFixtureProofCounts": false,
+            "browserChatHarnessCounts": false,
+            "requiresDisposableRealService": true,
+            "requiresScreenshot": true,
+            "requiresVerifiedInsertion": true,
+            "requiresNoSubmitOrPublish": true,
+            "allowsFullAccept": false
+          }
         }
       ]
     },
@@ -782,13 +838,20 @@
         {
           "id": "codex-full-accept-no-submit",
           "status": "pending",
-          "summary": "Keep full accept disabled until a dedicated Codex no-submit full-accept lane exists."
+          "summary": "Keep full accept disabled until a dedicated Codex no-submit full-accept lane exists.",
+          "scoreCap": {
+            "localFixtureProofCounts": false,
+            "requiresPromptAppFullAcceptProof": true,
+            "requiresScreenshot": true,
+            "requiresVerifiedInsertion": true,
+            "requiresNoSubmitOrPublish": true
+          }
         }
       ]
     },
     {
       "surface": "Obsidian",
-      "status": "partial",
+      "status": "complete",
       "manualSmoke": {
         "app": "Obsidian",
         "bundle": "md.obsidian",
@@ -799,63 +862,68 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
-      "gaps": [
-        "Current-head long-note proof is blocked because CodeMirror reports the AX cursor before the bottom typed line and the live proof times out before suggestion-presented."
+      "gaps": [],
+      "requirements": [
+        {
+          "id": "obsidian-theme-variants",
+          "status": "complete",
+          "summary": "Bounded proof across the non-default proof-vault theme is recorded.",
+          "manualSmoke": {
+            "app": "Obsidian",
+            "bundle": "md.obsidian",
+            "proof": "obsidian-theme",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+        },
+        {
+          "id": "obsidian-pane-variants",
+          "status": "complete",
+          "summary": "Bounded proof with split panes or side panes visible is recorded.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+        },
+        {
+          "id": "obsidian-long-note-variants",
+          "status": "complete",
+          "summary": "Current-head bounded proof in a long scrolled note passed with the CodeMirror viewport-end repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior.",
+          "manualSmoke": {
+            "app": "Obsidian",
+            "bundle": "md.obsidian",
+            "proof": "obsidian-long-note",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
+        }
       ],
-    "requirements": [
-      {
-        "id": "obsidian-theme-variants",
-        "status": "complete",
-        "summary": "Bounded proof across the non-default proof-vault theme is recorded.",
-        "manualSmoke": {
+      "requiredManualSmokes": [
+        {
+          "id": "obsidian-theme",
           "app": "Obsidian",
           "bundle": "md.obsidian",
           "proof": "obsidian-theme",
           "minVerifiedAccepts": 2,
           "requiresVisualStrictComplete": true
         },
-        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
-      },
-      {
-        "id": "obsidian-pane-variants",
-        "status": "complete",
-        "summary": "Bounded proof with split panes or side panes visible is recorded.",
-        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
-      },
-      {
-        "id": "obsidian-long-note-variants",
-        "status": "pending",
-        "summary": "Current-head bounded proof in a long scrolled note is blocked; rerun after the CodeMirror cursor source is repaired.",
-        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
-      }
-    ],
-    "requiredManualSmokes": [
-      {
-        "id": "obsidian-theme",
-        "app": "Obsidian",
-        "bundle": "md.obsidian",
-        "proof": "obsidian-theme",
-        "minVerifiedAccepts": 2,
-        "requiresVisualStrictComplete": true
-      },
-      {
-        "id": "obsidian-pane",
-        "app": "Obsidian",
-        "bundle": "md.obsidian",
-        "proof": "obsidian-pane",
-        "minVerifiedAccepts": 2,
-        "requiresVisualStrictComplete": true
-      },
-      {
-        "id": "obsidian-long-note",
-        "app": "Obsidian",
-        "bundle": "md.obsidian",
-        "proof": "obsidian-long-note",
-        "minVerifiedAccepts": 2,
-        "requiresVisualStrictComplete": true
-      }
-    ]
-  },
+        {
+          "id": "obsidian-pane",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-pane",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-long-note",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-long-note",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        }
+      ]
+    },
     {
       "surface": "Apple Notes title",
       "status": "complete",
@@ -1145,7 +1213,14 @@
         {
           "id": "claude-desktop-full-accept-no-submit",
           "status": "blocked",
-          "summary": "No safe full-accept proof command exists yet; keep full accept disabled until a dedicated no-submit lane can prove it without enabling unsafe prompt behavior."
+          "summary": "No safe full-accept proof command exists yet; keep full accept disabled until a dedicated no-submit lane can prove it without enabling unsafe prompt behavior.",
+          "scoreCap": {
+            "localFixtureProofCounts": false,
+            "requiresPromptAppFullAcceptProof": true,
+            "requiresScreenshot": true,
+            "requiresVerifiedInsertion": true,
+            "requiresNoSubmitOrPublish": true
+          }
         }
       ]
     }
@@ -1176,7 +1251,7 @@
       "surface": "Obsidian",
       "status": "partial",
       "owner": "electron editor adapter lane",
-      "safetyNote": "Defined Obsidian proof rows are current across default, theme, and pane lanes, but current-head long-note proof is blocked; broader vault variance and hidden-caret edge cases keep support yellow."
+      "safetyNote": "Defined Obsidian proof rows are current across default, theme, pane, and long-note lanes; broader vault variance and hidden-caret edge cases keep support yellow."
     },
     {
       "bundle": "com.apple.mail",
