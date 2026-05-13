@@ -287,6 +287,40 @@ if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/target-window.err
   exit 1
 fi
 
+REVERSED_TRACE_DIAGNOSTICS_LOG="$TMP_DIR/reversed-trace-diagnostics.log"
+REVERSED_TRACE_LOG="$TMP_DIR/reversed-trace-traces.jsonl"
+
+cat >"$REVERSED_TRACE_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T13:12:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T13:12:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$REVERSED_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T13:12:02Z","sessionID":"session","suggestionID":"reversed-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{}}
+{"timestamp":"2026-05-12T13:12:03Z","sessionID":"session","suggestionID":"reversed-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+LOG
+
+REVERSED_WINDOW="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$REVERSED_TRACE_DIAGNOSTICS_LOG" \
+    --trace-log "$REVERSED_TRACE_LOG" \
+    --min-first-visible-samples 1 \
+    --min-model-samples 1 \
+    --required-proof-app com.apple.TextEdit \
+    --required-proof-scenario textedit-model-latency \
+    --required-trace-app com.apple.TextEdit \
+    --required-request-mode wordCompletion \
+    --require-model-backed-visible 2>"$TMP_DIR/reversed-trace.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=1" <<<"$REVERSED_WINDOW" >/dev/null ||
+   ! grep -F "firstVisibleSamples=1; modelSamples=1" "$TMP_DIR/reversed-trace.err" >/dev/null; then
+  echo "latency window self-test did not count reversed-order model-backed visible proof" >&2
+  cat "$TMP_DIR/reversed-trace.err" >&2
+  echo "$REVERSED_WINDOW" >&2
+  exit 1
+fi
+
 cat >>"$TARGET_DIAGNOSTICS_LOG" <<'LOG'
 2026-05-12T13:15:00Z app-proof-mode-started app=com.apple.TextEdit
 2026-05-12T13:15:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
@@ -331,6 +365,8 @@ cat >"$SCENARIO_TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T14:00:03Z","sessionID":"session","suggestionID":"scenario-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
 {"timestamp":"2026-05-12T14:00:04Z","sessionID":"session","suggestionID":"scenario-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
 {"timestamp":"2026-05-12T14:00:05Z","sessionID":"session","suggestionID":"scenario-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T14:00:06Z","sessionID":"session","suggestionID":"scenario-phrase","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T14:00:07Z","sessionID":"session","suggestionID":"scenario-phrase","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
 {"timestamp":"2026-05-12T14:05:02Z","sessionID":"session","suggestionID":"generic-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":100,"metadata":{"totalGenerationLatencyMilliseconds":"100"}}
 {"timestamp":"2026-05-12T14:05:03Z","sessionID":"session","suggestionID":"generic-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":110,"metadata":{"candidateSelectionSource":"app-model-result"}}
 LOG
@@ -344,6 +380,7 @@ SCENARIO_WINDOW="$(
     --required-proof-app com.apple.TextEdit \
     --required-proof-scenario textedit-model-latency \
     --required-trace-app com.apple.TextEdit \
+    --required-request-mode wordCompletion \
     --require-model-backed-visible \
     --forbid-fast-word-visible 2>"$TMP_DIR/scenario-window.err"
 )"
@@ -352,6 +389,12 @@ if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=1" <<<"$SCENARIO_WINDOW" >/dev/nul
   echo "latency window self-test did not select the explicit TextEdit model-latency scenario" >&2
   cat "$TMP_DIR/scenario-window.err" >&2
   echo "$SCENARIO_WINDOW" >&2
+  exit 1
+fi
+
+if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/scenario-window.err" >/dev/null; then
+  echo "latency window self-test did not exclude phrase-continuation rows from model-latency scenario counts" >&2
+  cat "$TMP_DIR/scenario-window.err" >&2
   exit 1
 fi
 
@@ -373,6 +416,7 @@ if script/select_latency_window.py \
   --required-proof-app com.apple.TextEdit \
   --required-proof-scenario textedit-model-latency \
   --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
   --require-model-backed-visible \
   --forbid-fast-word-visible 2>"$TMP_DIR/scenario-partial.err" >/dev/null; then
   echo "latency window self-test expected partial latest model-latency scenario to fail" >&2
@@ -400,6 +444,7 @@ if script/select_latency_window.py \
   --required-proof-app com.apple.TextEdit \
   --required-proof-scenario textedit-model-latency \
   --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
   --require-model-backed-visible \
   --forbid-fast-word-visible 2>"$TMP_DIR/scenario-fast-word.err" >/dev/null; then
   echo "latency window self-test expected fast word completion inside model-latency scenario to fail" >&2
@@ -435,6 +480,7 @@ if script/select_latency_window.py \
   --required-proof-app com.apple.TextEdit \
   --required-proof-scenario textedit-model-latency \
   --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
   --require-model-backed-visible \
   --forbid-fast-word-visible 2>"$TMP_DIR/ended-scenario.err" >/dev/null; then
   echo "latency window self-test expected runtime after proof end not to inherit scenario" >&2
@@ -444,6 +490,40 @@ fi
 if ! grep -F "no eligible default runtime launch" "$TMP_DIR/ended-scenario.err" >/dev/null; then
   echo "latency window self-test did not clear proof scenario after proof end" >&2
   cat "$TMP_DIR/ended-scenario.err" >&2
+  exit 1
+fi
+
+TERMINATED_DIAGNOSTICS_LOG="$TMP_DIR/terminated-scenario-diagnostics.log"
+TERMINATED_TRACE_LOG="$TMP_DIR/terminated-scenario-traces.jsonl"
+
+cat >"$TERMINATED_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T15:10:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T15:10:01Z terminate
+2026-05-12T15:10:02Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$TERMINATED_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T15:10:03Z","sessionID":"session","suggestionID":"terminated-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T15:10:04Z","sessionID":"session","suggestionID":"terminated-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$TERMINATED_DIAGNOSTICS_LOG" \
+  --trace-log "$TERMINATED_TRACE_LOG" \
+  --min-first-visible-samples 1 \
+  --min-model-samples 1 \
+  --required-proof-app com.apple.TextEdit \
+  --required-proof-scenario textedit-model-latency \
+  --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
+  --require-model-backed-visible 2>"$TMP_DIR/terminated-scenario.err" >/dev/null; then
+  echo "latency window self-test expected runtime after terminate not to inherit scenario" >&2
+  exit 1
+fi
+
+if ! grep -F "no eligible default runtime launch" "$TMP_DIR/terminated-scenario.err" >/dev/null; then
+  echo "latency window self-test did not clear proof scenario after terminate" >&2
+  cat "$TMP_DIR/terminated-scenario.err" >&2
   exit 1
 fi
 
