@@ -1088,21 +1088,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 && !profile.isSensitive
                 && isSuggestionEnabled(for: app, profile: profile)
         } ?? false
-        let interval = focusPollingCadencePolicy.interval(
-            isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasSupportedProfile: hasSupportedProfile,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasRecentTextChange: focusPollingCadencePolicy.hasRecentTextChange(
-                lastTextChangeAt: lastFocusedTextChangeAt,
-                now: now
-            )
+        let isTrustedForAccessibility = accessibilityClient.isTrusted
+        let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
+        let hasRecentTextChange = focusPollingCadencePolicy.hasRecentTextChange(
+            lastTextChangeAt: lastFocusedTextChangeAt,
+            now: now
         )
 
-        guard let lastFocusedTextPollAttemptAt else {
-            return true
+        guard focusPollingCadencePolicy.shouldPoll(
+            now: now,
+            lastPollAt: lastFocusedTextPollAttemptAt,
+            isTrustedForAccessibility: isTrustedForAccessibility,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: hasVisibleSuggestion,
+            hasRecentTextChange: hasRecentTextChange
+        ) else {
+            if let nextPollDate = focusPollingCadencePolicy.nextPollDate(
+                lastPollAt: lastFocusedTextPollAttemptAt,
+                isTrustedForAccessibility: isTrustedForAccessibility,
+                hasSupportedProfile: hasSupportedProfile,
+                hasVisibleSuggestion: hasVisibleSuggestion,
+                hasRecentTextChange: hasRecentTextChange
+            ) {
+                deferFocusedTextPoll(until: nextPollDate, now: now)
+            }
+            return false
         }
 
-        return now.timeIntervalSince(lastFocusedTextPollAttemptAt) >= interval
+        return true
+    }
+
+    private func deferFocusedTextPoll(until nextPollDate: Date, now: Date) {
+        guard nextPollDate > now else {
+            return
+        }
+
+        pollTimer?.fireDate = nextPollDate
     }
 
     private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
