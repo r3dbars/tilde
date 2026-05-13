@@ -50,6 +50,7 @@ python3 script/check_steadytype_scorecard.py \
   --live \
   --manual-smoke-output "$MANUAL_LIVE" \
   --proof-manifest-output "$PROOF_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
   >"$TMP_DIR/live-pass.txt"
 
 if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/live-pass.txt" >/dev/null; then
@@ -330,6 +331,12 @@ lines = [
 ]
 for area in areas:
     evidence = "`./script/check.sh`: passed."
+    if area == "Latency":
+        evidence += (
+            " `./script/select_latency_window.py`: selected diagnosticsLine=24211, "
+            "traceStartLine=6225, firstVisibleSamples=5, modelSamples=20, "
+            "fastWordVisibleSamples=0."
+        )
     if area == "App coverage":
         evidence += " `manual_smoke_status.sh --strict`: failed with 7 stale or pending rows."
     if area == "Test/proof coverage":
@@ -354,6 +361,7 @@ python3 script/check_steadytype_scorecard.py \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
   --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
+  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
   >"$TMP_DIR/live-pass.txt"
 
 cat >"$TMP_DIR/manual-smoke-live-bad.txt" <<'EOF'
@@ -365,6 +373,7 @@ if python3 script/check_steadytype_scorecard.py \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live-bad.txt" \
   --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
+  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
   >"$TMP_DIR/live-bad.txt" 2>&1; then
   echo "scorecard self-test expected live manual count mismatch to fail" >&2
   exit 1
