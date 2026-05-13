@@ -89,17 +89,22 @@ developer_id="$(developer_id_identity)"
 validate_notary_profile() {
   local profile="$1"
   local quiet="${2:-0}"
-  local output_path="/tmp/autocomplete-notary-profile-check.txt"
+  local output
 
-  if xcrun notarytool history \
+  if [[ "$quiet" == "1" ]]; then
+    xcrun notarytool history \
+      --keychain-profile "$profile" \
+      --output-format json >/dev/null 2>&1
+    return
+  fi
+
+  if output="$(xcrun notarytool history \
     --keychain-profile "$profile" \
-    --output-format json >"$output_path" 2>&1; then
+    --output-format json 2>&1)"; then
     return 0
   fi
 
-  if [[ "$quiet" != "1" ]]; then
-    cat "$output_path" >&2 2>/dev/null || true
-  fi
+  printf '%s\n' "$output" >&2
   return 1
 }
 
