@@ -9,6 +9,7 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case obsidianCodeMirrorStalePreviousLine = "obsidian-codemirror-stale-previous-line"
     case obsidianCodeMirrorTextAfterGrowth = "obsidian-codemirror-text-after-growth"
     case obsidianCodeMirrorEndOfDocumentGrowth = "obsidian-codemirror-end-of-document-growth"
+    case obsidianCodeMirrorTextAfterTypingGrowth = "obsidian-codemirror-text-after-typing-growth"
     case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
     case obsidianCodeMirrorLeadingWordDrift = "obsidian-codemirror-leading-word-drift"
     case obsidianCodeMirrorTextAfterActiveLine = "obsidian-codemirror-text-after-active-line"
@@ -94,6 +95,9 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorEndOfDocumentGrowthRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorTextAfterTypingGrowthRepair(input) {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorTextAfterGrowthRepair(input) {
@@ -388,6 +392,55 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             textBeforeCursor: currentText,
             textAfterCursor: "",
             reason: .obsidianCodeMirrorEndOfDocumentGrowth
+        )
+    }
+
+    private func obsidianCodeMirrorTextAfterTypingGrowthRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              let previousTextBeforeCursor = input.previousTextBeforeCursor,
+              let previousTextAfterCursor = input.previousTextAfterCursor,
+              !previousTextBeforeCursor.isEmpty,
+              previousTextAfterCursor.isEmpty,
+              previousTextBeforeCursor == input.textBeforeCursor,
+              !input.textAfterCursor.isEmpty,
+              input.textAfterCursor.count <= 160 else {
+            return nil
+        }
+
+        let activeLine = firstLine(in: input.textAfterCursor)
+        let remainingAfterLine = String(input.textAfterCursor.dropFirst(activeLine.count))
+        let strippedRemaining = remainingAfterLine
+            .trimmingCodeMirrorScaffolding()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard activeLine.count <= 120,
+              strippedRemaining.isEmpty else {
+            return nil
+        }
+
+        let currentLineBefore = currentLine(in: input.textBeforeCursor)
+        let canJoinSameLine = currentLineBefore.last?.isLetter == true
+            || currentLineBefore.last?.isWhitespace == true
+        if canJoinSameLine,
+           isPlausibleActiveTypingLine(currentLineBefore + activeLine) {
+            return TextContextRepairResult(
+                textBeforeCursor: input.textBeforeCursor + activeLine,
+                textAfterCursor: remainingAfterLine,
+                reason: .obsidianCodeMirrorTextAfterTypingGrowth
+            )
+        }
+
+        guard input.textBeforeCursor.contains(where: \.isNewline),
+              isPlausibleActiveTypingLine(activeLine) else {
+            return nil
+        }
+
+        let separator = input.textBeforeCursor.last?.isNewline == true ? "" : "\n"
+        return TextContextRepairResult(
+            textBeforeCursor: input.textBeforeCursor + separator + activeLine,
+            textAfterCursor: remainingAfterLine,
+            reason: .obsidianCodeMirrorTextAfterTypingGrowth
         )
     }
 
