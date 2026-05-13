@@ -6673,6 +6673,7 @@ describe_plan() {
       if [[ "$TEXTEDIT_VARIANT" == "model-latency" ]]; then
         echo "Safety: model latency proof seeds stable context into the disposable TextEdit AX target, then types the final partial word through live key events."
         echo "Safety: model latency proof disables fast word completions for that launch so local model timing is required."
+        echo "Safety: model latency proof tags the runtime launch with scenario textedit-model-latency so generic TextEdit samples cannot satisfy the beta gate."
       else
         echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
       fi
