@@ -7838,85 +7838,7 @@ SWIFT
 
 assert_obsidian_smoke_target() {
   activate_obsidian_for_smoke
-  AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift - <<'SWIFT'
-import AppKit
-import ApplicationServices
-import Foundation
-
-let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "SteadyType Obsidian proof"
-let expectedSuffix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success else {
-        return nil
-    }
-    return value
-}
-
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian" else {
-    fputs("Obsidian is not frontmost for the Obsidian smoke target.\n", stderr)
-    exit(3)
-}
-
-guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    fputs("Obsidian is not running. Open a disposable smoke note first.\n", stderr)
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-let systemWide = AXUIElementCreateSystemWide()
-AXUIElementSetMessagingTimeout(systemWide, 1.0)
-
-func focusedElement(from element: AXUIElement) -> AXUIElement? {
-    var focusedValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(
-        element,
-        kAXFocusedUIElementAttribute as CFString,
-        &focusedValue
-    ) == .success,
-          let focusedValue else {
-        return nil
-    }
-
-    return (focusedValue as! AXUIElement)
-}
-
-guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
-    fputs("Could not read the focused Obsidian editor.\n", stderr)
-    exit(3)
-}
-
-AXUIElementSetMessagingTimeout(editor, 1.0)
-let role = copyAttribute(editor, kAXRoleAttribute) as? String
-guard role == kAXTextAreaRole as String || role == "AXWebArea" else {
-    fputs("Focused Obsidian element is not a CodeMirror text surface.\n", stderr)
-    exit(3)
-}
-
-let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
-guard text.localizedCaseInsensitiveContains(marker) else {
-    fputs("Refusing to type in Obsidian because the focused note does not contain the disposable smoke marker.\n", stderr)
-    exit(3)
-}
-
-if !expectedSuffix.isEmpty {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.hasSuffix(expectedSuffix) else {
-        fputs("Refusing Obsidian proof because the focused smoke note does not end with the expected disposable text.\n", stderr)
-        exit(3)
-    }
-}
-
-AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-var endRange = CFRange(location: text.utf16.count, length: 0)
-if let rangeValue = AXValueCreate(.cfRange, &endRange) {
-    AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-}
-print("Obsidian smoke target confirmed")
-SWIFT
+  AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift script/obsidian_ax_editor.swift assert
 }
 
 assert_obsidian_initial_smoke_target() {
@@ -8056,67 +7978,7 @@ type_obsidian_raw_smoke_text() {
 
   activate_obsidian_for_smoke
   if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE:-0}" == "1" ]] &&
-    AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" swift - <<'SWIFT' >/dev/null 2>&1; then
-import AppKit
-import ApplicationServices
-import Foundation
-
-let fragment = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"] ?? ""
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
-}
-
-func focusedElement(from element: AXUIElement) -> AXUIElement? {
-    var focusedValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(
-        element,
-        kAXFocusedUIElementAttribute as CFString,
-        &focusedValue
-    ) == .success,
-          let focusedValue else {
-        return nil
-    }
-
-    return (focusedValue as! AXUIElement)
-}
-
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
-      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-let systemWide = AXUIElementCreateSystemWide()
-AXUIElementSetMessagingTimeout(systemWide, 1.0)
-
-guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
-    exit(3)
-}
-
-AXUIElementSetMessagingTimeout(editor, 1.0)
-let role = copyAttribute(editor, kAXRoleAttribute) as? String
-guard role == kAXTextAreaRole as String || role == "AXWebArea" else {
-    exit(3)
-}
-
-let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
-var endRange = CFRange(location: text.utf16.count, length: 0)
-guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
-    exit(3)
-}
-AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-guard AXUIElementSetAttributeValue(
-    editor,
-    kAXSelectedTextAttribute as CFString,
-    fragment as CFTypeRef
-) == .success else {
-    exit(3)
-}
-SWIFT
+    AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" swift script/obsidian_ax_editor.swift insert >/dev/null 2>&1; then
     return 0
   fi
 
@@ -8146,60 +8008,7 @@ APPLESCRIPT
 
 set_obsidian_caret_to_value_end() {
   activate_obsidian_for_smoke
-  swift - <<'SWIFT' >/dev/null
-import AppKit
-import ApplicationServices
-import Foundation
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
-}
-
-func focusedElement(from element: AXUIElement) -> AXUIElement? {
-    var focusedValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(
-        element,
-        kAXFocusedUIElementAttribute as CFString,
-        &focusedValue
-    ) == .success,
-          let focusedValue else {
-        return nil
-    }
-
-    return (focusedValue as! AXUIElement)
-}
-
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
-      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-let systemWide = AXUIElementCreateSystemWide()
-AXUIElementSetMessagingTimeout(systemWide, 1.0)
-
-guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
-    exit(3)
-}
-
-AXUIElementSetMessagingTimeout(editor, 1.0)
-let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
-var endRange = CFRange(location: text.utf16.count, length: 0)
-guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
-    exit(3)
-}
-
-AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-guard AXUIElementSetAttributeValue(
-    editor,
-    kAXSelectedTextRangeAttribute as CFString,
-    rangeValue
-) == .success else {
-    exit(3)
-}
-SWIFT
+  swift script/obsidian_ax_editor.swift focus >/dev/null
   sleep 0.15
 }
 
@@ -8219,48 +8028,7 @@ reset_obsidian_smoke_note() {
   local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}}"
 
   activate_obsidian_for_smoke
-  AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift - <<'SWIFT'
-import AppKit
-import ApplicationServices
-import Foundation
-
-let markerText = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? "SteadyType Obsidian proof"
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
-}
-
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
-      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    fputs("Obsidian is not frontmost for smoke-note reset.\n", stderr)
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
-    fputs("Could not read focused Obsidian editor for smoke-note reset.\n", stderr)
-    exit(3)
-}
-
-let focused = (focusedValue as! AXUIElement)
-AXUIElementSetMessagingTimeout(focused, 1.0)
-guard AXUIElementSetAttributeValue(
-    focused,
-    kAXValueAttribute as CFString,
-    markerText as CFTypeRef
-) == .success else {
-    fputs("Could not reset the disposable Obsidian smoke note text.\n", stderr)
-    exit(3)
-}
-
-AXUIElementSetAttributeValue(focused, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-var endRange = CFRange(location: markerText.utf16.count, length: 0)
-if let rangeValue = AXValueCreate(.cfRange, &endRange) {
-    AXUIElementSetAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-}
-SWIFT
+  AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift script/obsidian_ax_editor.swift reset
 
   activate_obsidian_for_smoke
   osascript <<'APPLESCRIPT'
