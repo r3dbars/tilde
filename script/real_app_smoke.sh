@@ -9335,7 +9335,11 @@ run_textedit_model_latency() {
           sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_EVENT_TAP_SETTLE_SECONDS:-0.25}"
         fi
         event_tap_start="$(line_count "$LOG_PATH")"
-        press_textedit_event_tap_probe_key
+        if ! press_textedit_event_tap_probe_key; then
+          echo "TextEdit model latency sample $sample_index attempt $attempt could not type the event-tap Tab probe; retrying this stable context if attempts remain." >&2
+          sleep 0.4
+          continue
+        fi
         if ! wait_for_log_fields_optional "$event_tap_start" 5 \
           "keyboard-event-tap-latency" \
           "key=tab" \
