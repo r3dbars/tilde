@@ -8230,6 +8230,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ reason: PrefixFamilyCooldownReason,
         input: PrefixFamilyCooldownInput
     ) -> [String: String] {
+        if proofSuppressesAnnoyanceLearning() {
+            DiagnosticsLog.shared.record(
+                "proof-annoyance-learning-suppressed",
+                metadata: [
+                    "layer": "prefix-family-cooldown",
+                    "reason": reason.rawValue,
+                    "app": input.appBundleIdentifier
+                ]
+            )
+            return [:]
+        }
+
         guard let cooldown = suggestionOrchestrator.recordPrefixFamilyCooldown(reason, input: input) else {
             return [:]
         }
@@ -8331,6 +8343,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         metadata: [String: String] = [:]
     ) {
         guard let context else {
+            return
+        }
+
+        if proofSuppressesAnnoyanceLearning() {
+            DiagnosticsLog.shared.record(
+                "proof-annoyance-learning-suppressed",
+                metadata: [
+                    "layer": "annoyance-signal",
+                    "signal": signal.rawValue,
+                    "reason": reason,
+                    "app": context.appBundleIdentifier
+                ]
+            )
             return
         }
 
@@ -9782,6 +9807,23 @@ private extension AppDelegate {
 
     static var proofModeBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
+    }
+
+    static var proofSuppressAnnoyanceLearningEnvironmentKey: String {
+        "AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING"
+    }
+
+    static func environmentFlagEnabled(_ value: String?) -> Bool {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+            return false
+        }
+        return ["1", "true", "yes", "on"].contains(normalized)
+    }
+
+    func proofSuppressesAnnoyanceLearning() -> Bool {
+        Self.environmentFlagEnabled(
+            ProcessInfo.processInfo.environment[Self.proofSuppressAnnoyanceLearningEnvironmentKey]
+        )
     }
 
     static var textEditPracticeBundleIdentifier: String {
