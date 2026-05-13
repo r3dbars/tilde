@@ -47,6 +47,8 @@ Use this before inviting private beta testers.
   stays local, and supported apps are limited.
 - [ ] `docs/product/onboarding-permission-qa-checklist.md` passes on a clean
   macOS user account.
+- [ ] `./script/check_onboarding_walkthrough_proof.py` passes for the current
+  guided TextEdit walkthrough row.
 - [ ] Raw debug tracing is off.
 - [ ] Screenshot tracing is off.
 - [ ] The tester knows how to pause tracing.
@@ -98,6 +100,8 @@ Invite testers only when every applicable box is checked.
 - `./script/manual_smoke_status.sh --strict` still requires current-head proof
   refresh for 30 target app rows. Do not treat stale screenshot-backed rows as
   beta-current.
+- `./script/check_onboarding_walkthrough_proof.py` is expected to block until
+  the guided TextEdit walkthrough table has a current clean-user pass row.
 - `./script/private_beta_packet.sh --check` must be rerun after any app-code or
   artifact change and now validates the current DMG with stapler and spctl.
 - Current local SteadyType artifacts are not beta-current until a Developer ID

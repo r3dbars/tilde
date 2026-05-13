@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
+from dataclasses import dataclass
 import math
 import re
 import sys
@@ -85,6 +87,44 @@ PERFECT_SCORE_UNRESOLVED_PATTERNS = (
 PERFECT_SCORE_NEXT_PROOF_ACTION = re.compile(
     r"^\s*(?:add|check|close|finish|notarize|produce|record|refresh|recheck|rerun|run|staple|validate|verify)\b"
 )
+
+MANUAL_SMOKE_SCORECARD_PATTERNS = (
+    re.compile(
+        r"manual_smoke_status[.]sh\s+--strict`?:\s*"
+        r"(?:[^|.]*?\bfailed with\s+)?([0-9]+)\s+[^|.]*?\bstale or pending\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bmanual app proof is blocked by\s+([0-9]+)\s+stale or pending rows\b",
+        re.IGNORECASE,
+    ),
+)
+
+PROOF_MANIFEST_SCORECARD_PATTERNS = (
+    re.compile(
+        r"check_proof_manifest[.]sh\s+--require-all`?:\s*[^|.]*?"
+        r"\b([0-9]+)\s+(?:manifest\s+)?issues\b",
+        re.IGNORECASE,
+    ),
+)
+
+MANUAL_SMOKE_LIVE_COUNT = re.compile(
+    r"\b([0-9]+)\s+target app pass(?:[(]es[)]|es)?\s+still need real manual smoke proof\b",
+    re.IGNORECASE,
+)
+
+PROOF_MANIFEST_LIVE_COUNT = re.compile(
+    r"\bProof manifest check failed with\s+([0-9]+)\s+issue(?:[(]s[)]|s)?\.",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class CountClaim:
+    kind: str
+    count: int
+    line_number: int
+    snippet: str
 
 
 def split_markdown_row(line: str) -> list[str]:
@@ -171,7 +211,142 @@ def parse_overall(source: str, failures: list[str]) -> int | None:
     return overall
 
 
-def validate_scorecard(path: Path) -> list[str]:
+def compact_snippet(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip())
+
+
+def count_claim_key(kind: str, line_number: int, count: int, snippet: str) -> tuple[str, int, int, str]:
+    return (kind, line_number, count, snippet)
+
+
+def extract_count_claims(source: str) -> list[CountClaim]:
+    claims: list[CountClaim] = []
+    seen: set[tuple[str, int, int, str]] = set()
+
+    for line_number, line in enumerate(source.splitlines(), start=1):
+        snippet = compact_snippet(line)
+        if not snippet:
+            continue
+
+        if "manual_smoke_status.sh" in snippet or "manual app proof is blocked" in snippet.lower():
+            for pattern in MANUAL_SMOKE_SCORECARD_PATTERNS:
+                for match in pattern.finditer(snippet):
+                    count = int(match.group(1))
+                    key = count_claim_key("manual", line_number, count, snippet)
+                    if key not in seen:
+                        seen.add(key)
+                        claims.append(
+                            CountClaim(
+                                kind="manual",
+                                count=count,
+                                line_number=line_number,
+                                snippet=snippet,
+                            )
+                        )
+
+        if "check_proof_manifest.sh" in snippet:
+            for pattern in PROOF_MANIFEST_SCORECARD_PATTERNS:
+                for match in pattern.finditer(snippet):
+                    count = int(match.group(1))
+                    key = count_claim_key("proof-manifest", line_number, count, snippet)
+                    if key not in seen:
+                        seen.add(key)
+                        claims.append(
+                            CountClaim(
+                                kind="proof-manifest",
+                                count=count,
+                                line_number=line_number,
+                                snippet=snippet,
+                            )
+                        )
+
+    return claims
+
+
+def read_or_run_output(fixture_path: Path | None, command: list[str]) -> str:
+    if fixture_path is not None:
+        return fixture_path.read_text(encoding="utf-8")
+
+    result = subprocess.run(
+        command,
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return f"{result.stdout}\n{result.stderr}"
+
+
+def parse_manual_smoke_live_count(output: str) -> int | None:
+    matches = list(MANUAL_SMOKE_LIVE_COUNT.finditer(output))
+    if matches:
+        return int(matches[-1].group(1))
+    if "All required target proofs are covered." in output:
+        return 0
+    return None
+
+
+def parse_proof_manifest_live_count(output: str) -> int | None:
+    matches = list(PROOF_MANIFEST_LIVE_COUNT.finditer(output))
+    if matches:
+        return int(matches[-1].group(1))
+    if "Proof manifest verified." in output:
+        return 0
+    return None
+
+
+def validate_live_counts(
+    source: str,
+    manual_smoke_output: Path | None,
+    proof_manifest_output: Path | None,
+) -> list[str]:
+    failures: list[str] = []
+    claims = extract_count_claims(source)
+    manual_claims = [claim for claim in claims if claim.kind == "manual"]
+    proof_manifest_claims = [claim for claim in claims if claim.kind == "proof-manifest"]
+
+    if manual_claims:
+        output = read_or_run_output(
+            manual_smoke_output,
+            ["./script/manual_smoke_status.sh", "--strict"],
+        )
+        live_count = parse_manual_smoke_live_count(output)
+        if live_count is None:
+            failures.append("manual smoke live output did not include a stale/pending count")
+        else:
+            for claim in manual_claims:
+                if claim.count != live_count:
+                    failures.append(
+                        f"line {claim.line_number}: manual smoke stale/pending count claim is "
+                        f"{claim.count}, live output reports {live_count}: {claim.snippet}"
+                    )
+
+    if proof_manifest_claims:
+        output = read_or_run_output(
+            proof_manifest_output,
+            ["./script/check_proof_manifest.sh", "--require-all"],
+        )
+        live_count = parse_proof_manifest_live_count(output)
+        if live_count is None:
+            failures.append("proof manifest live output did not include an issue count")
+        else:
+            for claim in proof_manifest_claims:
+                if claim.count != live_count:
+                    failures.append(
+                        f"line {claim.line_number}: proof manifest issue count claim is "
+                        f"{claim.count}, live output reports {live_count}: {claim.snippet}"
+                    )
+
+    return failures
+
+
+def validate_scorecard(
+    path: Path,
+    *,
+    live: bool = False,
+    manual_smoke_output: Path | None = None,
+    proof_manifest_output: Path | None = None,
+) -> list[str]:
     failures: list[str] = []
     try:
         source = path.read_text(encoding="utf-8")
@@ -234,6 +409,9 @@ def validate_scorecard(path: Path) -> list[str]:
         if overall != expected:
             failures.append(f"overall score is {overall}/100, expected rounded average {expected}/100")
 
+    if live:
+        failures.extend(validate_live_counts(source, manual_smoke_output, proof_manifest_output))
+
     return failures
 
 
@@ -251,13 +429,35 @@ def main() -> int:
         default=str(DEFAULT_SCORECARD),
         help="Path to the scorecard markdown file.",
     )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Compare scorecard count claims against live proof gate output.",
+    )
+    parser.add_argument(
+        "--manual-smoke-output",
+        help="Read manual_smoke_status output from this file instead of running the live command.",
+    )
+    parser.add_argument(
+        "--proof-manifest-output",
+        help="Read check_proof_manifest output from this file instead of running the live command.",
+    )
     args = parser.parse_args()
+    if (args.manual_smoke_output or args.proof_manifest_output) and not args.live:
+        parser.error("--manual-smoke-output and --proof-manifest-output require --live")
 
     path = Path(args.scorecard)
     if not path.is_absolute():
         path = ROOT_DIR / path
 
-    failures = validate_scorecard(path)
+    manual_smoke_output = Path(args.manual_smoke_output) if args.manual_smoke_output else None
+    proof_manifest_output = Path(args.proof_manifest_output) if args.proof_manifest_output else None
+    failures = validate_scorecard(
+        path,
+        live=args.live,
+        manual_smoke_output=manual_smoke_output,
+        proof_manifest_output=proof_manifest_output,
+    )
     if failures:
         print("SteadyType scorecard check failed:", file=sys.stderr)
         for failure in failures:

@@ -69,6 +69,20 @@ if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || ((RUNS < 1)); then
   exit 2
 fi
 
+case "$TARGET_APP" in
+  textedit|textedit-model-latency)
+    ;;
+  *)
+    echo "--target must be textedit or textedit-model-latency" >&2
+    exit 2
+    ;;
+esac
+
+if [[ "$TARGET_APP" == "textedit-model-latency" && "$RUNS" != "1" ]]; then
+  echo "textedit-model-latency collects the beta sample set in one launch; forcing --runs 1."
+  RUNS=1
+fi
+
 if ! [[ "$FRESH_LATENCY_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
   exit 2
@@ -96,6 +110,11 @@ run_smoke() {
   local index="$1"
   local args=("$TARGET_APP")
 
+  if [[ "$TARGET_APP" == "textedit-model-latency" && "$index" != "1" ]]; then
+    echo "textedit-model-latency cannot use --skip-build reruns because proof mode must relaunch cleanly." >&2
+    exit 1
+  fi
+
   if ((index > 1)); then
     args+=(--skip-build)
     AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD=1 "$REAL_APP_SMOKE_SCRIPT" "${args[@]}"
@@ -103,6 +122,14 @@ run_smoke() {
   fi
 
   "$REAL_APP_SMOKE_SCRIPT" "${args[@]}"
+}
+
+clear_stale_proof_launchctl_env() {
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SCENARIO >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS >/dev/null 2>&1 || true
 }
 
 acquire_fresh_latency_lock() {
@@ -198,6 +225,7 @@ wait_for_quiet_proof_processes() {
 
 acquire_fresh_latency_lock
 wait_for_quiet_proof_processes
+clear_stale_proof_launchctl_env
 
 diagnostics_start_line="$(line_count "$LOG_PATH")"
 trace_start_line="$(line_count "$TRACE_PATH")"

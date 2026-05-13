@@ -7,6 +7,42 @@ cd "$ROOT_DIR"
 MODE="full"
 PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"
 SECONDARY_ARCHIVE="$ROOT_DIR/dist/SteadyType.zip"
+READINESS_SCRATCH_PATH_CREATED=""
+
+cleanup_readiness_scratch_path() {
+  if [[ -n "$READINESS_SCRATCH_PATH_CREATED" ]]; then
+    rm -rf "$READINESS_SCRATCH_PATH_CREATED"
+  fi
+}
+
+trap cleanup_readiness_scratch_path EXIT
+
+configure_readiness_scratch_path() {
+  local parent
+
+  if [[ -n "${AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH:-}" ]]; then
+    if ! mkdir -p "$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"; then
+      echo "SwiftPM readiness scratch blocked: could not create AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH=$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH" >&2
+      echo "Set AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH to a writable directory and rerun." >&2
+      return 1
+    fi
+
+    export AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH
+    echo "SwiftPM readiness scratch: $AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
+    return 0
+  fi
+
+  parent="${TMPDIR:-/tmp}"
+  if ! AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH="$(mktemp -d "${parent%/}/autocomplete-lab-beta-readiness.XXXXXX")"; then
+    echo "SwiftPM readiness scratch blocked: could not create a unique SwiftPM scratch path under $parent." >&2
+    echo "Set AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH to a writable directory and rerun." >&2
+    return 1
+  fi
+
+  READINESS_SCRATCH_PATH_CREATED="$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
+  export AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH
+  echo "SwiftPM readiness scratch: $AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
+}
 
 usage() {
   cat <<'EOF'
@@ -35,6 +71,8 @@ while (($#)); do
   esac
   shift
 done
+
+configure_readiness_scratch_path || exit 1
 
 run_check() {
   local label="$1"
@@ -402,25 +440,6 @@ latency_beta_gate() {
   ./script/latency_benchmark_report.py --beta-gate
 }
 
-latency_beta_gate() {
-  local args=(--beta-gate)
-  local trace_start="${AUTOCOMPLETE_LAB_LATENCY_TRACE_START_LINE:-${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}}"
-  local diagnostics_start="${AUTOCOMPLETE_LAB_LATENCY_DIAGNOSTICS_START_LINE:-${AUTOCOMPLETE_LAB_LOG_START_LINE:-}}"
-
-  if [[ -n "$trace_start" ]]; then
-    args+=(--trace-start-line "$trace_start")
-  fi
-  if [[ -n "$diagnostics_start" ]]; then
-    args+=(--diagnostics-start-line "$diagnostics_start")
-  fi
-
-  if [[ -z "$trace_start" && -z "$diagnostics_start" ]]; then
-    args+=(--line-limit "${AUTOCOMPLETE_LAB_LATENCY_LINE_LIMIT:-1000}")
-  fi
-
-  ./script/latency_benchmark_report.py "${args[@]}"
-}
-
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
 
@@ -432,6 +451,7 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
+  run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
@@ -492,16 +512,16 @@ echo "== Controls and diagnostics readiness =="
 ./script/check_controls_diagnostics_readiness.sh
 
 echo
-echo "== Latency beta gate =="
-latency_beta_gate
-
-echo
 echo "== Redacted report export =="
 ./script/check_redacted_report_export.sh
 
 echo
 echo "== Issue template validation =="
 ./script/validate_beta_issue_template.sh
+
+echo
+echo "== Onboarding walkthrough proof =="
+./script/check_onboarding_walkthrough_proof.py
 
 echo
 echo "== Clipboard fallback disabled =="
