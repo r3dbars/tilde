@@ -324,6 +324,16 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi
+if ! grep -F 'while kill -0 "$SMOKE_SCRIPT_PID"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '[[ -z "$current_pgid" ]] && return 0' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected exclusive proof guards to exit with their parent and fail closed without a self process group" >&2
+  exit 1
+fi
+if ! grep -F '${#current_pids[@]} > 1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keep_pid' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof launch verification to collapse duplicate current SteadyType processes" >&2
+  exit 1
+fi
 if grep -F 'index(command, app_binary)' script/real_app_smoke.sh >/dev/null ||
    grep -F 'pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app process matching, not substring process matching" >&2
@@ -684,7 +694,14 @@ if ! grep -F "script/real_app_smoke.sh obsidian-theme --manual-gate" "$TMP_DIR/o
   exit 1
 fi
 
-if ! grep -F "markerText.utf16.count" script/real_app_smoke.sh >/dev/null ||
+if ! grep -F '[[ "$manual_app" == "obsidian-pane" ]]' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "focus_obsidian_visible_tail_line" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian pane proof to actively focus the disposable note tail before typing" >&2
+  exit 1
+fi
+
+if ! grep -F "resetText.utf16.count" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note" >&2
   exit 1

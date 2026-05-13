@@ -11,14 +11,14 @@
 | 1 | `obsidian-long-note` | `direct-pass` | `script/real_app_smoke.sh obsidian-long-note --manual-gate` |
 | 1 | `obsidian-font-zoom` | `direct-pass` | `script/real_app_smoke.sh obsidian-font-zoom --manual-gate` |
 | 1 | `obsidian-markdown-bold` | `direct-pass` | `script/real_app_smoke.sh obsidian-markdown-bold --manual-gate` |
-| 1 | `obsidian-markdown-list` | `runner-blocked` | `script/real_app_smoke.sh obsidian-markdown-list --manual-gate` |
-| 1 | `obsidian-multiline` | `not-rerun-after-reset-fix` | `script/real_app_smoke.sh obsidian-multiline --manual-gate` |
-| 1 | `obsidian-run-on` | `not-rerun-after-reset-fix` | `script/real_app_smoke.sh obsidian-run-on --manual-gate` |
-| 1 | `obsidian-pane` | `historical-pass; moved-last` | `script/real_app_smoke.sh obsidian-pane --manual-gate` |
+| 1 | `obsidian-markdown-list` | `direct-pass` | `script/real_app_smoke.sh obsidian-markdown-list --manual-gate` |
+| 1 | `obsidian-multiline` | `direct-pass` | `script/real_app_smoke.sh obsidian-multiline --manual-gate` |
+| 1 | `obsidian-run-on` | `direct-pass` | `script/real_app_smoke.sh obsidian-run-on --manual-gate` |
+| 1 | `obsidian-pane` | `direct-red; insertion verified, strict visual/annoyance failed` | `script/real_app_smoke.sh obsidian-pane --manual-gate` |
 
 ## Summary
 
-- Direct strict passes recorded this pass: default, theme, font/zoom, bold Markdown.
+- Direct strict passes recorded this pass: default, theme, font/zoom, bold Markdown, list, multiline, run-on.
 - Current-branch long-note strict pass recorded earlier in this pass at 09:34 UTC.
-- List reached `suggestion-presented ... app=md.obsidian ... afterChars=0` in LaunchServices mode, but strict screenshot proof failed there because Screen Recording was blocked.
-- The matrix is not 100/100 yet. The next loop should first eliminate stale `25ed`/abandoned proof runners, then rerun list, multiline, run-on, pane-last, and repeated sweeps.
+- Pane is the current red lane: the latest reruns verified accepted text insertion, but extra typed-over suggestions made strict visual evidence and annoyance scoring fail.
+- The old `25ed` watchdog process group that killed `390d` proof jobs was found and terminated. The next loop should fix pane noise, then run repeated sweeps toward the 150+ sample target.

@@ -459,10 +459,17 @@ CHROME_LAST_LAUNCHED_PID=""
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
+SMOKE_INTERFERENCE_GUARD_PID=""
+SMOKE_INTERFERENCE_GUARD_POLL_SECONDS="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_POLL_SECONDS:-0.5}"
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
+  exit 2
+fi
+
+if [[ ! "$SMOKE_INTERFERENCE_GUARD_POLL_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_POLL_SECONDS must be a non-negative number." >&2
   exit 2
 fi
 
@@ -604,6 +611,12 @@ SWIFT
 }
 
 cleanup_smoke() {
+  if [[ -n "$SMOKE_INTERFERENCE_GUARD_PID" ]]; then
+    kill "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
+    wait "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
+    SMOKE_INTERFERENCE_GUARD_PID=""
+  fi
+
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
   cleanup_smoke_chrome_pids
@@ -776,12 +789,67 @@ other_smoke_process_lines() {
   ' <<<"$process_list"
 }
 
+other_autocomplete_proof_pgids() {
+  local process_list current_pgid
+  current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d ' ' || true)"
+  [[ -z "$current_pgid" ]] && return 0
+  process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
+
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" '
+    {
+      pid = $1
+      pgid = $3
+      command = $0
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|obsidian_deep_sweep|build_and_run)\.sh([[:space:]]|$)/
+      shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
+      hasProofScript = index(command, "script/real_app_smoke.sh") > 0 ||
+        index(command, "script/fresh_latency_proof.sh") > 0 ||
+        index(command, "script/obsidian_deep_sweep.sh") > 0 ||
+        index(command, "script/build_and_run.sh") > 0
+      if (pid == self) next
+      if (selfPGID != "" && pgid == selfPGID) next
+      if (directScript || (shellWrapper && hasProofScript)) {
+        print pgid
+      }
+    }
+  ' <<<"$process_list" | sort -u
+}
+
+terminate_other_autocomplete_proof_runs() {
+  local pgid
+  while IFS= read -r pgid; do
+    [[ -z "$pgid" ]] && continue
+    kill -TERM "-$pgid" >/dev/null 2>&1 || true
+  done < <(other_autocomplete_proof_pgids)
+}
+
+start_smoke_interference_guard() {
+  if [[ ! "${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+
+  terminate_other_autocomplete_proof_runs
+  (
+    while kill -0 "$SMOKE_SCRIPT_PID" >/dev/null 2>&1; do
+      terminate_other_autocomplete_proof_runs
+      sleep "$SMOKE_INTERFERENCE_GUARD_POLL_SECONDS"
+    done
+  ) &
+  SMOKE_INTERFERENCE_GUARD_PID="$!"
+}
+
 refuse_other_smoke_processes() {
   local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
   local announced=0
   local processes
 
   while true; do
+    if [[ "${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}" =~ ^(1|true|yes|on)$ ]]; then
+      terminate_other_autocomplete_proof_runs
+      sleep "$SMOKE_INTERFERENCE_GUARD_POLL_SECONDS"
+    fi
+
     processes="$(other_smoke_process_lines || true)"
     if [[ -z "$processes" ]]; then
       return 0
@@ -1803,6 +1871,8 @@ prepare_obsidian_variant_state() {
   case "$manual_app" in
     obsidian-pane)
       prepare_obsidian_pane_variant_if_needed
+      focus_obsidian_visible_tail_line
+      set_obsidian_caret_to_value_end
       ;;
     obsidian-theme)
       # The smoke lane must be run in a vault/theme setup that visibly differs
@@ -7766,6 +7836,7 @@ wait_for_current_autocomplete_lab_process() {
 
   while ((SECONDS <= deadline)); do
     local found_current=0
+    local current_pids=()
     local stale_processes=""
     local pid command
     while IFS=$'\t' read -r pid _pgid command; do
@@ -7773,10 +7844,26 @@ wait_for_current_autocomplete_lab_process() {
       [[ -z "$command" ]] && continue
       if command_matches_steadytype_binary "$command" "$expected_binary"; then
         found_current=1
+        current_pids+=("$pid")
       else
         stale_processes+="${pid} ${command}"$'\n'
       fi
     done < <(steadytype_app_process_rows)
+
+    if ((${#current_pids[@]} > 1)); then
+      local keep_pid=""
+      for pid in "${current_pids[@]}"; do
+        if [[ -z "$keep_pid" || "$pid" -gt "$keep_pid" ]]; then
+          keep_pid="$pid"
+        fi
+      done
+      for pid in "${current_pids[@]}"; do
+        [[ "$pid" == "$keep_pid" ]] && continue
+        kill "$pid" >/dev/null 2>&1 || true
+      done
+      sleep 0.25
+      continue
+    fi
 
     if [[ "$found_current" == "1" && -z "$stale_processes" ]]; then
       return 0
@@ -8948,6 +9035,10 @@ run_obsidian() {
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=1
+  elif [[ "$manual_app" == "obsidian-pane" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
   elif [[ "$manual_app" == "obsidian-font-zoom" ]]; then
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
@@ -9927,6 +10018,7 @@ fi
 
 refuse_other_smoke_processes
 acquire_smoke_lock
+start_smoke_interference_guard
 
 case "$APP" in
   textedit)

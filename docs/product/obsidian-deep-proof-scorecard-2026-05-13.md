@@ -10,12 +10,12 @@ Current branch: `codex/obsidian-deep-proof-390d`
 | --- | ---: | --- |
 | Default note writing | 96 | Current-branch default-note smoke passed at 09:53 UTC with 2 verified insertions and strict screenshots. Needs high-repeat sampling before 100. |
 | Non-default theme | 100 | Current-branch `obsidian-theme` smoke passed at 09:51 UTC with 2 verified insertions and strict screenshots after the Escape/reset fixes. |
-| Split pane / same-pane insertion | 100 | `obsidian-pane` smoke passed after focused-editor insertion fix. |
-| Accepted words appear on screen | 97 | Current-branch default/theme/font/bold plus long-note proofs have strict screenshot-backed passes with 2 verified insertions. List placement reached a suggestion, but current strict list proof was blocked by runner/TCC interference. |
-| CodeMirror stale cursor repair | 98 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, long-note viewport-tail repair reaches suggestion presentation, and the latest long-note proof verified insertion without the stale AX reread. Needs clean runner exits and broader repeats before 100. |
+| Split pane / same-pane insertion | 72 | Pane focus is better and accepted insertions verified in the latest reruns, but strict visual proof is still red because extra typed-over pane suggestions can appear without screenshot/capture metadata. |
+| Accepted words appear on screen | 98 | Current-branch default/theme/font/bold/list/multiline/run-on plus long-note proofs have strict screenshot-backed passes with 2 verified insertions. Split pane remains the current red lane. |
+| CodeMirror stale cursor repair | 96 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, long-note viewport-tail repair reaches suggestion presentation, and the latest long-note/list/multiline/run-on proofs verified insertion. Split-pane stale/noisy suggestion sessions still need work. |
 | Long scrolled note | 96 | Current-branch `obsidian-long-note` passed at 09:34 UTC with strict visual trace, 2 verified insertions, and preserved long-note file content. Needs repeated clean matrix runs before 100. |
 | Font/zoom/dynamic layout | 100 | Current-branch `obsidian-font-zoom` passed at 09:56 UTC with 2 verified insertions and strict screenshots after the reset/pane cleanup fixes. |
-| Markdown formatting stress | 90 | Current-branch bold passed at 09:58 UTC with strict screenshots. Dash-list placement reached a suggestion, but current strict list proof was interrupted or blocked by LaunchServices screen-recording permission; multiline/run-on still need current reruns after reset changes. |
+| Markdown formatting stress | 96 | Current-branch bold, list, multiline, and run-on lanes all passed strict screenshot proof after the reset/exclusive-run fixes. Needs repeats before 100. |
 
 ## Fixes Landed In This Pass
 
@@ -44,6 +44,9 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Electron and Chromium compatibility profiles now prefer hardware key events, so Obsidian receives accepted text through the focused CodeMirror editor instead of a softer synthetic path.
 - Modifier-only key downs and command/control/option/function shortcut chords no longer count as normal typing passthrough, which keeps Option-Tab full-accept from being poisoned by its own modifier event.
 - The smoke harness can temporarily switch the full-accept shortcut to Option-Tab for a proof run and restore the user's previous default afterward.
+- Exclusive proof runs now keep a background interference guard, but that guard exits when its parent dies and fails closed if it cannot identify its own process group.
+- The proof launcher now collapses duplicate current `SteadyType` processes before typing, so a stale same-path app instance cannot contribute shadow trace events.
+- The Obsidian pane lane now actively focuses the disposable note tail and sets the AX selected range to the value end before typing.
 
 ## Fresh Findings This Pass
 
@@ -95,6 +98,12 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Current-branch theme proof passed cleanly at `2026-05-13T09:51:37Z`, diagnostics lines 51119-51188, trace lines 11984-11995.
 - Current-branch font/zoom proof passed cleanly at `2026-05-13T09:56:01Z`, diagnostics lines 51920-52015, trace lines 12182-12207.
 - Current-branch bold Markdown proof passed cleanly at `2026-05-13T09:58:59Z`, diagnostics lines 52541-52597, trace lines 12313-12321.
+- Current-branch list proof passed cleanly at `2026-05-13T10:08:56Z`, diagnostics lines 53495-53570, trace lines 12542-12558.
+- Current-branch multiline proof passed cleanly at `2026-05-13T10:09:37Z`, diagnostics lines 53652-53709, trace lines 12576-12584.
+- Current-branch run-on proof passed cleanly at `2026-05-13T10:15:03Z`, diagnostics lines 54238-54295, trace lines 12692-12700.
+- Latest pane reruns are red. The improved pane harness verified 2 accepted insertions, but strict trace eval failed because extra typed-over suggestions were emitted without screenshot path and `screenshotCaptureRect`.
+- A model-only pane isolation attempt with `AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1` failed setup focus with `Refusing Obsidian proof because the focused smoke note does not end with the expected disposable text.`
+- The old `25ed` proof loop spawned a watchdog process group `89610` that killed any process touching this `390d` worktree every 0.5 seconds; that process group was terminated before the latest pane reruns.
 - The reset harness now closes duplicate Obsidian proof panes before non-pane lanes, because Computer Use showed two `placement-proof` panes and text landing inside `Autocomplete Lab Obsidian proof` instead of after it.
 - The reset harness now writes the intended reset text and caret position through AX instead of using Cmd-Right plus Return, because Cmd-Right can stop at a visual wrap in narrow CodeMirror panes.
 - Obsidian Escape before typing and between acceptances is now opt-in for proof runs, because Escape can put the active CodeMirror field into `suppressedField` and block the next suggestion.
@@ -104,6 +113,7 @@ Current branch: `codex/obsidian-deep-proof-390d`
 ## Remaining Gates To Reach 100
 
 - Make the test runner resilient to stale `25ed` / watchdog process cleanup so it cannot SIGTERM current Obsidian proof runs after verification.
+- Fix split-pane noisy/shadow suggestions so pane runs produce only screenshot-backed suggestions and no typed-over annoyance events.
 - Get the current-branch `obsidian-long-note` runner to exit cleanly after the verified Tab and Option-Tab pass.
 - Keep Obsidian post-insert verification tolerant of the exact "accepted text landed, but focus moved to another Obsidian tab" shape without recording a false `wrongInsertion`.
 - Keep hardening end-of-document caret placement across wrapped lines, split panes, and different zoom levels.
