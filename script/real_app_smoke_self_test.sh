@@ -696,7 +696,8 @@ fi
 
 if ! grep -F '[[ "$manual_app" == "obsidian-pane" ]]' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focus_obsidian_visible_tail_line" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1" script/real_app_smoke.sh >/dev/null; then
+   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "printf '%s.\\n' \"\$marker\"" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Obsidian pane proof to actively focus the disposable note tail before typing" >&2
   exit 1
 fi
