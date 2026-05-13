@@ -28,6 +28,8 @@ Use this before a private beta build. This is manual proof, not a code claim.
 - [ ] Type again, wait for another suggestion, press `Esc`, and confirm the suggestion dismisses without changing text.
 - [ ] Click `Pause Suggestions` from Practice and confirm suggestions stop.
 - [ ] Click `Delete Traces` from Practice and confirm local trace JSONL and screenshot files are gone.
+- [ ] Record the walkthrough in the `Guided TextEdit Walkthrough Proof` table below.
+- [ ] Run `./script/check_onboarding_walkthrough_proof.py`.
 
 ## First Success
 
@@ -67,6 +69,14 @@ Use this before a private beta build. This is manual proof, not a code claim.
 ## Release Rule
 
 Do not invite private beta testers until this checklist passes on a clean macOS user account.
+
+## Guided TextEdit Walkthrough Proof
+
+The row must prove one complete clean-user path: app-owned explanation, user-triggered Accessibility grant, app-owned local runtime readiness, disposable TextEdit practice, one-word `Tab`, `Esc`, Pause, and trace deletion. It must not rely on Ollama, llama.cpp, Python, a separate server, or mock fallback.
+
+| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |
 
 ## Proof Log
 

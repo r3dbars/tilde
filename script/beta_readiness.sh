@@ -369,6 +369,7 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
+  run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
@@ -434,6 +435,10 @@ echo "== Redacted report export =="
 echo
 echo "== Issue template validation =="
 ./script/validate_beta_issue_template.sh
+
+echo
+echo "== Onboarding walkthrough proof =="
+./script/check_onboarding_walkthrough_proof.py
 
 echo
 echo "== Clipboard fallback disabled =="
