@@ -63,6 +63,14 @@ require_contains 'SwiftPM readiness scratch: $AUTOCOMPLETE_LAB_READINESS_SCRATCH
 require_contains 'check_release_dmg_signature'
 require_contains 'check_release_archive_signature'
 require_contains 'run_check "Developer ID archive signature" check_release_archive_signature'
+require_contains 'check_runtime_no_egress_proof'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_MIN_SAMPLES:-10'
+require_contains '--validate-proof "$proof_path"'
+require_contains '--require-newer-than-latest-launch'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY'
+require_contains 'run_check "Runtime no-egress proof" check_runtime_no_egress_proof'
 require_contains 'check_notarized_install_proof'
 require_contains 'check_current_artifact_checksum'
 require_contains 'run_release_proof_check'
@@ -107,6 +115,14 @@ require_order 'echo "Beta readiness check-only found $failures blocker(s)."' \
   'print_next_beta_readiness_lanes "$onboarding_failed"'
 require_order 'configure_readiness_scratch_path || exit 1' \
   'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
+require_order 'run_check "Runtime production gate" env' \
+  'run_check "Runtime no-egress proof" check_runtime_no_egress_proof'
+require_order 'run_check "Runtime no-egress proof" check_runtime_no_egress_proof' \
+  'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
+require_order 'echo "== Runtime production gate =="' \
+  'echo "== Runtime no-egress proof =="'
+require_order 'echo "== Runtime no-egress proof =="' \
+  'echo "== Controls and diagnostics readiness =="'
 require_order 'echo "== Visual placement proof =="' \
   'echo "== Latency beta gate =="'
 require_order 'echo "== Latency beta gate =="' \
