@@ -161,7 +161,8 @@ enum ModelAssetIntegrityReceiptValidator {
     static func validate(
         manifest: LocalModelAssetManifest,
         modelDirectoryURL: URL,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        checksum: (URL) throws -> String = ModelAssetIntegrityReceiptWriter.sha256
     ) -> String? {
         guard let source = manifest.source else {
             return nil
@@ -257,7 +258,7 @@ enum ModelAssetIntegrityReceiptValidator {
 
             let digest: String
             do {
-                digest = try ModelAssetIntegrityReceiptWriter.sha256(fileURL)
+                digest = try checksum(fileURL)
             } catch {
                 return "could not checksum \(entry.path): \(error.localizedDescription)"
             }
@@ -314,5 +315,99 @@ enum ModelAssetIntegrityReceiptValidator {
             || path.contains("\\")
             || path == "."
             || path == ".."
+    }
+}
+
+struct ModelAssetIntegrityValidationCache {
+    private var cachedSnapshot: Snapshot?
+    private var cachedResult: String?
+
+    mutating func validate(
+        manifest: LocalModelAssetManifest,
+        modelDirectoryURL: URL,
+        fileManager: FileManager = .default,
+        checksum: (URL) throws -> String = ModelAssetIntegrityReceiptWriter.sha256
+    ) -> String? {
+        guard let snapshot = Snapshot.capture(
+            manifest: manifest,
+            modelDirectoryURL: modelDirectoryURL,
+            fileManager: fileManager
+        ) else {
+            cachedSnapshot = nil
+            cachedResult = nil
+            return ModelAssetIntegrityReceiptValidator.validate(
+                manifest: manifest,
+                modelDirectoryURL: modelDirectoryURL,
+                fileManager: fileManager,
+                checksum: checksum
+            )
+        }
+
+        if snapshot == cachedSnapshot {
+            return cachedResult
+        }
+
+        let result = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: modelDirectoryURL,
+            fileManager: fileManager,
+            checksum: checksum
+        )
+        cachedSnapshot = snapshot
+        cachedResult = result
+        return result
+    }
+
+    private struct Snapshot: Equatable {
+        let manifest: LocalModelAssetManifest
+        let directoryPath: String
+        let files: [FileFingerprint]
+
+        static func capture(
+            manifest: LocalModelAssetManifest,
+            modelDirectoryURL: URL,
+            fileManager: FileManager
+        ) -> Snapshot? {
+            let receiptURL = modelDirectoryURL.appendingPathComponent(
+                ModelAssetIntegrityReceiptWriter.fileName,
+                isDirectory: false
+            )
+
+            do {
+                let modelFiles = try ModelAssetIntegrityReceiptWriter.modelFiles(
+                    in: modelDirectoryURL,
+                    fileManager: fileManager
+                )
+                let fingerprintedURLs = ([receiptURL] + modelFiles)
+                    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+                let fingerprints = try fingerprintedURLs.map { url in
+                    try FileFingerprint(url: url, fileManager: fileManager)
+                }
+                return Snapshot(
+                    manifest: manifest,
+                    directoryPath: modelDirectoryURL.path,
+                    files: fingerprints
+                )
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    private struct FileFingerprint: Equatable {
+        let path: String
+        let byteCount: Int64
+        let modificationDate: Date?
+        let systemNumber: String
+        let fileNumber: String
+
+        init(url: URL, fileManager: FileManager) throws {
+            let attributes = try fileManager.attributesOfItem(atPath: url.path)
+            path = url.lastPathComponent
+            byteCount = (attributes[.size] as? NSNumber)?.int64Value ?? -1
+            modificationDate = attributes[.modificationDate] as? Date
+            systemNumber = attributes[.systemNumber].map(String.init(describing:)) ?? ""
+            fileNumber = attributes[.systemFileNumber].map(String.init(describing:)) ?? ""
+        }
     }
 }
