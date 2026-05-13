@@ -281,6 +281,11 @@ if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragm
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
   exit 1
 fi
+
+if ! grep -F 'AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected latency reports to include the tagged runtime launch" >&2
+  exit 1
+fi
 if ! grep -F 'clear_textedit_document_for_proof()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency initial reset"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"' script/real_app_smoke.sh >/dev/null ||
