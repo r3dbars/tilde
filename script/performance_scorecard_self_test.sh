@@ -11,6 +11,7 @@ LOG_PATH="$TMP_DIR/diagnostics.log"
 EGRESS_JSON="$TMP_DIR/no-egress.json"
 BAD_EGRESS_JSON="$TMP_DIR/bad-egress.json"
 RUNTIME_REPORT="$TMP_DIR/runtime-performance.txt"
+JSON_OUT="$TMP_DIR/scorecard.json"
 
 cat >"$LOG_PATH" <<'LOG'
 2026-05-12T20:00:00Z launch accessibility=true
@@ -38,6 +39,9 @@ for index in 1 2 3 4 5; do
 done
 
 cat >>"$LOG_PATH" <<'LOG'
+2026-05-12T20:00:55Z suggestion-blocked latencyMilliseconds=180 reason=replacement-gate requestMode=phraseContinuation traceID=blocked-one triggerReason=model-result
+2026-05-12T20:00:56Z suggestion-blocked latencyMilliseconds=220 keptVisibleStreamingSuggestion=true reason=empty-suggestion requestMode=phraseContinuation traceID=blocked-two triggerReason=model-result
+2026-05-12T20:00:57Z suggestion-request-cancelled reason=invalidate
 2026-05-12T20:01:00Z keyboard-event-tap-latency-summary count=60 maxMicros=120 p50Micros=85 p90Micros=110 p95Micros=115 p99Micros=120 reason=idle
 2026-05-12T20:01:01Z focused-text-poll-latency-summary count=60 maxMilliseconds=8 p50Milliseconds=1 p90Milliseconds=3 p95Milliseconds=4 p99Milliseconds=8
 LOG
@@ -76,6 +80,7 @@ REPORT
   --diagnostics-log "$LOG_PATH" \
   --egress-json "$EGRESS_JSON" \
   --runtime-report "$RUNTIME_REPORT" \
+  --json-out "$JSON_OUT" \
   --require-no-egress \
   --min-score 90 \
   >"$TMP_DIR/pass.txt"
@@ -86,6 +91,8 @@ for expected in \
   "Privacy: metadata-only parse; ignored sensitive field values=1" \
   "Latency sample depth: 100/100" \
   "Typing responsiveness: 100/100" \
+  "Request outcomes: visible=5 blocked=2 cancelled=1 visibleRate=63% lateVisible=0 slowHidden=0 staleHidden=0 keptStreamingVisible=1; visibleLatency n=5 avg=130ms p95=150ms max=150ms; blockedLatency n=2 avg=200ms p95=220ms max=220ms; topBlocked=replacement-gate:1, empty-suggestion:1; topCancelled=invalidate:1" \
+  "Request outcome visibility: 100/100" \
   "Event-tap latency: 100/100" \
   "Multi-model evidence: 100/100"; do
   if ! grep -F "$expected" "$TMP_DIR/pass.txt" >/dev/null; then
@@ -100,6 +107,22 @@ if grep -F "SECRET-SHOULD-NOT-APPEAR" "$TMP_DIR/pass.txt" >/dev/null; then
   cat "$TMP_DIR/pass.txt" >&2
   exit 1
 fi
+
+python3 - "$JSON_OUT" <<'PY'
+import json
+import sys
+
+payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+outcomes = payload["request_outcomes"]
+assert outcomes["visible"] == 5
+assert outcomes["blocked"] == 2
+assert outcomes["cancelled"] == 1
+assert outcomes["visible_rate_percent"] == 63
+assert outcomes["visible_latency"]["p95"] == 150
+assert outcomes["blocked_latency"]["avg"] == 200
+assert outcomes["kept_streaming_visible"] == 1
+assert outcomes["top_blocked_reasons"][0] == {"reason": "replacement-gate", "count": 1}
+PY
 
 if ./script/performance_scorecard.py \
   --diagnostics-log "$LOG_PATH" \
