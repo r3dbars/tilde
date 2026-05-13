@@ -176,6 +176,11 @@ if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev
   echo "real app smoke self-test expected TextEdit proof to stop the old app before opening its disposable target" >&2
   exit 1
 fi
+if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'selfPGID' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected app-stop cleanup to avoid killing the active proof shell" >&2
+  exit 1
+fi
 if ! grep -F 'textedit_smoke_allows_ax_proof_typing' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"' script/real_app_smoke.sh >/dev/null; then
@@ -193,7 +198,8 @@ if ! grep -F 'wait_for_textedit_document_exact "$textedit_window_title" "" "Text
   exit 1
 fi
 if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'docName starts with "textedit-model-latency-"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected stale TextEdit proof windows to be cleaned before opening a new disposable document" >&2
   exit 1
 fi
