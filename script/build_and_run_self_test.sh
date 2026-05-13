@@ -34,6 +34,9 @@ require_contains "AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES"
 require_contains "AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
 require_contains "AUTOCOMPLETE_LAB_DIST_DIR"
+require_contains 'SWIFT_BUILD_ROOT="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build}"'
+require_contains 'MLX_METALLIB="$SWIFT_BUILD_ROOT/mlx-metal/default.metallib"'
+require_contains 'local mlx_checkout="$SWIFT_BUILD_ROOT/checkouts/mlx-swift"'
 require_contains "wait_for_proof_locks_if_needed"
 require_contains "AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE"
 require_contains "Waiting for active proof run before build/run relaunch."
