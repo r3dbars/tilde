@@ -18,14 +18,14 @@ Use this before inviting private beta testers.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
 - [ ] Settings installs or repairs the local model without shell commands.
 - [ ] `./script/model_latency_report.py --default-model-proof` passes.
-- [ ] `./script/latency_benchmark_report.py --beta-gate` passes with current
+- [ ] `./script/beta_readiness.sh --check-only` passes the latency gate with current
   first-visible, first-token, total-generation, AX, event-tap, and stale-late
   suppression numbers.
 
 - [ ] Suggestions stay off while the runtime warms or fails.
 - [ ] Mock fallback is not used for beta.
-- [ ] Missing or invalid model setup is handled by Settings `Install Model` or
-  `Repair Model`.
+- [ ] Missing or invalid model setup is handled by Settings `Install Local Model` or
+  `Repair Local Model`.
 - [ ] Testers do not run Ollama, llama.cpp, Python, or a model server.
 
 ## Compatibility Gate
@@ -50,7 +50,7 @@ Use this before inviting private beta testers.
 - [ ] Raw debug tracing is off.
 - [ ] Screenshot tracing is off.
 - [ ] The tester knows how to pause tracing.
-- [ ] The tester knows how to disable the current app.
+- [ ] The tester knows how to pause the current app.
 - [ ] The tester knows how to delete traces.
 - [x] A redacted report export works through
   `./script/check_redacted_report_export.sh`.

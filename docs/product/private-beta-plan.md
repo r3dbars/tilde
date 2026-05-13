@@ -59,7 +59,7 @@ files.
 
 The generated private-beta packet must also keep tester model setup inside the
 app. If the model is missing or invalid, testers should use Settings
-`Install Model` or `Repair Model`; if that in-app setup fails, stop the session
+`Install Local Model` or `Repair Local Model`; if that in-app setup fails, stop the session
 instead of giving testers shell commands.
 
 The tester install path is inside Settings. If the model is missing, use
@@ -93,12 +93,12 @@ until the compatibility gates say otherwise.
 Walk each tester through this in 15 minutes or less:
 
 - First-run map: suggestions appear near the cursor, `Tab` accepts one word,
-  `Esc` dismisses, Pause stops everything, and Disable Current App stops one
+  `Esc` dismisses, Pause stops everything, and `Pause in <App Name>` stops one
   app.
 - Privacy promise: default traces are redacted and local; raw text and
   screenshots are debug-only opt-ins.
-- Pause/disable controls: menu bar `Disable <App Name>`, Diagnostics `Pause
-  Tracing`, and Diagnostics `Delete Traces`.
+- Pause controls: menu bar `Pause in <App Name>`, `Silence This Field`,
+  Diagnostics `Export Privacy Bundle`, and Diagnostics `Delete Local Logs`.
 - Smoke check: use `Start TextEdit Practice`, type disposable text, accept one
   word with `Tab`, dismiss with `Esc`, then export the redacted report.
 - Stop rules: one wrong insertion, sensitive-field suggestion, unreliable

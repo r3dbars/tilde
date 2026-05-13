@@ -12,6 +12,7 @@ TRIAGE_TEMPLATE="$(./script/private_beta_packet.sh --print-feedback-triage-templ
 STOP_TEMPLATE="$(./script/private_beta_packet.sh --print-stop-dashboard-template)"
 MODEL_TEMPLATE="$(./script/private_beta_packet.sh --print-model-asset-template "/tmp/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit")"
 FIRST_RUN_DOC="$(cat FIRST-RUN-BETA.md)"
+PRIVACY_DOC="$(cat PRIVACY-BETA.md)"
 
 require_contains() {
   local text="$1"
@@ -49,6 +50,7 @@ require_contains "$DAILY_TEMPLATE" "Use this once per beta day."
 require_contains "$DAILY_TEMPLATE" "Confirm raw text tracing and screenshot tracing are off"
 require_contains "$DAILY_TEMPLATE" "Stop immediately if text inserts in the wrong app"
 require_contains "$DAILY_TEMPLATE" "Do not include raw typed text"
+require_contains "$DAILY_TEMPLATE" "Pause Current App"
 
 require_contains "$EXPORT_TEMPLATE" "Export Privacy Bundle"
 require_contains "$EXPORT_TEMPLATE" "./script/check_redacted_report_export.sh"
@@ -82,14 +84,24 @@ reject_contains "$MODEL_TEMPLATE" "./script/check_model_asset.py"
 reject_contains "$MODEL_TEMPLATE" "Developer fallback"
 reject_contains "$MODEL_TEMPLATE" "operator fixes"
 
-require_contains "$FIRST_RUN_DOC" "Suggestions appear near the cursor"
+require_contains "$FIRST_RUN_DOC" "small floating suggestion next to the cursor"
 require_contains "$FIRST_RUN_DOC" '`Tab` accepts one word'
 require_contains "$FIRST_RUN_DOC" '`Esc` dismisses'
 require_contains "$FIRST_RUN_DOC" "Pause Suggestions stops suggestions everywhere"
+require_contains "$FIRST_RUN_DOC" "Pause Current App stops suggestions only in the frontmost app"
+require_contains "$FIRST_RUN_DOC" '`Install Local Model` or `Repair Local Model`'
+require_contains "$FIRST_RUN_DOC" "do not run Ollama, Python, shell scripts, or a separate model"
 require_contains "$FIRST_RUN_DOC" "Typed text, prompts, model output, accepted text, screenshots"
-require_contains "$FIRST_RUN_DOC" "TextEdit"
+require_contains "$FIRST_RUN_DOC" "Write-test only in these apps:"
+require_contains "$FIRST_RUN_DOC" "Do not write-test these as normal beta apps."
 require_contains "$FIRST_RUN_DOC" "Mail"
 require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
+require_contains "$FIRST_RUN_DOC" "Chrome included local practice pages"
+
+require_contains "$PRIVACY_DOC" "no default remote crash, analytics, or behavior telemetry path"
+require_contains "$PRIVACY_DOC" "Raw text traces and placement screenshots are debug opt-ins"
+require_contains "$PRIVACY_DOC" "Normal first-run setup does not need Screen Recording"
+require_contains "$PRIVACY_DOC" "Pause the current app from the menu bar"
 
 SCRIPT_TEXT="$(cat script/private_beta_packet.sh)"
 require_contains "$SCRIPT_TEXT" "Primary artifact: ../SteadyType.dmg"
@@ -125,7 +137,10 @@ require_contains "$SCRIPT_TEXT" "Developer ID DMG signature blocked"
 require_contains "$SCRIPT_TEXT" "Developer ID archive signature blocked"
 require_contains "$SCRIPT_TEXT" "refresh or remove the secondary ZIP"
 require_contains "$SCRIPT_TEXT" "This is separate from Apple notarization credentials."
+require_contains "$SCRIPT_TEXT" 'Click `Allow Accessibility` in SteadyType'
+require_contains "$SCRIPT_TEXT" "confirm Accessibility updates without restarting"
 reject_contains "$SCRIPT_TEXT" '1. Unzip `SteadyType.zip`.'
+reject_contains "$SCRIPT_TEXT" "Grant Accessibility when macOS asks"
 
 for expected_doc in \
   "PRIVACY-BETA.md" \
@@ -137,11 +152,16 @@ for expected_doc in \
   "docs/product/private-beta-ops-loop.md" \
   "tester-docs/private-beta-ops-loop.md" \
   "tester-docs/FIRST-RUN-BETA.md" \
+  "tester-docs/PRIVACY-BETA.md" \
   "tester-docs/autocomplete-beta-feedback.yml" \
   ".github/labels.yml" \
-  ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml"; do
+  ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml" \
+  "check_current_build_privacy_export.sh"; do
   require_contains "$SCRIPT_TEXT" "$expected_doc"
 done
+
+require_contains "$SCRIPT_TEXT" "beta packet commit is stale"
+require_contains "$SCRIPT_TEXT" "require_generated_file"
 
 ./script/validate_beta_issue_template.sh --quiet
 
