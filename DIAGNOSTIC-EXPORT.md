@@ -38,7 +38,7 @@ without sharing what the tester typed.
 
 ## How To Export
 
-Open Diagnostics from the menu bar and use Export Report.
+Open `Debug` -> `Diagnostics` from the menu bar and use `Export Privacy Bundle`.
 
 For beta feedback, use the structured issue form from `Submit Feedback...`.
 Attach only the redacted Privacy Bundle when diagnostics are needed; the form

@@ -570,7 +570,7 @@ EOF
 9. Click `Start TextEdit Practice`.
 10. Use Tab for one-word accept.
 11. Press Esc if a suggestion feels wrong.
-12. Use Diagnostics -> Export to create the local redacted trace report and survival report.
+12. Use Debug -> Diagnostics -> Export Privacy Bundle to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.

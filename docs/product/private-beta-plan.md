@@ -83,12 +83,12 @@ until the compatibility gates say otherwise.
 Walk each tester through this in 15 minutes or less:
 
 - First-run map: suggestions appear near the cursor, `Tab` accepts one word,
-  `Esc` dismisses, Pause stops everything, and Pause Current App stops one
+  `Esc` dismisses, Pause stops everything, and `Pause in <App Name>` stops one
   app.
 - Privacy promise: default traces are redacted and local; raw text and
   screenshots are debug-only opt-ins.
-- Pause/disable controls: menu bar `Disable <App Name>`, Diagnostics `Pause
-  Tracing`, and Diagnostics `Delete Traces`.
+- Pause controls: menu bar `Pause in <App Name>`, `Silence This Field`,
+  Diagnostics `Export Privacy Bundle`, and Diagnostics `Delete Local Logs`.
 - Smoke check: use `Start TextEdit Practice`, type disposable text, accept one
   word with `Tab`, dismiss with `Esc`, then export the redacted report.
 - Stop rules: one wrong insertion, sensitive-field suggestion, unreliable

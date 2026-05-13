@@ -9082,7 +9082,7 @@ private extension AppDelegate {
         Press Tab once to accept one word.
         Press Esc to dismiss a suggestion without changing text.
         Use Pause Suggestions to stop suggestions everywhere.
-        Use Pause Current App to stop suggestions only in the frontmost app.
+        Use Pause in TextEdit to stop suggestions only in TextEdit.
 
         Typed text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, and subject lines stay on this Mac by default.
         Write-test only in TextEdit, Notes, Obsidian, and the included Chrome local practice pages.
