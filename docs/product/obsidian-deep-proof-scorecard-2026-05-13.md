@@ -8,19 +8,20 @@ Current branch: `codex/obsidian-deep-proof-390d`
 
 | Category | Grade | Evidence |
 | --- | ---: | --- |
-| Default note writing | 90 | Fresh foreground Obsidian proof accepted one visible word suffix in the disposable proof note and the Markdown file ended as `Smoke proof feed` with no literal tab. Needs repetition across many notes before 100. |
+| Default note writing | 94 | Default-note smoke has multiple strict screenshot-backed passes with two verified insertions. Needs repetition across many notes before 100. |
 | Non-default theme | 100 | `obsidian-theme` smoke passed with 2 verified insertions and strict screenshots. |
 | Split pane / same-pane insertion | 100 | `obsidian-pane` smoke passed after focused-editor insertion fix. |
-| Accepted words appear on screen | 92 | Default-note foreground proof has a verified `Smoke proof feed` pass. The latest `obsidian-long-note` pass also left the file ending as `Smoke proof feels instant and stays instant` with strict visual trace evidence. Needs many-note repeat before 100. |
-| CodeMirror stale cursor repair | 95 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, and long-note line-start tail repair survived suggestion presentation. Needs broader formatting/font repeat before 100. |
-| Long scrolled note | 100 | `obsidian-long-note` passed with 2 accepted insertions, strict screenshot trace evidence, preserved line 01 and line 90, and final visible/file text at the long-note tail. |
-| Font/zoom/dynamic layout | 62 | A first-class `obsidian-font-zoom` lane now exists, but the first live run is red: zoomed Obsidian exposed a wrapped marker and the proof did not reach verified Tab acceptance. |
-| Markdown formatting stress | 65 | First-class bold, dash-list, multiline, and run-on lanes now exist in the smoke harness, but they are still pending real green runs. |
+| Accepted words appear on screen | 92 | Default/theme/pane/font/bold/list/multiline/run-on have green strict screenshot-backed passes. Fresh Computer Use inspection after the current long-note run confirmed `Smoke proof feels` rendered at the scrolled tail; the app verifier still downgraded that run because Obsidian focus flipped to another tab before post-insert verification. |
+| CodeMirror stale cursor repair | 97 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, long-note viewport-tail repair reaches suggestion presentation, and Obsidian accept now avoids a second flaky AX read. Needs clean long-note repeat before 100. |
+| Long scrolled note | 84 | Historical `obsidian-long-note` pass exists with strict screenshots and preserved line 01/90. The latest current-branch CUA check proves the accepted word appeared at the visible scrolled tail, but the strict runner is still red because post-insert AX verification can lose focus and later reruns receive SIGTERM. |
+| Font/zoom/dynamic layout | 90 | `obsidian-font-zoom` has a green strict screenshot-backed pass. Needs repeat after the latest Obsidian accept/insertion changes before 100. |
+| Markdown formatting stress | 92 | Bold, dash-list, multiline, and run-on lanes have green strict screenshot-backed passes. Needs repeated mixed-format notes and clean long-note coexistence before 100. |
 
 ## Fixes Landed In This Pass
 
 - Obsidian now avoids destructive AX value replacement for insertion because long virtualized notes can expose only the visible viewport through AX.
-- Obsidian acceptance now has a System Events paste path using Obsidian's own `Command-V` behavior instead of replacing the AX value.
+- Obsidian acceptance no longer re-reads the flaky CodeMirror AX tree during Tab/full accept when the same-process, short-age suggestion snapshot is still valid.
+- Obsidian keyEvents insertion was moved back to synthetic key insertion; the System Events paste shortcut is no longer used for the default keyEvents profile because it could stall before insert logging.
 - `obsidian-long-note` smoke now refuses to pass if line 01 or line 90 disappears from the Markdown file.
 - The long-note second suggestion gate no longer expects full-file `beforeChars`, because CodeMirror AX can report only the viewport.
 - Added an Obsidian Tab passthrough repair policy for the exact failure where CodeMirror inserts a leading tab while a word-completion suggestion was recently visible.
@@ -39,6 +40,7 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Added `script/obsidian_deep_sweep.sh` so the Obsidian matrix can be repeated toward the requested 150+ real-app attempts with strict screenshot trace evidence.
 - Updated Obsidian proof manifest/status coverage so the new lanes stay visible as pending gates instead of being hidden inside the default lane.
 - Made Obsidian marker matching whitespace-tolerant because zoomed Obsidian can expose `Autocomplete Lab Obsidian proof` as `Autocomplete Lab \nObsidian proof` through AX.
+- Made the smoke harness's direct child-process launch opt-out so Obsidian proofs can launch through LaunchServices when Codex process-group cleanup interferes.
 
 ## Fresh Findings This Pass
 
@@ -75,12 +77,17 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Fresh file evidence: `/Users/redbars/Documents/claudebrain-lab/Autocomplete Lab Obsidian Proof Codex.md` kept the long-note body and ended with `Long note filler line 90 ... Smoke proof feels`.
 - Fresh bad evidence: `/Users/redbars/Documents/claudebrain-lab/Autocomplete Lab Obsidian proof.md` ended up as `Smoke proof feelsAutocomplete Lab Obsidian proof`, which is not acceptable insertion behavior.
 - Superseded bad evidence: `/Users/redbars/Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md` previously showed `[TAB]Smoke proof fee`; after the repair it showed `Smoke proof feed`.
+- Latest current-branch long-note reruns reached visible-tail suggestion presentation and screenshot capture, then logged `obsidian-snapshot-fast-path` for both focus and acceptance. The remaining red is runner/process cleanup, not placement.
+- Latest Computer Use inspection showed the focused Obsidian editor with filler lines 70-90 preserved and the visible proof tail containing a typed `S` at the screen cursor.
+- Fresh 08:25 UTC long-note proof accepted the Tab suggestion with `keyboard-action ... handled=true`, `insert ... mode=keyEvents success=true`, and `acceptanceProof=passed`; Computer Use then confirmed the visible editor ended with `Smoke proof feels`.
+- That same 08:25 run is still not a strict pass because Obsidian focus moved to an extra blank tab before the app's post-insert verifier could read the original CodeMirror text area, producing `insert-verification ... result=fieldChanged`.
+- After closing the extra blank tab, the next strict long-note rerun was killed by SIGTERM after build/signing and target confirmation, before suggestion proof could finish.
+- The latest screenshot trace artifacts include `/Users/redbars/Library/Logs/SteadyType/screenshots/DF696F28-2CD6-439E-BE0E-C69CB3615E3A.png`, `/Users/redbars/Library/Logs/SteadyType/screenshots/A8FF3AF7-2BE8-45AF-BB4B-1ED412031C6C.png`, and `/Users/redbars/Library/Logs/SteadyType/screenshots/4A55A7D2-4457-4C0A-94C2-6E2FEC2581D8.png`.
 
 ## Remaining Gates To Reach 100
 
-- Repeat the clean `obsidian-long-note` pass enough times to turn it from smoke proof into a real reliability sample.
 - Make the test runner resilient to the old `25ed` TextEdit proof loop so it cannot kill or relaunch the Obsidian proof app mid-run.
+- Make Obsidian post-insert verification tolerate the exact "accepted text landed, but focus moved to another Obsidian tab" shape without recording a false `wrongInsertion`.
+- Get the current-branch `obsidian-long-note` runner back to a clean verified Tab/full-accept pass after the latest accept and insertion changes.
 - Keep hardening end-of-document caret placement across wrapped lines, split panes, and different zoom levels.
-- Turn `obsidian-font-zoom` green with verified Tab/full accept and strict screenshots.
-- Run and turn green `obsidian-markdown-bold`, `obsidian-markdown-list`, `obsidian-multiline`, and `obsidian-run-on`.
-- Repeat default/theme/pane/long-note enough times to turn this from smoke proof into a real reliability sample.
+- Repeat default/theme/pane/long-note/font/bold/list/multiline/run-on enough times to turn this from smoke proof into a real reliability sample.

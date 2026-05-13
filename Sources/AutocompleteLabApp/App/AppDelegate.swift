@@ -2534,6 +2534,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let font = tuning.font ?? syntheticTextAreaFont(for: context, bundleIdentifier: bundleIdentifier)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
 
+        if let obsidianScrolledCaret = obsidianScrolledCodeMirrorSyntheticCaretRect(
+            for: context,
+            bundleIdentifier: bundleIdentifier,
+            elementRect: elementRect,
+            font: font,
+            lineHeight: lineHeight
+        ) {
+            return obsidianScrolledCaret
+        }
+
         return SyntheticCaretEstimator.caretRect(
             textBeforeCursor: context.textBeforeCursor,
             elementRect: elementRect,
@@ -2543,6 +2553,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             verticalPadding: tuning.verticalPadding,
             inlineGap: tuning.inlineGap,
             centerSingleLineWhenTall: tuning.centerSingleLineWhenTall,
+            widthOfText: { width(of: $0, font: font) }
+        )
+    }
+
+    private func obsidianScrolledCodeMirrorSyntheticCaretRect(
+        for context: FocusedTextContext,
+        bundleIdentifier: String,
+        elementRect: CGRect,
+        font: NSFont,
+        lineHeight: CGFloat
+    ) -> CGRect? {
+        guard bundleIdentifier == "md.obsidian",
+              elementRect.width > 20,
+              elementRect.width <= 80,
+              elementRect.height >= lineHeight * 4,
+              let windowRect = context.windowRect,
+              windowRect.insetBy(dx: -24, dy: -24).intersects(elementRect) else {
+            return nil
+        }
+
+        let currentLine = context.textBeforeCursor
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .last
+            .map(String.init) ?? context.textBeforeCursor
+        guard !currentLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        let rowY = min(
+            max(elementRect.maxY - lineHeight - 12, windowRect.minY + 8),
+            windowRect.maxY - lineHeight - 8
+        )
+        let maxRight = min(
+            windowRect.maxX - 24,
+            max(elementRect.maxX + 160, windowRect.maxX - 96)
+        )
+        let rowWidth = max(160, maxRight - elementRect.minX)
+        let visibleRowRect = CGRect(
+            x: elementRect.minX,
+            y: rowY,
+            width: rowWidth,
+            height: lineHeight + 18
+        )
+
+        return SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: currentLine,
+            elementRect: visibleRowRect,
+            windowRect: windowRect,
+            lineHeight: lineHeight,
+            horizontalPadding: 18,
+            verticalPadding: 4,
+            inlineGap: 8,
+            centerSingleLineWhenTall: false,
             widthOfText: { width(of: $0, font: font) }
         )
     }
@@ -2932,7 +2995,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         guard focusedFieldMatchesCurrentSuggestion(
             allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
-            allowCodexProofSnapshotFastPath: action == .acceptNextWord
+            allowCodexProofSnapshotFastPath: action == .acceptNextWord,
+            allowObsidianSnapshotFastPath: action.insertsSuggestionText
         ) else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
@@ -2992,7 +3056,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true
+                allowCodexProofSnapshotFastPath: true,
+                allowObsidianSnapshotFastPath: true
             ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
@@ -3091,7 +3156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
                 return .replayOriginalKey(.unsupportedAction)
             }
-            if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+            if let blockReason = currentSuggestionAcceptanceDecision(
+                allowObsidianSnapshotFastPath: true
+            ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
@@ -3186,7 +3253,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func currentSuggestionAcceptanceDecision(
-        allowCodexProofSnapshotFastPath: Bool = false
+        allowCodexProofSnapshotFastPath: Bool = false,
+        allowObsidianSnapshotFastPath: Bool = false
     ) -> SuggestionAcceptanceDecision {
         guard let shownSnapshot = currentSuggestionAcceptanceSnapshot else {
             return .block(.missingShownSnapshot)
@@ -3195,6 +3263,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if allowCodexProofSnapshotFastPath,
            codexProofAcceptanceSnapshotMatchesShown(shownSnapshot) {
             recordCodexProofSnapshotFastPath(stage: "acceptance")
+            return .allow
+        }
+        if allowObsidianSnapshotFastPath,
+           obsidianAcceptanceSnapshotMatchesShown(shownSnapshot) {
+            recordObsidianSnapshotFastPath(stage: "acceptance")
             return .allow
         }
 
@@ -3311,6 +3384,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         action: KeyboardAction,
         metadata: [String: String] = [:]
     ) {
+        if currentSuggestionAppBundleIdentifier == "md.obsidian"
+            || currentProfile?.bundleIdentifier == "md.obsidian" {
+            var payload = metadata
+            payload["app"] = "md.obsidian"
+            payload["key"] = key.diagnosticName
+            payload["action"] = action.diagnosticName
+            payload["stage"] = stage
+            payload["hasVisibleSuggestion"] = String(suggestionSession.hasVisibleSuggestion)
+            payload["requestMode"] = currentSuggestionRequestMode?.rawValue ?? "unknown"
+            DiagnosticsLog.shared.record(
+                "obsidian-keyboard-progress",
+                metadata: payload
+            )
+        }
+
         guard currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             || currentProfile?.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier else {
             return
@@ -3331,7 +3419,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func focusedFieldMatchesCurrentSuggestion(
         allowTerminalHostProofSnapshotFastPath: Bool = false,
-        allowCodexProofSnapshotFastPath: Bool = false
+        allowCodexProofSnapshotFastPath: Bool = false,
+        allowObsidianSnapshotFastPath: Bool = false
     ) -> Bool {
         if allowTerminalHostProofSnapshotFastPath,
            terminalHostProofSnapshotMatchesCurrentSuggestion() {
@@ -3340,6 +3429,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if allowCodexProofSnapshotFastPath,
            codexProofSnapshotMatchesCurrentSuggestion() {
             recordCodexProofSnapshotFastPath(stage: "focus")
+            return true
+        }
+        if allowObsidianSnapshotFastPath,
+           obsidianSnapshotMatchesCurrentSuggestion() {
+            recordObsidianSnapshotFastPath(stage: "focus")
             return true
         }
 
@@ -3556,6 +3650,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return true
+    }
+
+    private func obsidianSnapshotMatchesCurrentSuggestion() -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
+              suggestionSession.hasVisibleSuggestion,
+              let currentProfile,
+              currentProfile.bundleIdentifier == bundleIdentifier,
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              let suggestionAgeMilliseconds = currentSuggestionAgeMilliseconds(),
+              suggestionAgeMilliseconds <= 5_000,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            return false
+        }
+
+        return true
+    }
+
+    private func obsidianAcceptanceSnapshotMatchesShown(
+        _ shownSnapshot: SuggestionAcceptanceSnapshot
+    ) -> Bool {
+        guard obsidianSnapshotMatchesCurrentSuggestion(),
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              shownSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              shownSnapshot.fieldIdentity == lastTextSnapshot.fieldIdentity,
+              shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+              shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor,
+              shownSnapshot.selectedTextLength == 0 else {
+            return false
+        }
+
+        return true
+    }
+
+    private func recordObsidianSnapshotFastPath(stage: String) {
+        DiagnosticsLog.shared.record(
+            "obsidian-snapshot-fast-path",
+            metadata: [
+                "app": "md.obsidian",
+                "stage": stage,
+                "fieldIdentity": currentSuggestionFieldIdentity?.traceDescription ?? "",
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "",
+                "suggestionAgeMilliseconds": currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
+            ]
+        )
     }
 
     private func codexProofAcceptanceSnapshotMatchesShown(
@@ -6667,12 +6811,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionAppBundleIdentifier == "md.obsidian"
             && profile.bundleIdentifier == "md.obsidian"
             && profile.insertionMode == .axValueReplacement
+            && ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT"] == "1"
     }
 
     private func shouldUseObsidianSystemEventsInsertion(profile: CompatibilityProfile) -> Bool {
         currentSuggestionAppBundleIdentifier == "md.obsidian"
             && profile.bundleIdentifier == "md.obsidian"
-            && profile.insertionMode == .keyEvents
+            && profile.insertionMode == .axValueReplacement
     }
 
     private func insertObsidianDirectValueText(_ acceptedText: String) -> Bool {
@@ -6843,16 +6988,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let fallbackChangeCount = pasteboard.changeCount
 
-        NSRunningApplication(processIdentifier: frontmostApp.processIdentifier)?
-            .activate(options: [])
-        Thread.sleep(forTimeInterval: 0.03)
-
-        let posted = Self.postCommandVKey()
+        let pasteDelayMilliseconds = 30
+        let posted = Self.postCommandVKeyAsync(afterMilliseconds: pasteDelayMilliseconds)
         if posted {
             schedulePasteboardRestore(
                 insertedText: acceptedText,
                 fallbackChangeCount: fallbackChangeCount,
-                originalItems: originalItems
+                originalItems: originalItems,
+                delaySeconds: 0.35
             )
         } else {
             restoreOriginalPasteboard()
@@ -6862,7 +7005,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "app": bundleIdentifier,
                 "posted": String(posted),
-                "source": "cgEventCommandPaste",
+                "source": "cgEventCommandPasteAsync",
+                "delayMilliseconds": String(pasteDelayMilliseconds),
                 "acceptedChars": String(acceptedText.count)
             ]
         )
@@ -7537,11 +7681,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func schedulePasteboardRestore(
         insertedText: String,
         fallbackChangeCount: Int,
-        originalItems: [NSPasteboardItem]
+        originalItems: [NSPasteboardItem],
+        delaySeconds: TimeInterval = 0.15
     ) {
         let restorePolicy = ClipboardFallbackRestorePolicy()
         let pasteboard = NSPasteboard.general
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds) {
             let restoreDecision = restorePolicy.decision(
                 insertedText: insertedText,
                 currentString: pasteboard.string(forType: .string),
@@ -7767,6 +7912,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
+        return true
+    }
+
+    nonisolated private static func postCommandVKeyAsync(afterMilliseconds delayMilliseconds: Int) -> Bool {
+        let postPaste: @Sendable () -> Void = {
+            let source = CGEventSource(stateID: .hidSystemState)
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+                DiagnosticsLog.shared.record(
+                    "keyboard-post-failed",
+                    metadata: [
+                        "key": "command-v",
+                        "source": "cgEventCommandPasteAsync"
+                    ]
+                )
+                return
+            }
+
+            keyDown.flags = .maskCommand
+            keyUp.flags = .maskCommand
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
+
+        if delayMilliseconds > 0 {
+            DispatchQueue.global(qos: .userInteractive).asyncAfter(
+                deadline: .now() + .milliseconds(delayMilliseconds),
+                execute: postPaste
+            )
+        } else {
+            DispatchQueue.global(qos: .userInteractive).async(execute: postPaste)
+        }
         return true
     }
 

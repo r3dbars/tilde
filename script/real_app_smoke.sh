@@ -1617,7 +1617,7 @@ obsidian_smoke_marker_text() {
       return 0
       ;;
     obsidian-markdown-list)
-      printf '%s\n\n**Bold context line**\n\n- Autocomplete list context' "$marker"
+      printf '%s\n\n**Bold context line**\n\n- ' "$marker"
       return 0
       ;;
     obsidian-multiline)
@@ -1625,7 +1625,7 @@ obsidian_smoke_marker_text() {
       return 0
       ;;
     obsidian-run-on)
-      printf '%s\n\nThis deliberately long Obsidian run on sentence keeps moving across the editor so wrapping, scrolling, and caret geometry have to stay calm before the proof line appears' "$marker"
+      printf '%s\n\nThis deliberately long Obsidian run on sentence keeps moving across the editor so wrapping, scrolling, and caret geometry have to stay calm before the proof line appears ' "$marker"
       return 0
       ;;
   esac
@@ -1763,6 +1763,14 @@ prepare_obsidian_variant_state() {
       ;;
     obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
       activate_obsidian_for_smoke
+      case "$manual_app" in
+        obsidian-markdown-list|obsidian-run-on)
+          move_obsidian_caret_to_document_end
+          ;;
+        obsidian-multiline)
+          set_obsidian_caret_to_value_end
+          ;;
+      esac
       ;;
     obsidian)
       activate_obsidian_for_smoke
@@ -7554,9 +7562,11 @@ build_if_needed() {
   SMOKE_PHASE="build/relaunch current SteadyType"
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
-      AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
     )
+    if [[ ! "${AUTOCOMPLETE_LAB_REAL_APP_DIRECT_LAUNCH:-1}" =~ ^(0|false|no|off)$ ]]; then
+      build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)
+    fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
   fi
 
@@ -8431,6 +8441,7 @@ guard let editor = focusedElement(from: appElement) ?? focusedElement(from: syst
 
 AXUIElementSetMessagingTimeout(editor, 1.0)
 let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
+let expectedLocation = text.utf16.count
 var endRange = CFRange(location: text.utf16.count, length: 0)
 guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
     exit(3)
@@ -8444,8 +8455,26 @@ guard AXUIElementSetAttributeValue(
 ) == .success else {
     exit(3)
 }
+
+let deadline = Date().addingTimeInterval(1.2)
+while Date() < deadline {
+    if let selectedValue = copyAttribute(editor, kAXSelectedTextRangeAttribute) {
+        var selectedRange = CFRange()
+        if AXValueGetValue(selectedValue as! AXValue, .cfRange, &selectedRange),
+           selectedRange.location >= max(0, expectedLocation - 1) {
+            exit(0)
+        }
+    }
+
+    _ = AXUIElementSetAttributeValue(
+        editor,
+        kAXSelectedTextRangeAttribute as CFString,
+        rangeValue
+    )
+    Thread.sleep(forTimeInterval: 0.12)
+}
 SWIFT
-  sleep 0.15
+  sleep 0.25
 }
 
 focus_obsidian_visible_tail_line() {
@@ -8584,8 +8613,9 @@ let tailElement = targetChildren
 
 let clickPoint: CGPoint
 if let (_, lineRect) = tailElement {
+    let tailX = min(targetRect.maxX - 8, max(lineRect.minX + 8, lineRect.maxX + 8))
     clickPoint = CGPoint(
-        x: targetRect.maxX - 8,
+        x: tailX,
         y: lineRect.height > 30 ? lineRect.maxY - 11 : lineRect.midY
     )
 } else {
@@ -8609,8 +8639,9 @@ APPLESCRIPT
   set_obsidian_caret_to_value_end
   if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL:-0}" == "1" ]]; then
     focus_obsidian_visible_tail_line
+    set_obsidian_caret_to_value_end
   fi
-  sleep 0.25
+  sleep 0.35
 }
 
 reset_obsidian_smoke_note() {
@@ -8774,7 +8805,7 @@ assert_obsidian_long_note_file_preserved() {
 
 activate_neutral_smoke_setup_app() {
   open -a Finder >/dev/null 2>&1 || true
-  wait_for_frontmost_app "Finder" 3 || true
+  try_wait_for_frontmost_app "Finder" 3 >/dev/null 2>&1 || true
   sleep 0.2
 }
 
@@ -8854,6 +8885,12 @@ run_obsidian() {
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+  elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+  elif [[ "$manual_app" == "obsidian-multiline" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
   fi
   if [[ "$manual_app" == "obsidian-markdown-bold" ]]; then
     export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
@@ -8885,6 +8922,9 @@ run_obsidian() {
   if [[ "$manual_app" != "obsidian-long-note" ]]; then
     reset_obsidian_smoke_note
   fi
+  prepare_obsidian_variant_state "$manual_app"
+  press_key_code 53
+  sleep 0.35
   prepare_obsidian_variant_state "$manual_app"
 
   start_line="$(line_count "$LOG_PATH")"
@@ -8924,11 +8964,17 @@ run_obsidian() {
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
-    second_start_line="$(line_count "$LOG_PATH")"
     assert_obsidian_smoke_target "Smoke proof feels instant"
     if [[ "$manual_app" == "obsidian-pane" ]]; then
       move_obsidian_caret_to_line_end
+    elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+      move_obsidian_caret_to_document_end
+    elif [[ "$manual_app" == "obsidian-multiline" ]]; then
+      set_obsidian_caret_to_value_end
     fi
+    press_key_code 53
+    sleep 0.25
+    second_start_line="$(line_count "$LOG_PATH")"
     type_obsidian_raw_smoke_text " and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then

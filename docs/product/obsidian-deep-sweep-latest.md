@@ -1,17 +1,19 @@
 # Obsidian Deep Sweep Latest
 
-- Started UTC: 2026-05-13T06:55:33Z
+- Started UTC: 2026-05-13T07:46:39Z
 - Iterations: 1
-- Lanes: obsidian-font-zoom obsidian-markdown-bold obsidian-markdown-list obsidian-multiline obsidian-run-on
+- Lanes: obsidian obsidian-theme obsidian-pane obsidian-long-note obsidian-font-zoom obsidian-markdown-bold obsidian-markdown-list obsidian-multiline obsidian-run-on
 
 | Iteration | Lane | Result | Command |
 | ---: | --- | --- | --- |
-| 1 | `obsidian-font-zoom` | `fail` | `script/real_app_smoke.sh obsidian-font-zoom --manual-gate` |
+| 1 | `obsidian` | `pass` | `script/real_app_smoke.sh obsidian --manual-gate` |
+| 1 | `obsidian-theme` | `pass` | `script/real_app_smoke.sh obsidian-theme --manual-gate --skip-build` |
+| 1 | `obsidian-pane` | `pass` | `script/real_app_smoke.sh obsidian-pane --manual-gate --skip-build` |
+| 1 | `obsidian-long-note` | `fail` | `script/real_app_smoke.sh obsidian-long-note --manual-gate --skip-build` |
+| 2 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR=/tmp/autocomplete-lab-obsidian-long-note-clean2.lock script/real_app_smoke.sh obsidian-long-note --manual-gate` |
+| 3 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_DIRECT_LAUNCH=0 script/real_app_smoke.sh obsidian-long-note --manual-gate` |
+| 4 | `obsidian-long-note` | `fail` | `script/real_app_smoke.sh obsidian-long-note --manual-gate --skip-build` |
+| 5 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR=/tmp/autocomplete-lab-obsidian-long-note-resume.lock script/real_app_smoke.sh obsidian-long-note --manual-gate` |
+| 6 | `obsidian-long-note` | `fail` | `AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR=/tmp/autocomplete-lab-obsidian-long-note-after-tab-close.lock script/real_app_smoke.sh obsidian-long-note --manual-gate` |
 
-## Summary
-
-- Attempts recorded: 1
-- Passes: 0
-- Failures: 1
-- Blocker: `obsidian-font-zoom` did not reach verified Tab acceptance. The zoomed Obsidian editor exposed the smoke marker with a visual/AX line break and the first run placed typed text before `Obsidian proof` instead of at the true visual end.
-- Interference: a stale `25ed` TextEdit latency loop later spawned a watchdog that killed this `390d` worktree during the same sweep window, so remaining lanes were not validly attempted in this report.
+Latest note: current branch reaches Obsidian visible-tail suggestion presentation and screenshot capture, and logs `obsidian-snapshot-fast-path` for accept focus/safety. Iteration 5 accepted the word and Computer Use confirmed `Smoke proof feels` on screen, but app verification reported `fieldChanged` after Obsidian focus moved to another tab. Iteration 6 was killed by SIGTERM after target confirmation.

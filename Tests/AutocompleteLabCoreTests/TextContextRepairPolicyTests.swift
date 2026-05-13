@@ -183,6 +183,48 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorLineDrift)
     }
 
+    @Test("Repairs Obsidian line drift when the tail words are reported after a leading space")
+    func repairsObsidianLineDriftWithLeadingWhitespaceTailGrowth() {
+        let policy = TextContextRepairPolicy()
+        let prefix = [
+            "Autocomplete Lab Obsidian proof",
+            "Autocomplete Lab Obsidian scroll filler line 90",
+            "Autocomplete Lab Obsidian proof"
+        ].joined(separator: "\n")
+        let previous = prefix + "\nS"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: prefix + "\nSmoke",
+            textAfterCursor: " proof feels",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == prefix + "\nSmoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTextAfterGrowth)
+    }
+
+    @Test("Does not repair Obsidian first-word middle edits without document-tail growth")
+    func doesNotRepairObsidianFirstWordMiddleEditWithoutTailGrowth() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Existing note\nSmoke",
+            textAfterCursor: " proof feels",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Existing note\nSmoke",
+            previousTextAfterCursor: " proof feels"
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror active line reported after the AX cursor")
     func repairsObsidianCodeMirrorTextAfterActiveLine() {
         let policy = TextContextRepairPolicy()
@@ -267,6 +309,167 @@ struct TextContextRepairPolicyTests {
         #expect(result.textBeforeCursor == beforeCursor + afterCursor)
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorViewportTailLine)
+    }
+
+    @Test("Repairs short Obsidian markdown docs when the visible tail line is after a stale AX cursor")
+    func repairsObsidianShortMarkdownTailLineAfterStaleCursor() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: "\n\nBold context line\n\u{200B}\n-\n\u{200B} \nSmoke proof feels",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\u{200B}\n-\n\u{200B} \nSmoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorShortDocumentTailLine)
+    }
+
+    @Test("Repairs short Obsidian markdown docs to the structure tail before typing starts")
+    func repairsObsidianShortMarkdownStructureTailBeforeTyping() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: "\n\nBold context line\n\n- ",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\n-")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorShortDocumentStructureTail)
+    }
+
+    @Test("Repairs short Obsidian docs when the after-cursor tail grows from the last snapshot")
+    func repairsObsidianShortTailLineGrowthFromPreviousAfterCursor() {
+        let policy = TextContextRepairPolicy()
+        let previousAfter = "\n\nEarlier markdown line\n- "
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: previousAfter + "Smoke proof feels",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof",
+            previousTextAfterCursor: previousAfter
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nEarlier markdown line\n- Smoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorShortDocumentTailLine)
+    }
+
+    @Test("Repairs short Obsidian run-on docs when the real active line is after a stale header cursor")
+    func repairsObsidianShortRunOnTailLineAfterStaleCursor() {
+        let policy = TextContextRepairPolicy()
+        let activeLine = "This deliberately long Obsidian run on sentence keeps moving across the editor so wrapping, scrolling, and caret geometry have to stay calm before the proof line appears Smoke proof feels instant and stays"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: "\n\n" + activeLine,
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\n" + activeLine)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorShortDocumentTailLine)
+    }
+
+    @Test("Repairs Obsidian markdown list word-split drift")
+    func repairsObsidianMarkdownListWordSplitDrift() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof\n\nBold context line\n\n- Smoke proof fe",
+            textAfterCursor: "els",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\n- Smoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorLineDrift)
+    }
+
+    @Test("Repairs Obsidian rendered list word-split drift")
+    func repairsObsidianRenderedListWordSplitDrift() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof\n\nBold context line\n\nSmoke proof fe",
+            textAfterCursor: "els",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\n\nBold context line\n\nSmoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorLineDrift)
+    }
+
+    @Test("Does not repair Obsidian markdown list text with real same-line content after the cursor")
+    func doesNotRepairObsidianMarkdownListRealMiddleOfLine() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "- Smoke proof fe",
+            textAfterCursor: "els in the middle",
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+
+        let completeWordBeforeAnotherWord = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof",
+            textAfterCursor: "feels",
+            selectedTextLength: 0
+        ))
+
+        #expect(!completeWordBeforeAnotherWord.wasRepaired)
+    }
+
+    @Test("Does not repair short Obsidian docs without markdown or tail-growth evidence")
+    func doesNotRepairObsidianShortTailLineWithoutEvidence() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: "\n\nExisting later paragraph\nSmoke proof feels",
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Does not repair short Obsidian docs to short plain paragraphs without evidence")
+    func doesNotRepairObsidianShortPlainParagraphTailWithoutEvidence() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: "\n\nExisting later paragraph with a few words",
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
     }
 
     @Test("Repairs Obsidian last-line text reported after the cursor")
