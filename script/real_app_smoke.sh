@@ -788,6 +788,48 @@ process_cwd() {
     head -n 1 || true
 }
 
+descendant_pids() {
+  local root_pid="$1"
+  ps -axo pid=,ppid= 2>/dev/null |
+    awk -v root="$root_pid" '
+      {
+        pid = $1
+        ppid = $2
+        if (pid == "") next
+        parent[pid] = ppid
+        seen[pid] = 1
+      }
+      END {
+        changed = 1
+        while (changed) {
+          changed = 0
+          for (pid in seen) {
+            if (parent[pid] == root || family[parent[pid]]) {
+              if (!family[pid]) {
+                family[pid] = 1
+                changed = 1
+              }
+            }
+          }
+        }
+        for (pid in family) {
+          print pid
+        }
+      }
+    '
+}
+
+terminate_pid_tree() {
+  local pid="$1"
+  local child
+
+  descendant_pids "$pid" | sort -rn | while IFS= read -r child; do
+    [[ -n "$child" && "$child" != "$SMOKE_SCRIPT_PID" ]] || continue
+    kill -TERM "$child" >/dev/null 2>&1 || true
+  done
+  kill -TERM "$pid" >/dev/null 2>&1 || true
+}
+
 command_path_is_foreign_worktree() {
   local command="$1"
   local worktree_root="$HOME/.codex/worktrees"
@@ -810,8 +852,6 @@ quarantine_foreign_worktree_pid() {
   local pid="$1"
   local command="${2:-}"
   local cwd
-  local pgid
-  local self_pgid
 
   quarantine_other_worktrees_enabled || return 1
   [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" && "$pid" != "$SMOKE_QUARANTINE_GUARD_PID" ]] || return 1
@@ -827,12 +867,7 @@ quarantine_foreign_worktree_pid() {
   fi
 
   echo "Stopping foreign worktree proof process pid $pid (${cwd:-unknown cwd})." >&2
-  pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)"
-  self_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
-  if [[ -n "$pgid" && "$pgid" != "$self_pgid" && "$pgid" != "0" ]]; then
-    kill -TERM "-$pgid" >/dev/null 2>&1 || true
-  fi
-  kill -TERM "$pid" >/dev/null 2>&1 || true
+  terminate_pid_tree "$pid"
   return 0
 }
 
@@ -957,10 +992,7 @@ terminate_foreign_proof_processes_for_exclusive_run() {
   local pid pgid cwd command
   while IFS=$'\t' read -r pid pgid cwd command; do
     [[ -n "$pid" ]] || continue
-    if [[ -n "$pgid" ]]; then
-      kill -TERM -"$pgid" >/dev/null 2>&1 || true
-    fi
-    kill -TERM "$pid" >/dev/null 2>&1 || true
+    terminate_pid_tree "$pid"
   done <<<"$lines"
 
   sleep 1

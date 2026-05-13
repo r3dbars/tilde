@@ -501,9 +501,16 @@ if ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES' script/real_app_smoke
    ! grep -F 'quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'quarantine_foreign_steadytype_apps' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_pid_tree "$pid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'descendant_pids "$pid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'cwd_is_foreign_worktree "$cwd"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command_path_is_foreign_worktree "$command"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected quarantine mode to stop foreign worktree proof processes and app bundles" >&2
+  exit 1
+fi
+if grep -F 'kill -TERM -"$pgid"' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'kill -TERM "-$pgid"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof quarantine to avoid process-group kills" >&2
   exit 1
 fi
 if grep -F 'index(command, app_binary)' script/real_app_smoke.sh >/dev/null ||
