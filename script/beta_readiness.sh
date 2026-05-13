@@ -396,8 +396,23 @@ latency_beta_gate() {
   ./script/latency_benchmark_report.py --beta-gate
 }
 
+print_next_beta_readiness_lanes() {
+  local onboarding_failed="${1:-0}"
+
+  echo
+  echo "== Next proof lanes =="
+  ./script/scorecard_next_proof_lanes.py --limit 5 || echo "Next proof lane listing failed."
+
+  if [[ "$onboarding_failed" == "1" ]]; then
+    echo
+    echo "== Onboarding walkthrough row template =="
+    ./script/check_onboarding_walkthrough_proof.py --print-template || echo "Onboarding walkthrough template unavailable."
+  fi
+}
+
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
+  onboarding_failed=0
 
   run_check "Model asset" ./script/check_model_asset.py || failures=$((failures + 1))
   run_check "Runtime production gate" env \
@@ -407,7 +422,10 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
-  run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || failures=$((failures + 1))
+  run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || {
+    failures=$((failures + 1))
+    onboarding_failed=1
+  }
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
@@ -442,6 +460,7 @@ if [[ "$MODE" == "check-only" ]]; then
   if ((failures > 0)); then
     echo
     echo "Beta readiness check-only found $failures blocker(s)."
+    print_next_beta_readiness_lanes "$onboarding_failed"
     exit 1
   fi
 
