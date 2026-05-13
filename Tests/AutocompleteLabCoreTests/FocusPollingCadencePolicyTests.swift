@@ -97,6 +97,58 @@ struct FocusPollingCadencePolicyTests {
         ))
     }
 
+    @Test("Reports the next poll date for timer backoff")
+    func reportsTheNextPollDateForTimerBackoff() {
+        let policy = FocusPollingCadencePolicy(
+            activeSuggestionIntervalSeconds: 0.05,
+            supportedTypingWatchIntervalSeconds: 0.2,
+            recentTextChangeIntervalSeconds: 0.3,
+            idleIntervalSeconds: 0.4,
+            untrustedIntervalSeconds: 0.8
+        )
+        let start = Date(timeIntervalSince1970: 1_000)
+
+        #expect(policy.nextPollDate(
+            lastPollAt: nil,
+            isTrustedForAccessibility: true,
+            hasSupportedProfile: true,
+            hasVisibleSuggestion: false
+        ) == nil)
+        #expect(policy.nextPollDate(
+            lastPollAt: start,
+            isTrustedForAccessibility: true,
+            hasSupportedProfile: true,
+            hasVisibleSuggestion: false,
+            hasRecentTextChange: true
+        ) == start.addingTimeInterval(0.3))
+        #expect(policy.nextPollDate(
+            lastPollAt: start,
+            isTrustedForAccessibility: true,
+            hasSupportedProfile: false,
+            hasVisibleSuggestion: false
+        ) == start.addingTimeInterval(0.4))
+        #expect(policy.nextPollDate(
+            lastPollAt: start,
+            isTrustedForAccessibility: false,
+            hasSupportedProfile: true,
+            hasVisibleSuggestion: true
+        ) == start.addingTimeInterval(0.8))
+    }
+
+    @Test("Future poll timestamps stay fail open")
+    func futurePollTimestampsStayFailOpen() {
+        let policy = FocusPollingCadencePolicy(supportedTypingWatchIntervalSeconds: 0.2)
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        #expect(policy.shouldPoll(
+            now: now,
+            lastPollAt: now.addingTimeInterval(1),
+            isTrustedForAccessibility: true,
+            hasSupportedProfile: true,
+            hasVisibleSuggestion: false
+        ))
+    }
+
     @Test("Visible suggestions keep the poll loop responsive")
     func visibleSuggestionsKeepThePollLoopResponsive() {
         let policy = FocusPollingCadencePolicy(
