@@ -1027,22 +1027,29 @@ terminate_foreign_proof_processes_for_exclusive_run() {
 }
 
 other_smoke_process_lines() {
-  local process_list ancestor_pids self_pgid
+  local process_list ancestor_pids self_pgid protected_pgids
   ancestor_pids="$(current_process_ancestor_pids || true)"
   ancestor_pids="${ancestor_pids//$'\n'/ }"
   self_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+  protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v selfPgid="$self_pgid" -v ancestorPids="$ancestor_pids" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPgid="$self_pgid" -v ancestorPids="$ancestor_pids" -v protectedPGIDs="$protected_pgids" '
     BEGIN {
       split(ancestorPids, rawAncestors, /[[:space:]]+/)
       for (i in rawAncestors) {
         if (rawAncestors[i] != "") {
           ancestor[rawAncestors[i]] = 1
+        }
+      }
+      split(protectedPGIDs, protectedList, /[[:space:]]+/)
+      for (i in protectedList) {
+        if (protectedList[i] != "") {
+          protected[protectedList[i]] = 1
         }
       }
     }
@@ -1085,6 +1092,7 @@ other_smoke_process_lines() {
     END {
       for (pid in rawLine) {
         if (relatedToSelf(pid)) continue
+        if (processGroup[pid] in protected) continue
         if (directScript[pid] || shellHasSmokeScript[pid]) {
           print rawLine[pid]
         }
@@ -1160,7 +1168,12 @@ terminate_other_autocomplete_proof_runs() {
   while IFS= read -r pgid; do
     [[ -z "$pgid" ]] && continue
     pgids+=("$pgid")
-    kill -TERM "-$pgid" >/dev/null 2>&1 || true
+    ps -axo pid=,pgid= 2>/dev/null |
+      awk -v pgid="$pgid" '$2 == pgid { print $1 }' |
+      while IFS= read -r pid; do
+        [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+        kill -TERM "$pid" >/dev/null 2>&1 || true
+      done
   done < <(other_autocomplete_proof_pgids)
 
   ((${#pgids[@]} == 0)) && return 0
@@ -1168,7 +1181,12 @@ terminate_other_autocomplete_proof_runs() {
 
   for pgid in "${pgids[@]}"; do
     if ps -axo pgid= 2>/dev/null | awk -v pgid="$pgid" '$1 == pgid { found = 1; exit } END { exit found ? 0 : 1 }'; then
-      kill -KILL "-$pgid" >/dev/null 2>&1 || true
+      ps -axo pid=,pgid= 2>/dev/null |
+        awk -v pgid="$pgid" '$2 == pgid { print $1 }' |
+        while IFS= read -r pid; do
+          [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+          kill -KILL "$pid" >/dev/null 2>&1 || true
+        done
     fi
   done
 }
@@ -9527,7 +9545,7 @@ run_obsidian() {
   prepare_obsidian_variant_state "$manual_app"
 
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    type_obsidian_raw_smoke_text "$first_fragment"
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"
     set_obsidian_caret_to_value_end
   fi
 
@@ -9537,7 +9555,7 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target
-    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"
+    type_obsidian_raw_smoke_text "s"
     wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels" 5
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels"
@@ -9560,22 +9578,33 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     press_key_code 53
     sleep 0.2
-    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant" 5
-    move_obsidian_caret_to_document_end
-    assert_obsidian_smoke_target "Smoke proof feels instant"
+    activate_neutral_smoke_setup_app
+    assert_obsidian_long_note_file_preserved "Smoke proof feels instant"
+    append_obsidian_smoke_note_file_text " and stays inst"
     second_start_line="$(line_count "$LOG_PATH")"
-    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays inst"
-    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant and stays inst" 5
-    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
+    open_obsidian_smoke_note_if_configured
+    wait_for_frontmost_app "Obsidian" 8
     move_obsidian_caret_to_document_end
+    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
-    press_key_code 53
-    sleep 0.2
-    second_start_line="$(line_count "$LOG_PATH")"
+    settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
     assert_obsidian_smoke_target "Smoke proof feels instant"
-    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
+    if [[ "$manual_app" == "obsidian-pane" ]]; then
+      move_obsidian_caret_to_line_end
+    elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+      move_obsidian_caret_to_document_end
+    elif [[ "$manual_app" == "obsidian-multiline" ]]; then
+      set_obsidian_caret_to_value_end
+    fi
+    if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BETWEEN_ACCEPTS:-0}" == "1" ]]; then
+      press_key_code 53
+      sleep 0.25
+    else
+      sleep 0.15
+    fi
+    second_start_line="$(line_count "$LOG_PATH")"
+    type_obsidian_raw_smoke_text " and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12

@@ -63,6 +63,18 @@ struct CodexProofFocusedTargetPolicy {
     }
 }
 
+private struct ObsidianPostAcceptanceSuppression {
+    let textBeforeCursor: String
+    let textAfterCursor: String
+    let expiresAt: Date
+
+    func matches(context: FocusedTextContext, now: Date = Date()) -> Bool {
+        expiresAt > now
+            && context.textBeforeCursor == textBeforeCursor
+            && context.textAfterCursor == textAfterCursor
+    }
+}
+
 struct SuggestionDebounceSchedule: Equatable, Sendable {
     let policyDelayMilliseconds: Int
     let scheduledDelayMilliseconds: Int
