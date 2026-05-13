@@ -596,7 +596,7 @@ def main() -> int:
     parser.add_argument(
         "--live",
         action="store_true",
-        help="Compare scorecard count claims against live proof gate output.",
+        help="Compare scorecard claims against live proof gate output, including strict latency proof.",
     )
     parser.add_argument(
         "--manual-smoke-output",
@@ -637,7 +637,7 @@ def main() -> int:
         manual_smoke_output=manual_smoke_output,
         proof_manifest_output=proof_manifest_output,
         latency_selector_output=latency_selector_output,
-        require_latency_selector=args.require_latency_selector or latency_selector_output is not None,
+        require_latency_selector=args.live,
     )
     if failures:
         print("SteadyType scorecard check failed:", file=sys.stderr)
