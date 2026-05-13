@@ -167,6 +167,26 @@ skip_stale_app_bundle_scan() {
   [[ "${AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN:-}" =~ ^(1|true|yes|on)$ ]]
 }
 
+truthy() {
+  [[ "${1:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+proof_launch_requested() {
+  truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION:-}" ||
+    truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" ||
+    [[ -n "${AUTOCOMPLETE_LAB_PROOF_SCENARIO:-}" ]] ||
+    [[ -n "${AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS:-}" ]]
+}
+
+scrub_proof_model_root_if_needed() {
+  if proof_launch_requested && ! truthy "${AUTOCOMPLETE_LAB_ALLOW_PROOF_MODEL_ROOT:-}"; then
+    unset AUTOCOMPLETE_LAB_MODEL_ROOT
+    unset AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS
+    launchctl unsetenv AUTOCOMPLETE_LAB_MODEL_ROOT >/dev/null 2>&1 || true
+    launchctl unsetenv AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS >/dev/null 2>&1 || true
+  fi
+}
+
 if skip_stale_app_bundle_scan; then
   echo "Skipping stale app bundle scan because AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN is enabled." >&2
 else
@@ -351,6 +371,7 @@ fi
 
 open_app() {
   stop_running_apps
+  scrub_proof_model_root_if_needed
 
   if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"
