@@ -8875,6 +8875,36 @@ if let (_, lineRect) = tailElement {
 
 AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
 clickInside(clickPoint)
+
+let endLocation = value.utf16.count
+var endRange = CFRange(location: endLocation, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+    _ = AXUIElementSetAttributeValue(target, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+
+let deadline = Date().addingTimeInterval(1.0)
+let systemWide = AXUIElementCreateSystemWide()
+AXUIElementSetMessagingTimeout(systemWide, 0.75)
+while Date() < deadline {
+    var focusedValue: CFTypeRef?
+    if AXUIElementCopyAttributeValue(
+        systemWide,
+        kAXFocusedUIElementAttribute as CFString,
+        &focusedValue
+    ) == .success,
+       let focusedValue {
+        let focused = (focusedValue as! AXUIElement)
+        if stringAttribute(focused, kAXRoleAttribute) == kAXTextAreaRole as String {
+            exit(0)
+        }
+    }
+
+    _ = AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+        _ = AXUIElementSetAttributeValue(target, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+    }
+    Thread.sleep(forTimeInterval: 0.1)
+}
 SWIFT
   sleep 0.2
 }
@@ -9280,7 +9310,8 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     full_start_line="$(line_count "$LOG_PATH")"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
-    settle_obsidian_focus_for_smoke "Obsidian long-note"
+    assert_frontmost_app "Obsidian" "Obsidian long-note"
+    sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.25}"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
       "keyboard-action" \
