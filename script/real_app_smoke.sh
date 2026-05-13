@@ -4093,15 +4093,48 @@ APPLESCRIPT
   fi
 }
 
+textedit_window_count() {
+  swift - <<'SWIFT' 2>/dev/null || true
+import AppKit
+import ApplicationServices
+import Foundation
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+var count = 0
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    if let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] {
+        count += windows.count
+    }
+}
+
+print(count)
+SWIFT
+}
+
 wait_for_textedit_document_open() {
   local window_title="$1"
   local timeout_seconds="${2:-5}"
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if [[ "$(textedit_document_exists "$window_title")" == "1" ||
-          "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
+    if [[ "$(textedit_document_exists "$window_title")" == "1" ]]; then
       return 0
+    fi
+    if [[ "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
+      nudge_textedit_frontmost
+      if [[ "$(textedit_window_count)" =~ ^[1-9][0-9]*$ ]]; then
+        return 0
+      fi
     fi
     sleep 0.2
   done

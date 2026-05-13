@@ -95,6 +95,7 @@ fi
 if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'textedit_window_count' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout 4 "TextEdit AppleScript open"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_NAME_PROBE_TIMEOUT_SECONDS:-2}" "TextEdit document-name probe"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_LIST_TIMEOUT_SECONDS:-2}" "TextEdit document-list diagnostic"' script/real_app_smoke.sh >/dev/null ||
@@ -127,6 +128,14 @@ for name in ("textedit_document_name_exists", "describe_open_textedit_documents"
     block = function_body(name)
     if "run_osascript_with_timeout" not in block:
         raise SystemExit(f"{name} must use bounded AppleScript")
+
+wait_for_open = function_body("wait_for_textedit_document_open")
+if 'textedit_document_name_exists "$window_title"' not in wait_for_open:
+    raise SystemExit("TextEdit open wait must keep document-name fallback")
+if "textedit_window_count" not in wait_for_open:
+    raise SystemExit("TextEdit open wait must require a real AX window before focus")
+if "nudge_textedit_frontmost" not in wait_for_open:
+    raise SystemExit("TextEdit open wait must activate TextEdit when only the document name is visible")
 
 run_textedit = function_body("run_textedit")
 fallback = run_textedit.index("export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1")
