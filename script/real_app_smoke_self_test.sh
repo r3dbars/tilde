@@ -369,7 +369,7 @@ if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh
   exit 1
 fi
 
-if ! grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-$dist_dir/smoke-proof/SteadyType.zip' script/real_app_smoke.sh >/dev/null ||
    grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Refusing to write smoke proof archive over release artifact' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected proof archives to stay separate from release dist/SteadyType.zip" >&2
@@ -495,6 +495,13 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_current_build_privacy_export.sh' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
+  exit 1
+fi
+if ! grep -F 'steadytype_dist_dir()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype_app_binary' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'cd "$dist_dir" && ditto -c -k --keepParent "SteadyType.app"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected smoke proof checks to honor AUTOCOMPLETE_LAB_DIST_DIR" >&2
   exit 1
 fi
 if ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES' script/real_app_smoke.sh >/dev/null ||

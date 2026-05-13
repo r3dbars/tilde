@@ -4,12 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+APP_BUNDLE_WAS_EXPLICIT=0
+if [[ -n "${AUTOCOMPLETE_LAB_APP_BUNDLE+x}" ]]; then
+  APP_BUNDLE_WAS_EXPLICIT=1
+fi
+
 APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
 OUTPUT_DIR="${AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT:-$ROOT_DIR/docs/diagnostics/runs/current-build-privacy-export-proof}"
 LOCK_DIR="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-current-build-privacy-export.lock}"
 LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_WAIT_SECONDS:-300}"
 LOCK_HELD=0
+BUILD_DIST_DIR=""
+EXPECTED_FILES=""
+ACTUAL_FILES=""
 
 BUILD_LOG=/tmp/autocomplete-current-build-privacy-build.log
 
@@ -17,8 +25,21 @@ cleanup() {
   if [[ "$LOCK_HELD" == "1" ]]; then
     rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true
   fi
+  [[ -z "$BUILD_DIST_DIR" ]] || rm -rf "$BUILD_DIST_DIR" >/dev/null 2>&1 || true
+  [[ -z "$EXPECTED_FILES" ]] || rm -f "$EXPECTED_FILES" >/dev/null 2>&1 || true
+  [[ -z "$ACTUAL_FILES" ]] || rm -f "$ACTUAL_FILES" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+use_temp_build_bundle_if_default() {
+  if [[ "$APP_BUNDLE_WAS_EXPLICIT" == "1" ]]; then
+    return 0
+  fi
+
+  BUILD_DIST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-privacy-build.XXXXXX")"
+  APP_BUNDLE="$BUILD_DIST_DIR/SteadyType.app"
+  APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
+}
 
 acquire_lock() {
   local deadline=$((SECONDS + LOCK_WAIT_SECONDS))
@@ -160,7 +181,8 @@ acquire_lock
 wait_for_quiet_proof_processes
 
 if [[ ! -x "$APP_BINARY" || "${AUTOCOMPLETE_LAB_REBUILD_PRIVACY_PROOF:-0}" =~ ^(1|true|yes|on)$ ]]; then
-  if ! ./script/build_and_run.sh --bundle-only >"$BUILD_LOG" 2>&1; then
+  use_temp_build_bundle_if_default
+  if ! AUTOCOMPLETE_LAB_DIST_DIR="$(dirname "$APP_BUNDLE")" ./script/build_and_run.sh --bundle-only >"$BUILD_LOG" 2>&1; then
     echo "failed to build app bundle for privacy export proof" >&2
     echo "build output:" >&2
     cat "$BUILD_LOG" >&2 2>/dev/null || true
@@ -211,7 +233,6 @@ done
 
 EXPECTED_FILES="$(mktemp)"
 ACTUAL_FILES="$(mktemp)"
-trap 'rm -f "$EXPECTED_FILES" "$ACTUAL_FILES"' EXIT
 
 cat >"$EXPECTED_FILES" <<'EOF'
 privacy-export/PRIVACY-CHECKLIST.md

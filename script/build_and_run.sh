@@ -10,7 +10,8 @@ APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
 APP_BUILD="${AUTOCOMPLETE_LAB_BUILD:-$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIST_DIR="$ROOT_DIR/dist"
+DIST_DIR="${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
+SWIFT_BUILD_ROOT="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build}"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
@@ -20,7 +21,7 @@ INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 GENERATED_APP_ICON_REL="dist/$APP_NAME.generated-icon.$$.icns"
 GENERATED_APP_ICON="$ROOT_DIR/$GENERATED_APP_ICON_REL"
-MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
+MLX_METALLIB="$SWIFT_BUILD_ROOT/mlx-metal/default.metallib"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-fresh-latency.lock}"
@@ -35,8 +36,8 @@ SWIFT_SCRATCH_ARGS=()
 SWIFT_JOB_ARGS=()
 
 if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-}" ]]; then
-  mkdir -p "$AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH"
-  SWIFT_SCRATCH_ARGS+=(--scratch-path "$AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH")
+  mkdir -p "$SWIFT_BUILD_ROOT"
+  SWIFT_SCRATCH_ARGS+=(--scratch-path "$SWIFT_BUILD_ROOT")
 fi
 
 if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-}" ]]; then
@@ -346,7 +347,7 @@ build_mlx_metallib_if_needed() {
     return 0
   fi
 
-  local mlx_checkout="$ROOT_DIR/.build/checkouts/mlx-swift"
+  local mlx_checkout="$SWIFT_BUILD_ROOT/checkouts/mlx-swift"
   local mlx_root="$mlx_checkout/Source/Cmlx/mlx"
   local kernel_dir="$mlx_root/mlx/backend/metal/kernels"
   local build_dir
