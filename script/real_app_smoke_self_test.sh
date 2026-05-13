@@ -30,9 +30,16 @@ fi
 
 script/real_app_smoke.sh textedit-model-latency --dry-run >"$TMP_DIR/textedit-model-latency.txt"
 if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
+   ! grep -F "allow a cold local model warmup" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
    ! grep -F "require real model-backed suggestions in one launch" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
    ! grep -F "disposable TextEdit AX target" "$TMP_DIR/textedit-model-latency.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit model latency dry-run plan" >&2
+  exit 1
+fi
+
+if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_RUNTIME_READY_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'textedit_model_latency_runtime_ready_timeout_seconds' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit model latency to have its own cold-warm runtime timeout" >&2
   exit 1
 fi
 
