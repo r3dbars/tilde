@@ -23,6 +23,15 @@ cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
 $base_timestamp runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 $base_timestamp focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
 LOG
+if [[ "${1:-}" == "textedit-model-latency" ]]; then
+  for sample in 1 2 3 4 5; do
+    cat >>"$AUTOCOMPLETE_LAB_TRACE_PATH" <<LOG
+{"timestamp":"$base_timestamp","sessionID":"fresh-model","suggestionID":"fresh-model-${sample}","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"$base_timestamp","sessionID":"fresh-model","suggestionID":"fresh-model-${sample}","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose","candidateSelectionSource":"app-model-result"}}
+LOG
+  done
+  exit 0
+fi
 cat >>"$AUTOCOMPLETE_LAB_TRACE_PATH" <<LOG
 {"timestamp":"$base_timestamp","sessionID":"fresh","suggestionID":"fresh-${run_number}-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
 {"timestamp":"$base_timestamp","sessionID":"fresh","suggestionID":"fresh-${run_number}-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose"}}
@@ -73,6 +82,48 @@ fi
 
 if [[ -d "$TMP_DIR/fresh-latency.lock" ]]; then
   echo "fresh latency proof self-test expected lock cleanup after success" >&2
+  exit 1
+fi
+
+: >"$SMOKE_LOG"
+: >"$DIAGNOSTICS_LOG"
+: >"$TRACE_LOG"
+MODEL_OUTPUT="$(
+  AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-model.lock" \
+    ./script/fresh_latency_proof.sh --target textedit-model-latency --runs 3
+)"
+
+if ! grep -F "textedit-model-latency collects the beta sample set in one launch; forcing --runs 1." <<<"$MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected textedit-model-latency to force one run" >&2
+  echo "$MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency beta gate passed." <<<"$MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected model-latency target to pass with one bounded launch" >&2
+  echo "$MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if [[ "$(wc -l <"$SMOKE_LOG" | tr -d ' ')" != "1" ]]; then
+  echo "fresh latency proof self-test expected one model-latency smoke run" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if [[ "$(sed -n '1p' "$SMOKE_LOG")" != "textedit-model-latency" ]]; then
+  echo "fresh latency proof self-test expected model-latency smoke without --skip-build" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
+  echo "fresh latency proof self-test expected no skip-build rerun for model-latency target" >&2
+  cat "$SMOKE_LOG" >&2
   exit 1
 fi
 
