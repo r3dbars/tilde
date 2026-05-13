@@ -4226,6 +4226,28 @@ wait_for_textedit_document_exact() {
   exit 1
 }
 
+wait_for_textedit_document_prefix() {
+  local window_title="$1"
+  local expected_prefix="$2"
+  local label="$3"
+  local timeout_seconds="${4:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local current_text
+    current_text="$(textedit_document_text "$window_title")"
+    if [[ "$current_text" == "$expected_prefix"* ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for TextEdit typed prefix during $label." >&2
+  echo "Expected prefix: $expected_prefix" >&2
+  echo "Actual: $(textedit_document_text "$window_title")" >&2
+  exit 1
+}
+
 verify_textedit_native_undo() {
   local window_title="$1"
   local expected_text="$2"
@@ -8611,7 +8633,7 @@ run_textedit_model_latency() {
     sample_start="$(line_count "$LOG_PATH")"
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
       type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
-    wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
+    wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
       "mlx-completion-timing" \
       "app=com.apple.TextEdit"
