@@ -97,6 +97,9 @@ cleanup_fresh_latency_lock() {
 }
 
 trap cleanup_fresh_latency_lock EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 line_count() {
   local path="$1"

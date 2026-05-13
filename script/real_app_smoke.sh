@@ -690,6 +690,9 @@ APPLESCRIPT
 }
 
 trap cleanup_smoke EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 acquire_smoke_lock() {
   local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
@@ -9188,6 +9191,8 @@ run_textedit_model_latency() {
       fi
       move_textedit_caret_to_document_end "$textedit_window_title"
       sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.6}"
+      dismiss_textedit_proof_suggestion "$textedit_window_title" "$stable_context" "TextEdit model latency seed suggestion dismissal $sample_index attempt $attempt"
+      move_textedit_caret_to_document_end "$textedit_window_title"
 
       assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index attempt $attempt"
       sample_start="$(line_count "$LOG_PATH")"
