@@ -119,6 +119,22 @@ trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$t
 timing = block.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"', trigger)
 if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigger:timing]:
     raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
+
+app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
+if "pollTimer?.fireDate" in app_delegate:
+    raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
+insert_start = app_delegate.index("private func insertObsidianDirectValueText(")
+insert_end = app_delegate.index("private func moveFrontmostInsertionPointToLineEnd()", insert_start)
+insert_block = app_delegate[insert_start:insert_end]
+if "focusedTextAreaElementIdentifier" not in insert_block:
+    raise SystemExit("Obsidian direct insertion fallback must verify the currently focused AX text area")
+if "elementIdentifier: focusedTextAreaElementIdentifier" not in insert_block:
+    raise SystemExit("Obsidian direct insertion fallback must pass the focused AX text area identity into descendant matching")
+fallback_start = app_delegate.index("nonisolated private static func axTextAreaDescendantContainingText(")
+fallback_end = app_delegate.index("nonisolated private static func replacementRange(", fallback_start)
+fallback_block = app_delegate[fallback_start:fallback_end]
+if "Int(CFHash(element)) == elementIdentifier" not in fallback_block:
+    raise SystemExit("Obsidian descendant fallback must only match the currently focused AX text area")
 PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||

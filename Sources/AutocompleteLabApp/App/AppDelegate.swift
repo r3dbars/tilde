@@ -1103,27 +1103,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasVisibleSuggestion: hasVisibleSuggestion,
             hasRecentTextChange: hasRecentTextChange
         ) else {
-            if let nextPollDate = focusPollingCadencePolicy.nextPollDate(
-                lastPollAt: lastFocusedTextPollAttemptAt,
-                isTrustedForAccessibility: isTrustedForAccessibility,
-                hasSupportedProfile: hasSupportedProfile,
-                hasVisibleSuggestion: hasVisibleSuggestion,
-                hasRecentTextChange: hasRecentTextChange
-            ) {
-                deferFocusedTextPoll(until: nextPollDate, now: now)
-            }
             return false
         }
 
         return true
-    }
-
-    private func deferFocusedTextPoll(until nextPollDate: Date, now: Date) {
-        guard nextPollDate > now else {
-            return
-        }
-
-        pollTimer?.fireDate = nextPollDate
     }
 
     private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
@@ -6494,7 +6477,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if shouldUseObsidianDirectValueInsertion(profile: profile) {
-            let succeeded = insertObsidianDirectValueText(acceptedText)
+            let succeeded = insertObsidianDirectValueText(acceptedText, profile: profile)
             DiagnosticsLog.shared.record(
                 "insert",
                 metadata: [
@@ -6578,7 +6561,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile.insertionMode == .axValueReplacement
     }
 
-    private func insertObsidianDirectValueText(_ acceptedText: String) -> Bool {
+    private func insertObsidianDirectValueText(
+        _ acceptedText: String,
+        profile: CompatibilityProfile
+    ) -> Bool {
         let bundleIdentifier = "md.obsidian"
         guard !acceptedText.isEmpty,
               let lastTextSnapshot,
@@ -6605,6 +6591,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             containing: lastTextSnapshot.textBeforeCursor,
             maxDepth: 32
         )
+        let focusedContext = accessibilityClient.focusedTextContext(
+            for: frontmostApp,
+            allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+            options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)
+        )
+        let focusedTextAreaElementIdentifier: Int?
+        if let focusedContext,
+           fieldIdentity(app: frontmostApp, context: focusedContext, profile: profile) == lastTextSnapshot.fieldIdentity,
+           focusedContext.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+           focusedContext.textAfterCursor == lastTextSnapshot.textAfterCursor {
+            focusedTextAreaElementIdentifier = focusedContext.elementIdentifier
+        } else {
+            focusedTextAreaElementIdentifier = nil
+        }
 
         let matchedTextArea: AXUIElement?
         let replacementText: String
@@ -6615,9 +6615,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             replacementText = acceptedReplacementText
             cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
             matchSource = "exact"
-        } else if let containingTextArea = Self.axTextAreaDescendantContainingText(
+        } else if let focusedTextAreaElementIdentifier,
+                  let containingTextArea = Self.axTextAreaDescendantContainingText(
             in: appElement,
             containing: lastTextSnapshot.textBeforeCursor,
+            elementIdentifier: focusedTextAreaElementIdentifier,
             maxDepth: 32
         ),
                   let currentValue = Self.axStringAttribute(containingTextArea, kAXValueAttribute),
@@ -7121,6 +7123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     nonisolated private static func axTextAreaDescendantContainingText(
         in element: AXUIElement,
         containing expectedText: String,
+        elementIdentifier: Int,
         maxDepth: Int
     ) -> AXUIElement? {
         guard maxDepth >= 0, !expectedText.isEmpty else {
@@ -7129,6 +7132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if axRole(element) == "AXTextArea",
            let value = axStringAttribute(element, kAXValueAttribute),
+           Int(CFHash(element)) == elementIdentifier,
            value.contains(expectedText) {
             return element
         }
@@ -7137,6 +7141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let match = axTextAreaDescendantContainingText(
                 in: child,
                 containing: expectedText,
+                elementIdentifier: elementIdentifier,
                 maxDepth: maxDepth - 1
             ) {
                 return match
