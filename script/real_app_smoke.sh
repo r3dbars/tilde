@@ -8553,7 +8553,6 @@ build_bundle_if_needed() {
     local build_run_env=(
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
-      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1
     )
     if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
@@ -8582,6 +8581,18 @@ steadytype_app_process_rows() {
     '
 }
 
+steadytype_dist_dir() {
+  printf '%s\n' "${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
+}
+
+steadytype_app_bundle() {
+  printf '%s/SteadyType.app\n' "$(steadytype_dist_dir)"
+}
+
+steadytype_app_binary() {
+  printf '%s/Contents/MacOS/SteadyType\n' "$(steadytype_app_bundle)"
+}
+
 command_matches_steadytype_binary() {
   local command="$1"
   local app_binary="$2"
@@ -8589,7 +8600,8 @@ command_matches_steadytype_binary() {
 }
 
 current_steadytype_app_bundle_pids() {
-  local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local app_binary
+  app_binary="$(steadytype_app_binary)"
   local current_pgid
   current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
   current_pgid="${current_pgid//[[:space:]]/}"
@@ -8620,7 +8632,8 @@ stop_current_steadytype_app_bundle() {
 }
 
 stale_steadytype_app_bundle_pids() {
-  local expected_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local expected_binary
+  expected_binary="$(steadytype_app_binary)"
   local pid command
 
   while IFS=$'\t' read -r pid _pgid command; do
@@ -8669,7 +8682,9 @@ launch_steadytype_after_chrome_setup() {
     return 0
   fi
 
-  local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local app_binary launch_log
+  app_binary="$(steadytype_app_binary)"
+  launch_log="$(steadytype_dist_dir)/SteadyType.launch.log"
   if [[ ! -x "$app_binary" ]]; then
     echo "SteadyType app binary is missing after build: $app_binary" >&2
     exit 1
@@ -8701,7 +8716,7 @@ launch_steadytype_after_chrome_setup() {
   done
 
   env "${launch_env[@]}" \
-    nohup "$app_binary" >"$ROOT_DIR/dist/SteadyType.launch.log" 2>&1 </dev/null &
+    nohup "$app_binary" >"$launch_log" 2>&1 </dev/null &
   disown "$!" 2>/dev/null || true
 
   wait_for_current_autocomplete_lab_process
@@ -8716,7 +8731,8 @@ launch_steadytype_after_chrome_setup() {
 }
 
 wait_for_current_autocomplete_lab_process() {
-  local expected_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local expected_binary
+  expected_binary="$(steadytype_app_binary)"
   local deadline=$((SECONDS + 20))
 
   while ((SECONDS <= deadline)); do
@@ -8767,8 +8783,10 @@ wait_for_current_autocomplete_lab_process() {
 }
 
 refresh_build_archive_proof() {
-  local app_bundle="dist/SteadyType.app"
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip}"
+  local dist_dir app_bundle archive_path
+  dist_dir="$(steadytype_dist_dir)"
+  app_bundle="$(steadytype_app_bundle)"
+  archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-$dist_dir/smoke-proof/SteadyType.zip}"
   local archive_dir archive_name archive_abs
 
   [[ -d "$app_bundle" ]] || return 0
@@ -8791,7 +8809,7 @@ refresh_build_archive_proof() {
   archive_status=1
   for archive_attempt in 1 2 3; do
     rm -f "$archive_abs"
-    if (cd dist && ditto -c -k --keepParent "SteadyType.app" "$archive_abs"); then
+    if (cd "$dist_dir" && ditto -c -k --keepParent "SteadyType.app" "$archive_abs"); then
       archive_status=0
       break
     fi
