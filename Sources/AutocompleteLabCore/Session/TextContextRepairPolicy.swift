@@ -12,6 +12,8 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case obsidianCodeMirrorEndOfDocumentTypingDrift = "obsidian-codemirror-end-of-document-typing-drift"
     case obsidianCodeMirrorViewportEndOfDocument = "obsidian-codemirror-viewport-end-of-document"
     case obsidianCodeMirrorViewportTailLine = "obsidian-codemirror-viewport-tail-line"
+    case obsidianCodeMirrorShortDocumentStructureTail = "obsidian-codemirror-short-document-structure-tail"
+    case obsidianCodeMirrorShortDocumentTailLine = "obsidian-codemirror-short-document-tail-line"
     case obsidianCodeMirrorLineStartTail = "obsidian-codemirror-line-start-tail"
     case obsidianCodeMirrorTextAfterTypingGrowth = "obsidian-codemirror-text-after-typing-growth"
     case obsidianCodeMirrorLineDrift = "obsidian-codemirror-line-drift"
@@ -105,6 +107,12 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorViewportTailLineRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorShortDocumentStructureTailRepair(input) {
+            return obsidianRepair
+        }
+        if let obsidianRepair = obsidianCodeMirrorShortDocumentTailLineRepair(input) {
             return obsidianRepair
         }
         if let obsidianRepair = obsidianCodeMirrorLineStartTailRepair(input) {
@@ -591,6 +599,105 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         )
     }
 
+    private func obsidianCodeMirrorShortDocumentStructureTailRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              input.textBeforeCursor.count <= 240,
+              !input.textAfterCursor.isEmpty,
+              input.textAfterCursor.count <= 360,
+              input.textAfterCursor.contains(where: \.isNewline) else {
+            return nil
+        }
+
+        let staleLine = currentLine(in: input.textBeforeCursor)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard staleLine.count >= 18,
+              staleLine.count <= 120,
+              contentWordCount(in: staleLine) >= 3 else {
+            return nil
+        }
+
+        let currentText = input.textBeforeCursor + input.textAfterCursor
+        let repairedTextBeforeCursor = currentText.trimmingCodeMirrorScaffoldingRight()
+        let tailLine = currentLine(in: repairedTextBeforeCursor)
+            .removingCodeMirrorScaffoldingMarkers()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let meaningfulAfterLines = meaningfulLines(in: input.textAfterCursor)
+        guard repairedTextBeforeCursor.count > input.textBeforeCursor.count,
+              !meaningfulAfterLines.isEmpty,
+              meaningfulAfterLines.last == tailLine,
+              isBareMarkdownStructureLine(tailLine) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: repairedTextBeforeCursor,
+            textAfterCursor: "",
+            reason: .obsidianCodeMirrorShortDocumentStructureTail
+        )
+    }
+
+    private func obsidianCodeMirrorShortDocumentTailLineRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "md.obsidian",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              input.textBeforeCursor.count <= 240,
+              !input.textAfterCursor.isEmpty,
+              input.textAfterCursor.count <= 360,
+              input.textAfterCursor.contains(where: \.isNewline) else {
+            return nil
+        }
+
+        let staleLine = currentLine(in: input.textBeforeCursor)
+        let trimmedStaleLine = staleLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedStaleLine.count >= 18,
+              trimmedStaleLine.count <= 120,
+              contentWordCount(in: trimmedStaleLine) >= 3 else {
+            return nil
+        }
+
+        let currentText = input.textBeforeCursor + input.textAfterCursor
+        let repairedTextBeforeCursor = currentText.trimmingCodeMirrorScaffoldingRight()
+        let activeLine = currentLine(in: repairedTextBeforeCursor)
+        let trimmedActiveLine = activeLine
+            .removingCodeMirrorScaffoldingMarkers()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard repairedTextBeforeCursor.count > input.textBeforeCursor.count,
+              trimmedActiveLine != trimmedStaleLine,
+              trimmedActiveLine.count <= 260,
+              isPlausibleActiveTypingLine(trimmedActiveLine) else {
+            return nil
+        }
+
+        let previousAfterGrewAtTail = input.previousTextBeforeCursor == input.textBeforeCursor
+            && !(input.previousTextAfterCursor ?? "").isEmpty
+            && input.textAfterCursor.hasPrefix(input.previousTextAfterCursor ?? "")
+            && input.textAfterCursor.count > (input.previousTextAfterCursor ?? "").count
+
+        let meaningfulAfterLines = meaningfulLines(in: input.textAfterCursor)
+        let hasMarkdownOrCodeMirrorScaffold = input.textAfterCursor.containsCodeMirrorInvisibleScaffolding
+            || meaningfulAfterLines.dropLast().contains(where: isMarkdownStructureLine)
+        let hasStructuredTailEvidence = meaningfulAfterLines.count >= 2
+            && (previousAfterGrewAtTail || hasMarkdownOrCodeMirrorScaffold)
+        let hasLongRunOnTailEvidence = meaningfulAfterLines.count == 1
+            && input.textAfterCursor.hasPrefix("\n\n")
+            && input.textBeforeCursor.count <= 80
+            && trimmedActiveLine.count >= 120
+            && contentWordCount(in: trimmedActiveLine) >= 16
+            && !isMarkdownStructureLine(trimmedActiveLine)
+        guard meaningfulAfterLines.last == trimmedActiveLine,
+              hasStructuredTailEvidence || hasLongRunOnTailEvidence else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: repairedTextBeforeCursor,
+            textAfterCursor: "",
+            reason: .obsidianCodeMirrorShortDocumentTailLine
+        )
+    }
+
     private func obsidianCodeMirrorLineStartTailRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
         guard input.bundleIdentifier == "md.obsidian",
               input.role == "AXTextArea",
@@ -672,15 +779,39 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
 
         let currentLineBefore = currentLine(in: input.textBeforeCursor)
         let lineAfterCursor = firstLine(in: input.textAfterCursor)
+        let currentLineWordCount = contentWordCount(in: currentLineBefore)
+        let isMarkdownListLine = isMarkdownListStructureLine(currentLineBefore)
+        let trailingFragment = trailingWordFragment(in: currentLineBefore) ?? ""
+        let standardLineDrift = currentLineBefore.count <= 24
+            && currentLineWordCount <= 2
+            && (lineAfterCursor.contains(where: \.isWhitespace) || trailingFragment.count <= 1)
+        let leadingWhitespaceLineDrift = standardLineDrift
+            && lineAfterCursor.first?.isWhitespace == true
+            && contentWordCount(in: lineAfterCursor) >= 1
+            && contentWordCount(in: lineAfterCursor) <= 8
+            && obsidianCodeMirrorLooksLikeDocumentTailGrowth(input)
+        let markdownListLineDrift = isMarkdownListLine
+            && currentLineBefore.count <= 80
+            && currentLineWordCount <= 8
+            && lineAfterCursor.allSatisfy(\.isLetter)
+        let shortTrailingWordSplit = currentLineBefore.count <= 80
+            && input.textBeforeCursor.contains(where: \.isNewline)
+            && currentLineWordCount <= 8
+            && trailingFragment.count >= 1
+            && trailingFragment.count <= 4
+            && lineAfterCursor.count <= 8
+            && lineAfterCursor.allSatisfy(\.isLetter)
+
         guard currentLineBefore.count >= 1,
-              currentLineBefore.count <= 24,
               lineAfterCursor.count >= 2,
               lineAfterCursor.count <= 80,
-              contentWordCount(in: currentLineBefore) <= 2,
+              standardLineDrift || leadingWhitespaceLineDrift || markdownListLineDrift || shortTrailingWordSplit,
               let lastCharacterBeforeCursor = currentLineBefore.last,
-              let firstCharacterAfterCursor = lineAfterCursor.first,
               lastCharacterBeforeCursor.isLetter,
-              firstCharacterAfterCursor.isLetter else {
+              obsidianCodeMirrorLineDriftAfterCursorStartsSafely(
+                  lineAfterCursor,
+                  allowsLeadingWhitespace: leadingWhitespaceLineDrift
+              ) else {
             return nil
         }
 
@@ -690,6 +821,12 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         let remainingAfterLine = String(input.textAfterCursor.dropFirst(lineAfterCursor.count))
+        let strippedRemainingAfterLine = remainingAfterLine
+            .trimmingCodeMirrorScaffolding()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard strippedRemainingAfterLine.isEmpty else {
+            return nil
+        }
         let repairedTextAfterCursor = remainingAfterLine.trimmingCodeMirrorScaffolding().isEmpty
             ? ""
             : remainingAfterLine
@@ -699,6 +836,40 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             textAfterCursor: repairedTextAfterCursor,
             reason: .obsidianCodeMirrorLineDrift
         )
+    }
+
+    private func obsidianCodeMirrorLooksLikeDocumentTailGrowth(_ input: TextContextRepairInput) -> Bool {
+        guard let previousTextBeforeCursor = input.previousTextBeforeCursor,
+              let previousTextAfterCursor = input.previousTextAfterCursor,
+              !previousTextBeforeCursor.isEmpty,
+              previousTextAfterCursor.isEmpty else {
+            return false
+        }
+
+        let currentText = input.textBeforeCursor + input.textAfterCursor
+        return currentText.hasPrefix(previousTextBeforeCursor)
+            && currentText.count > previousTextBeforeCursor.count
+            && currentText.count <= previousTextBeforeCursor.count + 200
+    }
+
+    private func obsidianCodeMirrorLineDriftAfterCursorStartsSafely(
+        _ lineAfterCursor: String,
+        allowsLeadingWhitespace: Bool
+    ) -> Bool {
+        guard let firstCharacterAfterCursor = lineAfterCursor.first else {
+            return false
+        }
+        if firstCharacterAfterCursor.isLetter {
+            return true
+        }
+        guard allowsLeadingWhitespace,
+              firstCharacterAfterCursor.isWhitespace else {
+            return false
+        }
+        return lineAfterCursor
+            .drop(while: \.isWhitespace)
+            .first?
+            .isLetter == true
     }
 
     private func obsidianCodeMirrorTextAfterActiveLineRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
@@ -861,6 +1032,45 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         ).first.map(String.init) ?? ""
     }
 
+    private func meaningfulLines(in text: String) -> [String] {
+        text
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map { line in
+                String(line)
+                    .removingCodeMirrorScaffoldingMarkers()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+    }
+
+    private func isMarkdownStructureLine(_ line: String) -> Bool {
+        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedLine == "-"
+            || trimmedLine == "*"
+            || trimmedLine == "+"
+            || trimmedLine.hasPrefix("- ")
+            || trimmedLine.hasPrefix("* ")
+            || trimmedLine.hasPrefix("+ ")
+            || trimmedLine.hasPrefix("#")
+            || trimmedLine.hasPrefix(">")
+            || trimmedLine.hasPrefix("|")
+            || trimmedLine.hasPrefix("```")
+    }
+
+    private func isMarkdownListStructureLine(_ line: String) -> Bool {
+        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedLine.hasPrefix("- ")
+            || trimmedLine.hasPrefix("* ")
+            || trimmedLine.hasPrefix("+ ")
+    }
+
+    private func isBareMarkdownStructureLine(_ line: String) -> Bool {
+        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedLine == "-"
+            || trimmedLine == "*"
+            || trimmedLine == "+"
+    }
+
     private func leadingCodeMirrorSpacerPrefix(in text: String) -> (prefix: String, remaining: String) {
         var prefix = ""
         var remaining = text
@@ -977,6 +1187,10 @@ private extension String {
         unicodeScalars.contains(where: \.isCodeMirrorScaffoldingMarker)
     }
 
+    var containsCodeMirrorInvisibleScaffolding: Bool {
+        unicodeScalars.contains(where: \.isCodeMirrorInvisibleScaffoldingMarker)
+    }
+
     func trimmingCodeMirrorScaffolding() -> String {
         String(unicodeScalars.filter { scalar in
             !scalar.isCodeMirrorScaffolding
@@ -991,9 +1205,30 @@ private extension String {
         }
         return String(scalars)
     }
+
+    func removingCodeMirrorScaffoldingMarkers() -> String {
+        String(unicodeScalars.filter { scalar in
+            !scalar.isCodeMirrorScaffoldingMarker
+        })
+    }
 }
 
 private extension Unicode.Scalar {
+    var isCodeMirrorInvisibleScaffoldingMarker: Bool {
+        switch value {
+        case 0x0009, // tab
+             0x200B, // zero-width space
+             0x200C, // zero-width non-joiner
+             0x200D, // zero-width joiner
+             0x2060, // word joiner
+             0xFEFF, // zero-width no-break space
+             0xFFFC: // object replacement character
+            return true
+        default:
+            return false
+        }
+    }
+
     var isCodeMirrorScaffoldingMarker: Bool {
         switch value {
         case 0x0009, // tab
