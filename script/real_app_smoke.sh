@@ -4437,12 +4437,24 @@ type_textedit_smoke_fragment() {
   (
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
 set smokeText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT"
+set keyDelayText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS"
+set keyDelay to 0
+try
+  if keyDelayText is not "" then set keyDelay to keyDelayText as real
+end try
 tell application "System Events"
   set frontApp to first application process whose frontmost is true
   if bundle identifier of frontApp is not "com.apple.TextEdit" then
     error "TextEdit is not frontmost for proof typing."
   end if
-  keystroke smokeText
+  if keyDelay > 0 then
+    repeat with characterIndex from 1 to count characters of smokeText
+      keystroke (character characterIndex of smokeText)
+      delay keyDelay
+    end repeat
+  else
+    keystroke smokeText
+  end if
 end tell
 APPLESCRIPT
   ) &
@@ -4518,10 +4530,10 @@ textedit_scrolled_prefill() {
 textedit_model_latency_fragments() {
   cat <<'EOF'
 The local runtime hardening pass keeps every model checksum verif
-Private beta recovery should explain the next safe repair before it confu
-Offline launch proof needs the embedded model to stay boringly relia
-The app owned runtime should catch a corrupt weight file immed
-The tester facing failure state should make recovery feel trust
+Private beta recovery should explain each local repair step verif
+Offline launch proof needs the embedded model checksum verif
+The app owned runtime should catch corrupt weight checks verif
+The tester facing failure state should keep recovery steps verif
 EOF
 }
 
@@ -8716,6 +8728,7 @@ run_textedit_model_latency() {
 
     sample_start="$(line_count "$LOG_PATH")"
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.08}" \
       type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
     wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
