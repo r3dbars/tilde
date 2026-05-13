@@ -15,6 +15,7 @@ FRESH_PROOF="$TMP_DIR/fresh-proof.json"
 STALE_PROOF="$TMP_DIR/stale-proof.json"
 MODEL_PHASE_PROOF="$TMP_DIR/model-phase-proof.json"
 LATEST_LAUNCH_LOG="$TMP_DIR/latest-launch.log"
+HASHED_LAUNCH_LOG="$TMP_DIR/hashed-launch.log"
 
 cat >"$NO_EGRESS" <<'EOF'
 COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
@@ -115,7 +116,12 @@ cat >"$FRESH_PROOF" <<'JSON'
   "phase": "autocomplete",
   "result": "pass",
   "samples": 30,
-  "unexpected_remote_endpoint_count": 0
+  "unexpected_remote_endpoint_count": 0,
+  "processes": [
+    {
+      "executable_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
 }
 JSON
 
@@ -142,6 +148,11 @@ JSON
 cat >"$LATEST_LAUNCH_LOG" <<'LOG'
 2026-05-13T05:00:00Z launch accessibility=true
 2026-05-13T05:00:01Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit nativeRuntimeAvailable=true
+LOG
+
+cat >"$HASHED_LAUNCH_LOG" <<'LOG'
+2026-05-13T05:00:00Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-13T05:30:00Z launch accessibility=true executableSHA256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 LOG
 
 ./script/check_runtime_network_egress.py \
@@ -190,6 +201,22 @@ fi
 if ! grep -F "older than latest runtime launch" "$TMP_DIR/validate-before-launch.err" >/dev/null; then
   echo "runtime network self-test expected latest-launch staleness failure output" >&2
   cat "$TMP_DIR/validate-before-launch.err" >&2
+  exit 1
+fi
+
+./script/check_runtime_network_egress.py \
+  --validate-proof "$FRESH_PROOF" \
+  --diagnostics-log "$HASHED_LAUNCH_LOG" \
+  --require-newer-than-latest-launch \
+  --expected-executable-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --max-proof-age-seconds 86400 \
+  --now "2026-05-13T06:00:00Z" \
+  --min-samples 10 \
+  >"$TMP_DIR/validate-hashed-launch.out"
+
+if ! grep -F "Runtime network egress proof validation: PASS" "$TMP_DIR/validate-hashed-launch.out" >/dev/null; then
+  echo "runtime network self-test expected later different-executable launches not to stale the proof" >&2
+  cat "$TMP_DIR/validate-hashed-launch.out" >&2
   exit 1
 fi
 
