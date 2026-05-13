@@ -165,6 +165,7 @@ PY
 check_runtime_no_egress_proof() {
   local proof_path="${AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json}"
   local diagnostics_log="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+  local app_binary="${AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType}"
   local max_age_seconds="${AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400}"
   local min_samples="${AUTOCOMPLETE_LAB_NO_EGRESS_MIN_SAMPLES:-10}"
   local args=(
@@ -175,8 +176,8 @@ check_runtime_no_egress_proof() {
     --require-newer-than-latest-launch
   )
 
-  if [[ -n "${AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-}" ]]; then
-    args+=(--app-binary "$AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY")
+  if [[ -n "$app_binary" ]]; then
+    args+=(--app-binary "$app_binary")
   fi
 
   ./script/check_runtime_network_egress.py "${args[@]}"

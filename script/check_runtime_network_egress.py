@@ -476,14 +476,31 @@ def load_proof_summary(path: Path) -> dict[str, object]:
     return parse_markdown_proof(path)
 
 
-def latest_launch_timestamp(path: Path) -> dt.datetime:
+def latest_launch_timestamp(path: Path, expected_executable_sha256: str = "") -> dt.datetime:
     if not path.is_file():
         raise FileNotFoundError(f"missing diagnostics log: {path}")
 
-    latest = ""
+    expected_hash = expected_executable_sha256.strip().lower()
+    latest_any = ""
+    latest_matching = ""
     for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
         if "launch accessibility=" in line:
-            latest = line.split(maxsplit=1)[0]
+            timestamp = line.split(maxsplit=1)[0]
+            latest_any = timestamp
+            if expected_hash:
+                match = re.search(r"(?:^|\s)executableSHA256=([0-9a-fA-F]+)(?:\s|$)", line)
+                if match and match.group(1).lower() == expected_hash:
+                    latest_matching = timestamp
+            else:
+                latest_matching = timestamp
+
+    if expected_hash and latest_any and not latest_matching:
+        raise ValueError(
+            "no launch accessibility= line matched the expected executable SHA-256 "
+            f"{expected_hash} in diagnostics log: {path}"
+        )
+
+    latest = latest_matching or latest_any
     if not latest:
         raise ValueError(f"no launch accessibility= line found in diagnostics log: {path}")
     return parse_iso_datetime(latest)
@@ -559,12 +576,19 @@ def validate_proof(args: argparse.Namespace) -> int:
                 f"maxAgeSeconds={int(args.max_proof_age_seconds)}"
             )
 
+    expected_hash = args.expected_executable_sha256.strip().lower()
+    if args.app_binary:
+        if args.app_binary.is_file():
+            expected_hash = sha256_file(args.app_binary)
+        else:
+            failures.append(f"missing app binary for executable hash check: {args.app_binary}")
+
     if args.require_newer_than_latest_launch:
         if not args.diagnostics_log:
             failures.append("--require-newer-than-latest-launch needs --diagnostics-log")
         elif generated_at is not None:
             try:
-                latest_launch = latest_launch_timestamp(args.diagnostics_log)
+                latest_launch = latest_launch_timestamp(args.diagnostics_log, expected_hash)
                 if generated_at < latest_launch:
                     failures.append(
                         "no-egress proof is older than latest runtime launch "
@@ -574,12 +598,6 @@ def validate_proof(args: argparse.Namespace) -> int:
             except (OSError, ValueError) as error:
                 failures.append(str(error))
 
-    expected_hash = args.expected_executable_sha256.strip().lower()
-    if args.app_binary:
-        if args.app_binary.is_file():
-            expected_hash = sha256_file(args.app_binary)
-        else:
-            failures.append(f"missing app binary for executable hash check: {args.app_binary}")
     if expected_hash:
         proof_hashes = proof_executable_hashes(summary)
         if expected_hash not in proof_hashes:
