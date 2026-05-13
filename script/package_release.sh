@@ -19,10 +19,14 @@ cd "$ROOT_DIR"
 
 usage() {
   cat <<'EOF'
-Usage: script/package_release.sh [archive|--check|--notarize] [--require-developer-id] [--require-notary-profile]
+Usage: script/package_release.sh [archive|--package-existing|--check|--notarize] [--require-developer-id] [--require-notary-profile]
 
 archive    Build a release app, sign with Developer ID, validate, and create
            primary dist/SteadyType.dmg plus secondary dist/SteadyType.zip.
+--package-existing
+           Sign and validate an existing dist/SteadyType.app with Developer ID,
+           then refresh primary dist/SteadyType.dmg and secondary
+           dist/SteadyType.zip without rebuilding the Swift package.
 --check    Report whether local signing/notary prerequisites are present.
 --notarize Submit the DMG to Apple notarytool. This uploads the app to Apple.
 --require-notary-profile
@@ -42,7 +46,7 @@ EOF
 
 while (($#)); do
   case "$1" in
-    archive|--check|check|--notarize|notarize|--print-proof-template)
+    archive|--package-existing|package-existing|--check|check|--notarize|notarize|--print-proof-template)
       MODE="$1"
       ;;
     --require-notary-profile)
@@ -322,6 +326,42 @@ create_dmg() {
   rm -rf "$dmg_src"
 }
 
+package_existing_app() {
+  local stage="${1:-archive}"
+
+  if [[ -z "$developer_id" ]]; then
+    echo "release packaging requires a Developer ID Application signing identity" >&2
+    echo "Run script/package_release.sh --check to inspect local prerequisites." >&2
+    exit 1
+  fi
+
+  codesign --force --options runtime --timestamp --sign "$developer_id" "$APP_BUNDLE" >/dev/null
+  ./script/check_app_bundle.sh --release "$APP_BUNDLE"
+
+  mkdir -p "$PROOF_DIR"
+  record_command "$PROOF_DIR/codesign-verify.txt" \
+    codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+  record_command_allow_failure "$PROOF_DIR/signature-and-entitlements.txt" \
+    codesign -d --entitlements :- --verbose=4 "$APP_BUNDLE"
+  record_command_allow_failure "$PROOF_DIR/spctl-app-pre-notary.txt" \
+    spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
+
+  create_zip
+  create_dmg
+  write_checksums
+  write_proof_checklist "$stage" "pending" "pending" "pending"
+  write_fresh_install_proof_instructions
+  if ! resolve_notary_profile >/dev/null; then
+    write_notary_blocker
+    echo "Notarization blocked: set NOTARYTOOL_PROFILE or a stored profile alias and run ./script/package_release.sh --notarize"
+  else
+    clear_notary_blocker
+  fi
+  echo "Primary beta artifact created: $DMG_PATH"
+  echo "Secondary archive created: $ZIP_PATH"
+  echo "Release proof checklist: $PROOF_DIR/release-proof-checklist.md"
+}
+
 case "$MODE" in
   help)
     usage
@@ -397,30 +437,10 @@ case "$MODE" in
       SIGN_IDENTITY="$developer_id" \
       ./script/build_and_run.sh --bundle-only
 
-    ./script/check_app_bundle.sh --release "$APP_BUNDLE"
-
-    mkdir -p "$PROOF_DIR"
-    record_command "$PROOF_DIR/codesign-verify.txt" \
-      codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
-    record_command_allow_failure "$PROOF_DIR/signature-and-entitlements.txt" \
-      codesign -d --entitlements :- --verbose=4 "$APP_BUNDLE"
-    record_command_allow_failure "$PROOF_DIR/spctl-app-pre-notary.txt" \
-      spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
-
-    create_zip
-    create_dmg
-    write_checksums
-    write_proof_checklist "archive" "pending" "pending" "pending"
-    write_fresh_install_proof_instructions
-    if ! resolve_notary_profile >/dev/null; then
-      write_notary_blocker
-      echo "Notarization blocked: set NOTARYTOOL_PROFILE or a stored profile alias and run ./script/package_release.sh --notarize"
-    else
-      clear_notary_blocker
-    fi
-    echo "Primary beta artifact created: $DMG_PATH"
-    echo "Secondary archive created: $ZIP_PATH"
-    echo "Release proof checklist: $PROOF_DIR/release-proof-checklist.md"
+    package_existing_app "archive"
+    ;;
+  --package-existing|package-existing)
+    package_existing_app "package-existing"
     ;;
   --notarize|notarize)
     resolved_notary_profile=""
