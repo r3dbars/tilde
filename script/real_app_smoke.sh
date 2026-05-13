@@ -4130,8 +4130,7 @@ open_textedit_smoke_document() {
     return 0
   fi
 
-  (
-    osascript - "$file_path" <<'APPLESCRIPT'
+  run_osascript_with_timeout 4 "TextEdit AppleScript open" - "$file_path" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 on run argv
   set targetPath to item 1 of argv
   tell application "TextEdit"
@@ -4140,9 +4139,6 @@ on run argv
   end tell
 end run
 APPLESCRIPT
-  ) >/dev/null 2>&1 &
-  local open_osascript_pid="$!"
-  wait_for_background_process "$open_osascript_pid" 4 "TextEdit AppleScript open" >/dev/null 2>&1 || true
 
   if wait_for_textedit_document_open "$window_title" 6; then
     return 0
@@ -8544,6 +8540,7 @@ run_textedit() {
       set_textedit_appearance dark
       ;;
   esac
+  export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-smoke-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
