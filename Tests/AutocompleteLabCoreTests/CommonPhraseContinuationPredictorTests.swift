@@ -11,11 +11,17 @@ struct CommonPhraseContinuationPredictorTests {
             for: "Quick note: I just wanted to",
             behaviorProfileID: .docsProse
         )
+        let proofSelection = predictor.selection(
+            for: "Smoke proof feels instant and the draft is almost",
+            behaviorProfileID: .docsProse
+        )
 
         #expect(selection.suggestion?.visibleText == " follow up")
         #expect(selection.matchedContextSuffix == "i just wanted to")
         #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
         #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        #expect(proofSelection.suggestion?.visibleText == " ready")
+        #expect(proofSelection.matchedContextSuffix == "the draft is almost")
     }
 
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")

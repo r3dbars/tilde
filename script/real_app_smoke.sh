@@ -9644,7 +9644,7 @@ APPLESCRIPT
   second_start_line="$(line_count "$LOG_PATH")"
 
   SMOKE_PHASE="TextEdit second suggestion"
-  type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and stays inst" "second typed"
+  type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and the draft is almost" "second typed"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
   focus_textedit_smoke_editor "$textedit_window_title"
