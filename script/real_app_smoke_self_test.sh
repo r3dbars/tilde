@@ -174,6 +174,14 @@ if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragm
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
   exit 1
 fi
+if ! grep -F 'clear_textedit_document_for_proof()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency initial reset"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keystroke "a" using command down' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key code 51' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit model latency reset to recover through a disposable-window keyboard clear" >&2
+  exit 1
+fi
 if ! grep -F 'trim_textedit_native_completion_suffix' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then

@@ -4495,10 +4495,52 @@ wait_for_textedit_document_exact() {
     sleep 0.2
   done
 
-  echo "Timed out waiting for TextEdit native undo during $label." >&2
+  echo "Timed out waiting for TextEdit document text during $label." >&2
   echo "Expected: $expected_text" >&2
   echo "Actual: $(textedit_document_text "$window_title")" >&2
   exit 1
+}
+
+wait_for_textedit_document_exact_or_return() {
+  local window_title="$1"
+  local expected_text="$2"
+  local timeout_seconds="${3:-3}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    local current_text
+    current_text="$(textedit_document_text "$window_title")"
+    if [[ "$current_text" == "$expected_text" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
+clear_textedit_document_for_proof() {
+  local window_title="$1"
+  local label="$2"
+
+  set_textedit_document_text "$window_title" "" || true
+  if wait_for_textedit_document_exact_or_return "$window_title" "" 2; then
+    return 0
+  fi
+
+  focus_textedit_smoke_editor "$window_title"
+  click_textedit_smoke_editor "$window_title"
+  run_osascript_with_timeout 3 "TextEdit proof reset" <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  tell process "TextEdit"
+    key code 53
+    keystroke "a" using command down
+    key code 51
+  end tell
+end tell
+APPLESCRIPT
+
+  wait_for_textedit_document_exact "$window_title" "" "$label" 5
 }
 
 wait_for_textedit_document_prefix() {
@@ -8972,8 +9014,7 @@ run_textedit_model_latency() {
   wait_for_textedit_smoke_editor "$textedit_window_title"
   focus_textedit_smoke_editor "$textedit_window_title"
   click_textedit_smoke_editor "$textedit_window_title"
-  set_textedit_document_text "$textedit_window_title" ""
-  wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit model latency initial reset" 5
+  clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency initial reset"
   move_textedit_caret_to_document_end "$textedit_window_title"
 
   prepare_temporary_app_enablement
@@ -8999,8 +9040,7 @@ run_textedit_model_latency() {
       exit 1
     fi
 
-    set_textedit_document_text "$textedit_window_title" ""
-    wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit model latency reset $sample_index" 5
+    clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"
     move_textedit_caret_to_document_end "$textedit_window_title"
     seed_start="$(line_count "$LOG_PATH")"
     if ! insert_textedit_smoke_fragment "$textedit_window_title" "$stable_context"; then
