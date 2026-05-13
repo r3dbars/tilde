@@ -32,6 +32,15 @@ LOG
   done
   exit 0
 fi
+if [[ "${1:-}" == "textedit-default-model-latency" ]]; then
+  for sample in 1 2 3 4 5; do
+    cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
+$base_timestamp mlx-completion-timing app=com.apple.TextEdit cleanedChars=18 cleanupMilliseconds=0 firstChunkMilliseconds=90 generationMilliseconds=120 maxTokens=11 mode=phraseContinuation promptMilliseconds=0 rawChars=18 sessionMilliseconds=0 totalMilliseconds=121
+$base_timestamp suggestion-presented app=com.apple.TextEdit candidateSelectionSource=app-model-result latencyMilliseconds=130 requestMode=phraseContinuation traceID=fresh-default-${sample}
+LOG
+  done
+  exit 0
+fi
 cat >>"$AUTOCOMPLETE_LAB_TRACE_PATH" <<LOG
 {"timestamp":"$base_timestamp","sessionID":"fresh","suggestionID":"fresh-${run_number}-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
 {"timestamp":"$base_timestamp","sessionID":"fresh","suggestionID":"fresh-${run_number}-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose"}}
@@ -97,7 +106,7 @@ MODEL_OUTPUT="$(
     ./script/fresh_latency_proof.sh --target textedit-model-latency --runs 3
 )"
 
-if ! grep -F "textedit-model-latency collects the beta sample set in one launch; forcing --runs 1." <<<"$MODEL_OUTPUT" >/dev/null; then
+if ! grep -F "textedit-model-latency collects the proof sample set in one launch; forcing --runs 1." <<<"$MODEL_OUTPUT" >/dev/null; then
   echo "fresh latency proof self-test expected textedit-model-latency to force one run" >&2
   echo "$MODEL_OUTPUT" >&2
   exit 1
@@ -123,6 +132,36 @@ fi
 
 if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
   echo "fresh latency proof self-test expected no skip-build rerun for model-latency target" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+: >"$SMOKE_LOG"
+: >"$DIAGNOSTICS_LOG"
+: >"$TRACE_LOG"
+DEFAULT_MODEL_OUTPUT="$(
+  AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-default-model.lock" \
+    ./script/fresh_latency_proof.sh --target textedit-default-model-latency --runs 3
+)"
+
+if ! grep -F "textedit-default-model-latency collects the proof sample set in one launch; forcing --runs 1." <<<"$DEFAULT_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected textedit-default-model-latency to force one run" >&2
+  echo "$DEFAULT_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Default model proof passed" <<<"$DEFAULT_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected default-model-latency target to pass the default model report" >&2
+  echo "$DEFAULT_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if [[ "$(sed -n '1p' "$SMOKE_LOG")" != "textedit-default-model-latency" ]]; then
+  echo "fresh latency proof self-test expected default-model-latency smoke without --skip-build" >&2
   cat "$SMOKE_LOG" >&2
   exit 1
 fi
