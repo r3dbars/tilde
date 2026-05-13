@@ -112,7 +112,6 @@ public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner,
 
 public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable {
     private let runner: any LocalCompletionRuntimeRunner
-    private let fallback: (any CompletionEngine)?
     private let promptBuilder: CompletionPromptBuilder
     private let configuration: LocalCompletionRuntimeConfiguration
 
@@ -122,19 +121,6 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
         configuration: LocalCompletionRuntimeConfiguration = LocalCompletionRuntimeConfiguration()
     ) {
         self.runner = runner
-        self.fallback = nil
-        self.promptBuilder = promptBuilder
-        self.configuration = configuration
-    }
-
-    init(
-        runner: any LocalCompletionRuntimeRunner,
-        testFallback: (any CompletionEngine)?,
-        promptBuilder: CompletionPromptBuilder = CompletionPromptBuilder(),
-        configuration: LocalCompletionRuntimeConfiguration = LocalCompletionRuntimeConfiguration()
-    ) {
-        self.runner = runner
-        self.fallback = testFallback
         self.promptBuilder = promptBuilder
         self.configuration = configuration
     }
@@ -151,10 +137,10 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
                 return cleaned
             }
         } catch {
-            return try await fallback?.suggestion(for: request)
+            return nil
         }
 
-        return try await fallback?.suggestion(for: request)
+        return nil
     }
 
     private func clean(_ rawOutput: String, request: CompletionRequest) -> CompletionSuggestion? {

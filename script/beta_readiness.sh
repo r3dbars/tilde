@@ -93,6 +93,10 @@ runtime = Path("Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.s
 blocked = []
 if re.search(r"public\s+init\s*\([^)]*\bfallback\s*:", engine, re.S):
     blocked.append("public LocalCompletionEngine fallback initializer")
+if re.search(r"\bprivate\s+let\s+fallback\s*:", engine):
+    blocked.append("LocalCompletionEngine runtime fallback slot")
+if re.search(r"\btestFallback\s*:", engine):
+    blocked.append("LocalCompletionEngine test fallback initializer")
 if "fallbackCandidate: .liteRTLM" in runtime:
     blocked.append("MVP LiteRT-LM fallback candidate")
 
