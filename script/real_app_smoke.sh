@@ -961,6 +961,38 @@ log_since_matches() {
   ' "$LOG_PATH" 2>/dev/null
 }
 
+MATCHED_LOG_LINE=0
+wait_for_log_line_number() {
+  local start_line="$1"
+  local pattern="$2"
+  local label="$3"
+  local timeout_seconds="${4:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local matched_line
+
+  while ((SECONDS <= deadline)); do
+    if [[ -f "$LOG_PATH" ]]; then
+      matched_line="$(awk -v start="$start_line" -v pattern="$pattern" '
+        NR > start && $0 ~ pattern {
+          print NR
+          exit
+        }
+      ' "$LOG_PATH" 2>/dev/null || true)"
+      if [[ -n "$matched_line" ]]; then
+        MATCHED_LOG_LINE="$matched_line"
+        return 0
+      fi
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for $label." >&2
+  echo "Pattern: $pattern" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
 wait_for_log_pattern() {
   local start_line="$1"
   local pattern="$2"
@@ -9200,6 +9232,10 @@ run_obsidian() {
 
   prepare_temporary_app_enablement
   build_if_needed
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    wait_for_log_line_number "$runtime_start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
+    runtime_start_line="$MATCHED_LOG_LINE"
+  fi
   wait_for_accessibility_ready "$runtime_start_line" "Obsidian Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
 
