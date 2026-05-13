@@ -54,12 +54,37 @@ NEXT_PROOF_MARKERS = (
     "checklist",
 )
 
-LOW_SCORE_TERMS = {
-    "stale": 75,
-    "blocked": 75,
-    "missing": 75,
-    "failed": 85,
-}
+LOW_SCORE_PATTERNS = (
+    ("stale", re.compile(r"\bstale\b"), 75),
+    ("pending", re.compile(r"\bpending\b"), 75),
+    ("blocked", re.compile(r"\bblocked\b"), 75),
+    ("missing", re.compile(r"\bmissing\b"), 75),
+    ("failed", re.compile(r"\b(?:failed|failing)\b"), 85),
+)
+
+PERFECT_SCORE_UNRESOLVED_PATTERNS = (
+    ("stale", re.compile(r"\bstale\b")),
+    ("pending", re.compile(r"\bpending\b")),
+    ("blocked", re.compile(r"\bblocked\b")),
+    ("missing", re.compile(r"\bmissing\b")),
+    ("failed", re.compile(r"\b(?:failed|failing)\b")),
+    ("incomplete", re.compile(r"\bincomplete\b")),
+    ("open gap", re.compile(r"\b(?:open|remaining)\b[^.]*\b(?:gap|proof|gate|lane|issue|item|row)s?\b|\bgaps?\b")),
+    ("still needs", re.compile(r"\bstill\s+(?:needs?|requires?|depends)\b")),
+    (
+        "needs proof",
+        re.compile(
+            r"\bneeds?\s+(?:fresh|current|manual|proof|evidence|screenshot|latency|runtime|app|signed|notarized|distribution|tester|walkthrough|gate)\b"
+        ),
+    ),
+    ("short of", re.compile(r"\bshort of\b")),
+    ("not yet", re.compile(r"\bnot yet\b")),
+    ("not complete", re.compile(r"\bnot complete\b|\bbefore\b[^.]*\bcomplete\b")),
+)
+
+PERFECT_SCORE_NEXT_PROOF_ACTION = re.compile(
+    r"^\s*(?:add|close|finish|produce|record|refresh|rerun\b.*\bafter\b|notarize|staple)\b"
+)
 
 
 def split_markdown_row(line: str) -> list[str]:
@@ -182,9 +207,19 @@ def validate_scorecard(path: Path) -> list[str]:
         if not any(marker.lower() in next_proof.lower() for marker in NEXT_PROOF_MARKERS):
             failures.append(f"{raw_area}: next proof must name a command or documented manual gate")
 
-        for term, maximum in LOW_SCORE_TERMS.items():
-            if term in combined and score > maximum:
+        for term, pattern, maximum in LOW_SCORE_PATTERNS:
+            if pattern.search(combined) and score > maximum:
                 failures.append(f"{raw_area}: contains {term!r}, so score must stay <= {maximum}/100")
+
+        if score == 100:
+            unresolved_terms = [
+                term for term, pattern in PERFECT_SCORE_UNRESOLVED_PATTERNS if pattern.search(combined)
+            ]
+            if PERFECT_SCORE_NEXT_PROOF_ACTION.search(next_proof.lower()):
+                unresolved_terms.append("unfinished next proof")
+            if unresolved_terms:
+                joined = ", ".join(dict.fromkeys(unresolved_terms))
+                failures.append(f"{raw_area}: 100/100 requires resolved row gates; unresolved language found: {joined}")
 
     missing = [area for area in REQUIRED_AREAS if area not in seen]
     extra = [raw for key, (_, raw) in seen.items() if key not in REQUIRED_AREAS]
