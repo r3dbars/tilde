@@ -174,10 +174,9 @@ def trace_window(
     for line_number, event in relevant_events:
         if event.get("type") != "modelResult":
             continue
-        key = (suggestion_key(event, line_number), line_number)
+        key = suggestion_key(event, line_number)
         if key in seen_model:
             continue
-        seen_model.add(key)
         metadata = event.get("metadata") or {}
         generation_latency = int_value(
             metadata.get("totalGenerationLatencyMilliseconds")
@@ -185,7 +184,8 @@ def trace_window(
         if generation_latency is None:
             generation_latency = int_value(event.get("latencyMilliseconds"))
         if generation_latency is not None:
-            model_backed_suggestion_ids.add(suggestion_key(event, line_number))
+            seen_model.add(key)
+            model_backed_suggestion_ids.add(key)
             model_samples += 1
 
     for line_number, event in relevant_events:
