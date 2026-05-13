@@ -91,12 +91,21 @@ fi
 RESOURCE_REPORT="$(script/model_latency_report.py \
   --log "$RESOURCE_LOG_FILE" \
   --latest \
+  --expected-executable-sha256 abc \
   --require-resource-samples 2 \
   --max-rss-growth-mb 512)"
 
 if ! grep -F "rssModelLoadDelta=2510MB rssPostReadyGrowth=10MB" <<<"$RESOURCE_REPORT" >/dev/null; then
   echo "latency report self-test did not split model-load RSS from post-ready growth" >&2
   echo "$RESOURCE_REPORT" >&2
+  exit 1
+fi
+
+if script/model_latency_report.py \
+  --log "$RESOURCE_LOG_FILE" \
+  --latest \
+  --expected-executable-sha256 def >/dev/null 2>&1; then
+  echo "latency report self-test did not reject unmatched executable hash" >&2
   exit 1
 fi
 
