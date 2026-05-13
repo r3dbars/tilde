@@ -7,7 +7,7 @@ Use this before inviting private beta testers.
 - [ ] `./script/beta_readiness.sh --check-only` reports only expected external
   blockers before the full gate.
 - [ ] `./script/beta_readiness.sh` passes.
-- [ ] `dist/AutocompleteLab.zip` exists.
+- [ ] `dist/SteadyType.zip` exists.
 - [ ] `dist/private-beta/checksums.txt` matches the archive.
 - [ ] The app is signed and the package check passes.
 - [x] Notarization status is known before sending the build.
@@ -18,14 +18,14 @@ Use this before inviting private beta testers.
 - [ ] The preferred asset is `Qwen3.5-4B-4bit`.
 - [ ] Settings installs or repairs the local model without shell commands.
 - [ ] `./script/model_latency_report.py --default-model-proof` passes.
-- [ ] `./script/latency_benchmark_report.py --beta-gate` passes with current
+- [ ] `./script/beta_readiness.sh --check-only` passes the latency gate with current
   first-visible, first-token, total-generation, AX, event-tap, and stale-late
   suppression numbers.
 
 - [ ] Suggestions stay off while the runtime warms or fails.
 - [ ] Mock fallback is not used for beta.
-- [ ] Missing or invalid model setup is handled by Settings `Install Model` or
-  `Repair Model`.
+- [ ] Missing or invalid model setup is handled by Settings `Install Local Model` or
+  `Repair Local Model`.
 - [ ] Testers do not run Ollama, llama.cpp, Python, or a model server.
 
 ## Compatibility Gate
@@ -42,12 +42,15 @@ Use this before inviting private beta testers.
 ## Privacy Gate
 
 - [ ] The tester hears the privacy promise in plain language.
+- [ ] The tester can repeat the first-run map: suggestions appear near the
+  cursor, `Tab` accepts one word, `Esc` dismisses, Pause stops everything, text
+  stays local, and supported apps are limited.
 - [ ] `docs/product/onboarding-permission-qa-checklist.md` passes on a clean
   macOS user account.
 - [ ] Raw debug tracing is off.
 - [ ] Screenshot tracing is off.
 - [ ] The tester knows how to pause tracing.
-- [ ] The tester knows how to disable the current app.
+- [ ] The tester knows how to pause the current app.
 - [ ] The tester knows how to delete traces.
 - [x] A redacted report export works through
   `./script/check_redacted_report_export.sh`.
@@ -74,6 +77,8 @@ Use this before inviting private beta testers.
 
 ## Trust Gate
 
+- [ ] `FIRST-RUN-BETA.md` matches the current Settings first-run copy and
+  generated private-beta packet.
 - [ ] `Tab` accepts one word in TextEdit.
 - [ ] `Esc` dismisses the suggestion.
 - [ ] Search, login, URL, secure, payment, address, and short form fields are
@@ -98,10 +103,10 @@ Invite testers only when every applicable box is checked.
 - Screenshot-backed proof is still pending for Claude Code and Claude desktop.
 - Codex has a screenshot, but still needs one strict same-slice proof that shows
   screenshot, one-word Tab accept, verified insertion, and no prompt submit.
-- `dist/AutocompleteLab.zip` and `dist/private-beta/checksums.txt` have been
+- `dist/SteadyType.zip` and `dist/private-beta/checksums.txt` have been
   created and verified locally, but `dist/` is ignored; recreate them if app
   code changes after the remaining proof blockers close.
-- Current local `dist/AutocompleteLab.zip` was submitted with
+- Current local `dist/SteadyType.zip` was submitted with
   `NOTARYTOOL_PROFILE=Transcripted`, accepted by Apple, stapled, validated, and
   Gatekeeper-accepted on 2026-05-07. Submission:
   `9b9c09f5-585b-4007-b8e1-55a9ac0f6ae2`.

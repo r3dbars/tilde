@@ -6,12 +6,12 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
     public init(report: RuntimeReadinessReport) {
         switch report.stage {
         case .downloadNeeded:
-            message = "Install the local model here. The download uses Hugging Face once; suggestions run locally after install. You do not need Ollama or a model server. Suggestions stay off until this finishes."
-            actionTitle = report.action == .installModel ? "Install Model" : "Open Model Folder"
+            message = "Install the local model here. The download uses one pinned Hugging Face revision, then suggestions run locally. You do not need Ollama or a model server. Suggestions stay off until this finishes."
+            actionTitle = report.action == .installModel ? report.action.displayName : RuntimeReadinessAction.revealModelFolder.displayName
             isActionEnabled = report.action != .none
         case .repairNeeded:
-            message = "The local model files look incomplete. Repair them here. Suggestions stay off until the files are valid."
-            actionTitle = report.action == .repairModel ? "Repair Model" : "Open Model Folder"
+            message = "The local model files look incomplete. Repair them here so the app can recheck the files before suggestions turn on."
+            actionTitle = report.action == .repairModel ? report.action.displayName : RuntimeReadinessAction.revealModelFolder.displayName
             isActionEnabled = report.action != .none
         case .runtimeUnavailable:
             message = "This build is missing its local model engine. Starting Ollama or another model server will not fix it."

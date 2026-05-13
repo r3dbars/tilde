@@ -75,6 +75,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only print failures.",
     )
+    parser.add_argument(
+        "--developer-fix",
+        action="store_true",
+        help="Include shell fallback commands for developers.",
+    )
 
     args = parser.parse_args()
     if args.model not in models:
@@ -96,26 +101,30 @@ def read_json_object(path: Path) -> str | None:
     return None
 
 
-def validation_failure(model: str, path: Path, reason: str) -> str:
+def validation_failure(model: str, path: Path, reason: str, include_developer_fix: bool) -> str:
     display_name = MODEL_VALIDATION[model]["display_name"]
-    return "\n".join(
-        [
-            f"model asset check failed: {reason}",
-            f"Model: {display_name} MLX ({model})",
-            f"Expected: {path}",
-            "",
-            "Fix:",
-            "  Open SteadyType Settings and use the Local model action.",
-            "  The app shows the expected model folder and keeps suggestions off until the model is valid.",
+    lines = [
+        f"model asset check failed: {reason}",
+        f"Model: {display_name} MLX ({model})",
+        f"Expected: {path}",
+        "",
+        "Fix:",
+        "  Open SteadyType Settings and use Install Local Model or Repair Local Model.",
+        "  The app shows the expected model folder and keeps suggestions off until the model is valid.",
+    ]
+    if include_developer_fix:
+        lines += [
             "",
             "Developer fallback:",
             "  python3 -m pip install --user huggingface_hub",
             f"  ./script/download_mlx_model.py --model {model}",
-            "",
-            "Then rerun:",
-            "  ./script/check_model_asset.py",
         ]
-    )
+    lines += [
+        "",
+        "Then rerun:",
+        "  ./script/check_model_asset.py",
+    ]
+    return "\n".join(lines)
 
 
 def validate_model(model: str, path: Path) -> tuple[bool, str, int, int]:
@@ -170,7 +179,7 @@ def main() -> int:
 
     is_valid, reason, weight_count, weight_bytes = validate_model(args.model, path)
     if not is_valid:
-        print(validation_failure(args.model, path, reason), file=sys.stderr)
+        print(validation_failure(args.model, path, reason, args.developer_fix), file=sys.stderr)
         return 1
 
     if not args.quiet:

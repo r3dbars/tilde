@@ -14,6 +14,9 @@ The app asks for Accessibility so it can:
 Suggestions stay off when Accessibility is denied or the focused field is not
 safe to inspect.
 
+Normal first-run setup does not need Screen Recording. Screen Recording is only
+for explicit local placement proof or visible-page-context debugging.
+
 ## What Stays On This Mac
 
 By default, typed text, nearby context, prompts, model output, accepted text,
@@ -47,7 +50,7 @@ an explicit local debug session, and turn them off afterward.
 ## Pause, Quit, Disable, And Delete
 
 - Pause suggestions from the menu bar.
-- Disable the current app from the menu bar.
+- Pause the current app from the menu bar.
 - Quiet the current field from Settings.
 - Export or delete local traces from Diagnostics.
 - Quit from the menu bar when you do not want the app watching typing.

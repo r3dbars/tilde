@@ -16,7 +16,7 @@ Run the full gate:
 
 That must create and verify:
 
-- `dist/AutocompleteLab.zip`
+- `dist/SteadyType.zip`
 - `dist/private-beta/README.md`
 - `dist/private-beta/install-checklist.md`
 - `dist/private-beta/daily-tester-checklist.md`
@@ -29,6 +29,7 @@ That must create and verify:
 - `dist/private-beta/session-report.md`
 - `dist/private-beta/privacy-status.md`
 - `dist/private-beta/tester-docs/PRIVACY-BETA.md`
+- `dist/private-beta/tester-docs/FIRST-RUN-BETA.md`
 - `dist/private-beta/tester-docs/KNOWN-LIMITATIONS.md`
 - `dist/private-beta/tester-docs/UNINSTALL-DELETE-DATA.md`
 - `dist/private-beta/tester-docs/DIAGNOSTIC-EXPORT.md`
@@ -37,6 +38,7 @@ That must create and verify:
 
 Also read:
 
+- `FIRST-RUN-BETA.md`
 - `docs/product/beta-readiness-checklist.md`
 - `docs/product/private-beta-ops-loop.md`
 - `docs/product/compatibility-matrix.md`
@@ -47,7 +49,7 @@ Ollama, llama.cpp, or mock fallback, do not invite testers.
 
 The generated private-beta packet must also keep tester model setup inside the
 app. If the model is missing or invalid, testers should use Settings
-`Install Model` or `Repair Model`; if that in-app setup fails, stop the session
+`Install Local Model` or `Repair Local Model`; if that in-app setup fails, stop the session
 instead of giving testers shell commands.
 
 The tester install path is inside Settings. If the model is missing, use
@@ -80,12 +82,15 @@ until the compatibility gates say otherwise.
 
 Walk each tester through this in 15 minutes or less:
 
+- First-run map: suggestions appear near the cursor, `Tab` accepts one word,
+  `Esc` dismisses, Pause stops everything, and `Pause in <App Name>` stops one
+  app.
 - Privacy promise: default traces are redacted and local; raw text and
   screenshots are debug-only opt-ins.
-- Pause/disable controls: menu bar `Disable <App Name>`, Diagnostics `Pause
-  Tracing`, and Diagnostics `Delete Traces`.
-- Smoke check: open TextEdit, type a normal sentence, accept one word with
-  `Tab`, dismiss with `Esc`, then export the redacted report.
+- Pause controls: menu bar `Pause in <App Name>`, `Silence This Field`,
+  Diagnostics `Export Privacy Bundle`, and Diagnostics `Delete Local Logs`.
+- Smoke check: use `Start TextEdit Practice`, type disposable text, accept one
+  word with `Tab`, dismiss with `Esc`, then export the redacted report.
 - Stop rules: one wrong insertion, sensitive-field suggestion, unreliable
   `Tab`, mock fallback, failed in-app model setup, or tester-side shell/Python
   setup ends the beta.

@@ -88,6 +88,7 @@ public enum DisplayScoreSuppressionReason: String, Equatable, Sendable {
     case highRisk = "high-risk"
     case highRepetition = "high-repetition"
     case highInstability = "high-instability"
+    case tooSlowToDisplay = "too-slow-to-display"
     case lowAcceptedAndKeptProbability = "low-accepted-and-kept-probability"
     case belowThreshold = "below-threshold"
 }

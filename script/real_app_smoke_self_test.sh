@@ -46,8 +46,63 @@ if ! grep -F "Chrome setup text first tries AX value replacement, then guarded k
   exit 1
 fi
 
-if ! grep -F 'build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Codex proof to direct-launch the current app bundle" >&2
+if ! grep -F 'AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof runs to direct-launch the current app bundle" >&2
+  exit 1
+fi
+if ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof runs to quarantine and move stale worktree apps before launch" >&2
+  exit 1
+fi
+if ! grep -F 'wait_for_current_autocomplete_lab_process' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- '--skip-build uses the already-running app' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected skip-build proof to verify the running app belongs to this checkout" >&2
+  exit 1
+fi
+if ! grep -F 'wait_for_textedit_acceptance_with_stale_retry' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'reason=text-before-cursor-changed-before-accept' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit stale-suggestion acceptance retry" >&2
+  exit 1
+fi
+if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof to close stale disposable smoke windows before each run" >&2
+  exit 1
+fi
+if ! grep -F 'wait_for_background_process "$!" 5 "stale TextEdit smoke window cleanup"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_background_process "$!" 5 "tracked TextEdit smoke window cleanup"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit cleanup AppleScript to be timeout-bounded" >&2
+  exit 1
+fi
+if ! grep -F 'wait_for_background_process "$!" 5 "TextEdit disposable document AppleScript open"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit open AppleScript fallback to be timeout-bounded" >&2
+  exit 1
+fi
+if ! grep -F 'real_app_smoke received $signal_name during phase:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Tracked TextEdit smoke windows:' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected SIGTERM diagnostics for interrupted proof runs" >&2
+  exit 1
+fi
+if ! grep -F 'Swift activation for pid $target_pid' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected process activation Swift helper to be timeout-bounded" >&2
+  exit 1
+fi
+if ! grep -F 'AUTOCOMPLETE_LAB_SYSTEM_EVENTS_PROCESS_ACTIVATION' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected System Events process activation to be opt-in" >&2
+  exit 1
+fi
+if ! grep -F 'reset_textedit_smoke_document "$textedit_window_title" "initial TextEdit smoke reset"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set_textedit_document_text "$window_title" "${current_text}${fragment}"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof to set exact document text and caret before polling" >&2
+  exit 1
+fi
+if ! grep -F 'wait_for_textedit_document_exact_at_end' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'current_caret="$(textedit_document_caret_location "$window_title")"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'expected_text="${before_text}${fragment}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '$text = "" unless defined $text' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof to require exact text with caret at end before suggestions" >&2
   exit 1
 fi
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
@@ -256,6 +311,11 @@ if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
   echo "real app smoke self-test expected Notes body proof to move the caret to the end of the disposable note" >&2
   exit 1
 fi
+if ! grep -F "moveCaret(textInput, to: replacementText.utf16.count)" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "kAXValueAttribute as CFString" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof setup to leave the caret after exact setup text" >&2
+  exit 1
+fi
 if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Focused Notes element is not the body text view" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Notes body proof to validate the focused text view without walking the Notes AX tree" >&2
@@ -337,6 +397,20 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP
 fi
 if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/process-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the concurrent process scan" >&2
+  exit 1
+fi
+
+if ! AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID=123 \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 123 bash ./script/real_app_smoke.sh textedit\n1 1 1 launchd\n' \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/self-process.lock" \
+  script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/self-process.txt"; then
+  if grep -F "Another real app smoke process is already active" "$TMP_DIR/self-process.txt" >/dev/null; then
+    echo "real app smoke self-test should ignore the current smoke process" >&2
+    exit 1
+  fi
+fi
+if ! grep -F "requires --manual-gate" "$TMP_DIR/self-process.txt" >/dev/null; then
+  echo "real app smoke self-test expected the self-process path to reach the Codex safety gate" >&2
   exit 1
 fi
 

@@ -74,6 +74,7 @@ check_clipboard_fallback_disabled() {
 check_notarized_install_proof() {
   local proof_dir="$ROOT_DIR/dist/release-proof"
   local blocker_path="$proof_dir/notarization-blocker.txt"
+  local checksum_path="$proof_dir/checksums.txt"
   local failed=0
 
   if [[ -s "$blocker_path" ]]; then
@@ -86,6 +87,7 @@ check_notarized_install_proof() {
     "$proof_dir/stapler-validate.txt" \
     "$proof_dir/spctl-dmg.txt" \
     "$proof_dir/spctl-installed-app.txt" \
+    "$checksum_path" \
     "$proof_dir/fresh-install-gatekeeper-proof.md"; do
     if [[ ! -s "$path" ]]; then
       echo "missing release proof: $path"
@@ -93,11 +95,69 @@ check_notarized_install_proof() {
     fi
   done
 
+  if [[ -s "$checksum_path" ]]; then
+    for artifact_name in SteadyType.dmg SteadyType.zip; do
+      local artifact_path="$ROOT_DIR/dist/$artifact_name"
+      if [[ ! -f "$artifact_path" ]]; then
+        continue
+      fi
+
+      local expected_sha actual_sha
+      expected_sha="$(shasum -a 256 "$artifact_path" | awk '{print $1}')"
+      actual_sha="$(awk -v artifact="$artifact_name" '$1 == artifact {print $2; exit}' "$checksum_path")"
+
+      if [[ -z "$actual_sha" ]]; then
+        echo "release proof checksum is missing $artifact_name"
+        failed=1
+      elif [[ "$expected_sha" != "$actual_sha" ]]; then
+        echo "release proof checksum is stale for $artifact_name"
+        echo "expected: $expected_sha"
+        echo "actual:   $actual_sha"
+        failed=1
+      fi
+    done
+  fi
+
+  local archive_path="$ROOT_DIR/dist/SteadyType.zip"
+  if [[ -s "$archive_path" ]]; then
+    local verify_dir
+    verify_dir="$(mktemp -d)"
+    if ditto -x -k "$archive_path" "$verify_dir" &&
+      [[ -d "$verify_dir/SteadyType.app" ]]; then
+      if ! ./script/check_app_bundle.sh --release "$verify_dir/SteadyType.app"; then
+        failed=1
+      fi
+    else
+      echo "release archive cannot be expanded for signature proof: $archive_path"
+      failed=1
+    fi
+    rm -rf "$verify_dir"
+  fi
+
   if ((failed > 0)); then
     return 1
   fi
 
   echo "notarization, stapling, and fresh-install proof files are present"
+}
+
+latency_beta_gate() {
+  local args=(--beta-gate)
+  local trace_start="${AUTOCOMPLETE_LAB_LATENCY_TRACE_START_LINE:-${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}}"
+  local diagnostics_start="${AUTOCOMPLETE_LAB_LATENCY_DIAGNOSTICS_START_LINE:-${AUTOCOMPLETE_LAB_LOG_START_LINE:-}}"
+
+  if [[ -n "$trace_start" ]]; then
+    args+=(--trace-start-line "$trace_start")
+  fi
+  if [[ -n "$diagnostics_start" ]]; then
+    args+=(--diagnostics-start-line "$diagnostics_start")
+  fi
+
+  if [[ -z "$trace_start" && -z "$diagnostics_start" ]]; then
+    args+=(--line-limit "${AUTOCOMPLETE_LAB_LATENCY_LINE_LIMIT:-1000}")
+  fi
+
+  ./script/latency_benchmark_report.py "${args[@]}"
 }
 
 if [[ "$MODE" == "check-only" ]]; then
@@ -108,11 +168,12 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
-  run_check "Latency beta gate" ./script/latency_benchmark_report.py --beta-gate || failures=$((failures + 1))
+  run_check "Latency beta gate" latency_beta_gate || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
+  run_check "Onboarding permission QA" ./script/check_onboarding_permission_qa.sh --check || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
   run_check "Release package prerequisites" ./script/package_release.sh --check || failures=$((failures + 1))
@@ -161,7 +222,7 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   ./script/check_diagnostics_log.sh
 echo
 echo "== Latency beta gate =="
-./script/latency_benchmark_report.py --beta-gate
+latency_beta_gate
 
 
 echo
@@ -181,6 +242,10 @@ echo "== Prompt app proof gate =="
 ./script/check_prompt_app_proof.sh
 
 echo
+echo "== Onboarding permission QA =="
+./script/check_onboarding_permission_qa.sh --check
+
+echo
 echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
 
@@ -192,6 +257,10 @@ echo
 echo "== Release package =="
 ./script/package_release.sh --check
 ./script/package_release.sh archive
+
+echo
+echo "== Notarized install proof =="
+check_notarized_install_proof
 
 echo
 echo "== Private beta packet =="

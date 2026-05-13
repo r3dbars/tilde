@@ -2,15 +2,35 @@
 
 Use this before a private beta build. This is manual proof, not a code claim.
 
+## First 10-Minute User Map
+
+The first-run surface and TextEdit practice file must make this clear in plain
+language:
+
+- Suggestions appear as a small floating suggestion next to the cursor in
+  supported writing apps.
+- Suggestions do not enter the document until accepted.
+- `Tab` accepts one word.
+- `Esc` dismisses the suggestion without changing text.
+- `Pause Suggestions` stops suggestions everywhere.
+- `Pause Current App` stops suggestions only in the frontmost app.
+- Typed text, prompts, model output, accepted text, screenshots, document
+  names, URLs, recipients, and subject lines stay on this Mac by default.
+- The write-test apps are TextEdit, Notes, Obsidian, and the included Chrome
+  local practice pages.
+- Mail, Atlas, Slack, Discord, Notion, search, login, payment, address, URL,
+  secure, and private fields stay off until proof says otherwise.
+
 ## Clean Install
 
 - [ ] Install the app with Accessibility off.
 - [ ] Confirm the app opens its own Settings/onboarding surface before any macOS Accessibility prompt appears.
-- [ ] Confirm the first screen explains the value and local-first behavior in plain language.
+- [ ] Confirm the first screen explains the full first 10-minute user map above.
 - [ ] Click `Allow Accessibility`.
 - [ ] Confirm the app explains why System Settings is opening.
 - [ ] Grant Accessibility, return to the app, and confirm the status updates without restart.
-- [ ] Record clean-user proof below with the macOS user name, build commit, and whether the first system prompt appeared only after `Allow Accessibility`.
+- [ ] Record clean-user proof below with the macOS user name, build commit, and
+  whether the first system prompt appeared only after `Allow Accessibility`.
 
 ## Guided Practice
 
@@ -18,6 +38,7 @@ Use this before a private beta build. This is manual proof, not a code claim.
 - [ ] Confirm Practice shows Accessibility status, local model readiness, and TextEdit enablement.
 - [ ] Click `Start TextEdit Practice`.
 - [ ] Confirm the app opens a disposable local TextEdit practice file.
+- [ ] Confirm the practice file repeats the safe first-run map in plain language.
 - [ ] Confirm TextEdit is enabled for suggestions.
 - [ ] Type disposable text in TextEdit.
 - [ ] Confirm a suggestion appears near the cursor.
@@ -39,6 +60,7 @@ Use this before a private beta build. This is manual proof, not a code claim.
 
 - [ ] Deny or remove Accessibility.
 - [ ] Confirm the app stays calm and says suggestions need Accessibility.
+- [ ] Confirm no suggestion appears while Accessibility is denied.
 - [ ] Confirm `Open Privacy Settings` returns the user to the right Settings area.
 - [ ] Confirm Screen Recording is not requested during normal autocomplete setup.
 - [ ] Relaunch with Accessibility still denied and confirm Settings opens without a suggestion appearing.
@@ -56,14 +78,20 @@ Use this before a private beta build. This is manual proof, not a code claim.
 
 - [ ] Start without the local model installed.
 - [ ] Confirm Settings says the model download uses Hugging Face once and suggestions run locally after install.
-- [ ] Start the install and confirm progress is visible.
+- [ ] Start the install with `Install Local Model` and confirm progress is visible.
 - [ ] Confirm low disk space is caught before a network download starts, or record why the scenario could not be safely reproduced.
 - [ ] Cancel the install and confirm the app returns to a recoverable state.
-- [ ] Repair an incomplete model folder and confirm suggestions stay off until validation passes.
+- [ ] Repair an incomplete model folder with `Repair Local Model` and confirm suggestions stay off until validation passes.
 
 ## Release Rule
 
 Do not invite private beta testers until this checklist passes on a clean macOS user account.
+
+Keep unchecked boxes and Pending proof rows visible until the run is complete.
+Current known gaps:
+
+- Accessibility denial/regrant proof is still pending.
+- Fresh clean-user first-prompt proof is still pending.
 
 ## Proof Log
 
