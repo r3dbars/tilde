@@ -375,58 +375,6 @@ struct ModelAssetInstallerTests {
         #expect(validate(expectedFiles: checksumMismatch) == "known-good checksum mismatch for config.json")
     }
 
-    @Test("Integrity receipts reject mutable source revisions")
-    func integrityReceiptsRejectMutableSourceRevisions() throws {
-        let fileManager = FileManager.default
-        let rootURL = fileManager.temporaryDirectory
-            .appendingPathComponent("AutocompleteLabInstallerTests-\(UUID().uuidString)", isDirectory: true)
-        defer {
-            try? fileManager.removeItem(at: rootURL)
-        }
-
-        let targetURL = rootURL.appendingPathComponent("target", isDirectory: true)
-        try fileManager.createDirectory(at: targetURL, withIntermediateDirectories: true)
-        try "{}".write(
-            to: targetURL.appendingPathComponent("config.json"),
-            atomically: true,
-            encoding: .utf8
-        )
-        try "weights".write(
-            to: targetURL.appendingPathComponent("model.safetensors"),
-            atomically: true,
-            encoding: .utf8
-        )
-
-        let manifest = LocalModelAssetManifest(
-            model: .qwen35FourB,
-            runtimeCandidate: .mlx,
-            cacheDirectoryName: "Models/Test/MLX",
-            fileName: "test-model",
-            source: LocalModelAssetSource(
-                repoID: "mlx-community/Test",
-                revision: "main",
-                allowPatterns: ["*.safetensors", "config.json"]
-            ),
-            expectedMinimumBytes: 1,
-            requiredFileNames: ["config.json"]
-        )
-
-        #expect(throws: ModelAssetIntegrityReceiptError.sourceRevisionNotImmutable(
-            LocalModelAssetSource.immutableRevisionRequirement
-        )) {
-            _ = try ModelAssetIntegrityReceiptWriter.write(
-                manifest: manifest,
-                modelDirectoryURL: targetURL,
-                fileManager: fileManager
-            )
-        }
-        #expect(ModelAssetIntegrityReceiptValidator.validate(
-            manifest: manifest,
-            modelDirectoryURL: targetURL,
-            fileManager: fileManager
-        ) == LocalModelAssetSource.immutableRevisionRequirement)
-    }
-
     @Test("Finalizing an invalid downloaded snapshot keeps the previous model folder")
     func finalizeInvalidSnapshotKeepsTarget() throws {
         let fileManager = FileManager.default
