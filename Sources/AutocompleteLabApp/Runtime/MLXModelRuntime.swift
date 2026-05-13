@@ -16,6 +16,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let candidateRanker: CompletionCandidateRanker
     private let lengthConfiguration: CompletionLengthConfiguration
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
+    private let cancellationCoordinator = RuntimeCancellationCoordinator()
 
     private var storedState: LocalRuntimeState
     private var integrityValidationCache: ModelAssetIntegrityValidationCache
@@ -334,9 +335,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             let task = warmTask?.task
             warmTask = nil
             generation += 1
+            container = nil
+            staticPromptCache = RuntimeStaticPromptCache()
             storedState = .unavailable(reason: "MLX runtime was canceled.")
             return task
         }
+        cancellationCoordinator.cancelAll()
         taskToCancel?.cancel()
     }
 
@@ -348,8 +352,22 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         _ request: CompletionRequest,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
+        try await cancellationCoordinator.withRegisteredTask { [self] cancellationEpoch in
+            try await performCompletion(
+                request,
+                cancellationEpoch: cancellationEpoch,
+                onPartialSuggestion: onPartialSuggestion
+            )
+        }
+    }
+
+    private func performCompletion(
+        _ request: CompletionRequest,
+        cancellationEpoch: Int,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
         let container = try await readyContainer()
-        try Task.checkCancellation()
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
 
         let startedAt = Date()
         let prompt = promptBuilder.prompt(for: request)
@@ -374,7 +392,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let stream = session.streamResponse(to: prompt.user)
         do {
             for try await chunk in stream {
-                try Task.checkCancellation()
+                try cancellationCoordinator.check(epoch: cancellationEpoch)
 
                 if firstChunkMilliseconds == nil {
                     firstChunkMilliseconds = Self.milliseconds(from: sessionBuiltAt, to: Date())
@@ -391,6 +409,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 if let partialSuggestion,
                    !partialSuggestion.isEmpty,
                    partialSuggestion.visibleText != lastPartialVisibleText {
+                    try cancellationCoordinator.check(epoch: cancellationEpoch)
                     lastPartialVisibleText = partialSuggestion.visibleText
                     onPartialSuggestion(partialSuggestion)
                 }
@@ -412,7 +431,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             throw CancellationError()
         }
         let generatedAt = Date()
-        try Task.checkCancellation()
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
 
         let cleanedCandidates = requestCleaner.cleanCandidates(
             rawOutput,
@@ -469,6 +488,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             firstTokenLatencyMilliseconds: firstChunkMilliseconds
         )
 
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
         return cleanedSuggestion
     }
 

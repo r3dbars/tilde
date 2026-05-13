@@ -8779,7 +8779,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func reloadModelRuntimeAfterInstall() {
+        let previousRuntime = modelRuntime
         runtimeWarmTask?.cancel()
+        invalidatePendingSuggestionRequest()
+        previousRuntime.cancel()
         modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
         engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
         suggestionOrchestrator.updateEngine(engine)
