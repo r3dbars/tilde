@@ -40,6 +40,8 @@ require_contains "$PRIVACY_SCRIPT" 'failed to build app bundle for privacy expor
 require_contains "$PRIVACY_SCRIPT" 'find "$OUTPUT_DIR" \( -name '\''traces.jsonl'\'' -o -name '\''raw-traces.jsonl'\'' \)'
 require_contains "$PRIVACY_SCRIPT" 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject'
 require_contains "$PRIVACY_SCRIPT" '"$OUTPUT_DIR/privacy-export/redacted-traces.jsonl"'
+reject_contains "$PRIVACY_SCRIPT" 'index(command, "script/check_controls_diagnostics_readiness.sh")'
+reject_contains "$PRIVACY_SCRIPT" 'index(command, "script/check_current_build_privacy_export.sh")'
 reject_contains "$PRIVACY_SCRIPT" '| tee /tmp/autocomplete-current-build-privacy-build.log'
 
 echo "Controls diagnostics readiness self-test passed."
