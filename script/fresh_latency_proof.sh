@@ -127,6 +127,7 @@ run_smoke() {
 
 clear_stale_proof_launchctl_env() {
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SCENARIO >/dev/null 2>&1 || true

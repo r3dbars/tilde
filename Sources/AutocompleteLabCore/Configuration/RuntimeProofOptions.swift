@@ -3,6 +3,8 @@ import Foundation
 public struct RuntimeProofOptions: Equatable, Sendable {
     public static let disableFastWordCompletionEnvironmentKey =
         "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
+    public static let disableWordCompletionEnvironmentKey =
+        "AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION"
     public static let disablePhraseContinuationEnvironmentKey =
         "AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
     public static let disableFastPhraseFallbackEnvironmentKey =
@@ -11,17 +13,20 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 
     public let disablesFastWordCompletion: Bool
+    public let disablesWordCompletion: Bool
     public let disablesPhraseContinuation: Bool
     public let disablesFastPhraseFallback: Bool
     public let proofScenario: String?
 
     public init(
         disablesFastWordCompletion: Bool = false,
+        disablesWordCompletion: Bool = false,
         disablesPhraseContinuation: Bool = false,
         disablesFastPhraseFallback: Bool = false,
         proofScenario: String? = nil
     ) {
         self.disablesFastWordCompletion = disablesFastWordCompletion
+        self.disablesWordCompletion = disablesWordCompletion
         self.disablesPhraseContinuation = disablesPhraseContinuation
         self.disablesFastPhraseFallback = disablesFastPhraseFallback
         self.proofScenario = Self.normalizedScenario(proofScenario)
@@ -31,6 +36,9 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         self.init(
             disablesFastWordCompletion: Self.isTruthy(
                 environment[Self.disableFastWordCompletionEnvironmentKey]
+            ),
+            disablesWordCompletion: Self.isTruthy(
+                environment[Self.disableWordCompletionEnvironmentKey]
             ),
             disablesPhraseContinuation: Self.isTruthy(
                 environment[Self.disablePhraseContinuationEnvironmentKey]
@@ -47,6 +55,14 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         activeProofBundleIdentifiers: Set<String>
     ) -> Bool {
         disablesFastWordCompletion
+            && activeProofBundleIdentifiers.contains(appBundleIdentifier)
+    }
+
+    public func disablesWordCompletion(
+        appBundleIdentifier: String,
+        activeProofBundleIdentifiers: Set<String>
+    ) -> Bool {
+        disablesWordCompletion
             && activeProofBundleIdentifiers.contains(appBundleIdentifier)
     }
 
