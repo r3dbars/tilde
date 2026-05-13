@@ -94,6 +94,10 @@ require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure,
 SCRIPT_TEXT="$(sed -n '1,620p' script/private_beta_packet.sh)"
 require_contains "$SCRIPT_TEXT" "Primary artifact: ../SteadyType.dmg"
 require_contains "$SCRIPT_TEXT" "Send testers the DMG, not the ZIP."
+require_contains "$SCRIPT_TEXT" "record_proof_command"
+require_contains "$SCRIPT_TEXT" '2>&1'
+require_contains "$SCRIPT_TEXT" '"$proof_dir/spctl-dmg.txt"'
+require_contains "$SCRIPT_TEXT" '"$proof_dir/spctl-installed-app.txt"'
 require_contains "$SCRIPT_TEXT" "xcrun stapler validate"
 require_contains "$SCRIPT_TEXT" "spctl -a -t open --context context:primary-signature"
 require_contains "$SCRIPT_TEXT" "spctl --assess --type execute --verbose=4"

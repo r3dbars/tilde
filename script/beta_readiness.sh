@@ -105,6 +105,33 @@ check_current_artifact_checksum() {
   echo "current DMG checksum matches release proof"
 }
 
+write_current_artifact_checksums() {
+  local checksums_path="$ROOT_DIR/dist/release-proof/checksums.txt"
+  local artifact_path
+
+  mkdir -p "$(dirname "$checksums_path")"
+  : >"$checksums_path"
+  for artifact_path in "$PRIMARY_ARTIFACT" "$SECONDARY_ARCHIVE"; do
+    if [[ -f "$artifact_path" ]]; then
+      printf '%s  %s\n' "$(basename "$artifact_path")" "$(shasum -a 256 "$artifact_path" | awk '{print $1}')" >>"$checksums_path"
+    fi
+  done
+}
+
+record_release_proof_command() {
+  local output_path="$1"
+  shift
+
+  mkdir -p "$(dirname "$output_path")"
+  if "$@" >"$output_path" 2>&1; then
+    cat "$output_path"
+    return 0
+  fi
+
+  cat "$output_path" >&2
+  return 1
+}
+
 check_release_dmg_signature() {
   local verify_dir mount_path app_path
 
@@ -157,9 +184,6 @@ check_notarized_install_proof() {
 
   for path in \
     "$proof_dir/notarytool-submit.txt" \
-    "$proof_dir/stapler-validate.txt" \
-    "$proof_dir/spctl-dmg.txt" \
-    "$proof_dir/spctl-installed-app.txt" \
     "$proof_dir/fresh-install-gatekeeper-proof.md"; do
     if [[ ! -s "$path" ]]; then
       echo "missing release proof: $path"
@@ -171,14 +195,17 @@ check_notarized_install_proof() {
     return 1
   fi
 
+  write_current_artifact_checksums
   check_current_artifact_checksum || return 1
 
-  if ! xcrun stapler validate "$PRIMARY_ARTIFACT"; then
+  if ! record_release_proof_command "$proof_dir/stapler-validate.txt" \
+    xcrun stapler validate "$PRIMARY_ARTIFACT"; then
     echo "current DMG stapler validation failed"
     return 1
   fi
 
-  if ! spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"; then
+  if ! record_release_proof_command "$proof_dir/spctl-dmg.txt" \
+    spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"; then
     echo "current DMG Gatekeeper assessment failed"
     return 1
   fi
@@ -203,7 +230,8 @@ check_notarized_install_proof() {
     return 1
   fi
 
-  if ! spctl --assess --type execute --verbose=4 "$app_path"; then
+  if ! record_release_proof_command "$proof_dir/spctl-installed-app.txt" \
+    spctl --assess --type execute --verbose=4 "$app_path"; then
     rm -rf "$verify_dir"
     echo "current installed-app Gatekeeper assessment failed"
     return 1

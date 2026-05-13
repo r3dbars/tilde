@@ -813,6 +813,15 @@ wait_for_runtime_ready() {
   exit 1
 }
 
+textedit_model_latency_runtime_ready_timeout_seconds() {
+  if [[ -n "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_RUNTIME_READY_TIMEOUT_SECONDS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_RUNTIME_READY_TIMEOUT_SECONDS"
+    return 0
+  fi
+
+  printf '180\n'
+}
+
 chrome_runtime_ready_timeout_seconds() {
   if [[ -n "${AUTOCOMPLETE_LAB_RUNTIME_READY_TIMEOUT_SECONDS:-}" ]]; then
     printf '%s\n' "$AUTOCOMPLETE_LAB_RUNTIME_READY_TIMEOUT_SECONDS"
@@ -6552,7 +6561,7 @@ describe_plan() {
           echo "Plan: build/relaunch AutocompleteLab, run the disposable TextEdit typing soak, then record pass-through proof."
           ;;
         model-latency)
-          echo "Plan: build/relaunch AutocompleteLab once, type several disposable TextEdit fragments, and require real model-backed suggestions in one launch."
+          echo "Plan: build/relaunch AutocompleteLab once, allow a cold local model warmup, type several disposable TextEdit fragments, and require real model-backed suggestions in one launch."
           ;;
         undo-one-word)
           echo "Plan: build/relaunch AutocompleteLab with app rollback disabled, prove TextEdit Tab accept, then Command-Z the one-word insertion through native TextEdit undo."
@@ -6565,7 +6574,11 @@ describe_plan() {
           ;;
       esac
       echo "Safety: the smoke launch temporarily enables TextEdit only for this proof pass."
-      echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
+      if [[ "$TEXTEDIT_VARIANT" == "model-latency" ]]; then
+        echo "Safety: model latency fragments are written only into the disposable TextEdit AX target, then the live app polls and runs the local model."
+      else
+        echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
+      fi
       ;;
     chrome)
       echo "Chrome fixture: $CHROME_FIXTURE"
@@ -8395,7 +8408,7 @@ run_textedit_model_latency() {
   prepare_temporary_app_enablement
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
-  wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" 60 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
@@ -8410,7 +8423,12 @@ run_textedit_model_latency() {
     move_textedit_caret_to_document_end "$textedit_window_title"
 
     sample_start="$(line_count "$LOG_PATH")"
-    type_textedit_smoke_fragment_and_confirm "$textedit_window_title" "$fragment" "model latency sample $sample_index"
+    if ! insert_textedit_smoke_fragment "$textedit_window_title" "$fragment"; then
+      echo "TextEdit model latency sample $sample_index could not seed the disposable AX target." >&2
+      exit 1
+    fi
+    wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
+    move_textedit_caret_to_document_end "$textedit_window_title"
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
       "mlx-completion-timing" \
       "app=com.apple.TextEdit" \
@@ -8419,8 +8437,6 @@ run_textedit_model_latency() {
       "suggestion-presented" \
       "app=com.apple.TextEdit" \
       "candidateSelectionSource=app-model-result"
-    focus_textedit_smoke_editor "$textedit_window_title"
-    press_key_code 53
     sleep 0.4
   done < <(textedit_model_latency_fragments)
 

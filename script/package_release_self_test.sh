@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 HELP_OUTPUT="$(./script/package_release.sh --help)"
 PROOF_TEMPLATE="$(./script/package_release.sh --print-proof-template)"
+SCRIPT_TEXT="$(cat script/package_release.sh)"
 
 require_contains() {
   local text="$1"
@@ -29,6 +30,10 @@ require_contains "$PROOF_TEMPLATE" "Notarization status:"
 require_contains "$PROOF_TEMPLATE" "Stapler status:"
 require_contains "$PROOF_TEMPLATE" "Gatekeeper status:"
 require_contains "$PROOF_TEMPLATE" "Fresh quarantined download"
+require_contains "$SCRIPT_TEXT" "2>&1 | tee dist/release-proof/spctl-installed-app.txt"
+require_contains "$SCRIPT_TEXT" 'record_command "$PROOF_DIR/stapler-staple.txt"'
+require_contains "$SCRIPT_TEXT" "gatekeeper_failed=0"
+require_contains "$SCRIPT_TEXT" 'Gatekeeper assessment failed; saved spctl output in $PROOF_DIR'
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"
 require_contains "$PROOF_TEMPLATE" "uninstall/delete-data instructions"
 
