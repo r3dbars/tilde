@@ -8532,7 +8532,6 @@ run_textedit_model_latency() {
     else
       echo "TextEdit model latency seed produced no model timing before sample $sample_index."
     fi
-    dismiss_textedit_smoke_suggestion "$textedit_window_title"
     move_textedit_caret_to_document_end "$textedit_window_title"
 
     sample_start="$(line_count "$LOG_PATH")"

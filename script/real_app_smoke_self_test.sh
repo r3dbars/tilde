@@ -68,8 +68,8 @@ end = source.index('run_chrome_fixture()', start)
 block = source[start:end]
 if "wait_for_log_fields_optional \"$seed_start\"" not in block:
     raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
-if "dismiss_textedit_smoke_suggestion" not in block:
-    raise SystemExit("model-latency proof must hide any settled seed suggestion before the measured sample")
+if "dismiss_textedit_smoke_suggestion" in block or "key code 53" in block:
+    raise SystemExit("model-latency proof must not press Escape after seeding context")
 PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
