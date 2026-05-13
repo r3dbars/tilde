@@ -90,6 +90,8 @@ def parse_launches(lines):
                 "presented": [],
             }
             launches.append(current)
+            pending_proof_app = None
+            pending_proof_scenario = None
             continue
 
         if current is None:
