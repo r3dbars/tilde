@@ -2,7 +2,7 @@
 
 ## Plain Promise
 
-Autocomplete Lab is local-first.
+SteadyType is local-first.
 
 By default, it does not upload typed text, prompts, model output, accepted text,
 screenshots, document names, URLs, recipients, or subject lines.
@@ -29,25 +29,25 @@ The redacted trace may store:
 It should be enough to answer "did this help?" without saving what the user
 wrote.
 
-## Disable An App
+## Pause An App
 
 To stop suggestions in the current app:
 
 1. Focus the app.
-2. Open the Autocomplete Lab menu bar item.
-3. Choose `Disable <App Name>`.
+2. Open the SteadyType menu bar item.
+3. Choose `Pause in <App Name>`.
 
-Use the same menu item later to enable that app again.
+Use `Resume in <App Name>` later to enable that app again.
 
 ## Pause Or Delete Traces
 
-Open `Show Diagnostics` from the menu bar item.
+Open `Debug` -> `Diagnostics` from the menu bar item.
 
 - `Pause Tracing` stops default redacted trace writes.
 - `Resume Tracing` turns them back on.
-- `Export Report` creates the local redacted HTML report and survival report.
+- `Export Privacy Bundle` creates the local redacted HTML report and survival report.
 - Exported reports include a short privacy checklist before the metrics.
-- `Delete Traces` deletes local trace files.
+- `Delete Local Logs` deletes local trace files.
 - `Open Trace Folder` reveals the local trace folder.
 
 Open Settings to see the current sharing status. If raw text or screenshots are

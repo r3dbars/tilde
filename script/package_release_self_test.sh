@@ -7,6 +7,9 @@ cd "$ROOT_DIR"
 HELP_OUTPUT="$(./script/package_release.sh --help)"
 PROOF_TEMPLATE="$(./script/package_release.sh --print-proof-template)"
 SCRIPT_TEXT="$(cat script/package_release.sh)"
+PATCH_SCRIPT="$(cat script/patch_mlx_swift_lm.sh)"
+MLX_PATCH="$(cat patches/mlx-swift-lm/gemma4-optiq-scaled-linear.patch)"
+BETA_READINESS_SCRIPT="$(cat script/beta_readiness.sh)"
 
 require_contains() {
   local text="$1"
@@ -49,6 +52,11 @@ require_contains "$SCRIPT_TEXT" '--output-format json >/dev/null 2>&1'
 reject_contains "$SCRIPT_TEXT" "/tmp/autocomplete-notary-profile-check.txt"
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"
 require_contains "$PROOF_TEMPLATE" "uninstall/delete-data instructions"
+require_contains "$PATCH_SCRIPT" 'SWIFT_SCRATCH_PATH="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build}"'
+require_contains "$PATCH_SCRIPT" 'patch -d "$SWIFT_SCRATCH_PATH" -p0'
+require_contains "$MLX_PATCH" '--- checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift'
+require_contains "$BETA_READINESS_SCRIPT" "release proof checksum is stale"
+require_contains "$BETA_READINESS_SCRIPT" "SteadyType.dmg SteadyType.zip"
 
 MISSING_MODEL_HOME="$(mktemp -d)"
 trap 'rm -rf "$MISSING_MODEL_HOME"' EXIT

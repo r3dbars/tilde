@@ -225,7 +225,7 @@ struct CompatibilityProfileTests {
         let green = store.supportStatus(for: "com.apple.TextEdit")
         #expect(green.supportLevel == .green)
         #expect(green.userFacingSummary == "Green: TextEdit")
-        #expect(green.userFacingReason == "Verified inline suggestions and native text insertion.")
+        #expect(green.userFacingReason == "Verified suggestions near the cursor and native text insertion.")
         #expect(green.menuText(appDisplayName: "TextEdit", isEnabled: true) == "TextEdit green on")
         #expect(green.canToggleSuggestions)
 
@@ -234,7 +234,7 @@ struct CompatibilityProfileTests {
         #expect(yellow.userFacingSummary == "Yellow: Notes")
         #expect(
             yellow.userFacingReason
-                == "Rich text can drift; display can fall back to floating, and insertion fails closed."
+                == "Rich text can drift; display can use a floating backup, and insertion fails closed."
         )
         #expect(yellow.menuText(appDisplayName: "Notes", isEnabled: false) == "Notes yellow off")
         #expect(yellow.canToggleSuggestions)

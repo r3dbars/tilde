@@ -33,7 +33,7 @@ struct DiagnosticsInspectorState: Equatable {
           Mode: \(Self.modeText(for: compatibilityStatus))
           Local model: \(runtimeReport.summary)
           Runtime target: \(runtimeTargetSummary)
-          Next action: \(runtimeReport.action.displayName)
+          Next action: \(runtimeReport.action == .none ? "Model ready" : runtimeReport.action.displayName)
           Traces: \(tracingPaused ? "paused" : "recording")
           Screenshots: \(screenshotTracingEnabled ? "on" : "off")
           Trace file: \(tracePath)

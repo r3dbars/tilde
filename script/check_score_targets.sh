@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 DEFAULT_DEEP_DIVE_PATH="docs/product/deep-dive-scorecard-2026-05-06.md"
 DEFAULT_DEEP_RESEARCH_PATH="docs/product/deep-research-autocomplete-scorecard-2026-05-07.md"
 DEFAULT_OVERALL_EXCELLENCE_PATH="docs/product/deep-research-overall-excellence-scorecard-2026-05-08.md"
+DEFAULT_ONBOARDING_PERMISSION_PATH="docs/product/deep-research-onboarding-permission-ux-scorecard-2026-05-08.md"
 DEFAULT_APPLE_NATIVE_PATH="docs/product/apple-native-experience-checklist.md"
 DEFAULT_APP_PROOF_PATH="docs/product/app-proof-matrix.md"
 DEFAULT_STEADYTYPE_SCORECARD_PATH="docs/product/steadytype-product-scorecard.md"
@@ -14,6 +15,7 @@ DEFAULT_STEADYTYPE_SCORECARD_PATH="docs/product/steadytype-product-scorecard.md"
 DEEP_DIVE_PATH="${AUTOCOMPLETE_LAB_DEEP_DIVE_SCORECARD:-$DEFAULT_DEEP_DIVE_PATH}"
 DEEP_RESEARCH_PATH="${AUTOCOMPLETE_LAB_DEEP_RESEARCH_SCORECARD:-$DEFAULT_DEEP_RESEARCH_PATH}"
 OVERALL_EXCELLENCE_PATH="${AUTOCOMPLETE_LAB_OVERALL_EXCELLENCE_SCORECARD:-$DEFAULT_OVERALL_EXCELLENCE_PATH}"
+ONBOARDING_PERMISSION_PATH="${AUTOCOMPLETE_LAB_ONBOARDING_PERMISSION_SCORECARD:-$DEFAULT_ONBOARDING_PERMISSION_PATH}"
 APPLE_NATIVE_PATH="${AUTOCOMPLETE_LAB_APPLE_NATIVE_CHECKLIST:-$DEFAULT_APPLE_NATIVE_PATH}"
 APP_PROOF_PATH="${AUTOCOMPLETE_LAB_APP_PROOF_MATRIX:-$DEFAULT_APP_PROOF_PATH}"
 STEADYTYPE_SCORECARD_PATH="${AUTOCOMPLETE_LAB_STEADYTYPE_SCORECARD:-$DEFAULT_STEADYTYPE_SCORECARD_PATH}"
@@ -174,6 +176,18 @@ check_overall_excellence() {
   done <"$path"
 }
 
+check_onboarding_permission() {
+  local path="$1"
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^Overall[[:space:]]score:[[:space:]]+\*\*([0-9]+)/100\*\*[[:space:]]*$ ]]; then
+      if [[ "${BASH_REMATCH[1]}" != "100" ]]; then
+        record_issue "$path" "Onboarding permission score" "${BASH_REMATCH[1]}/100" "100/100"
+      fi
+    fi
+  done <"$path"
+}
+
 check_apple_native() {
   local path="$1"
   local section_label=""
@@ -242,6 +256,7 @@ should_run_strict_proof_gates() {
       [[ "$DEEP_DIVE_PATH" == "$DEFAULT_DEEP_DIVE_PATH" \
         && "$DEEP_RESEARCH_PATH" == "$DEFAULT_DEEP_RESEARCH_PATH" \
         && "$OVERALL_EXCELLENCE_PATH" == "$DEFAULT_OVERALL_EXCELLENCE_PATH" \
+        && "$ONBOARDING_PERMISSION_PATH" == "$DEFAULT_ONBOARDING_PERMISSION_PATH" \
         && "$APPLE_NATIVE_PATH" == "$DEFAULT_APPLE_NATIVE_PATH" \
         && "$APP_PROOF_PATH" == "$DEFAULT_APP_PROOF_PATH" ]]
       return
@@ -305,6 +320,7 @@ check_steadytype_scorecard() {
 require_file "$DEEP_DIVE_PATH"
 require_file "$DEEP_RESEARCH_PATH"
 require_file "$OVERALL_EXCELLENCE_PATH"
+require_file "$ONBOARDING_PERMISSION_PATH"
 require_file "$APPLE_NATIVE_PATH"
 require_file "$APP_PROOF_PATH"
 require_file "$STEADYTYPE_SCORECARD_PATH"
@@ -314,6 +330,7 @@ echo "SteadyType product scorecard: $STEADYTYPE_SCORECARD_PATH"
 echo "Deep dive: $DEEP_DIVE_PATH"
 echo "Deep research: $DEEP_RESEARCH_PATH"
 echo "Overall excellence: $OVERALL_EXCELLENCE_PATH"
+echo "Onboarding permission: $ONBOARDING_PERMISSION_PATH"
 echo "Apple-native checklist: $APPLE_NATIVE_PATH"
 echo "App proof matrix: $APP_PROOF_PATH"
 echo
@@ -322,6 +339,7 @@ check_steadytype_scorecard
 check_deep_dive "$DEEP_DIVE_PATH"
 check_deep_research "$DEEP_RESEARCH_PATH"
 check_overall_excellence "$OVERALL_EXCELLENCE_PATH"
+check_onboarding_permission "$ONBOARDING_PERMISSION_PATH"
 check_apple_native "$APPLE_NATIVE_PATH"
 check_app_proof "$APP_PROOF_PATH"
 check_strict_proof_gates

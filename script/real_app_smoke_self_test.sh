@@ -647,6 +647,11 @@ if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
   echo "real app smoke self-test expected Notes body proof to move the caret to the end of the disposable note" >&2
   exit 1
 fi
+if ! grep -F "moveCaret(textInput, to: replacementText.utf16.count)" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "kAXValueAttribute as CFString" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof setup to leave the caret after exact setup text" >&2
+  exit 1
+fi
 if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Focused Notes element is not the body text view" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Notes body proof to validate the focused text view without walking the Notes AX tree" >&2
