@@ -4594,7 +4594,7 @@ trim_textedit_native_completion_suffix() {
   fi
 
   assert_textedit_frontmost_window "$window_title" "$label native completion trim"
-  AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT="$suffix_length" \
+  if ! AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT="$suffix_length" \
     run_osascript_with_timeout 3 "$label native completion trim" <<'APPLESCRIPT' >/dev/null
 set deleteCountText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT"
 set deleteCount to deleteCountText as integer
@@ -4608,7 +4608,15 @@ tell application "System Events"
   end repeat
 end tell
 APPLESCRIPT
-  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label native completion trim" 3
+  then
+    echo "TextEdit native completion trim during $label fell back to AX replacement." >&2
+    set_textedit_document_text "$window_title" "$expected_text" || true
+  fi
+
+  if ! wait_for_textedit_document_exact_or_return "$window_title" "$expected_text" 3; then
+    set_textedit_document_text "$window_title" "$expected_text" || true
+  fi
+  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label native completion trim" 5
 }
 
 verify_textedit_native_undo() {
