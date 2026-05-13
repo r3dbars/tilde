@@ -396,8 +396,8 @@ STALE_SCENARIO_TRACE_LOG="$TMP_DIR/stale-scenario-traces.jsonl"
 cp "$SCENARIO_DIAGNOSTICS_LOG" "$STALE_SCENARIO_DIAGNOSTICS_LOG"
 cp "$SCENARIO_TRACE_LOG" "$STALE_SCENARIO_TRACE_LOG"
 cat >>"$STALE_SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
-2026-05-12T14:05:30Z app-proof-mode-ended app=com.apple.TextEdit reason=expired
-2026-05-12T14:06:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T14:05:00Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T14:05:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 LOG
 
 if script/select_latency_window.py \
