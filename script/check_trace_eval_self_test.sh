@@ -3,7 +3,10 @@ set -euo pipefail
 
 TRACE_FILE="$(mktemp)"
 CLAUDE_CODE_TRACE_FILE="$(mktemp)"
-trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE"' EXIT
+VISUAL_TRACE_FILE="$(mktemp)"
+VISUAL_SCREENSHOT_FILE="$(mktemp)"
+trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE" "$VISUAL_TRACE_FILE" "$VISUAL_SCREENSHOT_FILE"' EXIT
+printf "png" >"$VISUAL_SCREENSHOT_FILE"
 
 cat >"$TRACE_FILE" <<'JSONL'
 {"type":"suggestionRequested","experimentArm":"length_1_word","suggestionID":"one","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion"}
@@ -230,6 +233,21 @@ fi
 if ! grep -F "com.openai.codex: 67% (6/9)" /tmp/autocomplete-trace-eval-self-test.txt >/dev/null; then
   echo "trace eval self-test did not report useful rate by app" >&2
   cat /tmp/autocomplete-trace-eval-self-test.txt >&2
+  exit 1
+fi
+
+cat >"$VISUAL_TRACE_FILE" <<JSONL
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"shadow-no-shot","appBundleIdentifier":"md.obsidian","fieldIdentity":"md.obsidian|pid:1|element:2","requestMode":"wordCompletion","displayedText":"String(8 chars)","textBeforeCursor":"String(49 chars)","textAfterCursor":"","timestamp":"2026-05-13T10:25:53Z","latencyMilliseconds":0,"metadata":{"anchorRect":"x=799,y=313,w=0,h=21","suggestionPanelRect":"x=735,y=317,w=87,h=32","clippingRect":"x=704,y=224,w=126,h=536","screenshotCaptureRect":"none","placementConfidenceBand":"medium"}}
+{"type":"suggestionPresented","experimentArm":"length_3_word","suggestionID":"shadow-covered","appBundleIdentifier":"md.obsidian","fieldIdentity":"md.obsidian|pid:1|element:2","requestMode":"wordCompletion","displayedText":"String(8 chars)","textBeforeCursor":"String(49 chars)","textAfterCursor":"","timestamp":"2026-05-13T10:25:53Z","latencyMilliseconds":0,"screenshotPath":"$VISUAL_SCREENSHOT_FILE","metadata":{"anchorRect":"x=799,y=313,w=0,h=21","suggestionPanelRect":"x=735,y=317,w=87,h=32","clippingRect":"x=704,y=224,w=126,h=536","screenshotCaptureRect":"x=680,y=200,w=174,h=584","placementConfidenceBand":"medium"}}
+JSONL
+
+AUTOCOMPLETE_LAB_TRACE_PATH="$VISUAL_TRACE_FILE" \
+AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE=1 \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-visual.txt
+
+if grep -F "visual evidence guardrail failed" /tmp/autocomplete-trace-eval-self-test-visual.txt >/dev/null; then
+  echo "trace eval self-test did not deduplicate same-second visual shadow presentations" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-visual.txt >&2
   exit 1
 fi
 

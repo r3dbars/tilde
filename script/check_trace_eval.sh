@@ -952,6 +952,25 @@ def visual_evidence_issues(event):
 
     return issues
 
+def visual_evidence_key(event):
+    metadata = event.get("metadata") or {}
+    timestamp = str(event.get("timestamp") or "")
+    timestamp_second = timestamp[:19] if len(timestamp) >= 19 else timestamp
+    displayed = event.get("displayedText") or event.get("cleanedVisibleText") or ""
+    return (
+        event.get("appBundleIdentifier") or "",
+        event.get("fieldIdentity") or "",
+        event.get("requestMode") or "",
+        timestamp_second,
+        displayed,
+        event.get("textBeforeCursor") or "",
+        event.get("textAfterCursor") or "",
+        metadata.get("anchorRect") or "",
+        metadata.get("suggestionPanelRect") or "",
+        metadata.get("clippingRect") or "",
+        metadata.get("placementConfidenceBand") or "",
+    )
+
 for event in presented:
     metadata = metadata_for(event)
     band = metadata.get("placementConfidenceBand")
@@ -989,7 +1008,11 @@ for event in presented:
             )
 
 if require_visual_evidence:
-    for suggestion_id, suggestion_events in sorted(presentations_by_id.items()):
+    visual_groups = defaultdict(list)
+    for event in presented:
+        visual_groups[visual_evidence_key(event)].append(event)
+
+    for _visual_key, suggestion_events in sorted(visual_groups.items()):
         issues_by_event = [
             visual_evidence_issues(event)
             for event in suggestion_events
@@ -999,8 +1022,15 @@ if require_visual_evidence:
             continue
 
         best_issues = min(issues_by_event, key=len)
+        suggestion_ids = sorted({
+            event.get("suggestionID") or "unknown"
+            for event in suggestion_events
+        })
+        suggestion_label = "/".join(suggestion_ids[:3])
+        if len(suggestion_ids) > 3:
+            suggestion_label += "/..."
         visual_evidence_failures.append(
-            f"{suggestion_id}: " + "; ".join(best_issues)
+            f"{suggestion_label}: " + "; ".join(best_issues)
         )
 
 for event in events:

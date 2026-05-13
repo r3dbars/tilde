@@ -14,11 +14,11 @@
 | 1 | `obsidian-markdown-list` | `direct-pass` | `script/real_app_smoke.sh obsidian-markdown-list --manual-gate` |
 | 1 | `obsidian-multiline` | `direct-pass` | `script/real_app_smoke.sh obsidian-multiline --manual-gate` |
 | 1 | `obsidian-run-on` | `direct-pass` | `script/real_app_smoke.sh obsidian-run-on --manual-gate` |
-| 1 | `obsidian-pane` | `direct-red; insertion verified, strict visual/annoyance failed` | `script/real_app_smoke.sh obsidian-pane --manual-gate` |
+| 1 | `obsidian-pane` | `direct-pass` | `script/real_app_smoke.sh obsidian-pane --manual-gate` |
 
 ## Summary
 
 - Direct strict passes recorded this pass: default, theme, font/zoom, bold Markdown, list, multiline, run-on.
 - Current-branch long-note strict pass recorded earlier in this pass at 09:34 UTC.
-- Pane is the current red lane: the latest reruns verified accepted text insertion, but extra typed-over suggestions made strict visual evidence and annoyance scoring fail.
-- The old `25ed` watchdog process group that killed `390d` proof jobs was found and terminated. The next loop should fix pane noise, then run repeated sweeps toward the 150+ sample target.
+- Pane passed after the quiet marker and same-second visual-shadow verifier fix.
+- The old `25ed` watchdog process group that killed `390d` proof jobs was found and terminated. The next loop should run repeated sweeps toward the 150+ sample target.

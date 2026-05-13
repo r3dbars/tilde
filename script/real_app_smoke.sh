@@ -1720,6 +1720,10 @@ obsidian_smoke_marker_text() {
   fi
 
   case "$manual_app" in
+    obsidian-pane)
+      printf '%s.\n' "$marker"
+      return 0
+      ;;
     obsidian-markdown-bold)
       printf '%s\n\n**' "$marker"
       return 0
