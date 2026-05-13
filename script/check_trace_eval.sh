@@ -954,14 +954,11 @@ def visual_evidence_issues(event):
 
 def visual_evidence_key(event):
     metadata = event.get("metadata") or {}
-    timestamp = str(event.get("timestamp") or "")
-    timestamp_second = timestamp[:19] if len(timestamp) >= 19 else timestamp
     displayed = event.get("displayedText") or event.get("cleanedVisibleText") or ""
     return (
         event.get("appBundleIdentifier") or "",
         event.get("fieldIdentity") or "",
         event.get("requestMode") or "",
-        timestamp_second,
         displayed,
         event.get("textBeforeCursor") or "",
         event.get("textAfterCursor") or "",

@@ -328,8 +328,11 @@ if ! grep -F 'while kill -0 "$SMOKE_SCRIPT_PID"' script/real_app_smoke.sh >/dev/
    ! grep -F '[[ -z "$current_pgid" ]] && return 0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'current_process_family_pgids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'pgid in protected' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected exclusive proof guards to exit with their parent and fail closed without a self process group" >&2
+   ! grep -F 'pgid in protected' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'kill -KILL "-$pgid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'index(command, "script/smoke_test.sh") > 0' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'staleRootWatchdog' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected exclusive proof guards to exit with their parent, fail closed without a self process group, and kill stale proof runs/watchdogs" >&2
   exit 1
 fi
 if ! grep -F '${#current_pids[@]} > 1' script/real_app_smoke.sh >/dev/null ||
@@ -848,6 +851,16 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP
 fi
 if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/manual-refresh-process-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the manual proof refresh process scan" >&2
+  exit 1
+fi
+
+ROOT_REALPATH="$(pwd -P)"
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="123 1 999 python3 -c stale_root = '$ROOT_REALPATH'; watcher()" script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/stale-root-watchdog-process-fail.txt"; then
+  echo "real app smoke self-test expected stale-root watchdog process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/stale-root-watchdog-process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the stale-root watchdog process scan" >&2
   exit 1
 fi
 

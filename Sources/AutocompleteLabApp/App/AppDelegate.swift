@@ -63,6 +63,18 @@ struct CodexProofFocusedTargetPolicy {
     }
 }
 
+private struct ObsidianPostAcceptanceSuppression {
+    let textBeforeCursor: String
+    let textAfterCursor: String
+    let expiresAt: Date
+
+    func matches(context: FocusedTextContext, now: Date = Date()) -> Bool {
+        expiresAt > now
+            && context.textBeforeCursor == textBeforeCursor
+            && context.textAfterCursor == textAfterCursor
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
@@ -284,6 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var obsidianPostAcceptanceSuppression: ObsidianPostAcceptanceSuppression?
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
@@ -1756,6 +1769,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let requestMode = activationDecision.requestMode ?? .phraseContinuation
+        if shouldSuppressObsidianPostAcceptanceRefresh(context: context, profile: profile) {
+            invalidatePendingSuggestionRequest()
+            let metadata = fieldClassification.traceMetadata
+                .merging(["reason": "obsidian-post-acceptance-settle"]) { current, _ in current }
+            setSuggestionDecision("Waiting: Obsidian accepted text settled")
+            showFieldStatusIndicator(.ready, context: context)
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: requestMode.rawValue,
+                triggerReason: "obsidian-post-acceptance-settle",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: "obsidian-post-acceptance-settle",
+                metadata: metadata
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: metadata
+            )
+            if suggestionSession.hasVisibleSuggestion {
+                hideSuggestion(reason: "obsidian-post-acceptance-settle")
+            }
+            return
+        }
         let prefixCooldownInput = PrefixFamilyCooldownInput(
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentifier: fieldIdentity.traceDescription,
@@ -3126,6 +3169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
             recordAcceptedText(acceptedText)
+            armObsidianPostAcceptanceSuppressionIfNeeded()
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
@@ -3194,6 +3238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            armObsidianPostAcceptanceSuppressionIfNeeded()
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
                 mode: currentSuggestionRequestMode,
@@ -8299,6 +8344,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: lastTextSnapshot.textBeforeCursor + acceptedText,
             textAfterCursor: lastTextSnapshot.textAfterCursor
         )
+    }
+
+    private func armObsidianPostAcceptanceSuppressionIfNeeded() {
+        guard (currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier) == "md.obsidian",
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentFieldIdentity else {
+            return
+        }
+
+        obsidianPostAcceptanceSuppression = ObsidianPostAcceptanceSuppression(
+            textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            textAfterCursor: lastTextSnapshot.textAfterCursor,
+            expiresAt: Date().addingTimeInterval(1.5)
+        )
+        DiagnosticsLog.shared.record(
+            "obsidian-post-acceptance-suppression-armed",
+            metadata: [
+                "app": "md.obsidian",
+                "beforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "afterChars": String(lastTextSnapshot.textAfterCursor.count)
+            ]
+        )
+    }
+
+    private func shouldSuppressObsidianPostAcceptanceRefresh(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        guard profile.bundleIdentifier == "md.obsidian",
+              let suppression = obsidianPostAcceptanceSuppression else {
+            return false
+        }
+
+        if suppression.expiresAt <= Date() {
+            obsidianPostAcceptanceSuppression = nil
+            return false
+        }
+
+        guard suppression.matches(context: context) else {
+            obsidianPostAcceptanceSuppression = nil
+            return false
+        }
+
+        return true
     }
 
     private func advanceCurrentSuggestionBaseline(afterAccepting acceptedText: String) {

@@ -8,14 +8,16 @@ Current branch: `codex/obsidian-deep-proof-390d`
 
 | Category | Grade | Evidence |
 | --- | ---: | --- |
-| Default note writing | 97 | Current-branch default-note smoke passed at 09:53 UTC and repeated at 10:31/10:36 UTC with 2 verified insertions and strict screenshots. Needs high-repeat sampling before 100. |
-| Non-default theme | 100 | Current-branch `obsidian-theme` smoke passed at 09:51 UTC with 2 verified insertions and strict screenshots after the Escape/reset fixes. |
+| Default note writing | 98 | Current-branch default-note smoke passed at 09:53, 10:31, 10:36, and 11:00 UTC with 2 verified insertions and strict screenshots. Needs high-repeat sampling before 100. |
+| Non-default theme | 82 | Earlier current-branch theme rows passed, but fresh 11:04 UTC reruns failed strict visual proof because extra post-accept/stale Obsidian suggestions appeared without screenshot-backed trace rows. |
 | Split pane / same-pane insertion | 96 | Current-branch `obsidian-pane` passed at 10:28 UTC with 2 verified insertions and strict screenshots after the quiet marker and visual-shadow verifier fix. Needs repeat sampling before 100. |
-| Accepted words appear on screen | 97 | Current-branch lanes have strict screenshot-backed passes, but the latest repeat long-note run showed AX can report visible tail text as middle-of-line before acceptance. Needs repeat proof before 100. |
-| CodeMirror stale cursor repair | 92 | Focused repair tests pass and many lanes verify insertion, but fresh long-note repeats still hit `middleOfLine`/cadence after visible tail typing. |
-| Long scrolled note | 88 | Earlier current-branch `obsidian-long-note` passed with strict visual trace and preserved file content, but the latest repeat exposed stale CodeMirror cursor state and runner interference. |
-| Font/zoom/dynamic layout | 96 | Current-branch `obsidian-font-zoom` passed at 09:56 UTC with 2 verified insertions and strict screenshots; the 10:35 repeat fail was poisoned by a prior long-note miss and `--skip-build` state. |
-| Markdown formatting stress | 96 | Current-branch bold, list, multiline, and run-on lanes all passed strict screenshot proof after the reset/exclusive-run fixes. Needs repeats before 100. |
+| Accepted words appear on screen | 98 | Default, long-note, and the latest theme failure all verified accepted text on screen/file. The remaining risk is extra stale suggestions around the accepted text, not missing accepted words. |
+| CodeMirror stale cursor repair | 93 | Focused repair tests pass, long-note now passed strictly at 10:55 UTC, and accepted inserts verify. Stale same-text/post-accept suggestions still need proof after the new settle gate. |
+| Long scrolled note | 96 | Fresh `obsidian-long-note` passed at 10:55 UTC with 2 accepted insertions, strict visual trace, and preserved long-note content. Needs repeat sampling before 100. |
+| Font/zoom/dynamic layout | 96 | Current-branch `obsidian-font-zoom` passed at 09:56 UTC with 2 verified insertions and strict screenshots; it still needs fresh repeat rows after the post-accept settle fix. |
+| Markdown formatting stress | 96 | Current-branch bold, list, multiline, and run-on lanes all passed strict screenshot proof after the reset/exclusive-run fixes. Needs repeats after the settle fix before 100. |
+| Stale/wrong-context suppression | 72 | Fresh theme proof exposed post-accept/stale parallel suggestions across Obsidian CodeMirror elements. A settle gate is now added, but it is not proven green yet. |
+| Deep repeat reliability | 45 | The wrapper started a 1-iteration sweep but produced no trustworthy rows, and the requested 150+ Obsidian attempt sample is not complete. |
 
 ## Fixes Landed In This Pass
 
@@ -51,6 +53,9 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Strict visual trace eval now treats same-second, same-geometry duplicate presentations as one visual proof unit when at least one paired event has screenshot evidence.
 - Exclusive proof guards now protect ancestor process groups and include `script/manual_proof_refresh.sh`, because a stale `25ed` manual refresh watchdog repeatedly killed this `390d` Obsidian goal.
 - The long-note harness now types the setup phrase, repairs the caret to the visible value end, then types the final trigger character live before waiting for the screenshot-backed suggestion.
+- Exclusive proof guards now detect stale-root watchdog processes scoped to this checkout, include `script/smoke_test.sh`, and escalate stale proof process groups from TERM to KILL.
+- Strict visual trace eval now deduplicates repeated same-geometry presentations across timestamp-second boundaries when one matching event has screenshot evidence.
+- Obsidian now arms a short post-acceptance settle gate after verified accepted text so the same just-accepted text does not immediately trigger another stale word completion before the user types more.
 
 ## Fresh Findings This Pass
 
@@ -117,12 +122,18 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Obsidian Escape before typing and between acceptances is now opt-in for proof runs, because Escape can put the active CodeMirror field into `suppressedField` and block the next suggestion.
 - The one-pass sweep wrapper is still not trustworthy in this desktop session: abandoned `25ed`/`390d` proof lanes and a Chrome proof lane spawned from old sessions and SIGTERMed fresh Obsidian runs.
 - LaunchServices-mode list proof reached `suggestion-presented ... app=md.obsidian ... afterChars=0`, but strict visual proof failed there because screenshot capture was blocked by Screen Recording permission.
+- Fresh 10:55 UTC long-note proof passed strictly on commit `3b880ece6738` with diagnostics lines 59222-59330 and trace lines 13941-13962.
+- Fresh 11:00 UTC default proof passed strictly on commit `3b880ece6738` with diagnostics lines 59847-59929 and trace lines 14119-14137.
+- Fresh 11:04 UTC theme reruns verified the two accepted insertions, but strict visual proof failed because extra post-accept suggestions were presented from Obsidian CodeMirror element churn without screenshot-backed rows.
+- The failing theme logs showed the app scheduling word completion again on the exact same just-accepted Obsidian text, so the next source fix is a short post-acceptance settle gate.
+- The patched 11:12 UTC theme rerun armed `obsidian-post-acceptance-suppression-armed` after the first accepted Tab and verified that insertion, but the run still failed because workspace focus changed back to Codex before the second accept.
+- `AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BEFORE_TYPING=1` cleared stale visuals but triggered `suppressedField` / quiet mode, so it is not a valid default workaround.
 
 ## Remaining Gates To Reach 100
 
-- Make the test runner resilient to stale `25ed` / watchdog process cleanup so it cannot SIGTERM current Obsidian proof runs after verification.
+- Prove the new Obsidian post-acceptance settle gate with fresh strict `obsidian-theme` rows.
 - Repeat split-pane proof enough times to prove the quiet marker plus visual-shadow handling is stable and not a one-off pass.
-- Get the current-branch `obsidian-long-note` runner to exit cleanly after the verified Tab and Option-Tab pass.
+- Keep the test runner resilient to stale `25ed` / watchdog process cleanup so it cannot SIGTERM current Obsidian proof runs after verification.
 - Keep Obsidian post-insert verification tolerant of the exact "accepted text landed, but focus moved to another Obsidian tab" shape without recording a false `wrongInsertion`.
 - Keep hardening end-of-document caret placement across wrapped lines, split panes, and different zoom levels.
 - Repeat default/theme/pane/long-note/font/bold/list/multiline/run-on 150+ times with screenshot traces to turn this from smoke proof into a real reliability sample.
