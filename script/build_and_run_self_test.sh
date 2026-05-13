@@ -24,6 +24,8 @@ reject_contains() {
 
 require_contains "stop_running_apps()"
 require_contains "open_app()"
+require_contains "running_app_process_rows()"
+require_contains "command_matches_binary()"
 require_contains "current_bundle_is_running()"
 require_contains "current_bundle_pid()"
 require_contains "pid_is_current_bundle()"
@@ -39,6 +41,10 @@ require_contains "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 require_contains 'current_pid="$(current_bundle_pid || true)"'
 require_contains 'pid_is_current_bundle "$current_pid"'
 require_contains "exited or restarted during the verification stability window"
+require_contains 'command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)")'
+require_contains 'command_matches_binary "$command" "$APP_BINARY"'
+reject_contains "pgrep -f"
+reject_contains 'pkill -x "$APP_NAME"'
 reject_contains "kill_running_app_instances"
 reject_contains "is_target_app_running"
 

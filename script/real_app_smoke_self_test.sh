@@ -55,6 +55,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
@@ -93,10 +94,31 @@ fi
 
 if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_NAME_PROBE_TIMEOUT_SECONDS:-2}" "TextEdit document-name probe"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'force_quit_textedit_if_only_smoke_windows' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit document-open diagnostics" >&2
   exit 1
 fi
+
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+
+def function_body(name: str) -> str:
+    marker = f"{name}() {{"
+    start = source.index(marker)
+    end = source.index("\n}\n\n", start) + 3
+    return source[start:end]
+
+for name in ("raise_textedit_smoke_window", "click_textedit_smoke_window"):
+    block = function_body(name)
+    if 'textedit_document_name_exists "$window_title"' in block:
+        raise SystemExit(f"{name} must not run the TextEdit document-name AppleScript probe on the focus/click hot path")
+    if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
+        raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
+PY
 
 if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
@@ -184,9 +206,33 @@ if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev
   exit 1
 fi
 if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype_app_process_rows' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'selfPGID' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected app-stop cleanup to avoid killing the active proof shell" >&2
+  echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
+fi
+if grep -F 'index(command, app_binary)' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected exact app process matching, not substring process matching" >&2
+  exit 1
+fi
+if ! AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 424242 zsh -lc ./script/real_app_smoke.sh textedit-model-latency\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/zsh-wrapper-fail.txt"; then
+  if ! grep -F "Another real app smoke process is already active." "$TMP_DIR/zsh-wrapper-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected zsh -lc smoke wrappers to be detected" >&2
+    exit 1
+  fi
+else
+  echo "real app smoke self-test expected zsh -lc smoke wrappers to block another smoke" >&2
+  exit 1
+fi
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 424242 zsh -lc echo /Users/redbars/.codex/worktrees/25ed/transcripted-autocomplete-lab/dist/SteadyType.app/Contents/MacOS/SteadyType\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/path-wrapper-fail.txt"; then
+  :
+else
+  if grep -F "Another real app smoke process is already active." "$TMP_DIR/path-wrapper-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected wrappers that only mention the app binary path not to be treated as smoke runs" >&2
+    exit 1
+  fi
 fi
 if ! grep -F 'textedit_smoke_allows_ax_proof_typing' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript' script/real_app_smoke.sh >/dev/null ||
