@@ -498,6 +498,80 @@ struct SettingsWindowControllerStateTests {
         #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
     }
 
+    @MainActor
+    @Test("Settings local model detail shows runtime guidance")
+    func settingsLocalModelDetailShowsRuntimeGuidance() {
+        _ = NSApplication.shared
+        let controller = SettingsWindowController(
+            requestPermission: {},
+            openAccessibilitySettings: {},
+            toggleSuggestionsPaused: {},
+            silenceCurrentField: {},
+            performRuntimeAction: { _ in },
+            toggleCurrentApp: {},
+            toggleCurrentAppMirrorMode: {},
+            startCurrentAppProof: {},
+            enableAllApps: {},
+            toggleTracingPaused: {},
+            toggleRawContentTracing: {},
+            toggleScreenshotTracing: {},
+            toggleVisiblePageContext: {},
+            deleteLocalLogs: {},
+            clearLearningData: {},
+            cycleAcceptAllShortcut: {},
+            setAcceptAllShortcut: { _ in },
+            setSuggestionAggressivenessLevel: { _ in },
+            setSuggestionMaxVisibleWords: { _ in }
+        )
+
+        controller.refresh(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: RuntimeReadinessReport(
+                stage: .downloadNeeded,
+                summary: "download needed",
+                detail: "short detail",
+                action: .installModel,
+                isReady: false
+            ),
+            runtimeTargetSummary: "Qwen local - short completions - normal",
+            modelDirectoryPath: "/tmp/SteadyType/Models",
+            modelInstallStatusText: nil,
+            isModelInstallInProgress: false,
+            currentApp: SettingsCurrentAppState(
+                displayName: "TextEdit",
+                bundleIdentifier: "com.apple.TextEdit",
+                supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+                isEnabled: true,
+                disabledAppCount: 0
+            ),
+            fieldControl: SettingsFieldControlState(
+                appDisplayName: "TextEdit",
+                hasFieldTarget: true,
+                isCurrentField: true,
+                isSilenced: false
+            ),
+            privacy: SettingsPrivacyState(
+                tracingPaused: false,
+                rawContentTracingEnabled: false,
+                rawContentTracingExpiresAt: nil,
+                screenshotTracingEnabled: false,
+                screenshotTracingExpiresAt: nil,
+                visiblePageContextEnabled: false,
+                screenCaptureAccessGranted: false,
+                diagnosticsPath: "/tmp/diagnostics.log",
+                tracePath: "/tmp/traces.jsonl"
+            ),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
+            lastSuggestionDecision: "Blocked"
+        )
+
+        #expect(controller.runtimeDetailTextForTesting.contains("pinned Hugging Face revision"))
+        #expect(controller.runtimeDetailTextForTesting.contains("You do not need Ollama or a model server"))
+        #expect(controller.runtimeDetailTextForTesting.contains("Suggestions stay off"))
+    }
+
     @Test("Practice state guides safe TextEdit smoke")
     func practiceStateGuidesSafeTextEditSmoke() {
         let missingPermission = SettingsPracticeState(

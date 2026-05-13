@@ -164,6 +164,13 @@ struct ModelAssetInstaller {
             modelDirectoryURL: snapshotURL,
             fileManager: fileManager
         )
+        if let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: snapshotURL,
+            fileManager: fileManager
+        ) {
+            throw ModelAssetInstallerError.invalidDownloadedAsset(integrityError)
+        }
 
         let parentURL = targetURL.deletingLastPathComponent()
         try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)

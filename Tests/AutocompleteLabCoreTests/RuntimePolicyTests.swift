@@ -325,6 +325,12 @@ struct RuntimePolicyTests {
         #expect(manifest.source?.revision == "32f3e8ecf65426fc3306969496342d504bfa13f3")
         #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
         #expect(manifest.source?.estimatedBytes == 3_030_000_000)
+        #expect(manifest.source?.expectedFiles.count == 10)
+        #expect(manifest.source?.expectedFiles.contains {
+            $0.path == "model.safetensors"
+                && $0.byteCount == 3_034_300_695
+                && $0.sha256 == "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db"
+        } == true)
         #expect(manifest.requiredFileNames.contains("config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(!manifest.requiresVisionLanguageFactory)

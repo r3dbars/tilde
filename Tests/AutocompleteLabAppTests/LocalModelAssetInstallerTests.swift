@@ -79,6 +79,21 @@ struct LocalModelAssetInstallerTests {
         try policy.validate(availableBytes: 5_000_000_000, expectedMinimumBytes: 4_000_000_000)
     }
 
+    @Test("Installer cancellation check fails closed before finalize")
+    func installerCancellationCheckFailsClosedBeforeFinalize() async {
+        let task = Task {
+            while !Task.isCancelled {
+                await Task.yield()
+            }
+            try LocalModelAssetInstaller.checkCancellationBeforeFinalizing()
+        }
+
+        task.cancel()
+        await #expect(throws: CancellationError.self) {
+            try await task.value
+        }
+    }
+
     @Test("Volume resolver falls back to an existing ancestor for first install")
     func volumeResolverFallsBackToExistingAncestorForFirstInstall() throws {
         let resolver = LocalModelInstallVolumeCapacityResolver()
