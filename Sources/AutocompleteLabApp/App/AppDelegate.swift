@@ -1279,7 +1279,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        return !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        return ProofModeAppEnablementPolicy(
+            disabledBundleIdentifiers: disabledBundleIdentifiers,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        ).isEnabled(
+            appBundleIdentifier: app.bundleIdentifier,
+            suggestionBundleIdentifier: profile.bundleIdentifier
+        )
     }
 
     private func claudeCodeTerminalHostProofProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
