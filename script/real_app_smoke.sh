@@ -1156,6 +1156,63 @@ wait_for_frontmost_app() {
   exit 1
 }
 
+expected_frontmost_bundle_id() {
+  local expected="$1"
+
+  case "$expected" in
+    "Claude") printf 'com.anthropic.claudefordesktop\n' ;;
+    "Claude Code") printf 'com.anthropic.claude-code\n' ;;
+    "Codex") printf 'com.openai.codex\n' ;;
+    "Finder") printf 'com.apple.finder\n' ;;
+    "Ghostty") printf 'com.mitchellh.ghostty\n' ;;
+    "Google Chrome") printf 'com.google.Chrome\n' ;;
+    "iTerm2") printf 'com.googlecode.iterm2\n' ;;
+    "Notes") printf 'com.apple.Notes\n' ;;
+    "Obsidian") printf 'md.obsidian\n' ;;
+    "Terminal") printf 'com.apple.Terminal\n' ;;
+    "TextEdit") printf 'com.apple.TextEdit\n' ;;
+    "Warp") printf 'dev.warp.Warp-Stable\n' ;;
+    com.*|dev.*|md.*) printf '%s\n' "$expected" ;;
+    *) printf '\n' ;;
+  esac
+}
+
+frontmost_app_identity_matches() {
+  local identity="$1"
+  local expected="$2"
+  local frontmost_name="$identity"
+  local frontmost_bundle=""
+  local expected_bundle
+
+  if [[ "$identity" == *$'\t'* ]]; then
+    frontmost_name="${identity%%$'\t'*}"
+    frontmost_bundle="${identity#*$'\t'}"
+  fi
+
+  expected_bundle="$(expected_frontmost_bundle_id "$expected")"
+
+  [[ "$frontmost_name" == "$expected" ||
+     "$frontmost_bundle" == "$expected" ||
+     ( -n "$expected_bundle" && "$frontmost_bundle" == "$expected_bundle" ) ]]
+}
+
+describe_frontmost_app_identity() {
+  local identity="$1"
+  local frontmost_name="$identity"
+  local frontmost_bundle=""
+
+  if [[ "$identity" == *$'\t'* ]]; then
+    frontmost_name="${identity%%$'\t'*}"
+    frontmost_bundle="${identity#*$'\t'}"
+  fi
+
+  if [[ -n "$frontmost_bundle" ]]; then
+    printf '%s (%s)\n' "$frontmost_name" "$frontmost_bundle"
+  else
+    printf '%s\n' "${frontmost_name:-unknown}"
+  fi
+}
+
 try_wait_for_frontmost_app() {
   local expected="$1"
   local timeout_seconds="${2:-5}"
@@ -1163,8 +1220,17 @@ try_wait_for_frontmost_app() {
 
   while ((SECONDS <= deadline)); do
     local frontmost
-    frontmost="$(run_osascript_with_timeout 1 "frontmost app wait probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
-    if [[ "$frontmost" == "$expected" ]]; then
+    frontmost="$(run_osascript_with_timeout 1 "frontmost app wait probe" \
+      -e 'tell application "System Events"' \
+      -e 'set frontProcess to first application process whose frontmost is true' \
+      -e 'set frontName to name of frontProcess' \
+      -e 'set frontBundle to ""' \
+      -e 'try' \
+      -e 'set frontBundle to bundle identifier of frontProcess' \
+      -e 'end try' \
+      -e 'return frontName & (ASCII character 9) & frontBundle' \
+      -e 'end tell' 2>/dev/null || true)"
+    if frontmost_app_identity_matches "$frontmost" "$expected"; then
       return 0
     fi
     sleep 0.2
@@ -1287,9 +1353,18 @@ assert_frontmost_app() {
   local expected="$1"
   local label="$2"
   local frontmost
-  frontmost="$(run_osascript_with_timeout 2 "frontmost app assertion probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
-  if [[ "$frontmost" != "$expected" ]]; then
-    echo "$label lost focus before accept. Expected frontmost app '$expected', got '${frontmost:-unknown}'." >&2
+  frontmost="$(run_osascript_with_timeout 2 "frontmost app assertion probe" \
+    -e 'tell application "System Events"' \
+    -e 'set frontProcess to first application process whose frontmost is true' \
+    -e 'set frontName to name of frontProcess' \
+    -e 'set frontBundle to ""' \
+    -e 'try' \
+    -e 'set frontBundle to bundle identifier of frontProcess' \
+    -e 'end try' \
+    -e 'return frontName & (ASCII character 9) & frontBundle' \
+    -e 'end tell' 2>/dev/null || true)"
+  if ! frontmost_app_identity_matches "$frontmost" "$expected"; then
+    echo "$label lost focus before accept. Expected frontmost app '$expected', got '$(describe_frontmost_app_identity "$frontmost")'." >&2
     exit 1
   fi
 }
