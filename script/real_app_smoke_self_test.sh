@@ -118,9 +118,13 @@ post_runtime_block = block[runtime_ready:sample_window]
 if "focus_textedit_smoke_editor" not in post_runtime_block or "click_textedit_smoke_editor" not in post_runtime_block:
     raise SystemExit("model-latency proof must refocus TextEdit after build/runtime warmup before sampling")
 trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"')
-timing = block.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"', trigger)
+timing = block.index('wait_for_log_fields_optional "$sample_start" 20', trigger)
 if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigger:timing]:
     raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
+if "visible_sample_count" not in block or "model_sample_count" not in block:
+    raise SystemExit("model-latency proof must count actual visible and timed model-backed samples")
+if "visible_sample_count >= 5" not in block:
+    raise SystemExit("model-latency proof must stop only after five visible model-backed word completions")
 
 default_start = source.index('run_textedit_default_model_latency()')
 default_end = source.index('run_chrome_fixture()', default_start)
@@ -321,8 +325,8 @@ start = source.index("textedit_model_latency_fragments()")
 body_start = source.index("cat <<'EOF'\n", start) + len("cat <<'EOF'\n")
 body_end = source.index("\nEOF", body_start)
 fragments = [line for line in source[body_start:body_end].splitlines() if line.strip()]
-if len(fragments) < 5:
-    raise SystemExit("model-latency proof must keep at least five fragments")
+if len(fragments) < 8:
+    raise SystemExit("model-latency proof must keep extra fragments so it can retry non-visible word-completion samples")
 bad_triggers = {"confu", "relia", "immed", "trust", "verif"}
 for fragment in fragments:
     trigger = fragment.rsplit(" ", 1)[-1]
@@ -340,16 +344,19 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
-start = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"')
-end = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index"', start)
-block = source[start:end]
+function_start = source.index('run_textedit_model_latency()')
+function_end = source.index('run_textedit_default_model_latency()', function_start)
+function_block = source[function_start:function_end]
+start = function_block.index('wait_for_log_fields_optional "$sample_start" 20')
+end = function_block.index('if wait_for_log_fields_optional "$sample_start" 20', start + 1)
+block = function_block[start:end]
 if '"mlx-completion-timing"' not in block or '"app=com.apple.TextEdit"' not in block:
     raise SystemExit("model-latency timing proof must still require TextEdit MLX timing")
 if '"mode=wordCompletion"' in block:
     raise SystemExit("model-latency timing proof must not depend on a fragile request mode label")
-start = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index"')
-end = source.index('sleep 0.4', start)
-block = source[start:end]
+start = function_block.index('if wait_for_log_fields_optional "$sample_start" 20', end)
+end = function_block.index('if ((visible_sample_count >= 5', start)
+block = function_block[start:end]
 if '"candidateSelectionSource=app-model-result"' not in block:
     raise SystemExit("model-latency visible proof must require model-backed display")
 if '"requestMode=wordCompletion"' in block:
