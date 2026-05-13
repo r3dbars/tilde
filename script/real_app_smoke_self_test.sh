@@ -111,6 +111,10 @@ if 'stable_context="${stable_context}${trigger_prefix}"' not in block:
     raise SystemExit("model-latency proof must include the trigger prefix in the stable AX seed")
 if 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS' not in block:
     raise SystemExit("model-latency proof must allow the prefix seed to settle before the measured final key")
+if 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT' not in block:
+    raise SystemExit("model-latency proof must expose a bounded retry count per stable context")
+if 'for ((attempt = 1; attempt <= max_attempts; attempt++))' not in block:
+    raise SystemExit("model-latency proof must retry a stable context before moving to the next fragment")
 if 'wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed' in block:
     raise SystemExit("model-latency proof must not hard-fail before typing the measured trigger")
 if 'proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"' not in block:
@@ -130,6 +134,11 @@ if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigg
     raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
 if "visible_sample_count" not in block or "model_sample_count" not in block:
     raise SystemExit("model-latency proof must count actual visible and timed model-backed samples")
+visible_increment = block.index('visible_sample_count=$((visible_sample_count + 1))')
+model_increment = block.rfind('model_sample_count=$((model_sample_count + 1))', 0, visible_increment)
+visible_wait = block.rfind('candidateSelectionSource=app-model-result', 0, visible_increment)
+if model_increment < visible_wait:
+    raise SystemExit("model-latency proof must count model samples only on an attempt with visible model-backed proof")
 if "visible_sample_count >= 5" not in block:
     raise SystemExit("model-latency proof must stop only after five visible model-backed word completions")
 
@@ -283,7 +292,7 @@ if "wait_for_appkit_activation_frontmost()" not in source or "frontmost_process_
     raise SystemExit("real app smoke must probe the frontmost process before falling back to System Events activation")
 PY
 
-if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
+if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
   exit 1
 fi
@@ -299,7 +308,7 @@ if ! grep -F 'latest_runtime_bootstrap_line_number' script/real_app_smoke.sh >/d
 fi
 if ! grep -F 'clear_textedit_document_for_proof()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency initial reset"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keystroke "a" using command down' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 51' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency reset to recover through a disposable-window keyboard clear" >&2
@@ -307,12 +316,12 @@ if ! grep -F 'clear_textedit_document_for_proof()' script/real_app_smoke.sh >/de
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency to trim native completion suffixes before waiting for visible proof" >&2
   exit 1
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fell back to AX replacement' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'set_textedit_document_text "$window_title" "$expected_text"' script/real_app_smoke.sh >/dev/null; then
@@ -436,6 +445,9 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'current_process_ancestor_pids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/beta_readiness.sh' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/check_score_targets.sh' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_current_build_privacy_export.sh' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
