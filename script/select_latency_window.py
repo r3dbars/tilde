@@ -19,6 +19,7 @@ class Launch:
     candidate: str
     native_runtime_available: str
     model_override: str
+    proof_app: str
 
 
 @dataclass(frozen=True)
@@ -63,12 +64,19 @@ def suggestion_key(event, line_number):
 
 def runtime_launches(path):
     launches = []
+    current_proof_app = ""
     if not path.exists():
         return launches
 
     with path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line_number, line in enumerate(handle, start=1):
             stripped = line.strip()
+            if " app-proof-mode-started " in f" {stripped} ":
+                parts = stripped.split()
+                fields = fields_from(parts[1:])
+                current_proof_app = fields.get("app", "")
+                continue
+
             if " runtime-bootstrap " not in f" {stripped} ":
                 continue
             parts = stripped.split()
@@ -83,18 +91,26 @@ def runtime_launches(path):
                     candidate=fields.get("activeCandidate", ""),
                     native_runtime_available=fields.get("nativeRuntimeAvailable", ""),
                     model_override=fields.get("modelOverride", ""),
+                    proof_app=current_proof_app,
                 )
             )
     return launches
 
 
-def trace_window(path, timestamp, before_timestamp=None):
+def trace_window(
+    path,
+    timestamp,
+    before_timestamp=None,
+    required_trace_app=None,
+    require_model_backed_visible=False,
+):
     trace_start_line = None
     trace_end_line = None
     first_visible_samples = 0
     model_samples = 0
     seen_presented = set()
     seen_model = set()
+    model_backed_suggestion_ids = set()
     last_line_number = 0
 
     if not timestamp or not path.exists():
@@ -118,11 +134,23 @@ def trace_window(path, timestamp, before_timestamp=None):
             if trace_start_line is None:
                 trace_start_line = max(0, line_number - 1)
 
+            if required_trace_app and event.get("appBundleIdentifier") != required_trace_app:
+                continue
+
             event_type = event.get("type")
             if event_type == "suggestionPresented":
                 key = suggestion_key(event, line_number)
                 if key in seen_presented:
                     continue
+
+                metadata = event.get("metadata") or {}
+                if require_model_backed_visible:
+                    selection_source = event.get("candidateSelectionSource") or metadata.get(
+                        "candidateSelectionSource"
+                    )
+                    if selection_source != "app-model-result" and key not in model_backed_suggestion_ids:
+                        continue
+
                 seen_presented.add(key)
                 if int_value(event.get("latencyMilliseconds")) is not None:
                     first_visible_samples += 1
@@ -140,6 +168,7 @@ def trace_window(path, timestamp, before_timestamp=None):
                 if generation_latency is None:
                     generation_latency = int_value(event.get("latencyMilliseconds"))
                 if generation_latency is not None:
+                    model_backed_suggestion_ids.add(suggestion_key(event, line_number))
                     model_samples += 1
 
     if before_timestamp and trace_end_line is None:
@@ -179,39 +208,74 @@ def select_window(
     expected_asset,
     min_first_visible_samples,
     min_model_samples,
+    required_proof_app=None,
+    required_trace_app=None,
+    require_model_backed_visible=False,
 ):
     launches = runtime_launches(diagnostics_log)
     eligible_launches = eligible_default_launches(launches, expected_asset)
+    if required_proof_app:
+        eligible_launches = [
+            launch for launch in eligible_launches if launch.proof_app == required_proof_app
+        ]
+
     if not eligible_launches:
         return Selection(None, None, "no eligible default runtime launch", False)
 
     latest_launch = launches[-1]
-    if not is_eligible_default_launch(latest_launch, expected_asset):
+    if required_proof_app:
+        required_launches = [
+            launch for launch in launches if launch.proof_app == required_proof_app
+        ]
+        latest_required_launch = required_launches[-1] if required_launches else None
+    else:
+        latest_required_launch = latest_launch
+
+    if latest_required_launch and not is_eligible_default_launch(latest_required_launch, expected_asset):
         reason = (
             "latest runtime launch is not the expected default runtime "
-            f"(diagnosticsLine={latest_launch.line}; asset={latest_launch.asset or 'unknown'}; "
-            f"candidate={latest_launch.candidate or 'unknown'}; "
-            f"modelOverride={latest_launch.model_override or 'none'}; "
-            f"nativeRuntimeAvailable={latest_launch.native_runtime_available or 'unknown'})"
+            f"(diagnosticsLine={latest_required_launch.line}; asset={latest_required_launch.asset or 'unknown'}; "
+            f"candidate={latest_required_launch.candidate or 'unknown'}; "
+            f"modelOverride={latest_required_launch.model_override or 'none'}; "
+            f"nativeRuntimeAvailable={latest_required_launch.native_runtime_available or 'unknown'}; "
+            f"proofApp={latest_required_launch.proof_app or 'none'})"
         )
-        return Selection(latest_launch, trace_window(trace_log, latest_launch.timestamp), reason, False)
+        return Selection(
+            latest_required_launch,
+            trace_window(
+                trace_log,
+                latest_required_launch.timestamp,
+                required_trace_app=required_trace_app,
+                require_model_backed_visible=require_model_backed_visible,
+            ),
+            reason,
+            False,
+        )
 
     current_segment_start = 0
-    for index, launch in enumerate(launches[:-1]):
-        if not is_eligible_default_launch(launch, expected_asset):
-            current_segment_start = index + 1
+    if not required_proof_app:
+        for index, launch in enumerate(launches[:-1]):
+            if not is_eligible_default_launch(launch, expected_asset):
+                current_segment_start = index + 1
 
     skipped_unsampled_default_launches = 0
     eligible_indexed_launches = [
         (index, launch)
         for index, launch in enumerate(launches[current_segment_start:], start=current_segment_start)
         if is_eligible_default_launch(launch, expected_asset)
+        and (not required_proof_app or launch.proof_app == required_proof_app)
     ]
     for index, launch in reversed(eligible_indexed_launches):
         next_launch = launches[index + 1] if index + 1 < len(launches) else None
         before_timestamp = next_launch.timestamp if next_launch else None
         diagnostics_end_line = max(0, next_launch.line - 1) if next_launch else None
-        window = trace_window(trace_log, launch.timestamp, before_timestamp)
+        window = trace_window(
+            trace_log,
+            launch.timestamp,
+            before_timestamp,
+            required_trace_app=required_trace_app,
+            require_model_backed_visible=require_model_backed_visible,
+        )
         if (
             window.first_visible_samples >= min_first_visible_samples
             and window.model_samples >= min_model_samples
@@ -233,9 +297,15 @@ def select_window(
             diagnostics_end_line,
         )
 
-    window = trace_window(trace_log, latest_launch.timestamp)
+    fallback_launch = latest_required_launch or latest_launch
+    window = trace_window(
+        trace_log,
+        fallback_launch.timestamp,
+        required_trace_app=required_trace_app,
+        require_model_backed_visible=require_model_backed_visible,
+    )
     return Selection(
-        latest_launch,
+        fallback_launch,
         window,
         "no sampled default runtime launch meets sample requirements",
         False,
@@ -251,6 +321,19 @@ def main():
     parser.add_argument("--expected-asset", default=DEFAULT_EXPECTED_ASSET)
     parser.add_argument("--min-first-visible-samples", type=int, default=5)
     parser.add_argument("--min-model-samples", type=int, default=5)
+    parser.add_argument(
+        "--required-proof-app",
+        help="Only select runtime launches started by this proof-mode app bundle.",
+    )
+    parser.add_argument(
+        "--required-trace-app",
+        help="Only count trace samples from this app bundle inside the selected window.",
+    )
+    parser.add_argument(
+        "--require-model-backed-visible",
+        action="store_true",
+        help="Only count visible samples that are explicitly model-backed.",
+    )
     args = parser.parse_args()
 
     selection = select_window(
@@ -259,6 +342,9 @@ def main():
         args.expected_asset,
         args.min_first_visible_samples,
         args.min_model_samples,
+        required_proof_app=args.required_proof_app,
+        required_trace_app=args.required_trace_app,
+        require_model_backed_visible=args.require_model_backed_visible,
     )
     launch = selection.launch
     window = selection.window

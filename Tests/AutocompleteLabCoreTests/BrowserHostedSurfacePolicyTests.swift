@@ -121,11 +121,34 @@ struct BrowserHostedSurfacePolicyTests {
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(
                 title: "Local smoke textarea fixture",
-                windowTitle: "SteadyType Chrome Textarea Fixture Smoke"
+                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
             )
         )
 
         #expect(decision.canSuggest)
+    }
+
+    @Test("Chrome fixture titles need local proof tokens")
+    func blocksSpoofedExternalFixtureTitles() throws {
+        let cases = [
+            FocusedElementFingerprint(
+                title: "Remote smoke textarea fixture",
+                windowTitle: "SteadyType Chrome Textarea Fixture Smoke"
+            ),
+            FocusedElementFingerprint(
+                title: "Remote smoke textarea fixture",
+                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+            )
+        ]
+
+        for fingerprint in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(try #require(blockedSurface(from: decision)).surface == .unproven)
+        }
     }
 
     @Test("Chrome sensitive pages block before local fixture allowlist")
@@ -144,9 +167,27 @@ struct BrowserHostedSurfacePolicyTests {
                 windowTitle: "Local sign in smoke [ready=1]"
             )
         )
+        let addressBar = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(
+                title: "Local smoke textarea fixture",
+                placeholder: "Search Google or type a URL",
+                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+            )
+        )
+        let terminal = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(
+                title: "Local smoke textarea fixture",
+                placeholder: "sudo command",
+                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+            )
+        )
 
         #expect(try #require(blockedSurface(from: payment)).surface == .payment)
         #expect(try #require(blockedSurface(from: login)).surface == .login)
+        #expect(try #require(blockedSurface(from: addressBar)).surface == .browserSearchOrAddressBar)
+        #expect(try #require(blockedSurface(from: terminal)).surface == .browserDeveloperTool)
     }
 
     @Test("Chrome risky browser-hosted fields stay blocked")

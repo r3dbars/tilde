@@ -183,16 +183,19 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
     }
 
     private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
-        (searchableText.contains("autocomplete lab chrome")
+        let matchesProofFixtureName = (searchableText.contains("autocomplete lab chrome")
             || searchableText.contains("steadytype chrome"))
+        let hasLocalOriginToken = searchableText.contains("localhost")
+            || searchableText.contains("127.0.0.1")
+            || searchableText.contains("[::1]")
+            || searchableText.contains("file:")
+        let hasReadyLocalFixtureToken = searchableText.contains("ready=1")
+            && searchableText.contains("local")
+            && searchableText.contains("fixture")
+
+        return matchesProofFixtureName
             && searchableText.contains("smoke")
-            && (
-                searchableText.contains("local")
-                    || searchableText.contains("fixture")
-                    || searchableText.contains("localhost")
-                    || searchableText.contains("127.0.0.1")
-                    || searchableText.contains("ready=1")
-            )
+            && (hasLocalOriginToken || hasReadyLocalFixtureToken)
     }
 
     private func matchesGoogleDocs(_ searchableText: String) -> Bool {
