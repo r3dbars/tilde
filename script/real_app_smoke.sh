@@ -1158,9 +1158,29 @@ SWIFT
     return 0
   fi
 
+  if wait_for_appkit_activation_frontmost "$target_pid"; then
+    return 0
+  fi
+
   activate_process_id_osascript "$target_pid" &
   local osascript_pid="$!"
   wait_for_background_process "$osascript_pid" 2 "System Events process activation" >/dev/null 2>&1 || true
+}
+
+wait_for_appkit_activation_frontmost() {
+  local expected_pid="$1"
+  local attempts="${2:-5}"
+  local attempt frontmost_pid
+
+  for ((attempt = 0; attempt < attempts; attempt++)); do
+    frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+    if [[ "$frontmost_pid" == "$expected_pid" ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  return 1
 }
 
 activate_process_id_osascript() {
@@ -9069,10 +9089,8 @@ run_textedit_default_model_latency() {
   open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
   sleep 0.8
   wait_for_textedit_smoke_editor "$textedit_window_title"
-  AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1 \
-    focus_textedit_smoke_editor "$textedit_window_title"
-  AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1 \
-    click_textedit_smoke_editor "$textedit_window_title"
+  focus_textedit_smoke_editor "$textedit_window_title"
+  click_textedit_smoke_editor "$textedit_window_title"
   clear_textedit_document_for_proof "$textedit_window_title" "TextEdit default model latency initial reset"
   move_textedit_caret_to_document_end "$textedit_window_title"
 

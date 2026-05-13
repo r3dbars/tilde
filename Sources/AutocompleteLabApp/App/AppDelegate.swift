@@ -6597,15 +6597,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
-        let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
-        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let acceptedReplacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
-        guard let textArea = Self.axTextAreaDescendant(
+        let exactTextArea = Self.axTextAreaDescendant(
             in: appElement,
             matchingValue: previousText,
             containing: lastTextSnapshot.textBeforeCursor,
             maxDepth: 32
-        ) else {
+        )
+
+        let matchedTextArea: AXUIElement?
+        let replacementText: String
+        let cursorUTF16Offset: Int
+        let matchSource: String
+        if let exactTextArea {
+            matchedTextArea = exactTextArea
+            replacementText = acceptedReplacementText
+            cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+            matchSource = "exact"
+        } else if let containingTextArea = Self.axTextAreaDescendantContainingText(
+            in: appElement,
+            containing: lastTextSnapshot.textBeforeCursor,
+            maxDepth: 32
+        ),
+                  let currentValue = Self.axStringAttribute(containingTextArea, kAXValueAttribute),
+                  let replacementRange = Self.replacementRange(
+                    in: currentValue,
+                    previousText: previousText,
+                    textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+                    textAfterCursor: lastTextSnapshot.textAfterCursor
+                  ) {
+            matchedTextArea = containingTextArea
+            replacementText = currentValue.replacingCharacters(
+                in: replacementRange,
+                with: acceptedReplacementText
+            )
+            cursorUTF16Offset = currentValue[..<replacementRange.lowerBound].utf16.count
+                + lastTextSnapshot.textBeforeCursor.utf16.count
+                + acceptedText.utf16.count
+            matchSource = "containingText"
+        } else {
             DiagnosticsLog.shared.record(
                 "obsidian-direct-value-insert",
                 metadata: [
@@ -6614,6 +6645,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "reason": "text-area-not-found"
                 ]
             )
+            return false
+        }
+        guard let textArea = matchedTextArea else {
             return false
         }
 
@@ -6658,7 +6692,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "success": String(succeeded),
                 "acceptedChars": String(acceptedText.count),
                 "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
-                "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count)
+                "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count),
+                "matchSource": matchSource
             ]
         )
         return succeeded
@@ -7081,6 +7116,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return nil
+    }
+
+    nonisolated private static func axTextAreaDescendantContainingText(
+        in element: AXUIElement,
+        containing expectedText: String,
+        maxDepth: Int
+    ) -> AXUIElement? {
+        guard maxDepth >= 0, !expectedText.isEmpty else {
+            return nil
+        }
+
+        if axRole(element) == "AXTextArea",
+           let value = axStringAttribute(element, kAXValueAttribute),
+           value.contains(expectedText) {
+            return element
+        }
+
+        for child in axChildren(element) {
+            if let match = axTextAreaDescendantContainingText(
+                in: child,
+                containing: expectedText,
+                maxDepth: maxDepth - 1
+            ) {
+                return match
+            }
+        }
+
+        return nil
+    }
+
+    nonisolated private static func replacementRange(
+        in currentValue: String,
+        previousText: String,
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> Range<String.Index>? {
+        if let exactRange = currentValue.range(of: previousText, options: .backwards) {
+            return exactRange
+        }
+
+        guard textAfterCursor.isEmpty else {
+            return nil
+        }
+
+        return currentValue.range(of: textBeforeCursor, options: .backwards)
     }
 
     nonisolated private static func setAXSelectedTextRange(
