@@ -368,8 +368,23 @@ require_primary_artifact() {
   fi
 }
 
+record_proof_command() {
+  local output_path="$1"
+  shift
+
+  mkdir -p "$(dirname "$output_path")"
+  if "$@" >"$output_path" 2>&1; then
+    cat "$output_path"
+    return 0
+  fi
+
+  cat "$output_path" >&2
+  return 1
+}
+
 check_primary_artifact_app() {
   local verify_dir mount_path app_path
+  local proof_dir="$DIST_DIR/release-proof"
   verify_dir="$(mktemp -d)"
   mount_path="$verify_dir/mount"
   app_path="$verify_dir/SteadyType.app"
@@ -402,19 +417,22 @@ check_primary_artifact_app() {
   fi
 
   if [[ "${AUTOCOMPLETE_LAB_PRIVATE_BETA_REQUIRE_NOTARIZED_DMG:-1}" == "1" ]]; then
-    if ! xcrun stapler validate "$DMG_PATH"; then
+    if ! record_proof_command "$proof_dir/stapler-validate.txt" \
+      xcrun stapler validate "$DMG_PATH"; then
       rm -rf "$verify_dir"
       echo "notarized DMG blocked: current stapler validation failed for $DMG_PATH" >&2
       exit 1
     fi
 
-    if ! spctl -a -t open --context context:primary-signature -v "$DMG_PATH"; then
+    if ! record_proof_command "$proof_dir/spctl-dmg.txt" \
+      spctl -a -t open --context context:primary-signature -v "$DMG_PATH"; then
       rm -rf "$verify_dir"
       echo "notarized DMG blocked: current Gatekeeper assessment failed for $DMG_PATH" >&2
       exit 1
     fi
 
-    if ! spctl --assess --type execute --verbose=4 "$app_path"; then
+    if ! record_proof_command "$proof_dir/spctl-installed-app.txt" \
+      spctl --assess --type execute --verbose=4 "$app_path"; then
       rm -rf "$verify_dir"
       echo "notarized DMG blocked: installed app Gatekeeper assessment failed for the current DMG" >&2
       exit 1

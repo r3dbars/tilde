@@ -30,7 +30,8 @@ fi
 
 script/real_app_smoke.sh textedit-model-latency --dry-run >"$TMP_DIR/textedit-model-latency.txt"
 if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
-   ! grep -F "require real model-backed suggestions in one launch" "$TMP_DIR/textedit-model-latency.txt" >/dev/null; then
+   ! grep -F "require real model-backed suggestions in one launch" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
+   ! grep -F "disposable TextEdit AX target" "$TMP_DIR/textedit-model-latency.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit model latency dry-run plan" >&2
   exit 1
 fi

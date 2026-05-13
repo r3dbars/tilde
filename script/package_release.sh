@@ -217,7 +217,7 @@ xattr -w com.apple.quarantine "0081;\$(printf '%x' "\$(date +%s)");SteadyType;$(
 hdiutil attach dist/SteadyType.dmg -mountpoint "\$verify_dir/mount" -nobrowse -quiet
 cp -R "\$verify_dir/mount/SteadyType.app" "\$verify_dir/SteadyType.app"
 hdiutil detach "\$verify_dir/mount" -quiet
-spctl --assess --type execute --verbose=4 "\$verify_dir/SteadyType.app" | tee dist/release-proof/spctl-installed-app.txt
+spctl --assess --type execute --verbose=4 "\$verify_dir/SteadyType.app" 2>&1 | tee dist/release-proof/spctl-installed-app.txt
 rm -rf "\$verify_dir"
 \`\`\`
 
@@ -236,8 +236,8 @@ xattr -p com.apple.quarantine SteadyType.dmg
 6. Run:
 
 \`\`\`bash
-spctl --assess --type execute --verbose=4 /Applications/SteadyType.app | tee dist/release-proof/spctl-installed-app.txt
-xcrun stapler validate dist/SteadyType.dmg | tee dist/release-proof/stapler-validate.txt
+spctl --assess --type execute --verbose=4 /Applications/SteadyType.app 2>&1 | tee dist/release-proof/spctl-installed-app.txt
+xcrun stapler validate dist/SteadyType.dmg 2>&1 | tee dist/release-proof/stapler-validate.txt
 \`\`\`
 EOF
 }
@@ -416,6 +416,7 @@ case "$MODE" in
     ;;
   --notarize|notarize)
     resolved_notary_profile=""
+    gatekeeper_failed=0
     if [[ ! -f "$DMG_PATH" ]]; then
       echo "missing preferred artifact: $DMG_PATH" >&2
       echo "Run script/package_release.sh archive first." >&2
@@ -433,13 +434,18 @@ case "$MODE" in
       xcrun notarytool submit "$DMG_PATH" \
       --keychain-profile "$resolved_notary_profile" \
       --wait
-    xcrun stapler staple "$DMG_PATH"
+    record_command "$PROOF_DIR/stapler-staple.txt" \
+      xcrun stapler staple "$DMG_PATH"
+    write_checksums
     record_command "$PROOF_DIR/stapler-validate.txt" \
       xcrun stapler validate "$DMG_PATH"
-    record_command "$PROOF_DIR/spctl-dmg.txt" \
-      spctl -a -t open --context context:primary-signature -v "$DMG_PATH"
+    if ! record_command "$PROOF_DIR/spctl-dmg.txt" \
+      spctl -a -t open --context context:primary-signature -v "$DMG_PATH"; then
+      gatekeeper_failed=1
+    fi
 
     create_zip
+    write_checksums
 
     verify_dir="$(mktemp -d)"
     trap 'rm -rf "$verify_dir"' EXIT
@@ -447,8 +453,15 @@ case "$MODE" in
     hdiutil attach "$DMG_PATH" -mountpoint "$verify_dir/mount" -nobrowse -quiet
     cp -R "$verify_dir/mount/SteadyType.app" "$verify_dir/SteadyType.app"
     hdiutil detach "$verify_dir/mount" -quiet
-    record_command "$PROOF_DIR/spctl-installed-app.txt" \
-      spctl --assess --type execute --verbose=4 "$verify_dir/SteadyType.app"
+    if ! record_command "$PROOF_DIR/spctl-installed-app.txt" \
+      spctl --assess --type execute --verbose=4 "$verify_dir/SteadyType.app"; then
+      gatekeeper_failed=1
+    fi
+    if ((gatekeeper_failed > 0)); then
+      write_proof_checklist "notarized" "accepted" "validated" "blocked"
+      echo "Gatekeeper assessment failed; saved spctl output in $PROOF_DIR" >&2
+      exit 1
+    fi
     write_checksums
     write_proof_checklist "notarized" "accepted" "validated" "accepted"
     write_fresh_install_proof_instructions
