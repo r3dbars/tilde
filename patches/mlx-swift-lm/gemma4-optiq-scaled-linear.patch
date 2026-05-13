@@ -1,5 +1,5 @@
---- .build/checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift
-+++ .build/checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift
+--- checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift
++++ checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift
 @@ -161,18 +161,39 @@
  }
  

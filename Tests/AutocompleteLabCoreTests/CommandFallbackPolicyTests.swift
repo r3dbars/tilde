@@ -14,7 +14,7 @@ struct CommandFallbackPolicyTests {
         #expect(decision.availability == .inlineAvailable)
         #expect(decision.reason == .inlineAvailable)
         #expect(!decision.canCopyOnly)
-        #expect(decision.statusText == "Fallback: not needed; inline is available.")
+        #expect(decision.statusText == "Fallback: not needed; cursor placement is available.")
     }
 
     @Test("disabled and unsupported apps do not offer fallback helpers")
@@ -69,7 +69,7 @@ struct CommandFallbackPolicyTests {
         #expect(safari.availability == .copyOnly)
         #expect(safari.reason == .diagnosticsOnlyProfile)
         #expect(safari.canCopyOnly)
-        #expect(safari.statusText == "Fallback: copy-only; inline and auto-insert stay off until proof passes.")
+        #expect(safari.statusText == "Fallback: copy-only; cursor placement and auto-insert stay off until testing passes.")
     }
 
     @Test("yellow low-confidence placement falls back to copy-only")

@@ -46,7 +46,7 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(overview.text.contains("Accessibility: On"))
         #expect(overview.text.contains("Suggestion: Shown"))
         #expect(overview.text.contains("Suggestions control: Global pause: off"))
-        #expect(overview.text.contains("Local model: ready | stage ready | action None | target MLX local model"))
+        #expect(overview.text.contains("Local model: ready | stage ready | action Model ready | target MLX local model"))
         #expect(overview.text.contains("Current app: No focused app | blocked: no MVP compatibility profile | disabled"))
         #expect(overview.text.contains("Tracing: traces on | screenshots on | events 12 | accept 50% | useful 25%"))
         #expect(!overview.text.contains("private phrase"))

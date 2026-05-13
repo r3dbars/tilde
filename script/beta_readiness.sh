@@ -289,6 +289,7 @@ check_release_dmg_signature() {
 check_notarized_install_proof() {
   local proof_dir="$ROOT_DIR/dist/release-proof"
   local blocker_path="$proof_dir/notarization-blocker.txt"
+  local checksum_path="$proof_dir/checksums.txt"
   local verify_dir mount_path app_path
   local failed=0
 
@@ -299,12 +300,55 @@ check_notarized_install_proof() {
 
   for path in \
     "$proof_dir/notarytool-submit.txt" \
+    "$proof_dir/stapler-validate.txt" \
+    "$proof_dir/spctl-dmg.txt" \
+    "$proof_dir/spctl-installed-app.txt" \
+    "$checksum_path" \
     "$proof_dir/fresh-install-gatekeeper-proof.md"; do
     if [[ ! -s "$path" ]]; then
       echo "missing release proof: $path"
       failed=1
     fi
   done
+
+  if [[ -s "$checksum_path" ]]; then
+    for artifact_name in SteadyType.dmg SteadyType.zip; do
+      local artifact_path="$ROOT_DIR/dist/$artifact_name"
+      if [[ ! -f "$artifact_path" ]]; then
+        continue
+      fi
+
+      local expected_sha actual_sha
+      expected_sha="$(shasum -a 256 "$artifact_path" | awk '{print $1}')"
+      actual_sha="$(awk -v artifact="$artifact_name" '$1 == artifact {print $2; exit}' "$checksum_path")"
+
+      if [[ -z "$actual_sha" ]]; then
+        echo "release proof checksum is missing $artifact_name"
+        failed=1
+      elif [[ "$expected_sha" != "$actual_sha" ]]; then
+        echo "release proof checksum is stale for $artifact_name"
+        echo "expected: $expected_sha"
+        echo "actual:   $actual_sha"
+        failed=1
+      fi
+    done
+  fi
+
+  local archive_path="$ROOT_DIR/dist/SteadyType.zip"
+  if [[ -s "$archive_path" ]]; then
+    local verify_dir
+    verify_dir="$(mktemp -d)"
+    if ditto -x -k "$archive_path" "$verify_dir" &&
+      [[ -d "$verify_dir/SteadyType.app" ]]; then
+      if ! ./script/check_app_bundle.sh --release "$verify_dir/SteadyType.app"; then
+        failed=1
+      fi
+    else
+      echo "release archive cannot be expanded for signature proof: $archive_path"
+      failed=1
+    fi
+    rm -rf "$verify_dir"
+  fi
 
   if ((failed > 0)); then
     return 1
@@ -458,6 +502,7 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
+  run_check "Onboarding permission QA" ./script/check_onboarding_permission_qa.sh --check || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
   # Run latency after proof/readiness checks so a later app relaunch cannot make
@@ -544,6 +589,10 @@ echo "== Prompt app proof gate =="
 ./script/check_prompt_app_proof.sh
 
 echo
+echo "== Onboarding permission QA =="
+./script/check_onboarding_permission_qa.sh --check
+
+echo
 echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
 
@@ -568,6 +617,10 @@ else
   echo "Set AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE=1 to let this full gate submit the current DMG to Apple, then rerun."
   exit 1
 fi
+check_notarized_install_proof
+
+echo
+echo "== Notarized install proof =="
 check_notarized_install_proof
 
 echo
