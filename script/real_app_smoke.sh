@@ -5039,17 +5039,14 @@ APPLESCRIPT
 }
 
 press_textedit_event_tap_probe_key() {
-  local probe_key="${1:-x}"
-
   (
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$probe_key" osascript <<'APPLESCRIPT'
-set smokeText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT"
+    osascript <<'APPLESCRIPT'
 tell application "System Events"
   set frontApp to first application process whose frontmost is true
   if bundle identifier of frontApp is not "com.apple.TextEdit" then
     error "TextEdit is not frontmost for event-tap proof typing."
   end if
-  keystroke smokeText
+  key code 48
 end tell
 APPLESCRIPT
   ) &
@@ -9238,11 +9235,11 @@ run_textedit_model_latency() {
           "keyboard-event-tap-started"
         assert_textedit_frontmost_window "$textedit_window_title" "TextEdit model latency event-tap proof"
         event_tap_start="$(line_count "$LOG_PATH")"
-        press_textedit_event_tap_probe_key "x"
-        wait_for_log_fields "$event_tap_start" "TextEdit model latency event-tap printable key $sample_index attempt $attempt" 5 \
+        press_textedit_event_tap_probe_key
+        wait_for_log_fields "$event_tap_start" "TextEdit model latency event-tap Tab key $sample_index attempt $attempt" 5 \
           "keyboard-event-tap-latency" \
-          "key=other" \
-          "decision=passthrough-other"
+          "key=tab" \
+          "decision=consume"
         event_tap_sample_count=$((event_tap_sample_count + 1))
         model_sample_count=$((model_sample_count + 1))
         visible_sample_count=$((visible_sample_count + 1))
