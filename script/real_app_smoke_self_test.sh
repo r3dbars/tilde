@@ -679,9 +679,10 @@ if ! grep -F "script/real_app_smoke.sh obsidian-theme --manual-gate" "$TMP_DIR/o
   exit 1
 fi
 
-if ! grep -F "markerText.utf16.count" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note" >&2
+if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note through the helper" >&2
   exit 1
 fi
 
