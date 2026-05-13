@@ -8794,13 +8794,13 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     press_key_code 53
     sleep 0.2
-    activate_neutral_smoke_setup_app
     wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant" 5
-    append_obsidian_smoke_note_file_text " and stays inst"
-    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
-    open_obsidian_smoke_note_if_configured
-    wait_for_obsidian_smoke_editor_ready 8
+    move_obsidian_caret_to_document_end
+    assert_obsidian_smoke_target "Smoke proof feels instant"
     second_start_line="$(line_count "$LOG_PATH")"
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays inst"
+    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant and stays inst" 5
+    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
