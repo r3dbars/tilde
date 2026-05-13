@@ -218,6 +218,7 @@ case "insert":
           ) == .success else {
         exit(3)
     }
+    _ = focusAtEnd(editor, text: textValue(of: editor))
 
 default:
     fputs("Unknown Obsidian AX editor action: \(action)\n", stderr)
