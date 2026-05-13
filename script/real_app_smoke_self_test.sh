@@ -872,8 +872,9 @@ fi
 if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
-   ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null; then
-  echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note through the helper" >&2
+   ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F "let replacementText = baseText + insertionText" script/obsidian_ax_editor.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian reset and append helpers to update the disposable note through guarded AX value replacement" >&2
   exit 1
 fi
 if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smoke.sh >/dev/null ||
@@ -900,6 +901,18 @@ assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instan
 branch_end = source.index('\n  else', append)
 if not (first_assert < watch < append < suffix < focus < assertion < branch_end):
     raise SystemExit("Obsidian long-note proof must start watching before AX-appending the second fragment and reasserting the caret at the note end")
+non_long_else = source.index('\n  else', branch_end)
+non_long_dismiss = source.index('press_key_code 53', non_long_else)
+non_long_pause = source.index('sleep 0.2', non_long_dismiss)
+non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_pause)
+non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_watch)
+non_long_append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"', non_long_assert)
+non_long_reassert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_append)
+non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_reassert)
+non_long_full_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_wait)
+non_long_full_start = source.index('full_start_line="$(line_count "$LOG_PATH")"', non_long_full_assert)
+if not (non_long_dismiss < non_long_pause < non_long_watch < non_long_assert < non_long_append < non_long_reassert < non_long_wait < non_long_full_assert < non_long_full_start):
+    raise SystemExit("Obsidian default/theme/pane proof must dismiss stale suggestions, AX-append the second fragment, reassert the AX target, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
 PY
 
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do

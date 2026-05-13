@@ -424,9 +424,12 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         let currentLineBefore = currentLine(in: input.textBeforeCursor)
-        let canJoinSameLine = currentLineBefore.last?.isLetter == true
-            || currentLineBefore.last?.isWhitespace == true
+        let canJoinSameLine = currentLineBefore.count <= 24
+            && contentWordCount(in: currentLineBefore) <= 3
+            && (currentLineBefore.last?.isLetter == true
+                || currentLineBefore.last?.isWhitespace == true)
         if canJoinSameLine,
+           activeLine.first?.isWhitespace != false,
            isPlausibleActiveTypingLine(currentLineBefore + activeLine) {
             return TextContextRepairResult(
                 textBeforeCursor: input.textBeforeCursor + activeLine,
@@ -435,8 +438,11 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             )
         }
 
-        guard input.textBeforeCursor.contains(where: \.isNewline),
-              isPlausibleActiveTypingLine(activeLine) else {
+        guard isPlausibleActiveTypingLine(activeLine),
+              input.textBeforeCursor.contains(where: \.isNewline)
+                || activeLine.first?.isWhitespace == false
+                    && currentLineBefore.count >= 24
+                    && contentWordCount(in: currentLineBefore) >= 3 else {
             return nil
         }
 
@@ -581,15 +587,15 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         let currentLineBefore = currentLine(in: input.textBeforeCursor)
-        guard input.textBeforeCursor.contains(where: \.isNewline),
-              currentLineBefore.count >= 24,
+        guard currentLineBefore.count >= 24,
               currentLineBefore.count <= 100,
               contentWordCount(in: currentLineBefore) >= 3 else {
             return nil
         }
 
         let lineAfterCursor = firstLine(in: input.textAfterCursor)
-        guard isPlausibleActiveTypingLine(lineAfterCursor) else {
+        guard lineAfterCursor.first?.isWhitespace == false,
+              isPlausibleActiveTypingLine(lineAfterCursor) else {
             return nil
         }
 
@@ -602,7 +608,9 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         }
 
         return TextContextRepairResult(
-            textBeforeCursor: input.textBeforeCursor + "\n" + lineAfterCursor,
+            textBeforeCursor: input.textBeforeCursor
+                + (input.textBeforeCursor.last?.isNewline == true ? "" : "\n")
+                + lineAfterCursor,
             textAfterCursor: remainingAfterLine,
             reason: .obsidianCodeMirrorTextAfterActiveLine
         )

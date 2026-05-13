@@ -8941,9 +8941,12 @@ run_obsidian() {
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
+    press_key_code 53
+    sleep 0.2
     second_start_line="$(line_count "$LOG_PATH")"
     assert_obsidian_smoke_target "Smoke proof feels instant"
-    type_obsidian_raw_smoke_text " and stays"
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12
@@ -8966,7 +8969,7 @@ run_obsidian() {
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   else
     activate_obsidian_for_smoke
-    assert_obsidian_smoke_target "Smoke proof feels instant"
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
