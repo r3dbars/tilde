@@ -26,7 +26,7 @@ CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|chrome|codex|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -34,8 +34,9 @@ a pass row to docs/product/manual-smoke-runs.md.
 
 Notes proof must be recorded as notes-title, notes-body, notes-checklist,
 their notes-*-undo variants, or explicit Notes variant lanes.
-Obsidian proof must keep default, theme, pane, and long-note variants separate
-before the app can graduate past partial proof.
+Obsidian proof must keep default, theme, pane, long-note, font-zoom,
+markdown-bold, markdown-list, multiline, and run-on variants separate before
+the app can graduate past partial proof.
 Use --visual when the trace slice must include strict screenshot evidence.
 
 Set AUTOCOMPLETE_LAB_LOG_START_LINE when using --check against a known log slice.
@@ -157,6 +158,26 @@ case "$APP" in
     APP="obsidian"
     OBSIDIAN_VARIANT="long-note"
     ;;
+  obsidian-font-zoom)
+    APP="obsidian"
+    OBSIDIAN_VARIANT="font-zoom"
+    ;;
+  obsidian-markdown-bold)
+    APP="obsidian"
+    OBSIDIAN_VARIANT="markdown-bold"
+    ;;
+  obsidian-markdown-list)
+    APP="obsidian"
+    OBSIDIAN_VARIANT="markdown-list"
+    ;;
+  obsidian-multiline)
+    APP="obsidian"
+    OBSIDIAN_VARIANT="multiline"
+    ;;
+  obsidian-run-on)
+    APP="obsidian"
+    OBSIDIAN_VARIANT="run-on"
+    ;;
 esac
 
 while [[ $# -gt 0 ]]; do
@@ -184,7 +205,7 @@ while [[ $# -gt 0 ]]; do
     --variant)
       shift
       if [[ $# -eq 0 ]]; then
-        echo "--variant needs default, theme, pane, or long-note" >&2
+        echo "--variant needs default, theme, pane, long-note, font-zoom, markdown-bold, markdown-list, multiline, or run-on" >&2
         exit 2
       fi
       OBSIDIAN_VARIANT="$1"
@@ -506,6 +527,21 @@ case "$APP" in
       obsidian-long-note)
         OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-long-note}"
         ;;
+      obsidian-font-zoom)
+        OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-font-zoom}"
+        ;;
+      obsidian-markdown-bold)
+        OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-markdown-bold}"
+        ;;
+      obsidian-markdown-list)
+        OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-markdown-list}"
+        ;;
+      obsidian-multiline)
+        OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-multiline}"
+        ;;
+      obsidian-run-on)
+        OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-run-on}"
+        ;;
     esac
 
     case "$OBSIDIAN_VARIANT" in
@@ -531,9 +567,39 @@ case "$APP" in
         SESSION_NAME="Obsidian long-note variant"
         STEPS=$'- Use a disposable proof vault with a note that visibly scrolls.\n- Scroll so the target writing line is not near the top of the note.\n- Put the caret on a visible scrolled line and type `Smoke proof feels inst`.\n- Confirm the ghost anchors to the visible scrolled caret, not the unscrolled editor origin.\n- Press Tab once and expect `instant` on that visible line.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion lands on the visible scrolled line.'
         ;;
+      font-zoom|zoom|font)
+        OBSIDIAN_VARIANT="font-zoom"
+        PROOF_LABEL="obsidian-font-zoom"
+        SESSION_NAME="Obsidian font/zoom variant"
+        STEPS=$'- Use the disposable proof vault.\n- Increase Obsidian editor zoom before typing.\n- Type `Smoke proof feels inst` at the zoomed caret.\n- Confirm the ghost tracks the larger visible text/caret.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion remains correct, then reset zoom.'
+        ;;
+      markdown-bold|bold)
+        OBSIDIAN_VARIANT="markdown-bold"
+        PROOF_LABEL="obsidian-markdown-bold"
+        SESSION_NAME="Obsidian Markdown bold variant"
+        STEPS=$'- Use the disposable proof vault.\n- Start after a Markdown bold prefix.\n- Type `Smoke proof feels inst` in that bold Markdown context.\n- Confirm the ghost tracks the visible caret.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion stays in the bold line.'
+        ;;
+      markdown-list|list|dash)
+        OBSIDIAN_VARIANT="markdown-list"
+        PROOF_LABEL="obsidian-markdown-list"
+        SESSION_NAME="Obsidian Markdown list variant"
+        STEPS=$'- Use the disposable proof vault.\n- Start from a dash-list Markdown context after a bold setup line.\n- Type `Smoke proof feels inst` in the list row.\n- Confirm the ghost tracks the list-row caret.\n- Press Tab once and expect `instant` without turning into indentation.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion stays in the same list row.'
+        ;;
+      multiline|blank-lines)
+        OBSIDIAN_VARIANT="multiline"
+        PROOF_LABEL="obsidian-multiline"
+        SESSION_NAME="Obsidian multiline variant"
+        STEPS=$'- Use the disposable proof vault.\n- Place the proof line several blank lines below the marker.\n- Type `Smoke proof feels inst` after the blank-line gap.\n- Confirm the ghost tracks the lower visible caret.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion stays on the intended line.'
+        ;;
+      run-on|runon|wrapped)
+        OBSIDIAN_VARIANT="run-on"
+        PROOF_LABEL="obsidian-run-on"
+        SESSION_NAME="Obsidian run-on sentence variant"
+        STEPS=$'- Use the disposable proof vault.\n- Start after a long wrapping sentence.\n- Type `Smoke proof feels inst` at the wrapped-line tail.\n- Confirm the ghost tracks the wrapped caret instead of the editor origin.\n- Press Tab once and expect `instant`.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion remains correct.'
+        ;;
       *)
         echo "unknown Obsidian variant: $OBSIDIAN_VARIANT" >&2
-        echo "expected default, theme, pane, or long-note" >&2
+        echo "expected default, theme, pane, long-note, font-zoom, markdown-bold, markdown-list, multiline, or run-on" >&2
         exit 2
         ;;
     esac

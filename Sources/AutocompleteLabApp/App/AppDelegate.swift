@@ -63,6 +63,18 @@ struct CodexProofFocusedTargetPolicy {
     }
 }
 
+private struct ObsidianPostAcceptanceSuppression {
+    let textBeforeCursor: String
+    let textAfterCursor: String
+    let expiresAt: Date
+
+    func matches(context: FocusedTextContext, now: Date = Date()) -> Bool {
+        expiresAt > now
+            && context.textBeforeCursor == textBeforeCursor
+            && context.textAfterCursor == textAfterCursor
+    }
+}
+
 struct SuggestionDebounceSchedule: Equatable, Sendable {
     let policyDelayMilliseconds: Int
     let scheduledDelayMilliseconds: Int
@@ -201,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
+    private let obsidianInsertionVerificationFastPathPolicy = ObsidianInsertionVerificationFastPathPolicy()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
@@ -209,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
+    private let obsidianTabPassthroughRepairPolicy = ObsidianTabPassthroughRepairPolicy()
     private let suggestionInterruptionPolicy = SuggestionInterruptionPolicy()
     private let workspaceFocusChangePolicy = WorkspaceFocusChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
@@ -391,6 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var obsidianPostAcceptanceSuppression: ObsidianPostAcceptanceSuppression?
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
     private var pendingAcceptedInsertionUndo: AcceptedInsertionUndo?
@@ -1264,7 +1279,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        return !disabledBundleIdentifiers.contains(app.bundleIdentifier)
+        return ProofModeAppEnablementPolicy(
+            disabledBundleIdentifiers: disabledBundleIdentifiers,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        ).isEnabled(
+            appBundleIdentifier: app.bundleIdentifier,
+            suggestionBundleIdentifier: profile.bundleIdentifier
+        )
     }
 
     private func claudeCodeTerminalHostProofProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
@@ -1613,6 +1634,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         transitionToField(rawFieldIdentity)
 
         let previousSnapshot = lastTextSnapshot
+        let rawSnapshot = FocusedTextSnapshot(
+            fieldIdentity: rawFieldIdentity,
+            textBeforeCursor: rawContext.textBeforeCursor,
+            textAfterCursor: rawContext.textAfterCursor
+        )
+        if repairObsidianTabPassthroughIfNeeded(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: rawSnapshot,
+            context: rawContext,
+            profile: profile,
+            fieldIdentity: rawFieldIdentity,
+            source: "raw"
+        ) {
+            return
+        }
+
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
@@ -1646,6 +1683,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             app: frontmostApp,
             textChanged: previousSnapshot == nil || snapshot != previousSnapshot
         )
+
+        if repairObsidianTabPassthroughIfNeeded(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: snapshot,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            source: "adjusted"
+        ) {
+            return
+        }
 
         guard snapshot != previousSnapshot else {
             if shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
@@ -1861,6 +1909,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let requestMode = activationDecision.requestMode ?? .phraseContinuation
+        if shouldSuppressObsidianPostAcceptanceRefresh(context: context, profile: profile) {
+            invalidatePendingSuggestionRequest()
+            let metadata = fieldClassification.traceMetadata
+                .merging(["reason": "obsidian-post-acceptance-settle"]) { current, _ in current }
+            setSuggestionDecision("Waiting: Obsidian accepted text settled")
+            showFieldStatusIndicator(.ready, context: context)
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: requestMode.rawValue,
+                triggerReason: "obsidian-post-acceptance-settle",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: "obsidian-post-acceptance-settle",
+                metadata: metadata
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: metadata
+            )
+            if suggestionSession.hasVisibleSuggestion {
+                hideSuggestion(reason: "obsidian-post-acceptance-settle")
+            }
+            return
+        }
         let prefixCooldownInput = PrefixFamilyCooldownInput(
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentifier: fieldIdentity.traceDescription,
@@ -2639,6 +2717,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let font = tuning.font ?? syntheticTextAreaFont(for: context, bundleIdentifier: bundleIdentifier)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
 
+        if let obsidianScrolledCaret = obsidianScrolledCodeMirrorSyntheticCaretRect(
+            for: context,
+            bundleIdentifier: bundleIdentifier,
+            elementRect: elementRect,
+            font: font,
+            lineHeight: lineHeight
+        ) {
+            return obsidianScrolledCaret
+        }
+
         return SyntheticCaretEstimator.caretRect(
             textBeforeCursor: context.textBeforeCursor,
             elementRect: elementRect,
@@ -2648,6 +2736,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             verticalPadding: tuning.verticalPadding,
             inlineGap: tuning.inlineGap,
             centerSingleLineWhenTall: tuning.centerSingleLineWhenTall,
+            widthOfText: { width(of: $0, font: font) }
+        )
+    }
+
+    private func obsidianScrolledCodeMirrorSyntheticCaretRect(
+        for context: FocusedTextContext,
+        bundleIdentifier: String,
+        elementRect: CGRect,
+        font: NSFont,
+        lineHeight: CGFloat
+    ) -> CGRect? {
+        guard bundleIdentifier == "md.obsidian",
+              elementRect.width > 20,
+              elementRect.width <= 80,
+              elementRect.height >= lineHeight * 4,
+              let windowRect = context.windowRect,
+              windowRect.insetBy(dx: -24, dy: -24).intersects(elementRect) else {
+            return nil
+        }
+
+        let currentLine = context.textBeforeCursor
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .last
+            .map(String.init) ?? context.textBeforeCursor
+        guard !currentLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        let rowY = min(
+            max(elementRect.maxY - lineHeight - 12, windowRect.minY + 8),
+            windowRect.maxY - lineHeight - 8
+        )
+        let maxRight = min(
+            windowRect.maxX - 24,
+            max(elementRect.maxX + 160, windowRect.maxX - 96)
+        )
+        let rowWidth = max(160, maxRight - elementRect.minX)
+        let visibleRowRect = CGRect(
+            x: elementRect.minX,
+            y: rowY,
+            width: rowWidth,
+            height: lineHeight + 18
+        )
+
+        return SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: currentLine,
+            elementRect: visibleRowRect,
+            windowRect: windowRect,
+            lineHeight: lineHeight,
+            horizontalPadding: 18,
+            verticalPadding: 4,
+            inlineGap: 8,
+            centerSingleLineWhenTall: false,
             widthOfText: { width(of: $0, font: font) }
         )
     }
@@ -3037,7 +3178,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         guard focusedFieldMatchesCurrentSuggestion(
             allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
-            allowCodexProofSnapshotFastPath: action == .acceptNextWord
+            allowCodexProofSnapshotFastPath: action == .acceptNextWord,
+            allowObsidianSnapshotFastPath: action.insertsSuggestionText
         ) else {
             setSuggestionDecision("Blocked: focus changed")
             hideSuggestion(reason: "focus-changed")
@@ -3097,7 +3239,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision(
-                allowCodexProofSnapshotFastPath: true
+                allowCodexProofSnapshotFastPath: true,
+                allowObsidianSnapshotFastPath: true
             ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
@@ -3166,6 +3309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
             recordAcceptedText(acceptedText)
+            armObsidianPostAcceptanceSuppressionIfNeeded()
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
@@ -3196,7 +3340,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "unsupported-full")
                 return .replayOriginalKey(.unsupportedAction)
             }
-            if let blockReason = currentSuggestionAcceptanceDecision().blockReason {
+            if let blockReason = currentSuggestionAcceptanceDecision(
+                allowObsidianSnapshotFastPath: true
+            ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
                 setSuggestionDecision("Blocked: \(blockReason.rawValue)")
                 hideSuggestion(reason: blockReason.rawValue)
@@ -3232,6 +3378,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             suggestionSession.commitAllVisibleAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
+            armObsidianPostAcceptanceSuppressionIfNeeded()
             suggestionRepetitionSuppressor.recordAcceptance(
                 acceptedText,
                 mode: currentSuggestionRequestMode,
@@ -3291,7 +3438,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func currentSuggestionAcceptanceDecision(
-        allowCodexProofSnapshotFastPath: Bool = false
+        allowCodexProofSnapshotFastPath: Bool = false,
+        allowObsidianSnapshotFastPath: Bool = false
     ) -> SuggestionAcceptanceDecision {
         guard let shownSnapshot = currentSuggestionAcceptanceSnapshot else {
             return .block(.missingShownSnapshot)
@@ -3300,6 +3448,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if allowCodexProofSnapshotFastPath,
            codexProofAcceptanceSnapshotMatchesShown(shownSnapshot) {
             recordCodexProofSnapshotFastPath(stage: "acceptance")
+            return .allow
+        }
+        if allowObsidianSnapshotFastPath,
+           obsidianAcceptanceSnapshotMatchesShown(shownSnapshot) {
+            recordObsidianSnapshotFastPath(stage: "acceptance")
             return .allow
         }
 
@@ -3416,6 +3569,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         action: KeyboardAction,
         metadata: [String: String] = [:]
     ) {
+        if currentSuggestionAppBundleIdentifier == "md.obsidian"
+            || currentProfile?.bundleIdentifier == "md.obsidian" {
+            var payload = metadata
+            payload["app"] = "md.obsidian"
+            payload["key"] = key.diagnosticName
+            payload["action"] = action.diagnosticName
+            payload["stage"] = stage
+            payload["hasVisibleSuggestion"] = String(suggestionSession.hasVisibleSuggestion)
+            payload["requestMode"] = currentSuggestionRequestMode?.rawValue ?? "unknown"
+            DiagnosticsLog.shared.record(
+                "obsidian-keyboard-progress",
+                metadata: payload
+            )
+        }
+
         guard currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             || currentProfile?.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier else {
             return
@@ -3436,7 +3604,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func focusedFieldMatchesCurrentSuggestion(
         allowTerminalHostProofSnapshotFastPath: Bool = false,
-        allowCodexProofSnapshotFastPath: Bool = false
+        allowCodexProofSnapshotFastPath: Bool = false,
+        allowObsidianSnapshotFastPath: Bool = false
     ) -> Bool {
         if allowTerminalHostProofSnapshotFastPath,
            terminalHostProofSnapshotMatchesCurrentSuggestion() {
@@ -3445,6 +3614,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if allowCodexProofSnapshotFastPath,
            codexProofSnapshotMatchesCurrentSuggestion() {
             recordCodexProofSnapshotFastPath(stage: "focus")
+            return true
+        }
+        if allowObsidianSnapshotFastPath,
+           obsidianSnapshotMatchesCurrentSuggestion() {
+            recordObsidianSnapshotFastPath(stage: "focus")
             return true
         }
 
@@ -3661,6 +3835,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return true
+    }
+
+    private func obsidianSnapshotMatchesCurrentSuggestion() -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
+              suggestionSession.hasVisibleSuggestion,
+              let currentProfile,
+              currentProfile.bundleIdentifier == bundleIdentifier,
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              let suggestionAgeMilliseconds = currentSuggestionAgeMilliseconds(),
+              suggestionAgeMilliseconds <= 5_000,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            return false
+        }
+
+        return true
+    }
+
+    private func obsidianAcceptanceSnapshotMatchesShown(
+        _ shownSnapshot: SuggestionAcceptanceSnapshot
+    ) -> Bool {
+        guard obsidianSnapshotMatchesCurrentSuggestion(),
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              shownSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              shownSnapshot.fieldIdentity == lastTextSnapshot.fieldIdentity,
+              shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+              shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor,
+              shownSnapshot.selectedTextLength == 0 else {
+            return false
+        }
+
+        return true
+    }
+
+    private func recordObsidianSnapshotFastPath(stage: String) {
+        DiagnosticsLog.shared.record(
+            "obsidian-snapshot-fast-path",
+            metadata: [
+                "app": "md.obsidian",
+                "stage": stage,
+                "fieldIdentity": currentSuggestionFieldIdentity?.traceDescription ?? "",
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "",
+                "suggestionAgeMilliseconds": currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
+            ]
+        )
     }
 
     private func codexProofAcceptanceSnapshotMatchesShown(
@@ -4058,6 +4282,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "currentAfterChars": String(context.textAfterCursor.count)
                 ]
             )
+
+            if baseline.profile.bundleIdentifier == "md.obsidian",
+               obsidianInsertionVerificationFastPathPolicy.canVerifyLengthMatchedSuffix(
+                   previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+                   acceptedText: acceptedText,
+                   currentTextBeforeCursor: context.textBeforeCursor,
+                   previousTextAfterCursor: baseline.previousTextAfterCursor,
+                   currentTextAfterCursor: context.textAfterCursor,
+                   verificationResult: result
+               ) {
+                result = .verified
+                DiagnosticsLog.shared.record(
+                    "obsidian-length-matched-insert-verification-fast-path",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "acceptedChars": String(acceptedText.count),
+                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "reason": "length-matched-suffix"
+                    ]
+                )
+                DiagnosticsLog.shared.record(
+                    "insert-verification",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "result": String(describing: result),
+                        "acceptedChars": String(acceptedText.count),
+                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                        "currentAfterChars": String(context.textAfterCursor.count),
+                        "source": "obsidian-length-matched-suffix"
+                    ]
+                )
+            }
 
             if !result.isVerified,
                let recheckDelayMilliseconds = insertionVerificationTimingPolicy.readOnlyRecheckDelayMilliseconds(
@@ -6625,7 +6884,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
                     || shouldUseCodexProofDirectInsertion(profile: profile)
                     || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
-                    || shouldUseObsidianDirectValueInsertion(profile: profile) ? 0.75 : 0.25
+                    || shouldUseObsidianDirectValueInsertion(profile: profile)
+                    || shouldUseObsidianSystemEventsInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
 
@@ -6725,6 +6985,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
+        if shouldUseObsidianSystemEventsInsertion(profile: profile) {
+            let succeeded = insertObsidianSystemEventsPasteText(acceptedText)
+            DiagnosticsLog.shared.record(
+                "insert",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
+                    "success": String(succeeded),
+                    "skippedModes": skippedModes
+                        .map(\.rawValue)
+                        .sorted()
+                        .joined(separator: ",")
+                ]
+            )
+            if succeeded {
+                focusedTextPollingPause.pause(
+                    now: Date(),
+                    durationMilliseconds: postInsertionPollPauseMilliseconds
+                )
+            }
+            return succeeded
+        }
+
         let result = insertionEngine.insert(
             acceptedText,
             profile: profile,
@@ -6781,6 +7065,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func shouldUseObsidianDirectValueInsertion(profile: CompatibilityProfile) -> Bool {
+        currentSuggestionAppBundleIdentifier == "md.obsidian"
+            && profile.bundleIdentifier == "md.obsidian"
+            && profile.insertionMode == .axValueReplacement
+            && ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT"] == "1"
+    }
+
+    private func shouldUseObsidianSystemEventsInsertion(profile: CompatibilityProfile) -> Bool {
         currentSuggestionAppBundleIdentifier == "md.obsidian"
             && profile.bundleIdentifier == "md.obsidian"
             && profile.insertionMode == .axValueReplacement
@@ -6878,37 +7169,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        guard AXUIElementSetAttributeValue(
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let valueResult = AXUIElementSetAttributeValue(
             textArea,
             kAXValueAttribute as CFString,
             replacementText as CFTypeRef
-        ) == .success else {
+        )
+        guard valueResult == .success else {
             DiagnosticsLog.shared.record(
                 "obsidian-direct-value-insert",
                 metadata: [
                     "app": bundleIdentifier,
                     "success": "false",
-                    "reason": "value-set-failed"
+                    "reason": "value-set-failed",
+                    "axResult": String(valueResult.rawValue)
                 ]
             )
             return false
         }
 
-        var cursorRange = CFRange(location: cursorUTF16Offset, length: 0)
-        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
-            _ = AXUIElementSetAttributeValue(
-                textArea,
-                kAXSelectedTextRangeAttribute as CFString,
-                rangeValue
-            )
+        let canUseDocumentEndCursorFallback = lastTextSnapshot.textAfterCursor.isEmpty
+        var usedDocumentEndCursorFallback = false
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+        if !Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+            textArea,
+            location: cursorUTF16Offset
+        ) {
+            if canUseDocumentEndCursorFallback {
+                Self.postCommandDownKey()
+                usedDocumentEndCursorFallback = true
+            } else {
+                Self.postCommandRightKey()
+                Thread.sleep(forTimeInterval: 0.05)
+                Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+            }
+            Thread.sleep(forTimeInterval: 0.05)
         }
-        moveFrontmostInsertionPointToLineEnd()
 
         var succeeded = false
+        var cursorMatches = false
+        var currentText: String?
         for _ in 0..<5 {
-            if Self.axStringAttribute(textArea, kAXValueAttribute) == replacementText {
+            currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+            let acceptedDocumentEndFallback = usedDocumentEndCursorFallback
+                && canUseDocumentEndCursorFallback
+            if currentText == replacementText,
+               cursorMatches || acceptedDocumentEndFallback {
                 succeeded = true
                 break
+            }
+            if currentText == replacementText {
+                if canUseDocumentEndCursorFallback {
+                    Self.postCommandDownKey()
+                    usedDocumentEndCursorFallback = true
+                } else {
+                    Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+                }
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
@@ -6917,7 +7238,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "app": bundleIdentifier,
                 "success": String(succeeded),
+                "cursorMatches": String(cursorMatches),
+                "documentEndCursorFallback": String(usedDocumentEndCursorFallback),
                 "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentText?.count ?? -1),
                 "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
                 "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count),
                 "matchSource": matchSource
@@ -6926,17 +7250,462 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return succeeded
     }
 
-    private func moveFrontmostInsertionPointToLineEnd() {
-        guard let source = CGEventSource(stateID: .hidSystemState),
-              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
-            return
+    private func insertObsidianSystemEventsPasteText(_ acceptedText: String) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-system-events-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "posted": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
         }
 
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        let pasteboard = NSPasteboard.general
+        let originalItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-system-events-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-set-failed"
+                ]
+            )
+            return false
+        }
+        let fallbackChangeCount = pasteboard.changeCount
+
+        let pasteDelayMilliseconds = 30
+        let posted = Self.postCommandVKeyAsync(afterMilliseconds: pasteDelayMilliseconds)
+        if posted {
+            schedulePasteboardRestore(
+                insertedText: acceptedText,
+                fallbackChangeCount: fallbackChangeCount,
+                originalItems: originalItems,
+                delaySeconds: 0.35
+            )
+        } else {
+            restoreOriginalPasteboard()
+        }
+        DiagnosticsLog.shared.record(
+            "obsidian-system-events-insert",
+            metadata: [
+                "app": bundleIdentifier,
+                "posted": String(posted),
+                "source": "cgEventCommandPasteAsync",
+                "delayMilliseconds": String(pasteDelayMilliseconds),
+                "acceptedChars": String(acceptedText.count)
+            ]
+        )
+        return posted
+    }
+
+    private func repairObsidianTabPassthroughIfNeeded(
+        previousSnapshot: FocusedTextSnapshot?,
+        currentSnapshot: FocusedTextSnapshot,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        source: String
+    ) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        let suggestionBundleIdentifier = currentSuggestionAppBundleIdentifier
+            ?? currentProfile?.bundleIdentifier
+            ?? profile.bundleIdentifier
+        let suggestionAgeMilliseconds = currentSuggestionAgeMilliseconds()
+        let hasRecentSuggestion = suggestionAgeMilliseconds.map { $0 <= 15_000 } ?? false
+        let suggestionFieldMatches = currentSuggestionFieldIdentity == fieldIdentity
+            || currentSuggestionFieldIdentity == previousSnapshot?.fieldIdentity
+            || hasRecentSuggestion
+        guard profile.bundleIdentifier == bundleIdentifier,
+              let previousSnapshot,
+              suggestionFieldMatches,
+              suggestionBundleIdentifier == bundleIdentifier,
+              currentSuggestionRequestMode == .wordCompletion else {
+            return false
+        }
+
+        let preview = suggestionSession.nextWordAcceptancePreview()
+        let acceptedText = preview?.acceptedText ?? currentSuggestionDisplayedText
+        let decision = obsidianTabPassthroughRepairPolicy.decision(
+            previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
+            currentTextBeforeCursor: currentSnapshot.textBeforeCursor,
+            previousTextAfterCursor: previousSnapshot.textAfterCursor,
+            currentTextAfterCursor: currentSnapshot.textAfterCursor,
+            currentSelectedText: context.selectedText,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion || hasRecentSuggestion,
+            acceptedText: acceptedText
+        )
+        guard decision.shouldRepair, let acceptedText, !acceptedText.isEmpty else {
+            if profile.bundleIdentifier == bundleIdentifier,
+               currentSnapshot.textBeforeCursor.contains("\t")
+                    || context.selectedTextLength > 0 {
+                DiagnosticsLog.shared.record(
+                    "obsidian-tab-passthrough-repair-skipped",
+                    metadata: [
+                        "app": bundleIdentifier,
+                        "reason": decision.reason,
+                        "source": source,
+                        "suggestionAgeMilliseconds": suggestionAgeMilliseconds.map(String.init) ?? "unknown",
+                        "suggestionVisible": String(suggestionSession.hasVisibleSuggestion),
+                        "acceptedChars": String(acceptedText?.count ?? 0),
+                        "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                        "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count),
+                        "currentAfterChars": String(currentSnapshot.textAfterCursor.count),
+                        "selectedChars": String(context.selectedText.count),
+                        "selectedTextLength": String(context.selectedTextLength)
+                    ]
+                )
+            }
+            return false
+        }
+
+        let action = KeyboardAction.acceptNextWord
+        let key = AutocompleteKey.tab
+        let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText)
+        if acceptanceProof == nil {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-proof-stale",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "source": source,
+                    "acceptedChars": String(acceptedText.count),
+                    "suggestionAgeMilliseconds": suggestionAgeMilliseconds.map(String.init) ?? "unknown"
+                ]
+            )
+        }
+
+        let acceptanceID = UUID().uuidString
+        let acceptedAt = Date()
+        let verificationBaseline = insertionVerificationBaseline(
+            acceptanceID: acceptanceID,
+            acceptedAt: acceptedAt,
+            acceptMode: action.diagnosticName
+        )
+
+        DiagnosticsLog.shared.record(
+            "obsidian-tab-passthrough-repair",
+            metadata: [
+                "app": bundleIdentifier,
+                "reason": decision.reason,
+                "source": source,
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count),
+                "currentAfterChars": String(currentSnapshot.textAfterCursor.count),
+                "selectedChars": String(context.selectedText.count),
+                "selectedTextLength": String(context.selectedTextLength),
+                "suggestionAgeMilliseconds": suggestionAgeMilliseconds.map(String.init) ?? "unknown",
+                "suggestionVisible": String(suggestionSession.hasVisibleSuggestion)
+            ]
+        )
+
+        let repairSucceeded = repairObsidianTabPassthroughByReplacingFocusedText(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: currentSnapshot,
+            acceptedText: acceptedText
+        ) || repairObsidianTabPassthroughByUndoingThenPasting(
+            previousSnapshot: previousSnapshot,
+            acceptedText: acceptedText
+        )
+        guard repairSucceeded else {
+            recordKeyboardAction(key: key, action: action, handled: false, reason: "obsidian-tab-passthrough-direct-repair-failed")
+            return false
+        }
+
+        armAcceptedInsertionUndo(
+            acceptedText: acceptedText,
+            acceptanceID: acceptanceID,
+            acceptedAt: acceptedAt,
+            acceptMode: action.diagnosticName
+        )
+        suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
+        recordAcceptedText(acceptedText)
+        advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
+        lastTextSnapshot = FocusedTextSnapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: previousSnapshot.textBeforeCursor + acceptedText,
+            textAfterCursor: previousSnapshot.textAfterCursor
+        )
+        suggestionRepetitionSuppressor.recordAcceptance(
+            acceptedText,
+            mode: currentSuggestionRequestMode,
+            scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+        )
+        if let acceptanceProof {
+            recordRawAcceptance(
+                action: action,
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptanceProof: acceptanceProof
+            )
+        }
+        recordAnnoyanceSignal(
+            .accepted,
+            context: currentAnnoyanceContext(),
+            suggestionID: currentSuggestionID ?? "",
+            reason: "obsidian-tab-passthrough-repaired"
+        )
+        setSuggestionDecision("Accepted: repaired Obsidian Tab passthrough")
+        hideSuggestion(
+            reason: "accepted-obsidian-tab-passthrough-repaired",
+            metadata: [
+                "repair": "obsidian-tab-passthrough",
+                "fieldBeforeChars": String(context.textBeforeCursor.count)
+            ]
+        )
+        scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
+        suppressKey(key)
+        recordKeyboardAction(key: key, action: action, handled: true, reason: "obsidian-tab-passthrough-repaired")
+        return true
+    }
+
+    private func repairObsidianTabPassthroughByReplacingFocusedText(
+        previousSnapshot: FocusedTextSnapshot,
+        currentSnapshot: FocusedTextSnapshot,
+        acceptedText: String
+    ) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-direct-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let currentText = currentSnapshot.textBeforeCursor + currentSnapshot.textAfterCursor
+        let replacementText = previousSnapshot.textBeforeCursor + acceptedText + previousSnapshot.textAfterCursor
+        let cursorUTF16Offset = previousSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard let textArea = Self.axFocusedTextArea(
+            in: appElement,
+            matchingValue: currentText,
+            containing: currentSnapshot.textBeforeCursor
+        ) ?? Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: currentText,
+            containing: currentSnapshot.textBeforeCursor,
+            maxDepth: 32
+        ) else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-direct-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "text-area-not-found",
+                    "currentChars": String(currentText.count),
+                    "replacementChars": String(replacementText.count)
+                ]
+            )
+            return false
+        }
+
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let valueResult = AXUIElementSetAttributeValue(
+            textArea,
+            kAXValueAttribute as CFString,
+            replacementText as CFTypeRef
+        )
+        guard valueResult == .success else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-direct-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "value-set-failed",
+                    "axResult": String(valueResult.rawValue)
+                ]
+            )
+            return false
+        }
+
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+
+        var succeeded = false
+        var cursorMatches = false
+        var currentValue: String?
+        for _ in 0..<5 {
+            currentValue = Self.axStringAttribute(textArea, kAXValueAttribute)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+            if currentValue == replacementText,
+               cursorMatches || previousSnapshot.textAfterCursor.isEmpty {
+                succeeded = true
+                break
+            }
+            if currentValue == replacementText {
+                Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        DiagnosticsLog.shared.record(
+            "obsidian-tab-passthrough-direct-repair",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "cursorMatches": String(cursorMatches),
+                "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentValue?.count ?? -1),
+                "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count)
+            ]
+        )
+        return succeeded
+    }
+
+    private func repairObsidianTabPassthroughByUndoingThenPasting(
+        previousSnapshot: FocusedTextSnapshot,
+        acceptedText: String
+    ) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "pasteboard-set-failed"
+                ]
+            )
+            return false
+        }
+        let fallbackChangeCount = pasteboard.changeCount
+
+        let script = """
+        tell application "System Events"
+          tell application process "Obsidian" to set frontmost to true
+          keystroke "z" using command down
+          delay 0.05
+          keystroke "v" using command down
+        end tell
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "osascript-run-failed"
+                ]
+            )
+            return false
+        }
+
+        guard process.terminationStatus == 0 else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "osascript-failed",
+                    "terminationStatus": String(process.terminationStatus)
+                ]
+            )
+            return false
+        }
+
+        schedulePasteboardRestore(
+            insertedText: acceptedText,
+            fallbackChangeCount: fallbackChangeCount,
+            originalItems: originalItems
+        )
+
+        let expectedText = previousSnapshot.textBeforeCursor + acceptedText + previousSnapshot.textAfterCursor
+        var succeeded = false
+        var currentChars = -1
+        for _ in 0..<8 {
+            if let context = accessibilityClient.focusedTextContext(allowDescendantTextFallback: true) {
+                let currentText = context.textBeforeCursor + context.textAfterCursor
+                currentChars = currentText.count
+                if currentText == expectedText {
+                    succeeded = true
+                    break
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        DiagnosticsLog.shared.record(
+            "obsidian-tab-passthrough-undo-paste-repair",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentChars),
+                "expectedChars": String(expectedText.count),
+                "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                "previousAfterChars": String(previousSnapshot.textAfterCursor.count)
+            ]
+        )
+        return succeeded
     }
 
     private func insertCodexProofText(_ acceptedText: String) -> Bool {
@@ -7219,11 +7988,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func schedulePasteboardRestore(
         insertedText: String,
         fallbackChangeCount: Int,
-        originalItems: [NSPasteboardItem]
+        originalItems: [NSPasteboardItem],
+        delaySeconds: TimeInterval = 0.15
     ) {
         let restorePolicy = ClipboardFallbackRestorePolicy()
         let pasteboard = NSPasteboard.general
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds) {
             let restoreDecision = restorePolicy.decision(
                 insertedText: insertedText,
                 currentString: pasteboard.string(forType: .string),
@@ -7305,6 +8075,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let focusedElement = focusedValue as! AXUIElement
         guard Int(CFHash(focusedElement)) == elementIdentifier,
               axRole(focusedElement) == "AXTextArea",
+              let value = axStringAttribute(focusedElement, kAXValueAttribute),
+              value == expectedValue,
+              value.contains(marker) else {
+            return nil
+        }
+
+        return focusedElement
+    }
+
+    nonisolated private static func axFocusedTextArea(
+        in appElement: AXUIElement,
+        matchingValue expectedValue: String,
+        containing marker: String
+    ) -> AXUIElement? {
+        guard let focusedValue = axAttribute(appElement, kAXFocusedUIElementAttribute),
+              CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+            return nil
+        }
+
+        let focusedElement = focusedValue as! AXUIElement
+        guard axRole(focusedElement) == "AXTextArea",
               let value = axStringAttribute(focusedElement, kAXValueAttribute),
               value == expectedValue,
               value.contains(marker) else {
@@ -7428,6 +8219,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return range.location == location && range.length == length
     }
 
+    nonisolated private static func axObsidianSelectedTextRangeMatchesInsertionPoint(
+        _ element: AXUIElement,
+        location: Int
+    ) -> Bool {
+        axSelectedTextRangeMatches(element, location: location, length: 0)
+            || (
+                location > 0
+                    && axSelectedTextRangeMatches(element, location: location - 1, length: 0)
+            )
+    }
+
     nonisolated private static func postCommandRightKey() {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
@@ -7439,6 +8241,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
+    }
+
+    nonisolated private static func postCommandDownKey() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 125, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 125, keyDown: false) else {
+            return
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+
+    nonisolated private static func postCommandVKey() -> Bool {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+            return false
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
+    }
+
+    nonisolated private static func postCommandVKeyAsync(afterMilliseconds delayMilliseconds: Int) -> Bool {
+        let postPaste: @Sendable () -> Void = {
+            let source = CGEventSource(stateID: .hidSystemState)
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+                DiagnosticsLog.shared.record(
+                    "keyboard-post-failed",
+                    metadata: [
+                        "key": "command-v",
+                        "source": "cgEventCommandPasteAsync"
+                    ]
+                )
+                return
+            }
+
+            keyDown.flags = .maskCommand
+            keyUp.flags = .maskCommand
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
+
+        if delayMilliseconds > 0 {
+            DispatchQueue.global(qos: .userInteractive).asyncAfter(
+                deadline: .now() + .milliseconds(delayMilliseconds),
+                execute: postPaste
+            )
+        } else {
+            DispatchQueue.global(qos: .userInteractive).async(execute: postPaste)
+        }
+        return true
     }
 
     nonisolated private static func axDescendant(
@@ -7793,6 +8654,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: lastTextSnapshot.textBeforeCursor + acceptedText,
             textAfterCursor: lastTextSnapshot.textAfterCursor
         )
+    }
+
+    private func armObsidianPostAcceptanceSuppressionIfNeeded() {
+        guard (currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier) == "md.obsidian",
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentFieldIdentity else {
+            return
+        }
+
+        obsidianPostAcceptanceSuppression = ObsidianPostAcceptanceSuppression(
+            textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            textAfterCursor: lastTextSnapshot.textAfterCursor,
+            expiresAt: Date().addingTimeInterval(1.5)
+        )
+        DiagnosticsLog.shared.record(
+            "obsidian-post-acceptance-suppression-armed",
+            metadata: [
+                "app": "md.obsidian",
+                "beforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "afterChars": String(lastTextSnapshot.textAfterCursor.count)
+            ]
+        )
+    }
+
+    private func shouldSuppressObsidianPostAcceptanceRefresh(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        guard profile.bundleIdentifier == "md.obsidian",
+              let suppression = obsidianPostAcceptanceSuppression else {
+            return false
+        }
+
+        if suppression.expiresAt <= Date() {
+            obsidianPostAcceptanceSuppression = nil
+            return false
+        }
+
+        guard suppression.matches(context: context) else {
+            obsidianPostAcceptanceSuppression = nil
+            return false
+        }
+
+        return true
     }
 
     private func advanceCurrentSuggestionBaseline(afterAccepting acceptedText: String) {

@@ -190,7 +190,7 @@ app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_tex
 if "pollTimer?.fireDate" in app_delegate:
     raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
 insert_start = app_delegate.index("private func insertObsidianDirectValueText(")
-insert_end = app_delegate.index("private func moveFrontmostInsertionPointToLineEnd()", insert_start)
+insert_end = app_delegate.index("private func insertObsidianSystemEventsPasteText(", insert_start)
 insert_block = app_delegate[insert_start:insert_end]
 if "focusedTextAreaElementIdentifier" not in insert_block:
     raise SystemExit("Obsidian direct insertion fallback must verify the currently focused AX text area")
@@ -917,27 +917,116 @@ first_long_suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smok
 first_suggestion = source.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"', first_long_suffix)
 if not (first_long_insert < first_long_suffix < first_suggestion):
     raise SystemExit("Obsidian long-note proof must AX-insert the first fragment, verify the disposable file suffix, then wait for the first suggestion")
-first_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"')
-watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', first_assert)
-append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays inst"', watch)
-suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant and stays inst"', append)
-focus = source.index('move_obsidian_caret_to_document_end', suffix)
-assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', suffix)
+first_preservation = source.index('assert_obsidian_long_note_file_preserved "Smoke proof feels instant"')
+append = source.index('append_obsidian_smoke_note_file_text " and stays inst"', first_preservation)
+watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', append)
+open_note = source.index('open_obsidian_smoke_note_if_configured', watch)
+focus = source.index('move_obsidian_caret_to_document_end', open_note)
+assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', focus)
 branch_end = source.index('\n  else', append)
-if not (first_assert < watch < append < suffix < focus < assertion < branch_end):
-    raise SystemExit("Obsidian long-note proof must start watching before AX-appending the second fragment and reasserting the caret at the note end")
+if not (first_preservation < append < watch < open_note < focus < assertion < branch_end):
+    raise SystemExit("Obsidian long-note proof must append the second fragment through the disposable note file, refocus Obsidian, and reassert the caret at the note end")
 non_long_else = source.index('\n  else', branch_end)
-non_long_dismiss = source.index('press_key_code 53', non_long_else)
-non_long_pause = source.index('sleep 0.2', non_long_dismiss)
-non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_pause)
-non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_watch)
-non_long_append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"', non_long_assert)
-non_long_reassert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_append)
-non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_reassert)
+non_long_settle = source.index('settle_obsidian_focus_for_smoke "Obsidian post-accept setup"', non_long_else)
+non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_settle)
+non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_assert)
+non_long_append = source.index('type_obsidian_raw_smoke_text " and stays"', non_long_watch)
+non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_append)
 non_long_full_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_wait)
 non_long_full_start = source.index('full_start_line="$(line_count "$LOG_PATH")"', non_long_full_assert)
-if not (non_long_dismiss < non_long_pause < non_long_watch < non_long_assert < non_long_append < non_long_reassert < non_long_wait < non_long_full_assert < non_long_full_start):
-    raise SystemExit("Obsidian default/theme/pane proof must dismiss stale suggestions, AX-append the second fragment, reassert the AX target, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
+if not (non_long_settle < non_long_assert < non_long_watch < non_long_append < non_long_wait < non_long_full_assert < non_long_full_start):
+    raise SystemExit("Obsidian default/theme/pane proof must settle focus, append the second fragment, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
+PY
+
+if ! grep -F 'insertionMode: .keyEvents' Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift >/dev/null ||
+   ! grep -F 'AX values can represent only the visible viewport' Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian to avoid destructive AX value replacement in long notes" >&2
+  exit 1
+fi
+
+if ! grep -F "insertObsidianSystemEventsPasteText" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'keystroke "v" using command down' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian insertion to use the proven paste path instead of raw CGEvents" >&2
+  exit 1
+fi
+
+if ! grep -F "assert_obsidian_long_note_file_preserved" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "lost off-screen note content" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to guard off-screen note preservation" >&2
+  exit 1
+fi
+
+if ! grep -F 'first_fragment="moke proof feel"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_obsidian_raw_smoke_text "s"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to type the final trigger character after caret-end repair" >&2
+  exit 1
+fi
+
+if ! grep -F 'wait_for_frontmost_app "Obsidian" "${AUTOCOMPLETE_LAB_OBSIDIAN_ACTIVATION_WAIT_SECONDS:-5}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_obsidian_focus_for_smoke()' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian activation to wait for frontmost focus before proof actions" >&2
+  exit 1
+fi
+
+if ! grep -F 'AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-optionTab}"' script/obsidian_deep_sweep.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.4}"' script/obsidian_deep_sweep.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian deep sweep to inherit the proven shortcut and focus settle defaults" >&2
+  exit 1
+fi
+
+if grep -F 'AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$lock_dir"' script/obsidian_deep_sweep.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian deep sweep to use the shared real-app smoke lock" >&2
+  exit 1
+fi
+
+if ! grep -F "terminate_stale_steadytype_app_bundles" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "stale_steadytype_app_bundle_pids" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected exclusive proof runs to terminate stale SteadyType apps from other worktrees" >&2
+  exit 1
+fi
+
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+append_index = source.index('append_obsidian_smoke_note_file_text " and stays inst"')
+start_index = source.index('second_start_line="$(line_count "$LOG_PATH")"', append_index)
+open_index = source.index('open_obsidian_smoke_note_if_configured', append_index)
+if not append_index < start_index < open_index:
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian long-note log watching to start before refocusing Obsidian"
+    )
+if '"beforeChars=$long_note_expected_before_chars"' in source:
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian long-note proof not to require full-file AX beforeChars"
+    )
+
+full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('wait_for_obsidian_long_note_second_suggestion "$second_start_line"')):]
+full_branch = full_branch[:full_branch.index('else')]
+required = [
+    'wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"',
+    'assert_frontmost_app "Obsidian" "Obsidian long-note"',
+    'press_accept_all_shortcut',
+]
+positions = [full_branch.find(text) for text in required]
+if any(position < 0 for position in positions) or positions != sorted(positions):
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian long-note proof to capture the second visual frame and preserve editor focus before full accept"
+    )
+
+normal_branch = source[source.index('else', source.index('wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified"')):]
+normal_branch = normal_branch[:normal_branch.index('fi', normal_branch.index('type_obsidian_raw_smoke_text " and stays"'))]
+normal_required = [
+    'settle_obsidian_focus_for_smoke "Obsidian post-accept setup"',
+    'assert_obsidian_smoke_target "Smoke proof feels instant"',
+    'second_start_line="$(line_count "$LOG_PATH")"',
+    'type_obsidian_raw_smoke_text " and stays"',
+]
+normal_positions = [normal_branch.find(text) for text in normal_required]
+if any(position < 0 for position in normal_positions) or normal_positions != sorted(normal_positions):
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian normal proof to settle focus before second typing"
+    )
 PY
 
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
@@ -983,6 +1072,18 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP
 fi
 if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/process-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the concurrent process scan" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 424242 bash ./script/real_app_smoke.sh chrome --fixture textarea\n' \
+  AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS=424242 \
+  script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/protected-process.txt"; then
+  echo "real app smoke self-test expected Codex to still require --manual-gate" >&2
+  exit 1
+fi
+if grep -F "Another real app smoke process is already active" "$TMP_DIR/protected-process.txt" >/dev/null; then
+  echo "real app smoke self-test expected protected proof parent groups not to block child lanes" >&2
   exit 1
 fi
 

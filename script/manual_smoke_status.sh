@@ -32,7 +32,8 @@ docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
 It separates insertion proof from screenshot-backed visual placement proof so
 real-app visual gaps stay visible after insertion passes.
 Notes title, body, and checklist are separate proof targets.
-Obsidian default, theme, pane, and long-note lanes are separate proof targets.
+Obsidian default, theme, pane, long-note, font-zoom, markdown, multiline, and
+run-on lanes are separate proof targets.
 Focused graduation decisions are printed separately so blocked or
 diagnostics-only high-value surfaces do not masquerade as supported proof.
 
@@ -52,6 +53,11 @@ declare -a APPS=(
   "Obsidian theme|Obsidian|md.obsidian|full|obsidian-theme|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
   "Obsidian panes|Obsidian|md.obsidian|full|obsidian-pane|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
   "Obsidian long note|Obsidian|md.obsidian|full|obsidian-long-note|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
+  "Obsidian font zoom|Obsidian|md.obsidian|full|obsidian-font-zoom|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-font-zoom --manual-gate"
+  "Obsidian Markdown bold|Obsidian|md.obsidian|full|obsidian-markdown-bold|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-bold --manual-gate"
+  "Obsidian Markdown list|Obsidian|md.obsidian|full|obsidian-markdown-list|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate"
+  "Obsidian multiline|Obsidian|md.obsidian|full|obsidian-multiline|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate"
+  "Obsidian run-on sentence|Obsidian|md.obsidian|full|obsidian-run-on|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate"
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea|script/manual_smoke_session.sh chrome --visual"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable|AUTOCOMPLETE_LAB_CHROME_FIXTURE=contenteditable script/manual_smoke_session.sh chrome --visual"
   "Chrome production textarea|Chrome|com.google.Chrome|full|textarea-public|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public"

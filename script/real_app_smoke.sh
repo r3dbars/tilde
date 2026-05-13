@@ -80,8 +80,9 @@ textedit-default-model-latency. These are still narrow TextEdit lanes, not a
 generic native-app claim. The TextEdit undo lanes automatically use native
 single-edit Command-Z proof.
 
-Obsidian proof must keep obsidian, obsidian-theme, obsidian-pane, and
-obsidian-long-note as separate manual-gated lanes before it can be complete.
+Obsidian proof must keep default, theme, pane, long-note, font-zoom,
+markdown-bold, markdown-list, multiline, and run-on lanes separate before it can
+be complete.
 
 Claude desktop proof can use claude-empty, claude-long, claude-wrapped,
 claude-narrow, claude-context, claude-light, or claude-dark to record bounded
@@ -301,6 +302,26 @@ case "$APP" in
     APP="obsidian"
     OBSIDIAN_SESSION_APP="obsidian-long-note"
     ;;
+  obsidian-font-zoom)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-font-zoom"
+    ;;
+  obsidian-markdown-bold)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-markdown-bold"
+    ;;
+  obsidian-markdown-list)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-markdown-list"
+    ;;
+  obsidian-multiline)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-multiline"
+    ;;
+  obsidian-run-on)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-run-on"
+    ;;
   claude-code-terminal)
     APP="claude-code"
     CLAUDE_CODE_HOST_VARIANT="terminal"
@@ -455,12 +476,19 @@ CHROME_LAST_LAUNCHED_PID=""
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
+SMOKE_INTERFERENCE_GUARD_PID=""
+SMOKE_INTERFERENCE_GUARD_POLL_SECONDS="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_POLL_SECONDS:-0.5}"
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
 SMOKE_QUARANTINE_GUARD_PID=""
 EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
+  exit 2
+fi
+
+if [[ ! "$SMOKE_INTERFERENCE_GUARD_POLL_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_POLL_SECONDS must be a non-negative number." >&2
   exit 2
 fi
 
@@ -999,22 +1027,29 @@ terminate_foreign_proof_processes_for_exclusive_run() {
 }
 
 other_smoke_process_lines() {
-  local process_list ancestor_pids self_pgid
+  local process_list ancestor_pids self_pgid protected_pgids
   ancestor_pids="$(current_process_ancestor_pids || true)"
   ancestor_pids="${ancestor_pids//$'\n'/ }"
   self_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+  protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v selfPgid="$self_pgid" -v ancestorPids="$ancestor_pids" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPgid="$self_pgid" -v ancestorPids="$ancestor_pids" -v protectedPGIDs="$protected_pgids" '
     BEGIN {
       split(ancestorPids, rawAncestors, /[[:space:]]+/)
       for (i in rawAncestors) {
         if (rawAncestors[i] != "") {
           ancestor[rawAncestors[i]] = 1
+        }
+      }
+      split(protectedPGIDs, protectedList, /[[:space:]]+/)
+      for (i in protectedList) {
+        if (protectedList[i] != "") {
+          protected[protectedList[i]] = 1
         }
       }
     }
@@ -1032,6 +1067,7 @@ other_smoke_process_lines() {
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasSmokeScript[pid] = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
+        index(command, "script/manual_proof_refresh.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
         index(command, "script/build_and_run.sh") > 0 ||
         index(command, "script/beta_readiness.sh") > 0 ||
@@ -1056,6 +1092,7 @@ other_smoke_process_lines() {
     END {
       for (pid in rawLine) {
         if (relatedToSelf(pid)) continue
+        if (processGroup[pid] in protected) continue
         if (directScript[pid] || shellHasSmokeScript[pid]) {
           print rawLine[pid]
         }
@@ -1064,12 +1101,122 @@ other_smoke_process_lines() {
   ' <<<"$process_list"
 }
 
+current_process_family_pgids() {
+  if [[ -n "${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS:-}" ]]; then
+    tr ', ' '\n\n' <<<"$AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS" |
+      awk 'NF && !seen[$1]++ { print $1 }'
+  fi
+
+  local pid="$SMOKE_SCRIPT_PID"
+  local seen_pids=" "
+  local row parent_pid pgid
+
+  while [[ -n "$pid" && "$pid" != "0" && "$seen_pids" != *" $pid "* ]]; do
+    seen_pids+="$pid "
+    row="$(ps -o ppid=,pgid= -p "$pid" 2>/dev/null | awk 'NR == 1 { print $1 "\t" $2 }' || true)"
+    [[ -z "$row" ]] && break
+
+    IFS=$'\t' read -r parent_pid pgid <<<"$row"
+    [[ -n "$pgid" ]] && printf '%s\n' "$pgid"
+    [[ -z "$parent_pid" || "$parent_pid" == "$pid" ]] && break
+    pid="$parent_pid"
+  done | awk 'NF && !seen[$1]++ { print $1 }'
+}
+
+other_autocomplete_proof_pgids() {
+  local process_list current_pgid protected_pgids
+  current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d ' ' || true)"
+  [[ -z "$current_pgid" ]] && return 0
+  protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
+  process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
+
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" -v rootDir="$ROOT_DIR" '
+    BEGIN {
+      split(protectedPGIDs, protectedList, " ")
+      for (i in protectedList) {
+        if (protectedList[i] != "") protected[protectedList[i]] = 1
+      }
+    }
+    {
+      pid = $1
+      pgid = $3
+      command = $0
+      sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|manual_proof_refresh|obsidian_deep_sweep|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
+      hasProofScript = index(command, "script/real_app_smoke.sh") > 0 ||
+        index(command, "script/fresh_latency_proof.sh") > 0 ||
+        index(command, "script/manual_proof_refresh.sh") > 0 ||
+        index(command, "script/obsidian_deep_sweep.sh") > 0 ||
+        index(command, "script/smoke_test.sh") > 0 ||
+        index(command, "script/build_and_run.sh") > 0
+      staleRootWatchdog = index(command, "stale_root") > 0 && index(command, rootDir) > 0
+      if (pid == self) next
+      if (selfPGID != "" && pgid == selfPGID) next
+      if (pgid in protected) next
+      if (directScript || (shellWrapper && hasProofScript) || staleRootWatchdog) {
+        print pgid
+      }
+    }
+  ' <<<"$process_list" | sort -u
+}
+
+terminate_other_autocomplete_proof_runs() {
+  local pgid pgids=()
+  terminate_stale_steadytype_app_bundles
+
+  while IFS= read -r pgid; do
+    [[ -z "$pgid" ]] && continue
+    pgids+=("$pgid")
+    ps -axo pid=,pgid= 2>/dev/null |
+      awk -v pgid="$pgid" '$2 == pgid { print $1 }' |
+      while IFS= read -r pid; do
+        [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+        kill -TERM "$pid" >/dev/null 2>&1 || true
+      done
+  done < <(other_autocomplete_proof_pgids)
+
+  ((${#pgids[@]} == 0)) && return 0
+  sleep 0.25
+
+  for pgid in "${pgids[@]}"; do
+    if ps -axo pgid= 2>/dev/null | awk -v pgid="$pgid" '$1 == pgid { found = 1; exit } END { exit found ? 0 : 1 }'; then
+      ps -axo pid=,pgid= 2>/dev/null |
+        awk -v pgid="$pgid" '$2 == pgid { print $1 }' |
+        while IFS= read -r pid; do
+          [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+          kill -KILL "$pid" >/dev/null 2>&1 || true
+        done
+    fi
+  done
+}
+
+start_smoke_interference_guard() {
+  if [[ ! "${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+
+  terminate_other_autocomplete_proof_runs
+  (
+    while kill -0 "$SMOKE_SCRIPT_PID" >/dev/null 2>&1; do
+      terminate_other_autocomplete_proof_runs
+      sleep "$SMOKE_INTERFERENCE_GUARD_POLL_SECONDS"
+    done
+  ) &
+  SMOKE_INTERFERENCE_GUARD_PID="$!"
+}
+
 refuse_other_smoke_processes() {
   local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
   local announced=0
   local processes
 
   while true; do
+    if [[ "${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}" =~ ^(1|true|yes|on)$ ]]; then
+      terminate_other_autocomplete_proof_runs
+      sleep "$SMOKE_INTERFERENCE_GUARD_POLL_SECONDS"
+    fi
+
     processes="$(other_smoke_process_lines || true)"
     if [[ -n "$processes" ]] && quarantine_foreign_smoke_processes "$processes"; then
       sleep 1
@@ -1733,6 +1880,15 @@ APPLESCRIPT
 
 activate_obsidian_for_smoke() {
   activate_app_by_process_name "Obsidian"
+  wait_for_frontmost_app "Obsidian" "${AUTOCOMPLETE_LAB_OBSIDIAN_ACTIVATION_WAIT_SECONDS:-5}"
+}
+
+settle_obsidian_focus_for_smoke() {
+  local label="${1:-Obsidian}"
+
+  activate_obsidian_for_smoke
+  sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.25}"
+  assert_frontmost_app "Obsidian" "$label"
 }
 
 reset_obsidian_zoom_for_smoke() {
@@ -1979,6 +2135,7 @@ prepare_temporary_app_enablement() {
   launchctl setenv "$PROOF_MODE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
   echo "Temporary app enablement for smoke: $bundle_ids"
   echo "Temporary proof mode for smoke: $bundle_ids"
+  prepare_accept_all_shortcut_default
 
   if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ ]]; then
     if [[ "$UNDO_RECOVERY_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
@@ -1993,6 +2150,34 @@ prepare_temporary_app_enablement() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so temporary enablement/proof mode only applies if the app was launched with this environment." >&2
   fi
+}
+
+prepare_accept_all_shortcut_default() {
+  local configured="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}"
+  case "$configured" in
+    "")
+      return 0
+      ;;
+    backtick|optionTab)
+      ;;
+    *)
+      echo "Unknown accept-all shortcut '$configured'; expected backtick or optionTab." >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED" != "1" ]]; then
+    if ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS="$(defaults read "$DEFAULTS_DOMAIN" AcceptAllShortcut 2>/dev/null)"; then
+      ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS=1
+    else
+      ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS=0
+      ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS=""
+    fi
+    ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED=1
+  fi
+
+  defaults write "$DEFAULTS_DOMAIN" AcceptAllShortcut "$configured" >/dev/null 2>&1 || true
+  echo "Temporary smoke whole-suggestion shortcut: $configured"
 }
 
 prepare_model_latency_runtime_options() {
@@ -2156,7 +2341,7 @@ obsidian_session_app() {
   fi
 
   case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
-    obsidian-theme|obsidian-pane|obsidian-long-note)
+    obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
       printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
       return 0
       ;;
@@ -2172,6 +2357,11 @@ Required Obsidian proof lanes:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-font-zoom --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-bold --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate
 EOF
 }
 
@@ -2189,6 +2379,29 @@ obsidian_smoke_marker_text() {
     printf 'S\n'
     return 0
   fi
+
+  case "$manual_app" in
+    obsidian-pane)
+      printf '%s.\n' "$marker"
+      return 0
+      ;;
+    obsidian-markdown-bold)
+      printf '%s\n\n**' "$marker"
+      return 0
+      ;;
+    obsidian-markdown-list)
+      printf '%s\n\n**Bold context line**\n\n- ' "$marker"
+      return 0
+      ;;
+    obsidian-multiline)
+      printf '%s\n\n\n' "$marker"
+      return 0
+      ;;
+    obsidian-run-on)
+      printf '%s\n\nThis deliberately long Obsidian run on sentence keeps moving across the editor so wrapping, scrolling, and caret geometry have to stay calm before the proof line appears ' "$marker"
+      return 0
+      ;;
+  esac
 
   printf '%s\n' "$marker"
 }
@@ -2278,12 +2491,62 @@ APPLESCRIPT
   fi
 }
 
+restore_obsidian_single_pane_if_needed() {
+  activate_obsidian_for_smoke
+
+  local pane_count attempt
+  pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+  attempt=0
+  while (( pane_count > 1 && attempt < 4 )); do
+    osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "System Events"
+  tell application process "Obsidian"
+    set frontmost to true
+    key code 13 using command down
+  end tell
+end tell
+APPLESCRIPT
+    sleep 0.5
+    activate_obsidian_for_smoke
+    pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+    attempt=$((attempt + 1))
+  done
+}
+
+set_obsidian_zoom_for_font_proof() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
+  key code 29 using command down
+  delay 0.1
+  key code 24 using command down
+  delay 0.1
+  key code 24 using command down
+end tell
+APPLESCRIPT
+  sleep 0.4
+}
+
+restore_obsidian_zoom_after_font_proof() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
+  key code 29 using command down
+end tell
+APPLESCRIPT
+  sleep 0.2
+}
+
 prepare_obsidian_variant_state() {
   local manual_app="$1"
 
   case "$manual_app" in
     obsidian-pane)
       prepare_obsidian_pane_variant_if_needed
+      focus_obsidian_visible_tail_line
+      set_obsidian_caret_to_value_end
       ;;
     obsidian-theme)
       # The smoke lane must be run in a vault/theme setup that visibly differs
@@ -2294,6 +2557,26 @@ prepare_obsidian_variant_state() {
     obsidian-long-note)
       activate_obsidian_for_smoke
       move_obsidian_caret_to_document_end
+      ;;
+    obsidian-font-zoom)
+      if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_FONT_ZOOM_APPLIED:-0}" != "1" ]]; then
+        export AUTOCOMPLETE_LAB_OBSIDIAN_FONT_ZOOM_APPLIED=1
+        set_obsidian_zoom_for_font_proof
+      else
+        activate_obsidian_for_smoke
+      fi
+      move_obsidian_caret_to_document_end
+      ;;
+    obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
+      activate_obsidian_for_smoke
+      case "$manual_app" in
+        obsidian-markdown-list|obsidian-run-on)
+          move_obsidian_caret_to_document_end
+          ;;
+        obsidian-multiline)
+          set_obsidian_caret_to_value_end
+          ;;
+      esac
       ;;
     obsidian)
       activate_obsidian_for_smoke
@@ -8137,6 +8420,21 @@ describe_plan() {
         obsidian-long-note)
           echo "Plan: manual-gated Obsidian long scrolled note proof. The script validates visible scrolled-caret placement after you run it."
           ;;
+        obsidian-font-zoom)
+          echo "Plan: guarded Obsidian font/zoom proof. The script increases Obsidian zoom, types smoke fragments, validates screenshots and insertion, then resets zoom."
+          ;;
+        obsidian-markdown-bold)
+          echo "Plan: guarded Obsidian bold Markdown proof. The script types smoke fragments after a bold marker prefix and validates visual placement plus insertion."
+          ;;
+        obsidian-markdown-list)
+          echo "Plan: guarded Obsidian list Markdown proof. The script types smoke fragments in a dash-list context and validates visual placement plus insertion."
+          ;;
+        obsidian-multiline)
+          echo "Plan: guarded Obsidian multiline proof. The script starts several blank lines below the marker and validates visual placement plus insertion."
+          ;;
+        obsidian-run-on)
+          echo "Plan: guarded Obsidian run-on/wrapped sentence proof. The script types after a long wrapping sentence and validates visual placement plus insertion."
+          ;;
         *)
           echo "Plan: manual-gated disposable Obsidian default-note smoke. The script prints the checklist and validates after you run it."
           ;;
@@ -8184,7 +8482,6 @@ build_if_needed() {
       AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
-      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1
     )
     if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
@@ -8267,6 +8564,38 @@ stop_current_steadytype_app_bundle() {
   done
 }
 
+stale_steadytype_app_bundle_pids() {
+  local expected_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local pid command
+
+  while IFS=$'\t' read -r pid _pgid command; do
+    [[ -z "$pid" ]] && continue
+    [[ -z "$command" ]] && continue
+    command_matches_steadytype_binary "$command" "$expected_binary" && continue
+    printf '%s\n' "$pid"
+  done < <(steadytype_app_process_rows)
+}
+
+terminate_stale_steadytype_app_bundles() {
+  local pid
+  local stale_pids=()
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    stale_pids+=("$pid")
+    kill "$pid" >/dev/null 2>&1 || true
+  done < <(stale_steadytype_app_bundle_pids)
+
+  ((${#stale_pids[@]} == 0)) && return 0
+  sleep 0.2
+
+  for pid in "${stale_pids[@]}"; do
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 pause_steadytype_for_chrome_setup() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
@@ -8336,7 +8665,10 @@ wait_for_current_autocomplete_lab_process() {
   local deadline=$((SECONDS + 20))
 
   while ((SECONDS <= deadline)); do
+    terminate_stale_steadytype_app_bundles
+
     local found_current=0
+    local current_pids=()
     local stale_processes=""
     local pid command
     while IFS=$'\t' read -r pid _pgid command; do
@@ -8344,10 +8676,26 @@ wait_for_current_autocomplete_lab_process() {
       [[ -z "$command" ]] && continue
       if command_matches_steadytype_binary "$command" "$expected_binary"; then
         found_current=1
+        current_pids+=("$pid")
       else
         stale_processes+="${pid} ${command}"$'\n'
       fi
     done < <(steadytype_app_process_rows)
+
+    if ((${#current_pids[@]} > 1)); then
+      local keep_pid=""
+      for pid in "${current_pids[@]}"; do
+        if [[ -z "$keep_pid" || "$pid" -gt "$keep_pid" ]]; then
+          keep_pid="$pid"
+        fi
+      done
+      for pid in "${current_pids[@]}"; do
+        [[ "$pid" == "$keep_pid" ]] && continue
+        kill "$pid" >/dev/null 2>&1 || true
+      done
+      sleep 0.25
+      continue
+    fi
 
     if [[ "$found_current" == "1" && -z "$stale_processes" ]]; then
       return 0
@@ -8928,7 +9276,11 @@ tell application "System Events"
 end tell
 APPLESCRIPT
   set_obsidian_caret_to_value_end
-  sleep 0.25
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL:-0}" == "1" ]]; then
+    focus_obsidian_visible_tail_line
+    set_obsidian_caret_to_value_end
+  fi
+  sleep 0.35
 }
 
 reset_obsidian_smoke_note() {
@@ -8938,7 +9290,8 @@ reset_obsidian_smoke_note() {
   AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift script/obsidian_ax_editor.swift reset
 
   activate_obsidian_for_smoke
-  osascript <<'APPLESCRIPT'
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_LEGACY_RESET_KEYS:-0}" == "1" ]]; then
+    osascript <<'APPLESCRIPT'
 tell application "System Events"
   tell application process "Obsidian" to set frontmost to true
   set frontApp to first application process whose frontmost is true
@@ -8951,9 +9304,12 @@ tell application "System Events"
     key code 124 using command down
   end if
   delay 0.2
-  key code 36
+  if (system attribute "AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN") is not "1" then
+    key code 36
+  end if
 end tell
 APPLESCRIPT
+  fi
   set_obsidian_caret_to_value_end
 }
 
@@ -9029,9 +9385,27 @@ obsidian_smoke_note_file_char_count() {
   LC_ALL=C wc -m <"$(obsidian_smoke_file_path)" | tr -d ' '
 }
 
+assert_obsidian_long_note_file_preserved() {
+  local expected_suffix="$1"
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+
+  if ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 01" "$smoke_file" ||
+     ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 90" "$smoke_file"; then
+    echo "Obsidian long-note proof lost off-screen note content." >&2
+    echo "Current head:" >&2
+    head -n 8 "$smoke_file" >&2 || true
+    echo "Current tail:" >&2
+    tail -n 8 "$smoke_file" >&2 || true
+    exit 3
+  fi
+
+  wait_for_obsidian_smoke_note_file_suffix "$expected_suffix" 5
+}
+
 activate_neutral_smoke_setup_app() {
   open -a Finder >/dev/null 2>&1 || true
-  wait_for_frontmost_app "Finder" 3 || true
+  try_wait_for_frontmost_app "Finder" 3 >/dev/null 2>&1 || true
   sleep 0.2
 }
 
@@ -9090,7 +9464,7 @@ run_obsidian() {
   local manual_app
   manual_app="$(obsidian_session_app)"
   case "$manual_app" in
-    obsidian|obsidian-theme|obsidian-pane|obsidian-long-note)
+    obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
       ;;
     *)
       run_manual_gated
@@ -9098,12 +9472,42 @@ run_obsidian() {
       ;;
   esac
 
-  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment long_note_expected_before_chars
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment
   runtime_start_line="$(line_count "$LOG_PATH")"
   obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
   first_fragment="Smoke proof feels"
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    first_fragment="moke proof feels"
+    first_fragment="moke proof feel"
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=1
+  elif [[ "$manual_app" == "obsidian-pane" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+  elif [[ "$manual_app" == "obsidian-font-zoom" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+  elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+  elif [[ "$manual_app" == "obsidian-multiline" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+  fi
+  if [[ "$manual_app" == "obsidian-markdown-bold" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=0
+  elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=0
+  elif [[ "$manual_app" == "obsidian-multiline" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=3
+  else
+    unset AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN
+    export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=1
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
@@ -9132,6 +9536,18 @@ run_obsidian() {
     reset_obsidian_smoke_note
   fi
   prepare_obsidian_variant_state "$manual_app"
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BEFORE_TYPING:-0}" == "1" ]]; then
+    press_key_code 53
+    sleep 0.35
+  else
+    sleep 0.15
+  fi
+  prepare_obsidian_variant_state "$manual_app"
+
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"
+    set_obsidian_caret_to_value_end
+  fi
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
@@ -9139,7 +9555,7 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target
-    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"
+    type_obsidian_raw_smoke_text "s"
     wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels" 5
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels"
@@ -9162,22 +9578,33 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     press_key_code 53
     sleep 0.2
-    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant" 5
-    move_obsidian_caret_to_document_end
-    assert_obsidian_smoke_target "Smoke proof feels instant"
+    activate_neutral_smoke_setup_app
+    assert_obsidian_long_note_file_preserved "Smoke proof feels instant"
+    append_obsidian_smoke_note_file_text " and stays inst"
     second_start_line="$(line_count "$LOG_PATH")"
-    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays inst"
-    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant and stays inst" 5
-    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
+    open_obsidian_smoke_note_if_configured
+    wait_for_frontmost_app "Obsidian" 8
     move_obsidian_caret_to_document_end
+    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
-    press_key_code 53
-    sleep 0.2
-    second_start_line="$(line_count "$LOG_PATH")"
+    settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
     assert_obsidian_smoke_target "Smoke proof feels instant"
-    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
+    if [[ "$manual_app" == "obsidian-pane" ]]; then
+      move_obsidian_caret_to_line_end
+    elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+      move_obsidian_caret_to_document_end
+    elif [[ "$manual_app" == "obsidian-multiline" ]]; then
+      set_obsidian_caret_to_value_end
+    fi
+    if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BETWEEN_ACCEPTS:-0}" == "1" ]]; then
+      press_key_code 53
+      sleep 0.25
+    else
+      sleep 0.15
+    fi
+    second_start_line="$(line_count "$LOG_PATH")"
+    type_obsidian_raw_smoke_text " and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12
@@ -9189,6 +9616,9 @@ run_obsidian() {
     activate_obsidian_for_smoke
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
     full_start_line="$(line_count "$LOG_PATH")"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
+    assert_frontmost_app "Obsidian" "Obsidian long-note"
+    sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.25}"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
       "keyboard-action" \
@@ -9197,7 +9627,7 @@ run_obsidian() {
       "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
+    assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
   else
     activate_obsidian_for_smoke
     assert_obsidian_smoke_target "Smoke proof feels instant and stays"
@@ -9211,6 +9641,10 @@ run_obsidian() {
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
+  fi
+
+  if [[ "$manual_app" == "obsidian-font-zoom" ]]; then
+    restore_obsidian_zoom_after_font_proof
   fi
 
   sleep 1
@@ -10202,6 +10636,7 @@ terminate_foreign_proof_processes_for_exclusive_run
 start_foreign_worktree_quarantine_guard
 refuse_other_smoke_processes
 acquire_smoke_lock
+start_smoke_interference_guard
 
 case "$APP" in
   textedit)
