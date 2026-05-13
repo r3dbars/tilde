@@ -53,9 +53,10 @@ fi
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing" >&2
+  echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
   exit 1
 fi
 
@@ -70,9 +71,15 @@ if "wait_for_log_fields_optional \"$seed_start\"" not in block:
     raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
 if "dismiss_textedit_smoke_suggestion" in block or "key code 53" in block:
     raise SystemExit("model-latency proof must not press Escape after seeding context")
+trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"')
+timing = block.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"', trigger)
+if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigger:timing]:
+    raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
 PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof scenario cleanup" >&2
   exit 1

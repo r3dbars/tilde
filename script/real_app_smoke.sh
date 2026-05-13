@@ -34,6 +34,9 @@ UNDO_RECOVERY_LAUNCHCTL_PREVIOUS=""
 PROOF_DISABLE_FAST_WORD_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=0
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+PROOF_DISABLE_PHRASE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
+PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=0
+PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
 PROOF_SCENARIO_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=0
 PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
@@ -545,6 +548,14 @@ cleanup_smoke() {
       launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 
@@ -1240,16 +1251,22 @@ prepare_model_latency_runtime_options() {
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
   fi
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
   if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
     PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
   fi
 
   export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
   export AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"
   launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
   launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "textedit-model-latency" >/dev/null 2>&1 || true
-  echo "TextEdit model latency proof: fast word completions disabled so every sample must hit the local model."
+  echo "TextEdit model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
   echo "TextEdit model latency proof scenario: textedit-model-latency"
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
@@ -6897,6 +6914,7 @@ launch_steadytype_after_chrome_setup() {
     AUTOCOMPLETE_LAB_VISIBLE_WORDS \
     AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
     AUTOCOMPLETE_LAB_PROOF_SCENARIO \
     AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
@@ -8538,7 +8556,6 @@ run_textedit_model_latency() {
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
       type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
     wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
-    move_textedit_caret_to_document_end "$textedit_window_title"
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
       "mlx-completion-timing" \
       "app=com.apple.TextEdit"
