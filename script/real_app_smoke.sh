@@ -4165,6 +4165,10 @@ assert_textedit_frontmost_window() {
   local label="$2"
 
   if [[ "$(textedit_frontmost_window_is "$window_title")" != "1" ]]; then
+    focus_textedit_smoke_editor "$window_title" >/dev/null 2>&1 || true
+  fi
+
+  if [[ "$(textedit_frontmost_window_is "$window_title")" != "1" ]]; then
     local frontmost
     frontmost="$(run_osascript_with_timeout 2 "frontmost app probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
     echo "$label lost focus before accept. Expected frontmost TextEdit window '$window_title', got frontmost app '${frontmost:-unknown}'." >&2
