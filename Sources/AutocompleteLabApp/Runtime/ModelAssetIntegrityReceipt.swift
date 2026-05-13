@@ -2,6 +2,17 @@ import AutocompleteLabCore
 import CryptoKit
 import Foundation
 
+enum ModelAssetIntegrityReceiptError: LocalizedError, Equatable {
+    case sourceRevisionNotImmutable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .sourceRevisionNotImmutable(reason):
+            return reason
+        }
+    }
+}
+
 struct ModelAssetIntegrityReceipt: Codable, Equatable {
     struct FileEntry: Codable, Equatable {
         let path: String
@@ -45,6 +56,9 @@ enum ModelAssetIntegrityReceiptWriter {
     ) throws -> URL? {
         guard let source = manifest.source else {
             return nil
+        }
+        if let sourceRevisionError = source.immutableRevisionError {
+            throw ModelAssetIntegrityReceiptError.sourceRevisionNotImmutable(sourceRevisionError)
         }
 
         let entries = try modelFiles(in: modelDirectoryURL, fileManager: fileManager).map { url in
@@ -151,6 +165,9 @@ enum ModelAssetIntegrityReceiptValidator {
     ) -> String? {
         guard let source = manifest.source else {
             return nil
+        }
+        if let sourceRevisionError = source.immutableRevisionError {
+            return sourceRevisionError
         }
 
         let receiptURL = modelDirectoryURL.appendingPathComponent(

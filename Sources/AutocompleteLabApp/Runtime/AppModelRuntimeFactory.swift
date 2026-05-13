@@ -146,6 +146,10 @@ enum AppModelRuntimeFactory {
         fileManager: FileManager
     ) -> LocalModelAssetState {
         let path = modelDirectoryURL.path
+        if let sourceRevisionError = manifest.source?.immutableRevisionError {
+            return .invalid(path: path, reason: sourceRevisionError)
+        }
+
         var isDirectory = ObjCBool(false)
         guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
             return .missing(expectedPath: path)

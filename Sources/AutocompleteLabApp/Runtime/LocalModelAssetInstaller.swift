@@ -47,6 +47,7 @@ struct LocalModelInstallProgress: Equatable, Sendable {
 
 enum LocalModelAssetInstallerError: LocalizedError, Equatable {
     case missingSource(model: String)
+    case sourceRevisionNotImmutable(String)
     case invalidRepository(String)
     case insufficientDiskSpace(requiredBytes: Int64, availableBytes: Int64)
     case invalidAfterInstall(String)
@@ -55,6 +56,8 @@ enum LocalModelAssetInstallerError: LocalizedError, Equatable {
         switch self {
         case let .missingSource(model):
             return "This model cannot be installed in the app yet: \(model). Open the model folder or choose the default model."
+        case let .sourceRevisionNotImmutable(reason):
+            return "This model cannot be installed safely: \(reason)."
         case let .invalidRepository(repoID):
             return "The model download address is invalid: \(repoID)."
         case let .insufficientDiskSpace(requiredBytes, availableBytes):
@@ -144,6 +147,9 @@ struct LocalModelAssetInstaller: Sendable {
     ) async throws -> URL {
         guard let source = manifest.source else {
             throw LocalModelAssetInstallerError.missingSource(model: manifest.model.rawValue)
+        }
+        if let sourceRevisionError = source.immutableRevisionError {
+            throw LocalModelAssetInstallerError.sourceRevisionNotImmutable(sourceRevisionError)
         }
 
         guard let repoID = Repo.ID(rawValue: source.repoID) else {

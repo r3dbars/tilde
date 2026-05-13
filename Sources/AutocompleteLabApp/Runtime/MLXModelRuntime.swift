@@ -231,6 +231,10 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             reason.contains("revision mismatch") {
             return "receipt-mismatch"
         }
+        if reason.contains("source revision") ||
+            reason.contains("commit SHA") {
+            return "mutable-revision"
+        }
         if reason.contains("invalid integrity receipt") ||
             reason.contains("unsupported integrity receipt schema") {
             return "invalid-receipt"

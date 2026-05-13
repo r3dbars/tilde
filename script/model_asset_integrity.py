@@ -8,6 +8,13 @@ from typing import Any
 
 
 RECEIPT_NAME = ".steadytype-model-integrity.json"
+IMMUTABLE_REVISION_ERROR = "model revision is not pinned to an immutable 40-character commit SHA"
+
+
+def is_immutable_revision(revision: str | None) -> bool:
+    if revision is None:
+        return False
+    return len(revision) == 40 and all(character in "0123456789abcdefABCDEF" for character in revision)
 
 
 def sha256_file(path: Path) -> str:
@@ -36,6 +43,9 @@ def write_integrity_receipt(
     revision: str,
     path: Path,
 ) -> Path:
+    if not is_immutable_revision(revision):
+        raise ValueError(IMMUTABLE_REVISION_ERROR)
+
     files = [
         {
             "path": child.name,
@@ -68,6 +78,9 @@ def validate_integrity_receipt(
     path: Path,
     expected_files: dict[str, dict[str, int | str]] | None = None,
 ) -> str | None:
+    if not is_immutable_revision(revision):
+        return IMMUTABLE_REVISION_ERROR
+
     receipt_path = path / RECEIPT_NAME
     if not receipt_path.exists():
         return f"missing integrity receipt {RECEIPT_NAME}"

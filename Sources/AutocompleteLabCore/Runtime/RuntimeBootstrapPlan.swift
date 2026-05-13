@@ -235,6 +235,10 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         childFileNames: Set<String>,
         modelBytes: Int64
     ) -> LocalModelAssetState {
+        if let sourceRevisionError = source?.immutableRevisionError {
+            return .invalid(path: path, reason: sourceRevisionError)
+        }
+
         guard isDirectory else {
             return .invalid(path: path, reason: "expected a model directory")
         }
@@ -282,6 +286,7 @@ public struct LocalModelAssetSource: Equatable, Sendable {
     public let estimatedBytes: Int64?
     public let licenseURL: String?
     public let expectedFiles: [ExpectedFile]
+    public static let immutableRevisionRequirement = "model source revision must be pinned to an immutable 40-character commit SHA"
 
     public init(
         repoID: String,
@@ -297,6 +302,23 @@ public struct LocalModelAssetSource: Equatable, Sendable {
         self.estimatedBytes = estimatedBytes
         self.licenseURL = licenseURL
         self.expectedFiles = expectedFiles
+    }
+
+    public var immutableRevisionError: String? {
+        let trimmed = revision.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed == revision,
+              revision.unicodeScalars.count == 40,
+              revision.unicodeScalars.allSatisfy(Self.isCommitSHAScalar) else {
+            return Self.immutableRevisionRequirement
+        }
+
+        return nil
+    }
+
+    private static func isCommitSHAScalar(_ scalar: Unicode.Scalar) -> Bool {
+        (48...57).contains(scalar.value)
+            || (65...70).contains(scalar.value)
+            || (97...102).contains(scalar.value)
     }
 
     public static let defaultMLXAllowPatterns = [

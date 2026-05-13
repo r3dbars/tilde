@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 
 from model_asset_integrity import (
+    IMMUTABLE_REVISION_ERROR,
     RECEIPT_NAME,
+    is_immutable_revision,
     validate_integrity_receipt,
     write_integrity_receipt,
 )
@@ -194,8 +196,8 @@ def validate_model(
     repo_id = model_info["repo_id"]
     revision = model_info.get("revision")
 
-    if not revision:
-        return False, "model download is not pinned to an immutable revision", 0, 0
+    if not is_immutable_revision(revision):
+        return False, IMMUTABLE_REVISION_ERROR, 0, 0
 
     if not path.exists():
         return False, f"missing {validation['display_name']} MLX model", 0, 0
@@ -244,11 +246,7 @@ def validate_model(
         repo_id=repo_id,
         revision=revision,
         path=path,
-        expected_files=(
-            None
-            if os.environ.get("AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS") == "1"
-            else validation.get("expected_files")
-        ),
+        expected_files=validation.get("expected_files"),
     )
     if receipt_error:
         return False, receipt_error, len(weight_files), weight_bytes
