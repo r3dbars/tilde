@@ -690,6 +690,41 @@ if ! grep -F "markerText.utf16.count" script/real_app_smoke.sh >/dev/null ||
   exit 1
 fi
 
+if ! grep -F 'insertionMode: .keyEvents' Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift >/dev/null ||
+   ! grep -F 'AX values can represent only the visible viewport' Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian to avoid destructive AX value replacement in long notes" >&2
+  exit 1
+fi
+
+if ! grep -F "insertObsidianSystemEventsPasteText" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'keystroke "v" using command down' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian insertion to use the proven paste path instead of raw CGEvents" >&2
+  exit 1
+fi
+
+if ! grep -F "assert_obsidian_long_note_file_preserved" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "lost off-screen note content" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to guard off-screen note preservation" >&2
+  exit 1
+fi
+
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+append_index = source.index('append_obsidian_smoke_note_file_text " and stays inst"')
+start_index = source.index('second_start_line="$(line_count "$LOG_PATH")"', append_index)
+open_index = source.index('open_obsidian_smoke_note_if_configured', append_index)
+if not append_index < start_index < open_index:
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian long-note log watching to start before refocusing Obsidian"
+    )
+if '"beforeChars=$long_note_expected_before_chars"' in source:
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian long-note proof not to require full-file AX beforeChars"
+    )
+PY
+
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
   script/real_app_smoke.sh "$obsidian_variant" --dry-run >"$TMP_DIR/$obsidian_variant.txt"
   case "$obsidian_variant" in

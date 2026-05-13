@@ -6419,7 +6419,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
                     || shouldUseCodexProofDirectInsertion(profile: profile)
                     || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
-                    || shouldUseObsidianDirectValueInsertion(profile: profile) ? 0.75 : 0.25
+                    || shouldUseObsidianDirectValueInsertion(profile: profile)
+                    || shouldUseObsidianSystemEventsInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
 
@@ -6519,6 +6520,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
+        if shouldUseObsidianSystemEventsInsertion(profile: profile) {
+            let succeeded = insertObsidianSystemEventsPasteText(acceptedText)
+            DiagnosticsLog.shared.record(
+                "insert",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "mode": InsertionMode.clipboardFallbackOptIn.rawValue,
+                    "promptSafetyMode": profile.promptAppSafetyMode.rawValue,
+                    "success": String(succeeded),
+                    "skippedModes": skippedModes
+                        .map(\.rawValue)
+                        .sorted()
+                        .joined(separator: ",")
+                ]
+            )
+            if succeeded {
+                focusedTextPollingPause.pause(
+                    now: Date(),
+                    durationMilliseconds: postInsertionPollPauseMilliseconds
+                )
+            }
+            return succeeded
+        }
+
         let result = insertionEngine.insert(
             acceptedText,
             profile: profile,
@@ -6578,6 +6603,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionAppBundleIdentifier == "md.obsidian"
             && profile.bundleIdentifier == "md.obsidian"
             && profile.insertionMode == .axValueReplacement
+    }
+
+    private func shouldUseObsidianSystemEventsInsertion(profile: CompatibilityProfile) -> Bool {
+        currentSuggestionAppBundleIdentifier == "md.obsidian"
+            && profile.bundleIdentifier == "md.obsidian"
+            && profile.insertionMode == .keyEvents
     }
 
     private func insertObsidianDirectValueText(_ acceptedText: String) -> Bool {
@@ -6701,6 +6732,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return succeeded
+    }
+
+    private func insertObsidianSystemEventsPasteText(_ acceptedText: String) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let currentSuggestionFieldIdentity,
+              let lastTextSnapshot,
+              lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier,
+              frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-system-events-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "posted": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-system-events-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-set-failed"
+                ]
+            )
+            return false
+        }
+        let fallbackChangeCount = pasteboard.changeCount
+
+        let script = """
+        tell application "System Events"
+          tell application process "Obsidian" to set frontmost to true
+          keystroke "v" using command down
+        end tell
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-system-events-insert",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "posted": "false",
+                    "reason": "osascript-run-failed"
+                ]
+            )
+            return false
+        }
+
+        let posted = process.terminationStatus == 0
+        if posted {
+            schedulePasteboardRestore(
+                insertedText: acceptedText,
+                fallbackChangeCount: fallbackChangeCount,
+                originalItems: originalItems
+            )
+        } else {
+            restoreOriginalPasteboard()
+        }
+        DiagnosticsLog.shared.record(
+            "obsidian-system-events-insert",
+            metadata: [
+                "app": bundleIdentifier,
+                "posted": String(posted),
+                "source": "systemEventsPaste",
+                "terminationStatus": String(process.terminationStatus),
+                "acceptedChars": String(acceptedText.count)
+            ]
+        )
+        return posted
     }
 
     private func insertCodexProofText(_ acceptedText: String) -> Bool {

@@ -8483,6 +8483,24 @@ obsidian_smoke_note_file_char_count() {
   LC_ALL=C wc -m <"$(obsidian_smoke_file_path)" | tr -d ' '
 }
 
+assert_obsidian_long_note_file_preserved() {
+  local expected_suffix="$1"
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+
+  if ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 01" "$smoke_file" ||
+     ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 90" "$smoke_file"; then
+    echo "Obsidian long-note proof lost off-screen note content." >&2
+    echo "Current head:" >&2
+    head -n 8 "$smoke_file" >&2 || true
+    echo "Current tail:" >&2
+    tail -n 8 "$smoke_file" >&2 || true
+    exit 3
+  fi
+
+  wait_for_obsidian_smoke_note_file_suffix "$expected_suffix" 5
+}
+
 activate_neutral_smoke_setup_app() {
   open -a Finder >/dev/null 2>&1 || true
   wait_for_frontmost_app "Finder" 3 || true
@@ -8552,7 +8570,7 @@ run_obsidian() {
       ;;
   esac
 
-  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment long_note_expected_before_chars
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment
   runtime_start_line="$(line_count "$LOG_PATH")"
   obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
   first_fragment="Smoke proof feels"
@@ -8607,14 +8625,13 @@ run_obsidian() {
     press_key_code 53
     sleep 0.2
     activate_neutral_smoke_setup_app
-    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant" 5
+    assert_obsidian_long_note_file_preserved "Smoke proof feels instant"
     append_obsidian_smoke_note_file_text " and stays inst"
-    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
+    second_start_line="$(line_count "$LOG_PATH")"
     open_obsidian_smoke_note_if_configured
     wait_for_frontmost_app "Obsidian" 8
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
-    second_start_line="$(line_count "$LOG_PATH")"
   else
     second_start_line="$(line_count "$LOG_PATH")"
     assert_obsidian_smoke_target "Smoke proof feels instant"
@@ -8627,15 +8644,11 @@ run_obsidian() {
     wait_for_log_fields "$second_start_line" "Obsidian second suggestion" 12 \
       "suggestion-presented" \
       "app=md.obsidian" \
-      "beforeChars=$long_note_expected_before_chars" \
       "afterChars=0"
   else
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    sleep 0.15
-    activate_obsidian_for_smoke
-    assert_frontmost_app "Obsidian" "Obsidian"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
@@ -8645,6 +8658,7 @@ run_obsidian() {
       "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
+    assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   else
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"

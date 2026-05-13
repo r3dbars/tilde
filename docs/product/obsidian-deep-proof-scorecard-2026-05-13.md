@@ -8,24 +8,38 @@ Current branch: `codex/obsidian-deep-proof-390d`
 
 | Category | Grade | Evidence |
 | --- | ---: | --- |
-| Default note writing | 100 | `obsidian` smoke passed with 2 verified insertions and strict screenshots. |
+| Default note writing | 85 | Earlier `obsidian` smoke passed with 2 verified insertions and strict screenshots, but the latest long-note run also left the simple proof note as `Smoke proof feelsAutocomplete Lab Obsidian proof`, so focus/setup guards still need hardening. |
 | Non-default theme | 100 | `obsidian-theme` smoke passed with 2 verified insertions and strict screenshots. |
 | Split pane / same-pane insertion | 100 | `obsidian-pane` smoke passed after focused-editor insertion fix. |
-| Accepted words appear on screen | 95 | Computer Use confirmed `Smoke proof feels instant` appeared correctly after accept; pane proof confirms same-pane writes. |
-| CodeMirror stale cursor repair | 95 | 32 focused repair tests pass, including viewport and long-note drift cases. |
-| Long scrolled note | 70 | Unit repair path passes; live long-note smoke still needs a clean recorded pass. External proof loops repeatedly killed the launch. |
+| Accepted words appear on screen | 75 | Current Computer Use pass showed the typed words on screen, but Tab inserted a literal tab/indent instead of accepting the visible suggestion. Not a pass. |
+| CodeMirror stale cursor repair | 85 | Focused repair tests pass, but live long-note clicks can still place the caret before/inside the target suffix. |
+| Long scrolled note | 60 | The old AX value-replacement path could truncate off-screen lines. The latest live run preserved line 01 through line 90 and appended `Smoke proof feels` at document end, but the harness still received SIGTERM before the second acceptance and formal verification. |
 | Font/zoom/dynamic layout | 60 | Theme and pane geometry passed; explicit font-size/zoom sweep is still pending. |
 | Markdown formatting stress | 60 | Plain prose and pane cases passed; bold, dash list, blank lines, and run-on sentence sweeps are still pending. |
 
 ## Fixes Landed In This Pass
 
-- Obsidian direct insertion now prefers the focused matching editor before searching duplicate panes.
-- Obsidian direct insertion now sends document-end fallback when AX refuses to place the cursor after end-of-note acceptance.
-- Obsidian long/virtualized CodeMirror viewport drift now has a dedicated repair and tests.
+- Obsidian now avoids destructive AX value replacement for insertion because long virtualized notes can expose only the visible viewport through AX.
+- Obsidian acceptance now has a System Events paste path using Obsidian's own `Command-V` behavior instead of replacing the AX value.
+- `obsidian-long-note` smoke now refuses to pass if line 01 or line 90 disappears from the Markdown file.
+- The long-note second suggestion gate no longer expects full-file `beforeChars`, because CodeMirror AX can report only the viewport.
+
+## Fresh Findings This Pass
+
+- Computer Use screenshot proof showed the long note split-pane state with line 01 visible in the right pane and lines 76-90 visible in the left pane.
+- Computer Use typing wrote `Smoke proof feels` to the visible Obsidian editor and the file preserved line 01 and line 90.
+- Computer Use Tab did not trigger a verified accept; Obsidian inserted a literal tab/indent.
+- Manual click testing can still place the caret before the suffix, producing `moke proof feelsS` instead of the intended text.
+- A separate `steadytype-score-loop` heartbeat in the old `25ed` worktree repeatedly flipped proof mode to TextEdit and killed/invalidated Obsidian proof attempts. That heartbeat was paused during this goal.
+- After pausing and killing the stale `25ed` jobs, `obsidian-long-note` reached a real Obsidian suggestion and consumed Tab, but the smoke harness still received SIGTERM before it could record a clean pass.
+- Fresh file evidence: `/Users/redbars/Documents/claudebrain-lab/Autocomplete Lab Obsidian Proof Codex.md` kept the long-note body and ended with `Long note filler line 90 ... Smoke proof feels`.
+- Fresh bad evidence: `/Users/redbars/Documents/claudebrain-lab/Autocomplete Lab Obsidian proof.md` ended up as `Smoke proof feelsAutocomplete Lab Obsidian proof`, which is not acceptable insertion behavior.
 
 ## Remaining Gates To Reach 100
 
 - Get `obsidian-long-note` to a clean recorded pass on this branch.
+- Prove the new System Events paste insertion path with `keyboard-action`, `obsidian-system-events-insert`, and verified file suffix evidence.
+- Fix or harden end-of-document caret placement so clicks and AX range repair land after the suffix, not before it.
 - Run a font-size/zoom sweep.
 - Run markdown formatting cases: bold, dash list, blank lines, indented line, long run-on sentence, and three-line down movement.
 - Repeat default/theme/pane/long-note enough times to turn this from smoke proof into a real reliability sample.
