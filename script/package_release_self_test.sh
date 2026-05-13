@@ -37,6 +37,17 @@ require_contains "$SCRIPT_TEXT" 'Gatekeeper assessment failed; saved spctl outpu
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"
 require_contains "$PROOF_TEMPLATE" "uninstall/delete-data instructions"
 
+MISSING_MODEL_HOME="$(mktemp -d)"
+trap 'rm -rf "$MISSING_MODEL_HOME"' EXIT
+if HOME="$MISSING_MODEL_HOME" ./script/package_release.sh --check >/tmp/autocomplete-package-missing-model-check.txt 2>&1; then
+  echo "package release check should fail when the required app-owned model asset is missing" >&2
+  cat /tmp/autocomplete-package-missing-model-check.txt >&2
+  exit 1
+fi
+
+require_contains "$(cat /tmp/autocomplete-package-missing-model-check.txt)" "Preferred MLX model: blocked - missing, invalid, corrupt, or not checksum-verified"
+require_contains "$(cat /tmp/autocomplete-package-missing-model-check.txt)" "Run ./script/check_model_asset.py for the exact fix."
+
 if env -u NOTARYTOOL_PROFILE \
   AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES=not-a-real-profile \
   ./script/package_release.sh --check --require-notary-profile >/tmp/autocomplete-package-check.txt 2>&1; then
