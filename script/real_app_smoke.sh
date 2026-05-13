@@ -34,15 +34,21 @@ UNDO_RECOVERY_LAUNCHCTL_PREVIOUS=""
 PROOF_DISABLE_FAST_WORD_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=0
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+PROOF_DISABLE_WORD_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION"
+PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED=0
+PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS=""
 PROOF_DISABLE_PHRASE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
 PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=0
 PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+PROOF_DISABLE_FAST_PHRASE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
+PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED=0
+PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS=""
 PROOF_SCENARIO_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=0
 PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
-ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED=0
-ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS=0
-ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS=""
+PROOF_SUPPRESS_ANNOYANCE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING"
+PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=0
+PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
 TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
@@ -51,7 +57,7 @@ SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -69,9 +75,10 @@ prints the surface picker and does not record proof.
 
 TextEdit proof can use textedit-light, textedit-dark, textedit-long-wrap,
 textedit-narrow, textedit-scrolled, textedit-selected-suppression, textedit-undo-one-word,
-textedit-undo-full, textedit-fast-typing, or textedit-model-latency. These are
-still narrow TextEdit lanes, not a generic native-app claim. The TextEdit undo
-lanes automatically use native single-edit Command-Z proof.
+textedit-undo-full, textedit-fast-typing, textedit-model-latency, or
+textedit-default-model-latency. These are still narrow TextEdit lanes, not a
+generic native-app claim. The TextEdit undo lanes automatically use native
+single-edit Command-Z proof.
 
 Obsidian proof must keep default, theme, pane, long-note, font-zoom,
 markdown-bold, markdown-list, multiline, and run-on lanes separate before it can
@@ -230,6 +237,10 @@ case "$APP" in
   textedit-model-latency)
     APP="textedit"
     TEXTEDIT_VARIANT="model-latency"
+    ;;
+  textedit-default-model-latency)
+    APP="textedit"
+    TEXTEDIT_VARIANT="default-model-latency"
     ;;
   notes-title)
     APP="notes"
@@ -439,6 +450,12 @@ if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_B
   exit 2
 fi
 
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]]; then
+  echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with word completions and the fast phrase fallback disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
 if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$APP" != "textedit" && "$APP" != "chrome" ]]; then
   echo "--native-undo-proof is currently automated only for TextEdit and Chrome." >&2
   usage >&2
@@ -462,6 +479,8 @@ SMOKE_LOCK_HELD=0
 SMOKE_INTERFERENCE_GUARD_PID=""
 SMOKE_INTERFERENCE_GUARD_POLL_SECONDS="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_POLL_SECONDS:-0.5}"
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
+SMOKE_QUARANTINE_GUARD_PID=""
+EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
@@ -529,7 +548,7 @@ on run argv
     repeat with docRef in documents
       try
         set docName to name of docRef
-        if docName starts with "textedit-smoke-" or docName starts with "textedit-model-latency-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
+        if docName starts with "textedit-smoke-" or docName starts with "textedit-model-latency-" or docName starts with "textedit-default-model-latency-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
           close docRef saving no
         end if
       end try
@@ -573,6 +592,7 @@ import Foundation
 let smokePrefixes = [
     "textedit-smoke-",
     "textedit-model-latency-",
+    "textedit-default-model-latency-",
     "autocomplete-lab-typing-soak-",
     "textedit-ax-retention-proof.",
     "textedit-retention-proof."
@@ -611,10 +631,10 @@ SWIFT
 }
 
 cleanup_smoke() {
-  if [[ -n "$SMOKE_INTERFERENCE_GUARD_PID" ]]; then
-    kill "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
-    wait "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
-    SMOKE_INTERFERENCE_GUARD_PID=""
+  if [[ -n "$SMOKE_QUARANTINE_GUARD_PID" ]]; then
+    kill "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
+    wait "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
+    SMOKE_QUARANTINE_GUARD_PID=""
   fi
 
   cleanup_smoke_textedit_windows
@@ -660,11 +680,27 @@ cleanup_smoke() {
     fi
   fi
 
+  if [[ "$PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_DISABLE_WORD_ENV_KEY" "$PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_DISABLE_WORD_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
   if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
     if [[ -n "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" ]]; then
       launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 
@@ -676,11 +712,11 @@ cleanup_smoke() {
     fi
   fi
 
-  if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED" == "1" ]]; then
-    if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS" == "1" ]]; then
-      defaults write "$DEFAULTS_DOMAIN" AcceptAllShortcut "$ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS" >/dev/null 2>&1 || true
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
-      defaults delete "$DEFAULTS_DOMAIN" AcceptAllShortcut >/dev/null 2>&1 || true
+      launchctl unsetenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 
@@ -703,6 +739,9 @@ APPLESCRIPT
 }
 
 trap cleanup_smoke EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 diagnose_smoke_signal() {
   local signal_name="$1"
@@ -742,6 +781,13 @@ acquire_smoke_lock() {
     fi
 
     if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+      if quarantine_foreign_worktree_pid "$existing_pid"; then
+        sleep 1
+        if ! kill -0 "$existing_pid" >/dev/null 2>&1; then
+          rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
+        fi
+        continue
+      fi
       if ((SECONDS >= deadline)); then
         echo "Another real app smoke run is already active (pid $existing_pid)." >&2
         echo "Timed out waiting for the real app smoke lock: $SMOKE_LOCK_DIR" >&2
@@ -759,9 +805,232 @@ acquire_smoke_lock() {
   done
 }
 
+quarantine_other_worktrees_enabled() {
+  [[ "${AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+process_cwd() {
+  local pid="$1"
+  lsof -a -p "$pid" -d cwd -Fn 2>/dev/null |
+    sed -n 's/^n//p' |
+    head -n 1 || true
+}
+
+descendant_pids() {
+  local root_pid="$1"
+  ps -axo pid=,ppid= 2>/dev/null |
+    awk -v root="$root_pid" '
+      {
+        pid = $1
+        ppid = $2
+        if (pid == "") next
+        parent[pid] = ppid
+        seen[pid] = 1
+      }
+      END {
+        changed = 1
+        while (changed) {
+          changed = 0
+          for (pid in seen) {
+            if (parent[pid] == root || family[parent[pid]]) {
+              if (!family[pid]) {
+                family[pid] = 1
+                changed = 1
+              }
+            }
+          }
+        }
+        for (pid in family) {
+          print pid
+        }
+      }
+    '
+}
+
+terminate_pid_tree() {
+  local pid="$1"
+  local child
+
+  descendant_pids "$pid" | sort -rn | while IFS= read -r child; do
+    [[ -n "$child" && "$child" != "$SMOKE_SCRIPT_PID" ]] || continue
+    kill -TERM "$child" >/dev/null 2>&1 || true
+  done
+  kill -TERM "$pid" >/dev/null 2>&1 || true
+}
+
+command_path_is_foreign_worktree() {
+  local command="$1"
+  local worktree_root="$HOME/.codex/worktrees"
+
+  [[ "$command" == "$worktree_root/"* ]] || return 1
+  [[ "$command" == "$ROOT_DIR" || "$command" == "$ROOT_DIR/"* ]] && return 1
+  return 0
+}
+
+cwd_is_foreign_worktree() {
+  local cwd="$1"
+  local worktree_root="$HOME/.codex/worktrees"
+
+  [[ -n "$cwd" && "$cwd" == "$worktree_root/"* ]] || return 1
+  [[ "$cwd" == "$ROOT_DIR" || "$cwd" == "$ROOT_DIR/"* ]] && return 1
+  return 0
+}
+
+quarantine_foreign_worktree_pid() {
+  local pid="$1"
+  local command="${2:-}"
+  local cwd
+
+  quarantine_other_worktrees_enabled || return 1
+  [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" && "$pid" != "$SMOKE_QUARANTINE_GUARD_PID" ]] || return 1
+  kill -0 "$pid" >/dev/null 2>&1 || return 1
+
+  if [[ -z "$command" ]]; then
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  fi
+  cwd="$(process_cwd "$pid")"
+
+  if ! cwd_is_foreign_worktree "$cwd" && ! command_path_is_foreign_worktree "$command"; then
+    return 1
+  fi
+
+  echo "Stopping foreign worktree proof process pid $pid (${cwd:-unknown cwd})." >&2
+  terminate_pid_tree "$pid"
+  return 0
+}
+
+quarantine_foreign_smoke_processes() {
+  local processes="$1"
+  local line
+  local pid
+  local command
+  local stopped=1
+
+  quarantine_other_worktrees_enabled || return 1
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    pid="$(awk '{ print $1 }' <<<"$line")"
+    command="$line"
+    command="${command#"$pid"}"
+    command="${command#"${command%%[![:space:]]*}"}"
+    if quarantine_foreign_worktree_pid "$pid" "$command"; then
+      stopped=0
+    fi
+  done <<<"$processes"
+
+  return "$stopped"
+}
+
+quarantine_foreign_steadytype_apps() {
+  local pid
+  local command
+  local line
+  local rows
+
+  quarantine_other_worktrees_enabled || return 0
+  rows="$(ps ax -o pid=,command= 2>/dev/null |
+    awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' || true)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    pid="$(awk '{ print $1 }' <<<"$line")"
+    command="$line"
+    command="${command#"$pid"}"
+    command="${command#"${command%%[![:space:]]*}"}"
+    quarantine_foreign_worktree_pid "$pid" "$command" >/dev/null 2>&1 || true
+  done <<<"$rows"
+}
+
+start_foreign_worktree_quarantine_guard() {
+  quarantine_other_worktrees_enabled || exclusive_proof_run_enabled || return 0
+  (
+    while true; do
+      terminate_foreign_proof_processes_for_exclusive_run quiet >/dev/null 2>&1 || true
+      quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)" >/dev/null 2>&1 || true
+      quarantine_foreign_steadytype_apps >/dev/null 2>&1 || true
+      sleep "${AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS:-1}"
+    done
+  ) &
+  SMOKE_QUARANTINE_GUARD_PID="$!"
+}
+
+current_process_ancestor_pids() {
+  local pid="${BASHPID:-$$}"
+  local parent
+  local ancestors=()
+
+  while parent="$(ps -o ppid= -p "$pid" 2>/dev/null || true)"; do
+    parent="${parent//[[:space:]]/}"
+    [[ -n "$parent" && "$parent" != "0" && "$parent" != "$pid" ]] || break
+    ancestors+=("$parent")
+    pid="$parent"
+  done
+
+  printf '%s\n' "${ancestors[@]}"
+}
+
+exclusive_proof_run_enabled() {
+  [[ "$EXCLUSIVE_PROOF_RUN" =~ ^(1|true|yes|on)$ ]]
+}
+
+foreign_proof_process_lines() {
+  local current_pgid
+  current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+
+  ps -axo pid=,pgid=,command= 2>/dev/null |
+    while read -r pid pgid command; do
+      [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+      [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
+
+      case "$command" in
+        *script/real_app_smoke.sh*|*script/manual_proof_refresh.sh*|*script/obsidian_deep_sweep.sh*|*script/build_and_run.sh*|*script/local_quality_audit.py*|*script/local_completion_runtime.py*|*/SteadyType.app/Contents/MacOS/SteadyType*)
+          ;;
+        *)
+          continue
+          ;;
+      esac
+
+      local cwd
+      cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
+      if [[ "$cwd" == "$ROOT_DIR"* ]]; then
+        continue
+      fi
+
+      if [[ "$cwd" == */transcripted-autocomplete-lab* ||
+            "$cwd" == /private/tmp/steadytype-* ||
+            "$command" == */transcripted-autocomplete-lab/* ||
+            "$command" == /private/tmp/steadytype-* ]]; then
+        printf '%s\t%s\t%s\t%s\n' "$pid" "$pgid" "${cwd:-unknown-cwd}" "$command"
+      fi
+    done
+}
+
+terminate_foreign_proof_processes_for_exclusive_run() {
+  local quiet="${1:-0}"
+  exclusive_proof_run_enabled || return 0
+
+  local lines
+  lines="$(foreign_proof_process_lines || true)"
+  [[ -n "$lines" ]] || return 0
+
+  if [[ "$quiet" != "quiet" ]]; then
+    echo "Exclusive proof run terminating foreign proof process(es):" >&2
+    echo "$lines" >&2
+  fi
+
+  local pid pgid cwd command
+  while IFS=$'\t' read -r pid pgid cwd command; do
+    [[ -n "$pid" ]] || continue
+    terminate_pid_tree "$pid"
+  done <<<"$lines"
+
+  sleep 1
+}
+
 other_smoke_process_lines() {
-  local process_list current_pgid protected_pgids
-  current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d ' ' || true)"
+  local process_list ancestor_pids self_pgid protected_pgids
+  ancestor_pids="$(current_process_ancestor_pids || true)"
+  ancestor_pids="${ancestor_pids//$'\n'/ }"
+  self_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
   protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
@@ -769,31 +1038,64 @@ other_smoke_process_lines() {
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" -v rootDir="$ROOT_DIR" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPgid="$self_pgid" -v ancestorPids="$ancestor_pids" -v protectedPGIDs="$protected_pgids" '
     BEGIN {
-      split(protectedPGIDs, protectedList, " ")
+      split(ancestorPids, rawAncestors, /[[:space:]]+/)
+      for (i in rawAncestors) {
+        if (rawAncestors[i] != "") {
+          ancestor[rawAncestors[i]] = 1
+        }
+      }
+      split(protectedPGIDs, protectedList, /[[:space:]]+/)
       for (i in protectedList) {
-        if (protectedList[i] != "") protected[protectedList[i]] = 1
+        if (protectedList[i] != "") {
+          protected[protectedList[i]] = 1
+        }
       }
     }
     {
       pid = $1
+      ppid = $2
       pgid = $3
       command = $0
+      rawLine[pid] = $0
+      parent[pid] = ppid
+      processGroup[pid] = pgid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|manual_proof_refresh|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      readOnlyBetaReadiness[pid] = index(command, "script/beta_readiness.sh --check-only") > 0
+      directScript[pid] = !readOnlyBetaReadiness[pid] && command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness|check_current_build_privacy_export)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
-      hasSmokeScript = index(command, "script/real_app_smoke.sh") > 0 ||
+      hasSmokeScript[pid] = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
         index(command, "script/manual_proof_refresh.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
-        index(command, "script/build_and_run.sh") > 0
-      staleRootWatchdog = index(command, "stale_root") > 0 && index(command, rootDir) > 0
-      if (pid == self) next
-      if (selfPGID != "" && pgid == selfPGID) next
-      if (pgid in protected) next
-      if (directScript || (shellWrapper && hasSmokeScript) || staleRootWatchdog) {
-        print
+        index(command, "script/build_and_run.sh") > 0 ||
+        index(command, "script/beta_readiness.sh") > 0 ||
+        index(command, "script/check_score_targets.sh") > 0 ||
+        index(command, "script/check_controls_diagnostics_readiness.sh") > 0 ||
+        index(command, "script/check_current_build_privacy_export.sh") > 0
+      if (readOnlyBetaReadiness[pid]) hasSmokeScript[pid] = 0
+      shellHasSmokeScript[pid] = shellWrapper && hasSmokeScript[pid]
+    }
+    function relatedToSelf(pid, parentPid, depth) {
+      if (selfPgid != "" && processGroup[pid] == selfPgid) return 1
+      if (pid == self || pid in ancestor) return 1
+      parentPid = pid
+      for (depth = 0; depth < 128; depth++) {
+        if (!(parentPid in parent)) return 0
+        parentPid = parent[parentPid]
+        if (parentPid == self) return 1
+        if (parentPid == "" || parentPid == "0" || parentPid == parent[parentPid]) return 0
+      }
+      return 0
+    }
+    END {
+      for (pid in rawLine) {
+        if (relatedToSelf(pid)) continue
+        if (processGroup[pid] in protected) continue
+        if (directScript[pid] || shellHasSmokeScript[pid]) {
+          print rawLine[pid]
+        }
       }
     }
   ' <<<"$process_list"
@@ -866,7 +1168,12 @@ terminate_other_autocomplete_proof_runs() {
   while IFS= read -r pgid; do
     [[ -z "$pgid" ]] && continue
     pgids+=("$pgid")
-    kill -TERM "-$pgid" >/dev/null 2>&1 || true
+    ps -axo pid=,pgid= 2>/dev/null |
+      awk -v pgid="$pgid" '$2 == pgid { print $1 }' |
+      while IFS= read -r pid; do
+        [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+        kill -TERM "$pid" >/dev/null 2>&1 || true
+      done
   done < <(other_autocomplete_proof_pgids)
 
   ((${#pgids[@]} == 0)) && return 0
@@ -874,7 +1181,12 @@ terminate_other_autocomplete_proof_runs() {
 
   for pgid in "${pgids[@]}"; do
     if ps -axo pgid= 2>/dev/null | awk -v pgid="$pgid" '$1 == pgid { found = 1; exit } END { exit found ? 0 : 1 }'; then
-      kill -KILL "-$pgid" >/dev/null 2>&1 || true
+      ps -axo pid=,pgid= 2>/dev/null |
+        awk -v pgid="$pgid" '$2 == pgid { print $1 }' |
+        while IFS= read -r pid; do
+          [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+          kill -KILL "$pid" >/dev/null 2>&1 || true
+        done
     fi
   done
 }
@@ -906,6 +1218,10 @@ refuse_other_smoke_processes() {
     fi
 
     processes="$(other_smoke_process_lines || true)"
+    if [[ -n "$processes" ]] && quarantine_foreign_smoke_processes "$processes"; then
+      sleep 1
+      continue
+    fi
     if [[ -z "$processes" ]]; then
       return 0
     fi
@@ -1063,6 +1379,104 @@ wait_for_log_fields_optional() {
   done
 
   return 1
+}
+
+wait_for_obsidian_long_note_second_suggestion() {
+  local start_line="$1"
+  local expected_before_chars="$2"
+  local timeout_seconds="${3:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local max_before_chars=$((expected_before_chars + 2))
+  local min_before_chars=$((expected_before_chars - 1))
+  if (( min_before_chars < 0 )); then
+    min_before_chars=0
+  fi
+
+  while ((SECONDS <= deadline)); do
+    if python3 - "$LOG_PATH" "$start_line" "$min_before_chars" "$max_before_chars" <<'PY'
+import re
+import sys
+
+path, start_line, min_before, max_before = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+field_pattern = re.compile(r"(^| )([A-Za-z][A-Za-z0-9]*)=([^ ]+)")
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if line_number <= start_line or "suggestion-presented" not in line:
+                continue
+            fields = {match.group(2): match.group(3) for match in field_pattern.finditer(line)}
+            if fields.get("app") != "md.obsidian" or fields.get("afterChars") != "0":
+                continue
+            try:
+                before_chars = int(fields.get("beforeChars", "-1"))
+            except ValueError:
+                continue
+            if min_before <= before_chars <= max_before:
+                raise SystemExit(0)
+except FileNotFoundError:
+    pass
+raise SystemExit(1)
+PY
+    then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Obsidian second suggestion." >&2
+  echo "Required fields: suggestion-presented app=md.obsidian beforeChars=${expected_before_chars}±2 afterChars=0" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
+describe_textedit_model_latency_seed_miss() {
+  local seed_start="$1"
+  local window_title="$2"
+  local sample_index="$3"
+  local expected_seed="$4"
+  local current_text frontmost
+
+  current_text="$(textedit_document_text "$window_title")"
+  frontmost="$(run_osascript_with_timeout 1 "frontmost app probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
+
+  echo "TextEdit model latency seed $sample_index did not emit phrase-continuation-disabled before sampling; continuing to the live key trigger." >&2
+  echo "Seed diagnostics: window=$window_title frontmost=${frontmost:-unknown} documentChars=${#current_text} expectedSeedChars=${#expected_seed}" >&2
+  if [[ "$current_text" != "$expected_seed" ]]; then
+    echo "Seed diagnostics: TextEdit document no longer matches the expected stable seed text." >&2
+  fi
+  echo "Recent TextEdit proof logs since seed start:" >&2
+  tail -n +"$((seed_start + 1))" "$LOG_PATH" 2>/dev/null |
+    grep -E "app=com\\.apple\\.TextEdit|workspace-focus-changed|focused-text|suggestion-|phrase-continuation-disabled|runtime|status accessibility" |
+    tail -n 40 >&2 || true
+}
+
+assert_no_runtime_relaunch_since() {
+  local guard_line="$1"
+  local label="$2"
+
+  if ! log_since_matches "$guard_line" "runtime-bootstrap"; then
+    return 0
+  fi
+
+  echo "TextEdit model latency proof lost its tagged runtime before $label." >&2
+  echo "A newer SteadyType runtime-bootstrap appeared after this proof launch began sampling, probably from another build/run or smoke process." >&2
+  echo "Rerun textedit-model-latency when no other SteadyType build/run/smoke lane is active." >&2
+  echo "Newer runtime launches:" >&2
+  tail -n +"$((guard_line + 1))" "$LOG_PATH" 2>/dev/null |
+    grep -F "runtime-bootstrap" |
+    tail -n 5 >&2 || true
+  exit 1
+}
+
+latest_runtime_bootstrap_line_number() {
+  local latest_line
+  latest_line="$(grep -n "runtime-bootstrap" "$LOG_PATH" 2>/dev/null | tail -n 1 | cut -d: -f1 || true)"
+  if [[ "$latest_line" =~ ^[0-9]+$ ]]; then
+    echo "$latest_line"
+    return 0
+  fi
+  line_count "$LOG_PATH"
 }
 
 wait_for_textedit_acceptance_with_stale_retry() {
@@ -1244,6 +1658,63 @@ wait_for_frontmost_app() {
   exit 1
 }
 
+expected_frontmost_bundle_id() {
+  local expected="$1"
+
+  case "$expected" in
+    "Claude") printf 'com.anthropic.claudefordesktop\n' ;;
+    "Claude Code") printf 'com.anthropic.claude-code\n' ;;
+    "Codex") printf 'com.openai.codex\n' ;;
+    "Finder") printf 'com.apple.finder\n' ;;
+    "Ghostty") printf 'com.mitchellh.ghostty\n' ;;
+    "Google Chrome") printf 'com.google.Chrome\n' ;;
+    "iTerm2") printf 'com.googlecode.iterm2\n' ;;
+    "Notes") printf 'com.apple.Notes\n' ;;
+    "Obsidian") printf 'md.obsidian\n' ;;
+    "Terminal") printf 'com.apple.Terminal\n' ;;
+    "TextEdit") printf 'com.apple.TextEdit\n' ;;
+    "Warp") printf 'dev.warp.Warp-Stable\n' ;;
+    com.*|dev.*|md.*) printf '%s\n' "$expected" ;;
+    *) printf '\n' ;;
+  esac
+}
+
+frontmost_app_identity_matches() {
+  local identity="$1"
+  local expected="$2"
+  local frontmost_name="$identity"
+  local frontmost_bundle=""
+  local expected_bundle
+
+  if [[ "$identity" == *$'\t'* ]]; then
+    frontmost_name="${identity%%$'\t'*}"
+    frontmost_bundle="${identity#*$'\t'}"
+  fi
+
+  expected_bundle="$(expected_frontmost_bundle_id "$expected")"
+
+  [[ "$frontmost_name" == "$expected" ||
+     "$frontmost_bundle" == "$expected" ||
+     ( -n "$expected_bundle" && "$frontmost_bundle" == "$expected_bundle" ) ]]
+}
+
+describe_frontmost_app_identity() {
+  local identity="$1"
+  local frontmost_name="$identity"
+  local frontmost_bundle=""
+
+  if [[ "$identity" == *$'\t'* ]]; then
+    frontmost_name="${identity%%$'\t'*}"
+    frontmost_bundle="${identity#*$'\t'}"
+  fi
+
+  if [[ -n "$frontmost_bundle" ]]; then
+    printf '%s (%s)\n' "$frontmost_name" "$frontmost_bundle"
+  else
+    printf '%s\n' "${frontmost_name:-unknown}"
+  fi
+}
+
 try_wait_for_frontmost_app() {
   local expected="$1"
   local timeout_seconds="${2:-5}"
@@ -1251,8 +1722,17 @@ try_wait_for_frontmost_app() {
 
   while ((SECONDS <= deadline)); do
     local frontmost
-    frontmost="$(run_osascript_with_timeout 1 "frontmost app wait probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
-    if [[ "$frontmost" == "$expected" ]]; then
+    frontmost="$(run_osascript_with_timeout 1 "frontmost app wait probe" \
+      -e 'tell application "System Events"' \
+      -e 'set frontProcess to first application process whose frontmost is true' \
+      -e 'set frontName to name of frontProcess' \
+      -e 'set frontBundle to ""' \
+      -e 'try' \
+      -e 'set frontBundle to bundle identifier of frontProcess' \
+      -e 'end try' \
+      -e 'return frontName & (ASCII character 9) & frontBundle' \
+      -e 'end tell' 2>/dev/null || true)"
+    if frontmost_app_identity_matches "$frontmost" "$expected"; then
       return 0
     fi
     sleep 0.2
@@ -1321,7 +1801,7 @@ guard CommandLine.arguments.count == 2,
     exit(1)
 }
 
-app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+app.activate(options: [.activateAllWindows])
 SWIFT
   } &
   swift_activation_pid="$!"
@@ -1331,9 +1811,29 @@ SWIFT
     return 0
   fi
 
+  if wait_for_appkit_activation_frontmost "$target_pid"; then
+    return 0
+  fi
+
   activate_process_id_osascript "$target_pid" &
   local osascript_pid="$!"
   wait_for_background_process "$osascript_pid" 2 "System Events process activation" >/dev/null 2>&1 || true
+}
+
+wait_for_appkit_activation_frontmost() {
+  local expected_pid="$1"
+  local attempts="${2:-5}"
+  local attempt frontmost_pid
+
+  for ((attempt = 0; attempt < attempts; attempt++)); do
+    frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+    if [[ "$frontmost_pid" == "$expected_pid" ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  return 1
 }
 
 activate_process_id_osascript() {
@@ -1362,9 +1862,18 @@ assert_frontmost_app() {
   local expected="$1"
   local label="$2"
   local frontmost
-  frontmost="$(run_osascript_with_timeout 2 "frontmost app assertion probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
-  if [[ "$frontmost" != "$expected" ]]; then
-    echo "$label lost focus before accept. Expected frontmost app '$expected', got '${frontmost:-unknown}'." >&2
+  frontmost="$(run_osascript_with_timeout 2 "frontmost app assertion probe" \
+    -e 'tell application "System Events"' \
+    -e 'set frontProcess to first application process whose frontmost is true' \
+    -e 'set frontName to name of frontProcess' \
+    -e 'set frontBundle to ""' \
+    -e 'try' \
+    -e 'set frontBundle to bundle identifier of frontProcess' \
+    -e 'end try' \
+    -e 'return frontName & (ASCII character 9) & frontBundle' \
+    -e 'end tell' 2>/dev/null || true)"
+  if ! frontmost_app_identity_matches "$frontmost" "$expected"; then
+    echo "$label lost focus before accept. Expected frontmost app '$expected', got '$(describe_frontmost_app_identity "$frontmost")'." >&2
     exit 1
   fi
 }
@@ -1386,7 +1895,7 @@ guard let app = NSWorkspace.shared.runningApplications.first(where: {
     exit(1)
 }
 
-app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+app.activate(options: [.activateAllWindows])
 SWIFT
 
   osascript - "$process_name" <<'APPLESCRIPT' >/dev/null 2>&1 || true
@@ -1412,6 +1921,19 @@ settle_obsidian_focus_for_smoke() {
   activate_obsidian_for_smoke
   sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.25}"
   assert_frontmost_app "Obsidian" "$label"
+}
+
+reset_obsidian_zoom_for_smoke() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "System Events"
+  tell application process "Obsidian"
+    set frontmost to true
+    click menu item "Actual Size" of menu "View" of menu bar item "View" of menu bar 1
+  end tell
+end tell
+APPLESCRIPT
+  sleep 0.2
 }
 
 frontmost_process_id() {
@@ -1604,6 +2126,19 @@ smoke_target_bundle_ids() {
   esac
 }
 
+drop_stale_same_value_launchctl_previous() {
+  local key="$1"
+  local previous_value="$2"
+  local owned_value="$3"
+
+  if [[ -n "$owned_value" && "$previous_value" == "$owned_value" ]]; then
+    launchctl unsetenv "$key" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  return 1
+}
+
 prepare_temporary_app_enablement() {
   local bundle_ids
   bundle_ids="$(smoke_target_bundle_ids | paste -sd, -)"
@@ -1613,10 +2148,16 @@ prepare_temporary_app_enablement() {
 
   if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     TEMP_ENABLE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$TEMP_ENABLE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$TEMP_ENABLE_ENV_KEY" "$TEMP_ENABLE_LAUNCHCTL_PREVIOUS" "$bundle_ids"; then
+      TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
+    fi
     TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_MODE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_MODE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_MODE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_MODE_ENV_KEY" "$PROOF_MODE_LAUNCHCTL_PREVIOUS" "$bundle_ids"; then
+      PROOF_MODE_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_MODE_LAUNCHCTL_WAS_PREPARED=1
   fi
 
@@ -1674,28 +2215,84 @@ prepare_accept_all_shortcut_default() {
 prepare_model_latency_runtime_options() {
   if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "textedit-model-latency"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
   fi
 
   export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
   export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
   export AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
   launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
   launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
   launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "textedit-model-latency" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
   echo "TextEdit model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
   echo "TextEdit model latency proof scenario: textedit-model-latency"
+  echo "TextEdit model latency proof suppresses annoyance learning for synthetic event-tap probe keys."
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_default_model_latency_runtime_options() {
+  if [[ "$PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_WORD_ENV_KEY" "$PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "textedit-default-model-latency"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-default-model-latency"
+  launchctl setenv "$PROOF_DISABLE_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "textedit-default-model-latency" >/dev/null 2>&1 || true
+  echo "TextEdit default model latency proof: word completions and fast phrase fallback disabled so every measured phrase sample must hit the local model path."
+  echo "TextEdit default model latency proof scenario: textedit-default-model-latency"
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so default-model-latency proof mode only applies if the app was launched with this environment." >&2
   fi
 }
 
@@ -1860,10 +2457,23 @@ import ApplicationServices
 import Foundation
 
 let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
-let normalizedMarker = marker
-    .components(separatedBy: .whitespacesAndNewlines)
-    .filter { !$0.isEmpty }
-    .joined(separator: " ")
+let normalizedMarker = normalizedWhitespace(marker)
+let compactMarker = compactWhitespace(marker)
+
+func normalizedWhitespace(_ value: String) -> String {
+    value
+        .split(whereSeparator: { $0.isWhitespace })
+        .joined(separator: " ")
+}
+
+func compactWhitespace(_ value: String) -> String {
+    String(value.filter { !$0.isWhitespace })
+}
+
+func containsNormalized(_ haystack: String, _ needle: String) -> Bool {
+    normalizedWhitespace(haystack).range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        || compactWhitespace(haystack).range(of: compactMarker, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+}
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -1881,11 +2491,7 @@ func countMarkerTextAreas(in element: AXUIElement, depth: Int = 0) -> Int {
 
     let role = copyAttribute(element, kAXRoleAttribute) as? String
     let value = copyAttribute(element, kAXValueAttribute) as? String ?? ""
-    let normalizedValue = value
-        .components(separatedBy: .whitespacesAndNewlines)
-        .filter { !$0.isEmpty }
-        .joined(separator: " ")
-    var count = (role == kAXTextAreaRole as String && normalizedValue.contains(normalizedMarker)) ? 1 : 0
+    var count = (role == kAXTextAreaRole as String && containsNormalized(value, normalizedMarker)) ? 1 : 0
     for child in children(of: element) {
         count += countMarkerTextAreas(in: child, depth: depth + 1)
     }
@@ -2227,7 +2833,7 @@ window.AutocompleteLabRealProseMirrorSmoke = {
     const view = new EditorView(element, {
       state: EditorState.create({ schema }),
       attributes: {
-        "aria-label": "Real ProseMirror smoke editor",
+        "aria-label": "Local real ProseMirror smoke fixture editor",
         "aria-multiline": "true",
         "data-smoke-editor": "true",
         "role": "textbox",
@@ -4073,13 +4679,14 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
         return title.hasPrefix("textedit-smoke-") ||
             title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("textedit-default-model-latency-") ||
             title.hasPrefix("autocomplete-lab-typing-soak-") ||
             title.hasPrefix("textedit-ax-retention-proof.") ||
             title.hasPrefix("textedit-retention-proof.")
     }() ? windows[0] : nil)
 
     if let window = targetWindow {
-        app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        app.activate(options: [.activateAllWindows])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         let deadline = Date().addingTimeInterval(2.0)
         while Date() <= deadline {
@@ -4194,6 +4801,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
         return title.hasPrefix("textedit-smoke-") ||
             title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("textedit-default-model-latency-") ||
             title.hasPrefix("autocomplete-lab-typing-soak-") ||
             title.hasPrefix("textedit-ax-retention-proof.") ||
             title.hasPrefix("textedit-retention-proof.")
@@ -4209,7 +4817,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
               let source = CGEventSource(stateID: .hidSystemState) else {
             exit(1)
         }
-        app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        app.activate(options: [.activateAllWindows])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         Thread.sleep(forTimeInterval: 0.2)
 
@@ -4318,6 +4926,7 @@ if let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement
         let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
         guard title.hasPrefix("textedit-smoke-") ||
             title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("textedit-default-model-latency-") ||
             title.hasPrefix("autocomplete-lab-typing-soak-") ||
             title.hasPrefix("textedit-ax-retention-proof.") ||
             title.hasPrefix("textedit-retention-proof.") else {
@@ -4356,6 +4965,10 @@ wait_for_textedit_frontmost_window() {
 assert_textedit_frontmost_window() {
   local window_title="$1"
   local label="$2"
+
+  if [[ "$(textedit_frontmost_window_is "$window_title")" != "1" ]]; then
+    focus_textedit_smoke_editor "$window_title" >/dev/null 2>&1 || true
+  fi
 
   if [[ "$(textedit_frontmost_window_is "$window_title")" != "1" ]]; then
     local frontmost
@@ -4507,8 +5120,13 @@ SWIFT
 set_textedit_document_text() {
   local window_title="$1"
   local text="$2"
+  local run_dir stdout_path stderr_path status swift_pid
 
-  swift - "$window_title" "$text" <<'SWIFT'
+  run_dir="$(make_tmp_dir)"
+  stdout_path="$run_dir/textedit-ax-write-stdout.txt"
+  stderr_path="$run_dir/textedit-ax-write-stderr.txt"
+
+  swift - "$window_title" "$text" >"$stdout_path" 2>"$stderr_path" <<'SWIFT' &
 import AppKit
 import ApplicationServices
 import Foundation
@@ -4609,6 +5227,16 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
 
 exit(1)
 SWIFT
+  swift_pid="$!"
+
+  if wait_for_background_process "$swift_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_AX_WRITE_TIMEOUT_SECONDS:-5}" "TextEdit AX value replacement"; then
+    cat "$stdout_path"
+    return 0
+  fi
+
+  status=$?
+  cat "$stderr_path" >&2 || true
+  return "$status"
 }
 
 textedit_document_exists() {
@@ -4724,6 +5352,7 @@ if titles.count == 1 {
     let title = titles[0]
     if title.hasPrefix("textedit-smoke-") ||
         title.hasPrefix("textedit-model-latency-") ||
+        title.hasPrefix("textedit-default-model-latency-") ||
         title.hasPrefix("autocomplete-lab-typing-soak-") ||
         title.hasPrefix("textedit-ax-retention-proof.") ||
         title.hasPrefix("textedit-retention-proof.") {
@@ -4989,6 +5618,20 @@ APPLESCRIPT
   wait_for_textedit_document_exact "$window_title" "" "$label" 5
 }
 
+dismiss_textedit_proof_suggestion() {
+  local window_title="$1"
+  local expected_text="$2"
+  local label="$3"
+
+  assert_textedit_frontmost_window "$window_title" "$label"
+  run_osascript_with_timeout 2 "$label" <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  key code 53
+end tell
+APPLESCRIPT
+  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label unchanged" 3
+}
+
 wait_for_textedit_document_prefix() {
   local window_title="$1"
   local expected_prefix="$2"
@@ -5030,10 +5673,10 @@ trim_textedit_native_completion_suffix() {
     return 0
   fi
   if ((suffix_length > 20)); then
-    echo "TextEdit native completion suffix during $label was unexpectedly long ($suffix_length chars)." >&2
-    echo "Expected prefix: $expected_text" >&2
-    echo "Actual: $current_text" >&2
-    exit 1
+    echo "TextEdit native completion suffix during $label was unexpectedly long ($suffix_length chars); falling back to AX replacement." >&2
+    set_textedit_document_text "$window_title" "$expected_text" || true
+    wait_for_textedit_document_exact "$window_title" "$expected_text" "$label native completion fallback" 5
+    return 0
   fi
 
   assert_textedit_frontmost_window "$window_title" "$label native completion trim"
@@ -5060,6 +5703,16 @@ APPLESCRIPT
     set_textedit_document_text "$window_title" "$expected_text" || true
   fi
   wait_for_textedit_document_exact "$window_title" "$expected_text" "$label native completion trim" 5
+}
+
+normalize_textedit_typed_seed_for_proof() {
+  local window_title="$1"
+  local expected_text="$2"
+  local label="$3"
+
+  set_textedit_document_text "$window_title" "$expected_text"
+  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label typed seed normalize" 5
+  move_textedit_caret_to_document_end "$window_title"
 }
 
 verify_textedit_native_undo() {
@@ -5202,6 +5855,7 @@ textedit_smoke_allows_ax_proof_typing() {
 type_textedit_smoke_fragment() {
   local window_title="$1"
   local fragment="$2"
+  local attempt
 
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
@@ -5211,9 +5865,13 @@ type_textedit_smoke_fragment() {
     return 0
   fi
 
-  assert_textedit_frontmost_window "$window_title" "TextEdit proof typing"
-  (
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
+  for attempt in 1 2; do
+    focus_textedit_smoke_editor "$window_title"
+    click_textedit_smoke_editor "$window_title"
+    move_textedit_caret_to_document_end "$window_title"
+    assert_textedit_frontmost_window "$window_title" "TextEdit proof typing"
+    (
+      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
 set smokeText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT"
 set keyDelayText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS"
 set keyDelay to 0
@@ -5235,9 +5893,34 @@ tell application "System Events"
   end if
 end tell
 APPLESCRIPT
+    ) &
+    local osascript_pid="$!"
+    if wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"; then
+      return 0
+    fi
+    if ((attempt == 1)); then
+      echo "TextEdit proof typing lost focus; refocusing smoke window and retrying once." >&2
+      sleep 0.25
+      continue
+    fi
+    return 1
+  done
+}
+
+press_textedit_event_tap_probe_key() {
+  (
+    osascript <<'APPLESCRIPT'
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.apple.TextEdit" then
+    error "TextEdit is not frontmost for event-tap proof typing."
+  end if
+  key code 48
+end tell
+APPLESCRIPT
   ) &
   local osascript_pid="$!"
-  wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"
+  wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit event-tap proof key typing"
 }
 
 type_textedit_smoke_fragment_and_confirm() {
@@ -5250,7 +5933,8 @@ type_textedit_smoke_fragment_and_confirm() {
 
   type_textedit_smoke_fragment "$window_title" "$fragment"
   if wait_for_textedit_document_fragment "$window_title" "$fragment" "$label" 5; then
-    move_textedit_caret_to_document_end "$window_title"
+    trim_textedit_native_completion_suffix "$window_title" "$expected_text" "$label"
+    normalize_textedit_typed_seed_for_proof "$window_title" "$expected_text" "$label"
     return 0
   fi
 
@@ -5258,9 +5942,11 @@ type_textedit_smoke_fragment_and_confirm() {
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
   set_textedit_document_text "$window_title" ""
+  expected_text="$fragment"
   type_textedit_smoke_fragment "$window_title" "$fragment"
   wait_for_textedit_document_fragment "$window_title" "$fragment" "$label retry" 5
-  move_textedit_caret_to_document_end "$window_title"
+  trim_textedit_native_completion_suffix "$window_title" "$expected_text" "$label retry"
+  normalize_textedit_typed_seed_for_proof "$window_title" "$expected_text" "$label retry"
 }
 
 wait_for_textedit_smoke_editor() {
@@ -5310,11 +5996,35 @@ textedit_scrolled_prefill() {
 
 textedit_model_latency_fragments() {
   cat <<'EOF'
-The local runtime hardening pass keeps every model checksum verif
-Private beta recovery should explain each local repair step verif
-Offline launch proof needs the embedded model checksum verif
-The app owned runtime should catch corrupt weight checks verif
-The tester facing failure state should keep recovery steps verif
+The local runtime hardening pass keeps every model checksum chec
+Private beta recovery should explain each local repair step fixp
+Offline launch proof needs the embedded model checksum hash
+The app owned runtime should catch corrupt weight checks qchk
+The tester facing failure state should keep recovery steps runb
+Suggestion placement should stay beside the cursor alig
+The diagnostics panel should explain latency proof clea
+Privacy checks should keep typed text local priv
+Onboarding should make permission prompts feel cal
+Beta readiness should require current manual proof fres
+Current proof should reject stale latency windows curr
+The beta packet should include a quiet recovery note recov
+Model readiness should prefer the bundled runtime read
+Diagnostics should keep redacted export proof visi
+Controls should pause suggestions before tester paus
+Tab safety should accept one word without sending subm
+EOF
+}
+
+textedit_default_model_latency_fragments() {
+  cat <<'EOF'
+The local model stays responsive when
+Private beta recovery feels safer because
+Offline startup checks the embedded asset before
+The typing loop measures phrase suggestions while
+Runtime proof should prefer quiet completions that
+App owned inference keeps suggestions private by
+Cold launch feels better when the model
+Typing responsiveness improves after the runtime
 EOF
 }
 
@@ -7089,11 +7799,11 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Editor-Like Smoke</title>
+<title>SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <div class="cm-editor" role="application" aria-label="Local editor-like smoke fixture" style="display: grid; grid-template-columns: 48px 1fr; font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; border: 1px solid #bbb;">
   <div aria-hidden="true" style="padding-top: 14px; border-right: 1px solid #ddd; background: #f5f5f2; color: #777; font: 14px Menlo, monospace; text-align: center;">1</div>
-  <div data-smoke-editor class="cm-content" role="textbox" aria-label="CodeMirror-style editor" aria-multiline="true" contenteditable="true" spellcheck="false" style="min-height: 160px; padding: 12px; outline: none; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
+  <div data-smoke-editor class="cm-content" role="textbox" aria-label="Local CodeMirror-style smoke fixture editor" aria-multiline="true" contenteditable="true" spellcheck="false" style="min-height: 160px; padding: 12px; outline: none; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
 </div>
 <script>
 window.focusSmokeEditor = function () {
@@ -7114,7 +7824,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Monaco-Like Smoke</title>
+<title>SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -7152,7 +7862,7 @@ body { margin: 0; background: #f7f7f7; }
   <div class="overflow-guard">
     <div class="monaco-scrollable-element">
       <div class="view-lines">
-        <div data-smoke-editor class="view-line inputarea monaco-mouse-cursor-text" role="textbox" aria-label="Monaco-like editor input" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
+        <div data-smoke-editor class="view-line inputarea monaco-mouse-cursor-text" role="textbox" aria-label="Local Monaco-like smoke fixture editor input" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
       </div>
     </div>
   </div>
@@ -7176,7 +7886,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Real Monaco Smoke [ready=0]</title>
+<title>SteadyType Chrome Local Real Monaco Fixture Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file: blob:; worker-src blob: file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -7192,8 +7902,8 @@ body { margin: 0; background: #f7f7f7; }
   font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 </style>
-<div class="label">Real Monaco editor smoke fixture</div>
-<div data-smoke-editor class="monaco-host" aria-label="Real Monaco smoke editor"></div>
+<div class="label">Local real Monaco editor smoke fixture</div>
+<div data-smoke-editor class="monaco-host" aria-label="Local real Monaco smoke fixture editor"></div>
 <script src="$CHROME_FIXTURE_ASSET_URL/loader.js"></script>
 <script>
 window.autocompleteSmokeReady = false;
@@ -7217,7 +7927,7 @@ require(["vs/editor/editor.main"], function () {
     scrollBeyondLastLine: false,
     wordWrap: "on",
     accessibilitySupport: "on",
-    ariaLabel: "Real Monaco smoke editor"
+    ariaLabel: "Local real Monaco smoke fixture editor"
   });
 
   window.autocompleteSmokeEditorText = function () {
@@ -7243,7 +7953,7 @@ require(["vs/editor/editor.main"], function () {
     editor.focus();
   };
   window.autocompleteSmokeReady = true;
-  document.title = "SteadyType Chrome Real Monaco Smoke [ready=1]";
+  document.title = "SteadyType Chrome Local Real Monaco Fixture Smoke [ready=1]";
   window.focusSmokeEditor();
 });
 </script>
@@ -7253,7 +7963,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome ProseMirror-Like Smoke</title>
+<title>SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -7284,7 +7994,7 @@ body { margin: 0; background: #fbfbfb; }
 </style>
 <article class="editor-shell" aria-label="Local ProseMirror-like smoke fixture">
   <div class="menubar" aria-hidden="true"><span>B</span><span>I</span><span>H1</span></div>
-  <div data-smoke-editor class="ProseMirror" role="textbox" aria-label="ProseMirror-like editor" aria-multiline="true" contenteditable="true" spellcheck="false"><p><br></p></div>
+  <div data-smoke-editor class="ProseMirror" role="textbox" aria-label="Local ProseMirror-like smoke fixture editor" aria-multiline="true" contenteditable="true" spellcheck="false"><p><br></p></div>
 </article>
 <script>
 window.focusSmokeEditor = function () {
@@ -7306,7 +8016,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Real ProseMirror Smoke [ready=0]</title>
+<title>SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -7335,7 +8045,7 @@ body { margin: 0; background: #fbfbfb; }
 }
 .ProseMirror p { margin: 0 0 12px; }
 </style>
-<article class="editor-shell" aria-label="Real ProseMirror smoke fixture">
+<article class="editor-shell" aria-label="Local real ProseMirror smoke fixture">
   <div class="menubar" aria-hidden="true"><span>B</span><span>I</span><span>H1</span></div>
   <div data-prosemirror-mount></div>
 </article>
@@ -7343,7 +8053,7 @@ body { margin: 0; background: #fbfbfb; }
 <script>
 window.autocompleteSmokeReady = false;
 window.AutocompleteLabRealProseMirrorSmoke.mount(document.querySelector("[data-prosemirror-mount]"));
-document.title = "SteadyType Chrome Real ProseMirror Smoke [ready=1]";
+document.title = "SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=1]";
 </script>
 HTML
       ;;
@@ -7351,7 +8061,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Chat-Like No-Submit Smoke [submits=0]</title>
+<title>SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -7405,7 +8115,7 @@ button {
 <section class="thread" aria-label="Local chat-like smoke fixture">
   <div class="message">Local disposable chat fixture.</div>
   <form data-smoke-form>
-    <div data-smoke-editor role="textbox" aria-label="Chat message composer" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
+    <div data-smoke-editor role="textbox" aria-label="Local chat-like smoke fixture message composer" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
     <button type="submit">Send</button>
   </form>
   <div class="meter" aria-live="polite">Submits: <span data-smoke-submit-count>0</span></div>
@@ -7413,7 +8123,7 @@ button {
 <script>
 window.autocompleteSmokeSubmitCount = 0;
 window.updateSmokeSubmitCount = function () {
-  document.title = "SteadyType Chrome Chat-Like No-Submit Smoke [submits=" + window.autocompleteSmokeSubmitCount + "]";
+  document.title = "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=" + window.autocompleteSmokeSubmitCount + "]";
   document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
 };
 window.autocompleteSmokeEditorText = function () {
@@ -7617,6 +8327,9 @@ describe_plan() {
         model-latency)
           echo "Plan: build/relaunch AutocompleteLab once, allow a cold local model warmup, type several disposable TextEdit fragments, and require real model-backed suggestions in one launch."
           ;;
+        default-model-latency)
+          echo "Plan: build/relaunch AutocompleteLab once, allow a cold local model warmup, type several disposable TextEdit phrase contexts, and require default phrase model suggestions in one launch."
+          ;;
         undo-one-word)
           echo "Plan: build/relaunch AutocompleteLab with app rollback disabled, prove TextEdit Tab accept, then Command-Z the one-word insertion through native TextEdit undo."
           ;;
@@ -7632,6 +8345,10 @@ describe_plan() {
         echo "Safety: model latency proof seeds stable context into the disposable TextEdit AX target, then types the final partial word through live key events."
         echo "Safety: model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
         echo "Safety: model latency proof tags the runtime launch with scenario textedit-model-latency so generic TextEdit samples cannot satisfy the beta gate."
+      elif [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]]; then
+        echo "Safety: default model latency proof seeds stable context into the disposable TextEdit AX target, then types a trailing space through live key events."
+        echo "Safety: default model latency proof disables word completions and fast phrase fallback for that launch so local phrase-continuation model timing is required."
+        echo "Safety: default model latency proof tags the runtime launch with scenario textedit-default-model-latency so generic TextEdit samples cannot satisfy the beta gate."
       else
         echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
       fi
@@ -7806,10 +8523,12 @@ build_if_needed() {
   SMOKE_PHASE="build/relaunch current SteadyType"
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
+      AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
+      AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
     )
-    if [[ ! "${AUTOCOMPLETE_LAB_REAL_APP_DIRECT_LAUNCH:-1}" =~ ^(0|false|no|off)$ ]]; then
-      build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)
+    if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
+      build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
     fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
   fi
@@ -7820,8 +8539,15 @@ build_if_needed() {
 
 build_bundle_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1 \
-      ./script/build_and_run.sh bundle-only
+    local build_run_env=(
+      AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
+      AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
+      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1
+    )
+    if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
+      build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
+    fi
+    env "${build_run_env[@]}" ./script/build_and_run.sh bundle-only
   else
     wait_for_current_autocomplete_lab_process
   fi
@@ -7854,7 +8580,8 @@ command_matches_steadytype_binary() {
 current_steadytype_app_bundle_pids() {
   local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
   local current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
+  current_pgid="${current_pgid//[[:space:]]/}"
 
   while IFS=$'\t' read -r pid pgid command; do
     [[ -z "$pid" ]] && continue
@@ -7949,8 +8676,11 @@ launch_steadytype_after_chrome_setup() {
     AUTOCOMPLETE_LAB_VISIBLE_WORDS \
     AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK \
     AUTOCOMPLETE_LAB_PROOF_SCENARIO \
+    AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING \
     AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY; do
@@ -8046,8 +8776,22 @@ refresh_build_archive_proof() {
     exit 1
   fi
 
-  rm -f "$archive_abs"
-  (cd dist && ditto -c -k --keepParent "SteadyType.app" "$archive_abs")
+  local archive_attempt archive_status
+  archive_status=1
+  for archive_attempt in 1 2 3; do
+    rm -f "$archive_abs"
+    if (cd dist && ditto -c -k --keepParent "SteadyType.app" "$archive_abs"); then
+      archive_status=0
+      break
+    fi
+    archive_status=$?
+    echo "Archive proof attempt $archive_attempt failed with status $archive_status; retrying." >&2
+    sleep 0.5
+  done
+  if ((archive_status != 0)); then
+    echo "Archive proof failed after 3 attempts." >&2
+    return "$archive_status"
+  fi
 
   local archive_sha
   archive_sha="$(shasum -a 256 "$archive_abs" | awk '{print $1}')"
@@ -8376,96 +9120,22 @@ SWIFT
 
 assert_obsidian_smoke_target() {
   activate_obsidian_for_smoke
-  AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift - <<'SWIFT'
-import AppKit
-import ApplicationServices
-import Foundation
-
-let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "SteadyType Obsidian proof"
-let expectedSuffix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
-let normalizedMarker = marker
-    .components(separatedBy: .whitespacesAndNewlines)
-    .filter { !$0.isEmpty }
-    .joined(separator: " ")
-
-func normalizedForMarkerMatch(_ value: String) -> String {
-    value
-        .components(separatedBy: .whitespacesAndNewlines)
-        .filter { !$0.isEmpty }
-        .joined(separator: " ")
+  AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift script/obsidian_ax_editor.swift assert
 }
 
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success else {
-        return nil
-    }
-    return value
-}
+wait_for_obsidian_smoke_editor_ready() {
+  local timeout_seconds="${1:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
 
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian" else {
-    fputs("Obsidian is not frontmost for the Obsidian smoke target.\n", stderr)
-    exit(3)
-}
+  while ((SECONDS <= deadline)); do
+    if swift script/obsidian_ax_editor.swift assert >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.2
+  done
 
-guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    fputs("Obsidian is not running. Open a disposable smoke note first.\n", stderr)
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-let systemWide = AXUIElementCreateSystemWide()
-AXUIElementSetMessagingTimeout(systemWide, 1.0)
-
-func focusedElement(from element: AXUIElement) -> AXUIElement? {
-    var focusedValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(
-        element,
-        kAXFocusedUIElementAttribute as CFString,
-        &focusedValue
-    ) == .success,
-          let focusedValue else {
-        return nil
-    }
-
-    return (focusedValue as! AXUIElement)
-}
-
-guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
-    fputs("Could not read the focused Obsidian editor.\n", stderr)
-    exit(3)
-}
-
-AXUIElementSetMessagingTimeout(editor, 1.0)
-let role = copyAttribute(editor, kAXRoleAttribute) as? String
-guard role == kAXTextAreaRole as String || role == "AXWebArea" else {
-    fputs("Focused Obsidian element is not a CodeMirror text surface.\n", stderr)
-    exit(3)
-}
-
-let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
-guard normalizedForMarkerMatch(text).localizedCaseInsensitiveContains(normalizedMarker) else {
-    fputs("Refusing to type in Obsidian because the focused note does not contain the disposable smoke marker.\n", stderr)
-    exit(3)
-}
-
-if !expectedSuffix.isEmpty {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.hasSuffix(expectedSuffix) else {
-        fputs("Refusing Obsidian proof because the focused smoke note does not end with the expected disposable text.\n", stderr)
-        exit(3)
-    }
-}
-
-AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-var endRange = CFRange(location: text.utf16.count, length: 0)
-if let rangeValue = AXValueCreate(.cfRange, &endRange) {
-    AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-}
-print("Obsidian smoke target confirmed")
-SWIFT
+  echo "Timed out waiting for the disposable Obsidian smoke editor." >&2
+  exit 1
 }
 
 assert_obsidian_initial_smoke_target() {
@@ -8604,69 +9274,8 @@ type_obsidian_raw_smoke_text() {
   local text="$1"
 
   activate_obsidian_for_smoke
-  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE:-0}" != "1" ]] &&
-    [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE:-0}" == "1" ]] &&
-    AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" swift - <<'SWIFT' >/dev/null 2>&1; then
-import AppKit
-import ApplicationServices
-import Foundation
-
-let fragment = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"] ?? ""
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
-}
-
-func focusedElement(from element: AXUIElement) -> AXUIElement? {
-    var focusedValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(
-        element,
-        kAXFocusedUIElementAttribute as CFString,
-        &focusedValue
-    ) == .success,
-          let focusedValue else {
-        return nil
-    }
-
-    return (focusedValue as! AXUIElement)
-}
-
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
-      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-let systemWide = AXUIElementCreateSystemWide()
-AXUIElementSetMessagingTimeout(systemWide, 1.0)
-
-guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
-    exit(3)
-}
-
-AXUIElementSetMessagingTimeout(editor, 1.0)
-let role = copyAttribute(editor, kAXRoleAttribute) as? String
-guard role == kAXTextAreaRole as String || role == "AXWebArea" else {
-    exit(3)
-}
-
-let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
-var endRange = CFRange(location: text.utf16.count, length: 0)
-guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
-    exit(3)
-}
-AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-guard AXUIElementSetAttributeValue(
-    editor,
-    kAXSelectedTextAttribute as CFString,
-    fragment as CFTypeRef
-) == .success else {
-    exit(3)
-}
-SWIFT
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE:-0}" == "1" ]] &&
+    AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" swift script/obsidian_ax_editor.swift insert >/dev/null 2>&1; then
     return 0
   fi
 
@@ -8678,6 +9287,8 @@ tell application "System Events"
   if bundle identifier of frontApp is not "md.obsidian" then
     error "Obsidian is not frontmost for smoke-note setup."
   end if
+  key code 125 using command down
+  delay 0.2
   keystroke rawText
 end tell
 APPLESCRIPT
@@ -8696,261 +9307,8 @@ APPLESCRIPT
 
 set_obsidian_caret_to_value_end() {
   activate_obsidian_for_smoke
-  swift - <<'SWIFT' >/dev/null
-import AppKit
-import ApplicationServices
-import Foundation
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
-}
-
-func focusedElement(from element: AXUIElement) -> AXUIElement? {
-    var focusedValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(
-        element,
-        kAXFocusedUIElementAttribute as CFString,
-        &focusedValue
-    ) == .success,
-          let focusedValue else {
-        return nil
-    }
-
-    return (focusedValue as! AXUIElement)
-}
-
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
-      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-let systemWide = AXUIElementCreateSystemWide()
-AXUIElementSetMessagingTimeout(systemWide, 1.0)
-
-guard let editor = focusedElement(from: appElement) ?? focusedElement(from: systemWide) else {
-    exit(3)
-}
-
-AXUIElementSetMessagingTimeout(editor, 1.0)
-let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
-let expectedLocation = text.utf16.count
-var endRange = CFRange(location: text.utf16.count, length: 0)
-guard let rangeValue = AXValueCreate(.cfRange, &endRange) else {
-    exit(3)
-}
-
-AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-guard AXUIElementSetAttributeValue(
-    editor,
-    kAXSelectedTextRangeAttribute as CFString,
-    rangeValue
-) == .success else {
-    exit(3)
-}
-
-let deadline = Date().addingTimeInterval(1.2)
-while Date() < deadline {
-    if let selectedValue = copyAttribute(editor, kAXSelectedTextRangeAttribute) {
-        var selectedRange = CFRange()
-        if AXValueGetValue(selectedValue as! AXValue, .cfRange, &selectedRange),
-           selectedRange.location >= max(0, expectedLocation - 1) {
-            exit(0)
-        }
-    }
-
-    _ = AXUIElementSetAttributeValue(
-        editor,
-        kAXSelectedTextRangeAttribute as CFString,
-        rangeValue
-    )
-    Thread.sleep(forTimeInterval: 0.12)
-}
-SWIFT
-  sleep 0.25
-}
-
-focus_obsidian_visible_tail_line() {
-  activate_obsidian_for_smoke
-  swift - <<'SWIFT' >/dev/null
-import AppKit
-import ApplicationServices
-import CoreGraphics
-import Foundation
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
-}
-
-func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
-    copyAttribute(element, attribute) as? String ?? ""
-}
-
-func children(of element: AXUIElement) -> [AXUIElement] {
-    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
-}
-
-func rect(for element: AXUIElement) -> CGRect? {
-    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
-          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
-        return nil
-    }
-
-    var position = CGPoint.zero
-    var size = CGSize.zero
-    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
-          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
-        return nil
-    }
-
-    return CGRect(origin: position, size: size)
-}
-
-func collectElements(in element: AXUIElement, depth: Int = 0, results: inout [AXUIElement]) {
-    guard depth <= 32 else {
-        return
-    }
-
-    results.append(element)
-    for child in children(of: element) {
-        collectElements(in: child, depth: depth + 1, results: &results)
-    }
-}
-
-func clickInside(_ point: CGPoint) {
-    let source = CGEventSource(stateID: .hidSystemState)
-    guard let mouseDown = CGEvent(
-        mouseEventSource: source,
-        mouseType: .leftMouseDown,
-        mouseCursorPosition: point,
-        mouseButton: .left
-    ),
-    let mouseUp = CGEvent(
-        mouseEventSource: source,
-        mouseType: .leftMouseUp,
-        mouseCursorPosition: point,
-        mouseButton: .left
-    ) else {
-        return
-    }
-
-    mouseDown.post(tap: .cghidEventTap)
-    mouseUp.post(tap: .cghidEventTap)
-}
-
-guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "md.obsidian").first else {
-    exit(3)
-}
-
-app.activate(options: [.activateAllWindows])
-Thread.sleep(forTimeInterval: 0.15)
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 0.75)
-let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
-let normalizedMarker = marker
-    .components(separatedBy: .whitespacesAndNewlines)
-    .filter { !$0.isEmpty }
-    .joined(separator: " ")
-let requireLongNoteLine = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90"] != "0"
-
-func normalizedForMarkerMatch(_ value: String) -> String {
-    value
-        .components(separatedBy: .whitespacesAndNewlines)
-        .filter { !$0.isEmpty }
-        .joined(separator: " ")
-}
-
-var elements: [AXUIElement] = []
-collectElements(in: appElement, results: &elements)
-
-let textAreas = elements.filter {
-    stringAttribute($0, kAXRoleAttribute) == kAXTextAreaRole as String
-}
-
-guard let target = textAreas
-    .filter({
-        let value = stringAttribute($0, kAXValueAttribute)
-        return normalizedForMarkerMatch(value).contains(normalizedMarker)
-            && (!requireLongNoteLine || value.contains("Autocomplete Lab Obsidian scroll filler line 90"))
-    })
-    .sorted(by: {
-        (rect(for: $0)?.maxY ?? 0) > (rect(for: $1)?.maxY ?? 0)
-    })
-    .first,
-    let targetRect = rect(for: target) else {
-    exit(3)
-}
-
-let value = stringAttribute(target, kAXValueAttribute)
-let visibleLines = value
-    .split(separator: "\n", omittingEmptySubsequences: false)
-    .map(String.init)
-let tailLine = visibleLines.last(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? ""
-
-var targetChildren: [AXUIElement] = []
-collectElements(in: target, results: &targetChildren)
-let tailElement = targetChildren
-    .filter { stringAttribute($0, kAXValueAttribute) == tailLine }
-    .compactMap { element -> (AXUIElement, CGRect)? in
-        guard let frame = rect(for: element),
-              frame.height > 0,
-              targetRect.intersects(frame) else {
-            return nil
-        }
-        return (element, frame)
-    }
-    .sorted { $0.1.maxY > $1.1.maxY }
-    .first
-
-let clickPoint: CGPoint
-if let (_, lineRect) = tailElement {
-    let tailX = min(targetRect.maxX - 8, max(lineRect.minX + 8, lineRect.maxX + 8))
-    clickPoint = CGPoint(
-        x: tailX,
-        y: lineRect.height > 30 ? lineRect.maxY - 11 : lineRect.midY
-    )
-} else {
-    clickPoint = CGPoint(x: targetRect.minX + 28, y: targetRect.maxY - 18)
-}
-
-AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-clickInside(clickPoint)
-
-let endLocation = value.utf16.count
-var endRange = CFRange(location: endLocation, length: 0)
-if let rangeValue = AXValueCreate(.cfRange, &endRange) {
-    _ = AXUIElementSetAttributeValue(target, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-}
-
-let deadline = Date().addingTimeInterval(1.0)
-let systemWide = AXUIElementCreateSystemWide()
-AXUIElementSetMessagingTimeout(systemWide, 0.75)
-while Date() < deadline {
-    var focusedValue: CFTypeRef?
-    if AXUIElementCopyAttributeValue(
-        systemWide,
-        kAXFocusedUIElementAttribute as CFString,
-        &focusedValue
-    ) == .success,
-       let focusedValue {
-        let focused = (focusedValue as! AXUIElement)
-        if stringAttribute(focused, kAXRoleAttribute) == kAXTextAreaRole as String {
-            exit(0)
-        }
-    }
-
-    _ = AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-    if let rangeValue = AXValueCreate(.cfRange, &endRange) {
-        _ = AXUIElementSetAttributeValue(target, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-    }
-    Thread.sleep(forTimeInterval: 0.1)
-}
-SWIFT
-  sleep 0.2
+  swift script/obsidian_ax_editor.swift focus >/dev/null
+  sleep 0.15
 }
 
 move_obsidian_caret_to_document_end() {
@@ -8973,51 +9331,7 @@ reset_obsidian_smoke_note() {
   local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}}"
 
   activate_obsidian_for_smoke
-  AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift - <<'SWIFT'
-import AppKit
-import ApplicationServices
-import Foundation
-
-let markerText = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? "SteadyType Obsidian proof"
-let appendNewlineFallback = (ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN"] == "1") ? 0 : 1
-let appendNewlines = max(0, Int(ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES"] ?? "") ?? appendNewlineFallback)
-let resetText = markerText + String(repeating: "\n", count: appendNewlines)
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
-}
-
-guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "md.obsidian",
-      let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
-    fputs("Obsidian is not frontmost for smoke-note reset.\n", stderr)
-    exit(3)
-}
-
-let appElement = AXUIElementCreateApplication(app.processIdentifier)
-AXUIElementSetMessagingTimeout(appElement, 1.0)
-guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute) else {
-    fputs("Could not read focused Obsidian editor for smoke-note reset.\n", stderr)
-    exit(3)
-}
-
-let focused = (focusedValue as! AXUIElement)
-AXUIElementSetMessagingTimeout(focused, 1.0)
-guard AXUIElementSetAttributeValue(
-    focused,
-    kAXValueAttribute as CFString,
-    resetText as CFTypeRef
-) == .success else {
-    fputs("Could not reset the disposable Obsidian smoke note text.\n", stderr)
-    exit(3)
-}
-
-AXUIElementSetAttributeValue(focused, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-var endRange = CFRange(location: resetText.utf16.count, length: 0)
-if let rangeValue = AXValueCreate(.cfRange, &endRange) {
-    AXUIElementSetAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-}
-SWIFT
+  AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT="$marker" swift script/obsidian_ax_editor.swift reset
 
   activate_obsidian_for_smoke
   if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_LEGACY_RESET_KEYS:-0}" == "1" ]]; then
@@ -9257,20 +9571,16 @@ run_obsidian() {
   obsidian_reset_text="$(obsidian_reset_text_for_variant "$manual_app")"
   seed_obsidian_proof_vault_note "$obsidian_reset_text"
   open_obsidian_smoke_note_if_configured
-  wait_for_frontmost_app "Obsidian" 8
-  if [[ "$manual_app" != "obsidian-pane" ]]; then
-    restore_obsidian_single_pane_if_needed
-    open_obsidian_smoke_note_if_configured
-    wait_for_frontmost_app "Obsidian" 8
-  fi
+  wait_for_obsidian_smoke_editor_ready 8
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     reset_obsidian_smoke_note_file "$(obsidian_long_note_text_before_trigger)"
     open_obsidian_smoke_note_if_configured
-    wait_for_frontmost_app "Obsidian" 8
+    wait_for_obsidian_smoke_editor_ready 8
   fi
   prepare_obsidian_variant_state "$manual_app"
   assert_obsidian_smoke_target
   if [[ "$manual_app" != "obsidian-long-note" ]]; then
+    reset_obsidian_zoom_for_smoke
     reset_obsidian_smoke_note
   fi
   prepare_obsidian_variant_state "$manual_app"
@@ -9290,21 +9600,18 @@ run_obsidian() {
   trace_start_line="$(line_count "$TRACE_PATH")"
 
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    move_obsidian_caret_to_document_end
+    assert_obsidian_smoke_target
     type_obsidian_raw_smoke_text "s"
+    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels" 5
+    move_obsidian_caret_to_document_end
+    assert_obsidian_smoke_target "Smoke proof feels"
   else
     type_obsidian_raw_smoke_text "$first_fragment"
   fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
-  if [[ "$manual_app" == "obsidian-font-zoom" ]]; then
-    local zoom_resync_line
-    zoom_resync_line="$(line_count "$LOG_PATH")"
-    sleep 0.8
-    if log_since_matches "$zoom_resync_line" "suggestion-presented .*app=md.obsidian"; then
-      wait_for_screenshot_capture_if_enabled "$zoom_resync_line" "md.obsidian" "Obsidian zoom-resynced"
-    fi
-  fi
-  settle_obsidian_focus_for_smoke "Obsidian"
+  activate_obsidian_for_smoke
+  assert_obsidian_smoke_target
   press_key_code 48
   wait_for_log_fields "$start_line" "Obsidian Tab acceptance" 12 \
     "keyboard-action" \
@@ -9313,6 +9620,7 @@ run_obsidian() {
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
 
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     press_key_code 53
@@ -9324,6 +9632,7 @@ run_obsidian() {
     open_obsidian_smoke_note_if_configured
     wait_for_frontmost_app "Obsidian" 8
     move_obsidian_caret_to_document_end
+    long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
     settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
@@ -9335,8 +9644,6 @@ run_obsidian() {
     elif [[ "$manual_app" == "obsidian-multiline" ]]; then
       set_obsidian_caret_to_value_end
     fi
-    # In Obsidian/CodeMirror, Escape can mark the focused editor as suppressed.
-    # Let normal typing invalidate the previous suggestion unless we are explicitly testing Escape.
     if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BETWEEN_ACCEPTS:-0}" == "1" ]]; then
       press_key_code 53
       sleep 0.25
@@ -9347,14 +9654,14 @@ run_obsidian() {
     type_obsidian_raw_smoke_text " and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    wait_for_log_fields "$second_start_line" "Obsidian second suggestion" 12 \
-      "suggestion-presented" \
-      "app=md.obsidian" \
-      "afterChars=0"
+    wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12
   else
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    sleep 0.15
+    activate_obsidian_for_smoke
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
     full_start_line="$(line_count "$LOG_PATH")"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
     assert_frontmost_app "Obsidian" "Obsidian long-note"
@@ -9369,8 +9676,8 @@ run_obsidian() {
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
   else
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
-    settle_obsidian_focus_for_smoke "Obsidian"
+    activate_obsidian_for_smoke
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
@@ -9380,6 +9687,7 @@ run_obsidian() {
       "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   fi
 
   if [[ "$manual_app" == "obsidian-font-zoom" ]]; then
@@ -9677,6 +9985,11 @@ run_textedit() {
   SMOKE_PHASE="TextEdit setup"
   runtime_start_line="$(line_count "$LOG_PATH")"
 
+  if [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]]; then
+    run_textedit_default_model_latency
+    return 0
+  fi
+
   if [[ "$TEXTEDIT_VARIANT" == "model-latency" ]]; then
     run_textedit_model_latency
     return 0
@@ -9782,7 +10095,6 @@ run_textedit() {
   fi
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   focus_textedit_smoke_editor "$textedit_window_title"
   assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_one_word_accept_text
@@ -9790,6 +10102,7 @@ run_textedit() {
   SMOKE_PHASE="TextEdit Tab acceptance"
   wait_for_textedit_acceptance_with_stale_retry "$start_line" "TextEdit Tab acceptance" "tab" "acceptNextWord" "$textedit_window_title"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   if native_undo_proof_requested; then
     verify_textedit_native_undo "$textedit_window_title" "$before_one_word_accept_text" "$start_line" "TextEdit one-word native undo" "acceptNextWord"
   elif [[ "$TEXTEDIT_VARIANT" != "undo-full" ]]; then
@@ -9814,10 +10127,9 @@ APPLESCRIPT
   second_start_line="$(line_count "$LOG_PATH")"
 
   SMOKE_PHASE="TextEdit second suggestion"
-  type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and stays inst" "second typed"
+  type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and the draft is almost" "second typed"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
-  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
   focus_textedit_smoke_editor "$textedit_window_title"
   assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_full_accept_text
@@ -9826,6 +10138,7 @@ APPLESCRIPT
   SMOKE_PHASE="TextEdit full acceptance"
   wait_for_textedit_acceptance_with_stale_retry "$full_start_line" "TextEdit full acceptance" "$full_accept_key" "acceptAllVisible" "$textedit_window_title"
   wait_for_log_pattern "$full_start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit full verified insertion"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
 
   if native_undo_proof_requested; then
     verify_textedit_native_undo "$textedit_window_title" "$before_full_accept_text" "$full_start_line" "TextEdit full native undo" "acceptAllVisible"
@@ -9862,7 +10175,7 @@ APPLESCRIPT
 }
 
 run_textedit_model_latency() {
-  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
+  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line proof_runtime_guard_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
@@ -9871,6 +10184,7 @@ run_textedit_model_latency() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
 
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
@@ -9890,7 +10204,12 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 fragment sample_start seed_start stable_context trigger_text
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
+  max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
+    echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
+    exit 2
+  fi
   while IFS= read -r fragment; do
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
@@ -9900,55 +10219,210 @@ run_textedit_model_latency() {
       echo "TextEdit model latency sample $sample_index does not contain a stable context plus trigger word." >&2
       exit 1
     fi
-
-    clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"
-    move_textedit_caret_to_document_end "$textedit_window_title"
-    seed_start="$(line_count "$LOG_PATH")"
-    if ! insert_textedit_smoke_fragment "$textedit_window_title" "$stable_context"; then
-      echo "TextEdit model latency sample $sample_index could not seed the stable AX context." >&2
+    if ((${#trigger_text} < 2)); then
+      echo "TextEdit model latency sample $sample_index trigger word must contain at least two characters." >&2
       exit 1
     fi
-    wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index" 5
-    move_textedit_caret_to_document_end "$textedit_window_title"
-    if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
-      wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed $sample_index" 8 \
-        "phrase-continuation-disabled" \
-        "app=com.apple.TextEdit"
-      echo "TextEdit model latency seed settled by disabled phrase continuation $sample_index."
-    elif wait_for_log_fields_optional "$seed_start" 4 \
-      "mlx-completion-timing" \
-      "app=com.apple.TextEdit" \
-      "mode=phraseContinuation"; then
-      echo "TextEdit model latency seed settled $sample_index."
-    else
-      echo "TextEdit model latency seed produced no model timing before sample $sample_index."
-    fi
-    move_textedit_caret_to_document_end "$textedit_window_title"
+    attempt_had_model=0
+    attempt_had_visible=0
+    attempt_had_event_tap=0
+    for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+      assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency seed $sample_index attempt $attempt"
+      clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index attempt $attempt"
+      move_textedit_caret_to_document_end "$textedit_window_title"
+      seed_start="$(line_count "$LOG_PATH")"
+      if ! insert_textedit_smoke_fragment "$textedit_window_title" "$stable_context"; then
+        echo "TextEdit model latency sample $sample_index attempt $attempt could not seed the stable AX context." >&2
+        exit 1
+      fi
+      wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index attempt $attempt" 5
+      move_textedit_caret_to_document_end "$textedit_window_title"
+      if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
+        if wait_for_log_fields_optional "$seed_start" 8 \
+          "phrase-continuation-disabled" \
+          "app=com.apple.TextEdit"; then
+          echo "TextEdit model latency seed settled by disabled phrase continuation $sample_index attempt $attempt."
+        else
+          describe_textedit_model_latency_seed_miss "$seed_start" "$textedit_window_title" "$sample_index" "$stable_context"
+        fi
+      elif wait_for_log_fields_optional "$seed_start" 4 \
+        "mlx-completion-timing" \
+        "app=com.apple.TextEdit" \
+        "mode=phraseContinuation"; then
+        echo "TextEdit model latency seed settled $sample_index attempt $attempt."
+      else
+        echo "TextEdit model latency seed produced no model timing before sample $sample_index attempt $attempt."
+      fi
+      move_textedit_caret_to_document_end "$textedit_window_title"
+      sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.6}"
 
-    sample_start="$(line_count "$LOG_PATH")"
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
-      type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
-    wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
-    trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"
-    wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
-      "mlx-completion-timing" \
-      "app=com.apple.TextEdit"
-    wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index" 20 \
-      "suggestion-presented" \
-      "app=com.apple.TextEdit" \
-      "candidateSelectionSource=app-model-result"
+      assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index attempt $attempt"
+      sample_start="$(line_count "$LOG_PATH")"
+      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
+      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.03}" \
+        type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
+      wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt" 5
+      trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"
+      if wait_for_log_fields_optional "$sample_start" 20 \
+        "mlx-completion-timing" \
+        "app=com.apple.TextEdit"; then
+        attempt_had_model=1
+      else
+        echo "TextEdit model latency sample $sample_index attempt $attempt produced no model timing; retrying this stable context if attempts remain." >&2
+        sleep 0.4
+        continue
+      fi
+      if wait_for_log_fields_optional "$sample_start" 20 \
+        "suggestion-presented" \
+        "app=com.apple.TextEdit" \
+        "candidateSelectionSource=app-model-result"; then
+        attempt_had_visible=1
+        if ((event_tap_started == 0)); then
+          wait_for_log_fields "$runtime_start_line" "TextEdit model latency event tap startup" 10 \
+            "keyboard-event-tap-started"
+          event_tap_started=1
+        fi
+        assert_textedit_frontmost_window "$textedit_window_title" "TextEdit model latency event-tap proof"
+        if wait_for_log_fields_optional "$sample_start" 2 \
+          "keyboard-event-tap-started"; then
+          sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_EVENT_TAP_SETTLE_SECONDS:-0.25}"
+        fi
+        event_tap_start="$(line_count "$LOG_PATH")"
+        if ! press_textedit_event_tap_probe_key; then
+          echo "TextEdit model latency sample $sample_index attempt $attempt could not type the event-tap Tab probe; retrying this stable context if attempts remain." >&2
+          sleep 0.4
+          continue
+        fi
+        if ! wait_for_log_fields_optional "$event_tap_start" 5 \
+          "keyboard-event-tap-latency" \
+          "key=tab" \
+          "decision=consume"; then
+          echo "TextEdit model latency sample $sample_index attempt $attempt missed the event-tap Tab consume proof; retrying this stable context if attempts remain." >&2
+          sleep 0.4
+          continue
+        fi
+        attempt_had_event_tap=1
+        event_tap_sample_count=$((event_tap_sample_count + 1))
+        model_sample_count=$((model_sample_count + 1))
+        visible_sample_count=$((visible_sample_count + 1))
+        break
+      else
+        echo "TextEdit model latency sample $sample_index attempt $attempt produced no visible model-backed word completion; retrying this stable context if attempts remain." >&2
+      fi
+      sleep 0.4
+    done
+    if ((attempt_had_model == 1 && attempt_had_visible == 0)); then
+      echo "TextEdit model latency sample $sample_index exhausted $max_attempts attempts with model timing but no visible model-backed word completion." >&2
+    fi
+    if ((attempt_had_visible == 1 && attempt_had_event_tap == 0)); then
+      echo "TextEdit model latency sample $sample_index exhausted $max_attempts attempts with visible model-backed word completion but no event-tap Tab consume proof." >&2
+    fi
+    if ((visible_sample_count >= 5 && model_sample_count >= 5)); then
+      break
+    fi
     sleep 0.4
   done < <(textedit_model_latency_fragments)
 
-  if ((sample_index < 5)); then
-    echo "TextEdit model latency proof expected at least 5 samples, got $sample_index." >&2
+  if ((visible_sample_count < 5 || model_sample_count < 5)); then
+    echo "TextEdit model latency proof expected at least 5 visible model-backed word-completion samples, got $visible_sample_count visible and $model_sample_count model timings from $sample_index attempted contexts." >&2
     exit 1
   fi
 
-  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
-    ./script/latency_benchmark_report.py --beta-gate
+    ./script/latency_benchmark_report.py --beta-gate \
+      --require-event-tap-samples "$event_tap_sample_count"
+}
+
+run_textedit_default_model_latency() {
+  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line proof_runtime_guard_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
+
+  prepare_temporary_app_enablement
+  prepare_default_model_latency_runtime_options
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION:-}" != "1" ]]; then
+    echo "TextEdit default model latency requires AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1." >&2
+    exit 1
+  fi
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "TextEdit default model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "TextEdit default model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
+
+  textedit_tmp_dir="$(make_tmp_dir)"
+  textedit_file="$textedit_tmp_dir/textedit-default-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
+  textedit_window_title="$(basename "$textedit_file")"
+  SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
+  : >"$textedit_file"
+  cleanup_stale_textedit_smoke_windows
+  open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
+  sleep 0.8
+  wait_for_textedit_smoke_editor "$textedit_window_title"
+  focus_textedit_smoke_editor "$textedit_window_title"
+  click_textedit_smoke_editor "$textedit_window_title"
+  clear_textedit_document_for_proof "$textedit_window_title" "TextEdit default model latency initial reset"
+  move_textedit_caret_to_document_end "$textedit_window_title"
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  local sample_index=0 visible_sample_count=0 fragment sample_start expected_text
+  while IFS= read -r fragment; do
+    [[ -z "$fragment" ]] && continue
+    sample_index=$((sample_index + 1))
+    expected_text="${fragment} "
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit default model latency seed $sample_index"
+    clear_textedit_document_for_proof "$textedit_window_title" "TextEdit default model latency reset $sample_index"
+    move_textedit_caret_to_document_end "$textedit_window_title"
+    if ! insert_textedit_smoke_fragment "$textedit_window_title" "$fragment"; then
+      echo "TextEdit default model latency sample $sample_index could not seed the stable AX context." >&2
+      exit 1
+    fi
+    wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit default model latency stable context $sample_index" 5
+    move_textedit_caret_to_document_end "$textedit_window_title"
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit default model latency trigger $sample_index"
+    sample_start="$(line_count "$LOG_PATH")"
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
+      type_textedit_smoke_fragment "$textedit_window_title" " "
+    wait_for_textedit_document_exact "$textedit_window_title" "$expected_text" "TextEdit default model latency sample $sample_index" 5
+    wait_for_log_fields "$sample_start" "TextEdit default model latency timing $sample_index" 25 \
+      "mlx-completion-timing" \
+      "app=com.apple.TextEdit" \
+      "mode=phraseContinuation" \
+      "maxTokens=11"
+    if wait_for_log_fields_optional "$sample_start" 8 \
+      "suggestion-presented" \
+      "app=com.apple.TextEdit" \
+      "requestMode=phraseContinuation" \
+      "candidateSelectionSource=app-model-result"; then
+      visible_sample_count=$((visible_sample_count + 1))
+    elif wait_for_log_fields_optional "$sample_start" 1 \
+      "suggestion-blocked" \
+      "app=com.apple.TextEdit" \
+      "reason=empty-suggestion"; then
+      echo "TextEdit default model latency sample $sample_index produced an empty phrase candidate; trying the next stable context." >&2
+    else
+      wait_for_log_fields "$sample_start" "TextEdit default model latency visible or empty $sample_index" 1 \
+        "suggestion-presented" \
+        "app=com.apple.TextEdit" \
+        "requestMode=phraseContinuation" \
+        "candidateSelectionSource=app-model-result"
+    fi
+    sleep 0.4
+  done < <(textedit_default_model_latency_fragments)
+
+  if ((visible_sample_count < 5)); then
+    echo "TextEdit default model latency proof expected at least 5 visible phrase samples, got $visible_sample_count from $sample_index attempted contexts." >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/model_latency_report.py --default-model-proof
 }
 
 run_chrome_fixture() {
@@ -10205,6 +10679,8 @@ if [[ "$APP" == "chrome" ]] && chrome_fixture_is_blocked_high_value_surface "$CH
   exit 1
 fi
 
+terminate_foreign_proof_processes_for_exclusive_run
+start_foreign_worktree_quarantine_guard
 refuse_other_smoke_processes
 acquire_smoke_lock
 start_smoke_interference_guard

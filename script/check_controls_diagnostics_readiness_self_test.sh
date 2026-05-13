@@ -28,13 +28,20 @@ reject_contains() {
 require_contains "$READINESS_SCRIPT" 'run_logged_check "Current build privacy export proof"'
 require_contains "$READINESS_SCRIPT" 'check_controls_diagnostics_readiness_self_test.sh'
 require_contains "$READINESS_SCRIPT" 'DiagnosticsTypingHealthTests'
+require_contains "$READINESS_SCRIPT" "SwiftPM module SDK mismatch detected; cleaning package cache and retrying controls tests."
+require_contains "$READINESS_SCRIPT" 'swift package clean'
 reject_contains "$READINESS_SCRIPT" 'run_check "Current build privacy export proof"'
 
 require_contains "$PRIVACY_SCRIPT" 'BUILD_LOG=/tmp/autocomplete-current-build-privacy-build.log'
+require_contains "$PRIVACY_SCRIPT" 'AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_DIR'
+require_contains "$PRIVACY_SCRIPT" 'current build privacy export is already active'
+require_contains "$PRIVACY_SCRIPT" 'Waiting for active proof process before current build privacy export.'
 require_contains "$PRIVACY_SCRIPT" 'failed to build app bundle for privacy export proof'
 require_contains "$PRIVACY_SCRIPT" 'find "$OUTPUT_DIR" \( -name '\''traces.jsonl'\'' -o -name '\''raw-traces.jsonl'\'' \)'
 require_contains "$PRIVACY_SCRIPT" 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject'
 require_contains "$PRIVACY_SCRIPT" '"$OUTPUT_DIR/privacy-export/redacted-traces.jsonl"'
+reject_contains "$PRIVACY_SCRIPT" 'index(command, "script/check_controls_diagnostics_readiness.sh")'
+reject_contains "$PRIVACY_SCRIPT" 'index(command, "script/check_current_build_privacy_export.sh")'
 reject_contains "$PRIVACY_SCRIPT" '| tee /tmp/autocomplete-current-build-privacy-build.log'
 
 echo "Controls diagnostics readiness self-test passed."

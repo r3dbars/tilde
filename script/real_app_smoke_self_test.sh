@@ -50,14 +50,50 @@ if ! grep -F "must relaunch with fast word completions and phrase continuations 
   exit 1
 fi
 
+script/real_app_smoke.sh textedit-default-model-latency --dry-run >"$TMP_DIR/textedit-default-model-latency.txt"
+if ! grep -F "TextEdit variant: default-model-latency" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "default phrase model suggestions" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "trailing space through live key events" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "disables word completions and fast phrase fallback for that launch" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario textedit-default-model-latency" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "proof scenario: textedit-default-model-latency" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test did not print the TextEdit default model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh textedit-default-model-latency --skip-build --dry-run >"$TMP_DIR/textedit-default-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected TextEdit default model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with word completions and the fast phrase fallback disabled" "$TMP_DIR/textedit-default-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected TextEdit default model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'press_textedit_event_tap_probe_key' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- '--require-event-tap-samples "$event_tap_sample_count"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
+  exit 1
+fi
+
+if ! grep -F 'run_textedit_default_model_latency()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'TextEdit default model latency stable context' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"mode=phraseContinuation"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"maxTokens=11"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'visible_sample_count' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'reason=empty-suggestion' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F './script/model_latency_report.py --default-model-proof' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected default model latency proof to force and count visible phrase model samples" >&2
   exit 1
 fi
 
@@ -66,10 +102,30 @@ from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
 start = source.index('run_textedit_model_latency()')
-end = source.index('run_chrome_fixture()', start)
+end = source.index('run_textedit_default_model_latency()', start)
 block = source[start:end]
 if "wait_for_log_fields_optional \"$seed_start\"" not in block:
     raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
+if "describe_textedit_model_latency_seed_miss" not in block:
+    raise SystemExit("model-latency proof must diagnose missing seed logs before the measured sample")
+if 'trigger_prefix="${trigger_text%?}"' in block or 'trigger_final="${trigger_text: -1}"' in block:
+    raise SystemExit("model-latency proof must not seed a partial trigger that can create a seed suggestion")
+if 'stable_context="${stable_context}${trigger_prefix}"' in block:
+    raise SystemExit("model-latency proof must seed only stable context before live-typing the trigger word")
+if 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS' not in block:
+    raise SystemExit("model-latency proof must allow the stable context seed to settle before the measured trigger word")
+if 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT' not in block:
+    raise SystemExit("model-latency proof must expose a bounded retry count per stable context")
+if 'for ((attempt = 1; attempt <= max_attempts; attempt++))' not in block:
+    raise SystemExit("model-latency proof must retry a stable context before moving to the next fragment")
+if 'wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed' in block:
+    raise SystemExit("model-latency proof must not hard-fail before typing the measured trigger")
+if 'dismiss_textedit_seed_suggestion_if_possible' in block:
+    raise SystemExit("model-latency proof must not dismiss seed suggestions with Escape because that suppresses the field")
+if 'proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"' not in block:
+    raise SystemExit("model-latency proof must remember the tagged runtime launch before opening TextEdit")
+if block.count('assert_no_runtime_relaunch_since "$proof_runtime_guard_line"') < 2:
+    raise SystemExit("model-latency proof must fail clearly if another runtime relaunches before sampling")
 if "dismiss_textedit_smoke_suggestion" in block or "key code 53" in block:
     raise SystemExit("model-latency proof must not press Escape after seeding context")
 runtime_ready = block.index('"TextEdit model latency runtime readiness"')
@@ -78,15 +134,85 @@ post_runtime_block = block[runtime_ready:sample_window]
 if "focus_textedit_smoke_editor" not in post_runtime_block or "click_textedit_smoke_editor" not in post_runtime_block:
     raise SystemExit("model-latency proof must refocus TextEdit after build/runtime warmup before sampling")
 trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"')
-timing = block.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"', trigger)
+sample_start = block.index('sample_start="$(line_count "$LOG_PATH")')
+if sample_start > trigger:
+    raise SystemExit("model-latency proof must start sample timing before live-typing the trigger word")
+timing = block.index('wait_for_log_fields_optional "$sample_start" 20', trigger)
 if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigger:timing]:
     raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
+if "visible_sample_count" not in block or "model_sample_count" not in block:
+    raise SystemExit("model-latency proof must count actual visible and timed model-backed samples")
+if "event_tap_sample_count" not in block:
+    raise SystemExit("model-latency proof must count raw event-tap latency samples")
+if "event_tap_started=0" not in block:
+    raise SystemExit("model-latency proof must treat event-tap startup as a one-time launch condition")
+visible_increment = block.index('visible_sample_count=$((visible_sample_count + 1))')
+model_increment = block.rfind('model_sample_count=$((model_sample_count + 1))', 0, visible_increment)
+visible_wait = block.rfind('candidateSelectionSource=app-model-result', 0, visible_increment)
+if model_increment < visible_wait:
+    raise SystemExit("model-latency proof must count model samples only on an attempt with visible model-backed proof")
+if 'wait_for_log_fields "$sample_start" "TextEdit model latency event tap started' in block:
+    raise SystemExit("model-latency proof must not expect a fresh event-tap-started marker for every visible sample")
+if 'wait_for_log_fields "$runtime_start_line" "TextEdit model latency event tap startup"' not in block:
+    raise SystemExit("model-latency proof must require event-tap startup once for the runtime launch")
+event_tap_wait = block.rfind('keyboard-event-tap-latency', 0, visible_increment)
+if event_tap_wait < visible_wait:
+    raise SystemExit("model-latency proof must require event-tap latency after visible model-backed proof")
+if 'press_textedit_event_tap_probe_key' not in block:
+    raise SystemExit("model-latency proof must press a disposable acceptance key after the tap starts")
+if '"key=tab"' not in block or '"decision=consume"' not in block:
+    raise SystemExit("model-latency proof must require the tab acceptance event-tap diagnostic category")
+if '--require-event-tap-samples "$event_tap_sample_count"' not in block:
+    raise SystemExit("model-latency proof must require raw event-tap samples in its beta gate")
+if "visible_sample_count >= 5" not in block:
+    raise SystemExit("model-latency proof must stop only after five visible model-backed word completions")
+
+keyboard_tap = Path("Sources/AutocompleteLabApp/Mac/KeyboardEventTap.swift").read_text()
+if 'if key != .other' in keyboard_tap:
+    raise SystemExit("keyboard event tap latency must include normal typed-key categories")
+if '"keyboard-event-tap-latency"' not in keyboard_tap or '"key": key.diagnosticName' not in keyboard_tap:
+    raise SystemExit("keyboard event tap latency must log key category and duration")
+
+default_start = source.index('run_textedit_default_model_latency()')
+default_end = source.index('run_chrome_fixture()', default_start)
+default_block = source[default_start:default_end]
+default_prepare_start = source.index('prepare_default_model_latency_runtime_options()')
+default_prepare_end = source.index('accept_all_shortcut()', default_prepare_start)
+default_prepare_block = source[default_prepare_start:default_prepare_end]
+if "dismiss_textedit_proof_suggestion" in default_block or "key code 53" in default_block:
+    raise SystemExit("default-model phrase proof must not press Escape after seeding context")
+if "prepare_default_model_latency_runtime_options" not in default_block:
+    raise SystemExit("default-model phrase proof must prepare its proof-only runtime flags")
+if "AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1" not in default_prepare_block:
+    raise SystemExit("default-model phrase proof must disable seed word completions before measuring the trailing-space trigger")
+
+app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
+if "pollTimer?.fireDate" in app_delegate:
+    raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
+insert_start = app_delegate.index("private func insertObsidianDirectValueText(")
+insert_end = app_delegate.index("private func insertObsidianSystemEventsPasteText(", insert_start)
+insert_block = app_delegate[insert_start:insert_end]
+if "focusedTextAreaElementIdentifier" not in insert_block:
+    raise SystemExit("Obsidian direct insertion fallback must verify the currently focused AX text area")
+if "elementIdentifier: focusedTextAreaElementIdentifier" not in insert_block:
+    raise SystemExit("Obsidian direct insertion fallback must pass the focused AX text area identity into descendant matching")
+fallback_start = app_delegate.index("nonisolated private static func axTextAreaDescendantContainingText(")
+fallback_end = app_delegate.index("nonisolated private static func replacementRange(", fallback_start)
+fallback_block = app_delegate[fallback_start:fallback_end]
+if "Int(CFHash(element)) == elementIdentifier" not in fallback_block:
+    raise SystemExit("Obsidian descendant fallback must only match the currently focused AX text area")
 PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_WORD_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'launchctl unsetenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof scenario cleanup" >&2
   exit 1
 fi
@@ -131,7 +257,7 @@ for name, block in textedit_focus_blocks.items():
         raise SystemExit(f"{name} must not run the TextEdit document-name AppleScript probe on the focus/click hot path")
     if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
         raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
-    if "activateIgnoringOtherApps" not in block:
+    if "app.activate(options: [.activateAllWindows])" not in block:
         raise SystemExit(f"{name} must force TextEdit foreground activation for live key-event proof")
     if "print(app.processIdentifier)" not in block:
         raise SystemExit(f"{name} must return the TextEdit pid, not the currently frontmost app pid")
@@ -139,6 +265,8 @@ for name, block in textedit_focus_blocks.items():
         raise SystemExit(f"{name} must not treat any single TextEdit window as safe fallback")
     if 'title.hasPrefix("textedit-model-latency-")' not in block:
         raise SystemExit(f"{name} fallback must be limited to disposable smoke/proof windows")
+    if 'title.hasPrefix("textedit-default-model-latency-")' not in block:
+        raise SystemExit(f"{name} fallback must include disposable default-model-latency proof windows")
 
 frontmost_start = source.index("textedit_frontmost_window_is()")
 frontmost_end = source.index("wait_for_textedit_frontmost_window()", frontmost_start)
@@ -147,6 +275,8 @@ if 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' not in frontmost_block or 
     raise SystemExit("TextEdit frontmost proof must honor the single-window fallback")
 if 'title.hasPrefix("textedit-model-latency-")' not in frontmost_block:
     raise SystemExit("TextEdit frontmost fallback must be limited to disposable smoke/proof windows")
+if 'title.hasPrefix("textedit-default-model-latency-")' not in frontmost_block:
+    raise SystemExit("TextEdit frontmost fallback must include disposable default-model-latency proof windows")
 
 for name in ("textedit_document_name_exists", "describe_open_textedit_documents", "assert_textedit_frontmost_window", "try_wait_for_frontmost_app"):
     block = function_body(name)
@@ -176,38 +306,64 @@ model_build = model_latency.index("build_if_needed")
 model_open = model_latency.index('open_textedit_smoke_document "$textedit_file" "$textedit_window_title"')
 if model_build > model_open:
     raise SystemExit("TextEdit model-latency proof must relaunch SteadyType before opening the disposable TextEdit window")
+default_model_latency = function_body("run_textedit_default_model_latency")
+if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in default_model_latency:
+    raise SystemExit("TextEdit default-model latency proof must keep bounded System Events focus recovery available")
+if "wait_for_textedit_frontmost_window" not in function_body("focus_textedit_smoke_editor"):
+    raise SystemExit("TextEdit focus must still verify the expected frontmost window after activation")
 activate_process_id_block = source[
     source.index("activate_process_id()"):
     source.index("activate_process_id_osascript()", source.index("activate_process_id()"))
 ]
-if "activateIgnoringOtherApps" not in activate_process_id_block:
+if "app.activate(options: [.activateAllWindows])" not in activate_process_id_block:
     raise SystemExit("activate_process_id must force foreground activation for live proof focus recovery")
+if 'wait_for_appkit_activation_frontmost "$target_pid"' not in activate_process_id_block:
+    raise SystemExit("activate_process_id must skip System Events activation when AppKit already made the process frontmost")
 if 'activate_process_id_osascript "$target_pid" &' not in activate_process_id_block:
     raise SystemExit("activate_process_id must keep bounded System Events activation available")
+if "wait_for_appkit_activation_frontmost()" not in source or "frontmost_process_id" not in function_body("wait_for_appkit_activation_frontmost"):
+    raise SystemExit("real app smoke must probe the frontmost process before falling back to System Events activation")
 PY
 
-if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
+if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
+  exit 1
+fi
+
+if ! grep -F 'AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected latency reports to include the tagged runtime launch" >&2
+  exit 1
+fi
+if ! grep -F 'latest_runtime_bootstrap_line_number' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected latency relaunch guard to anchor to the tagged runtime bootstrap line" >&2
   exit 1
 fi
 if ! grep -F 'clear_textedit_document_for_proof()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency initial reset"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keystroke "a" using command down' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 51' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency reset to recover through a disposable-window keyboard clear" >&2
   exit 1
 fi
+if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_AX_WRITE_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'TextEdit AX value replacement' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit AX document writes to be timeout-bounded" >&2
+  exit 1
+fi
 if ! grep -F 'trim_textedit_native_completion_suffix' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency to trim native completion suffixes before waiting for visible proof" >&2
   exit 1
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fell back to AX replacement' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'unexpectedly long ($suffix_length chars); falling back to AX replacement' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$label native completion fallback"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'set_textedit_document_text "$window_title" "$expected_text"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency proof to remove native completion suffixes before timing" >&2
   exit 1
@@ -242,9 +398,9 @@ start = source.index("textedit_model_latency_fragments()")
 body_start = source.index("cat <<'EOF'\n", start) + len("cat <<'EOF'\n")
 body_end = source.index("\nEOF", body_start)
 fragments = [line for line in source[body_start:body_end].splitlines() if line.strip()]
-if len(fragments) < 5:
-    raise SystemExit("model-latency proof must keep at least five fragments")
-bad_triggers = {"confu", "relia", "immed", "trust"}
+if len(fragments) < 8:
+    raise SystemExit("model-latency proof must keep extra fragments so it can retry non-visible word-completion samples")
+bad_triggers = {"confu", "relia", "immed", "trust", "verif"}
 for fragment in fragments:
     trigger = fragment.rsplit(" ", 1)[-1]
     if trigger in bad_triggers:
@@ -261,16 +417,19 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
-start = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"')
-end = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index"', start)
-block = source[start:end]
+function_start = source.index('run_textedit_model_latency()')
+function_end = source.index('run_textedit_default_model_latency()', function_start)
+function_block = source[function_start:function_end]
+start = function_block.index('wait_for_log_fields_optional "$sample_start" 20')
+end = function_block.index('if wait_for_log_fields_optional "$sample_start" 20', start + 1)
+block = function_block[start:end]
 if '"mlx-completion-timing"' not in block or '"app=com.apple.TextEdit"' not in block:
     raise SystemExit("model-latency timing proof must still require TextEdit MLX timing")
 if '"mode=wordCompletion"' in block:
     raise SystemExit("model-latency timing proof must not depend on a fragile request mode label")
-start = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index"')
-end = source.index('sleep 0.4', start)
-block = source[start:end]
+start = function_block.index('if wait_for_log_fields_optional "$sample_start" 20', end)
+end = function_block.index('if ((visible_sample_count >= 5', start)
+block = function_block[start:end]
 if '"candidateSelectionSource=app-model-result"' not in block:
     raise SystemExit("model-latency visible proof must require model-backed display")
 if '"requestMode=wordCompletion"' in block:
@@ -309,6 +468,10 @@ if ! grep -F 'AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1' script/real_app_smoke.sh >/dev/n
   echo "real app smoke self-test expected proof runs to direct-launch the current app bundle" >&2
   exit 1
 fi
+if ! grep -F 'AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected build/run relaunches to be marked as smoke-owned" >&2
+  exit 1
+fi
 if grep -F '|| screenshot_trace_requested' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected direct launch to be unconditional for proof runs" >&2
   exit 1
@@ -320,24 +483,36 @@ fi
 if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadytype_app_process_rows' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'selfPGID' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'current_process_ancestor_pids' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'selfPgid' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'processGroup[pid]' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'foreign_proof_process_lines' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/beta_readiness.sh' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/check_score_targets.sh' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/check_current_build_privacy_export.sh' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi
-if ! grep -F 'while kill -0 "$SMOKE_SCRIPT_PID"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F '[[ -z "$current_pgid" ]] && return 0' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'current_process_family_pgids' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'pgid in protected' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'kill -KILL "-$pgid"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'index(command, "script/smoke_test.sh") > 0' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'staleRootWatchdog' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected exclusive proof guards to exit with their parent, fail closed without a self process group, and kill stale proof runs/watchdogs" >&2
+if ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'start_foreign_worktree_quarantine_guard' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run quiet' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'quarantine_foreign_steadytype_apps' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_pid_tree "$pid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'descendant_pids "$pid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'cwd_is_foreign_worktree "$cwd"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'command_path_is_foreign_worktree "$command"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected quarantine mode to stop foreign worktree proof processes and app bundles" >&2
   exit 1
 fi
-if ! grep -F '${#current_pids[@]} > 1' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'keep_pid' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected proof launch verification to collapse duplicate current SteadyType processes" >&2
+if grep -F 'kill -TERM -"$pgid"' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'kill -TERM "-$pgid"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof quarantine to avoid process-group kills" >&2
   exit 1
 fi
 if grep -F 'index(command, app_binary)' script/real_app_smoke.sh >/dev/null ||
@@ -384,7 +559,8 @@ if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/d
    ! grep -F 'dismiss_textedit_modal_panels' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout 2 "TextEdit modal cleanup"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'docName starts with "textedit-model-latency-"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'docName starts with "textedit-model-latency-"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'docName starts with "textedit-default-model-latency-"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected stale TextEdit proof windows to be cleaned before opening a new disposable document" >&2
   exit 1
 fi
@@ -420,6 +596,8 @@ if "wait_for_current_autocomplete_lab_process\n  refresh_build_archive_proof" no
     raise SystemExit("build_if_needed must verify the current checkout process before proof")
 if 'else\n    wait_for_current_autocomplete_lab_process' not in build_bundle_if_needed:
     raise SystemExit("build_bundle_if_needed must verify the current checkout process when --skip-build is used")
+if "Archive proof failed after 3 attempts." not in source:
+    raise SystemExit("archive proof must retry transient ditto failures before failing the smoke")
 if "SteadyType smoke launch did not settle on this checkout" not in source:
     raise SystemExit("stale process failure message is missing")
 PY
@@ -470,16 +648,28 @@ if ! grep -F "disposable Chrome editor-like fixture" "$TMP_DIR/chrome-editor-lik
   echo "real app smoke self-test did not print the Chrome editor-like dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected the Chrome editor-like fixture title to carry the local ready proof marker" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh chrome --fixture monaco-like --dry-run >"$TMP_DIR/chrome-monaco-like.txt"
 if ! grep -F "disposable Chrome monaco-like fixture" "$TMP_DIR/chrome-monaco-like.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome Monaco-like dry-run plan" >&2
   exit 1
 fi
+if ! grep -F "SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected the Chrome Monaco-like fixture title to carry the local ready proof marker" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh chrome --fixture prosemirror-like --dry-run >"$TMP_DIR/chrome-prosemirror-like.txt"
 if ! grep -F "disposable Chrome prosemirror-like fixture" "$TMP_DIR/chrome-prosemirror-like.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome ProseMirror-like dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F "SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected the Chrome ProseMirror-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
 
@@ -514,6 +704,10 @@ fi
 script/real_app_smoke.sh chrome --fixture chat-like --dry-run >"$TMP_DIR/chrome-chat-like.txt"
 if ! grep -F "disposable Chrome chat-like fixture" "$TMP_DIR/chrome-chat-like.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome chat-like dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected the Chrome chat-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
 
@@ -700,19 +894,49 @@ if ! grep -F "script/real_app_smoke.sh obsidian-theme --manual-gate" "$TMP_DIR/o
   exit 1
 fi
 
-if ! grep -F '[[ "$manual_app" == "obsidian-pane" ]]' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "focus_obsidian_visible_tail_line" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "printf '%s.\\n' \"\$marker\"" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Obsidian pane proof to actively focus the disposable note tail before typing" >&2
+if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F "let replacementText = baseText + insertionText" script/obsidian_ax_editor.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian reset and append helpers to update the disposable note through guarded AX value replacement" >&2
+  exit 1
+fi
+if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "beforeChars=\${expected_before_chars}±2" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to allow a tiny CodeMirror file/AX count skew while requiring afterChars=0" >&2
   exit 1
 fi
 
-if ! grep -F "resetText.utf16.count" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note" >&2
-  exit 1
-fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+first_long_insert = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"')
+first_long_suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels"', first_long_insert)
+first_suggestion = source.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"', first_long_suffix)
+if not (first_long_insert < first_long_suffix < first_suggestion):
+    raise SystemExit("Obsidian long-note proof must AX-insert the first fragment, verify the disposable file suffix, then wait for the first suggestion")
+first_preservation = source.index('assert_obsidian_long_note_file_preserved "Smoke proof feels instant"')
+append = source.index('append_obsidian_smoke_note_file_text " and stays inst"', first_preservation)
+watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', append)
+open_note = source.index('open_obsidian_smoke_note_if_configured', watch)
+focus = source.index('move_obsidian_caret_to_document_end', open_note)
+assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', focus)
+branch_end = source.index('\n  else', append)
+if not (first_preservation < append < watch < open_note < focus < assertion < branch_end):
+    raise SystemExit("Obsidian long-note proof must append the second fragment through the disposable note file, refocus Obsidian, and reassert the caret at the note end")
+non_long_else = source.index('\n  else', branch_end)
+non_long_settle = source.index('settle_obsidian_focus_for_smoke "Obsidian post-accept setup"', non_long_else)
+non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_settle)
+non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_assert)
+non_long_append = source.index('type_obsidian_raw_smoke_text " and stays"', non_long_watch)
+non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_append)
+non_long_full_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_wait)
+non_long_full_start = source.index('full_start_line="$(line_count "$LOG_PATH")"', non_long_full_assert)
+if not (non_long_settle < non_long_assert < non_long_watch < non_long_append < non_long_wait < non_long_full_assert < non_long_full_start):
+    raise SystemExit("Obsidian default/theme/pane proof must settle focus, append the second fragment, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
+PY
 
 if ! grep -F 'insertionMode: .keyEvents' Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift >/dev/null ||
    ! grep -F 'AX values can represent only the visible viewport' Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift >/dev/null; then
@@ -777,7 +1001,7 @@ if '"beforeChars=$long_note_expected_before_chars"' in source:
         "real app smoke self-test expected Obsidian long-note proof not to require full-file AX beforeChars"
     )
 
-full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('wait_for_log_fields "$second_start_line"')):]
+full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('wait_for_obsidian_long_note_second_suggestion "$second_start_line"')):]
 full_branch = full_branch[:full_branch.index('else')]
 required = [
     'wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"',
@@ -881,23 +1105,33 @@ if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/build-
   exit 1
 fi
 
-if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/manual_proof_refresh.sh --run --target chrome-chat-like\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/manual-refresh-process-fail.txt"; then
-  echo "real app smoke self-test expected manual proof refresh process scan to fail" >&2
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/beta_readiness.sh --check-only\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/beta-check-only-process-fail.txt"; then
+  :
+else
+  if grep -F "Another real app smoke process is already active" "$TMP_DIR/beta-check-only-process-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected beta_readiness --check-only not to block a proof refresh" >&2
+    exit 1
+  fi
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/beta_readiness.sh\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/beta-readiness-process-fail.txt"; then
+  echo "real app smoke self-test expected full beta readiness process scan to fail" >&2
   exit 1
 fi
-if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/manual-refresh-process-fail.txt" >/dev/null; then
-  echo "real app smoke self-test did not explain the manual proof refresh process scan" >&2
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/beta-readiness-process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the full beta readiness process scan" >&2
   exit 1
 fi
 
-ROOT_REALPATH="$(pwd -P)"
-if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="123 1 999 python3 -c stale_root = '$ROOT_REALPATH'; watcher()" script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/stale-root-watchdog-process-fail.txt"; then
-  echo "real app smoke self-test expected stale-root watchdog process scan to fail" >&2
-  exit 1
-fi
-if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/stale-root-watchdog-process-fail.txt" >/dev/null; then
-  echo "real app smoke self-test did not explain the stale-root watchdog process scan" >&2
-  exit 1
+SELF_TEST_PGID="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
+SELF_TEST_PGID="${SELF_TEST_PGID//[[:space:]]/}"
+if [[ -n "$SELF_TEST_PGID" ]]; then
+  if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="123 1 $SELF_TEST_PGID bash ./script/build_and_run.sh --verify"$'\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/same-pgid-build-run-process-fail.txt"; then
+    :
+  elif grep -F "Another real app smoke process is already active" "$TMP_DIR/same-pgid-build-run-process-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected same-PGID child/sibling process scan to be treated as the active proof, not a competing proof" >&2
+    exit 1
+  fi
 fi
 
 if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then

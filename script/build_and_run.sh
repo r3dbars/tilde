@@ -20,6 +20,9 @@ INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
+FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-fresh-latency.lock}"
+PROOF_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS:-300}"
 
 cd "$ROOT_DIR"
 
@@ -35,6 +38,59 @@ if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-}" ]]; then
   SWIFT_JOB_ARGS+=(--jobs "$AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS")
 fi
 
+truthy() {
+  [[ "${1:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+active_lock_pid() {
+  local lock_dir="$1"
+  local pid=""
+
+  [[ -f "$lock_dir/pid" ]] || return 1
+  pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" >/dev/null 2>&1 || return 1
+  printf '%s\n' "$pid"
+}
+
+wait_for_proof_locks_if_needed() {
+  if truthy "${AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE:-}"; then
+    return 0
+  fi
+
+  if ! [[ "$PROOF_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
+    echo "AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS must be a non-negative integer" >&2
+    exit 2
+  fi
+
+  local deadline=$((SECONDS + PROOF_LOCK_WAIT_SECONDS))
+  local announced=0
+  local smoke_pid fresh_pid
+
+  while true; do
+    smoke_pid="$(active_lock_pid "$SMOKE_LOCK_DIR" || true)"
+    fresh_pid="$(active_lock_pid "$FRESH_LATENCY_LOCK_DIR" || true)"
+    if [[ -z "$smoke_pid$fresh_pid" ]]; then
+      return 0
+    fi
+
+    if ((SECONDS >= deadline)); then
+      echo "Another proof run is active; refusing to relaunch $APP_NAME." >&2
+      [[ -n "$smoke_pid" ]] && echo "real app smoke pid: $smoke_pid" >&2
+      [[ -n "$fresh_pid" ]] && echo "fresh latency proof pid: $fresh_pid" >&2
+      exit 1
+    fi
+
+    if [[ "$announced" == "0" ]]; then
+      echo "Waiting for active proof run before build/run relaunch." >&2
+      [[ -n "$smoke_pid" ]] && echo "real app smoke pid: $smoke_pid" >&2
+      [[ -n "$fresh_pid" ]] && echo "fresh latency proof pid: $fresh_pid" >&2
+      announced=1
+    fi
+    sleep 2
+  done
+}
+
 running_app_process_rows() {
   ps ax -o pid=,command= 2>/dev/null |
     awk -v app_name="$APP_NAME" '
@@ -43,7 +99,8 @@ running_app_process_rows() {
         command = $0
         sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", command)
       }
-      command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)") {
+      command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)") &&
+        command !~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "[[:space:]].*--privacy-export-proof([[:space:]]|$)") {
         print pid "\t" command
       }
     '
@@ -190,13 +247,12 @@ skip_stale_app_bundle_scan() {
   [[ "${AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN:-}" =~ ^(1|true|yes|on)$ ]]
 }
 
-truthy() {
-  [[ "${1:-}" =~ ^(1|true|yes|on)$ ]]
-}
-
 proof_launch_requested() {
   truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION:-}" ||
+    truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION:-}" ||
     truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" ||
+    truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK:-}" ||
+    truthy "${AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING:-}" ||
     [[ -n "${AUTOCOMPLETE_LAB_PROOF_SCENARIO:-}" ]] ||
     [[ -n "${AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS:-}" ]]
 }
@@ -209,6 +265,8 @@ scrub_proof_model_root_if_needed() {
     launchctl unsetenv AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS >/dev/null 2>&1 || true
   fi
 }
+
+wait_for_proof_locks_if_needed
 
 if skip_stale_app_bundle_scan; then
   echo "Skipping stale app bundle scan because AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN is enabled." >&2
@@ -439,6 +497,13 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
   fi
 
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION \
+      "$AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION >/dev/null 2>&1 || true
+  fi
+
   if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
       "$AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
@@ -446,10 +511,24 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION >/dev/null 2>&1 || true
   fi
 
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK \
+      "$AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK >/dev/null 2>&1 || true
+  fi
+
   if [[ -n "${AUTOCOMPLETE_LAB_PROOF_SCENARIO:-}" ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_PROOF_SCENARIO "$AUTOCOMPLETE_LAB_PROOF_SCENARIO"
   else
     launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SCENARIO >/dev/null 2>&1 || true
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING \
+      "$AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING >/dev/null 2>&1 || true
   fi
 
   if [[ -n "${AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS:-}" ]]; then

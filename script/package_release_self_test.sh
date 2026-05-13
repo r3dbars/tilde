@@ -30,6 +30,9 @@ reject_contains() {
 }
 
 require_contains "$HELP_OUTPUT" "primary dist/SteadyType.dmg plus secondary dist/SteadyType.zip"
+require_contains "$HELP_OUTPUT" "--package-existing"
+require_contains "$HELP_OUTPUT" "Sign and validate an existing dist/SteadyType.app with Developer ID"
+require_contains "$HELP_OUTPUT" "without rebuilding the Swift package"
 require_contains "$HELP_OUTPUT" "--print-proof-template"
 require_contains "$HELP_OUTPUT" "--require-developer-id"
 require_contains "$HELP_OUTPUT" "Submit the DMG to Apple notarytool"
@@ -49,6 +52,10 @@ require_contains "$SCRIPT_TEXT" 'Gatekeeper assessment failed; saved spctl outpu
 require_contains "$SCRIPT_TEXT" 'local source_app="${1:-$APP_BUNDLE}"'
 require_contains "$SCRIPT_TEXT" 'create_zip "$verify_dir/SteadyType.app"'
 require_contains "$SCRIPT_TEXT" '--output-format json >/dev/null 2>&1'
+require_contains "$SCRIPT_TEXT" 'package_existing_app "archive"'
+require_contains "$SCRIPT_TEXT" 'package_existing_app "package-existing"'
+require_contains "$SCRIPT_TEXT" 'codesign --force --options runtime --timestamp --sign "$developer_id" "$APP_BUNDLE"'
+require_contains "$SCRIPT_TEXT" './script/check_app_bundle.sh --release "$APP_BUNDLE"'
 reject_contains "$SCRIPT_TEXT" "/tmp/autocomplete-notary-profile-check.txt"
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"
 require_contains "$PROOF_TEMPLATE" "uninstall/delete-data instructions"

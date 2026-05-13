@@ -6,6 +6,7 @@ import hashlib
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -50,6 +51,9 @@ EXTERNAL_RUNTIME_TERMS = (
 BUILD_TOKEN_PATTERN = re.compile(
     r"(commit:[0-9a-fA-F]{7,40}|app-sha256:[0-9a-fA-F]{64}|archive-sha256:[0-9a-fA-F]{64})"
 )
+PASS_RESULT_PATTERN = re.compile(r"\bpass(?:ed)?\b")
+PLACEHOLDER_PATTERN = re.compile(r"<[^>\n|]+>")
+RECORDING_GUIDE = "docs/product/onboarding-walkthrough-proof.md"
 
 
 def run_git(args: list[str], *, check: bool = False) -> str:
@@ -213,6 +217,11 @@ def validate_row(row: dict[str, str], tokens: set[str]) -> list[str]:
     for term in UNRESOLVED_TERMS:
         if re.search(rf"\b{re.escape(term)}\b", normalize(row_text)):
             failures.append(f"row still contains unresolved marker: {term}")
+    placeholders = sorted(set(PLACEHOLDER_PATTERN.findall(row_text)))
+    if placeholders:
+        failures.append(
+            "row still contains template placeholder(s): " + ", ".join(placeholders)
+        )
 
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", row["time utc"].strip()):
         failures.append("time utc must be an ISO UTC timestamp like 2026-05-13T12:00:00Z")
@@ -260,7 +269,7 @@ def validate_row(row: dict[str, str], tokens: set[str]) -> list[str]:
     if not any(term in delete_traces for term in ("gone", "removed", "0 files")):
         failures.append("delete-traces proof must show files were removed")
 
-    if not re.search(r"\bpass(?:ed)?\b", normalize(row["result"])):
+    if not PASS_RESULT_PATTERN.search(normalize(row["result"])):
         failures.append("result must be pass or passed")
 
     evidence = normalize(row["evidence"])
@@ -268,6 +277,78 @@ def validate_row(row: dict[str, str], tokens: set[str]) -> list[str]:
         failures.append("evidence must cite command output, diagnostics/trace lines, or a manual gate row")
 
     return failures
+
+
+def is_nonpassing_manual_row(row: dict[str, str]) -> bool:
+    result = normalize(row["result"])
+    if PASS_RESULT_PATTERN.search(result):
+        return False
+
+    row_text = " ".join(normalize(value) for value in row.values())
+    return contains_any(row_text, UNRESOLVED_TERMS)
+
+
+def current_commit_token() -> str:
+    commit = run_git(["rev-parse", "--short=12", "--verify", "HEAD"], check=True)
+    return f"commit:{commit}"
+
+
+def current_time_utc() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def proof_row_template() -> str:
+    return (
+        f"| {current_time_utc()} | `{current_commit_token()}` | "
+        "steadytype-clean-2026-05-13 | "
+        "Accessibility granted after app-owned Settings user-triggered Allow Accessibility | "
+        "Runtime ready; app-owned MLX; no external server | "
+        "TextEdit opened disposable local practice file | "
+        "one-word Tab inserted verified next word | "
+        "Esc dismissed with no text change | "
+        "Pause stopped suggestions | "
+        "Delete traces removed local trace/log files | "
+        "pass | "
+        "manual gate; diagnostics lines <start>-<end>; trace lines <start>-<end> |"
+    )
+
+
+def recording_template() -> str:
+    header = (
+        "| Time UTC | Build proof | macOS user | Accessibility | Runtime | "
+        "TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |"
+    )
+    separator = (
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+    )
+    return "\n".join(
+        [
+            "Onboarding walkthrough proof recording guide",
+            "",
+            "Only add a pass row after a real clean-user walkthrough. Do not copy this as proof from memory.",
+            "",
+            "Before the run:",
+            "- Build or verify the current app.",
+            "- Use a clean macOS tester account.",
+            "- Keep typed text disposable and do not paste raw user text into docs.",
+            "",
+            "A pass row must prove:",
+            "- app-owned explanation before Accessibility",
+            "- user-triggered Accessibility grant",
+            "- app-owned local MLX runtime ready with no external server",
+            "- disposable TextEdit practice opened",
+            "- one-word or next-word Tab insert verified",
+            "- Esc dismiss with no text change",
+            "- pause stops suggestions",
+            "- local trace/log deletion removed files",
+            "",
+            f"Full runbook: {RECORDING_GUIDE}",
+            "",
+            header,
+            separator,
+            proof_row_template(),
+        ]
+    )
 
 
 def display_path(path: Path) -> str:
@@ -292,13 +373,29 @@ def validate(path: Path) -> list[str]:
 
     tokens = current_build_tokens()
     row_failures: list[str] = []
+    nonpassing_rows: list[str] = []
     for index, row in enumerate(rows, start=1):
+        if is_nonpassing_manual_row(row):
+            result = row["result"].strip() or "empty"
+            nonpassing_rows.append(
+                f"row {index}: result is {result}; this is not completed pass proof"
+            )
+            continue
+
         failures = validate_row(row, tokens)
         if not failures:
             return []
         row_failures.extend(f"row {index}: {failure}" for failure in failures)
 
-    return row_failures
+    if row_failures:
+        return row_failures
+
+    return [
+        "no completed passing walkthrough proof row found",
+        *nonpassing_rows,
+        f"record a real manual row, then rerun this check; guide: {RECORDING_GUIDE}",
+        "template: ./script/check_onboarding_walkthrough_proof.py --print-template",
+    ]
 
 
 def main() -> int:
@@ -310,7 +407,16 @@ def main() -> int:
         default=str(DEFAULT_PROOF),
         help="Markdown file containing the Guided TextEdit Walkthrough Proof table.",
     )
+    parser.add_argument(
+        "--print-template",
+        action="store_true",
+        help="Print the exact passing-row template and recording rules.",
+    )
     args = parser.parse_args()
+
+    if args.print_template:
+        print(recording_template())
+        return 0
 
     path = Path(args.proof)
     if not path.is_absolute():

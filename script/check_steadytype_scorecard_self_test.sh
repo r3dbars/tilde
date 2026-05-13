@@ -31,18 +31,54 @@ Path(sys.argv[1]).write_text(
 )
 Path(sys.argv[2]).write_text(
     "Proof manifest gaps:\n"
-    "Proof manifest check failed with 7 issue(s).\n",
+    "Proof manifest check failed with 6 issue(s).\n",
     encoding="utf-8",
 )
-Path(sys.argv[3]).write_text(
-    "AUTOCOMPLETE_LAB_LOG_START_LINE=24210\n"
-    "AUTOCOMPLETE_LAB_TRACE_START_LINE=6225\n"
-    "Latency window: selected latest sampled default runtime launch; "
-    "diagnosticsLine=24211; traceStartLine=6225; diagnosticsEndLine=none; "
-    "traceEndLine=none; firstVisibleSamples=5; modelSamples=20; "
-    "fastWordVisibleSamples=0\n",
-    encoding="utf-8",
+PY
+
+python3 - "$SCORECARD" "$LATENCY_SELECTOR_LIVE" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+latency_line = next(line for line in source.splitlines() if line.startswith("| Latency |"))
+green = re.search(
+    r"select_latency_window[.]py\b[^|]*?: selected "
+    r"diagnosticsLine=([0-9]+), traceStartLine=([0-9]+), "
+    r"firstVisibleSamples=([0-9]+), modelSamples=([0-9]+), "
+    r"fastWordVisibleSamples=([0-9]+)",
+    latency_line,
 )
+red = re.search(
+    r"select_latency_window[.]py\b[^|]*?: failed red because "
+    r"(.+?), with diagnosticsLine=([0-9]+), traceStartLine=([0-9]+), "
+    r"firstVisibleSamples=([0-9]+), modelSamples=([0-9]+), "
+    r"fastWordVisibleSamples=([0-9]+)",
+    latency_line,
+)
+if green:
+    diagnostics, trace, first_visible, model, fast_word = green.groups()
+    output = (
+        f"AUTOCOMPLETE_LAB_LOG_START_LINE={int(diagnostics) - 1}\n"
+        f"AUTOCOMPLETE_LAB_TRACE_START_LINE={trace}\n"
+        "Latency window: selected latest sampled default runtime launch; "
+        f"diagnosticsLine={diagnostics}; traceStartLine={trace}; diagnosticsEndLine=none; "
+        f"traceEndLine=none; firstVisibleSamples={first_visible}; modelSamples={model}; "
+        f"fastWordVisibleSamples={fast_word}\n"
+    )
+elif red:
+    reason, diagnostics, trace, first_visible, model, fast_word = red.groups()
+    output = (
+        f"Latency window: {reason}; diagnosticsLine={diagnostics}; traceStartLine={trace}; "
+        "diagnosticsEndLine=none; traceEndLine=none; "
+        f"firstVisibleSamples={first_visible}; modelSamples={model}; "
+        f"fastWordVisibleSamples={fast_word}\n"
+    )
+else:
+    raise SystemExit("could not parse scorecard latency selector claim")
+
+Path(sys.argv[2]).write_text(output, encoding="utf-8")
 PY
 
 python3 script/check_steadytype_scorecard.py \
@@ -85,12 +121,13 @@ if python3 script/check_steadytype_scorecard.py \
   --proof-manifest-output "$PROOF_LIVE" \
   --latency-selector-output "$LATENCY_SELECTOR_RED" \
   >"$TMP_DIR/live-latency-red.txt" 2>&1; then
-  echo "scorecard self-test expected old green latency text to fail against red latest selector output" >&2
+  echo "scorecard self-test expected stale red latency count to fail" >&2
   exit 1
 fi
 
-if ! grep -F "latency selector live output is red: latest default runtime launch has too few samples" "$TMP_DIR/live-latency-red.txt" >/dev/null; then
-  echo "scorecard self-test missing red latest latency selector failure" >&2
+if ! grep -F "diagnosticsLine claim is" "$TMP_DIR/live-latency-red.txt" >/dev/null ||
+   ! grep -F "live output reports 25000" "$TMP_DIR/live-latency-red.txt" >/dev/null; then
+  echo "scorecard self-test missing stale red latency selector failure" >&2
   cat "$TMP_DIR/live-latency-red.txt" >&2
   exit 1
 fi
@@ -98,10 +135,11 @@ fi
 LATENCY_SELECTOR_DRIFT="$TMP_DIR/latency-selector-drift.txt"
 python3 - "$LATENCY_SELECTOR_LIVE" "$LATENCY_SELECTOR_DRIFT" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("modelSamples=20", "modelSamples=19", 1)
+source = re.sub(r"modelSamples=[0-9]+", "modelSamples=1", source, count=1)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -116,7 +154,8 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "modelSamples claim is 20, live output reports 19" "$TMP_DIR/live-latency-drift.txt" >/dev/null; then
+if ! grep -F "modelSamples claim is" "$TMP_DIR/live-latency-drift.txt" >/dev/null ||
+   ! grep -F "live output reports 1" "$TMP_DIR/live-latency-drift.txt" >/dev/null; then
   echo "scorecard self-test missing stale latency selector count failure" >&2
   cat "$TMP_DIR/live-latency-drift.txt" >&2
   exit 1
@@ -158,7 +197,7 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("7 manifest issues", "8 manifest issues", 1)
+source = source.replace("6 manifest issues", "7 manifest issues", 1)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -172,7 +211,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "proof manifest issue count claim is 8, live output reports 7" "$TMP_DIR/proof-drift.txt" >/dev/null; then
+if ! grep -F "proof manifest issue count claim is 7, live output reports 6" "$TMP_DIR/proof-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live proof manifest count drift failure" >&2
   cat "$TMP_DIR/proof-drift.txt" >&2
   exit 1
@@ -220,8 +259,81 @@ if ! grep -F "Tab safety: contains 'pending', so score must stay <= 75/100" "$TM
   exit 1
 fi
 
+ZERO_LATENCY_METRIC="$TMP_DIR/zero-latency-metric.md"
+python3 - "$ZERO_LATENCY_METRIC" <<'PY'
+from pathlib import Path
+import sys
+
+areas = [
+    "Suggestion quality",
+    "Placement",
+    "Tab safety",
+    "Latency",
+    "Privacy",
+    "App coverage",
+    "Onboarding",
+    "Controls",
+    "Diagnostics",
+    "Model readiness",
+    "Beta readiness",
+    "Test/proof coverage",
+]
+
+lines = [
+    "# Scorecard",
+    "",
+    "Overall score: 76/100.",
+    "",
+    "| Area | Score | Evidence | Why It Is Not Higher | Next Proof |",
+    "| --- | --- | --- | --- | --- |",
+]
+for area in areas:
+    score = "75/100"
+    evidence = "`./script/check.sh`: passed."
+    why = "More proof needed."
+    if area == "Latency":
+        score = "90/100"
+        evidence = (
+            "`./script/latency_benchmark_report.py`: first visible n=5 avg 142ms; "
+            "Stale/late suppression: n=0; latency beta gate passed."
+        )
+        why = "Strict TextEdit default-runtime latency is fresh and model-backed."
+    lines.append(f"| {area} | {score} | {evidence} | {why} | Run `./script/check.sh`. |")
+
+Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+
+python3 script/check_steadytype_scorecard.py --scorecard "$ZERO_LATENCY_METRIC" >"$TMP_DIR/zero-latency-metric.txt"
+
+for term in stale pending blocked; do
+  BAD_ZERO_LATENCY_METRIC="$TMP_DIR/zero-latency-metric-$term.md"
+  python3 - "$ZERO_LATENCY_METRIC" "$BAD_ZERO_LATENCY_METRIC" "$term" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+term = sys.argv[3]
+source = source.replace(
+    "Strict TextEdit default-runtime latency is fresh and model-backed.",
+    f"Strict TextEdit default-runtime latency is fresh, but manual app proof is {term}.",
+)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+  if python3 script/check_steadytype_scorecard.py --scorecard "$BAD_ZERO_LATENCY_METRIC" >"$TMP_DIR/zero-latency-metric-$term.txt" 2>&1; then
+    echo "scorecard self-test expected unresolved $term language beside zero-count latency metric to fail" >&2
+    exit 1
+  fi
+
+  if ! grep -F "Latency: contains '$term', so score must stay <= 75/100" "$TMP_DIR/zero-latency-metric-$term.txt" >/dev/null; then
+    echo "scorecard self-test missing unresolved $term failure beside zero-count latency metric" >&2
+    cat "$TMP_DIR/zero-latency-metric-$term.txt" >&2
+    exit 1
+  fi
+done
+
 PERFECT_UNRESOLVED="$TMP_DIR/perfect-unresolved.md"
-sed -e 's#Overall score: 80/100\.#Overall score: 81/100.#' \
+sed -e 's#Overall score: 78/100\.#Overall score: 79/100.#' \
   -e 's#| Diagnostics | 90/100 |#| Diagnostics | 100/100 |#' \
   "$SCORECARD" >"$PERFECT_UNRESOLVED"
 
@@ -302,6 +414,13 @@ if ! grep -F "missing required score area: model readiness" "$TMP_DIR/missing.tx
 fi
 
 LIVE_SCORECARD="$TMP_DIR/live-scorecard.md"
+LATENCY_SELECTOR_GREEN="$TMP_DIR/latency-selector-green.txt"
+cat >"$LATENCY_SELECTOR_GREEN" <<'EOF'
+AUTOCOMPLETE_LAB_LOG_START_LINE=24210
+AUTOCOMPLETE_LAB_TRACE_START_LINE=6225
+Latency window: selected latest sampled default runtime launch; diagnosticsLine=24211; traceStartLine=6225; diagnosticsEndLine=none; traceEndLine=none; firstVisibleSamples=5; modelSamples=20; fastWordVisibleSamples=0
+EOF
+
 python3 - "$LIVE_SCORECARD" <<'PY'
 from pathlib import Path
 import sys
@@ -361,7 +480,7 @@ python3 script/check_steadytype_scorecard.py \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
   --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
-  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_GREEN" \
   >"$TMP_DIR/live-pass.txt"
 
 cat >"$TMP_DIR/manual-smoke-live-bad.txt" <<'EOF'
@@ -373,7 +492,7 @@ if python3 script/check_steadytype_scorecard.py \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live-bad.txt" \
   --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
-  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_GREEN" \
   >"$TMP_DIR/live-bad.txt" 2>&1; then
   echo "scorecard self-test expected live manual count mismatch to fail" >&2
   exit 1
