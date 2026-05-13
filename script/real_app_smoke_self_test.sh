@@ -98,7 +98,7 @@ from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
 start = source.index('run_textedit_model_latency()')
-end = source.index('run_chrome_fixture()', start)
+end = source.index('run_textedit_default_model_latency()', start)
 block = source[start:end]
 if "wait_for_log_fields_optional \"$seed_start\"" not in block:
     raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
@@ -121,6 +121,14 @@ trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$t
 timing = block.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"', trigger)
 if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigger:timing]:
     raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
+
+default_start = source.index('run_textedit_default_model_latency()')
+default_end = source.index('run_chrome_fixture()', default_start)
+default_block = source[default_start:default_end]
+if "dismiss_textedit_proof_suggestion" not in default_block:
+    raise SystemExit("default-model phrase proof must dismiss seed suggestions before measuring the trailing-space trigger")
+if 'wait_for_textedit_document_exact "$window_title" "$expected_text" "$label unchanged"' not in source:
+    raise SystemExit("default-model phrase proof dismissal must verify the seeded TextEdit document is unchanged")
 
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "pollTimer?.fireDate" in app_delegate:

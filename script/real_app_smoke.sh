@@ -4703,6 +4703,20 @@ APPLESCRIPT
   wait_for_textedit_document_exact "$window_title" "" "$label" 5
 }
 
+dismiss_textedit_proof_suggestion() {
+  local window_title="$1"
+  local expected_text="$2"
+  local label="$3"
+
+  assert_textedit_frontmost_window "$window_title" "$label"
+  run_osascript_with_timeout 2 "$label" <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  key code 53
+end tell
+APPLESCRIPT
+  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label unchanged" 3
+}
+
 wait_for_textedit_document_prefix() {
   local window_title="$1"
   local expected_prefix="$2"
@@ -9114,6 +9128,8 @@ run_textedit_default_model_latency() {
       exit 1
     fi
     wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit default model latency stable context $sample_index" 5
+    move_textedit_caret_to_document_end "$textedit_window_title"
+    dismiss_textedit_proof_suggestion "$textedit_window_title" "$fragment" "TextEdit default model latency seed suggestion dismiss $sample_index"
     move_textedit_caret_to_document_end "$textedit_window_title"
 
     assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit default model latency trigger $sample_index"
