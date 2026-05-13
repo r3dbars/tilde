@@ -48,7 +48,7 @@ SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -70,8 +70,9 @@ textedit-undo-full, textedit-fast-typing, or textedit-model-latency. These are
 still narrow TextEdit lanes, not a generic native-app claim. The TextEdit undo
 lanes automatically use native single-edit Command-Z proof.
 
-Obsidian proof must keep obsidian, obsidian-theme, obsidian-pane, and
-obsidian-long-note as separate manual-gated lanes before it can be complete.
+Obsidian proof must keep default, theme, pane, long-note, font-zoom,
+markdown-bold, markdown-list, multiline, and run-on lanes separate before it can
+be complete.
 
 Claude desktop proof can use claude-empty, claude-long, claude-wrapped,
 claude-narrow, claude-context, claude-light, or claude-dark to record bounded
@@ -286,6 +287,26 @@ case "$APP" in
   obsidian-long-note)
     APP="obsidian"
     OBSIDIAN_SESSION_APP="obsidian-long-note"
+    ;;
+  obsidian-font-zoom)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-font-zoom"
+    ;;
+  obsidian-markdown-bold)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-markdown-bold"
+    ;;
+  obsidian-markdown-list)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-markdown-list"
+    ;;
+  obsidian-multiline)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-multiline"
+    ;;
+  obsidian-run-on)
+    APP="obsidian"
+    OBSIDIAN_SESSION_APP="obsidian-run-on"
     ;;
   claude-code-terminal)
     APP="claude-code"
@@ -1551,7 +1572,7 @@ obsidian_session_app() {
   fi
 
   case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
-    obsidian-theme|obsidian-pane|obsidian-long-note)
+    obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
       printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
       return 0
       ;;
@@ -1567,6 +1588,11 @@ Required Obsidian proof lanes:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-font-zoom --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-bold --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate
 EOF
 }
 
@@ -1585,6 +1611,25 @@ obsidian_smoke_marker_text() {
     return 0
   fi
 
+  case "$manual_app" in
+    obsidian-markdown-bold)
+      printf '%s\n\n**' "$marker"
+      return 0
+      ;;
+    obsidian-markdown-list)
+      printf '%s\n\n**Bold context line**\n\n- Autocomplete list context' "$marker"
+      return 0
+      ;;
+    obsidian-multiline)
+      printf '%s\n\n\n' "$marker"
+      return 0
+      ;;
+    obsidian-run-on)
+      printf '%s\n\nThis deliberately long Obsidian run on sentence keeps moving across the editor so wrapping, scrolling, and caret geometry have to stay calm before the proof line appears' "$marker"
+      return 0
+      ;;
+  esac
+
   printf '%s\n' "$marker"
 }
 
@@ -1595,6 +1640,10 @@ import ApplicationServices
 import Foundation
 
 let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let normalizedMarker = marker
+    .components(separatedBy: .whitespacesAndNewlines)
+    .filter { !$0.isEmpty }
+    .joined(separator: " ")
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -1612,7 +1661,11 @@ func countMarkerTextAreas(in element: AXUIElement, depth: Int = 0) -> Int {
 
     let role = copyAttribute(element, kAXRoleAttribute) as? String
     let value = copyAttribute(element, kAXValueAttribute) as? String ?? ""
-    var count = (role == kAXTextAreaRole as String && value.contains(marker)) ? 1 : 0
+    let normalizedValue = value
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+    var count = (role == kAXTextAreaRole as String && normalizedValue.contains(normalizedMarker)) ? 1 : 0
     for child in children(of: element) {
         count += countMarkerTextAreas(in: child, depth: depth + 1)
     }
@@ -1656,6 +1709,32 @@ APPLESCRIPT
   fi
 }
 
+set_obsidian_zoom_for_font_proof() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
+  key code 29 using command down
+  delay 0.1
+  key code 24 using command down
+  delay 0.1
+  key code 24 using command down
+end tell
+APPLESCRIPT
+  sleep 0.4
+}
+
+restore_obsidian_zoom_after_font_proof() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT' >/dev/null
+tell application "System Events"
+  tell application process "Obsidian" to set frontmost to true
+  key code 29 using command down
+end tell
+APPLESCRIPT
+  sleep 0.2
+}
+
 prepare_obsidian_variant_state() {
   local manual_app="$1"
 
@@ -1672,6 +1751,18 @@ prepare_obsidian_variant_state() {
     obsidian-long-note)
       activate_obsidian_for_smoke
       move_obsidian_caret_to_document_end
+      ;;
+    obsidian-font-zoom)
+      if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_FONT_ZOOM_APPLIED:-0}" != "1" ]]; then
+        export AUTOCOMPLETE_LAB_OBSIDIAN_FONT_ZOOM_APPLIED=1
+        set_obsidian_zoom_for_font_proof
+      else
+        activate_obsidian_for_smoke
+      fi
+      move_obsidian_caret_to_document_end
+      ;;
+    obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
+      activate_obsidian_for_smoke
       ;;
     obsidian)
       activate_obsidian_for_smoke
@@ -7404,6 +7495,21 @@ describe_plan() {
         obsidian-long-note)
           echo "Plan: manual-gated Obsidian long scrolled note proof. The script validates visible scrolled-caret placement after you run it."
           ;;
+        obsidian-font-zoom)
+          echo "Plan: guarded Obsidian font/zoom proof. The script increases Obsidian zoom, types smoke fragments, validates screenshots and insertion, then resets zoom."
+          ;;
+        obsidian-markdown-bold)
+          echo "Plan: guarded Obsidian bold Markdown proof. The script types smoke fragments after a bold marker prefix and validates visual placement plus insertion."
+          ;;
+        obsidian-markdown-list)
+          echo "Plan: guarded Obsidian list Markdown proof. The script types smoke fragments in a dash-list context and validates visual placement plus insertion."
+          ;;
+        obsidian-multiline)
+          echo "Plan: guarded Obsidian multiline proof. The script starts several blank lines below the marker and validates visual placement plus insertion."
+          ;;
+        obsidian-run-on)
+          echo "Plan: guarded Obsidian run-on/wrapped sentence proof. The script types after a long wrapping sentence and validates visual placement plus insertion."
+          ;;
         *)
           echo "Plan: manual-gated disposable Obsidian default-note smoke. The script prints the checklist and validates after you run it."
           ;;
@@ -7972,6 +8078,17 @@ import Foundation
 
 let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "SteadyType Obsidian proof"
 let expectedSuffix = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
+let normalizedMarker = marker
+    .components(separatedBy: .whitespacesAndNewlines)
+    .filter { !$0.isEmpty }
+    .joined(separator: " ")
+
+func normalizedForMarkerMatch(_ value: String) -> String {
+    value
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+}
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -8024,7 +8141,7 @@ guard role == kAXTextAreaRole as String || role == "AXWebArea" else {
 }
 
 let text = copyAttribute(editor, kAXValueAttribute) as? String ?? ""
-guard text.localizedCaseInsensitiveContains(marker) else {
+guard normalizedForMarkerMatch(text).localizedCaseInsensitiveContains(normalizedMarker) else {
     fputs("Refusing to type in Obsidian because the focused note does not contain the disposable smoke marker.\n", stderr)
     exit(3)
 }
@@ -8409,6 +8526,19 @@ Thread.sleep(forTimeInterval: 0.15)
 
 let appElement = AXUIElementCreateApplication(app.processIdentifier)
 AXUIElementSetMessagingTimeout(appElement, 0.75)
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let normalizedMarker = marker
+    .components(separatedBy: .whitespacesAndNewlines)
+    .filter { !$0.isEmpty }
+    .joined(separator: " ")
+let requireLongNoteLine = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90"] != "0"
+
+func normalizedForMarkerMatch(_ value: String) -> String {
+    value
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+}
 
 var elements: [AXUIElement] = []
 collectElements(in: appElement, results: &elements)
@@ -8420,8 +8550,8 @@ let textAreas = elements.filter {
 guard let target = textAreas
     .filter({
         let value = stringAttribute($0, kAXValueAttribute)
-        return value.contains("Autocomplete Lab Obsidian scroll filler line 90")
-            && value.contains("Autocomplete Lab Obsidian proof")
+        return normalizedForMarkerMatch(value).contains(normalizedMarker)
+            && (!requireLongNoteLine || value.contains("Autocomplete Lab Obsidian scroll filler line 90"))
     })
     .sorted(by: {
         (rect(for: $0)?.maxY ?? 0) > (rect(for: $1)?.maxY ?? 0)
@@ -8544,7 +8674,9 @@ tell application "System Events"
     key code 124 using command down
   end if
   delay 0.2
-  key code 36
+  if (system attribute "AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN") is not "1" then
+    key code 36
+  end if
 end tell
 APPLESCRIPT
   set_obsidian_caret_to_value_end
@@ -8701,7 +8833,7 @@ run_obsidian() {
   local manual_app
   manual_app="$(obsidian_session_app)"
   case "$manual_app" in
-    obsidian|obsidian-theme|obsidian-pane|obsidian-long-note)
+    obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
       ;;
     *)
       run_manual_gated
@@ -8717,6 +8849,16 @@ run_obsidian() {
     first_fragment="moke proof feels"
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=1
+  elif [[ "$manual_app" == "obsidian-font-zoom" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+  fi
+  if [[ "$manual_app" == "obsidian-markdown-bold" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN=1
+  else
+    unset AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
@@ -8751,6 +8893,14 @@ run_obsidian() {
   type_obsidian_raw_smoke_text "$first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
+  if [[ "$manual_app" == "obsidian-font-zoom" ]]; then
+    local zoom_resync_line
+    zoom_resync_line="$(line_count "$LOG_PATH")"
+    sleep 0.8
+    if log_since_matches "$zoom_resync_line" "suggestion-presented .*app=md.obsidian"; then
+      wait_for_screenshot_capture_if_enabled "$zoom_resync_line" "md.obsidian" "Obsidian zoom-resynced"
+    fi
+  fi
   activate_obsidian_for_smoke
   assert_frontmost_app "Obsidian" "Obsidian"
   press_key_code 48
@@ -8814,6 +8964,10 @@ run_obsidian() {
       "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
+  fi
+
+  if [[ "$manual_app" == "obsidian-font-zoom" ]]; then
+    restore_obsidian_zoom_after_font_proof
   fi
 
   sleep 1
