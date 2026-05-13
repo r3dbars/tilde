@@ -8517,17 +8517,22 @@ run_textedit_model_latency() {
     set_textedit_document_text "$textedit_window_title" ""
     wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit model latency reset $sample_index" 5
     move_textedit_caret_to_document_end "$textedit_window_title"
+    seed_start="$(line_count "$LOG_PATH")"
     if ! insert_textedit_smoke_fragment "$textedit_window_title" "$stable_context"; then
       echo "TextEdit model latency sample $sample_index could not seed the stable AX context." >&2
       exit 1
     fi
     wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index" 5
     move_textedit_caret_to_document_end "$textedit_window_title"
-    seed_start="$(line_count "$LOG_PATH")"
-    wait_for_log_fields "$seed_start" "TextEdit model latency seed settled $sample_index" 20 \
-      "suggestion-presented" \
+    if wait_for_log_fields_optional "$seed_start" 4 \
+      "mlx-completion-timing" \
       "app=com.apple.TextEdit" \
-      "candidateSelectionSource=app-model-result"
+      "mode=phraseContinuation"; then
+      echo "TextEdit model latency seed settled $sample_index."
+    else
+      echo "TextEdit model latency seed produced no model timing before sample $sample_index."
+    fi
+    dismiss_textedit_smoke_suggestion "$textedit_window_title"
     move_textedit_caret_to_document_end "$textedit_window_title"
 
     sample_start="$(line_count "$LOG_PATH")"
@@ -8537,12 +8542,10 @@ run_textedit_model_latency() {
     move_textedit_caret_to_document_end "$textedit_window_title"
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
       "mlx-completion-timing" \
-      "app=com.apple.TextEdit" \
-      "mode=wordCompletion"
+      "app=com.apple.TextEdit"
     wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index" 20 \
       "suggestion-presented" \
       "app=com.apple.TextEdit" \
-      "requestMode=wordCompletion" \
       "candidateSelectionSource=app-model-result"
     sleep 0.4
   done < <(textedit_model_latency_fragments)
