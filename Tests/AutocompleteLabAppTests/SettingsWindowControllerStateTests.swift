@@ -569,6 +569,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(controller.runtimeDetailTextForTesting.contains("pinned Hugging Face revision"))
         #expect(controller.runtimeDetailTextForTesting.contains("You do not need Ollama or a model server"))
+        #expect(controller.runtimeDetailTextForTesting.contains("Runtime detail: short detail"))
         #expect(controller.runtimeDetailTextForTesting.contains("Suggestions stay off"))
     }
 
@@ -621,6 +622,44 @@ struct SettingsWindowControllerStateTests {
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Tab once"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Esc"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Delete Traces"))
+    }
+
+    @Test("Practice model line exposes missing corrupt and unlinked runtime detail")
+    func practiceModelLineExposesRuntimeFailureDetail() {
+        let reports = [
+            RuntimeReadinessReport(
+                stage: .downloadNeeded,
+                summary: "download needed",
+                detail: "The local model is not installed yet. Expected folder: /tmp/SteadyType/model",
+                action: .installModel
+            ),
+            RuntimeReadinessReport(
+                stage: .repairNeeded,
+                summary: "model folder needs repair",
+                detail: "The local model folder is incomplete: missing tokenizer.json. Folder: /tmp/SteadyType/model",
+                action: .repairModel
+            ),
+            RuntimeReadinessReport(
+                stage: .runtimeUnavailable,
+                summary: "runtime unavailable (MLX)",
+                detail: "This build is missing its local model engine. A separate model server will not fix it.",
+                action: .none
+            )
+        ]
+
+        for report in reports {
+            let state = SettingsPracticeState(
+                isTrusted: true,
+                suggestionsPaused: false,
+                runtimeReport: report,
+                isModelInstallInProgress: false,
+                isTextEditEnabled: true
+            )
+
+            #expect(state.modelText.contains(report.summary))
+            #expect(state.modelText.contains(report.detail ?? ""))
+            #expect(state.modelText.contains("Runtime detail:"))
+        }
     }
 
     @Test("Field control copy scopes silence to the current field")

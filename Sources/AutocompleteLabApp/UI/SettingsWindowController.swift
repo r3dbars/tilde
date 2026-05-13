@@ -534,7 +534,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var modelText: String {
-        "Local model: \(runtimeReport.summary)"
+        RuntimeReadinessPresentation(report: runtimeReport).modelText
     }
 
     var textEditText: String {
@@ -1003,8 +1003,9 @@ final class SettingsWindowController: NSObject {
         silenceFieldButton.title = fieldControl.buttonTitle
         silenceFieldButton.isEnabled = fieldControl.canSilence
         runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
-        runtimeDetailLabel.stringValue = guidance.message
-        runtimeDetailLabel.isHidden = guidance.message.isEmpty
+        let runtimePresentation = RuntimeReadinessPresentation(report: runtimeReport)
+        runtimeDetailLabel.stringValue = runtimePresentation.settingsDetailText
+        runtimeDetailLabel.isHidden = runtimePresentation.settingsDetailText.isEmpty
         if isModelInstallInProgress {
             runtimeActionLabel.stringValue = "Next step: Wait for the model install or cancel it."
             runtimeActionButton.title = "Cancel Install"
