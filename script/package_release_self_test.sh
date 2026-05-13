@@ -45,7 +45,7 @@ if HOME="$MISSING_MODEL_HOME" ./script/package_release.sh --check >/tmp/autocomp
   exit 1
 fi
 
-require_contains "$(cat /tmp/autocomplete-package-missing-model-check.txt)" "Preferred MLX model: blocked - missing, invalid, corrupt, or not checksum-verified"
+require_contains "$(cat /tmp/autocomplete-package-missing-model-check.txt)" "Preferred MLX model: blocked - required app-owned model is missing, invalid, corrupt, or not checksum-verified"
 require_contains "$(cat /tmp/autocomplete-package-missing-model-check.txt)" "Run ./script/check_model_asset.py for the exact fix."
 
 if env -u NOTARYTOOL_PROFILE \
