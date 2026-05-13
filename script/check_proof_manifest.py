@@ -22,8 +22,13 @@ CURRENT_PROOF_SOURCE_PATHS = (
     "Package.resolved",
     "Sources",
     "script/build_and_run.sh",
+    "script/beta_readiness.sh",
+    "script/check_score_targets.sh",
+    "script/fresh_latency_proof.sh",
+    "script/fresh_latency_proof_self_test.sh",
     "script/local_completion_runtime.py",
     "script/real_app_smoke.sh",
+    "script/scorecard_goal_loop.sh",
 )
 EXPECTED_GRADUATION_DECISIONS = {
     "Google Docs in Chrome": {
@@ -206,6 +211,7 @@ SUBMIT_SIGNAL_METADATA_KEYS = {
     "reason",
     "result",
 }
+NON_ACTIONABLE_BLOCKER_TYPES = {"unavailable-host"}
 
 
 def fail(message: str) -> None:
@@ -467,6 +473,7 @@ def validate_requirements(name: str, surface: dict, failures: list[str]) -> list
         requirement_id = str(requirement.get("id", "")).strip()
         status = str(requirement.get("status", "")).strip()
         summary = str(requirement.get("summary", "")).strip()
+        blocker_type = str(requirement.get("blockerType", "")).strip()
         if not requirement_id:
             failures.append(f"{name}: requirement {index} is missing id")
         elif requirement_id in seen:
@@ -476,6 +483,16 @@ def validate_requirements(name: str, surface: dict, failures: list[str]) -> list
             failures.append(
                 f"{name}: requirement {requirement_id or index} status must be complete, pending, or blocked"
             )
+        if blocker_type:
+            if blocker_type not in NON_ACTIONABLE_BLOCKER_TYPES:
+                failures.append(
+                    f"{name}: requirement {requirement_id or index} blockerType must be one of "
+                    + ", ".join(sorted(NON_ACTIONABLE_BLOCKER_TYPES))
+                )
+            if status != "blocked":
+                failures.append(
+                    f"{name}: requirement {requirement_id or index} blockerType is only valid on blocked requirements"
+                )
         if not summary:
             failures.append(f"{name}: requirement {requirement_id or index} is missing summary")
         valid.append(requirement)
@@ -510,11 +527,31 @@ def validate_required_manual_smokes(name: str, surface: dict, failures: list[str
     return valid
 
 
-def pending_requirement_labels(requirements: list[dict]) -> list[str]:
+def requirement_is_unavailable_host_blocker(requirement: dict) -> bool:
+    return (
+        str(requirement.get("status", "")).strip() == "blocked"
+        and str(requirement.get("blockerType", "")).strip() == "unavailable-host"
+    )
+
+
+def pending_requirement_labels(
+    requirements: list[dict],
+    *,
+    include_unavailable_host: bool = True,
+) -> list[str]:
     return [
         requirement_label(requirement)
         for requirement in requirements
         if str(requirement.get("status", "")).strip() in {"pending", "blocked"}
+        and (include_unavailable_host or not requirement_is_unavailable_host_blocker(requirement))
+    ]
+
+
+def unavailable_host_requirement_labels(requirements: list[dict]) -> list[str]:
+    return [
+        requirement_label(requirement)
+        for requirement in requirements
+        if requirement_is_unavailable_host_blocker(requirement)
     ]
 
 
@@ -934,7 +971,10 @@ def verify_manifest(
         gaps = surface.get("gaps", [])
         requirements = validate_requirements(name, surface, failures)
         required_manual_smokes = validate_required_manual_smokes(name, surface, failures)
-        pending_requirements = pending_requirement_labels(requirements)
+        pending_requirements = pending_requirement_labels(
+            requirements,
+            include_unavailable_host=status == "complete",
+        )
         if status == "complete":
             complete += 1
             if gaps:
@@ -1121,18 +1161,31 @@ def verify_manifest(
         for name in pending:
             print(f"- {name}")
     requirement_rows: list[tuple[str, list[str]]] = []
+    unavailable_requirement_rows: list[tuple[str, list[str]]] = []
     for surface in surfaces:
         if not isinstance(surface, dict):
             continue
         name = str(surface.get("surface", "")).strip()
         if not name:
             continue
-        labels = pending_requirement_labels(validate_requirements(name, surface, []))
+        labels = pending_requirement_labels(
+            validate_requirements(name, surface, []),
+            include_unavailable_host=False,
+        )
         if labels:
             requirement_rows.append((name, labels))
+        unavailable_labels = unavailable_host_requirement_labels(validate_requirements(name, surface, []))
+        if unavailable_labels:
+            unavailable_requirement_rows.append((name, unavailable_labels))
     if requirement_rows:
         print("Pending requirements:")
         for name, labels in requirement_rows:
+            print(f"- {name}")
+            for label in labels:
+                print(f"  - {label}")
+    if unavailable_requirement_rows:
+        print("Unavailable host requirements:")
+        for name, labels in unavailable_requirement_rows:
             print(f"- {name}")
             for label in labels:
                 print(f"  - {label}")

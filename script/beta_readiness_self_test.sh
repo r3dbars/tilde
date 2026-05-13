@@ -52,6 +52,12 @@ require_order() {
 
 require_contains './script/package_release.sh --check --require-developer-id --require-notary-profile'
 require_contains 'PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"'
+require_contains 'READINESS_SCRATCH_PATH_CREATED=""'
+require_contains 'cleanup_readiness_scratch_path'
+require_contains 'configure_readiness_scratch_path || exit 1'
+require_contains 'mktemp -d "${parent%/}/autocomplete-lab-beta-readiness.XXXXXX"'
+require_contains 'export AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH'
+require_contains 'SwiftPM readiness scratch: $AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH'
 require_contains 'check_release_dmg_signature'
 require_contains 'check_release_archive_signature'
 require_contains 'run_check "Developer ID archive signature" check_release_archive_signature'
@@ -91,6 +97,8 @@ require_order 'run_check "Visual placement proof" ./script/check_visual_placemen
   'run_check "Latency beta gate" latency_beta_gate'
 require_order 'run_check "Latency beta gate" latency_beta_gate' \
   'run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile'
+require_order 'configure_readiness_scratch_path || exit 1' \
+  'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
 require_order 'echo "== Visual placement proof =="' \
   'echo "== Latency beta gate =="'
 require_order 'echo "== Latency beta gate =="' \

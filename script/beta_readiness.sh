@@ -7,6 +7,42 @@ cd "$ROOT_DIR"
 MODE="full"
 PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"
 SECONDARY_ARCHIVE="$ROOT_DIR/dist/SteadyType.zip"
+READINESS_SCRATCH_PATH_CREATED=""
+
+cleanup_readiness_scratch_path() {
+  if [[ -n "$READINESS_SCRATCH_PATH_CREATED" ]]; then
+    rm -rf "$READINESS_SCRATCH_PATH_CREATED"
+  fi
+}
+
+trap cleanup_readiness_scratch_path EXIT
+
+configure_readiness_scratch_path() {
+  local parent
+
+  if [[ -n "${AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH:-}" ]]; then
+    if ! mkdir -p "$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"; then
+      echo "SwiftPM readiness scratch blocked: could not create AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH=$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH" >&2
+      echo "Set AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH to a writable directory and rerun." >&2
+      return 1
+    fi
+
+    export AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH
+    echo "SwiftPM readiness scratch: $AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
+    return 0
+  fi
+
+  parent="${TMPDIR:-/tmp}"
+  if ! AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH="$(mktemp -d "${parent%/}/autocomplete-lab-beta-readiness.XXXXXX")"; then
+    echo "SwiftPM readiness scratch blocked: could not create a unique SwiftPM scratch path under $parent." >&2
+    echo "Set AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH to a writable directory and rerun." >&2
+    return 1
+  fi
+
+  READINESS_SCRATCH_PATH_CREATED="$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
+  export AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH
+  echo "SwiftPM readiness scratch: $AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
+}
 
 usage() {
   cat <<'EOF'
@@ -35,6 +71,8 @@ while (($#)); do
   esac
   shift
 done
+
+configure_readiness_scratch_path || exit 1
 
 run_check() {
   local label="$1"

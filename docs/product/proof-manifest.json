@@ -1077,8 +1077,8 @@
         {
           "id": "claude-code-warp-host-no-submit",
           "status": "blocked",
-          "summary": "Warp proof is blocked on this Mac because Warp is not installed.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host warp --manual-gate"
+          "blockerType": "unavailable-host",
+          "summary": "Warp proof is blocked on this Mac because Warp is not installed."
         }
       ]
     },
