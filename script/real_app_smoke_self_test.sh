@@ -144,11 +144,17 @@ if "visible_sample_count" not in block or "model_sample_count" not in block:
     raise SystemExit("model-latency proof must count actual visible and timed model-backed samples")
 if "event_tap_sample_count" not in block:
     raise SystemExit("model-latency proof must count raw event-tap latency samples")
+if "event_tap_started=0" not in block:
+    raise SystemExit("model-latency proof must treat event-tap startup as a one-time launch condition")
 visible_increment = block.index('visible_sample_count=$((visible_sample_count + 1))')
 model_increment = block.rfind('model_sample_count=$((model_sample_count + 1))', 0, visible_increment)
 visible_wait = block.rfind('candidateSelectionSource=app-model-result', 0, visible_increment)
 if model_increment < visible_wait:
     raise SystemExit("model-latency proof must count model samples only on an attempt with visible model-backed proof")
+if 'wait_for_log_fields "$sample_start" "TextEdit model latency event tap started' in block:
+    raise SystemExit("model-latency proof must not expect a fresh event-tap-started marker for every visible sample")
+if 'wait_for_log_fields "$runtime_start_line" "TextEdit model latency event tap startup"' not in block:
+    raise SystemExit("model-latency proof must require event-tap startup once for the runtime launch")
 event_tap_wait = block.rfind('keyboard-event-tap-latency', 0, visible_increment)
 if event_tap_wait < visible_wait:
     raise SystemExit("model-latency proof must require event-tap latency after visible model-backed proof")
