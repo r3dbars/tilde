@@ -7120,7 +7120,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Editor-Like Smoke</title>
+<title>SteadyType Chrome Editor-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <div class="cm-editor" role="application" aria-label="Local editor-like smoke fixture" style="display: grid; grid-template-columns: 48px 1fr; font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; border: 1px solid #bbb;">
   <div aria-hidden="true" style="padding-top: 14px; border-right: 1px solid #ddd; background: #f5f5f2; color: #777; font: 14px Menlo, monospace; text-align: center;">1</div>
@@ -7145,7 +7145,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Monaco-Like Smoke</title>
+<title>SteadyType Chrome Monaco-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -7284,7 +7284,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome ProseMirror-Like Smoke</title>
+<title>SteadyType Chrome ProseMirror-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -7382,7 +7382,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Chat-Like No-Submit Smoke [submits=0]</title>
+<title>SteadyType Chrome Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
