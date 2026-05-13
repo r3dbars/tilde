@@ -3743,6 +3743,9 @@ guard CommandLine.arguments.count == 2 else {
 }
 
 let targetTitle = CommandLine.arguments[1]
+let allowSingleWindowFallback = ["1", "true", "yes", "on"].contains(
+    (ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK"] ?? "").lowercased()
+)
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -3774,6 +3777,11 @@ for attribute in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
 
 if let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] {
     for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        print("1")
+        exit(0)
+    }
+
+    if allowSingleWindowFallback && windows.count == 1 {
         print("1")
         exit(0)
     }
