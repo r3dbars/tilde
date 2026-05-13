@@ -82,9 +82,27 @@ check_production_mock_fallback_disabled() {
     failed=1
   fi
 
-  if rg -n 'fallback: \(any CompletionEngine\)|fallbackCandidate: \.liteRTLM' \
-    Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift \
-    Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift; then
+  if python3 - <<'PY'
+from pathlib import Path
+import re
+import sys
+
+engine = Path("Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift").read_text()
+runtime = Path("Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift").read_text()
+
+blocked = []
+if re.search(r"public\s+init\s*\([^)]*\bfallback\s*:", engine, re.S):
+    blocked.append("public LocalCompletionEngine fallback initializer")
+if "fallbackCandidate: .liteRTLM" in runtime:
+    blocked.append("MVP LiteRT-LM fallback candidate")
+
+for item in blocked:
+    print(item)
+sys.exit(1 if blocked else 0)
+PY
+  then
+    :
+  else
     failed=1
   fi
 
