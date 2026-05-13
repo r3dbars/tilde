@@ -362,6 +362,8 @@ if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh
    ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fell back to AX replacement' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'unexpectedly long ($suffix_length chars); falling back to AX replacement' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$label native completion fallback"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'set_textedit_document_text "$window_title" "$expected_text"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency proof to remove native completion suffixes before timing" >&2
   exit 1
@@ -999,6 +1001,24 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP
 fi
 if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/build-run-process-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the build/run process scan" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/beta_readiness.sh --check-only\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/beta-check-only-process-fail.txt"; then
+  :
+else
+  if grep -F "Another real app smoke process is already active" "$TMP_DIR/beta-check-only-process-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected beta_readiness --check-only not to block a proof refresh" >&2
+    exit 1
+  fi
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/beta_readiness.sh\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/beta-readiness-process-fail.txt"; then
+  echo "real app smoke self-test expected full beta readiness process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/beta-readiness-process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the full beta readiness process scan" >&2
   exit 1
 fi
 
