@@ -421,6 +421,37 @@ if ! grep -F "latest runtime launch is newer than the required proof launch" "$T
   exit 1
 fi
 
+UNSAMPLED_SCENARIO_DIAGNOSTICS_LOG="$TMP_DIR/unsampled-scenario-diagnostics.log"
+UNSAMPLED_SCENARIO_TRACE_LOG="$TMP_DIR/unsampled-scenario-traces.jsonl"
+cp "$SCENARIO_DIAGNOSTICS_LOG" "$UNSAMPLED_SCENARIO_DIAGNOSTICS_LOG"
+cp "$SCENARIO_TRACE_LOG" "$UNSAMPLED_SCENARIO_TRACE_LOG"
+cat >>"$UNSAMPLED_SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T14:07:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T14:07:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$UNSAMPLED_SCENARIO_DIAGNOSTICS_LOG" \
+  --trace-log "$UNSAMPLED_SCENARIO_TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 \
+  --required-proof-app com.apple.TextEdit \
+  --required-proof-scenario textedit-model-latency \
+  --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
+  --require-model-backed-visible \
+  --forbid-fast-word-visible 2>"$TMP_DIR/unsampled-scenario.err" >/dev/null; then
+  echo "latency window self-test expected unsampled latest model-latency scenario to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/unsampled-scenario.err" >/dev/null ||
+   ! grep -F "firstVisibleSamples=0; modelSamples=0" "$TMP_DIR/unsampled-scenario.err" >/dev/null; then
+  echo "latency window self-test did not keep unsampled latest model-latency scenario red" >&2
+  cat "$TMP_DIR/unsampled-scenario.err" >&2
+  exit 1
+fi
+
 cat >>"$SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
 2026-05-12T14:10:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
 2026-05-12T14:10:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
