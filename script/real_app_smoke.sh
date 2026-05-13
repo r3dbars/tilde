@@ -7780,7 +7780,6 @@ run_notes() {
     assert_notes_title_smoke_target
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title suggestion"
-    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes title"
     assert_frontmost_app "Notes" "Notes title"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes title Tab acceptance" 12 \
@@ -7790,6 +7789,7 @@ run_notes() {
       "action=acceptNextWord" \
       "handled=true"
     wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes title first verified insertion"
+    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes title"
 
     if (( notes_requires_undo == 1 )); then
       press_and_wait_for_accepted_insertion_undo "com.apple.Notes" "Notes title"
@@ -7802,7 +7802,6 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title second suggestion"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes title second"
     assert_frontmost_app "Notes" "Notes title"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
@@ -7812,6 +7811,7 @@ run_notes() {
       "key=$full_accept_key" \
       "action=acceptAllVisible" \
       "handled=true"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes title second"
 
     sleep 1
     local manual_check_args=("$manual_app" --check)
@@ -7849,7 +7849,6 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist suggestion"
-    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes checklist"
     assert_frontmost_app "Notes" "Notes checklist"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes checklist Tab acceptance" 12 \
@@ -7859,6 +7858,7 @@ run_notes() {
       "action=acceptNextWord" \
       "handled=true"
     wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes checklist first verified insertion"
+    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes checklist"
 
     if (( notes_requires_undo == 1 )); then
       local checklist_acceptance_id
@@ -7876,7 +7876,6 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist second suggestion"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes checklist second"
     assert_frontmost_app "Notes" "Notes checklist"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
@@ -7886,6 +7885,7 @@ run_notes() {
       "key=$full_accept_key" \
       "action=acceptAllVisible" \
       "handled=true"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes checklist second"
 
     sleep 1
     local manual_check_args=("$manual_app" --check)
@@ -7912,7 +7912,6 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
   assert_frontmost_app "Notes" "Notes body"
   press_key_code 48
   wait_for_log_fields "$start_line" "Notes body Tab acceptance" 12 \
@@ -7922,6 +7921,7 @@ run_notes() {
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes body first verified insertion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
 
   if (( notes_requires_undo == 1 )); then
     press_and_wait_for_accepted_insertion_undo "com.apple.Notes" "Notes body"
@@ -7932,7 +7932,6 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_second_fragment"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
-  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
   assert_frontmost_app "Notes" "Notes body"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
@@ -7942,6 +7941,7 @@ run_notes() {
     "key=$full_accept_key" \
     "action=acceptAllVisible" \
     "handled=true"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
 
   sleep 1
   local manual_check_args=("$manual_app" --check)
