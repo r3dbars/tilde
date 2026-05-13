@@ -183,12 +183,15 @@ other_proof_process_lines() {
       pgid = $3
       command = $0
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasProofScript = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
-        index(command, "script/build_and_run.sh") > 0
+        index(command, "script/build_and_run.sh") > 0 ||
+        index(command, "script/beta_readiness.sh") > 0 ||
+        index(command, "script/check_score_targets.sh") > 0 ||
+        index(command, "script/check_controls_diagnostics_readiness.sh") > 0
     }
     pid != self &&
       (selfPGID == "" || pgid != selfPGID) &&
@@ -255,9 +258,14 @@ echo "AUTOCOMPLETE_LAB_TRACE_START_LINE=$trace_start_line"
 echo "AUTOCOMPLETE_LAB_TRACE_END_LINE=$trace_end_line"
 
 if [[ "$TARGET_APP" == "textedit-default-model-latency" ]]; then
-  "$DEFAULT_MODEL_REPORT_SCRIPT" \
-    --log "$LOG_PATH" \
-    --default-model-proof
+  env \
+    AUTOCOMPLETE_LAB_LOG_START_LINE="$diagnostics_start_line" \
+    AUTOCOMPLETE_LAB_LOG_END_LINE="$diagnostics_end_line" \
+    "$DEFAULT_MODEL_REPORT_SCRIPT" \
+      --log "$LOG_PATH" \
+      --default-model-proof \
+      --require-sample-app com.apple.TextEdit \
+      --require-proof-scenario textedit-default-model-latency
 else
   env \
     AUTOCOMPLETE_LAB_LOG_START_LINE="$diagnostics_start_line" \

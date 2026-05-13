@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import re
 import statistics
 from pathlib import Path
@@ -20,6 +21,9 @@ TIMING_RE = re.compile(
 )
 PRESENTED_RE = re.compile(
     r"^(?P<timestamp>\S+) suggestion-presented (?P<fields>.*)$"
+)
+PROOF_MODE_RE = re.compile(
+    r"^(?P<timestamp>\S+) app-proof-mode-started (?P<fields>.*)$"
 )
 
 
@@ -64,13 +68,24 @@ def int_field(fields, key):
 def parse_launches(lines):
     launches = []
     current = None
+    pending_proof_app = None
+    pending_proof_scenario = None
 
     for line in lines:
+        proof_mode = PROOF_MODE_RE.search(line)
+        if proof_mode:
+            fields = proof_mode.group("fields")
+            pending_proof_app = field_value(fields, "app")
+            pending_proof_scenario = field_value(fields, "scenario")
+            continue
+
         bootstrap = BOOTSTRAP_RE.search(line)
         if bootstrap:
             current = {
                 "timestamp": bootstrap.group("timestamp"),
                 "asset": bootstrap.group("asset"),
+                "proofApp": pending_proof_app,
+                "proofScenario": pending_proof_scenario,
                 "timings": [],
                 "presented": [],
             }
@@ -92,6 +107,7 @@ def parse_launches(lines):
             current["timings"].append(
                 {
                     "timestamp": timing.group("timestamp"),
+                    "app": field_value(fields, "app"),
                     "mode": mode,
                     "first": int_field(fields, "firstChunkMilliseconds"),
                     "generation": generation,
@@ -115,6 +131,7 @@ def parse_launches(lines):
             current["presented"].append(
                 {
                     "timestamp": presented.group("timestamp"),
+                    "app": field_value(fields, "app"),
                     "traceID": field_value(fields, "traceID"),
                     "mode": mode,
                     "latency": latency,
@@ -122,6 +139,69 @@ def parse_launches(lines):
             )
 
     return launches
+
+
+def line_slice(path, start_line=0, end_line=None):
+    selected = []
+    with path.open(errors="ignore") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if line_number <= start_line:
+                continue
+            if end_line is not None and line_number > end_line:
+                break
+            selected.append(line.rstrip("\n"))
+    return selected
+
+
+def env_line(name):
+    value = os.environ.get(name)
+    if not value:
+        return 0
+    try:
+        line = int(value)
+    except ValueError:
+        raise SystemExit(f"{name} must be an integer line number, got {value!r}")
+    if line < 0:
+        raise SystemExit(f"{name} must be a non-negative line number, got {value!r}")
+    return line
+
+
+def env_end_line(name):
+    value = os.environ.get(name)
+    if not value:
+        return None
+    try:
+        line = int(value)
+    except ValueError:
+        raise SystemExit(f"{name} must be an integer line number, got {value!r}")
+    if line < 0:
+        raise SystemExit(f"{name} must be a non-negative line number, got {value!r}")
+    return line
+
+
+def validate_end_line(start_line, end_line):
+    if end_line is None:
+        return None
+    if end_line < start_line:
+        raise SystemExit(f"end line {end_line} is before start line {start_line}")
+    return end_line
+
+
+def filter_samples_by_app(launches, required_app):
+    if not required_app:
+        return launches
+
+    filtered = []
+    for launch in launches:
+        launch_copy = dict(launch)
+        launch_copy["timings"] = [
+            item for item in launch["timings"] if item.get("app") == required_app
+        ]
+        launch_copy["presented"] = [
+            item for item in launch["presented"] if item.get("app") == required_app
+        ]
+        filtered.append(launch_copy)
+    return filtered
 
 
 def first_presented_samples(presented):
@@ -138,7 +218,12 @@ def first_presented_samples(presented):
 
 
 def print_launch(launch):
-    print(f"Launch: {launch['timestamp']} asset={launch['asset']}")
+    proof = ""
+    if launch.get("proofScenario"):
+        proof = f" scenario={launch['proofScenario']}"
+    elif launch.get("proofApp"):
+        proof = f" proofApp={launch['proofApp']}"
+    print(f"Launch: {launch['timestamp']} asset={launch['asset']}{proof}")
 
     timings = launch["timings"]
     presented = first_presented_samples(launch["presented"])
@@ -241,6 +326,26 @@ def main():
     parser.add_argument("--latest", action="store_true", help="show only the latest model launch")
     parser.add_argument("--asset", help="show only launches whose asset contains this text")
     parser.add_argument(
+        "--start-line",
+        type=int,
+        default=env_line("AUTOCOMPLETE_LAB_LOG_START_LINE"),
+        help="ignore diagnostics lines at or before this 1-based line number",
+    )
+    parser.add_argument(
+        "--end-line",
+        type=int,
+        default=env_end_line("AUTOCOMPLETE_LAB_LOG_END_LINE"),
+        help="ignore diagnostics lines after this 1-based line number",
+    )
+    parser.add_argument(
+        "--require-sample-app",
+        help="fail unless the selected launch has enough timing and shown samples for this app bundle",
+    )
+    parser.add_argument(
+        "--require-proof-scenario",
+        help="fail unless the selected launch was tagged with this proof scenario",
+    )
+    parser.add_argument(
         "--default-model-proof",
         action="store_true",
         help="prove the latest Qwen3.5 4B default-model launch has enough phrase latency samples under target.",
@@ -281,6 +386,7 @@ def main():
         help="fail unless phrase shown-latency average is at or below this threshold",
     )
     args = parser.parse_args()
+    args.end_line = validate_end_line(max(0, args.start_line), args.end_line)
 
     if args.default_model_proof:
         args.latest = True
@@ -297,14 +403,24 @@ def main():
     if not log_path.exists():
         raise SystemExit(f"diagnostics log missing: {log_path}")
 
-    launches = parse_launches(log_path.read_text(errors="ignore").splitlines())
+    launches = parse_launches(
+        line_slice(log_path, max(0, args.start_line), args.end_line)
+    )
     if args.asset:
         launches = [launch for launch in launches if args.asset in launch["asset"]]
+    if args.require_proof_scenario:
+        launches = [
+            launch
+            for launch in launches
+            if launch.get("proofScenario") == args.require_proof_scenario
+        ]
     if args.latest and launches:
         launches = [launches[-1]]
 
     if not launches:
         raise SystemExit("no matching model launches found")
+
+    launches = filter_samples_by_app(launches, args.require_sample_app)
 
     enforce_minimum(
         "model timing",
