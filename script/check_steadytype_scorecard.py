@@ -84,6 +84,10 @@ PERFECT_SCORE_UNRESOLVED_PATTERNS = (
     ("not complete", re.compile(r"\bnot complete\b|\bbefore\b[^.]*\bcomplete\b")),
 )
 
+ZERO_COUNT_RESOLVED_METRIC_PATTERNS = (
+    re.compile(r"\bstale\s*/\s*late\s+suppression\s*:?\s*n\s*=\s*0\b", re.IGNORECASE),
+)
+
 PERFECT_SCORE_NEXT_PROOF_ACTION = re.compile(
     r"^\s*(?:add|check|close|finish|notarize|produce|record|refresh|recheck|rerun|run|staple|validate|verify)\b"
 )
@@ -270,6 +274,13 @@ def parse_overall(source: str, failures: list[str]) -> int | None:
 
 def compact_snippet(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip())
+
+
+def strip_resolved_zero_count_metrics(value: str) -> str:
+    scrubbed = value
+    for pattern in ZERO_COUNT_RESOLVED_METRIC_PATTERNS:
+        scrubbed = pattern.sub("", scrubbed)
+    return scrubbed
 
 
 def count_claim_key(kind: str, line_number: int, count: int, snippet: str) -> tuple[str, int, int, str]:
@@ -592,6 +603,7 @@ def validate_scorecard(
         evidence = row["evidence"]
         next_proof = row["next proof"]
         combined = " ".join(row.values()).lower()
+        unresolved_text = strip_resolved_zero_count_metrics(combined)
 
         if any(bad in combined for bad in ("tbd", "todo", "vibes", "round up", "green enough")):
             failures.append(f"{raw_area}: scorecard language must stay evidence-based")
@@ -603,12 +615,12 @@ def validate_scorecard(
             failures.append(f"{raw_area}: next proof must name a command or documented manual gate")
 
         for term, pattern, maximum in LOW_SCORE_PATTERNS:
-            if pattern.search(combined) and score > maximum:
+            if pattern.search(unresolved_text) and score > maximum:
                 failures.append(f"{raw_area}: contains {term!r}, so score must stay <= {maximum}/100")
 
         if score == 100:
             unresolved_terms = [
-                term for term, pattern in PERFECT_SCORE_UNRESOLVED_PATTERNS if pattern.search(combined)
+                term for term, pattern in PERFECT_SCORE_UNRESOLVED_PATTERNS if pattern.search(unresolved_text)
             ]
             if PERFECT_SCORE_NEXT_PROOF_ACTION.search(next_proof.lower()):
                 unresolved_terms.append("unfinished next proof")
