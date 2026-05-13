@@ -71,10 +71,12 @@ enum AppModelRuntimeFactory {
             environment: environment,
             allowEnvironmentOverrides: allowEnvironmentOverrides
         )
+        var integrityValidationCache = ModelAssetIntegrityValidationCache()
         let assetState = modelAssetState(
             for: manifest,
             at: modelDirectoryURL,
-            fileManager: fileManager
+            fileManager: fileManager,
+            integrityValidationCache: &integrityValidationCache
         )
         let plan = RuntimeBootstrapPlan(
             preferredAsset: manifest,
@@ -89,7 +91,8 @@ enum AppModelRuntimeFactory {
                 modelManifest: manifest,
                 fileManager: fileManager,
                 usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory,
-                lengthConfiguration: lengthConfiguration
+                lengthConfiguration: lengthConfiguration,
+                integrityValidationCache: integrityValidationCache
             )
         } else {
             runtime = UnavailableModelRuntime(
@@ -145,6 +148,21 @@ enum AppModelRuntimeFactory {
         at modelDirectoryURL: URL,
         fileManager: FileManager
     ) -> LocalModelAssetState {
+        var integrityValidationCache = ModelAssetIntegrityValidationCache()
+        return modelAssetState(
+            for: manifest,
+            at: modelDirectoryURL,
+            fileManager: fileManager,
+            integrityValidationCache: &integrityValidationCache
+        )
+    }
+
+    static func modelAssetState(
+        for manifest: LocalModelAssetManifest,
+        at modelDirectoryURL: URL,
+        fileManager: FileManager,
+        integrityValidationCache: inout ModelAssetIntegrityValidationCache
+    ) -> LocalModelAssetState {
         let path = modelDirectoryURL.path
         if let sourceRevisionError = manifest.source?.immutableRevisionError {
             return .invalid(path: path, reason: sourceRevisionError)
@@ -181,7 +199,7 @@ enum AppModelRuntimeFactory {
             return structureState
         }
 
-        if let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+        if let integrityError = integrityValidationCache.validate(
             manifest: manifest,
             modelDirectoryURL: modelDirectoryURL,
             fileManager: fileManager

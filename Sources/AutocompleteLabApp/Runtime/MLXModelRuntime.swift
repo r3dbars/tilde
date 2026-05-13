@@ -18,18 +18,43 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
 
     private var storedState: LocalRuntimeState
+    private var integrityValidationCache: ModelAssetIntegrityValidationCache
     private var container: ModelContainer?
     private var staticPromptCache = RuntimeStaticPromptCache()
     private var generation = 0
     private var warmTaskID = 0
     private var warmTask: (id: Int, task: Task<Void, Error>)?
 
-    public init(
+    public convenience init(
         modelDirectoryURL: URL,
         modelManifest: LocalModelAssetManifest? = nil,
         fileManager: FileManager = .default,
         usesVisionLanguageFactory: Bool = false,
         lengthConfiguration: CompletionLengthConfiguration = .default,
+        promptBuilder: CompletionPromptBuilder? = nil,
+        cleaner: CompletionOutputCleaner? = nil,
+        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
+    ) {
+        self.init(
+            modelDirectoryURL: modelDirectoryURL,
+            modelManifest: modelManifest,
+            fileManager: fileManager,
+            usesVisionLanguageFactory: usesVisionLanguageFactory,
+            lengthConfiguration: lengthConfiguration,
+            integrityValidationCache: ModelAssetIntegrityValidationCache(),
+            promptBuilder: promptBuilder,
+            cleaner: cleaner,
+            candidateRanker: candidateRanker
+        )
+    }
+
+    init(
+        modelDirectoryURL: URL,
+        modelManifest: LocalModelAssetManifest? = nil,
+        fileManager: FileManager = .default,
+        usesVisionLanguageFactory: Bool = false,
+        lengthConfiguration: CompletionLengthConfiguration = .default,
+        integrityValidationCache: ModelAssetIntegrityValidationCache,
         promptBuilder: CompletionPromptBuilder? = nil,
         cleaner: CompletionOutputCleaner? = nil,
         candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
@@ -42,6 +67,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.candidateRanker = candidateRanker
+        self.integrityValidationCache = integrityValidationCache
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
     }
 
@@ -76,7 +102,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func performWarm() async throws {
         let startedAt = Date()
-        var integrityValidationCache = ModelAssetIntegrityValidationCache()
+        var integrityValidationCache = stateQueue.sync {
+            self.integrityValidationCache
+        }
+        defer {
+            storeIntegrityValidationCache(integrityValidationCache)
+        }
         try verifyModelAssetIntegrity(startedAt: startedAt, cache: &integrityValidationCache)
         var didReuseLoadedContainer = false
         let warmGeneration = stateQueue.sync {
@@ -475,6 +506,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             if warmTask?.id == id {
                 warmTask = nil
             }
+        }
+    }
+
+    private func storeIntegrityValidationCache(_ cache: ModelAssetIntegrityValidationCache) {
+        stateQueue.sync {
+            integrityValidationCache = cache
         }
     }
 
