@@ -781,13 +781,13 @@ full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]
 full_branch = full_branch[:full_branch.index('else')]
 required = [
     'wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"',
-    'settle_obsidian_focus_for_smoke "Obsidian long-note"',
+    'assert_frontmost_app "Obsidian" "Obsidian long-note"',
     'press_accept_all_shortcut',
 ]
 positions = [full_branch.find(text) for text in required]
 if any(position < 0 for position in positions) or positions != sorted(positions):
     raise SystemExit(
-        "real app smoke self-test expected Obsidian long-note proof to capture the second visual frame and settle focus before full accept"
+        "real app smoke self-test expected Obsidian long-note proof to capture the second visual frame and preserve editor focus before full accept"
     )
 
 normal_branch = source[source.index('else', source.index('wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified"')):]
