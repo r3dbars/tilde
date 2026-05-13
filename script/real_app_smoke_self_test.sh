@@ -71,6 +71,11 @@ if "wait_for_log_fields_optional \"$seed_start\"" not in block:
     raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
 if "dismiss_textedit_smoke_suggestion" in block or "key code 53" in block:
     raise SystemExit("model-latency proof must not press Escape after seeding context")
+runtime_ready = block.index('"TextEdit model latency runtime readiness"')
+sample_window = block.index('start_line="$(line_count "$LOG_PATH")"', runtime_ready)
+post_runtime_block = block[runtime_ready:sample_window]
+if "focus_textedit_smoke_editor" not in post_runtime_block or "click_textedit_smoke_editor" not in post_runtime_block:
+    raise SystemExit("model-latency proof must refocus TextEdit after build/runtime warmup before sampling")
 trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"')
 timing = block.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"', trigger)
 if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigger:timing]:
