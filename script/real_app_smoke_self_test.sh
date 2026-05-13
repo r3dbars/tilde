@@ -95,6 +95,7 @@ fi
 if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'run_osascript_with_timeout 4 "TextEdit AppleScript open"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_NAME_PROBE_TIMEOUT_SECONDS:-2}" "TextEdit document-name probe"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_LIST_TIMEOUT_SECONDS:-2}" "TextEdit document-list diagnostic"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout 2 "frontmost app probe"' script/real_app_smoke.sh >/dev/null ||
@@ -126,6 +127,12 @@ for name in ("textedit_document_name_exists", "describe_open_textedit_documents"
     block = function_body(name)
     if "run_osascript_with_timeout" not in block:
         raise SystemExit(f"{name} must use bounded AppleScript")
+
+run_textedit = function_body("run_textedit")
+fallback = run_textedit.index("export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1")
+open_document = run_textedit.index('open_textedit_smoke_document "$textedit_file" "$textedit_window_title"')
+if fallback > open_document:
+    raise SystemExit("TextEdit smoke must enable single-window fallback before opening/focusing the proof document")
 PY
 
 if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then

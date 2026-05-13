@@ -504,6 +504,7 @@ create_packet() {
   ./script/check_model_asset.py
   ./script/validate_beta_issue_template.sh --quiet
   check_primary_artifact_app
+  check_secondary_archive_app
   mkdir -p "$PACKET_DIR"
   mkdir -p "$TESTER_DOCS_DIR"
 
