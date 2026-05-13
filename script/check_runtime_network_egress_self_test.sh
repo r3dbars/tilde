@@ -11,6 +11,11 @@ NO_EGRESS="$TMP_DIR/no-egress.lsof"
 REMOTE_EGRESS="$TMP_DIR/remote-egress.lsof"
 MODEL_SETUP="$TMP_DIR/model-setup.lsof"
 MODEL_SETUP_UNEXPECTED="$TMP_DIR/model-setup-unexpected.lsof"
+FRESH_PROOF="$TMP_DIR/fresh-proof.json"
+STALE_PROOF="$TMP_DIR/stale-proof.json"
+MODEL_PHASE_PROOF="$TMP_DIR/model-phase-proof.json"
+LATEST_LAUNCH_LOG="$TMP_DIR/latest-launch.log"
+HASHED_LAUNCH_LOG="$TMP_DIR/hashed-launch.log"
 
 cat >"$NO_EGRESS" <<'EOF'
 COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
@@ -78,6 +83,169 @@ fi
 if ! grep -F '"command_summary": "String(' "$TMP_DIR/no-egress.json" >/dev/null; then
   echo "runtime network self-test expected command line to be summarized in json" >&2
   cat "$TMP_DIR/no-egress.json" >&2
+  exit 1
+fi
+
+./script/check_runtime_network_egress.py \
+  --validate-proof "$TMP_DIR/no-egress.json" \
+  --max-proof-age-seconds 315360000 \
+  --min-samples 1 \
+  >"$TMP_DIR/validate-current.out"
+
+if ! grep -F "Runtime network egress proof validation: PASS" "$TMP_DIR/validate-current.out" >/dev/null; then
+  echo "runtime network self-test expected generated proof validation to pass" >&2
+  cat "$TMP_DIR/validate-current.out" >&2
+  exit 1
+fi
+
+./script/check_runtime_network_egress.py \
+  --validate-proof "$TMP_DIR/no-egress.md" \
+  --max-proof-age-seconds 315360000 \
+  --min-samples 1 \
+  >"$TMP_DIR/validate-current-markdown.out"
+
+if ! grep -F "Runtime network egress proof validation: PASS" "$TMP_DIR/validate-current-markdown.out" >/dev/null; then
+  echo "runtime network self-test expected generated markdown proof validation to pass" >&2
+  cat "$TMP_DIR/validate-current-markdown.out" >&2
+  exit 1
+fi
+
+cat >"$FRESH_PROOF" <<'JSON'
+{
+  "generated_at": "2026-05-13T05:05:00+00:00",
+  "phase": "autocomplete",
+  "result": "pass",
+  "samples": 30,
+  "unexpected_remote_endpoint_count": 0,
+  "processes": [
+    {
+      "executable_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}
+JSON
+
+cat >"$STALE_PROOF" <<'JSON'
+{
+  "generated_at": "2026-05-11T05:05:00+00:00",
+  "phase": "autocomplete",
+  "result": "pass",
+  "samples": 30,
+  "unexpected_remote_endpoint_count": 0
+}
+JSON
+
+cat >"$MODEL_PHASE_PROOF" <<'JSON'
+{
+  "generated_at": "2026-05-13T05:05:00+00:00",
+  "phase": "model-setup",
+  "result": "pass",
+  "samples": 30,
+  "unexpected_remote_endpoint_count": 0
+}
+JSON
+
+cat >"$LATEST_LAUNCH_LOG" <<'LOG'
+2026-05-13T05:00:00Z launch accessibility=true
+2026-05-13T05:00:01Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit nativeRuntimeAvailable=true
+LOG
+
+cat >"$HASHED_LAUNCH_LOG" <<'LOG'
+2026-05-13T05:00:00Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-13T05:30:00Z launch accessibility=true executableSHA256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+LOG
+
+./script/check_runtime_network_egress.py \
+  --validate-proof "$FRESH_PROOF" \
+  --diagnostics-log "$LATEST_LAUNCH_LOG" \
+  --require-newer-than-latest-launch \
+  --max-proof-age-seconds 86400 \
+  --now "2026-05-13T06:00:00Z" \
+  --min-samples 10 \
+  >"$TMP_DIR/validate-fresh.out"
+
+if ! grep -F "Autocomplete no-egress proof is fresh enough" "$TMP_DIR/validate-fresh.out" >/dev/null; then
+  echo "runtime network self-test expected fresh no-egress proof validation to pass" >&2
+  cat "$TMP_DIR/validate-fresh.out" >&2
+  exit 1
+fi
+
+if ./script/check_runtime_network_egress.py \
+  --validate-proof "$STALE_PROOF" \
+  --max-proof-age-seconds 86400 \
+  --now "2026-05-13T06:00:00Z" \
+  --min-samples 10 \
+  >"$TMP_DIR/validate-stale.out" 2>"$TMP_DIR/validate-stale.err"; then
+  echo "runtime network self-test expected stale no-egress proof to fail validation" >&2
+  exit 1
+fi
+
+if ! grep -F "no-egress proof is stale" "$TMP_DIR/validate-stale.err" >/dev/null; then
+  echo "runtime network self-test expected stale proof failure output" >&2
+  cat "$TMP_DIR/validate-stale.err" >&2
+  exit 1
+fi
+
+if ./script/check_runtime_network_egress.py \
+  --validate-proof "$STALE_PROOF" \
+  --diagnostics-log "$LATEST_LAUNCH_LOG" \
+  --require-newer-than-latest-launch \
+  --max-proof-age-seconds 315360000 \
+  --now "2026-05-13T06:00:00Z" \
+  --min-samples 10 \
+  >"$TMP_DIR/validate-before-launch.out" 2>"$TMP_DIR/validate-before-launch.err"; then
+  echo "runtime network self-test expected proof before latest launch to fail validation" >&2
+  exit 1
+fi
+
+if ! grep -F "older than latest runtime launch" "$TMP_DIR/validate-before-launch.err" >/dev/null; then
+  echo "runtime network self-test expected latest-launch staleness failure output" >&2
+  cat "$TMP_DIR/validate-before-launch.err" >&2
+  exit 1
+fi
+
+./script/check_runtime_network_egress.py \
+  --validate-proof "$FRESH_PROOF" \
+  --diagnostics-log "$HASHED_LAUNCH_LOG" \
+  --require-newer-than-latest-launch \
+  --expected-executable-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --max-proof-age-seconds 86400 \
+  --now "2026-05-13T06:00:00Z" \
+  --min-samples 10 \
+  >"$TMP_DIR/validate-hashed-launch.out"
+
+if ! grep -F "Runtime network egress proof validation: PASS" "$TMP_DIR/validate-hashed-launch.out" >/dev/null; then
+  echo "runtime network self-test expected later different-executable launches not to stale the proof" >&2
+  cat "$TMP_DIR/validate-hashed-launch.out" >&2
+  exit 1
+fi
+
+if ./script/check_runtime_network_egress.py \
+  --validate-proof "$MODEL_PHASE_PROOF" \
+  --max-proof-age-seconds 86400 \
+  --now "2026-05-13T06:00:00Z" \
+  --min-samples 10 \
+  >"$TMP_DIR/validate-model-phase.out" 2>"$TMP_DIR/validate-model-phase.err"; then
+  echo "runtime network self-test expected model-setup proof to fail autocomplete validation" >&2
+  exit 1
+fi
+
+if ! grep -F "does not prove autocomplete no-egress" "$TMP_DIR/validate-model-phase.err" >/dev/null; then
+  echo "runtime network self-test expected model phase validation failure output" >&2
+  cat "$TMP_DIR/validate-model-phase.err" >&2
+  exit 1
+fi
+
+if ./script/check_runtime_network_egress.py \
+  --validate-proof "$TMP_DIR/missing-proof.json" \
+  >"$TMP_DIR/validate-missing.out" 2>"$TMP_DIR/validate-missing.err"; then
+  echo "runtime network self-test expected missing no-egress proof to fail validation" >&2
+  exit 1
+fi
+
+if ! grep -F "missing no-egress proof" "$TMP_DIR/validate-missing.err" >/dev/null; then
+  echo "runtime network self-test expected missing proof failure output" >&2
+  cat "$TMP_DIR/validate-missing.err" >&2
   exit 1
 fi
 

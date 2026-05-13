@@ -159,8 +159,8 @@ EXPECTED_SURFACES: tuple[ExpectedSurface, ...] = (
     ),
     ExpectedSurface(
         surface="Obsidian long notes",
-        decision="blocked",
-        proof_state="blocked",
+        decision="word-only",
+        proof_state="complete",
         smoke_command="script/real_app_smoke.sh obsidian-long-note --manual-gate",
         profile_bundles=("md.obsidian",),
         required_proof=(
@@ -536,7 +536,7 @@ def status_and_test_checks() -> list[Check]:
         "Browser ChatGPT: blocked",
         "Claude desktop layouts: word-only",
         "Codex layouts: word-only",
-        "Obsidian long notes: blocked",
+        "Obsidian long notes: word-only",
         "Real Monaco and CodeMirror editors: blocked",
     )
     return [

@@ -6,7 +6,7 @@ import json
 import re
 import statistics
 import sys
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -51,6 +51,7 @@ SAFE_FIELD_KEYS = {
     "fallbackReason",
     "firstChunkMilliseconds",
     "generationMilliseconds",
+    "keptVisibleStreamingSuggestion",
     "key",
     "latencyMilliseconds",
     "loadMilliseconds",
@@ -77,6 +78,7 @@ SAFE_FIELD_KEYS = {
     "sessionMilliseconds",
     "state",
     "totalMilliseconds",
+    "triggerReason",
     "traceID",
     "warmMilliseconds",
 }
@@ -207,6 +209,12 @@ def average(values: list[int]) -> int | None:
     return round(statistics.mean(values))
 
 
+def rounded_percent(numerator: int, denominator: int) -> int | None:
+    if denominator <= 0:
+        return None
+    return int((numerator * 100 / denominator) + 0.5)
+
+
 def latest_slice(records: list[Record]) -> list[Record]:
     launch_lines = [
         record.line
@@ -254,6 +262,21 @@ def metric_summary(values: list[int]) -> dict[str, int] | None:
         "p99": percentile(values, 0.99) or 0,
         "max": max(values),
     }
+
+
+def deduped_event_records(records: list[Record], event: str) -> list[Record]:
+    samples: list[Record] = []
+    seen_trace_ids: set[str] = set()
+    for record in records:
+        if record.event != event:
+            continue
+        trace_id = record.fields.get("traceID")
+        if trace_id:
+            if trace_id in seen_trace_ids:
+                continue
+            seen_trace_ids.add(trace_id)
+        samples.append(record)
+    return samples
 
 
 def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dict[str, Any]:
@@ -386,6 +409,8 @@ def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dic
     if runtime_report.rss_mb is not None:
         rss_samples.append(runtime_report.rss_mb)
 
+    request_outcomes = summarize_request_outcomes(current_or_all)
+
     return {
         "records": len(records),
         "latest_bootstrap": bootstraps[-1] if bootstraps else None,
@@ -396,6 +421,7 @@ def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dic
         "candidates": candidates,
         "shown": deduped_shown_latencies(current_or_all),
         "shown_summary": metric_summary(deduped_shown_latencies(current_or_all)),
+        "request_outcomes": request_outcomes,
         "model_first": model_first,
         "model_first_summary": metric_summary(model_first),
         "model_total": model_total,
@@ -424,6 +450,57 @@ def collect_metrics(records: list[Record], runtime_report: RuntimeReport) -> dic
     }
 
 
+def summarize_request_outcomes(records: list[Record]) -> dict[str, Any]:
+    presented = deduped_event_records(records, "suggestion-presented")
+    blocked = deduped_event_records(records, "suggestion-blocked")
+    cancelled = [record for record in records if record.event == "suggestion-request-cancelled"]
+    visible_latencies = [
+        value
+        for record in presented
+        for value in [int_field(record.fields, "latencyMilliseconds")]
+        if value is not None
+    ]
+    blocked_latencies = [
+        value
+        for record in blocked
+        for value in [int_field(record.fields, "latencyMilliseconds")]
+        if value is not None
+    ]
+    blocked_reasons = Counter(record.fields.get("reason", "unknown") for record in blocked)
+    cancellation_reasons = Counter(record.fields.get("reason", "unknown") for record in cancelled)
+    total_outcomes = len(presented) + len(blocked) + len(cancelled)
+    visible_rate = rounded_percent(len(presented), total_outcomes)
+    slow_hidden = sum(
+        count
+        for reason, count in blocked_reasons.items()
+        if "too-slow" in reason.lower()
+    )
+    stale_hidden = sum(
+        count
+        for reason, count in blocked_reasons.items()
+        if "stale" in reason.lower()
+    )
+    kept_streaming = sum(
+        1
+        for record in blocked
+        if bool_field(record.fields, "keptVisibleStreamingSuggestion") is True
+    )
+    return {
+        "visible": len(presented),
+        "blocked": len(blocked),
+        "cancelled": len(cancelled),
+        "visible_rate_percent": visible_rate,
+        "late_visible": sum(1 for value in visible_latencies if value > 750),
+        "slow_hidden": slow_hidden,
+        "stale_hidden": stale_hidden,
+        "kept_streaming_visible": kept_streaming,
+        "visible_latency": metric_summary(visible_latencies),
+        "blocked_latency": metric_summary(blocked_latencies),
+        "top_blocked_reasons": blocked_reasons.most_common(3),
+        "top_cancellation_reasons": cancellation_reasons.most_common(3),
+    }
+
+
 def score_for_count(count: int, full: int, okay: int, weak: int) -> int:
     if count >= full:
         return 100
@@ -442,6 +519,27 @@ def format_metric(summary: dict[str, int] | None, unit: str) -> str:
     if summary is None:
         return "no samples"
     return f"n={summary['n']} avg={summary['avg']}{unit} p95={summary['p95']}{unit} max={summary['max']}{unit}"
+
+
+def format_counter(items: list[tuple[str, int]]) -> str:
+    if not items:
+        return "none"
+    return ", ".join(f"{name}:{count}" for name, count in items)
+
+
+def format_request_outcomes(outcomes: dict[str, Any]) -> str:
+    visible_rate = outcomes["visible_rate_percent"]
+    rate_text = f"{visible_rate}%" if visible_rate is not None else "n/a"
+    return (
+        f"visible={outcomes['visible']} blocked={outcomes['blocked']} "
+        f"cancelled={outcomes['cancelled']} visibleRate={rate_text} "
+        f"lateVisible={outcomes['late_visible']} slowHidden={outcomes['slow_hidden']} "
+        f"staleHidden={outcomes['stale_hidden']} keptStreamingVisible={outcomes['kept_streaming_visible']}; "
+        f"visibleLatency {format_metric(outcomes['visible_latency'], 'ms')}; "
+        f"blockedLatency {format_metric(outcomes['blocked_latency'], 'ms')}; "
+        f"topBlocked={format_counter(outcomes['top_blocked_reasons'])}; "
+        f"topCancelled={format_counter(outcomes['top_cancellation_reasons'])}"
+    )
 
 
 def score_runtime(metrics: dict[str, Any], egress: EgressEvidence) -> ScoreItem:
@@ -568,6 +666,44 @@ def score_typing(metrics: dict[str, Any]) -> ScoreItem:
         reasons.append(f"cancellations={metrics['cancellations']}")
 
     return ScoreItem("Typing responsiveness", 15, clamp(score), "; ".join(reasons))
+
+
+def score_request_outcomes(metrics: dict[str, Any]) -> ScoreItem:
+    outcomes = metrics["request_outcomes"]
+    visible = outcomes["visible"]
+    blocked = outcomes["blocked"]
+    cancelled = outcomes["cancelled"]
+    total = visible + blocked + cancelled
+    if total == 0:
+        return ScoreItem("Request outcome visibility", 10, 45, "no request outcome samples")
+
+    score = 100
+    reasons: list[str] = [format_request_outcomes(outcomes)]
+    visible_rate = outcomes["visible_rate_percent"]
+    visible_latency = outcomes["visible_latency"]
+    blocked_latency = outcomes["blocked_latency"]
+
+    if visible == 0:
+        score = min(score, 45)
+        reasons.append("no visible outcomes")
+    elif visible_rate is not None and total >= 5 and visible_rate < 25:
+        score -= 15
+
+    if outcomes["late_visible"]:
+        score -= min(45, outcomes["late_visible"] * 15)
+    if outcomes["slow_hidden"]:
+        score -= min(25, outcomes["slow_hidden"] * 5)
+    if outcomes["stale_hidden"]:
+        score -= min(15, outcomes["stale_hidden"] * 3)
+    if cancelled > max(3, visible + blocked):
+        score -= 10
+
+    if visible_latency is not None and visible_latency["p95"] > 750:
+        score -= 15
+    if blocked_latency is not None and blocked_latency["p95"] > 1200:
+        score -= 10
+
+    return ScoreItem("Request outcome visibility", 10, clamp(score), "; ".join(reasons))
 
 
 def score_model_timing(metrics: dict[str, Any]) -> ScoreItem:
@@ -817,6 +953,7 @@ def make_scorecard(metrics: dict[str, Any], egress: EgressEvidence) -> list[Scor
         score_runtime(metrics, egress),
         score_sample_depth(metrics),
         score_typing(metrics),
+        score_request_outcomes(metrics),
         score_model_timing(metrics),
         score_event_tap(metrics),
         score_memory_cpu(metrics),
@@ -837,6 +974,7 @@ def print_report(
     line_limit: int,
     privacy: PrivacyStats,
     egress: EgressEvidence,
+    metrics: dict[str, Any],
     items: list[ScoreItem],
     overall: int,
 ) -> None:
@@ -846,6 +984,7 @@ def print_report(
     print(f"Privacy: metadata-only parse; ignored sensitive field values={privacy.ignored_sensitive_fields}")
     print(f"No-egress proof: {egress.status} ({egress.reason})")
     print(f"Overall score: {overall}/100")
+    print(f"Request outcomes: {format_request_outcomes(metrics['request_outcomes'])}")
     print()
     for item in items:
         print(f"{item.name}: {item.score}/100 - {item.reason}")
@@ -857,7 +996,14 @@ def print_report(
     )
 
 
-def write_json(path: Path, items: list[ScoreItem], overall: int, privacy: PrivacyStats, egress: EgressEvidence) -> None:
+def write_json(
+    path: Path,
+    items: list[ScoreItem],
+    overall: int,
+    privacy: PrivacyStats,
+    egress: EgressEvidence,
+    metrics: dict[str, Any],
+) -> None:
     payload = {
         "overall_score": overall,
         "privacy": {
@@ -869,6 +1015,26 @@ def write_json(path: Path, items: list[ScoreItem], overall: int, privacy: Privac
             "status": egress.status,
             "reason": egress.reason,
             "sources": list(egress.sources),
+        },
+        "request_outcomes": {
+            "visible": metrics["request_outcomes"]["visible"],
+            "blocked": metrics["request_outcomes"]["blocked"],
+            "cancelled": metrics["request_outcomes"]["cancelled"],
+            "visible_rate_percent": metrics["request_outcomes"]["visible_rate_percent"],
+            "late_visible": metrics["request_outcomes"]["late_visible"],
+            "slow_hidden": metrics["request_outcomes"]["slow_hidden"],
+            "stale_hidden": metrics["request_outcomes"]["stale_hidden"],
+            "kept_streaming_visible": metrics["request_outcomes"]["kept_streaming_visible"],
+            "visible_latency": metrics["request_outcomes"]["visible_latency"],
+            "blocked_latency": metrics["request_outcomes"]["blocked_latency"],
+            "top_blocked_reasons": [
+                {"reason": reason, "count": count}
+                for reason, count in metrics["request_outcomes"]["top_blocked_reasons"]
+            ],
+            "top_cancellation_reasons": [
+                {"reason": reason, "count": count}
+                for reason, count in metrics["request_outcomes"]["top_cancellation_reasons"]
+            ],
         },
         "scores": [
             {
@@ -942,6 +1108,7 @@ def main() -> int:
         line_limit=max(0, args.line_limit),
         privacy=privacy,
         egress=egress,
+        metrics=metrics,
         items=items,
         overall=overall,
     )
@@ -950,7 +1117,7 @@ def main() -> int:
         json_path = Path(args.json_out).expanduser()
         if not json_path.is_absolute():
             json_path = ROOT_DIR / json_path
-        write_json(json_path, items, overall, privacy, egress)
+        write_json(json_path, items, overall, privacy, egress, metrics)
         print(f"JSON scorecard: {relative_path(json_path)}")
 
     failures: list[str] = []

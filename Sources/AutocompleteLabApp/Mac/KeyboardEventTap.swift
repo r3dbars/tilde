@@ -366,16 +366,14 @@ final class KeyboardEventTap: @unchecked Sendable {
         let summary = latencyStats.record(elapsedMicros)
         latencyLock.unlock()
 
-        if key != .other {
-            DiagnosticsLog.shared.record(
-                "keyboard-event-tap-latency",
-                metadata: [
-                    "key": key.diagnosticName,
-                    "decision": decision,
-                    "durationMicros": String(elapsedMicros)
-                ]
-            )
-        }
+        DiagnosticsLog.shared.record(
+            "keyboard-event-tap-latency",
+            metadata: [
+                "key": key.diagnosticName,
+                "decision": decision,
+                "durationMicros": String(elapsedMicros)
+            ]
+        )
 
         if elapsedMicros >= slowEventTapLatencyMicros {
             DiagnosticsLog.shared.record(

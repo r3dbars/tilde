@@ -99,6 +99,8 @@ Current known gaps:
 
 The row must prove one complete clean-user path: app-owned explanation, user-triggered Accessibility grant, app-owned local runtime readiness, disposable TextEdit practice, one-word `Tab`, `Esc`, Pause, and trace deletion. It must not rely on Ollama, llama.cpp, Python, a separate server, or mock fallback.
 
+Use [onboarding-walkthrough-proof.md](onboarding-walkthrough-proof.md) before editing this table. `./script/check_onboarding_walkthrough_proof.py --print-template` prints the exact row shape with the current commit proof. The placeholder row below is not evidence; the gate should stay red until a real clean-user run adds a `pass` row with diagnostics or trace line references.
+
 | Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |

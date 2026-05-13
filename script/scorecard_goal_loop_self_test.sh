@@ -62,6 +62,7 @@ if ! grep -F "All scorecard goals complete on iteration 1." <<<"$OUTPUT" >/dev/n
 fi
 
 for expected in \
+  "steadytype-scorecard|--live|strict=unset" \
   "score-targets||strict=never" \
   "manual-smoke|--strict|strict=unset" \
   "visual-evidence|--require-all|strict=unset" \

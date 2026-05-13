@@ -63,15 +63,110 @@ struct CodexProofFocusedTargetPolicy {
     }
 }
 
-private struct ObsidianPostAcceptanceSuppression {
-    let textBeforeCursor: String
-    let textAfterCursor: String
-    let expiresAt: Date
+struct SuggestionDebounceSchedule: Equatable, Sendable {
+    let policyDelayMilliseconds: Int
+    let scheduledDelayMilliseconds: Int
 
-    func matches(context: FocusedTextContext, now: Date = Date()) -> Bool {
-        expiresAt > now
-            && context.textBeforeCursor == textBeforeCursor
-            && context.textAfterCursor == textAfterCursor
+    init(policyDelayMilliseconds: Int, renderMode: SuggestionRenderMode) {
+        let policyDelayMilliseconds = max(0, policyDelayMilliseconds)
+        self.policyDelayMilliseconds = policyDelayMilliseconds
+        self.scheduledDelayMilliseconds = renderMode == .inlineAdjacent
+            ? policyDelayMilliseconds
+            : max(policyDelayMilliseconds, 60)
+    }
+
+    var traceMetadata: [String: String] {
+        [
+            "delayMilliseconds": String(policyDelayMilliseconds),
+            "policyDelayMilliseconds": String(policyDelayMilliseconds),
+            "scheduledDelayMilliseconds": String(scheduledDelayMilliseconds)
+        ]
+    }
+}
+
+private final class ProcessResourceDiagnosticsSampler {
+    private var previousCPUSeconds: Double?
+    private var previousWallTime: Date?
+
+    func sample() -> [String: String] {
+        let now = Date()
+        let cpuSeconds = Self.currentCPUSeconds()
+        var metadata: [String: String] = [
+            "lowPowerMode": String(ProcessInfo.processInfo.isLowPowerModeEnabled),
+            "processorCount": String(ProcessInfo.processInfo.activeProcessorCount),
+            "thermalState": ProcessInfo.processInfo.thermalState.diagnosticsValue
+        ]
+
+        if let rssMB = Self.currentResidentMemoryMegabytes() {
+            metadata["rssMB"] = String(rssMB)
+        }
+
+        if let cpuSeconds {
+            if let previousCPUSeconds, let previousWallTime {
+                let elapsed = max(0.001, now.timeIntervalSince(previousWallTime))
+                let cpuPercent = max(0, ((cpuSeconds - previousCPUSeconds) / elapsed) * 100)
+                metadata["cpuPercent"] = String(format: "%.1f", cpuPercent)
+            } else {
+                metadata["cpuPercent"] = "0.0"
+            }
+            previousCPUSeconds = cpuSeconds
+            previousWallTime = now
+        }
+
+        return metadata
+    }
+
+    private static func currentCPUSeconds() -> Double? {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else {
+            return nil
+        }
+
+        return seconds(from: usage.ru_utime) + seconds(from: usage.ru_stime)
+    }
+
+    private static func seconds(from timeValue: timeval) -> Double {
+        Double(timeValue.tv_sec) + (Double(timeValue.tv_usec) / 1_000_000)
+    }
+
+    private static func currentResidentMemoryMegabytes() -> Int? {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<mach_task_basic_info>.stride / MemoryLayout<natural_t>.stride
+        )
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(MACH_TASK_BASIC_INFO),
+                    reboundPointer,
+                    &count
+                )
+            }
+        }
+        guard result == KERN_SUCCESS else {
+            return nil
+        }
+
+        let megabyte = UInt64(1_048_576)
+        return Int((UInt64(info.resident_size) + megabyte - 1) / megabyte)
+    }
+}
+
+private extension ProcessInfo.ThermalState {
+    var diagnosticsValue: String {
+        switch self {
+        case .nominal:
+            "nominal"
+        case .fair:
+            "fair"
+        case .serious:
+            "serious"
+        case .critical:
+            "critical"
+        @unknown default:
+            "unknown"
+        }
     }
 }
 
@@ -249,6 +344,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workspaceFocusObservers: [NSObjectProtocol] = []
     private var screenGeometryObserver: NSObjectProtocol?
     private var pollTimer: Timer?
+    private var resourceDiagnosticsTimer: Timer?
+    private let resourceDiagnosticsSampler = ProcessResourceDiagnosticsSampler()
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
     private var prefixCooldownRetryTask: Task<Void, Never>?
@@ -343,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadAcceptedTextStyleMemory()
         loadProofModeOverrides()
         configureStatusItem()
-        DiagnosticsLog.shared.record("launch", metadata: ["accessibility": String(accessibilityClient.isTrusted)])
+        DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
         if startupOnboardingPolicy.shouldRequestAccessibilityPromptOnLaunch(
             isTrusted: accessibilityClient.isTrusted
@@ -357,6 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startWorkspaceFocusObservers()
         startScreenGeometryObserver()
         startPolling()
+        startResourceDiagnostics()
         DispatchQueue.main.async { [weak self] in
             self?.keepProcessResident()
         }
@@ -377,6 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
         pollTimer?.invalidate()
+        resourceDiagnosticsTimer?.invalidate()
         stopWorkspaceFocusObservers()
         stopScreenGeometryObserver()
         stopKeyboardEventTapNow(reason: "terminate")
@@ -704,6 +803,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         timer.tolerance = focusedTextPollInterval / 2
         pollTimer = timer
+    }
+
+    private func startResourceDiagnostics() {
+        recordResourceDiagnostics(reason: "launch")
+
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.recordResourceDiagnostics(reason: "periodic")
+            }
+        }
+        timer.tolerance = 1
+        RunLoop.main.add(timer, forMode: .common)
+        resourceDiagnosticsTimer = timer
+    }
+
+    private func recordResourceDiagnostics(reason: String) {
+        var metadata = resourceDiagnosticsSampler.sample()
+        metadata["reason"] = reason
+        DiagnosticsLog.shared.record("runtime-resource-sample", metadata: metadata)
     }
 
     private func warmModelRuntime() {
@@ -1103,21 +1221,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 && !profile.isSensitive
                 && isSuggestionEnabled(for: app, profile: profile)
         } ?? false
-        let interval = focusPollingCadencePolicy.interval(
-            isTrustedForAccessibility: accessibilityClient.isTrusted,
-            hasSupportedProfile: hasSupportedProfile,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            hasRecentTextChange: focusPollingCadencePolicy.hasRecentTextChange(
-                lastTextChangeAt: lastFocusedTextChangeAt,
-                now: now
-            )
+        let isTrustedForAccessibility = accessibilityClient.isTrusted
+        let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
+        let hasRecentTextChange = focusPollingCadencePolicy.hasRecentTextChange(
+            lastTextChangeAt: lastFocusedTextChangeAt,
+            now: now
         )
 
-        guard let lastFocusedTextPollAttemptAt else {
-            return true
+        guard focusPollingCadencePolicy.shouldPoll(
+            now: now,
+            lastPollAt: lastFocusedTextPollAttemptAt,
+            isTrustedForAccessibility: isTrustedForAccessibility,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: hasVisibleSuggestion,
+            hasRecentTextChange: hasRecentTextChange
+        ) else {
+            return false
         }
 
-        return now.timeIntervalSince(lastFocusedTextPollAttemptAt) >= interval
+        return true
     }
 
     private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
@@ -5238,6 +5360,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
+        let debounceSchedule = SuggestionDebounceSchedule(
+            policyDelayMilliseconds: delayMilliseconds,
+            renderMode: renderMode
+        )
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -5249,9 +5375,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: request.textBeforeCursor,
             textAfterCursor: request.textAfterCursor,
             metadata: [
-                "renderMode": renderMode.rawValue,
-                "delayMilliseconds": String(delayMilliseconds)
+                "renderMode": renderMode.rawValue
             ]
+            .merging(debounceSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
 
@@ -5259,10 +5385,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
         )
+        let disablesWordCompletionForProof = runtimeProofOptions.disablesWordCompletion(
+            appBundleIdentifier: appBundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        )
         let disablesPhraseContinuationForProof = runtimeProofOptions.disablesPhraseContinuation(
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
         )
+        let disablesFastPhraseFallbackForProof = runtimeProofOptions.disablesFastPhraseFallback(
+            appBundleIdentifier: appBundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        )
+
+        if requestMode == .wordCompletion,
+           disablesWordCompletionForProof {
+            DiagnosticsLog.shared.record(
+                "word-completion-disabled",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "reason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
+                ]
+            )
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentityDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: "proof-word-completion-disabled",
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                reason: "proof-word-completion-disabled",
+                metadata: [
+                    "renderMode": renderMode.rawValue,
+                    "proofDisableReason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
+                ]
+                .merging(requestMetadata) { current, _ in current }
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "proof-word-completion-disabled"
+                ]
+            )
+            setSuggestionDecision("Blocked: proof word completion disabled")
+            hideSuggestion()
+            return
+        }
 
         if requestMode == .wordCompletion,
            !disablesFastWordCompletionForProof {
@@ -5420,7 +5592,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if requestMode == .phraseContinuation {
+        if requestMode == .phraseContinuation,
+           !disablesFastPhraseFallbackForProof {
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
                 behaviorProfileID: request.behaviorProfileID,
@@ -5497,12 +5670,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 return
             }
+        } else if requestMode == .phraseContinuation,
+                  disablesFastPhraseFallbackForProof {
+            DiagnosticsLog.shared.record(
+                "fast-phrase-fallback-disabled",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "reason": RuntimeProofOptions.disableFastPhraseFallbackEnvironmentKey
+                ]
+            )
+            setSuggestionDecision("Queued: proof model phrase continuation")
         }
 
+        recordSuggestionEvent(
+            "suggestion-request-scheduled",
+            context: context,
+            profile: profile,
+            metadata: [
+                "requestMode": request.mode.rawValue,
+                "traceID": String(suggestionID.prefix(8)),
+                "suggestionID": suggestionID
+            ]
+            .merging(debounceSchedule.traceMetadata) { current, _ in current }
+            .merging(requestMetadata) { current, _ in current }
+        )
         debounceTaskSuggestionID = suggestionID
-        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity] in
-            let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 60)
-            try? await Task.sleep(for: .milliseconds(renderDelay))
+        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, debounceSchedule] in
+            try? await Task.sleep(for: .milliseconds(debounceSchedule.scheduledDelayMilliseconds))
             guard !Task.isCancelled else {
                 await MainActor.run {
                     self.clearCompletedSuggestionTask(suggestionID: suggestionID)
@@ -6750,7 +6944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if shouldUseObsidianDirectValueInsertion(profile: profile) {
-            let succeeded = insertObsidianDirectValueText(acceptedText)
+            let succeeded = insertObsidianDirectValueText(acceptedText, profile: profile)
             DiagnosticsLog.shared.record(
                 "insert",
                 metadata: [
@@ -6865,7 +7059,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile.insertionMode == .axValueReplacement
     }
 
-    private func insertObsidianDirectValueText(_ acceptedText: String) -> Bool {
+    private func insertObsidianDirectValueText(
+        _ acceptedText: String,
+        profile: CompatibilityProfile
+    ) -> Bool {
         let bundleIdentifier = "md.obsidian"
         guard !acceptedText.isEmpty,
               let lastTextSnapshot,
@@ -6884,19 +7081,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
-        let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
-        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let acceptedReplacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
-        guard let textArea = Self.axFocusedTextArea(
-            in: appElement,
-            matchingValue: previousText,
-            containing: lastTextSnapshot.textBeforeCursor
-        ) ?? Self.axTextAreaDescendant(
+        let exactTextArea = Self.axTextAreaDescendant(
             in: appElement,
             matchingValue: previousText,
             containing: lastTextSnapshot.textBeforeCursor,
             maxDepth: 32
-        ) else {
+        )
+        let focusedContext = accessibilityClient.focusedTextContext(
+            for: frontmostApp,
+            allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+            options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)
+        )
+        let focusedTextAreaElementIdentifier: Int?
+        if let focusedContext,
+           fieldIdentity(app: frontmostApp, context: focusedContext, profile: profile) == lastTextSnapshot.fieldIdentity,
+           focusedContext.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+           focusedContext.textAfterCursor == lastTextSnapshot.textAfterCursor {
+            focusedTextAreaElementIdentifier = focusedContext.elementIdentifier
+        } else {
+            focusedTextAreaElementIdentifier = nil
+        }
+
+        let matchedTextArea: AXUIElement?
+        let replacementText: String
+        let cursorUTF16Offset: Int
+        let matchSource: String
+        if let exactTextArea {
+            matchedTextArea = exactTextArea
+            replacementText = acceptedReplacementText
+            cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+            matchSource = "exact"
+        } else if let focusedTextAreaElementIdentifier,
+                  let containingTextArea = Self.axTextAreaDescendantContainingText(
+            in: appElement,
+            containing: lastTextSnapshot.textBeforeCursor,
+            elementIdentifier: focusedTextAreaElementIdentifier,
+            maxDepth: 32
+        ),
+                  let currentValue = Self.axStringAttribute(containingTextArea, kAXValueAttribute),
+                  let replacementRange = Self.replacementRange(
+                    in: currentValue,
+                    previousText: previousText,
+                    textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+                    textAfterCursor: lastTextSnapshot.textAfterCursor
+                  ) {
+            matchedTextArea = containingTextArea
+            replacementText = currentValue.replacingCharacters(
+                in: replacementRange,
+                with: acceptedReplacementText
+            )
+            cursorUTF16Offset = currentValue[..<replacementRange.lowerBound].utf16.count
+                + lastTextSnapshot.textBeforeCursor.utf16.count
+                + acceptedText.utf16.count
+            matchSource = "containingText"
+        } else {
             DiagnosticsLog.shared.record(
                 "obsidian-direct-value-insert",
                 metadata: [
@@ -6905,6 +7145,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "reason": "text-area-not-found"
                 ]
             )
+            return false
+        }
+        guard let textArea = matchedTextArea else {
             return false
         }
 
@@ -6982,7 +7225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "acceptedChars": String(acceptedText.count),
                 "currentChars": String(currentText?.count ?? -1),
                 "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
-                "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count)
+                "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count),
+                "matchSource": matchSource
             ]
         )
         return succeeded
@@ -7872,6 +8116,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return nil
+    }
+
+    nonisolated private static func axTextAreaDescendantContainingText(
+        in element: AXUIElement,
+        containing expectedText: String,
+        elementIdentifier: Int,
+        maxDepth: Int
+    ) -> AXUIElement? {
+        guard maxDepth >= 0, !expectedText.isEmpty else {
+            return nil
+        }
+
+        if axRole(element) == "AXTextArea",
+           let value = axStringAttribute(element, kAXValueAttribute),
+           Int(CFHash(element)) == elementIdentifier,
+           value.contains(expectedText) {
+            return element
+        }
+
+        for child in axChildren(element) {
+            if let match = axTextAreaDescendantContainingText(
+                in: child,
+                containing: expectedText,
+                elementIdentifier: elementIdentifier,
+                maxDepth: maxDepth - 1
+            ) {
+                return match
+            }
+        }
+
+        return nil
+    }
+
+    nonisolated private static func replacementRange(
+        in currentValue: String,
+        previousText: String,
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> Range<String.Index>? {
+        if let exactRange = currentValue.range(of: previousText, options: .backwards) {
+            return exactRange
+        }
+
+        guard textAfterCursor.isEmpty else {
+            return nil
+        }
+
+        return currentValue.range(of: textBeforeCursor, options: .backwards)
     }
 
     nonisolated private static func setAXSelectedTextRange(
@@ -8972,6 +9264,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ reason: PrefixFamilyCooldownReason,
         input: PrefixFamilyCooldownInput
     ) -> [String: String] {
+        if proofSuppressesAnnoyanceLearning() {
+            DiagnosticsLog.shared.record(
+                "proof-annoyance-learning-suppressed",
+                metadata: [
+                    "layer": "prefix-family-cooldown",
+                    "reason": reason.rawValue,
+                    "app": input.appBundleIdentifier
+                ]
+            )
+            return [:]
+        }
+
         guard let cooldown = suggestionOrchestrator.recordPrefixFamilyCooldown(reason, input: input) else {
             return [:]
         }
@@ -9073,6 +9377,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         metadata: [String: String] = [:]
     ) {
         guard let context else {
+            return
+        }
+
+        if proofSuppressesAnnoyanceLearning() {
+            DiagnosticsLog.shared.record(
+                "proof-annoyance-learning-suppressed",
+                metadata: [
+                    "layer": "annoyance-signal",
+                    "signal": signal.rawValue,
+                    "reason": reason,
+                    "app": context.appBundleIdentifier
+                ]
+            )
             return
         }
 
@@ -9489,7 +9806,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func reloadModelRuntimeAfterInstall() {
+        let previousRuntime = modelRuntime
         runtimeWarmTask?.cancel()
+        invalidatePendingSuggestionRequest()
+        previousRuntime.cancel()
         modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
         engine = RuntimeBackedCompletionEngine(runtime: modelRuntime)
         suggestionOrchestrator.updateEngine(engine)
@@ -9514,6 +9834,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         refreshRuntimeChrome()
         modelInstallTask.cancel()
+    }
+
+    private func launchDiagnosticsMetadata() -> [String: String] {
+        var metadata = ["accessibility": String(accessibilityClient.isTrusted)]
+        if let executableURL = Bundle.main.executableURL,
+           let executableSHA256 = try? ModelAssetIntegrityReceiptWriter.sha256(executableURL) {
+            metadata["executableSHA256"] = executableSHA256
+        }
+        return metadata
     }
 
     private func performRuntimeAction(_ action: RuntimeReadinessAction) {
@@ -10517,6 +10846,23 @@ private extension AppDelegate {
 
     static var proofModeBundleIDsEnvironmentKey: String {
         "AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS"
+    }
+
+    static var proofSuppressAnnoyanceLearningEnvironmentKey: String {
+        "AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING"
+    }
+
+    static func environmentFlagEnabled(_ value: String?) -> Bool {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+            return false
+        }
+        return ["1", "true", "yes", "on"].contains(normalized)
+    }
+
+    func proofSuppressesAnnoyanceLearning() -> Bool {
+        Self.environmentFlagEnabled(
+            ProcessInfo.processInfo.environment[Self.proofSuppressAnnoyanceLearningEnvironmentKey]
+        )
     }
 
     static var textEditPracticeBundleIdentifier: String {

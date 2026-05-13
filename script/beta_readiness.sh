@@ -32,6 +32,12 @@ configure_readiness_scratch_path() {
     return 0
   fi
 
+  if ! [[ "${AUTOCOMPLETE_LAB_READINESS_ISOLATED_SCRATCH:-}" =~ ^(1|true|yes|on)$ ]]; then
+    unset AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH
+    echo "SwiftPM readiness scratch: default SwiftPM build cache"
+    return 0
+  fi
+
   parent="${TMPDIR:-/tmp}"
   if ! AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH="$(mktemp -d "${parent%/}/autocomplete-lab-beta-readiness.XXXXXX")"; then
     echo "SwiftPM readiness scratch blocked: could not create a unique SwiftPM scratch path under $parent." >&2
@@ -154,6 +160,27 @@ PY
   fi
 
   echo "production mock fallback surfaces disabled"
+}
+
+check_runtime_no_egress_proof() {
+  local proof_path="${AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json}"
+  local diagnostics_log="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+  local app_binary="${AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType}"
+  local max_age_seconds="${AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400}"
+  local min_samples="${AUTOCOMPLETE_LAB_NO_EGRESS_MIN_SAMPLES:-10}"
+  local args=(
+    --validate-proof "$proof_path"
+    --max-proof-age-seconds "$max_age_seconds"
+    --min-samples "$min_samples"
+    --diagnostics-log "$diagnostics_log"
+    --require-newer-than-latest-launch
+  )
+
+  if [[ -n "$app_binary" ]]; then
+    args+=(--app-binary "$app_binary")
+  fi
+
+  ./script/check_runtime_network_egress.py "${args[@]}"
 }
 
 check_current_artifact_checksum() {
@@ -421,6 +448,7 @@ latency_beta_gate() {
     --required-proof-scenario "${AUTOCOMPLETE_LAB_BETA_LATENCY_PROOF_SCENARIO:-textedit-model-latency}" \
     --required-trace-app "${AUTOCOMPLETE_LAB_BETA_LATENCY_TRACE_APP:-com.apple.TextEdit}" \
     --required-request-mode "${AUTOCOMPLETE_LAB_BETA_LATENCY_REQUEST_MODE:-wordCompletion}" \
+    --app-binary "${AUTOCOMPLETE_LAB_BETA_LATENCY_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType}" \
     --require-model-backed-visible \
     --forbid-fast-word-visible
   )"; then
@@ -440,18 +468,37 @@ latency_beta_gate() {
   ./script/latency_benchmark_report.py --beta-gate
 }
 
+print_next_beta_readiness_lanes() {
+  local onboarding_failed="${1:-0}"
+
+  echo
+  echo "== Next proof lanes =="
+  ./script/scorecard_next_proof_lanes.py --limit 5 || echo "Next proof lane listing failed."
+
+  if [[ "$onboarding_failed" == "1" ]]; then
+    echo
+    echo "== Onboarding walkthrough row template =="
+    ./script/check_onboarding_walkthrough_proof.py --print-template || echo "Onboarding walkthrough template unavailable."
+  fi
+}
+
 if [[ "$MODE" == "check-only" ]]; then
   failures=0
+  onboarding_failed=0
 
   run_check "Model asset" ./script/check_model_asset.py || failures=$((failures + 1))
   run_check "Runtime production gate" env \
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
+  run_check "Runtime no-egress proof" check_runtime_no_egress_proof || failures=$((failures + 1))
   run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
-  run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || failures=$((failures + 1))
+  run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || {
+    failures=$((failures + 1))
+    onboarding_failed=1
+  }
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
@@ -487,6 +534,7 @@ if [[ "$MODE" == "check-only" ]]; then
   if ((failures > 0)); then
     echo
     echo "Beta readiness check-only found $failures blocker(s)."
+    print_next_beta_readiness_lanes "$onboarding_failed"
     exit 1
   fi
 
@@ -507,6 +555,11 @@ echo "== Runtime production gate =="
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
   ./script/check_diagnostics_log.sh
+
+echo
+echo "== Runtime no-egress proof =="
+check_runtime_no_egress_proof
+
 echo
 echo "== Controls and diagnostics readiness =="
 ./script/check_controls_diagnostics_readiness.sh

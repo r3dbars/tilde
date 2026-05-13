@@ -61,7 +61,7 @@ run_iteration() {
   local prefix="$TMP_DIR/iteration-$iteration"
   local failed=0
 
-  if ! "$STEADYTYPE_SCORECARD_GATE_SCRIPT" >"$prefix-steadytype-scorecard.txt" 2>&1; then
+  if ! "$STEADYTYPE_SCORECARD_GATE_SCRIPT" --live >"$prefix-steadytype-scorecard.txt" 2>&1; then
     failed=1
   fi
 

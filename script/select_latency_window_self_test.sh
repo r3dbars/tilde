@@ -101,6 +101,38 @@ if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/token-only-model.
   exit 1
 fi
 
+DUPLICATE_MODEL_DIAGNOSTICS_LOG="$TMP_DIR/duplicate-model-diagnostics.log"
+DUPLICATE_MODEL_TRACE_LOG="$TMP_DIR/duplicate-model-traces.jsonl"
+
+cat >"$DUPLICATE_MODEL_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T10:08:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$DUPLICATE_MODEL_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T10:08:01Z","sessionID":"session","suggestionID":"duplicate-model","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T10:08:02Z","sessionID":"session","suggestionID":"duplicate-model","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T10:08:03Z","sessionID":"session","suggestionID":"duplicate-model","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"behaviorProfile":"docs_prose","totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T10:08:04Z","sessionID":"session","suggestionID":"duplicate-model","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$DUPLICATE_MODEL_DIAGNOSTICS_LOG" \
+  --trace-log "$DUPLICATE_MODEL_TRACE_LOG" \
+  --min-first-visible-samples 1 \
+  --min-model-samples 2 \
+  --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
+  --require-model-backed-visible 2>"$TMP_DIR/duplicate-model.err" >/dev/null; then
+  echo "latency window self-test expected duplicate modelResult rows not to inflate model samples" >&2
+  exit 1
+fi
+
+if ! grep -F "firstVisibleSamples=1; modelSamples=1" "$TMP_DIR/duplicate-model.err" >/dev/null; then
+  echo "latency window self-test did not dedupe model samples by suggestion ID" >&2
+  cat "$TMP_DIR/duplicate-model.err" >&2
+  exit 1
+fi
+
 cat >>"$DIAGNOSTICS_LOG" <<'LOG'
 2026-05-12T10:12:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 LOG
@@ -418,6 +450,91 @@ fi
 if ! grep -F "latest runtime launch is newer than the required proof launch" "$TMP_DIR/stale-scenario.err" >/dev/null; then
   echo "latency window self-test did not reject stale proof after a newer runtime launch" >&2
   cat "$TMP_DIR/stale-scenario.err" >&2
+  exit 1
+fi
+
+HASH_SCENARIO_DIAGNOSTICS_LOG="$TMP_DIR/hash-scenario-diagnostics.log"
+HASH_SCENARIO_TRACE_LOG="$TMP_DIR/hash-scenario-traces.jsonl"
+
+cat >"$HASH_SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T14:20:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T14:20:01Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-12T14:20:02Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T14:20:10Z app-proof-mode-ended app=com.apple.TextEdit reason=complete
+2026-05-12T14:21:00Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-12T14:21:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$HASH_SCENARIO_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T14:20:03Z","sessionID":"session","suggestionID":"hash-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T14:20:04Z","sessionID":"session","suggestionID":"hash-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T14:20:05Z","sessionID":"session","suggestionID":"hash-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T14:20:06Z","sessionID":"session","suggestionID":"hash-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+HASH_WINDOW="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$HASH_SCENARIO_DIAGNOSTICS_LOG" \
+    --trace-log "$HASH_SCENARIO_TRACE_LOG" \
+    --min-first-visible-samples 2 \
+    --min-model-samples 2 \
+    --required-proof-app com.apple.TextEdit \
+    --required-proof-scenario textedit-model-latency \
+    --required-trace-app com.apple.TextEdit \
+    --required-request-mode wordCompletion \
+    --require-model-backed-visible \
+    --expected-executable-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    2>"$TMP_DIR/hash-scenario.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=2" <<<"$HASH_WINDOW" >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_LOG_END_LINE=5" <<<"$HASH_WINDOW" >/dev/null ||
+   ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/hash-scenario.err" >/dev/null; then
+  echo "latency window self-test did not keep same-executable later launches from staling proof" >&2
+  cat "$TMP_DIR/hash-scenario.err" >&2
+  echo "$HASH_WINDOW" >&2
+  exit 1
+fi
+
+PROOF_LEAK_DIAGNOSTICS_LOG="$TMP_DIR/proof-leak-diagnostics.log"
+PROOF_LEAK_TRACE_LOG="$TMP_DIR/proof-leak-traces.jsonl"
+
+cat >"$PROOF_LEAK_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T14:30:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T14:30:01Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-12T14:30:02Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T14:31:00Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-12T14:31:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$PROOF_LEAK_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T14:30:03Z","sessionID":"session","suggestionID":"leak-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T14:30:04Z","sessionID":"session","suggestionID":"leak-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T14:30:05Z","sessionID":"session","suggestionID":"leak-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T14:30:06Z","sessionID":"session","suggestionID":"leak-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+PROOF_LEAK_WINDOW="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$PROOF_LEAK_DIAGNOSTICS_LOG" \
+    --trace-log "$PROOF_LEAK_TRACE_LOG" \
+    --min-first-visible-samples 2 \
+    --min-model-samples 2 \
+    --required-proof-app com.apple.TextEdit \
+    --required-proof-scenario textedit-model-latency \
+    --required-trace-app com.apple.TextEdit \
+    --required-request-mode wordCompletion \
+    --require-model-backed-visible \
+    --expected-executable-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    2>"$TMP_DIR/proof-leak.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=2" <<<"$PROOF_LEAK_WINDOW" >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_LOG_END_LINE=4" <<<"$PROOF_LEAK_WINDOW" >/dev/null ||
+   ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/proof-leak.err" >/dev/null; then
+  echo "latency window self-test let proof metadata leak into a later same-executable idle launch" >&2
+  cat "$TMP_DIR/proof-leak.err" >&2
+  echo "$PROOF_LEAK_WINDOW" >&2
   exit 1
 fi
 

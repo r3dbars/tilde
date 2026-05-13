@@ -139,8 +139,8 @@ EXPECTED_GRADUATION_DECISIONS = {
         },
     },
     "Obsidian long notes": {
-        "decision": "blocked",
-        "proofState": "blocked",
+        "decision": "word-only",
+        "proofState": "complete",
         "smokeCommand": "script/real_app_smoke.sh obsidian-long-note --manual-gate",
         "requiredProof": {
             "correct scrolled CodeMirror caret source",
