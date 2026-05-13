@@ -52,7 +52,6 @@ fi
 
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
@@ -162,12 +161,11 @@ if "nudge_textedit_frontmost" not in wait_for_open:
 
 run_textedit = function_body("run_textedit")
 fallback = run_textedit.index("export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1")
-skip_system_events = run_textedit.index("export AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1")
 open_document = run_textedit.index('open_textedit_smoke_document "$textedit_file" "$textedit_window_title"')
 if fallback > open_document:
     raise SystemExit("TextEdit smoke must enable single-window fallback before opening/focusing the proof document")
-if skip_system_events > fallback:
-    raise SystemExit("TextEdit smoke must disable System Events process activation before focus retries")
+if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in run_textedit:
+    raise SystemExit("TextEdit smoke must allow bounded System Events activation for focus recovery")
 
 model_latency = function_body("run_textedit_model_latency")
 if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in model_latency:
