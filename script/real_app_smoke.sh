@@ -706,9 +706,12 @@ other_smoke_process_lines() {
       pgid = $3
       command = $0
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/real_app_smoke\.sh([[:space:]]|$)/
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
-      hasSmokeScript = index(command, "script/real_app_smoke.sh") > 0
+      hasSmokeScript = index(command, "script/real_app_smoke.sh") > 0 ||
+        index(command, "script/fresh_latency_proof.sh") > 0 ||
+        index(command, "script/smoke_test.sh") > 0 ||
+        index(command, "script/build_and_run.sh") > 0
       if (pid == self) next
       if (selfPGID != "" && pgid == selfPGID) next
       if (directScript || (shellWrapper && hasSmokeScript)) {
@@ -1037,7 +1040,7 @@ guard CommandLine.arguments.count == 2,
     exit(1)
 }
 
-app.activate(options: [.activateAllWindows])
+app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
 SWIFT
 
   if [[ "${AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION:-0}" =~ ^(1|true|yes|on)$ ]]; then
@@ -3634,7 +3637,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
     }() ? windows[0] : nil)
 
     if let window = targetWindow {
-        app.activate(options: [.activateAllWindows])
+        app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         let deadline = Date().addingTimeInterval(2.0)
         while Date() <= deadline {
@@ -3764,7 +3767,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
               let source = CGEventSource(stateID: .hidSystemState) else {
             exit(1)
         }
-        app.activate(options: [.activateAllWindows])
+        app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         Thread.sleep(forTimeInterval: 0.2)
 
@@ -7479,7 +7482,7 @@ wait_for_current_autocomplete_lab_process() {
 
 refresh_build_archive_proof() {
   local app_bundle="dist/SteadyType.app"
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip}"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip}"
   local archive_dir archive_name archive_abs
 
   [[ -d "$app_bundle" ]] || return 0
@@ -7487,7 +7490,15 @@ refresh_build_archive_proof() {
   archive_dir="$(dirname "$archive_path")"
   archive_name="$(basename "$archive_path")"
   mkdir -p "$archive_dir"
-  archive_abs="$(cd "$archive_dir" && pwd)/$archive_name"
+  archive_abs="$(cd "$archive_dir" && pwd -P)/$archive_name"
+
+  local release_archive_abs
+  release_archive_abs="$(cd "$ROOT_DIR/dist" && pwd -P)/SteadyType.zip"
+  if [[ "$archive_abs" == "$release_archive_abs" ]]; then
+    echo "Refusing to write smoke proof archive over release artifact: $archive_path" >&2
+    echo "Use ./script/package_release.sh archive or --notarize to refresh dist/SteadyType.zip." >&2
+    exit 1
+  fi
 
   rm -f "$archive_abs"
   (cd dist && ditto -c -k --keepParent "SteadyType.app" "$archive_abs")

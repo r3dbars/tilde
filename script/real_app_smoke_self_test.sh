@@ -132,6 +132,8 @@ for name, block in textedit_focus_blocks.items():
         raise SystemExit(f"{name} must not run the TextEdit document-name AppleScript probe on the focus/click hot path")
     if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
         raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
+    if "activateIgnoringOtherApps" not in block:
+        raise SystemExit(f"{name} must force TextEdit foreground activation for live key-event proof")
     if "print(app.processIdentifier)" not in block:
         raise SystemExit(f"{name} must return the TextEdit pid, not the currently frontmost app pid")
     if "allowSingleWindowFallback && windows.count == 1 ? windows[0]" in block:
@@ -146,6 +148,13 @@ if 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' not in frontmost_block or 
     raise SystemExit("TextEdit frontmost proof must honor the single-window fallback")
 if 'title.hasPrefix("textedit-model-latency-")' not in frontmost_block:
     raise SystemExit("TextEdit frontmost fallback must be limited to disposable smoke/proof windows")
+
+activate_process_id_block = source[
+    source.index("activate_process_id()"):
+    source.index("activate_process_id_osascript()", source.index("activate_process_id()"))
+]
+if "activateIgnoringOtherApps" not in activate_process_id_block:
+    raise SystemExit("activate_process_id must force foreground activation for live proof focus recovery")
 
 for name in ("textedit_document_name_exists", "describe_open_textedit_documents", "assert_textedit_frontmost_window", "try_wait_for_frontmost_app"):
     block = function_body(name)
@@ -192,6 +201,13 @@ if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh
    ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency proof to remove native completion suffixes before timing" >&2
+  exit 1
+fi
+
+if ! grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Refusing to write smoke proof archive over release artifact' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof archives to stay separate from release dist/SteadyType.zip" >&2
   exit 1
 fi
 
@@ -703,6 +719,24 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP
 fi
 if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/process-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the concurrent process scan" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/smoke_test.sh\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/full-smoke-process-fail.txt"; then
+  echo "real app smoke self-test expected full smoke test process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/full-smoke-process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the full smoke test process scan" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/build_and_run.sh --verify\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/build-run-process-fail.txt"; then
+  echo "real app smoke self-test expected build/run process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/build-run-process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the build/run process scan" >&2
   exit 1
 fi
 

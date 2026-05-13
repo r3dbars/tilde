@@ -154,10 +154,16 @@ other_proof_process_lines() {
       pgid = $3
       command = $0
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
+      hasProofScript = index(command, "script/real_app_smoke.sh") > 0 ||
+        index(command, "script/fresh_latency_proof.sh") > 0 ||
+        index(command, "script/smoke_test.sh") > 0 ||
+        index(command, "script/build_and_run.sh") > 0
     }
     pid != self &&
       (selfPGID == "" || pgid != selfPGID) &&
-      command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?bash|\/usr\/bin\/env[[:space:]]+bash)[[:space:]]+(\.\/)?script\/(real_app_smoke|fresh_latency_proof)\.sh([[:space:]]|$)/ {
+      (directScript || (shellWrapper && hasProofScript)) {
         print
       }
   ' <<<"$process_list"

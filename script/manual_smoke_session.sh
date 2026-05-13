@@ -924,7 +924,7 @@ current_build_proof_summary() {
     fi
   fi
 
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip}"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip}"
   if [[ -s "$archive_path" ]]; then
     local archive_sha
     archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"

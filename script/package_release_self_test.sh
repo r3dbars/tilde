@@ -43,6 +43,8 @@ require_contains "$SCRIPT_TEXT" "2>&1 | tee dist/release-proof/spctl-installed-a
 require_contains "$SCRIPT_TEXT" 'record_command "$PROOF_DIR/stapler-staple.txt"'
 require_contains "$SCRIPT_TEXT" "gatekeeper_failed=0"
 require_contains "$SCRIPT_TEXT" 'Gatekeeper assessment failed; saved spctl output in $PROOF_DIR'
+require_contains "$SCRIPT_TEXT" 'local source_app="${1:-$APP_BUNDLE}"'
+require_contains "$SCRIPT_TEXT" 'create_zip "$verify_dir/SteadyType.app"'
 require_contains "$SCRIPT_TEXT" '--output-format json >/dev/null 2>&1'
 reject_contains "$SCRIPT_TEXT" "/tmp/autocomplete-notary-profile-check.txt"
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"
