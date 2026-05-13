@@ -86,8 +86,10 @@ if ! grep -F 'run_textedit_default_model_latency()' script/real_app_smoke.sh >/d
    ! grep -F 'TextEdit default model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"mode=phraseContinuation"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"maxTokens=11"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'visible_sample_count' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'reason=empty-suggestion' script/real_app_smoke.sh >/dev/null ||
    ! grep -F './script/model_latency_report.py --default-model-proof' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected default model latency proof to force phrase model samples" >&2
+  echo "real app smoke self-test expected default model latency proof to force and count visible phrase model samples" >&2
   exit 1
 fi
 
