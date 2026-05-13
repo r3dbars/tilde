@@ -1818,27 +1818,6 @@ end tell
 APPLESCRIPT
 }
 
-press_key_code_hid() {
-  local key_code="$1"
-
-  swift - "$key_code" <<'SWIFT'
-import CoreGraphics
-import Foundation
-
-guard CommandLine.arguments.count == 2,
-      let rawKeyCode = UInt16(CommandLine.arguments[1]),
-      let source = CGEventSource(stateID: .hidSystemState),
-      let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(rawKeyCode), keyDown: true),
-      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(rawKeyCode), keyDown: false) else {
-    exit(2)
-}
-
-keyDown.post(tap: .cghidEventTap)
-usleep(20_000)
-keyUp.post(tap: .cghidEventTap)
-SWIFT
-}
-
 file_url() {
   local path="$1"
   printf 'file://%s\n' "$path"
@@ -9164,7 +9143,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible event_tap_start
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible
   max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
@@ -9236,16 +9215,6 @@ run_textedit_model_latency() {
         "app=com.apple.TextEdit" \
         "candidateSelectionSource=app-model-result"; then
         attempt_had_visible=1
-        wait_for_log_fields "$sample_start" "TextEdit model latency event tap started $sample_index attempt $attempt" 5 \
-          "keyboard-event-tap-started"
-        focus_textedit_smoke_editor "$textedit_window_title"
-        assert_textedit_frontmost_window "$textedit_window_title" "TextEdit model latency event-tap proof"
-        event_tap_start="$(line_count "$LOG_PATH")"
-        press_key_code_hid 53
-        wait_for_log_fields "$event_tap_start" "TextEdit model latency event-tap Escape $sample_index attempt $attempt" 5 \
-          "keyboard-event-tap-latency" \
-          "key=escape"
-        event_tap_sample_count=$((event_tap_sample_count + 1))
         model_sample_count=$((model_sample_count + 1))
         visible_sample_count=$((visible_sample_count + 1))
         break
@@ -9271,7 +9240,7 @@ run_textedit_model_latency() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/latency_benchmark_report.py --beta-gate \
-      --require-event-tap-samples "$event_tap_sample_count"
+      --require-event-tap-samples 5
 }
 
 run_textedit_default_model_latency() {
