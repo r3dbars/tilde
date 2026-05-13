@@ -132,8 +132,6 @@ for name, block in textedit_focus_blocks.items():
         raise SystemExit(f"{name} must not run the TextEdit document-name AppleScript probe on the focus/click hot path")
     if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
         raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
-    if "activateIgnoringOtherApps" not in block:
-        raise SystemExit(f"{name} must force TextEdit foreground activation for live key-event proof")
     if "print(app.processIdentifier)" not in block:
         raise SystemExit(f"{name} must return the TextEdit pid, not the currently frontmost app pid")
     if "allowSingleWindowFallback && windows.count == 1 ? windows[0]" in block:
@@ -148,13 +146,6 @@ if 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' not in frontmost_block or 
     raise SystemExit("TextEdit frontmost proof must honor the single-window fallback")
 if 'title.hasPrefix("textedit-model-latency-")' not in frontmost_block:
     raise SystemExit("TextEdit frontmost fallback must be limited to disposable smoke/proof windows")
-
-activate_process_id_block = source[
-    source.index("activate_process_id()"):
-    source.index("activate_process_id_osascript()", source.index("activate_process_id()"))
-]
-if "activateIgnoringOtherApps" not in activate_process_id_block:
-    raise SystemExit("activate_process_id must force foreground activation for live proof focus recovery")
 
 for name in ("textedit_document_name_exists", "describe_open_textedit_documents", "assert_textedit_frontmost_window", "try_wait_for_frontmost_app"):
     block = function_body(name)
@@ -177,6 +168,16 @@ if fallback > open_document:
     raise SystemExit("TextEdit smoke must enable single-window fallback before opening/focusing the proof document")
 if skip_system_events > fallback:
     raise SystemExit("TextEdit smoke must disable System Events process activation before focus retries")
+
+model_latency = function_body("run_textedit_model_latency")
+if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in model_latency:
+    raise SystemExit("TextEdit model-latency proof must allow bounded System Events activation for focus recovery")
+activate_process_id_block = source[
+    source.index("activate_process_id()"):
+    source.index("activate_process_id_osascript()", source.index("activate_process_id()"))
+]
+if 'activate_process_id_osascript "$target_pid" &' not in activate_process_id_block:
+    raise SystemExit("activate_process_id must keep bounded System Events activation available")
 PY
 
 if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
