@@ -40,6 +40,9 @@ PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
 PROOF_SCENARIO_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=0
 PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED=0
+ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS=0
+ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS=""
 TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
@@ -657,6 +660,14 @@ cleanup_smoke() {
       launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED" == "1" ]]; then
+    if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS" == "1" ]]; then
+      defaults write "$DEFAULTS_DOMAIN" AcceptAllShortcut "$ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      defaults delete "$DEFAULTS_DOMAIN" AcceptAllShortcut >/dev/null 2>&1 || true
     fi
   fi
 
@@ -1451,6 +1462,7 @@ prepare_temporary_app_enablement() {
   launchctl setenv "$PROOF_MODE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
   echo "Temporary app enablement for smoke: $bundle_ids"
   echo "Temporary proof mode for smoke: $bundle_ids"
+  prepare_accept_all_shortcut_default
 
   if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ ]]; then
     if [[ "$UNDO_RECOVERY_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
@@ -1465,6 +1477,34 @@ prepare_temporary_app_enablement() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so temporary enablement/proof mode only applies if the app was launched with this environment." >&2
   fi
+}
+
+prepare_accept_all_shortcut_default() {
+  local configured="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}"
+  case "$configured" in
+    "")
+      return 0
+      ;;
+    backtick|optionTab)
+      ;;
+    *)
+      echo "Unknown accept-all shortcut '$configured'; expected backtick or optionTab." >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED" != "1" ]]; then
+    if ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS="$(defaults read "$DEFAULTS_DOMAIN" AcceptAllShortcut 2>/dev/null)"; then
+      ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS=1
+    else
+      ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS=0
+      ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS=""
+    fi
+    ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED=1
+  fi
+
+  defaults write "$DEFAULTS_DOMAIN" AcceptAllShortcut "$configured" >/dev/null 2>&1 || true
+  echo "Temporary smoke whole-suggestion shortcut: $configured"
 }
 
 prepare_model_latency_runtime_options() {
