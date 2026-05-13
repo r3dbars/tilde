@@ -32,8 +32,15 @@ script/real_app_smoke.sh textedit-model-latency --dry-run >"$TMP_DIR/textedit-mo
 if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
    ! grep -F "allow a cold local model warmup" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
    ! grep -F "require real model-backed suggestions in one launch" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
-   ! grep -F "disposable TextEdit AX target" "$TMP_DIR/textedit-model-latency.txt" >/dev/null; then
+   ! grep -F "stable context into the disposable TextEdit AX target" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
+   ! grep -F "final partial word through live key events" "$TMP_DIR/textedit-model-latency.txt" >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit model latency dry-run plan" >&2
+  exit 1
+fi
+
+if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing" >&2
   exit 1
 fi
 

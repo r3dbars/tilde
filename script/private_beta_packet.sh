@@ -382,6 +382,26 @@ record_proof_command() {
   return 1
 }
 
+attach_dmg_for_inspection() {
+  local dmg_path="$1"
+  local mount_path="$2"
+  local output
+
+  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse 2>&1)"; then
+    [[ -n "$output" ]] && printf '%s\n' "$output"
+    return 0
+  fi
+
+  sleep 1
+  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse 2>&1)"; then
+    [[ -n "$output" ]] && printf '%s\n' "$output"
+    return 0
+  fi
+
+  printf '%s\n' "$output" >&2
+  return 1
+}
+
 check_primary_artifact_app() {
   local verify_dir mount_path app_path
   local proof_dir="$DIST_DIR/release-proof"
@@ -390,9 +410,9 @@ check_primary_artifact_app() {
   app_path="$verify_dir/SteadyType.app"
   mkdir -p "$mount_path"
 
-  if ! hdiutil attach "$DMG_PATH" -mountpoint "$mount_path" -nobrowse -quiet; then
+  if ! attach_dmg_for_inspection "$DMG_PATH" "$mount_path"; then
     rm -rf "$verify_dir"
-    echo "could not mount primary beta artifact: $DMG_PATH" >&2
+    echo "DMG inspection blocked: could not mount primary beta artifact: $DMG_PATH" >&2
     exit 1
   fi
 

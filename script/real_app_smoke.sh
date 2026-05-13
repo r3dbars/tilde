@@ -6575,7 +6575,7 @@ describe_plan() {
       esac
       echo "Safety: the smoke launch temporarily enables TextEdit only for this proof pass."
       if [[ "$TEXTEDIT_VARIANT" == "model-latency" ]]; then
-        echo "Safety: model latency fragments are written only into the disposable TextEdit AX target, then the live app polls and runs the local model."
+        echo "Safety: model latency proof seeds stable context into the disposable TextEdit AX target, then types the final partial word through live key events."
       else
         echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
       fi
@@ -8413,20 +8413,30 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 fragment sample_start
+  local sample_index=0 fragment sample_start stable_context trigger_text
   while IFS= read -r fragment; do
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
+    stable_context="${fragment% *} "
+    trigger_text="${fragment##* }"
+    if [[ -z "$trigger_text" || "$stable_context" == "$fragment " ]]; then
+      echo "TextEdit model latency sample $sample_index does not contain a stable context plus trigger word." >&2
+      exit 1
+    fi
 
     set_textedit_document_text "$textedit_window_title" ""
     wait_for_textedit_document_exact "$textedit_window_title" "" "TextEdit model latency reset $sample_index" 5
     move_textedit_caret_to_document_end "$textedit_window_title"
-
-    sample_start="$(line_count "$LOG_PATH")"
-    if ! insert_textedit_smoke_fragment "$textedit_window_title" "$fragment"; then
-      echo "TextEdit model latency sample $sample_index could not seed the disposable AX target." >&2
+    if ! insert_textedit_smoke_fragment "$textedit_window_title" "$stable_context"; then
+      echo "TextEdit model latency sample $sample_index could not seed the stable AX context." >&2
       exit 1
     fi
+    wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index" 5
+    move_textedit_caret_to_document_end "$textedit_window_title"
+
+    sample_start="$(line_count "$LOG_PATH")"
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
+      type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
     wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
     move_textedit_caret_to_document_end "$textedit_window_title"
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \

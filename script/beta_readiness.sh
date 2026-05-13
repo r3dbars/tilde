@@ -132,6 +132,26 @@ record_release_proof_command() {
   return 1
 }
 
+attach_dmg_for_inspection() {
+  local dmg_path="$1"
+  local mount_path="$2"
+  local output
+
+  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse 2>&1)"; then
+    [[ -n "$output" ]] && printf '%s\n' "$output"
+    return 0
+  fi
+
+  sleep 1
+  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse 2>&1)"; then
+    [[ -n "$output" ]] && printf '%s\n' "$output"
+    return 0
+  fi
+
+  printf '%s\n' "$output" >&2
+  return 1
+}
+
 check_release_dmg_signature() {
   local verify_dir mount_path app_path
 
@@ -145,9 +165,9 @@ check_release_dmg_signature() {
   app_path="$verify_dir/SteadyType.app"
   mkdir -p "$mount_path"
 
-  if ! hdiutil attach "$PRIMARY_ARTIFACT" -mountpoint "$mount_path" -nobrowse -quiet; then
+  if ! attach_dmg_for_inspection "$PRIMARY_ARTIFACT" "$mount_path"; then
     rm -rf "$verify_dir"
-    echo "Developer ID DMG signature blocked: could not mount $PRIMARY_ARTIFACT"
+    echo "DMG inspection blocked: could not mount $PRIMARY_ARTIFACT"
     return 1
   fi
 
@@ -215,7 +235,7 @@ check_notarized_install_proof() {
   app_path="$verify_dir/SteadyType.app"
   mkdir -p "$mount_path"
 
-  if ! hdiutil attach "$PRIMARY_ARTIFACT" -mountpoint "$mount_path" -nobrowse -quiet; then
+  if ! attach_dmg_for_inspection "$PRIMARY_ARTIFACT" "$mount_path"; then
     rm -rf "$verify_dir"
     echo "current DMG install proof failed: could not mount $PRIMARY_ARTIFACT"
     return 1
