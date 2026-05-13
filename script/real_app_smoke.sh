@@ -855,6 +855,27 @@ wait_for_log_fields_optional() {
   return 1
 }
 
+describe_textedit_model_latency_seed_miss() {
+  local seed_start="$1"
+  local window_title="$2"
+  local sample_index="$3"
+  local expected_seed="$4"
+  local current_text frontmost
+
+  current_text="$(textedit_document_text "$window_title")"
+  frontmost="$(run_osascript_with_timeout 1 "frontmost app probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
+
+  echo "TextEdit model latency seed $sample_index did not emit phrase-continuation-disabled before sampling; continuing to the live key trigger." >&2
+  echo "Seed diagnostics: window=$window_title frontmost=${frontmost:-unknown} documentChars=${#current_text} expectedSeedChars=${#expected_seed}" >&2
+  if [[ "$current_text" != "$expected_seed" ]]; then
+    echo "Seed diagnostics: TextEdit document no longer matches the expected stable seed text." >&2
+  fi
+  echo "Recent TextEdit proof logs since seed start:" >&2
+  tail -n +"$((seed_start + 1))" "$LOG_PATH" 2>/dev/null |
+    grep -E "app=com\\.apple\\.TextEdit|workspace-focus-changed|focused-text|suggestion-|phrase-continuation-disabled|runtime|status accessibility" |
+    tail -n 40 >&2 || true
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -8844,10 +8865,13 @@ run_textedit_model_latency() {
     wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index" 5
     move_textedit_caret_to_document_end "$textedit_window_title"
     if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
-      wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed $sample_index" 8 \
+      if wait_for_log_fields_optional "$seed_start" 8 \
         "phrase-continuation-disabled" \
-        "app=com.apple.TextEdit"
-      echo "TextEdit model latency seed settled by disabled phrase continuation $sample_index."
+        "app=com.apple.TextEdit"; then
+        echo "TextEdit model latency seed settled by disabled phrase continuation $sample_index."
+      else
+        describe_textedit_model_latency_seed_miss "$seed_start" "$textedit_window_title" "$sample_index" "$stable_context"
+      fi
     elif wait_for_log_fields_optional "$seed_start" 4 \
       "mlx-completion-timing" \
       "app=com.apple.TextEdit" \
