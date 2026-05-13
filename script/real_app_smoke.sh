@@ -489,6 +489,7 @@ APPLESCRIPT
 }
 
 cleanup_stale_textedit_smoke_windows() {
+  dismiss_textedit_modal_panels
   osascript <<'APPLESCRIPT' >/dev/null 2>&1 &
 on run argv
   tell application "TextEdit"
@@ -506,6 +507,28 @@ APPLESCRIPT
   local osascript_pid="$!"
   wait_for_background_process "$osascript_pid" 4 "stale TextEdit smoke cleanup" >/dev/null 2>&1 || true
   force_quit_textedit_if_only_smoke_windows
+}
+
+dismiss_textedit_modal_panels() {
+  run_osascript_with_timeout 2 "TextEdit modal cleanup" <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "System Events"
+  if exists process "TextEdit" then
+    tell process "TextEdit"
+      repeat with windowRef in windows
+        try
+          set windowName to name of windowRef
+          set windowSubrole to subrole of windowRef
+          if windowName is "Open" or windowSubrole is "AXDialog" then
+            key code 53
+            delay 0.1
+            exit repeat
+          end if
+        end try
+      end repeat
+    end tell
+  end if
+end tell
+APPLESCRIPT
 }
 
 force_quit_textedit_if_only_smoke_windows() {
@@ -4305,11 +4328,13 @@ open_textedit_smoke_document() {
   local file_path="$1"
   local window_title="$2"
 
+  dismiss_textedit_modal_panels
   open -F -a TextEdit "$file_path"
   if wait_for_textedit_document_open "$window_title" 8; then
     return 0
   fi
 
+  dismiss_textedit_modal_panels
   run_osascript_with_timeout 4 "TextEdit AppleScript open" - "$file_path" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 on run argv
   set targetPath to item 1 of argv
@@ -4324,6 +4349,7 @@ APPLESCRIPT
     return 0
   fi
 
+  dismiss_textedit_modal_panels
   open -a TextEdit "$file_path"
   if wait_for_textedit_document_open "$window_title" 8; then
     return 0
@@ -8771,6 +8797,7 @@ run_textedit() {
       set_textedit_appearance dark
       ;;
   esac
+  export AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1
   export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
   textedit_tmp_dir="$(make_tmp_dir)"
