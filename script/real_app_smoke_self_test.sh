@@ -1004,6 +1004,24 @@ if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/build-
   exit 1
 fi
 
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/beta_readiness.sh --check-only\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/beta-check-only-process-fail.txt"; then
+  :
+else
+  if grep -F "Another real app smoke process is already active" "$TMP_DIR/beta-check-only-process-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected beta_readiness --check-only not to block a proof refresh" >&2
+    exit 1
+  fi
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/beta_readiness.sh\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/beta-readiness-process-fail.txt"; then
+  echo "real app smoke self-test expected full beta readiness process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/beta-readiness-process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the full beta readiness process scan" >&2
+  exit 1
+fi
+
 SELF_TEST_PGID="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
 SELF_TEST_PGID="${SELF_TEST_PGID//[[:space:]]/}"
 if [[ -n "$SELF_TEST_PGID" ]]; then
