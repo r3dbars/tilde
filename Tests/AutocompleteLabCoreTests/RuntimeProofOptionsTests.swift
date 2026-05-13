@@ -18,4 +18,22 @@ struct RuntimeProofOptionsTests {
             RuntimeProofOptions.disableFastWordCompletionEnvironmentKey: "0"
         ]).disablesFastWordCompletion)
     }
+
+    @Test("Disables fast word completion only inside active proof scope")
+    func disablesFastWordCompletionOnlyInsideActiveProofScope() {
+        let options = RuntimeProofOptions(disablesFastWordCompletion: true)
+
+        #expect(options.disablesFastWordCompletion(
+            appBundleIdentifier: "com.apple.TextEdit",
+            activeProofBundleIdentifiers: ["com.apple.TextEdit"]
+        ))
+        #expect(!options.disablesFastWordCompletion(
+            appBundleIdentifier: "com.apple.Notes",
+            activeProofBundleIdentifiers: ["com.apple.TextEdit"]
+        ))
+        #expect(!RuntimeProofOptions(disablesFastWordCompletion: false).disablesFastWordCompletion(
+            appBundleIdentifier: "com.apple.TextEdit",
+            activeProofBundleIdentifiers: ["com.apple.TextEdit"]
+        ))
+    }
 }
