@@ -190,6 +190,58 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: terminal)).surface == .browserDeveloperTool)
     }
 
+    @Test("Chrome local fixture tokens do not unlock real hosted services")
+    func localFixtureTokensDoNotUnlockRealHostedServices() throws {
+        let cases: [(BrowserHostedSurface, FocusedElementFingerprint)] = [
+            (
+                .googleDocs,
+                FocusedElementFingerprint(
+                    title: "Autocomplete Lab Chrome smoke local fixture",
+                    windowTitle: "https://docs.google.com/document/d/disposable/edit [ready=1]"
+                )
+            ),
+            (
+                .notion,
+                FocusedElementFingerprint(
+                    title: "SteadyType Chrome smoke local fixture",
+                    windowTitle: "Disposable proof - Notion [ready=1]"
+                )
+            ),
+            (
+                .chatGPT,
+                FocusedElementFingerprint(
+                    title: "Autocomplete Lab Chrome browser-chat smoke local fixture",
+                    windowTitle: "ChatGPT [ready=1]"
+                )
+            ),
+            (
+                .slack,
+                FocusedElementFingerprint(
+                    title: "SteadyType Chrome browser-chat smoke local fixture",
+                    windowTitle: "Transcripted | Slack [ready=1]"
+                )
+            ),
+            (
+                .discord,
+                FocusedElementFingerprint(
+                    title: "SteadyType Chrome browser-chat smoke local fixture",
+                    windowTitle: "Discord [ready=1]"
+                )
+            )
+        ]
+
+        for (expectedSurface, fingerprint) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            let block = try #require(blockedSurface(from: decision))
+            #expect(block.surface == expectedSurface)
+            #expect(block.traceMetadata["localFixtureProofCountsForProduction"] == "false")
+        }
+    }
+
     @Test("Chrome risky browser-hosted fields stay blocked")
     func blocksRiskyBrowserHostedFields() throws {
         let cases: [(BrowserHostedSurface, FocusedElementFingerprint)] = [
@@ -398,6 +450,11 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(metadata["browserSurfaceDecision"] == "blocked")
         #expect(metadata["browserSurfaceReason"] == "unsupported-surface-needs-proof")
         #expect(metadata["browserSurfaceSafetyClass"] == "browser-editor")
+        #expect(
+            metadata["browserSurfaceRequiredProof"]
+                == "exact-disposable-real-service-safe-tab-no-submit-screenshot-insertion-undo"
+        )
+        #expect(metadata["localFixtureProofCountsForProduction"] == "false")
         #expect(!metadata.values.contains(secretTitle))
         #expect(!metadata.values.contains("https://docs.google.com/document/d/private-id/edit"))
     }
@@ -433,6 +490,11 @@ struct BrowserHostedSurfacePolicyTests {
 
         #expect(metadata["browserSurface"] == "slack")
         #expect(metadata["browserSurfaceSafetyClass"] == "browser-chat")
+        #expect(
+            metadata["browserSurfaceRequiredProof"]
+                == "exact-disposable-real-service-one-word-no-submit-screenshot-insertion"
+        )
+        #expect(metadata["localFixtureProofCountsForProduction"] == "false")
         #expect(metadata["promptSafetyMetricSurface"] == "browser-chat")
     }
 

@@ -37,6 +37,9 @@ PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
 PROOF_DISABLE_PHRASE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
 PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=0
 PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+PROOF_DISABLE_FAST_PHRASE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
+PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED=0
+PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS=""
 PROOF_SCENARIO_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=0
 PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
@@ -47,7 +50,7 @@ CODEX_DRAFT_BACKUP_ACTIVE=0
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -65,9 +68,10 @@ prints the surface picker and does not record proof.
 
 TextEdit proof can use textedit-light, textedit-dark, textedit-long-wrap,
 textedit-narrow, textedit-scrolled, textedit-selected-suppression, textedit-undo-one-word,
-textedit-undo-full, textedit-fast-typing, or textedit-model-latency. These are
-still narrow TextEdit lanes, not a generic native-app claim. The TextEdit undo
-lanes automatically use native single-edit Command-Z proof.
+textedit-undo-full, textedit-fast-typing, textedit-model-latency, or
+textedit-default-model-latency. These are still narrow TextEdit lanes, not a
+generic native-app claim. The TextEdit undo lanes automatically use native
+single-edit Command-Z proof.
 
 Obsidian proof must keep obsidian, obsidian-theme, obsidian-pane, and
 obsidian-long-note as separate manual-gated lanes before it can be complete.
@@ -225,6 +229,10 @@ case "$APP" in
   textedit-model-latency)
     APP="textedit"
     TEXTEDIT_VARIANT="model-latency"
+    ;;
+  textedit-default-model-latency)
+    APP="textedit"
+    TEXTEDIT_VARIANT="default-model-latency"
     ;;
   notes-title)
     APP="notes"
@@ -414,6 +422,12 @@ if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_B
   exit 2
 fi
 
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]]; then
+  echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with the fast phrase fallback disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
 if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$APP" != "textedit" && "$APP" != "chrome" ]]; then
   echo "--native-undo-proof is currently automated only for TextEdit and Chrome." >&2
   usage >&2
@@ -496,7 +510,7 @@ on run argv
     repeat with docRef in documents
       try
         set docName to name of docRef
-        if docName starts with "textedit-smoke-" or docName starts with "textedit-model-latency-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
+        if docName starts with "textedit-smoke-" or docName starts with "textedit-model-latency-" or docName starts with "textedit-default-model-latency-" or docName starts with "autocomplete-lab-typing-soak-" or docName starts with "textedit-ax-retention-proof." or docName starts with "textedit-retention-proof." then
           close docRef saving no
         end if
       end try
@@ -540,6 +554,7 @@ import Foundation
 let smokePrefixes = [
     "textedit-smoke-",
     "textedit-model-latency-",
+    "textedit-default-model-latency-",
     "autocomplete-lab-typing-soak-",
     "textedit-ax-retention-proof.",
     "textedit-retention-proof."
@@ -626,6 +641,14 @@ cleanup_smoke() {
       launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 
@@ -1411,6 +1434,28 @@ prepare_model_latency_runtime_options() {
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_default_model_latency_runtime_options() {
+  if [[ "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-default-model-latency"
+  launchctl setenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "textedit-default-model-latency" >/dev/null 2>&1 || true
+  echo "TextEdit default model latency proof: fast phrase fallback disabled so every measured phrase sample must hit the local model path."
+  echo "TextEdit default model latency proof scenario: textedit-default-model-latency"
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so default-model-latency proof mode only applies if the app was launched with this environment." >&2
   fi
 }
 
@@ -3670,6 +3715,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
         return title.hasPrefix("textedit-smoke-") ||
             title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("textedit-default-model-latency-") ||
             title.hasPrefix("autocomplete-lab-typing-soak-") ||
             title.hasPrefix("textedit-ax-retention-proof.") ||
             title.hasPrefix("textedit-retention-proof.")
@@ -3791,6 +3837,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
         return title.hasPrefix("textedit-smoke-") ||
             title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("textedit-default-model-latency-") ||
             title.hasPrefix("autocomplete-lab-typing-soak-") ||
             title.hasPrefix("textedit-ax-retention-proof.") ||
             title.hasPrefix("textedit-retention-proof.")
@@ -3915,6 +3962,7 @@ if let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement
         let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
         guard title.hasPrefix("textedit-smoke-") ||
             title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("textedit-default-model-latency-") ||
             title.hasPrefix("autocomplete-lab-typing-soak-") ||
             title.hasPrefix("textedit-ax-retention-proof.") ||
             title.hasPrefix("textedit-retention-proof.") else {
@@ -4321,6 +4369,7 @@ if titles.count == 1 {
     let title = titles[0]
     if title.hasPrefix("textedit-smoke-") ||
         title.hasPrefix("textedit-model-latency-") ||
+        title.hasPrefix("textedit-default-model-latency-") ||
         title.hasPrefix("autocomplete-lab-typing-soak-") ||
         title.hasPrefix("textedit-ax-retention-proof.") ||
         title.hasPrefix("textedit-retention-proof.") {
@@ -4883,11 +4932,21 @@ textedit_scrolled_prefill() {
 
 textedit_model_latency_fragments() {
   cat <<'EOF'
-The local runtime hardening pass keeps every model checksum verif
-Private beta recovery should explain each local repair step verif
-Offline launch proof needs the embedded model checksum verif
-The app owned runtime should catch corrupt weight checks verif
-The tester facing failure state should keep recovery steps verif
+The local runtime hardening pass keeps every model checksum chec
+Private beta recovery should explain each local repair step fixp
+Offline launch proof needs the embedded model checksum hash
+The app owned runtime should catch corrupt weight checks qchk
+The tester facing failure state should keep recovery steps runb
+EOF
+}
+
+textedit_default_model_latency_fragments() {
+  cat <<'EOF'
+Default model latency proof keeps the local runtime steady
+Private beta recovery notes stay inside the app owned model path
+Offline startup checks the embedded asset before suggestions appear
+The typing loop measures phrase suggestions after stable context
+Runtime proof should prefer quiet complete sentences while typing
 EOF
 }
 
@@ -7190,6 +7249,9 @@ describe_plan() {
         model-latency)
           echo "Plan: build/relaunch AutocompleteLab once, allow a cold local model warmup, type several disposable TextEdit fragments, and require real model-backed suggestions in one launch."
           ;;
+        default-model-latency)
+          echo "Plan: build/relaunch AutocompleteLab once, allow a cold local model warmup, type several disposable TextEdit phrase contexts, and require default phrase model suggestions in one launch."
+          ;;
         undo-one-word)
           echo "Plan: build/relaunch AutocompleteLab with app rollback disabled, prove TextEdit Tab accept, then Command-Z the one-word insertion through native TextEdit undo."
           ;;
@@ -7205,6 +7267,10 @@ describe_plan() {
         echo "Safety: model latency proof seeds stable context into the disposable TextEdit AX target, then types the final partial word through live key events."
         echo "Safety: model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
         echo "Safety: model latency proof tags the runtime launch with scenario textedit-model-latency so generic TextEdit samples cannot satisfy the beta gate."
+      elif [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]]; then
+        echo "Safety: default model latency proof seeds stable context into the disposable TextEdit AX target, then types a trailing space through live key events."
+        echo "Safety: default model latency proof disables fast phrase fallback for that launch so local phrase-continuation model timing is required."
+        echo "Safety: default model latency proof tags the runtime launch with scenario textedit-default-model-latency so generic TextEdit samples cannot satisfy the beta gate."
       else
         echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
       fi
@@ -7363,9 +7429,11 @@ describe_plan() {
 build_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
-      AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
     )
+    if [[ "$TEXTEDIT_VARIANT" != "model-latency" && "$TEXTEDIT_VARIANT" != "default-model-latency" ]]; then
+      build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)
+    fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
   fi
 
@@ -7471,6 +7539,7 @@ launch_steadytype_after_chrome_setup() {
     AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK \
     AUTOCOMPLETE_LAB_PROOF_SCENARIO \
     AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
@@ -8644,6 +8713,11 @@ run_textedit() {
   local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
 
+  if [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]]; then
+    run_textedit_default_model_latency
+    return 0
+  fi
+
   if [[ "$TEXTEDIT_VARIANT" == "model-latency" ]]; then
     run_textedit_model_latency
     return 0
@@ -8927,6 +9001,85 @@ run_textedit_model_latency() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/latency_benchmark_report.py --beta-gate
+}
+
+run_textedit_default_model_latency() {
+  local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line proof_runtime_guard_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
+
+  textedit_tmp_dir="$(make_tmp_dir)"
+  textedit_file="$textedit_tmp_dir/textedit-default-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
+  textedit_window_title="$(basename "$textedit_file")"
+  SMOKE_TEXTEDIT_WINDOW_TITLES+=("$textedit_window_title")
+  : >"$textedit_file"
+  cleanup_stale_textedit_smoke_windows
+  open_textedit_smoke_document "$textedit_file" "$textedit_window_title"
+  sleep 0.8
+  wait_for_textedit_smoke_editor "$textedit_window_title"
+  focus_textedit_smoke_editor "$textedit_window_title"
+  click_textedit_smoke_editor "$textedit_window_title"
+  clear_textedit_document_for_proof "$textedit_window_title" "TextEdit default model latency initial reset"
+  move_textedit_caret_to_document_end "$textedit_window_title"
+
+  prepare_temporary_app_enablement
+  prepare_default_model_latency_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "TextEdit default model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "TextEdit default model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(line_count "$LOG_PATH")"
+
+  focus_textedit_smoke_editor "$textedit_window_title"
+  click_textedit_smoke_editor "$textedit_window_title"
+  clear_textedit_document_for_proof "$textedit_window_title" "TextEdit default model latency ready reset"
+  move_textedit_caret_to_document_end "$textedit_window_title"
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  local sample_index=0 fragment sample_start expected_text
+  while IFS= read -r fragment; do
+    [[ -z "$fragment" ]] && continue
+    sample_index=$((sample_index + 1))
+    expected_text="${fragment} "
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit default model latency seed $sample_index"
+    clear_textedit_document_for_proof "$textedit_window_title" "TextEdit default model latency reset $sample_index"
+    move_textedit_caret_to_document_end "$textedit_window_title"
+    if ! insert_textedit_smoke_fragment "$textedit_window_title" "$fragment"; then
+      echo "TextEdit default model latency sample $sample_index could not seed the stable AX context." >&2
+      exit 1
+    fi
+    wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit default model latency stable context $sample_index" 5
+    move_textedit_caret_to_document_end "$textedit_window_title"
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit default model latency trigger $sample_index"
+    sample_start="$(line_count "$LOG_PATH")"
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
+      type_textedit_smoke_fragment "$textedit_window_title" " "
+    wait_for_textedit_document_exact "$textedit_window_title" "$expected_text" "TextEdit default model latency sample $sample_index" 5
+    wait_for_log_fields "$sample_start" "TextEdit default model latency timing $sample_index" 25 \
+      "mlx-completion-timing" \
+      "app=com.apple.TextEdit" \
+      "mode=phraseContinuation" \
+      "maxTokens=11"
+    wait_for_log_fields "$sample_start" "TextEdit default model latency visible $sample_index" 25 \
+      "suggestion-presented" \
+      "app=com.apple.TextEdit" \
+      "requestMode=phraseContinuation" \
+      "candidateSelectionSource=app-model-result"
+    sleep 0.4
+  done < <(textedit_default_model_latency_fragments)
+
+  if ((sample_index < 5)); then
+    echo "TextEdit default model latency proof expected at least 5 samples, got $sample_index." >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/model_latency_report.py --default-model-proof
 }
 
 run_chrome_fixture() {

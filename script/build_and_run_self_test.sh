@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SCRIPT_TEXT="$(sed -n '1,520p' script/build_and_run.sh)"
+SCRIPT_TEXT="$(sed -n '1,560p' script/build_and_run.sh)"
 
 require_contains() {
   local expected="$1"
@@ -37,6 +37,7 @@ require_contains "unset AUTOCOMPLETE_LAB_MODEL_ROOT"
 require_contains "launchctl unsetenv AUTOCOMPLETE_LAB_MODEL_ROOT"
 require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
 require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
+require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
 require_contains "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 require_contains 'current_pid="$(current_bundle_pid || true)"'
 require_contains 'pid_is_current_bundle "$current_pid"'

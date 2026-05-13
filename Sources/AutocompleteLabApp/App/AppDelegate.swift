@@ -4972,6 +4972,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
         )
+        let disablesFastPhraseFallbackForProof = runtimeProofOptions.disablesFastPhraseFallback(
+            appBundleIdentifier: appBundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        )
 
         if requestMode == .wordCompletion,
            !disablesFastWordCompletionForProof {
@@ -5129,7 +5133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if requestMode == .phraseContinuation {
+        if requestMode == .phraseContinuation,
+           !disablesFastPhraseFallbackForProof {
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
                 behaviorProfileID: request.behaviorProfileID,
@@ -5206,6 +5211,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 return
             }
+        } else if requestMode == .phraseContinuation,
+                  disablesFastPhraseFallbackForProof {
+            DiagnosticsLog.shared.record(
+                "fast-phrase-fallback-disabled",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "reason": RuntimeProofOptions.disableFastPhraseFallbackEnvironmentKey
+                ]
+            )
+            setSuggestionDecision("Queued: proof model phrase continuation")
         }
 
         debounceTaskSuggestionID = suggestionID

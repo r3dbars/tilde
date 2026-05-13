@@ -50,6 +50,26 @@ if ! grep -F "must relaunch with fast word completions and phrase continuations 
   exit 1
 fi
 
+script/real_app_smoke.sh textedit-default-model-latency --dry-run >"$TMP_DIR/textedit-default-model-latency.txt"
+if ! grep -F "TextEdit variant: default-model-latency" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "default phrase model suggestions" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "trailing space through live key events" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "disables fast phrase fallback for that launch" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario textedit-default-model-latency" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "proof scenario: textedit-default-model-latency" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test did not print the TextEdit default model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh textedit-default-model-latency --skip-build --dry-run >"$TMP_DIR/textedit-default-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected TextEdit default model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with the fast phrase fallback disabled" "$TMP_DIR/textedit-default-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected TextEdit default model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
@@ -58,6 +78,16 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
+  exit 1
+fi
+
+if ! grep -F 'run_textedit_default_model_latency()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'TextEdit default model latency stable context' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"mode=phraseContinuation"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"maxTokens=11"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F './script/model_latency_report.py --default-model-proof' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected default model latency proof to force phrase model samples" >&2
   exit 1
 fi
 
@@ -93,7 +123,9 @@ PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof scenario cleanup" >&2
   exit 1
@@ -147,6 +179,8 @@ for name, block in textedit_focus_blocks.items():
         raise SystemExit(f"{name} must not treat any single TextEdit window as safe fallback")
     if 'title.hasPrefix("textedit-model-latency-")' not in block:
         raise SystemExit(f"{name} fallback must be limited to disposable smoke/proof windows")
+    if 'title.hasPrefix("textedit-default-model-latency-")' not in block:
+        raise SystemExit(f"{name} fallback must include disposable default-model-latency proof windows")
 
 frontmost_start = source.index("textedit_frontmost_window_is()")
 frontmost_end = source.index("wait_for_textedit_frontmost_window()", frontmost_start)
@@ -155,6 +189,8 @@ if 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' not in frontmost_block or 
     raise SystemExit("TextEdit frontmost proof must honor the single-window fallback")
 if 'title.hasPrefix("textedit-model-latency-")' not in frontmost_block:
     raise SystemExit("TextEdit frontmost fallback must be limited to disposable smoke/proof windows")
+if 'title.hasPrefix("textedit-default-model-latency-")' not in frontmost_block:
+    raise SystemExit("TextEdit frontmost fallback must include disposable default-model-latency proof windows")
 
 for name in ("textedit_document_name_exists", "describe_open_textedit_documents", "assert_textedit_frontmost_window", "try_wait_for_frontmost_app"):
     block = function_body(name)
@@ -252,7 +288,7 @@ body_end = source.index("\nEOF", body_start)
 fragments = [line for line in source[body_start:body_end].splitlines() if line.strip()]
 if len(fragments) < 5:
     raise SystemExit("model-latency proof must keep at least five fragments")
-bad_triggers = {"confu", "relia", "immed", "trust"}
+bad_triggers = {"confu", "relia", "immed", "trust", "verif"}
 for fragment in fragments:
     trigger = fragment.rsplit(" ", 1)[-1]
     if trigger in bad_triggers:
@@ -376,7 +412,8 @@ if ! grep -F 'cleanup_stale_textedit_smoke_windows' script/real_app_smoke.sh >/d
    ! grep -F 'dismiss_textedit_modal_panels' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout 2 "TextEdit modal cleanup"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'docName starts with "textedit-smoke-"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'docName starts with "textedit-model-latency-"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'docName starts with "textedit-model-latency-"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'docName starts with "textedit-default-model-latency-"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected stale TextEdit proof windows to be cleaned before opening a new disposable document" >&2
   exit 1
 fi

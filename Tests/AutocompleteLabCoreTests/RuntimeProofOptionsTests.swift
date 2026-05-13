@@ -7,11 +7,13 @@ struct RuntimeProofOptionsTests {
         let options = RuntimeProofOptions(environment: [
             RuntimeProofOptions.disableFastWordCompletionEnvironmentKey: "yes",
             RuntimeProofOptions.disablePhraseContinuationEnvironmentKey: "on",
+            RuntimeProofOptions.disableFastPhraseFallbackEnvironmentKey: "true",
             RuntimeProofOptions.proofScenarioEnvironmentKey: " textedit-model-latency "
         ])
 
         #expect(options.disablesFastWordCompletion)
         #expect(options.disablesPhraseContinuation)
+        #expect(options.disablesFastPhraseFallback)
         #expect(options.proofScenario == "textedit-model-latency")
     }
 
@@ -25,6 +27,10 @@ struct RuntimeProofOptionsTests {
         #expect(!RuntimeProofOptions(environment: [
             RuntimeProofOptions.disablePhraseContinuationEnvironmentKey: "off"
         ]).disablesPhraseContinuation)
+        #expect(!RuntimeProofOptions(environment: [:]).disablesFastPhraseFallback)
+        #expect(!RuntimeProofOptions(environment: [
+            RuntimeProofOptions.disableFastPhraseFallbackEnvironmentKey: "no"
+        ]).disablesFastPhraseFallback)
     }
 
     @Test("Ignores blank proof scenario")
@@ -65,6 +71,24 @@ struct RuntimeProofOptionsTests {
             activeProofBundleIdentifiers: ["com.apple.TextEdit"]
         ))
         #expect(!RuntimeProofOptions(disablesPhraseContinuation: false).disablesPhraseContinuation(
+            appBundleIdentifier: "com.apple.TextEdit",
+            activeProofBundleIdentifiers: ["com.apple.TextEdit"]
+        ))
+    }
+
+    @Test("Disables fast phrase fallback only inside active proof scope")
+    func disablesFastPhraseFallbackOnlyInsideActiveProofScope() {
+        let options = RuntimeProofOptions(disablesFastPhraseFallback: true)
+
+        #expect(options.disablesFastPhraseFallback(
+            appBundleIdentifier: "com.apple.TextEdit",
+            activeProofBundleIdentifiers: ["com.apple.TextEdit"]
+        ))
+        #expect(!options.disablesFastPhraseFallback(
+            appBundleIdentifier: "com.apple.Notes",
+            activeProofBundleIdentifiers: ["com.apple.TextEdit"]
+        ))
+        #expect(!RuntimeProofOptions(disablesFastPhraseFallback: false).disablesFastPhraseFallback(
             appBundleIdentifier: "com.apple.TextEdit",
             activeProofBundleIdentifiers: ["com.apple.TextEdit"]
         ))

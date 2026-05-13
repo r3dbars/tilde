@@ -10,13 +10,14 @@ LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 REAL_APP_SMOKE_SCRIPT="${AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT:-./script/real_app_smoke.sh}"
 LATENCY_REPORT_SCRIPT="${AUTOCOMPLETE_LAB_FRESH_LATENCY_REPORT_SCRIPT:-./script/latency_benchmark_report.py}"
+DEFAULT_MODEL_REPORT_SCRIPT="${AUTOCOMPLETE_LAB_FRESH_DEFAULT_MODEL_REPORT_SCRIPT:-./script/model_latency_report.py}"
 FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-fresh-latency.lock}"
 FRESH_LATENCY_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS:-300}"
 FRESH_LATENCY_LOCK_HELD=0
 
 usage() {
   cat <<'EOF'
-Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency]
+Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency]
 
 Runs a fresh bounded latency proof: one current-app smoke launch, repeated
 TextEdit smoke passes with rebuilds skipped, then latency_benchmark_report.py
@@ -70,16 +71,16 @@ if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || ((RUNS < 1)); then
 fi
 
 case "$TARGET_APP" in
-  textedit|textedit-model-latency)
+  textedit|textedit-model-latency|textedit-default-model-latency)
     ;;
   *)
-    echo "--target must be textedit or textedit-model-latency" >&2
+    echo "--target must be textedit, textedit-model-latency, or textedit-default-model-latency" >&2
     exit 2
     ;;
 esac
 
-if [[ "$TARGET_APP" == "textedit-model-latency" && "$RUNS" != "1" ]]; then
-  echo "textedit-model-latency collects the beta sample set in one launch; forcing --runs 1."
+if [[ "$TARGET_APP" =~ ^textedit-(default-)?model-latency$ && "$RUNS" != "1" ]]; then
+  echo "$TARGET_APP collects the proof sample set in one launch; forcing --runs 1."
   RUNS=1
 fi
 
@@ -110,8 +111,8 @@ run_smoke() {
   local index="$1"
   local args=("$TARGET_APP")
 
-  if [[ "$TARGET_APP" == "textedit-model-latency" && "$index" != "1" ]]; then
-    echo "textedit-model-latency cannot use --skip-build reruns because proof mode must relaunch cleanly." >&2
+  if [[ "$TARGET_APP" =~ ^textedit-(default-)?model-latency$ && "$index" != "1" ]]; then
+    echo "$TARGET_APP cannot use --skip-build reruns because proof mode must relaunch cleanly." >&2
     exit 1
   fi
 
@@ -127,6 +128,7 @@ run_smoke() {
 clear_stale_proof_launchctl_env() {
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SCENARIO >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS >/dev/null 2>&1 || true
@@ -252,12 +254,18 @@ echo "AUTOCOMPLETE_LAB_LOG_END_LINE=$diagnostics_end_line"
 echo "AUTOCOMPLETE_LAB_TRACE_START_LINE=$trace_start_line"
 echo "AUTOCOMPLETE_LAB_TRACE_END_LINE=$trace_end_line"
 
-env \
-  AUTOCOMPLETE_LAB_LOG_START_LINE="$diagnostics_start_line" \
-  AUTOCOMPLETE_LAB_LOG_END_LINE="$diagnostics_end_line" \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
-  AUTOCOMPLETE_LAB_TRACE_END_LINE="$trace_end_line" \
-  "$LATENCY_REPORT_SCRIPT" \
-    --diagnostics-log "$LOG_PATH" \
-    --trace-log "$TRACE_PATH" \
-    --beta-gate
+if [[ "$TARGET_APP" == "textedit-default-model-latency" ]]; then
+  "$DEFAULT_MODEL_REPORT_SCRIPT" \
+    --log "$LOG_PATH" \
+    --default-model-proof
+else
+  env \
+    AUTOCOMPLETE_LAB_LOG_START_LINE="$diagnostics_start_line" \
+    AUTOCOMPLETE_LAB_LOG_END_LINE="$diagnostics_end_line" \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    AUTOCOMPLETE_LAB_TRACE_END_LINE="$trace_end_line" \
+    "$LATENCY_REPORT_SCRIPT" \
+      --diagnostics-log "$LOG_PATH" \
+      --trace-log "$TRACE_PATH" \
+      --beta-gate
+fi

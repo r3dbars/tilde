@@ -5,20 +5,25 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
     public static let disablePhraseContinuationEnvironmentKey =
         "AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
+    public static let disableFastPhraseFallbackEnvironmentKey =
+        "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
     public static let proofScenarioEnvironmentKey =
         "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 
     public let disablesFastWordCompletion: Bool
     public let disablesPhraseContinuation: Bool
+    public let disablesFastPhraseFallback: Bool
     public let proofScenario: String?
 
     public init(
         disablesFastWordCompletion: Bool = false,
         disablesPhraseContinuation: Bool = false,
+        disablesFastPhraseFallback: Bool = false,
         proofScenario: String? = nil
     ) {
         self.disablesFastWordCompletion = disablesFastWordCompletion
         self.disablesPhraseContinuation = disablesPhraseContinuation
+        self.disablesFastPhraseFallback = disablesFastPhraseFallback
         self.proofScenario = Self.normalizedScenario(proofScenario)
     }
 
@@ -29,6 +34,9 @@ public struct RuntimeProofOptions: Equatable, Sendable {
             ),
             disablesPhraseContinuation: Self.isTruthy(
                 environment[Self.disablePhraseContinuationEnvironmentKey]
+            ),
+            disablesFastPhraseFallback: Self.isTruthy(
+                environment[Self.disableFastPhraseFallbackEnvironmentKey]
             ),
             proofScenario: environment[Self.proofScenarioEnvironmentKey]
         )
@@ -47,6 +55,14 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         activeProofBundleIdentifiers: Set<String>
     ) -> Bool {
         disablesPhraseContinuation
+            && activeProofBundleIdentifiers.contains(appBundleIdentifier)
+    }
+
+    public func disablesFastPhraseFallback(
+        appBundleIdentifier: String,
+        activeProofBundleIdentifiers: Set<String>
+    ) -> Bool {
+        disablesFastPhraseFallback
             && activeProofBundleIdentifiers.contains(appBundleIdentifier)
     }
 
