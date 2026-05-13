@@ -121,6 +121,14 @@ struct BrowserHostedSurfacePolicyTests {
                 windowTitle: "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]"
             ),
             FocusedElementFingerprint(
+                title: "Local real Monaco smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local Real Monaco Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local real ProseMirror smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
                 title: "Local ProseMirror-like smoke fixture",
                 description: "Real ProseMirror smoke editor",
                 windowTitle: "SteadyType Chrome Real ProseMirror Smoke [ready=1]"

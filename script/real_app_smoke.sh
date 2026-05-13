@@ -2176,7 +2176,7 @@ window.AutocompleteLabRealProseMirrorSmoke = {
     const view = new EditorView(element, {
       state: EditorState.create({ schema }),
       attributes: {
-        "aria-label": "Real ProseMirror smoke editor",
+        "aria-label": "Local real ProseMirror smoke fixture editor",
         "aria-multiline": "true",
         "data-smoke-editor": "true",
         "role": "textbox",
@@ -7207,7 +7207,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Real Monaco Smoke [ready=0]</title>
+<title>SteadyType Chrome Local Real Monaco Fixture Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file: blob:; worker-src blob: file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -7223,8 +7223,8 @@ body { margin: 0; background: #f7f7f7; }
   font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 </style>
-<div class="label">Real Monaco editor smoke fixture</div>
-<div data-smoke-editor class="monaco-host" aria-label="Real Monaco smoke editor"></div>
+<div class="label">Local real Monaco editor smoke fixture</div>
+<div data-smoke-editor class="monaco-host" aria-label="Local real Monaco smoke fixture editor"></div>
 <script src="$CHROME_FIXTURE_ASSET_URL/loader.js"></script>
 <script>
 window.autocompleteSmokeReady = false;
@@ -7248,7 +7248,7 @@ require(["vs/editor/editor.main"], function () {
     scrollBeyondLastLine: false,
     wordWrap: "on",
     accessibilitySupport: "on",
-    ariaLabel: "Real Monaco smoke editor"
+    ariaLabel: "Local real Monaco smoke fixture editor"
   });
 
   window.autocompleteSmokeEditorText = function () {
@@ -7274,7 +7274,7 @@ require(["vs/editor/editor.main"], function () {
     editor.focus();
   };
   window.autocompleteSmokeReady = true;
-  document.title = "SteadyType Chrome Real Monaco Smoke [ready=1]";
+  document.title = "SteadyType Chrome Local Real Monaco Fixture Smoke [ready=1]";
   window.focusSmokeEditor();
 });
 </script>
@@ -7337,7 +7337,7 @@ HTML
       cat <<HTML
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Real ProseMirror Smoke [ready=0]</title>
+<title>SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; connect-src 'none'; img-src 'self' data: file:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -7366,7 +7366,7 @@ body { margin: 0; background: #fbfbfb; }
 }
 .ProseMirror p { margin: 0 0 12px; }
 </style>
-<article class="editor-shell" aria-label="Real ProseMirror smoke fixture">
+<article class="editor-shell" aria-label="Local real ProseMirror smoke fixture">
   <div class="menubar" aria-hidden="true"><span>B</span><span>I</span><span>H1</span></div>
   <div data-prosemirror-mount></div>
 </article>
@@ -7374,7 +7374,7 @@ body { margin: 0; background: #fbfbfb; }
 <script>
 window.autocompleteSmokeReady = false;
 window.AutocompleteLabRealProseMirrorSmoke.mount(document.querySelector("[data-prosemirror-mount]"));
-document.title = "SteadyType Chrome Real ProseMirror Smoke [ready=1]";
+document.title = "SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=1]";
 </script>
 HTML
       ;;
