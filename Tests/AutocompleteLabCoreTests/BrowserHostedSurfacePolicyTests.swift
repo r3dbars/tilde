@@ -128,6 +128,29 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(decision.canSuggest)
     }
 
+    @Test("Chrome public text field proof pages stay eligible")
+    func allowsChromePublicTextFieldProofPages() {
+        let cases = [
+            FocusedElementFingerprint(
+                title: "Public textarea proof field",
+                windowTitle: "Editpad - Online Notepad & Wordpad (Text Editor) for Notes"
+            ),
+            FocusedElementFingerprint(
+                title: "Public contenteditable proof field",
+                windowTitle: "MediumEditor - The dead simple inline editor toolbar"
+            )
+        ]
+
+        for fingerprint in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(decision.canSuggest)
+        }
+    }
+
     @Test("Chrome fixture titles need local proof tokens")
     func blocksSpoofedExternalFixtureTitles() throws {
         let cases = [
