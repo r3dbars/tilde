@@ -725,31 +725,72 @@ acquire_smoke_lock() {
   done
 }
 
+current_process_ancestor_pids() {
+  local pid="$$"
+  local parent
+  local ancestors=()
+
+  while parent="$(ps -o ppid= -p "$pid" 2>/dev/null || true)"; do
+    parent="${parent//[[:space:]]/}"
+    [[ -n "$parent" && "$parent" != "0" && "$parent" != "$pid" ]] || break
+    ancestors+=("$parent")
+    pid="$parent"
+  done
+
+  printf '%s\n' "${ancestors[@]}"
+}
+
 other_smoke_process_lines() {
-  local process_list current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+  local process_list ancestor_pids
+  ancestor_pids="$(current_process_ancestor_pids || true)"
+  ancestor_pids="${ancestor_pids//$'\n'/ }"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$$" -v selfPGID="$current_pgid" '
+  awk -v self="$$" -v ancestorPids="$ancestor_pids" '
+    BEGIN {
+      split(ancestorPids, rawAncestors, /[[:space:]]+/)
+      for (i in rawAncestors) {
+        if (rawAncestors[i] != "") {
+          ancestor[rawAncestors[i]] = 1
+        }
+      }
+    }
     {
       pid = $1
-      pgid = $3
+      ppid = $2
       command = $0
+      rawLine[pid] = $0
+      parent[pid] = ppid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
-      hasSmokeScript = index(command, "script/real_app_smoke.sh") > 0 ||
+      hasSmokeScript[pid] = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
         index(command, "script/build_and_run.sh") > 0
-      if (pid == self) next
-      if (selfPGID != "" && pgid == selfPGID) next
-      if (directScript || (shellWrapper && hasSmokeScript)) {
-        print
+      shellHasSmokeScript[pid] = shellWrapper && hasSmokeScript[pid]
+    }
+    function relatedToSelf(pid, parentPid, depth) {
+      if (pid == self || pid in ancestor) return 1
+      parentPid = pid
+      for (depth = 0; depth < 128; depth++) {
+        if (!(parentPid in parent)) return 0
+        parentPid = parent[parentPid]
+        if (parentPid == self) return 1
+        if (parentPid == "" || parentPid == "0" || parentPid == parent[parentPid]) return 0
+      }
+      return 0
+    }
+    END {
+      for (pid in rawLine) {
+        if (relatedToSelf(pid)) continue
+        if (directScript[pid] || shellHasSmokeScript[pid]) {
+          print rawLine[pid]
+        }
       }
     }
   ' <<<"$process_list"
@@ -7581,7 +7622,8 @@ command_matches_steadytype_binary() {
 current_steadytype_app_bundle_pids() {
   local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
   local current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
+  current_pgid="${current_pgid//[[:space:]]/}"
 
   while IFS=$'\t' read -r pid pgid command; do
     [[ -z "$pid" ]] && continue

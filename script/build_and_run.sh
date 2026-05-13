@@ -43,7 +43,8 @@ running_app_process_rows() {
         command = $0
         sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", command)
       }
-      command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)") {
+      command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)") &&
+        command !~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "[[:space:]].*--privacy-export-proof([[:space:]]|$)") {
         print pid "\t" command
       }
     '

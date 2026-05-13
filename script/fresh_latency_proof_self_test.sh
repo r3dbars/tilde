@@ -217,6 +217,36 @@ if ! grep -F "Another proof process is already active." "$FULL_SMOKE_BLOCKED_OUT
   exit 1
 fi
 
+if ! grep -F 'current_process_ancestor_pids' script/fresh_latency_proof.sh >/dev/null ||
+   ! grep -F 'relatedToSelf(pid)' script/fresh_latency_proof.sh >/dev/null; then
+  echo "fresh latency proof self-test expected ancestor-only process exclusion" >&2
+  exit 1
+fi
+
+SELF_TEST_PGID="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
+SELF_TEST_PGID="${SELF_TEST_PGID//[[:space:]]/}"
+if [[ -n "$SELF_TEST_PGID" ]]; then
+  SAME_PGID_BLOCKED_OUTPUT="$TMP_DIR/same-pgid-build-blocked-output.txt"
+  if AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+    AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+    AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+    AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-same-pgid-blocked.lock" \
+    AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS=0 \
+    AUTOCOMPLETE_LAB_FRESH_LATENCY_PROCESS_LIST="123 1 $SELF_TEST_PGID bash ./script/check_controls_diagnostics_readiness.sh"$'\n' \
+      ./script/fresh_latency_proof.sh --runs 1 >"$SAME_PGID_BLOCKED_OUTPUT" 2>&1; then
+    echo "fresh latency proof self-test expected same-PGID proof process to block before selecting a window" >&2
+    cat "$SAME_PGID_BLOCKED_OUTPUT" >&2
+    exit 1
+  fi
+
+  if ! grep -F "Another proof process is already active." "$SAME_PGID_BLOCKED_OUTPUT" >/dev/null; then
+    echo "fresh latency proof self-test expected same-PGID proof process warning" >&2
+    cat "$SAME_PGID_BLOCKED_OUTPUT" >&2
+    exit 1
+  fi
+fi
+
 BETA_GATE_BLOCKED_OUTPUT="$TMP_DIR/beta-gate-blocked-output.txt"
 if AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
