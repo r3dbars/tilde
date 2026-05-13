@@ -81,6 +81,19 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_RUNTIME_READY_TIMEOUT_SECO
   exit 1
 fi
 
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index"')
+end = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index"', start)
+block = source[start:end]
+if '"mlx-completion-timing"' not in block or '"app=com.apple.TextEdit"' not in block:
+    raise SystemExit("model-latency timing proof must still require TextEdit MLX timing")
+if "mode=wordCompletion" in block:
+    raise SystemExit("model-latency timing proof must not require wordCompletion when fast word completions are disabled")
+PY
+
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
 if ! grep -F "disposable Chrome textarea fixture" "$TMP_DIR/chrome.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome dry-run plan" >&2
