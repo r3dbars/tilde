@@ -42,6 +42,21 @@ if ! grep -F "check_model_asset.py" script/download_mlx_model.py >/dev/null ||
   exit 1
 fi
 
+python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+module_path = Path("script/model_asset_integrity.py")
+spec = importlib.util.spec_from_file_location("model_asset_integrity", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+assert module.is_immutable_revision("32f3e8ecf65426fc3306969496342d504bfa13f3")
+assert not module.is_immutable_revision("main")
+assert not module.is_immutable_revision("32f3e8ecf65426fc3306969496342d504bfa13f")
+PY
+
 script/download_mlx_model.py --model qwen3.5-4b --print-target >/tmp/autocomplete-download-model-target.txt
 if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-MLX-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then
   echo "download helper did not point qwen3.5-4b at the preferred repo" >&2

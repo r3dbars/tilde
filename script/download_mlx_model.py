@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from model_asset_integrity import write_integrity_receipt
+from model_asset_integrity import IMMUTABLE_REVISION_ERROR, is_immutable_revision, write_integrity_receipt
 
 MODELS = {
     "qwen35-4b": {
@@ -157,6 +157,12 @@ def main() -> int:
     if not revision and not args.allow_floating_revision:
         print(
             f"{args.model} does not have a pinned revision. Refusing a mutable download.",
+            file=sys.stderr,
+        )
+        return 1
+    if revision and not is_immutable_revision(revision):
+        print(
+            f"{args.model} {IMMUTABLE_REVISION_ERROR}. Refusing a mutable download.",
             file=sys.stderr,
         )
         return 1

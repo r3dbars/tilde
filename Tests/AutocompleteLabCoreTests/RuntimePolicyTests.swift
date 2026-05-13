@@ -336,6 +336,40 @@ struct RuntimePolicyTests {
         #expect(!manifest.requiresVisionLanguageFactory)
     }
 
+    @Test("Source-backed model manifests require immutable revision pins")
+    func sourceBackedModelManifestsRequireImmutableRevisionPins() {
+        let validSource = LocalModelAssetSource(
+            repoID: "mlx-community/Test",
+            revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            allowPatterns: ["*.safetensors", "config.json"]
+        )
+        #expect(validSource.immutableRevisionError == nil)
+
+        let mutableSource = LocalModelAssetSource(
+            repoID: "mlx-community/Test",
+            revision: "main",
+            allowPatterns: ["*.safetensors", "config.json"]
+        )
+        #expect(mutableSource.immutableRevisionError == LocalModelAssetSource.immutableRevisionRequirement)
+
+        let manifest = LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: mutableSource,
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json"]
+        )
+
+        #expect(manifest.validatedDirectoryState(
+            path: "/tmp/model",
+            isDirectory: true,
+            childFileNames: ["config.json", "model.safetensors"],
+            modelBytes: 8
+        ) == .invalid(path: "/tmp/model", reason: LocalModelAssetSource.immutableRevisionRequirement))
+    }
+
     @Test("Named MLX manifests support local model trials")
     func namedMLXManifestsSupportLocalModelTrials() {
         #expect(LocalModelAssetManifest.mlxManifest(named: nil) == .qwen35FourBMLX)
@@ -388,6 +422,33 @@ struct RuntimePolicyTests {
             childFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json", "model.safetensors"],
             modelBytes: 3 * 1024 * 1024 * 1024
         ) == .available(path: "/tmp/gemma"))
+    }
+
+    @Test("MLX source model validation rejects mutable revisions")
+    func mlxSourceModelValidationRejectsMutableRevisions() {
+        let manifest = LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: LocalModelAssetSource(
+                repoID: "mlx-community/Test",
+                revision: "main",
+                allowPatterns: ["*.safetensors", "config.json"]
+            ),
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json"]
+        )
+
+        #expect(manifest.validatedDirectoryState(
+            path: "/tmp/test-model",
+            isDirectory: true,
+            childFileNames: ["config.json", "model.safetensors"],
+            modelBytes: 7
+        ) == .invalid(
+            path: "/tmp/test-model",
+            reason: LocalModelAssetSource.immutableRevisionRequirement
+        ))
     }
 
     @Test("Benchmark passes when average latency is under target")
