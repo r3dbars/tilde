@@ -49,6 +49,9 @@ PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
 PROOF_SUPPRESS_ANNOYANCE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING"
 PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=0
 PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED=0
+ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS=0
+ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS=""
 TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
@@ -717,6 +720,14 @@ cleanup_smoke() {
       launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_WAS_PREPARED" == "1" ]]; then
+    if [[ "$ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS_EXISTS" == "1" ]]; then
+      defaults write "$DEFAULTS_DOMAIN" AcceptAllShortcut "$ACCEPT_ALL_SHORTCUT_DEFAULT_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      defaults delete "$DEFAULTS_DOMAIN" AcceptAllShortcut >/dev/null 2>&1 || true
     fi
   fi
 
@@ -9309,6 +9320,187 @@ set_obsidian_caret_to_value_end() {
   activate_obsidian_for_smoke
   swift script/obsidian_ax_editor.swift focus >/dev/null
   sleep 0.15
+}
+
+focus_obsidian_visible_tail_line() {
+  activate_obsidian_for_smoke
+  swift - <<'SWIFT' >/dev/null
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func rect(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
+func collectElements(in element: AXUIElement, depth: Int = 0, results: inout [AXUIElement]) {
+    guard depth <= 32 else {
+        return
+    }
+
+    results.append(element)
+    for child in children(of: element) {
+        collectElements(in: child, depth: depth + 1, results: &results)
+    }
+}
+
+func clickInside(_ point: CGPoint) {
+    let source = CGEventSource(stateID: .hidSystemState)
+    guard let mouseDown = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseDown,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ),
+    let mouseUp = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseUp,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        return
+    }
+
+    mouseDown.post(tap: .cghidEventTap)
+    mouseUp.post(tap: .cghidEventTap)
+}
+
+guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "md.obsidian").first else {
+    exit(3)
+}
+
+app.activate(options: [.activateAllWindows])
+Thread.sleep(forTimeInterval: 0.15)
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.75)
+let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let normalizedMarker = marker
+    .components(separatedBy: .whitespacesAndNewlines)
+    .filter { !$0.isEmpty }
+    .joined(separator: " ")
+let requireLongNoteLine = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90"] != "0"
+
+func normalizedForMarkerMatch(_ value: String) -> String {
+    value
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+}
+
+var elements: [AXUIElement] = []
+collectElements(in: appElement, results: &elements)
+
+let textAreas = elements.filter {
+    stringAttribute($0, kAXRoleAttribute) == kAXTextAreaRole as String
+}
+
+guard let target = textAreas
+    .filter({
+        let value = stringAttribute($0, kAXValueAttribute)
+        return normalizedForMarkerMatch(value).contains(normalizedMarker)
+            && (!requireLongNoteLine || value.contains("Autocomplete Lab Obsidian scroll filler line 90"))
+    })
+    .sorted(by: {
+        (rect(for: $0)?.maxY ?? 0) > (rect(for: $1)?.maxY ?? 0)
+    })
+    .first,
+    let targetRect = rect(for: target) else {
+    exit(3)
+}
+
+let value = stringAttribute(target, kAXValueAttribute)
+let visibleLines = value
+    .split(separator: "\n", omittingEmptySubsequences: false)
+    .map(String.init)
+let tailLine = visibleLines.last(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? ""
+
+var targetChildren: [AXUIElement] = []
+collectElements(in: target, results: &targetChildren)
+let tailElement = targetChildren
+    .filter { stringAttribute($0, kAXValueAttribute) == tailLine }
+    .compactMap { element -> (AXUIElement, CGRect)? in
+        guard let frame = rect(for: element),
+              frame.height > 0,
+              targetRect.intersects(frame) else {
+            return nil
+        }
+        return (element, frame)
+    }
+    .sorted { $0.1.maxY > $1.1.maxY }
+    .first
+
+let clickPoint: CGPoint
+if let (_, lineRect) = tailElement {
+    let tailX = min(targetRect.maxX - 8, max(lineRect.minX + 8, lineRect.maxX + 8))
+    clickPoint = CGPoint(
+        x: tailX,
+        y: lineRect.height > 30 ? lineRect.maxY - 11 : lineRect.midY
+    )
+} else {
+    clickPoint = CGPoint(x: targetRect.minX + 28, y: targetRect.maxY - 18)
+}
+
+AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+clickInside(clickPoint)
+
+let endLocation = value.utf16.count
+var endRange = CFRange(location: endLocation, length: 0)
+if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+    _ = AXUIElementSetAttributeValue(target, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+}
+
+let deadline = Date().addingTimeInterval(1.0)
+let systemWide = AXUIElementCreateSystemWide()
+AXUIElementSetMessagingTimeout(systemWide, 0.75)
+while Date() < deadline {
+    var focusedValue: CFTypeRef?
+    if AXUIElementCopyAttributeValue(
+        systemWide,
+        kAXFocusedUIElementAttribute as CFString,
+        &focusedValue
+    ) == .success,
+       let focusedValue {
+        let focused = (focusedValue as! AXUIElement)
+        if stringAttribute(focused, kAXRoleAttribute) == kAXTextAreaRole as String {
+            exit(0)
+        }
+    }
+
+    _ = AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+        _ = AXUIElementSetAttributeValue(target, kAXSelectedTextRangeAttribute as CFString, rangeValue)
+    }
+    Thread.sleep(forTimeInterval: 0.1)
+}
+SWIFT
+  sleep 0.2
 }
 
 move_obsidian_caret_to_document_end() {
