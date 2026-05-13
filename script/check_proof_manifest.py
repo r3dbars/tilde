@@ -21,6 +21,7 @@ CURRENT_PROOF_SOURCE_PATHS = (
     "Package.swift",
     "Package.resolved",
     "Sources",
+    "script/build_and_run.sh",
     "script/local_completion_runtime.py",
     "script/real_app_smoke.sh",
 )

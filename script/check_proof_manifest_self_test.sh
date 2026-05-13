@@ -698,6 +698,29 @@ if ! grep -F "graduationDecisions Google Docs in Chrome: decision is 'supported'
   exit 1
 fi
 
+DIRTY_PROOF_PATH="Sources/.proof-manifest-self-test-dirty"
+rm -f "$DIRTY_PROOF_PATH"
+printf 'dirty proof source\n' >"$DIRTY_PROOF_PATH"
+trap 'rm -rf "$TMP_DIR"; rm -f "$DIRTY_PROOF_PATH"' EXIT
+
+if script/check_proof_manifest.sh \
+  --manifest docs/product/proof-manifest.json \
+  --skip-profile-coverage \
+  --require-current-commit >"$TMP_DIR/dirty-proof-source.out" 2>&1; then
+  echo "proof manifest self-test expected dirty proof-sensitive source paths to fail current-commit validation" >&2
+  cat "$TMP_DIR/dirty-proof-source.out" >&2
+  rm -f "$DIRTY_PROOF_PATH"
+  exit 1
+fi
+
+if ! grep -F "proof-sensitive source paths have uncommitted changes" "$TMP_DIR/dirty-proof-source.out" >/dev/null; then
+  echo "proof manifest self-test did not explain dirty proof-sensitive source path failure" >&2
+  cat "$TMP_DIR/dirty-proof-source.out" >&2
+  rm -f "$DIRTY_PROOF_PATH"
+  exit 1
+fi
+rm -f "$DIRTY_PROOF_PATH"
+
 script/check_proof_manifest.sh \
   --manifest "$VARIANT_MANIFEST" \
   --manual-smoke "$MANUAL_SMOKE" \
