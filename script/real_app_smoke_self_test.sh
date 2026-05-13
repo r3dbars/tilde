@@ -483,6 +483,8 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'current_process_ancestor_pids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'selfPgid' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'processGroup[pid]' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/beta_readiness.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_score_targets.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null ||
@@ -983,11 +985,9 @@ SELF_TEST_PGID="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
 SELF_TEST_PGID="${SELF_TEST_PGID//[[:space:]]/}"
 if [[ -n "$SELF_TEST_PGID" ]]; then
   if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="123 1 $SELF_TEST_PGID bash ./script/build_and_run.sh --verify"$'\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/same-pgid-build-run-process-fail.txt"; then
-    echo "real app smoke self-test expected same-PGID sibling build/run process scan to fail" >&2
-    exit 1
-  fi
-  if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/same-pgid-build-run-process-fail.txt" >/dev/null; then
-    echo "real app smoke self-test did not explain the same-PGID sibling process scan" >&2
+    :
+  elif grep -F "Another real app smoke process is already active" "$TMP_DIR/same-pgid-build-run-process-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected same-PGID child/sibling process scan to be treated as the active proof, not a competing proof" >&2
     exit 1
   fi
 fi
