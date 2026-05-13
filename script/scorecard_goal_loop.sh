@@ -12,7 +12,7 @@ Usage: script/scorecard_goal_loop.sh [--iterations N]
 
 Runs the SteadyType product scorecard checker, scorecard target gate, strict
 manual smoke status, strict visual evidence gate, strict proof manifest gate,
-prompt-app proof gate, and private-beta readiness gate repeatedly. This is
+prompt-app manifest proof gate, and private-beta readiness gate repeatedly. This is
 intentionally a proof loop, not a score inflator: it exits 1 until every score
 and required app proof is actually complete.
 EOF
@@ -53,7 +53,7 @@ SCORE_TARGET_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_GATE_SCRIPT:-./script/
 MANUAL_SMOKE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_MANUAL_SMOKE_GATE_SCRIPT:-./script/manual_smoke_status.sh}"
 VISUAL_EVIDENCE_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_VISUAL_EVIDENCE_GATE_SCRIPT:-./script/check_visual_placement_evidence.sh}"
 PROOF_MANIFEST_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROOF_MANIFEST_GATE_SCRIPT:-./script/check_proof_manifest.sh}"
-PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_proof.sh}"
+PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_manifest_proof.sh}"
 BETA_READINESS_GATE_SCRIPT="${AUTOCOMPLETE_LAB_BETA_READINESS_GATE_SCRIPT:-./script/beta_readiness.sh}"
 
 run_iteration() {
@@ -65,7 +65,8 @@ run_iteration() {
     failed=1
   fi
 
-  if ! "$SCORE_TARGET_GATE_SCRIPT" >"$prefix-score-targets.txt" 2>&1; then
+  if ! AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES=never \
+    "$SCORE_TARGET_GATE_SCRIPT" >"$prefix-score-targets.txt" 2>&1; then
     failed=1
   fi
 
@@ -117,7 +118,7 @@ print_final_output() {
   sed -n '1,220p' "$prefix-proof-manifest.txt"
 
   echo
-  echo "Final prompt app proof output:"
+  echo "Final prompt app manifest proof output:"
   sed -n '1,220p' "$prefix-prompt-app-proof.txt"
 
   echo
