@@ -551,6 +551,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let candidate = modelRuntimeBundle.activeCandidate
         let runtime = modelRuntime
 
+        guard modelRuntimeBundle.bootstrapPlan.canWarmPreferredRuntime else {
+            let reason = modelRuntimeBundle.bootstrapPlan.unavailableReason ?? "local model runtime is not ready"
+            applyRuntimeState(.unavailable(reason: reason))
+            DiagnosticsLog.shared.record(
+                "runtime-warm-skipped",
+                metadata: [
+                    "candidate": candidate.rawValue,
+                    "reason": reason,
+                    "modelDirectory": modelRuntimeBundle.modelDirectoryURL.path
+                ]
+            )
+            return
+        }
+
         applyRuntimeState(.warming(candidate: candidate))
         DiagnosticsLog.shared.record(
             "runtime-warm-start",
@@ -1301,6 +1315,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard snapshot != previousSnapshot else {
+            if shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            ) {
+                updateKeyboardEventTapSnapshot()
+                setSuggestionDecision("Shown: preserving current suggestion")
+                recordSuggestionEvent(
+                    "suggestion-preserved",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "transient-empty-context-stable",
+                        "blockReason": CompletionActivationBlockReason.tooLittleContext.rawValue,
+                        "fieldIdentity": fieldIdentity.traceDescription
+                    ]
+                )
+                return
+            }
             setSuggestionDecision(
                 suggestionSession.hasVisibleSuggestion
                     ? "Shown: tracking current field"
@@ -1405,6 +1438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity
             ) {
+                updateKeyboardEventTapSnapshot()
                 setSuggestionDecision("Shown: preserving current suggestion")
                 recordSuggestionEvent(
                     "suggestion-preserved",
@@ -1953,6 +1987,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         return visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
             blockReason: blockReason,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+    }
+
+    private func shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Bool {
+        visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
+            blockReason: .tooLittleContext,
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
@@ -7790,21 +7842,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markAppEnablementSetupCompleted()
         persistDisabledApps()
 
-        if suggestionsPaused {
-            suggestionsPaused = false
-            suggestionsPausedUntil = nil
-            pauseExpirationTask?.cancel()
-            pauseExpirationTask = nil
-            persistPauseState()
-        }
-
-        setSuggestionDecision("Ready: TextEdit practice")
+        setSuggestionDecision(suggestionsPaused ? "Paused: TextEdit practice ready" : "Ready: TextEdit practice")
         openTextEditPracticeDocument()
         DiagnosticsLog.shared.record(
             "textedit-practice-started",
             metadata: [
                 "app": Self.textEditPracticeBundleIdentifier,
                 "model": runtimeReadinessReport.summary,
+                "globalPaused": String(suggestionsPaused),
                 "textEditEnabled": String(!disabledBundleIdentifiers.contains(Self.textEditPracticeBundleIdentifier))
             ]
         )
@@ -9031,10 +9076,19 @@ private extension AppDelegate {
         SteadyType practice
 
         This is a disposable local TextEdit file.
-        Type one short sentence below.
-        When a suggestion appears, press Tab once to accept one word.
-        Type again, then press Esc to dismiss the next suggestion.
-        Return to SteadyType Settings to pause suggestions or delete traces.
+        Suggestions appear as a small floating suggestion next to the cursor.
+        They do not enter the document until you accept them.
+
+        Press Tab once to accept one word.
+        Press Esc to dismiss a suggestion without changing text.
+        Use Pause Suggestions to stop suggestions everywhere.
+        Use Pause in TextEdit to stop suggestions only in TextEdit.
+
+        Typed text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, and subject lines stay on this Mac by default.
+        Write-test only in TextEdit, Notes, Obsidian, and the included Chrome local practice pages.
+        Mail, Atlas, Slack, Discord, Notion, search, login, payment, address, URL, secure, and private fields stay off until proof says otherwise.
+
+        Return to SteadyType Settings to delete traces or export only the redacted Privacy Bundle.
 
         Practice here:
 

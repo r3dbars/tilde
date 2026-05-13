@@ -58,7 +58,7 @@ public enum RuntimeReadinessAction: String, Equatable, Sendable {
         case .retry:
             return "Retry"
         case .none:
-            return "None"
+            return "Model ready"
         }
     }
 }
@@ -354,18 +354,14 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
     }
 
     public var activeCandidate: CompletionRuntimeCandidate {
-        guard nativeRuntimeAvailable else {
-            return .mock
-        }
-
-        guard assetState.isUsable else {
-            return .mock
-        }
-
-        return decision.preferredCandidate
+        canWarmPreferredRuntime ? decision.preferredCandidate : .unavailable
     }
 
-    public var fallbackReason: String? {
+    public var canWarmPreferredRuntime: Bool {
+        nativeRuntimeAvailable && assetState.isUsable
+    }
+
+    public var unavailableReason: String? {
         if !nativeRuntimeAvailable {
             return "\(decision.preferredCandidate.displayName) runtime is not linked yet"
         }
@@ -375,6 +371,10 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         }
 
         return nil
+    }
+
+    public var fallbackReason: String? {
+        unavailableReason
     }
 
     public func isProductionReady(runtimeState: LocalRuntimeState) -> Bool {
@@ -389,7 +389,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         case let .missing(expectedPath):
             return RuntimeReadinessReport(
                 stage: .downloadNeeded,
-                summary: fallbackSummary("download needed (\(preferredAsset.model.rawValue))", runtimeState: runtimeState),
+                summary: "download needed (\(preferredAsset.model.rawValue))",
                 detail: "The local model is not installed yet. Expected folder: \(expectedPath)",
                 action: preferredAsset.source == nil ? .revealModelFolder : .installModel
             )
@@ -397,7 +397,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         case let .invalid(path, reason):
             return RuntimeReadinessReport(
                 stage: .repairNeeded,
-                summary: fallbackSummary("model folder needs repair", runtimeState: runtimeState),
+                summary: "model folder needs repair",
                 detail: "The local model folder is incomplete: \(reason). Folder: \(path)",
                 action: .repairModel
             )
@@ -409,7 +409,7 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
         guard nativeRuntimeAvailable else {
             return RuntimeReadinessReport(
                 stage: .runtimeUnavailable,
-                summary: fallbackSummary("runtime unavailable (\(decision.preferredCandidate.displayName))", runtimeState: runtimeState),
+                summary: "runtime unavailable (\(decision.preferredCandidate.displayName))",
                 detail: "This build is missing its local model engine. A separate model server will not fix it.",
                 action: .none
             )
@@ -450,13 +450,5 @@ public struct RuntimeBootstrapPlan: Equatable, Sendable {
 
     public func readinessSummary(for runtimeState: LocalRuntimeState) -> String {
         readinessReport(for: runtimeState).summary
-    }
-
-    private func fallbackSummary(_ primary: String, runtimeState: LocalRuntimeState) -> String {
-        guard activeCandidate == .mock else {
-            return primary
-        }
-
-        return "\(primary); fallback: \(runtimeState.statusSummary)"
     }
 }

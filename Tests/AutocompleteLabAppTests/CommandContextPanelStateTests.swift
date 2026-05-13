@@ -142,7 +142,7 @@ struct CommandContextPanelStateTests {
         )
 
         #expect(!missingModel.canRequestSuggestion)
-        #expect(missingModel.requestUnavailableReason == "Local model is download needed.")
+        #expect(missingModel.requestUnavailableReason == "Local model needs setup: download needed.")
     }
 
     @Test("Selected text is treated as panel context")

@@ -15,7 +15,7 @@ Before writing:
 - Confirm raw text tracing and screenshot tracing are off unless there is a
   separate debug session.
 - Use only the allowed app for the session.
-- Know the exits: `Esc`, menu bar pause, `Disable <App>`, Diagnostics export,
+- Know the exits: `Esc`, menu bar pause, `Pause Current App`, Diagnostics export,
   Diagnostics delete traces, and Quit.
 
 During writing:

@@ -23,7 +23,7 @@ The first target apps are:
 - TextEdit
 - Apple Notes
 - Obsidian
-- Chrome text fields and local editor fixtures
+- Chrome included local practice pages and local fixtures only
 
 Prompt and chat apps stay heavily guarded. Codex and Claude-style fields are proof-gated because accepting text must never submit a prompt by surprise.
 

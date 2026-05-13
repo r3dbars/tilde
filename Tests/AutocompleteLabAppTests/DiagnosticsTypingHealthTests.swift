@@ -36,7 +36,7 @@ struct DiagnosticsTypingHealthTests {
                   Mode: mirror
                   Local model: ready
                   Runtime target: Qwen3.5 4B MLX
-                  Next action: None
+                  Next action: Model ready
                   Traces: recording
                   Screenshots: on
                   Trace file: /tmp/traces.jsonl

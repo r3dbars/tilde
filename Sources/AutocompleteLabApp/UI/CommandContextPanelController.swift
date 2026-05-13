@@ -172,7 +172,7 @@ struct CommandContextPanelState: Equatable {
         }
 
         guard runtimeReport.allowsSuggestions else {
-            return "Local model is \(runtimeReport.summary)."
+            return "Local model needs setup: \(runtimeReport.summary)."
         }
 
         guard let context else {

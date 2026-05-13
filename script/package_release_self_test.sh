@@ -6,6 +6,9 @@ cd "$ROOT_DIR"
 
 HELP_OUTPUT="$(./script/package_release.sh --help)"
 PROOF_TEMPLATE="$(./script/package_release.sh --print-proof-template)"
+PATCH_SCRIPT="$(cat script/patch_mlx_swift_lm.sh)"
+MLX_PATCH="$(cat patches/mlx-swift-lm/gemma4-optiq-scaled-linear.patch)"
+BETA_READINESS_SCRIPT="$(cat script/beta_readiness.sh)"
 
 require_contains() {
   local text="$1"
@@ -28,6 +31,12 @@ require_contains "$PROOF_TEMPLATE" "Gatekeeper status:"
 require_contains "$PROOF_TEMPLATE" "Fresh quarantined download"
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"
 require_contains "$PROOF_TEMPLATE" "uninstall/delete-data instructions"
+
+require_contains "$PATCH_SCRIPT" 'SWIFT_SCRATCH_PATH="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build}"'
+require_contains "$PATCH_SCRIPT" 'patch -d "$SWIFT_SCRATCH_PATH" -p0'
+require_contains "$MLX_PATCH" '--- checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift'
+require_contains "$BETA_READINESS_SCRIPT" "release proof checksum is stale"
+require_contains "$BETA_READINESS_SCRIPT" "SteadyType.dmg SteadyType.zip"
 
 if env -u NOTARYTOOL_PROFILE ./script/package_release.sh --check --require-notary-profile >/tmp/autocomplete-package-check.txt 2>&1; then
   echo "package release check should fail when --require-notary-profile is used without NOTARYTOOL_PROFILE" >&2
