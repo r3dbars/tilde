@@ -121,7 +121,13 @@ def trace_window(
     last_line_number = 0
 
     if not timestamp or not path.exists():
-        return TraceWindow(0, trace_end_line, first_visible_samples, model_samples)
+        return TraceWindow(
+            0,
+            trace_end_line,
+            first_visible_samples,
+            model_samples,
+            fast_word_visible_samples,
+        )
 
     with path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line_number, line in enumerate(handle, start=1):

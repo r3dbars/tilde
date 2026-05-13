@@ -35,6 +35,7 @@ if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency.
    ! grep -F "stable context into the disposable TextEdit AX target" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
    ! grep -F "final partial word through live key events" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
    ! grep -F "disables fast word completions for that launch" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario textedit-model-latency" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||
    ! grep -F "proof scenario: textedit-model-latency" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit model latency dry-run plan" >&2
   exit 1
