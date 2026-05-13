@@ -946,6 +946,10 @@ guard CommandLine.arguments.count == 2,
 app.activate(options: [.activateAllWindows])
 SWIFT
 
+  if [[ "${AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+
   activate_process_id_osascript "$target_pid" &
   local osascript_pid="$!"
   wait_for_background_process "$osascript_pid" 2 "System Events process activation" >/dev/null 2>&1 || true
@@ -8513,6 +8517,7 @@ APPLESCRIPT
 run_textedit_model_latency() {
   local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
+  export AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1
 
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"

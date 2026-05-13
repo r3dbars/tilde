@@ -194,12 +194,70 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             "mlx-model-integrity-failed",
             metadata: [
                 "assetDirectory": modelDirectoryURL.path,
+                "integrityCode": Self.integrityFailureCode(for: integrityError),
+                "integrityFile": Self.integrityFailureFile(for: integrityError) ?? "unknown",
                 "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
                 "reason": integrityError,
                 "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
             ]
         )
         throw error
+    }
+
+    static func integrityFailureCode(for reason: String) -> String {
+        if reason.contains("checksum mismatch") {
+            return "checksum-mismatch"
+        }
+        if reason.contains("byte count mismatch") {
+            return "byte-count-mismatch"
+        }
+        if reason.contains("missing expected file") ||
+            reason.contains("references missing model file") ||
+            reason.contains("missing integrity receipt") {
+            return "missing-file"
+        }
+        if reason.contains("unexpected file") ||
+            reason.contains("not in integrity receipt") {
+            return "unexpected-file"
+        }
+        if reason.contains("unsafe file path") {
+            return "unsafe-path"
+        }
+        if reason.contains("duplicate file") {
+            return "duplicate-file"
+        }
+        if reason.contains("model mismatch") ||
+            reason.contains("repo mismatch") ||
+            reason.contains("revision mismatch") {
+            return "receipt-mismatch"
+        }
+        if reason.contains("invalid integrity receipt") ||
+            reason.contains("unsupported integrity receipt schema") {
+            return "invalid-receipt"
+        }
+        return "unknown"
+    }
+
+    static func integrityFailureFile(for reason: String) -> String? {
+        let markers = [
+            " for ",
+            " file ",
+            " checksum ",
+            " references missing model file: ",
+            "not in integrity receipt: "
+        ]
+        for marker in markers {
+            guard let range = reason.range(of: marker) else {
+                continue
+            }
+            let suffix = reason[range.upperBound...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,:;"))
+            if !suffix.isEmpty && !suffix.contains(" ") {
+                return String(suffix)
+            }
+        }
+        return nil
     }
 
     public func cancel() {

@@ -189,6 +189,20 @@ struct AppModelRuntimeFactoryTests {
         ))
     }
 
+    @Test("MLX integrity failures expose safe structured diagnostics")
+    func mlxIntegrityFailuresExposeSafeStructuredDiagnostics() {
+        let checksumReason = "integrity receipt checksum mismatch for model.safetensors"
+        #expect(MLXModelRuntime.integrityFailureCode(for: checksumReason) == "checksum-mismatch")
+        #expect(MLXModelRuntime.integrityFailureFile(for: checksumReason) == "model.safetensors")
+
+        let missingReason = "integrity receipt missing expected file tokenizer.json"
+        #expect(MLXModelRuntime.integrityFailureCode(for: missingReason) == "missing-file")
+        #expect(MLXModelRuntime.integrityFailureFile(for: missingReason) == "tokenizer.json")
+
+        #expect(MLXModelRuntime.integrityFailureCode(for: "some new integrity failure") == "unknown")
+        #expect(MLXModelRuntime.integrityFailureFile(for: "some new integrity failure") == nil)
+    }
+
     private func temporaryDefaults() -> UserDefaults {
         let suiteName = "autocomplete-app-model-runtime-factory-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
