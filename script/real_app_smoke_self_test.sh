@@ -77,7 +77,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'press_textedit_event_tap_probe_key "x"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'press_textedit_event_tap_probe_key' script/real_app_smoke.sh >/dev/null ||
    ! grep -F -- '--require-event-tap-samples "$event_tap_sample_count"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
   exit 1
@@ -151,10 +151,10 @@ if model_increment < visible_wait:
 event_tap_wait = block.rfind('keyboard-event-tap-latency', 0, visible_increment)
 if event_tap_wait < visible_wait:
     raise SystemExit("model-latency proof must require event-tap latency after visible model-backed proof")
-if 'press_textedit_event_tap_probe_key "x"' not in block:
-    raise SystemExit("model-latency proof must press a harmless printable key after the tap starts")
-if '"key=other"' not in block or '"decision=passthrough-other"' not in block:
-    raise SystemExit("model-latency proof must require the printable key event-tap diagnostic category")
+if 'press_textedit_event_tap_probe_key' not in block:
+    raise SystemExit("model-latency proof must press a disposable acceptance key after the tap starts")
+if '"key=tab"' not in block or '"decision=consume"' not in block:
+    raise SystemExit("model-latency proof must require the tab acceptance event-tap diagnostic category")
 if '--require-event-tap-samples "$event_tap_sample_count"' not in block:
     raise SystemExit("model-latency proof must require raw event-tap samples in its beta gate")
 if "visible_sample_count >= 5" not in block:
