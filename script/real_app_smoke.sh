@@ -9171,7 +9171,7 @@ run_textedit_model_latency() {
     exit 1
   fi
 
-  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/latency_benchmark_report.py --beta-gate
 }
@@ -9262,7 +9262,7 @@ run_textedit_default_model_latency() {
     exit 1
   fi
 
-  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/model_latency_report.py --default-model-proof
 }
