@@ -81,6 +81,15 @@ def runtime_launches(path):
                 current_proof_scenario = fields.get("scenario", "")
                 continue
 
+            if " app-proof-mode-ended " in f" {stripped} ":
+                parts = stripped.split()
+                fields = fields_from(parts[1:])
+                ended_app = fields.get("app", "")
+                if not ended_app or ended_app == current_proof_app:
+                    current_proof_app = ""
+                    current_proof_scenario = ""
+                continue
+
             if " runtime-bootstrap " not in f" {stripped} ":
                 continue
             parts = stripped.split()
