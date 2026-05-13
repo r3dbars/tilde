@@ -91,13 +91,23 @@ require_contains "$FIRST_RUN_DOC" "TextEdit"
 require_contains "$FIRST_RUN_DOC" "Mail"
 require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
 
-SCRIPT_TEXT="$(sed -n '1,720p' script/private_beta_packet.sh)"
+SCRIPT_TEXT="$(cat script/private_beta_packet.sh)"
 require_contains "$SCRIPT_TEXT" "Primary artifact: ../SteadyType.dmg"
 require_contains "$SCRIPT_TEXT" "Send testers the DMG, not the ZIP."
 require_contains "$SCRIPT_TEXT" "record_proof_command"
+require_contains "$SCRIPT_TEXT" "run_artifact_proof_command"
+require_contains "$SCRIPT_TEXT" 'if [[ "$MODE" == "--check" || "$MODE" == "check" ]]; then'
+require_contains "$SCRIPT_TEXT" 'run_command_read_only "$@"'
+require_contains "$SCRIPT_TEXT" 'record_proof_command "$output_path" "$@"'
 require_contains "$SCRIPT_TEXT" '2>&1'
 require_contains "$SCRIPT_TEXT" '"$proof_dir/spctl-dmg.txt"'
 require_contains "$SCRIPT_TEXT" '"$proof_dir/spctl-installed-app.txt"'
+require_contains "$SCRIPT_TEXT" 'run_artifact_proof_command "$proof_dir/stapler-validate.txt"'
+require_contains "$SCRIPT_TEXT" 'run_artifact_proof_command "$proof_dir/spctl-dmg.txt"'
+require_contains "$SCRIPT_TEXT" 'run_artifact_proof_command "$proof_dir/spctl-installed-app.txt"'
+reject_contains "$SCRIPT_TEXT" 'record_proof_command "$proof_dir/stapler-validate.txt"'
+reject_contains "$SCRIPT_TEXT" 'record_proof_command "$proof_dir/spctl-dmg.txt"'
+reject_contains "$SCRIPT_TEXT" 'record_proof_command "$proof_dir/spctl-installed-app.txt"'
 require_contains "$SCRIPT_TEXT" "attach_dmg_for_inspection"
 require_contains "$SCRIPT_TEXT" 'hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse -quiet'
 require_contains "$SCRIPT_TEXT" "DMG inspection blocked: could not mount primary beta artifact"
