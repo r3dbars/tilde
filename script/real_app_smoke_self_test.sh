@@ -50,7 +50,8 @@ fi
 
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'dismiss_textedit_smoke_suggestion' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing" >&2
   exit 1
 fi
@@ -90,8 +91,8 @@ end = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency 
 block = source[start:end]
 if '"mlx-completion-timing"' not in block or '"app=com.apple.TextEdit"' not in block:
     raise SystemExit("model-latency timing proof must still require TextEdit MLX timing")
-if "mode=wordCompletion" in block:
-    raise SystemExit("model-latency timing proof must not require wordCompletion when fast word completions are disabled")
+if '"mode=wordCompletion"' not in block:
+    raise SystemExit("model-latency timing proof must require wordCompletion after seed-context drain")
 PY
 
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
