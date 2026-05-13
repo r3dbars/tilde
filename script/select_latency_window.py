@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ class Launch:
     model_override: str
     proof_app: str
     proof_scenario: str
+    executable_sha256: str
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,14 @@ def int_value(value):
         return None
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def suggestion_key(event, line_number):
     return event.get("suggestionID") or event.get("id") or f"line-{line_number}"
 
@@ -68,12 +78,19 @@ def runtime_launches(path):
     launches = []
     current_proof_app = ""
     current_proof_scenario = ""
+    pending_executable_sha256 = ""
     if not path.exists():
         return launches
 
     with path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line_number, line in enumerate(handle, start=1):
             stripped = line.strip()
+            if " launch " in f" {stripped} ":
+                parts = stripped.split()
+                fields = fields_from(parts[1:])
+                pending_executable_sha256 = fields.get("executableSHA256", "").lower()
+                continue
+
             if " app-proof-mode-started " in f" {stripped} ":
                 parts = stripped.split()
                 fields = fields_from(parts[1:])
@@ -111,8 +128,12 @@ def runtime_launches(path):
                     model_override=fields.get("modelOverride", ""),
                     proof_app=current_proof_app,
                     proof_scenario=current_proof_scenario,
+                    executable_sha256=pending_executable_sha256,
                 )
             )
+            current_proof_app = ""
+            current_proof_scenario = ""
+            pending_executable_sha256 = ""
     return launches
 
 
@@ -174,10 +195,9 @@ def trace_window(
     for line_number, event in relevant_events:
         if event.get("type") != "modelResult":
             continue
-        key = (suggestion_key(event, line_number), line_number)
+        key = suggestion_key(event, line_number)
         if key in seen_model:
             continue
-        seen_model.add(key)
         metadata = event.get("metadata") or {}
         generation_latency = int_value(
             metadata.get("totalGenerationLatencyMilliseconds")
@@ -185,7 +205,8 @@ def trace_window(
         if generation_latency is None:
             generation_latency = int_value(event.get("latencyMilliseconds"))
         if generation_latency is not None:
-            model_backed_suggestion_ids.add(suggestion_key(event, line_number))
+            seen_model.add(key)
+            model_backed_suggestion_ids.add(key)
             model_samples += 1
 
     for line_number, event in relevant_events:
@@ -242,6 +263,11 @@ def is_eligible_default_launch(launch, expected_asset):
     )
 
 
+def has_expected_executable_hash(launch, expected_executable_sha256):
+    expected_hash = (expected_executable_sha256 or "").strip().lower()
+    return not expected_hash or launch.executable_sha256 == expected_hash
+
+
 def select_window(
     diagnostics_log,
     trace_log,
@@ -254,9 +280,15 @@ def select_window(
     require_model_backed_visible=False,
     required_proof_scenario=None,
     forbid_fast_word_visible=False,
+    expected_executable_sha256="",
 ):
     launches = runtime_launches(diagnostics_log)
-    eligible_launches = eligible_default_launches(launches, expected_asset)
+    expected_executable_sha256 = (expected_executable_sha256 or "").strip().lower()
+    eligible_launches = [
+        launch
+        for launch in eligible_default_launches(launches, expected_asset)
+        if has_expected_executable_hash(launch, expected_executable_sha256)
+    ]
     if required_proof_app:
         eligible_launches = [
             launch for launch in eligible_launches if launch.proof_app == required_proof_app
@@ -269,13 +301,19 @@ def select_window(
     if not eligible_launches:
         return Selection(None, None, "no eligible default runtime launch", False)
 
-    latest_launch = launches[-1]
+    relevant_launches = [
+        launch
+        for launch in launches
+        if has_expected_executable_hash(launch, expected_executable_sha256)
+    ]
+    latest_launch = relevant_launches[-1] if relevant_launches else launches[-1]
     if required_proof_app:
         required_launches = [
             launch
             for launch in launches
             if launch.proof_app == required_proof_app
             and (not required_proof_scenario or launch.proof_scenario == required_proof_scenario)
+            and has_expected_executable_hash(launch, expected_executable_sha256)
         ]
         latest_required_launch = required_launches[-1] if required_launches else None
     else:
@@ -285,6 +323,11 @@ def select_window(
         required_proof_app
         and latest_required_launch
         and latest_launch.line > latest_required_launch.line
+        and not (
+            expected_executable_sha256
+            and latest_launch.executable_sha256 == latest_required_launch.executable_sha256
+            and is_eligible_default_launch(latest_launch, expected_asset)
+        )
     ):
         reason = (
             "latest runtime launch is newer than the required proof launch "
@@ -341,6 +384,7 @@ def select_window(
         (index, launch)
         for index, launch in enumerate(launches[current_segment_start:], start=current_segment_start)
         if is_eligible_default_launch(launch, expected_asset)
+        and has_expected_executable_hash(launch, expected_executable_sha256)
         and (not required_proof_app or launch.proof_app == required_proof_app)
         and (not required_proof_scenario or launch.proof_scenario == required_proof_scenario)
     ]
@@ -446,7 +490,22 @@ def main():
         action="store_true",
         help="Fail if the selected window contains a fast word completion presentation.",
     )
+    parser.add_argument(
+        "--expected-executable-sha256",
+        help="Only select runtime launches whose diagnostics launch line matches this executable hash.",
+    )
+    parser.add_argument(
+        "--app-binary",
+        help="Hash this app binary and select only matching diagnostics launches.",
+    )
     args = parser.parse_args()
+    expected_executable_sha256 = (args.expected_executable_sha256 or "").strip().lower()
+    if args.app_binary:
+        app_binary = Path(args.app_binary).expanduser()
+        if not app_binary.is_file():
+            print(f"Latency window: missing app binary: {app_binary}", file=sys.stderr)
+            return 1
+        expected_executable_sha256 = sha256_file(app_binary)
 
     selection = select_window(
         Path(args.diagnostics_log).expanduser(),
@@ -460,6 +519,7 @@ def main():
         require_model_backed_visible=args.require_model_backed_visible,
         required_proof_scenario=args.required_proof_scenario,
         forbid_fast_word_visible=args.forbid_fast_word_visible,
+        expected_executable_sha256=expected_executable_sha256,
     )
     launch = selection.launch
     window = selection.window

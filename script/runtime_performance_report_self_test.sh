@@ -63,6 +63,7 @@ OUTPUT="$TMP_DIR/report.txt"
   >"$OUTPUT"
 
 grep -F "Runtime launch: asset=Qwen3.5-4B-4bit candidate=mlx native=true override=none" "$OUTPUT" >/dev/null
+grep -F "App launch to ready: n=1 min=2000ms avg=2000ms p50=2000ms p95=2000ms p99=2000ms max=2000ms" "$OUTPUT" >/dev/null
 grep -F "Latest warm event: runtime-warm-succeeded 12ms" "$OUTPUT" >/dev/null
 grep -F "Latest model load event: mlx-model-load-reused 7ms" "$OUTPUT" >/dev/null
 grep -F "Cold model load succeeded: n=5 min=1980ms avg=2216ms p50=2200ms p95=2500ms p99=2500ms max=2500ms" "$OUTPUT" >/dev/null
@@ -96,6 +97,7 @@ MISSING_OUTPUT="$TMP_DIR/missing-report.txt"
   >"$MISSING_OUTPUT"
 
 grep -F "Missing cold model load samples; do not score cold-start load time from this report." "$MISSING_OUTPUT" >/dev/null
+grep -F "Missing app launch-to-ready samples; do not score cold app start from this report." "$MISSING_OUTPUT" >/dev/null
 grep -F "Missing first-visible samples; do not score keystroke-to-visible latency from this report." "$MISSING_OUTPUT" >/dev/null
 grep -F "Missing first-token samples; do not score model response latency from this report." "$MISSING_OUTPUT" >/dev/null
 

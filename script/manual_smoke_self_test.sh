@@ -139,6 +139,24 @@ write_passing_visual_trace() {
 EOF
 }
 
+write_passing_log "com.apple.TextEdit" "inlineAdjacent"
+write_passing_trace "com.apple.TextEdit"
+
+if AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$TMP_DIR/headless-manual-smoke-runs.md" \
+  script/manual_smoke_session.sh textedit --visual >"$TMP_DIR/headless-run.txt" 2>&1 </dev/null; then
+  echo "manual smoke self-test expected headless run mode to fail before validation" >&2
+  exit 1
+fi
+
+if ! grep -F 'Manual smoke run mode needs an interactive terminal' "$TMP_DIR/headless-run.txt" >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_LOG_START_LINE=' "$TMP_DIR/headless-run.txt" >/dev/null ||
+   ! grep -F 'script/manual_smoke_session.sh textedit --check' "$TMP_DIR/headless-run.txt" >/dev/null; then
+  echo "manual smoke self-test expected headless run mode to explain --check recovery" >&2
+  exit 1
+fi
+
 run_passing_case() {
   local app="$1"
   local display_name="$2"

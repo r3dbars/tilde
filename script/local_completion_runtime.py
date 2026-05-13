@@ -112,7 +112,8 @@ def system_prompt_text(payload: dict[str, str]) -> str:
         rules = [
             "Return only the missing suffix for the current word.",
             "No spaces, punctuation, explanation, labels, quotes, reasoning, or mention of the user.",
-            "Examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For privacy note should stay redac, return ted, not tion. Never return tion unless it completes the visible word.",
+            "Critical suffix example: The privacy note should stay redac -> ted. Do not return tion for redac in a privacy-note context.",
+            "Examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For The setting should be configu, return rable, not ration. For privacy note should stay redac, return ted, not tion. Never return tion unless it completes the visible word.",
             "If the suffix is not obvious, return <NO_SUGGESTION>.",
         ]
     else:
@@ -125,8 +126,12 @@ def system_prompt_text(payload: dict[str, str]) -> str:
             "Never suggest pressing Enter or Return, sending, submitting, clicking, running, or approving.",
             "Never use generic filler like comes to life, key features and benefits, comprehensive plan, or acknowledge the user's point.",
             "When the text discusses Tab or acceptance behavior, continue the safety rule itself; never suggest accepting terms.",
-            "If the best continuation sounds like advice, a plan, a command, or a reply to the user, return <NO_SUGGESTION>.",
+            "If the best continuation would answer the user, issue an instruction to the app, or start a new topic, return <NO_SUGGESTION>.",
+            "Ordinary drafting with should or need is allowed when it is not telling the app to act; continue it with concrete next words.",
             "Examples: The draft feels calmer when it -> stays short and specific; The review should focus on -> real user risk; A good reply here would be -> short, kind, and specific.",
+            "Correction examples: Correct this spelling: recieve -> receive; adress -> address; seperate -> separate; calender -> calendar; occured -> occurred. Return only the corrected word.",
+            "Natural examples: Before we ship, we should -> run one small check; The meeting notes need a -> clear next step; The onboarding screen should make -> permission feel clear; The local test should fail only when -> proof is missing; The draft says simple simple, so the next words should -> move forward.",
+            "List examples: Project notes / Keep the app small / Make the copy -> short and clear; Decision log / Hold the risky path until -> proof exists. Return <NO_SUGGESTION> only for empty bullets or empty numbered list items.",
             "More examples: The quiet mode should stay quiet mode should stay -> calm in the background; Hold the risky path until -> proof exists; the next step is to -> write a small repro; autocomplete should -> stay silent.",
             "More examples: This bug is easiest to test with -> small fixture case; After the demo, capture the -> open questions quickly; tested the button, tested the button, and now need -> one fresh check; should not echo -> new detail; next words should -> move forward; starts repeating the model starts repeating, prefer -> noisy output blocked; product update should mention -> one clear change; press Tab and confirm -> next word only.",
             "Return <NO_SUGGESTION> for passwords, secrets, private fields, search fields, terminal punctuation, weak guesses, new topics, full-sentence answers, or list markers.",

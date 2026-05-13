@@ -394,16 +394,17 @@ run_strict_visual_evidence_gate() {
 print_focused_graduation_decisions() {
   echo
   echo "Focused graduation decisions:"
-  echo "- Google Docs browser: blocked - no disposable-doc screenshot, insertion, undo, and safe-Tab proof yet."
-  echo "- Notion browser/desktop: blocked - no disposable-page ProseMirror placement and insertion proof yet."
-  echo "- Slack browser/desktop: blocked - no disposable-channel no-send proof yet."
-  echo "- Discord browser/desktop: blocked - no disposable-server no-send proof yet."
+  echo "- Google Docs browser: blocked - no disposable real-service doc screenshot, insertion, undo, no-submit, and safe-Tab proof yet; local fixtures do not count."
+  echo "- Notion browser/desktop: blocked - no disposable real-service page ProseMirror placement, insertion, undo, and no-submit proof yet; local fixtures do not count."
+  echo "- Slack browser/desktop: blocked - no disposable real-service channel no-send screenshot and insertion proof yet; local fixtures do not count."
+  echo "- Discord browser/desktop: blocked - no disposable real-service server/channel no-send screenshot and insertion proof yet; local fixtures do not count."
   echo "- Mail compose: diagnostics-only - compose text is sensitive and insertion is unproven."
-  echo "- Browser ChatGPT: blocked - no real-service one-word no-submit proof yet."
+  echo "- Browser ChatGPT: blocked - no disposable real-service one-word no-submit screenshot and insertion proof yet; the browser-chat harness does not count."
   echo "- Claude desktop layouts: word-only - default proof exists; layout variants remain pending."
   echo "- Codex layouts: word-only - default proof exists; more prompt layouts remain pending."
-  echo "- Obsidian deep variants: partial - default/theme/pane/long-note proof exists, while font/zoom and Markdown/multiline lanes must pass separately."
+  echo "- Obsidian long notes: word-only - current-head long-note proof passed; broader vault variance remains yellow."
   echo "- Real Monaco and CodeMirror editors: blocked - official/default editor proof is not complete."
+  echo "- Prompt-app full accept: blocked - no prompt app may count full accept without exact separate no-submit screenshot and insertion proof."
 }
 
 if [[ ! -f "$REPORT_PATH" ]]; then

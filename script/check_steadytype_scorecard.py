@@ -84,6 +84,10 @@ PERFECT_SCORE_UNRESOLVED_PATTERNS = (
     ("not complete", re.compile(r"\bnot complete\b|\bbefore\b[^.]*\bcomplete\b")),
 )
 
+ZERO_COUNT_RESOLVED_METRIC_PATTERNS = (
+    re.compile(r"\bstale\s*/\s*late\s+suppression\s*:?\s*n\s*=\s*0\b", re.IGNORECASE),
+)
+
 PERFECT_SCORE_NEXT_PROOF_ACTION = re.compile(
     r"^\s*(?:add|check|close|finish|notarize|produce|record|refresh|recheck|rerun|run|staple|validate|verify)\b"
 )
@@ -118,7 +122,7 @@ PROOF_MANIFEST_LIVE_COUNT = re.compile(
     re.IGNORECASE,
 )
 
-LATENCY_SELECTOR_SCORECARD_PATTERN = re.compile(
+LATENCY_SELECTOR_SCORECARD_GREEN_PATTERN = re.compile(
     r"select_latency_window[.]py\b[^|]*?:\s*selected\s+"
     r"diagnosticsLine=([0-9]+),\s*"
     r"traceStartLine=([0-9]+),\s*"
@@ -128,8 +132,19 @@ LATENCY_SELECTOR_SCORECARD_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+LATENCY_SELECTOR_SCORECARD_RED_PATTERN = re.compile(
+    r"select_latency_window[.]py\b[^|]*?:\s*failed\s+red\s+because\s+"
+    r"(.+?),\s*with\s*"
+    r"diagnosticsLine=([0-9]+),\s*"
+    r"traceStartLine=([0-9]+),\s*"
+    r"firstVisibleSamples=([0-9]+),\s*"
+    r"modelSamples=([0-9]+),\s*"
+    r"fastWordVisibleSamples=([0-9]+)",
+    re.IGNORECASE,
+)
+
 LATENCY_SELECTOR_LIVE_PATTERN = re.compile(
-    r"\bLatency window:\s*([^;\n]+);\s*"
+    r"\bLatency window:\s*(.+?);\s*"
     r"diagnosticsLine=([0-9]+);\s*"
     r"traceStartLine=([0-9]+);\s*"
     r"diagnosticsEndLine=(?:[0-9]+|none);\s*"
@@ -151,6 +166,8 @@ class CountClaim:
 
 @dataclass(frozen=True)
 class LatencySelectorClaim:
+    ok: bool
+    reason: str
     diagnostics_line: int
     trace_start_line: int
     first_visible_samples: int
@@ -259,6 +276,13 @@ def compact_snippet(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip())
 
 
+def strip_resolved_zero_count_metrics(value: str) -> str:
+    scrubbed = value
+    for pattern in ZERO_COUNT_RESOLVED_METRIC_PATTERNS:
+        scrubbed = pattern.sub("", scrubbed)
+    return scrubbed
+
+
 def count_claim_key(kind: str, line_number: int, count: int, snippet: str) -> tuple[str, int, int, str]:
     return (kind, line_number, count, snippet)
 
@@ -313,14 +337,30 @@ def extract_latency_selector_claims(source: str) -> list[LatencySelectorClaim]:
         snippet = compact_snippet(line)
         if "select_latency_window.py" not in snippet:
             continue
-        for match in LATENCY_SELECTOR_SCORECARD_PATTERN.finditer(snippet):
+        for match in LATENCY_SELECTOR_SCORECARD_GREEN_PATTERN.finditer(snippet):
             claims.append(
                 LatencySelectorClaim(
+                    ok=True,
+                    reason="selected",
                     diagnostics_line=int(match.group(1)),
                     trace_start_line=int(match.group(2)),
                     first_visible_samples=int(match.group(3)),
                     model_samples=int(match.group(4)),
                     fast_word_visible_samples=int(match.group(5)),
+                    line_number=line_number,
+                    snippet=snippet,
+                )
+            )
+        for match in LATENCY_SELECTOR_SCORECARD_RED_PATTERN.finditer(snippet):
+            claims.append(
+                LatencySelectorClaim(
+                    ok=False,
+                    reason=match.group(1).strip(),
+                    diagnostics_line=int(match.group(2)),
+                    trace_start_line=int(match.group(3)),
+                    first_visible_samples=int(match.group(4)),
+                    model_samples=int(match.group(5)),
+                    fast_word_visible_samples=int(match.group(6)),
                     line_number=line_number,
                     snippet=snippet,
                 )
@@ -409,6 +449,62 @@ def parse_latency_selector_result(output: str) -> LatencySelectorResult:
     )
 
 
+def normalize_latency_reason(value: str) -> str:
+    normalized = re.sub(r"\s+", " ", value.strip().lower())
+    normalized = re.sub(r"^the\s+", "", normalized)
+    return re.sub(r"\s*\([^)]*\)", "", normalized).strip()
+
+
+def latency_reason_has_volatile_latest_lines(value: str) -> bool:
+    return normalize_latency_reason(value).startswith(
+        "latest runtime launch is newer than the required proof launch"
+    )
+
+
+def compare_latency_selector_claim(
+    claim: LatencySelectorClaim,
+    live_result: LatencySelectorResult,
+) -> list[str]:
+    mismatches: list[str] = []
+    if claim.ok != live_result.ok:
+        claim_state = "green" if claim.ok else "red"
+        live_state = "green" if live_result.ok else "red"
+        mismatches.append(f"scorecard claims {claim_state}, live output is {live_state}")
+    if not claim.ok and not live_result.ok:
+        if normalize_latency_reason(claim.reason) != normalize_latency_reason(live_result.reason):
+            mismatches.append(
+                f"red reason claim is {claim.reason!r}, live output reports {live_result.reason!r}"
+            )
+    volatile_latest_lines = (
+        not claim.ok
+        and not live_result.ok
+        and latency_reason_has_volatile_latest_lines(claim.reason)
+        and latency_reason_has_volatile_latest_lines(live_result.reason)
+    )
+    if not volatile_latest_lines:
+        if claim.diagnostics_line != live_result.diagnostics_line:
+            mismatches.append(
+                f"diagnosticsLine claim is {claim.diagnostics_line}, live output reports {live_result.diagnostics_line}"
+            )
+        if claim.trace_start_line != live_result.trace_start_line:
+            mismatches.append(
+                f"traceStartLine claim is {claim.trace_start_line}, live output reports {live_result.trace_start_line}"
+            )
+    if claim.first_visible_samples != live_result.first_visible_samples:
+        mismatches.append(
+            f"firstVisibleSamples claim is {claim.first_visible_samples}, live output reports {live_result.first_visible_samples}"
+        )
+    if claim.model_samples != live_result.model_samples:
+        mismatches.append(
+            f"modelSamples claim is {claim.model_samples}, live output reports {live_result.model_samples}"
+        )
+    if claim.fast_word_visible_samples != live_result.fast_word_visible_samples:
+        mismatches.append(
+            f"fastWordVisibleSamples claim is {claim.fast_word_visible_samples}, live output reports {live_result.fast_word_visible_samples}"
+        )
+    return mismatches
+
+
 def validate_live_counts(
     source: str,
     manual_smoke_output: Path | None,
@@ -460,36 +556,15 @@ def validate_live_counts(
             failures.append("latency selector live check requires a select_latency_window.py scorecard claim")
         output = read_or_run_output(latency_selector_output, strict_latency_selector_command())
         live_result = parse_latency_selector_result(output)
-        if not live_result.ok:
+        if not live_result.ok and not any(not claim.ok for claim in latency_selector_claims):
             failures.append(f"latency selector live output is red: {live_result.reason}")
-        else:
-            for claim in latency_selector_claims:
-                mismatches: list[str] = []
-                if claim.diagnostics_line != live_result.diagnostics_line:
-                    mismatches.append(
-                        f"diagnosticsLine claim is {claim.diagnostics_line}, live output reports {live_result.diagnostics_line}"
-                    )
-                if claim.trace_start_line != live_result.trace_start_line:
-                    mismatches.append(
-                        f"traceStartLine claim is {claim.trace_start_line}, live output reports {live_result.trace_start_line}"
-                    )
-                if claim.first_visible_samples != live_result.first_visible_samples:
-                    mismatches.append(
-                        f"firstVisibleSamples claim is {claim.first_visible_samples}, live output reports {live_result.first_visible_samples}"
-                    )
-                if claim.model_samples != live_result.model_samples:
-                    mismatches.append(
-                        f"modelSamples claim is {claim.model_samples}, live output reports {live_result.model_samples}"
-                    )
-                if claim.fast_word_visible_samples != live_result.fast_word_visible_samples:
-                    mismatches.append(
-                        f"fastWordVisibleSamples claim is {claim.fast_word_visible_samples}, live output reports {live_result.fast_word_visible_samples}"
-                    )
-                if mismatches:
-                    failures.append(
-                        f"line {claim.line_number}: latency selector claim is stale: "
-                        f"{'; '.join(mismatches)}: {claim.snippet}"
-                    )
+        for claim in latency_selector_claims:
+            mismatches = compare_latency_selector_claim(claim, live_result)
+            if mismatches:
+                failures.append(
+                    f"line {claim.line_number}: latency selector claim is stale: "
+                    f"{'; '.join(mismatches)}: {claim.snippet}"
+                )
 
     return failures
 
@@ -528,6 +603,7 @@ def validate_scorecard(
         evidence = row["evidence"]
         next_proof = row["next proof"]
         combined = " ".join(row.values()).lower()
+        unresolved_text = strip_resolved_zero_count_metrics(combined)
 
         if any(bad in combined for bad in ("tbd", "todo", "vibes", "round up", "green enough")):
             failures.append(f"{raw_area}: scorecard language must stay evidence-based")
@@ -539,12 +615,12 @@ def validate_scorecard(
             failures.append(f"{raw_area}: next proof must name a command or documented manual gate")
 
         for term, pattern, maximum in LOW_SCORE_PATTERNS:
-            if pattern.search(combined) and score > maximum:
+            if pattern.search(unresolved_text) and score > maximum:
                 failures.append(f"{raw_area}: contains {term!r}, so score must stay <= {maximum}/100")
 
         if score == 100:
             unresolved_terms = [
-                term for term, pattern in PERFECT_SCORE_UNRESOLVED_PATTERNS if pattern.search(combined)
+                term for term, pattern in PERFECT_SCORE_UNRESOLVED_PATTERNS if pattern.search(unresolved_text)
             ]
             if PERFECT_SCORE_NEXT_PROOF_ACTION.search(next_proof.lower()):
                 unresolved_terms.append("unfinished next proof")
