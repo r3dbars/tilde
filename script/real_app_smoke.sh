@@ -8305,9 +8305,9 @@ run_obsidian() {
     long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
     open_obsidian_smoke_note_if_configured
     wait_for_obsidian_smoke_editor_ready 8
+    second_start_line="$(line_count "$LOG_PATH")"
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
-    second_start_line="$(line_count "$LOG_PATH")"
   else
     second_start_line="$(line_count "$LOG_PATH")"
     assert_obsidian_smoke_target "Smoke proof feels instant"
