@@ -220,6 +220,17 @@ model_build = model_latency.index("build_if_needed")
 model_open = model_latency.index('open_textedit_smoke_document "$textedit_file" "$textedit_window_title"')
 if model_build > model_open:
     raise SystemExit("TextEdit model-latency proof must relaunch SteadyType before opening the disposable TextEdit window")
+default_model_latency = function_body("run_textedit_default_model_latency")
+if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" not in default_model_latency:
+    raise SystemExit("TextEdit default-model latency proof must skip the flaky System Events activation fallback")
+default_focus = default_model_latency.index('focus_textedit_smoke_editor "$textedit_window_title"')
+default_click = default_model_latency.index('click_textedit_smoke_editor "$textedit_window_title"')
+if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" not in default_model_latency[:default_focus]:
+    raise SystemExit("TextEdit default-model latency proof must skip System Events activation while focusing")
+if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" not in default_model_latency[default_focus:default_click]:
+    raise SystemExit("TextEdit default-model latency proof must skip System Events activation while clicking")
+if "wait_for_textedit_frontmost_window" not in function_body("focus_textedit_smoke_editor"):
+    raise SystemExit("TextEdit focus must still verify the expected frontmost window after skipping System Events activation")
 activate_process_id_block = source[
     source.index("activate_process_id()"):
     source.index("activate_process_id_osascript()", source.index("activate_process_id()"))
