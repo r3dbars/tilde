@@ -6602,7 +6602,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let replacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
         let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
-        guard let textArea = Self.axTextAreaDescendant(
+        guard let textArea = Self.axFocusedTextArea(
+            in: appElement,
+            matchingValue: previousText,
+            containing: lastTextSnapshot.textBeforeCursor
+        ) ?? Self.axTextAreaDescendant(
             in: appElement,
             matchingValue: previousText,
             containing: lastTextSnapshot.textBeforeCursor,
@@ -6619,37 +6623,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        guard AXUIElementSetAttributeValue(
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let valueResult = AXUIElementSetAttributeValue(
             textArea,
             kAXValueAttribute as CFString,
             replacementText as CFTypeRef
-        ) == .success else {
+        )
+        guard valueResult == .success else {
             DiagnosticsLog.shared.record(
                 "obsidian-direct-value-insert",
                 metadata: [
                     "app": bundleIdentifier,
                     "success": "false",
-                    "reason": "value-set-failed"
+                    "reason": "value-set-failed",
+                    "axResult": String(valueResult.rawValue)
                 ]
             )
             return false
         }
 
-        var cursorRange = CFRange(location: cursorUTF16Offset, length: 0)
-        if let rangeValue = AXValueCreate(.cfRange, &cursorRange) {
-            _ = AXUIElementSetAttributeValue(
-                textArea,
-                kAXSelectedTextRangeAttribute as CFString,
-                rangeValue
-            )
+        let canUseDocumentEndCursorFallback = lastTextSnapshot.textAfterCursor.isEmpty
+        var usedDocumentEndCursorFallback = false
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+        if !Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+            textArea,
+            location: cursorUTF16Offset
+        ) {
+            if canUseDocumentEndCursorFallback {
+                Self.postCommandDownKey()
+                usedDocumentEndCursorFallback = true
+            } else {
+                Self.postCommandRightKey()
+                Thread.sleep(forTimeInterval: 0.05)
+                Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+            }
+            Thread.sleep(forTimeInterval: 0.05)
         }
-        moveFrontmostInsertionPointToLineEnd()
 
         var succeeded = false
+        var cursorMatches = false
+        var currentText: String?
         for _ in 0..<5 {
-            if Self.axStringAttribute(textArea, kAXValueAttribute) == replacementText {
+            currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+            let acceptedDocumentEndFallback = usedDocumentEndCursorFallback
+                && canUseDocumentEndCursorFallback
+            if currentText == replacementText,
+               cursorMatches || acceptedDocumentEndFallback {
                 succeeded = true
                 break
+            }
+            if currentText == replacementText {
+                if canUseDocumentEndCursorFallback {
+                    Self.postCommandDownKey()
+                    usedDocumentEndCursorFallback = true
+                } else {
+                    Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+                }
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
@@ -6658,25 +6692,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "app": bundleIdentifier,
                 "success": String(succeeded),
+                "cursorMatches": String(cursorMatches),
+                "documentEndCursorFallback": String(usedDocumentEndCursorFallback),
                 "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentText?.count ?? -1),
                 "previousBeforeChars": String(lastTextSnapshot.textBeforeCursor.count),
                 "previousAfterChars": String(lastTextSnapshot.textAfterCursor.count)
             ]
         )
         return succeeded
-    }
-
-    private func moveFrontmostInsertionPointToLineEnd() {
-        guard let source = CGEventSource(stateID: .hidSystemState),
-              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
-            return
-        }
-
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
     }
 
     private func insertCodexProofText(_ acceptedText: String) -> Bool {
@@ -7054,6 +7078,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return focusedElement
     }
 
+    nonisolated private static func axFocusedTextArea(
+        in appElement: AXUIElement,
+        matchingValue expectedValue: String,
+        containing marker: String
+    ) -> AXUIElement? {
+        guard let focusedValue = axAttribute(appElement, kAXFocusedUIElementAttribute),
+              CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+            return nil
+        }
+
+        let focusedElement = focusedValue as! AXUIElement
+        guard axRole(focusedElement) == "AXTextArea",
+              let value = axStringAttribute(focusedElement, kAXValueAttribute),
+              value == expectedValue,
+              value.contains(marker) else {
+            return nil
+        }
+
+        return focusedElement
+    }
+
     nonisolated private static func axTextAreaDescendant(
         in element: AXUIElement,
         matchingValue expectedValue: String,
@@ -7120,10 +7165,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return range.location == location && range.length == length
     }
 
+    nonisolated private static func axObsidianSelectedTextRangeMatchesInsertionPoint(
+        _ element: AXUIElement,
+        location: Int
+    ) -> Bool {
+        axSelectedTextRangeMatches(element, location: location, length: 0)
+            || (
+                location > 0
+                    && axSelectedTextRangeMatches(element, location: location - 1, length: 0)
+            )
+    }
+
     nonisolated private static func postCommandRightKey() {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
+            return
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+
+    nonisolated private static func postCommandDownKey() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 125, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 125, keyDown: false) else {
             return
         }
 
