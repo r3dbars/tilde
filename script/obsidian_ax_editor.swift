@@ -11,6 +11,23 @@ let insertionText = environment["AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"] ?? ""
 let defaultProofFile = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent("Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md")
 let proofFile = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_FILE"].map(URL.init(fileURLWithPath:)) ?? defaultProofFile
+let normalizedMarker = normalizedWhitespace(marker)
+let compactMarker = compactWhitespace(marker)
+
+func normalizedWhitespace(_ value: String) -> String {
+    value
+        .split(whereSeparator: { $0.isWhitespace })
+        .joined(separator: " ")
+}
+
+func compactWhitespace(_ value: String) -> String {
+    String(value.filter { !$0.isWhitespace })
+}
+
+func containsNormalized(_ haystack: String, _ needle: String) -> Bool {
+    normalizedWhitespace(haystack).range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        || compactWhitespace(haystack).range(of: compactMarker, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+}
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -58,7 +75,7 @@ func isDisposableProofWindow(_ element: AXUIElement) -> Bool {
 
 func hasDisposableProofFile() -> Bool {
     proofFile.path.contains("AutocompleteLab/ObsidianProofVault/")
-        && proofFileText().localizedCaseInsensitiveContains(marker)
+        && containsNormalized(proofFileText(), normalizedMarker)
 }
 
 func isTextEntry(_ element: AXUIElement) -> Bool {
@@ -69,7 +86,7 @@ func isTextEntry(_ element: AXUIElement) -> Bool {
 }
 
 func containsMarker(_ element: AXUIElement) -> Bool {
-    textValue(of: element).localizedCaseInsensitiveContains(marker)
+    containsNormalized(textValue(of: element), normalizedMarker)
 }
 
 func findTextEntry(
@@ -183,8 +200,8 @@ let currentText = textValue(of: editor)
 switch action {
 case "assert":
     let fileText = proofFileText()
-    guard currentText.localizedCaseInsensitiveContains(marker)
-        || fileText.localizedCaseInsensitiveContains(marker) else {
+    guard containsNormalized(currentText, normalizedMarker)
+        || containsNormalized(fileText, normalizedMarker) else {
         fputs("Refusing to type in Obsidian because the focused note does not contain the disposable smoke marker.\n", stderr)
         exit(3)
     }

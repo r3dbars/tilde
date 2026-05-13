@@ -1330,6 +1330,19 @@ activate_obsidian_for_smoke() {
   activate_app_by_process_name "Obsidian"
 }
 
+reset_obsidian_zoom_for_smoke() {
+  activate_obsidian_for_smoke
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "System Events"
+  tell application process "Obsidian"
+    set frontmost to true
+    click menu item "Actual Size" of menu "View" of menu bar item "View" of menu bar 1
+  end tell
+end tell
+APPLESCRIPT
+  sleep 0.2
+}
+
 frontmost_process_id() {
   swift - <<'SWIFT'
 import AppKit
@@ -1782,6 +1795,23 @@ import ApplicationServices
 import Foundation
 
 let marker = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "Autocomplete Lab Obsidian proof"
+let normalizedMarker = normalizedWhitespace(marker)
+let compactMarker = compactWhitespace(marker)
+
+func normalizedWhitespace(_ value: String) -> String {
+    value
+        .split(whereSeparator: { $0.isWhitespace })
+        .joined(separator: " ")
+}
+
+func compactWhitespace(_ value: String) -> String {
+    String(value.filter { !$0.isWhitespace })
+}
+
+func containsNormalized(_ haystack: String, _ needle: String) -> Bool {
+    normalizedWhitespace(haystack).range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        || compactWhitespace(haystack).range(of: compactMarker, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+}
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -1799,7 +1829,7 @@ func countMarkerTextAreas(in element: AXUIElement, depth: Int = 0) -> Int {
 
     let role = copyAttribute(element, kAXRoleAttribute) as? String
     let value = copyAttribute(element, kAXValueAttribute) as? String ?? ""
-    var count = (role == kAXTextAreaRole as String && value.contains(marker)) ? 1 : 0
+    var count = (role == kAXTextAreaRole as String && containsNormalized(value, normalizedMarker)) ? 1 : 0
     for child in children(of: element) {
         count += countMarkerTextAreas(in: child, depth: depth + 1)
     }
@@ -8662,6 +8692,7 @@ run_obsidian() {
   prepare_obsidian_variant_state "$manual_app"
   assert_obsidian_smoke_target
   if [[ "$manual_app" != "obsidian-long-note" ]]; then
+    reset_obsidian_zoom_for_smoke
     reset_obsidian_smoke_note
   fi
   prepare_obsidian_variant_state "$manual_app"
@@ -8698,9 +8729,6 @@ run_obsidian() {
   else
     second_start_line="$(line_count "$LOG_PATH")"
     assert_obsidian_smoke_target "Smoke proof feels instant"
-    if [[ "$manual_app" == "obsidian-pane" ]]; then
-      move_obsidian_caret_to_line_end
-    fi
     type_obsidian_raw_smoke_text " and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
