@@ -43,7 +43,7 @@ Stale proof can explain progress, but it cannot make a row green.
 Run this before changing the score:
 
 ```bash
-./script/check_steadytype_scorecard.py
+./script/check_steadytype_scorecard.py --live
 ./script/check_test_coverage_manifest.sh
 ./script/check_onboarding_walkthrough_proof_self_test.sh
 ./script/check_onboarding_walkthrough_proof.py
