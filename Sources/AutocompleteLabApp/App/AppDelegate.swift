@@ -80,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
+    private let runtimeProofOptions = RuntimeProofOptions.fromProcessEnvironment()
     private var completionLengthConfiguration: CompletionLengthConfiguration {
         modelRuntimeBundle.lengthConfiguration
     }
@@ -4963,7 +4964,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(requestMetadata) { current, _ in current }
         )
 
-        if requestMode == .wordCompletion {
+        if requestMode == .wordCompletion,
+           !runtimeProofOptions.disablesFastWordCompletion {
             let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
                 + (visiblePageContext?.completionCandidateWords ?? [])
             let allowPredictiveFallback = shouldUsePredictiveWordFallback(
@@ -5068,6 +5070,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hideSuggestion()
                 return
             }
+        } else if requestMode == .wordCompletion {
+            DiagnosticsLog.shared.record(
+                "fast-word-completion-disabled",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "reason": RuntimeProofOptions.disableFastWordCompletionEnvironmentKey
+                ]
+            )
+            setSuggestionDecision("Queued: proof model word completion")
         }
 
         if requestMode == .phraseContinuation {
