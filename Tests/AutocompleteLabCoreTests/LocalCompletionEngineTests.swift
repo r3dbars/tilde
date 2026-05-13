@@ -101,7 +101,7 @@ struct LocalCompletionEngineTests {
     @Test("Explicit test fallback can still exercise unmatched words")
     func explicitTestFallbackSuggestsAfterTrailingWhitespace() async throws {
         let runner = FakeLocalRunner(result: .success("   "))
-        let engine = LocalCompletionEngine(runner: runner, fallback: MockCompletionEngine())
+        let engine = LocalCompletionEngine(runner: runner, testFallback: MockCompletionEngine())
 
         let suggestion = try await engine.suggestion(
             for: CompletionRequest(textBeforeCursor: "I wrote test ", maxVisibleWords: 8)
@@ -113,7 +113,7 @@ struct LocalCompletionEngineTests {
     @Test("Explicit test fallback can still exercise echoed context")
     func explicitTestFallbackCanExerciseEchoedContext() async throws {
         let runner = FakeLocalRunner(result: .success("Hey. How are"))
-        let engine = LocalCompletionEngine(runner: runner, fallback: MockCompletionEngine())
+        let engine = LocalCompletionEngine(runner: runner, testFallback: MockCompletionEngine())
 
         let suggestion = try await engine.suggestion(
             for: CompletionRequest(textBeforeCursor: "Hey. How are we going to do th", maxVisibleWords: 8)

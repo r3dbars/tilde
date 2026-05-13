@@ -13,8 +13,9 @@ autocomplete works.
 MLX is the current runtime path because it is Apple Silicon native and already
 lives behind the app-owned `ModelRuntime` boundary. Qwen3.5 4B is the documented
 default because it is the current low-latency quality target for short
-autocomplete completions. LiteRT-LM stays tracked as a fallback candidate for
-future app-owned packaging work.
+autocomplete completions. LiteRT-LM stays tracked as a future candidate for
+future app-owned packaging research, but it is not a runtime fallback in the app
+or beta UX.
 
 The preferred beta model asset is Qwen3.5 4B 4-bit:
 
@@ -100,7 +101,7 @@ The directory should contain at least:
 
 The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
 
-## Fallback Candidate: LiteRT-LM
+## Future Candidate: LiteRT-LM
 
 LiteRT-LM stays tracked as a future packaged runtime candidate, especially for
 Gemma-family edge models. It is not the current beta path.
