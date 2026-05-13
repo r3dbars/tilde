@@ -1231,7 +1231,7 @@ guard CommandLine.arguments.count == 2,
     exit(1)
 }
 
-app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+app.activate(options: [.activateAllWindows])
 SWIFT
 
   if [[ "${AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION:-0}" =~ ^(1|true|yes|on)$ ]]; then
@@ -1311,7 +1311,7 @@ guard let app = NSWorkspace.shared.runningApplications.first(where: {
     exit(1)
 }
 
-app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+app.activate(options: [.activateAllWindows])
 SWIFT
 
   osascript - "$process_name" <<'APPLESCRIPT' >/dev/null 2>&1 || true
@@ -3924,7 +3924,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
     }() ? windows[0] : nil)
 
     if let window = targetWindow {
-        app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        app.activate(options: [.activateAllWindows])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         let deadline = Date().addingTimeInterval(2.0)
         while Date() <= deadline {
@@ -4055,7 +4055,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
               let source = CGEventSource(stateID: .hidSystemState) else {
             exit(1)
         }
-        app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        app.activate(options: [.activateAllWindows])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         Thread.sleep(forTimeInterval: 0.2)
 
