@@ -242,4 +242,78 @@ if ! grep -F "latest runtime launch is not the expected default runtime" "$TMP_D
   exit 1
 fi
 
+TARGET_DIAGNOSTICS_LOG="$TMP_DIR/target-diagnostics.log"
+TARGET_TRACE_LOG="$TMP_DIR/target-traces.jsonl"
+
+cat >"$TARGET_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T13:00:00Z app-proof-mode-started app=com.apple.Notes
+2026-05-12T13:00:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T13:05:00Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T13:05:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T13:10:00Z app-proof-mode-started app=com.apple.Notes
+2026-05-12T13:10:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$TARGET_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T13:00:02Z","sessionID":"session","suggestionID":"notes-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.Notes","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-word-fallback"}}
+{"timestamp":"2026-05-12T13:05:02Z","sessionID":"session","suggestionID":"textedit-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T13:05:03Z","sessionID":"session","suggestionID":"textedit-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T13:05:04Z","sessionID":"session","suggestionID":"textedit-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T13:05:05Z","sessionID":"session","suggestionID":"textedit-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{}}
+{"timestamp":"2026-05-12T13:10:02Z","sessionID":"session","suggestionID":"notes-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.Notes","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-word-fallback"}}
+LOG
+
+TARGET_WINDOW="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$TARGET_DIAGNOSTICS_LOG" \
+    --trace-log "$TARGET_TRACE_LOG" \
+    --min-first-visible-samples 2 \
+    --min-model-samples 2 \
+    --required-proof-app com.apple.TextEdit \
+    --required-trace-app com.apple.TextEdit \
+    --require-model-backed-visible 2>"$TMP_DIR/target-window.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=3" <<<"$TARGET_WINDOW" >/dev/null; then
+  echo "latency window self-test did not choose the latest TextEdit proof launch" >&2
+  cat "$TMP_DIR/target-window.err" >&2
+  echo "$TARGET_WINDOW" >&2
+  exit 1
+fi
+
+if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/target-window.err" >/dev/null; then
+  echo "latency window self-test did not count only TextEdit model-backed samples" >&2
+  cat "$TMP_DIR/target-window.err" >&2
+  exit 1
+fi
+
+cat >>"$TARGET_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T13:15:00Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T13:15:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >>"$TARGET_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T13:15:02Z","sessionID":"session","suggestionID":"textedit-partial","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T13:15:03Z","sessionID":"session","suggestionID":"textedit-partial","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$TARGET_DIAGNOSTICS_LOG" \
+  --trace-log "$TARGET_TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 \
+  --required-proof-app com.apple.TextEdit \
+  --required-trace-app com.apple.TextEdit \
+  --require-model-backed-visible 2>"$TMP_DIR/target-partial.err" >/dev/null; then
+  echo "latency window self-test expected partial latest TextEdit proof launch to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/target-partial.err" >/dev/null ||
+   ! grep -F "firstVisibleSamples=1; modelSamples=1" "$TMP_DIR/target-partial.err" >/dev/null; then
+  echo "latency window self-test did not keep partial TextEdit proof red" >&2
+  cat "$TMP_DIR/target-partial.err" >&2
+  exit 1
+fi
+
 echo "Latency window self-test passed."

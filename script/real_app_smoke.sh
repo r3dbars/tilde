@@ -5988,7 +5988,7 @@ chrome_fixture_html() {
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Textarea Fixture Smoke</title>
+<title>SteadyType Chrome Textarea Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <textarea data-smoke-editor autofocus aria-label="Local smoke textarea fixture" style="font: 18px -apple-system; width: 720px; height: 180px; margin: 80px;"></textarea>
 <script>
@@ -6013,7 +6013,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Contenteditable Fixture Smoke</title>
+<title>SteadyType Chrome Contenteditable Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <main data-smoke-editor role="textbox" aria-label="Local smoke rich text fixture" contenteditable="true" spellcheck="false" style="font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; padding: 12px; border: 1px solid #bbb; outline: none;"></main>
 <script>
