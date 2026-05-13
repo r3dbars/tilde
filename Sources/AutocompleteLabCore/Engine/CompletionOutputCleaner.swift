@@ -127,47 +127,56 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
-        if mode.isContinuation,
-           looksLikeRepeatedListMarker(withoutPromptEchoLabel) {
-            return nil
-        }
+        let candidateText = strippingCorrectionArrowEcho(
+            from: withoutPromptEchoLabel,
+            after: textBeforeCursor
+        )
 
-        guard !looksLikeAssistantMeta(withoutPromptEchoLabel) else {
-            return nil
-        }
-
-        guard !looksLikeGenericChatFiller(withoutPromptEchoLabel) else {
-            return nil
-        }
-
-        guard !looksLikeUnsafePromptAction(withoutPromptEchoLabel) else {
+        guard !candidateText.isEmpty else {
             return nil
         }
 
         if mode.isContinuation,
-           startsSecondSentence(withoutPromptEchoLabel) {
+           looksLikeRepeatedListMarker(candidateText) {
             return nil
         }
 
-        guard !looksLikeVisibleUIChromeCandidate(withoutPromptEchoLabel, mode: mode) else {
+        guard !looksLikeAssistantMeta(candidateText) else {
+            return nil
+        }
+
+        guard !looksLikeGenericChatFiller(candidateText) else {
+            return nil
+        }
+
+        guard !looksLikeUnsafePromptAction(candidateText) else {
+            return nil
+        }
+
+        if mode.isContinuation,
+           startsSecondSentence(candidateText) {
+            return nil
+        }
+
+        guard !looksLikeVisibleUIChromeCandidate(candidateText, mode: mode) else {
             return nil
         }
 
         if let textBeforeCursor,
-           looksLikeAssistantResponseToPrompt(withoutPromptEchoLabel, after: textBeforeCursor) {
+           looksLikeAssistantResponseToPrompt(candidateText, after: textBeforeCursor) {
             return nil
         }
 
         if let textBeforeCursor,
-           restartsCurrentSentence(withoutPromptEchoLabel, after: textBeforeCursor) {
+           restartsCurrentSentence(candidateText, after: textBeforeCursor) {
             return nil
         }
 
-        guard !isAdviceOrToneDriftPhrase(withoutPromptEchoLabel) else {
+        guard !isAdviceOrToneDriftPhrase(candidateText) else {
             return nil
         }
 
-        let normalizedSuggestion = mode == .wordCompletion ? withoutPromptEchoLabel : ensureLeadingSpace(withoutPromptEchoLabel)
+        let normalizedSuggestion = mode == .wordCompletion ? candidateText : ensureLeadingSpace(candidateText)
         let trimmedSuggestion: String
         if let textBeforeCursor {
             trimmedSuggestion = CompletionPrefixTrimmer.trim(normalizedSuggestion, after: textBeforeCursor)
@@ -198,7 +207,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         if mode == .wordCompletion,
            !isValidWordCompletion(
                 suggestion.visibleText,
-                rawCandidate: withoutPromptEchoLabel,
+                rawCandidate: candidateText,
                 after: textBeforeCursor
            ) {
             return nil
@@ -361,6 +370,23 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return trimmed
+    }
+
+    private func strippingCorrectionArrowEcho(from text: String, after textBeforeCursor: String?) -> String {
+        guard let textBeforeCursor,
+              textBeforeCursor.contains("->"),
+              text.contains("->"),
+              let tail = text.components(separatedBy: "->").last?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !tail.isEmpty,
+              tail.range(
+                of: #"^[A-Za-z][A-Za-z'-]*[.!?]?$"#,
+                options: .regularExpression
+              ) != nil else {
+            return text
+        }
+
+        return tail
     }
 
     private func looksLikeGenericChatFiller(_ text: String) -> Bool {

@@ -384,6 +384,10 @@ def display_output(row: AuditRow, raw_output: str) -> str:
         return "<NO_SUGGESTION>"
 
     stripped = raw_output.strip()
+    if "->" in row.user and "->" in stripped:
+        arrow_tail = stripped.rsplit("->", 1)[-1].strip()
+        if re.match(r"^[A-Za-z][A-Za-z'-]*[.!?]?$", arrow_tail):
+            stripped = arrow_tail
     if row.mode.lower() in {"word", "word_completion", "wordcompletion"}:
         stripped = word_completion_display_output(row.user, stripped)
 
@@ -517,8 +521,8 @@ def summarize(scores: list[RowScore], source: str, include_raw: bool) -> tuple[s
         relevance_population = [score for score in scores if not score.row.expected_suppression]
         relevance_failed = sum(1 for score in relevance_population if "relevance" in score.failures)
         overall = round(((total_possible - total_failed) / total_possible) * 100)
-        relevance = round(
-            ((len(relevance_population) - relevance_failed) / max(1, len(relevance_population))) * 100
+        relevance = 100 if not relevance_population else round(
+            ((len(relevance_population) - relevance_failed) / len(relevance_population)) * 100
         )
     else:
         overall = 0

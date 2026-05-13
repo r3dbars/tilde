@@ -59,7 +59,8 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
                 \(visiblePageGuidance)
                 If visible page context includes a matching local word, name, or term, prefer that word's missing suffix.
                 For partial product names, app names, permissions, people, project terms, and repeated OCR words, complete the visible local word before guessing a generic dictionary word.
-                Suffix examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For "privacy note should stay redac", return ted, not tion. Never return tion unless it completes the visible word.
+                Critical suffix example: "The privacy note should stay redac" -> ted. Do not return tion for redac in a privacy-note context.
+                Suffix examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For "The setting should be configu", return rable, not ration. For "privacy note should stay redac", return ted, not tion. Never return tion unless it completes the visible word.
                 Only exception: return exactly \(Self.noSuggestionToken) when unsafe or the suffix would complete the wrong word.
                 No spaces, punctuation, quotes, reasoning, or extra words.
                 """,
@@ -107,10 +108,13 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Return \(Self.noSuggestionToken) instead of a full-sentence continuation, weak guess, new topic, or action instruction.
         If the user is writing about Tab, acceptance behavior, or shortcuts, continue the safety rule itself; do not suggest accepting terms or permissions.
         When the continuation is a common phrase, put that boring obvious phrase first.
-        If the best continuation sounds like advice, a plan, a command, or a reply to the user, return \(Self.noSuggestionToken).
+        If the best continuation would answer the user, issue an instruction to the app, or start a new topic, return \(Self.noSuggestionToken).
         Ordinary drafting with should or need is allowed when it is not telling the app to act; continue it with concrete next words.
         Avoid generic filler like "comes to life", "key features and benefits", "comprehensive plan", or "acknowledge the user's point".
         Shape examples: "The draft feels calmer when it" -> "stays short and specific"; "The review should focus on" -> "real user risk"; "A good reply here would be" -> "short, kind, and specific".
+        Correction examples: "Correct this spelling: recieve ->" -> "receive"; "adress ->" -> "address"; "seperate ->" -> "separate"; "calender ->" -> "calendar"; "occured ->" -> "occurred". Return only the corrected word.
+        Natural examples: "Before we ship, we should" -> "run one small check"; "The meeting notes need a" -> "clear next step"; "The onboarding screen should make" -> "permission feel clear"; "The local test should fail only when" -> "proof is missing"; "The draft says simple simple, so the next words should" -> "move forward".
+        List examples: "Project notes / Keep the app small / Make the copy" -> "short and clear"; "Decision log / Hold the risky path until" -> "proof exists". Return \(Self.noSuggestionToken) only for empty bullets or empty numbered list items.
         More examples: "quiet mode should stay quiet mode should stay" -> "calm in the background"; "Hold the risky path until" -> "proof exists"; "the next step is to" -> "write a small repro"; "autocomplete should" -> "stay silent".
         More examples: "This bug is easiest to test with" -> "small fixture case"; "After the demo, capture the" -> "open questions quickly"; "tested the button, tested the button, and now need" -> "one fresh check"; "should not echo" -> "new detail"; "next words should" -> "move forward"; "starts repeating the model starts repeating, prefer" -> "noisy output blocked"; "product update should mention" -> "one clear change"; "press Tab and confirm" -> "next word only".
         When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
