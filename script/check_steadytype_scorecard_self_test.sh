@@ -45,6 +45,36 @@ if ! grep -F "Placement: contains 'stale', so score must stay <= 75/100" "$TMP_D
   exit 1
 fi
 
+PENDING_ROUND_UP="$TMP_DIR/pending-round-up.md"
+sed 's#| Tab safety | 74/100 |#| Tab safety | 90/100 |#' "$SCORECARD" >"$PENDING_ROUND_UP"
+
+if python3 script/check_steadytype_scorecard.py --scorecard "$PENDING_ROUND_UP" >"$TMP_DIR/pending.txt" 2>&1; then
+  echo "scorecard self-test expected pending rounded-up proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Tab safety: contains 'pending', so score must stay <= 75/100" "$TMP_DIR/pending.txt" >/dev/null; then
+  echo "scorecard self-test missing pending proof failure" >&2
+  cat "$TMP_DIR/pending.txt" >&2
+  exit 1
+fi
+
+PERFECT_UNRESOLVED="$TMP_DIR/perfect-unresolved.md"
+sed -e 's#Overall score: 77/100\.#Overall score: 78/100.#' \
+  -e 's#| Diagnostics | 90/100 |#| Diagnostics | 100/100 |#' \
+  "$SCORECARD" >"$PERFECT_UNRESOLVED"
+
+if python3 script/check_steadytype_scorecard.py --scorecard "$PERFECT_UNRESOLVED" >"$TMP_DIR/perfect.txt" 2>&1; then
+  echo "scorecard self-test expected unresolved 100/100 row to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Diagnostics: 100/100 requires resolved row gates" "$TMP_DIR/perfect.txt" >/dev/null; then
+  echo "scorecard self-test missing unresolved 100/100 failure" >&2
+  cat "$TMP_DIR/perfect.txt" >&2
+  exit 1
+fi
+
 MISSING_AREA="$TMP_DIR/missing-area.md"
 grep -v '^| Model readiness |' "$SCORECARD" >"$MISSING_AREA"
 

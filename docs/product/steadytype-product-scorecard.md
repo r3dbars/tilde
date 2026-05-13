@@ -31,7 +31,10 @@ only counts the command output named below.
 ## Score Rules
 
 - The overall score is the rounded average of the 12 row scores.
-- A row with stale, blocked, missing, or failed evidence must stay visibly below green.
+- A row with stale, pending, blocked, missing, or failed evidence must stay visibly below green.
+- A 100/100 row must have its own row-specific gates green. It cannot contain
+  stale, pending, blocked, missing, failed, incomplete, open-gap, remaining-gap,
+  still-needs, short-of, or not-yet language.
 - A row can only rise when its evidence cell names a current command, trace slice,
   screenshot, proof manifest row, or documented manual gate.
 - If a gate fails, the failure is evidence. Keep it in the row until the command
