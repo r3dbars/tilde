@@ -23,7 +23,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private var staticPromptCache = RuntimeStaticPromptCache()
     private var generation = 0
     private var warmTaskID = 0
-    private var warmTask: (id: Int, task: Task<Void, Error>)?
+    private var warmTask: (id: Int, task: Task<Void, Error>, gate: MLXRuntimeWarmGate)?
 
     public convenience init(
         modelDirectoryURL: URL,
@@ -80,24 +80,31 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func warm() async throws {
-        let task = stateQueue.sync {
+        let warmTask = warmTaskSnapshot()
+        try await warmTask.task.value
+    }
+
+    private func warmTaskSnapshot() -> (task: Task<Void, Error>, gate: MLXRuntimeWarmGate) {
+        stateQueue.sync {
             if let warmTask {
-                return warmTask.task
+                return (warmTask.task, warmTask.gate)
             }
 
             warmTaskID += 1
             let taskID = warmTaskID
+            let gate = MLXRuntimeWarmGate()
             let task = Task { [self] in
-                defer {
-                    clearWarmTask(id: taskID)
+                do {
+                    try await performWarm()
+                    finishWarmTask(id: taskID, gate: gate, result: .success(()))
+                } catch {
+                    finishWarmTask(id: taskID, gate: gate, result: .failure(error))
+                    throw error
                 }
-                try await performWarm()
             }
-            warmTask = (taskID, task)
-            return task
+            warmTask = (taskID, task, gate)
+            return (task, gate)
         }
-
-        try await task.value
     }
 
     private func performWarm() async throws {
@@ -501,12 +508,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
     }
 
-    private func clearWarmTask(id: Int) {
+    private func finishWarmTask(id: Int, gate: MLXRuntimeWarmGate, result: Result<Void, Error>) {
         stateQueue.sync {
             if warmTask?.id == id {
                 warmTask = nil
             }
         }
+        gate.finish(with: result)
     }
 
     private func storeIntegrityValidationCache(_ cache: ModelAssetIntegrityValidationCache) {
@@ -546,7 +554,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func readyContainer() async throws -> ModelContainer {
         let initialSnapshot = stateQueue.sync {
-            (storedState, container)
+            (storedState, container, warmTask?.gate)
         }
 
         if case let .failed(_, reason) = initialSnapshot.0 {
@@ -557,34 +565,93 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return existing
         }
 
-        for _ in 0..<3_000 {
-            let isWarming = stateQueue.sync {
-                if case .warming = storedState {
-                    return true
-                }
-
-                return false
-            }
-
-            guard isWarming else {
-                break
-            }
-
+        if let warmGate = initialSnapshot.2 {
+            try await warmGate.wait()
             try Task.checkCancellation()
-            try await Task.sleep(for: .milliseconds(10))
-
-            if let existing = stateQueue.sync(execute: { container }) {
-                return existing
+            guard let warmed = stateQueue.sync(execute: { container }) else {
+                throw MLXModelRuntimeError.warmCompletedWithoutContainer
             }
+            return warmed
         }
 
-        try await warm()
+        let startedWarmTask = warmTaskSnapshot()
+        try await startedWarmTask.gate.wait()
 
         guard let warmed = stateQueue.sync(execute: { container }) else {
             throw MLXModelRuntimeError.warmCompletedWithoutContainer
         }
 
         return warmed
+    }
+}
+
+final class MLXRuntimeWarmGate: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-runtime-warm-gate")
+    private var nextWaiterID = 0
+    private var waiters: [Int: CheckedContinuation<Void, Error>] = [:]
+    private var canceledBeforeRegistration = Set<Int>()
+    private var completion: Result<Void, Error>?
+
+    func wait() async throws {
+        let waiterID = queue.sync {
+            nextWaiterID += 1
+            return nextWaiterID
+        }
+
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await withCheckedThrowingContinuation { continuation in
+                let immediateResult: Result<Void, Error>? = queue.sync {
+                    if let completion {
+                        return completion
+                    }
+                    if canceledBeforeRegistration.remove(waiterID) != nil {
+                        return .failure(CancellationError())
+                    }
+
+                    waiters[waiterID] = continuation
+                    return nil
+                }
+
+                if let immediateResult {
+                    continuation.resume(with: immediateResult)
+                }
+            }
+        } onCancel: {
+            cancelWaiter(id: waiterID)
+        }
+    }
+
+    func finish(with result: Result<Void, Error>) {
+        let continuations = queue.sync {
+            guard completion == nil else {
+                return [CheckedContinuation<Void, Error>]()
+            }
+
+            completion = result
+            let continuations = Array(waiters.values)
+            waiters.removeAll()
+            canceledBeforeRegistration.removeAll()
+            return continuations
+        }
+
+        for continuation in continuations {
+            continuation.resume(with: result)
+        }
+    }
+
+    private func cancelWaiter(id: Int) {
+        let continuation: CheckedContinuation<Void, Error>? = queue.sync {
+            if let continuation = waiters.removeValue(forKey: id) {
+                return continuation
+            }
+            if completion == nil {
+                canceledBeforeRegistration.insert(id)
+            }
+            return nil
+        }
+
+        continuation?.resume(throwing: CancellationError())
     }
 }
 
