@@ -47,6 +47,8 @@ require_contains '--required-proof-scenario "${AUTOCOMPLETE_LAB_BETA_LATENCY_PRO
 require_contains '--required-trace-app "${AUTOCOMPLETE_LAB_BETA_LATENCY_TRACE_APP:-com.apple.TextEdit}"'
 require_contains '--require-model-backed-visible'
 require_contains '--forbid-fast-word-visible'
+reject_contains 'AUTOCOMPLETE_LAB_LOG_START_LINE:-'
+reject_contains 'AUTOCOMPLETE_LAB_TRACE_START_LINE:-'
 require_contains 'xcrun stapler validate "$PRIMARY_ARTIFACT"'
 require_contains 'spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"'
 require_contains 'spctl --assess --type execute --verbose=4 "$app_path"'

@@ -413,4 +413,38 @@ if ! grep -F "selected latency window has fast word completion samples" "$TMP_DI
   exit 1
 fi
 
+ENDED_DIAGNOSTICS_LOG="$TMP_DIR/ended-scenario-diagnostics.log"
+ENDED_TRACE_LOG="$TMP_DIR/ended-scenario-traces.jsonl"
+
+cat >"$ENDED_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T15:00:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T15:00:01Z app-proof-mode-ended app=com.apple.TextEdit reason=expired
+2026-05-12T15:00:02Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$ENDED_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T15:00:03Z","sessionID":"session","suggestionID":"ended-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T15:00:04Z","sessionID":"session","suggestionID":"ended-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$ENDED_DIAGNOSTICS_LOG" \
+  --trace-log "$ENDED_TRACE_LOG" \
+  --min-first-visible-samples 1 \
+  --min-model-samples 1 \
+  --required-proof-app com.apple.TextEdit \
+  --required-proof-scenario textedit-model-latency \
+  --required-trace-app com.apple.TextEdit \
+  --require-model-backed-visible \
+  --forbid-fast-word-visible 2>"$TMP_DIR/ended-scenario.err" >/dev/null; then
+  echo "latency window self-test expected runtime after proof end not to inherit scenario" >&2
+  exit 1
+fi
+
+if ! grep -F "no eligible default runtime launch" "$TMP_DIR/ended-scenario.err" >/dev/null; then
+  echo "latency window self-test did not clear proof scenario after proof end" >&2
+  cat "$TMP_DIR/ended-scenario.err" >&2
+  exit 1
+fi
+
 echo "Latency window self-test passed."
