@@ -207,7 +207,7 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
     seen_presented = set()
     seen_model = set()
     model_backed_suggestion_ids = set()
-    presented_records = []
+    presented_samples = []
     malformed = []
 
     for line_number, line in line_slice(path, start_line, line_limit, end_line):
@@ -233,12 +233,7 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
                 continue
             sample = Sample(latency, app, profile, mode, "trace", line_number, suggestion_id)
             first_visible.append(sample)
-            selection_source = (
-                event.get("candidateSelectionSource")
-                or metadata.get("candidateSelectionSource")
-                or ""
-            )
-            presented_records.append((sample, str(selection_source)))
+            presented_samples.append(sample)
             if latency > late_visible_budget_ms:
                 late_visible.append(sample)
             continue
@@ -276,9 +271,8 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
 
     model_backed_first_visible = [
         sample
-        for sample, selection_source in presented_records
+        for sample in presented_samples
         if sample.label in model_backed_suggestion_ids
-        or selection_source == "app-model-result"
     ]
 
     return {
@@ -635,7 +629,7 @@ def enforce_bounded_trace_evidence(failures, args, trace_data):
 
     failures.append(
         "bounded beta gate needs fresh model-backed visible trace evidence: "
-        f"expected at least {expected} model-backed visible trace samples, found {actual} "
+        f"expected at least {expected} paired modelResult/suggestionPresented trace samples, found {actual} "
         f"(traceVisible={len(trace_data['first_visible'])}; "
         f"traceModelTiming={len(trace_data['total_generation'])}; "
         f"traceStartLine={args.trace_start_line}; "
