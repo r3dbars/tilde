@@ -18,10 +18,15 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
+GENERATED_APP_ICON_REL="dist/$APP_NAME.generated-icon.$$.icns"
+GENERATED_APP_ICON="$ROOT_DIR/$GENERATED_APP_ICON_REL"
 MLX_METALLIB="$ROOT_DIR/.build/mlx-metal/default.metallib"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 cd "$ROOT_DIR"
+trap 'rm -f "$GENERATED_APP_ICON"' EXIT
+mkdir -p "$DIST_DIR"
+swift script/generate_app_icon.swift "$GENERATED_APP_ICON_REL"
 
 SWIFT_SCRATCH_ARGS=()
 SWIFT_JOB_ARGS=()
@@ -180,6 +185,17 @@ find_signing_identity() {
   echo "$identity"
 }
 
+sign_app_bundle() {
+  local identity="$1"
+
+  if codesign --force --options runtime --sign "$identity" "$APP_BUNDLE" >/dev/null; then
+    return 0
+  fi
+
+  sleep 0.5
+  codesign --force --options runtime --sign "$identity" "dist/$APP_NAME.app" >/dev/null
+}
+
 run_swift_package_resolve() {
   if ((${#SWIFT_SCRATCH_ARGS[@]})); then
     swift package "${SWIFT_SCRATCH_ARGS[@]}" resolve
@@ -293,7 +309,7 @@ mkdir -p "$APP_MACOS"
 mkdir -p "$APP_RESOURCES/mlx-swift_Cmlx.bundle"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$MLX_METALLIB" "$APP_RESOURCES/mlx-swift_Cmlx.bundle/default.metallib"
-swift "$ROOT_DIR/script/generate_app_icon.swift" "$APP_ICON"
+cp "$GENERATED_APP_ICON" "$APP_ICON"
 chmod +x "$APP_BINARY"
 
 cat >"$INFO_PLIST" <<PLIST
@@ -331,7 +347,7 @@ PLIST
 
 SIGNING_IDENTITY="$(find_signing_identity)"
 if [[ -n "$SIGNING_IDENTITY" ]]; then
-  codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$APP_BUNDLE" >/dev/null
+  sign_app_bundle "$SIGNING_IDENTITY"
 else
   codesign --force --options runtime --sign - "$APP_BUNDLE" >/dev/null
   echo "warning: no stable code signing identity found; Accessibility may ask again after rebuilds" >&2

@@ -7868,6 +7868,12 @@ APPLESCRIPT
     wait_for_log_fields "$full_undo_start_line" "TextEdit full accepted insertion undo" 8 \
       "accepted-insertion-undone" \
       "app=com.apple.TextEdit"
+  else
+    wait_for_log_fields "$full_start_line" "TextEdit accepted-and-kept survival" 45 \
+      "annoyance-signal" \
+      "app=com.apple.TextEdit" \
+      "reason=thirty-second-finalized" \
+      "signal=acceptedAndKept"
   fi
 
   sleep 1
