@@ -8331,6 +8331,143 @@ SWIFT
   sleep 0.15
 }
 
+focus_obsidian_visible_tail_line() {
+  activate_obsidian_for_smoke
+  swift - <<'SWIFT' >/dev/null
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func rect(for element: AXUIElement) -> CGRect? {
+    guard let positionValue = copyAttribute(element, kAXPositionAttribute),
+          let sizeValue = copyAttribute(element, kAXSizeAttribute) else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
+func collectElements(in element: AXUIElement, depth: Int = 0, results: inout [AXUIElement]) {
+    guard depth <= 32 else {
+        return
+    }
+
+    results.append(element)
+    for child in children(of: element) {
+        collectElements(in: child, depth: depth + 1, results: &results)
+    }
+}
+
+func clickInside(_ point: CGPoint) {
+    let source = CGEventSource(stateID: .hidSystemState)
+    guard let mouseDown = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseDown,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ),
+    let mouseUp = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseUp,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        return
+    }
+
+    mouseDown.post(tap: .cghidEventTap)
+    mouseUp.post(tap: .cghidEventTap)
+}
+
+guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "md.obsidian").first else {
+    exit(3)
+}
+
+app.activate(options: [.activateAllWindows])
+Thread.sleep(forTimeInterval: 0.15)
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.75)
+
+var elements: [AXUIElement] = []
+collectElements(in: appElement, results: &elements)
+
+let textAreas = elements.filter {
+    stringAttribute($0, kAXRoleAttribute) == kAXTextAreaRole as String
+}
+
+guard let target = textAreas
+    .filter({
+        let value = stringAttribute($0, kAXValueAttribute)
+        return value.contains("Autocomplete Lab Obsidian scroll filler line 90")
+            && value.contains("Autocomplete Lab Obsidian proof")
+    })
+    .sorted(by: {
+        (rect(for: $0)?.maxY ?? 0) > (rect(for: $1)?.maxY ?? 0)
+    })
+    .first,
+    let targetRect = rect(for: target) else {
+    exit(3)
+}
+
+let value = stringAttribute(target, kAXValueAttribute)
+let visibleLines = value
+    .split(separator: "\n", omittingEmptySubsequences: false)
+    .map(String.init)
+let tailLine = visibleLines.last(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? ""
+
+var targetChildren: [AXUIElement] = []
+collectElements(in: target, results: &targetChildren)
+let tailElement = targetChildren
+    .filter { stringAttribute($0, kAXValueAttribute) == tailLine }
+    .compactMap { element -> (AXUIElement, CGRect)? in
+        guard let frame = rect(for: element),
+              frame.height > 0,
+              targetRect.intersects(frame) else {
+            return nil
+        }
+        return (element, frame)
+    }
+    .sorted { $0.1.maxY > $1.1.maxY }
+    .first
+
+let clickPoint: CGPoint
+if let (_, lineRect) = tailElement {
+    clickPoint = CGPoint(
+        x: targetRect.maxX - 8,
+        y: lineRect.height > 30 ? lineRect.maxY - 11 : lineRect.midY
+    )
+} else {
+    clickPoint = CGPoint(x: targetRect.minX + 28, y: targetRect.maxY - 18)
+}
+
+AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+clickInside(clickPoint)
+SWIFT
+  sleep 0.2
+}
+
 move_obsidian_caret_to_document_end() {
   activate_obsidian_for_smoke
   osascript <<'APPLESCRIPT'
@@ -8340,6 +8477,9 @@ tell application "System Events"
 end tell
 APPLESCRIPT
   set_obsidian_caret_to_value_end
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL:-0}" == "1" ]]; then
+    focus_obsidian_visible_tail_line
+  fi
   sleep 0.25
 }
 
@@ -8576,6 +8716,7 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     first_fragment="moke proof feels"
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
