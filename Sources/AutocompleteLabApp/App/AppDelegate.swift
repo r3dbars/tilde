@@ -63,6 +63,27 @@ struct CodexProofFocusedTargetPolicy {
     }
 }
 
+struct SuggestionDebounceSchedule: Equatable, Sendable {
+    let policyDelayMilliseconds: Int
+    let scheduledDelayMilliseconds: Int
+
+    init(policyDelayMilliseconds: Int, renderMode: SuggestionRenderMode) {
+        let policyDelayMilliseconds = max(0, policyDelayMilliseconds)
+        self.policyDelayMilliseconds = policyDelayMilliseconds
+        self.scheduledDelayMilliseconds = renderMode == .inlineAdjacent
+            ? policyDelayMilliseconds
+            : max(policyDelayMilliseconds, 60)
+    }
+
+    var traceMetadata: [String: String] {
+        [
+            "delayMilliseconds": String(policyDelayMilliseconds),
+            "policyDelayMilliseconds": String(policyDelayMilliseconds),
+            "scheduledDelayMilliseconds": String(scheduledDelayMilliseconds)
+        ]
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let accessibilityClient = AccessibilityClient()
@@ -4951,6 +4972,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
+        let debounceSchedule = SuggestionDebounceSchedule(
+            policyDelayMilliseconds: delayMilliseconds,
+            renderMode: renderMode
+        )
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -4962,9 +4987,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: request.textBeforeCursor,
             textAfterCursor: request.textAfterCursor,
             metadata: [
-                "renderMode": renderMode.rawValue,
-                "delayMilliseconds": String(delayMilliseconds)
+                "renderMode": renderMode.rawValue
             ]
+            .merging(debounceSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
 
@@ -5269,10 +5294,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Queued: proof model phrase continuation")
         }
 
+        recordSuggestionEvent(
+            "suggestion-request-scheduled",
+            context: context,
+            profile: profile,
+            metadata: [
+                "requestMode": request.mode.rawValue,
+                "traceID": String(suggestionID.prefix(8)),
+                "suggestionID": suggestionID
+            ]
+            .merging(debounceSchedule.traceMetadata) { current, _ in current }
+            .merging(requestMetadata) { current, _ in current }
+        )
         debounceTaskSuggestionID = suggestionID
-        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity] in
-            let renderDelay = renderMode == .inlineAdjacent ? delayMilliseconds : max(delayMilliseconds, 60)
-            try? await Task.sleep(for: .milliseconds(renderDelay))
+        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, debounceSchedule] in
+            try? await Task.sleep(for: .milliseconds(debounceSchedule.scheduledDelayMilliseconds))
             guard !Task.isCancelled else {
                 await MainActor.run {
                     self.clearCompletedSuggestionTask(suggestionID: suggestionID)
