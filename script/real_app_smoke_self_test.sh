@@ -147,6 +147,23 @@ if ! awk '
   exit 1
 fi
 
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("textedit_model_latency_fragments()")
+body_start = source.index("cat <<'EOF'\n", start) + len("cat <<'EOF'\n")
+body_end = source.index("\nEOF", body_start)
+fragments = [line for line in source[body_start:body_end].splitlines() if line.strip()]
+if len(fragments) < 5:
+    raise SystemExit("model-latency proof must keep at least five fragments")
+bad_triggers = {"confu", "relia", "immed", "trust"}
+for fragment in fragments:
+    trigger = fragment.rsplit(" ", 1)[-1]
+    if trigger in bad_triggers:
+        raise SystemExit(f"model-latency trigger {trigger!r} is prone to native TextEdit completion")
+PY
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_RUNTIME_READY_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'textedit_model_latency_runtime_ready_timeout_seconds' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency to have its own cold-warm runtime timeout" >&2
