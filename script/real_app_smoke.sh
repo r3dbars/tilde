@@ -456,6 +456,7 @@ SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/auto
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
+SMOKE_QUARANTINE_GUARD_PID=""
 EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
@@ -602,6 +603,12 @@ SWIFT
 }
 
 cleanup_smoke() {
+  if [[ -n "$SMOKE_QUARANTINE_GUARD_PID" ]]; then
+    kill "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
+    wait "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
+    SMOKE_QUARANTINE_GUARD_PID=""
+  fi
+
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
   cleanup_smoke_chrome_pids
@@ -746,6 +753,13 @@ acquire_smoke_lock() {
     fi
 
     if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+      if quarantine_foreign_worktree_pid "$existing_pid"; then
+        sleep 1
+        if ! kill -0 "$existing_pid" >/dev/null 2>&1; then
+          rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
+        fi
+        continue
+      fi
       if ((SECONDS >= deadline)); then
         echo "Another real app smoke run is already active (pid $existing_pid)." >&2
         echo "Timed out waiting for the real app smoke lock: $SMOKE_LOCK_DIR" >&2
@@ -761,6 +775,119 @@ acquire_smoke_lock() {
 
     rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
   done
+}
+
+quarantine_other_worktrees_enabled() {
+  [[ "${AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+process_cwd() {
+  local pid="$1"
+  lsof -a -p "$pid" -d cwd -Fn 2>/dev/null |
+    sed -n 's/^n//p' |
+    head -n 1 || true
+}
+
+command_path_is_foreign_worktree() {
+  local command="$1"
+  local worktree_root="$HOME/.codex/worktrees"
+
+  [[ "$command" == "$worktree_root/"* ]] || return 1
+  [[ "$command" == "$ROOT_DIR" || "$command" == "$ROOT_DIR/"* ]] && return 1
+  return 0
+}
+
+cwd_is_foreign_worktree() {
+  local cwd="$1"
+  local worktree_root="$HOME/.codex/worktrees"
+
+  [[ -n "$cwd" && "$cwd" == "$worktree_root/"* ]] || return 1
+  [[ "$cwd" == "$ROOT_DIR" || "$cwd" == "$ROOT_DIR/"* ]] && return 1
+  return 0
+}
+
+quarantine_foreign_worktree_pid() {
+  local pid="$1"
+  local command="${2:-}"
+  local cwd
+  local pgid
+  local self_pgid
+
+  quarantine_other_worktrees_enabled || return 1
+  [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" && "$pid" != "$SMOKE_QUARANTINE_GUARD_PID" ]] || return 1
+  kill -0 "$pid" >/dev/null 2>&1 || return 1
+
+  if [[ -z "$command" ]]; then
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  fi
+  cwd="$(process_cwd "$pid")"
+
+  if ! cwd_is_foreign_worktree "$cwd" && ! command_path_is_foreign_worktree "$command"; then
+    return 1
+  fi
+
+  echo "Stopping foreign worktree proof process pid $pid (${cwd:-unknown cwd})." >&2
+  pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  self_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ -n "$pgid" && "$pgid" != "$self_pgid" && "$pgid" != "0" ]]; then
+    kill -TERM "-$pgid" >/dev/null 2>&1 || true
+  fi
+  kill -TERM "$pid" >/dev/null 2>&1 || true
+  return 0
+}
+
+quarantine_foreign_smoke_processes() {
+  local processes="$1"
+  local line
+  local pid
+  local command
+  local stopped=1
+
+  quarantine_other_worktrees_enabled || return 1
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    pid="$(awk '{ print $1 }' <<<"$line")"
+    command="$line"
+    command="${command#"$pid"}"
+    command="${command#"${command%%[![:space:]]*}"}"
+    if quarantine_foreign_worktree_pid "$pid" "$command"; then
+      stopped=0
+    fi
+  done <<<"$processes"
+
+  return "$stopped"
+}
+
+quarantine_foreign_steadytype_apps() {
+  local pid
+  local command
+  local line
+  local rows
+
+  quarantine_other_worktrees_enabled || return 0
+  rows="$(ps ax -o pid=,command= 2>/dev/null |
+    awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' || true)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    pid="$(awk '{ print $1 }' <<<"$line")"
+    command="$line"
+    command="${command#"$pid"}"
+    command="${command#"${command%%[![:space:]]*}"}"
+    quarantine_foreign_worktree_pid "$pid" "$command" >/dev/null 2>&1 || true
+  done <<<"$rows"
+}
+
+start_foreign_worktree_quarantine_guard() {
+  quarantine_other_worktrees_enabled || exclusive_proof_run_enabled || return 0
+  (
+    while true; do
+      terminate_foreign_proof_processes_for_exclusive_run quiet >/dev/null 2>&1 || true
+      quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)" >/dev/null 2>&1 || true
+      quarantine_foreign_steadytype_apps >/dev/null 2>&1 || true
+      sleep "${AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS:-1}"
+    done
+  ) &
+  SMOKE_QUARANTINE_GUARD_PID="$!"
 }
 
 current_process_ancestor_pids() {
@@ -815,14 +942,17 @@ foreign_proof_process_lines() {
 }
 
 terminate_foreign_proof_processes_for_exclusive_run() {
+  local quiet="${1:-0}"
   exclusive_proof_run_enabled || return 0
 
   local lines
   lines="$(foreign_proof_process_lines || true)"
   [[ -n "$lines" ]] || return 0
 
-  echo "Exclusive proof run terminating foreign proof process(es):" >&2
-  echo "$lines" >&2
+  if [[ "$quiet" != "quiet" ]]; then
+    echo "Exclusive proof run terminating foreign proof process(es):" >&2
+    echo "$lines" >&2
+  fi
 
   local pid pgid cwd command
   while IFS=$'\t' read -r pid pgid cwd command; do
@@ -907,6 +1037,10 @@ refuse_other_smoke_processes() {
 
   while true; do
     processes="$(other_smoke_process_lines || true)"
+    if [[ -n "$processes" ]] && quarantine_foreign_smoke_processes "$processes"; then
+      sleep 1
+      continue
+    fi
     if [[ -z "$processes" ]]; then
       return 0
     fi
@@ -10031,6 +10165,7 @@ if [[ "$APP" == "chrome" ]] && chrome_fixture_is_blocked_high_value_surface "$CH
 fi
 
 terminate_foreign_proof_processes_for_exclusive_run
+start_foreign_worktree_quarantine_guard
 refuse_other_smoke_processes
 acquire_smoke_lock
 

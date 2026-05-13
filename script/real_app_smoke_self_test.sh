@@ -495,6 +495,17 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi
+if ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'start_foreign_worktree_quarantine_guard' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run quiet' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'quarantine_foreign_steadytype_apps' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'cwd_is_foreign_worktree "$cwd"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'command_path_is_foreign_worktree "$command"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected quarantine mode to stop foreign worktree proof processes and app bundles" >&2
+  exit 1
+fi
 if grep -F 'index(command, app_binary)' script/real_app_smoke.sh >/dev/null ||
    grep -F 'pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app process matching, not substring process matching" >&2
