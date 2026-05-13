@@ -17,9 +17,12 @@ require_contains() {
 }
 
 require_contains 'BETA_READINESS_GATE_SCRIPT="${AUTOCOMPLETE_LAB_BETA_READINESS_GATE_SCRIPT:-./script/beta_readiness.sh}"'
+require_contains 'PROMPT_APP_PROOF_GATE_SCRIPT="${AUTOCOMPLETE_LAB_SCORE_TARGET_PROMPT_APP_PROOF_GATE_SCRIPT:-./script/check_prompt_app_manifest_proof.sh}"'
+require_contains 'AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES=never'
 require_contains '"$BETA_READINESS_GATE_SCRIPT" --check-only'
+require_contains 'Final prompt app manifest proof output:'
 require_contains 'Final beta readiness output:'
-require_contains 'private-beta readiness gate repeatedly'
+require_contains 'prompt-app manifest proof gate, and private-beta readiness gate repeatedly'
 
 make_gate() {
   local name="$1"
@@ -27,7 +30,11 @@ make_gate() {
   cat >"$path" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-echo "$(basename "$0") $*" >>"$AUTOCOMPLETE_LAB_SCORE_LOOP_STUB_LOG"
+printf '%s|%s|strict=%s\n' \
+  "$(basename "$0")" \
+  "$*" \
+  "${AUTOCOMPLETE_LAB_SCORE_TARGET_STRICT_PROOF_GATES:-unset}" \
+  >>"$AUTOCOMPLETE_LAB_SCORE_LOOP_STUB_LOG"
 STUB
   chmod +x "$path"
   printf '%s' "$path"
@@ -54,10 +61,18 @@ if ! grep -F "All scorecard goals complete on iteration 1." <<<"$OUTPUT" >/dev/n
   exit 1
 fi
 
-if ! grep -F "beta-readiness --check-only" "$STUB_LOG" >/dev/null; then
-  echo "score loop self-test did not run beta readiness with --check-only" >&2
-  cat "$STUB_LOG" >&2
-  exit 1
-fi
+for expected in \
+  "score-targets||strict=never" \
+  "manual-smoke|--strict|strict=unset" \
+  "visual-evidence|--require-all|strict=unset" \
+  "proof-manifest|--require-all|strict=unset" \
+  "prompt-app-proof||strict=unset" \
+  "beta-readiness|--check-only|strict=unset"; do
+  if ! grep -F "$expected" "$STUB_LOG" >/dev/null; then
+    echo "score loop self-test missing expected gate invocation: $expected" >&2
+    cat "$STUB_LOG" >&2
+    exit 1
+  fi
+done
 
 echo "Scorecard goal loop self-test passed."
