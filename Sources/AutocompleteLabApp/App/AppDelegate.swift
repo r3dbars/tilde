@@ -102,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
+    private let obsidianTabPassthroughRepairPolicy = ObsidianTabPassthroughRepairPolicy()
     private let suggestionInterruptionPolicy = SuggestionInterruptionPolicy()
     private let workspaceFocusChangePolicy = WorkspaceFocusChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
@@ -1479,6 +1480,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         transitionToField(rawFieldIdentity)
 
         let previousSnapshot = lastTextSnapshot
+        let rawSnapshot = FocusedTextSnapshot(
+            fieldIdentity: rawFieldIdentity,
+            textBeforeCursor: rawContext.textBeforeCursor,
+            textAfterCursor: rawContext.textAfterCursor
+        )
+        if repairObsidianTabPassthroughIfNeeded(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: rawSnapshot,
+            context: rawContext,
+            profile: profile,
+            fieldIdentity: rawFieldIdentity,
+            source: "raw"
+        ) {
+            return
+        }
+
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
@@ -1512,6 +1529,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             app: frontmostApp,
             textChanged: previousSnapshot == nil || snapshot != previousSnapshot
         )
+
+        if repairObsidianTabPassthroughIfNeeded(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: snapshot,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            source: "adjusted"
+        ) {
+            return
+        }
 
         guard snapshot != previousSnapshot else {
             if shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
@@ -6828,6 +6856,258 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return posted
+    }
+
+    private func repairObsidianTabPassthroughIfNeeded(
+        previousSnapshot: FocusedTextSnapshot?,
+        currentSnapshot: FocusedTextSnapshot,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        source: String
+    ) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        let suggestionBundleIdentifier = currentSuggestionAppBundleIdentifier
+            ?? currentProfile?.bundleIdentifier
+            ?? profile.bundleIdentifier
+        let suggestionAgeMilliseconds = currentSuggestionAgeMilliseconds()
+        let hasRecentSuggestion = suggestionAgeMilliseconds.map { $0 <= 15_000 } ?? false
+        let suggestionFieldMatches = currentSuggestionFieldIdentity == fieldIdentity
+            || currentSuggestionFieldIdentity == previousSnapshot?.fieldIdentity
+            || hasRecentSuggestion
+        guard profile.bundleIdentifier == bundleIdentifier,
+              let previousSnapshot,
+              suggestionFieldMatches,
+              suggestionBundleIdentifier == bundleIdentifier,
+              currentSuggestionRequestMode == .wordCompletion else {
+            return false
+        }
+
+        let preview = suggestionSession.nextWordAcceptancePreview()
+        let acceptedText = preview?.acceptedText ?? currentSuggestionDisplayedText
+        let decision = obsidianTabPassthroughRepairPolicy.decision(
+            previousTextBeforeCursor: previousSnapshot.textBeforeCursor,
+            currentTextBeforeCursor: currentSnapshot.textBeforeCursor,
+            previousTextAfterCursor: previousSnapshot.textAfterCursor,
+            currentTextAfterCursor: currentSnapshot.textAfterCursor,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion || hasRecentSuggestion,
+            acceptedText: acceptedText
+        )
+        guard decision.shouldRepair, let acceptedText, !acceptedText.isEmpty else {
+            if profile.bundleIdentifier == bundleIdentifier,
+               currentSnapshot.textBeforeCursor.contains("\t") {
+                DiagnosticsLog.shared.record(
+                    "obsidian-tab-passthrough-repair-skipped",
+                    metadata: [
+                        "app": bundleIdentifier,
+                        "reason": decision.reason,
+                        "source": source,
+                        "suggestionAgeMilliseconds": suggestionAgeMilliseconds.map(String.init) ?? "unknown",
+                        "suggestionVisible": String(suggestionSession.hasVisibleSuggestion),
+                        "acceptedChars": String(acceptedText?.count ?? 0),
+                        "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                        "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count)
+                    ]
+                )
+            }
+            return false
+        }
+
+        let action = KeyboardAction.acceptNextWord
+        let key = AutocompleteKey.tab
+        let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText)
+        if acceptanceProof == nil {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-proof-stale",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "source": source,
+                    "acceptedChars": String(acceptedText.count),
+                    "suggestionAgeMilliseconds": suggestionAgeMilliseconds.map(String.init) ?? "unknown"
+                ]
+            )
+        }
+
+        let acceptanceID = UUID().uuidString
+        let acceptedAt = Date()
+        let verificationBaseline = insertionVerificationBaseline(
+            acceptanceID: acceptanceID,
+            acceptedAt: acceptedAt,
+            acceptMode: action.diagnosticName
+        )
+
+        DiagnosticsLog.shared.record(
+            "obsidian-tab-passthrough-repair",
+            metadata: [
+                "app": bundleIdentifier,
+                "reason": decision.reason,
+                "source": source,
+                "acceptedChars": String(acceptedText.count),
+                "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count),
+                "suggestionAgeMilliseconds": suggestionAgeMilliseconds.map(String.init) ?? "unknown",
+                "suggestionVisible": String(suggestionSession.hasVisibleSuggestion)
+            ]
+        )
+
+        guard repairObsidianTabPassthroughByReplacingFocusedText(
+            previousSnapshot: previousSnapshot,
+            currentSnapshot: currentSnapshot,
+            acceptedText: acceptedText
+        ) else {
+            recordKeyboardAction(key: key, action: action, handled: false, reason: "obsidian-tab-passthrough-direct-repair-failed")
+            return false
+        }
+
+        armAcceptedInsertionUndo(
+            acceptedText: acceptedText,
+            acceptanceID: acceptanceID,
+            acceptedAt: acceptedAt,
+            acceptMode: action.diagnosticName
+        )
+        suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
+        recordAcceptedText(acceptedText)
+        advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
+        lastTextSnapshot = FocusedTextSnapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: previousSnapshot.textBeforeCursor + acceptedText,
+            textAfterCursor: previousSnapshot.textAfterCursor
+        )
+        suggestionRepetitionSuppressor.recordAcceptance(
+            acceptedText,
+            mode: currentSuggestionRequestMode,
+            scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+        )
+        if let acceptanceProof {
+            recordRawAcceptance(
+                action: action,
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptanceProof: acceptanceProof
+            )
+        }
+        recordAnnoyanceSignal(
+            .accepted,
+            context: currentAnnoyanceContext(),
+            suggestionID: currentSuggestionID ?? "",
+            reason: "obsidian-tab-passthrough-repaired"
+        )
+        setSuggestionDecision("Accepted: repaired Obsidian Tab passthrough")
+        hideSuggestion(
+            reason: "accepted-obsidian-tab-passthrough-repaired",
+            metadata: [
+                "repair": "obsidian-tab-passthrough",
+                "fieldBeforeChars": String(context.textBeforeCursor.count)
+            ]
+        )
+        scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
+        suppressKey(key)
+        recordKeyboardAction(key: key, action: action, handled: true, reason: "obsidian-tab-passthrough-repaired")
+        return true
+    }
+
+    private func repairObsidianTabPassthroughByReplacingFocusedText(
+        previousSnapshot: FocusedTextSnapshot,
+        currentSnapshot: FocusedTextSnapshot,
+        acceptedText: String
+    ) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-direct-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let currentText = currentSnapshot.textBeforeCursor + currentSnapshot.textAfterCursor
+        let replacementText = previousSnapshot.textBeforeCursor + acceptedText + previousSnapshot.textAfterCursor
+        let cursorUTF16Offset = previousSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        guard let textArea = Self.axFocusedTextArea(
+            in: appElement,
+            matchingValue: currentText,
+            containing: currentSnapshot.textBeforeCursor
+        ) ?? Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: currentText,
+            containing: currentSnapshot.textBeforeCursor,
+            maxDepth: 32
+        ) else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-direct-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "text-area-not-found",
+                    "currentChars": String(currentText.count),
+                    "replacementChars": String(replacementText.count)
+                ]
+            )
+            return false
+        }
+
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let valueResult = AXUIElementSetAttributeValue(
+            textArea,
+            kAXValueAttribute as CFString,
+            replacementText as CFTypeRef
+        )
+        guard valueResult == .success else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-direct-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "value-set-failed",
+                    "axResult": String(valueResult.rawValue)
+                ]
+            )
+            return false
+        }
+
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+
+        var succeeded = false
+        var cursorMatches = false
+        var currentValue: String?
+        for _ in 0..<5 {
+            currentValue = Self.axStringAttribute(textArea, kAXValueAttribute)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+            if currentValue == replacementText,
+               cursorMatches || previousSnapshot.textAfterCursor.isEmpty {
+                succeeded = true
+                break
+            }
+            if currentValue == replacementText {
+                Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        DiagnosticsLog.shared.record(
+            "obsidian-tab-passthrough-direct-repair",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "cursorMatches": String(cursorMatches),
+                "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentValue?.count ?? -1),
+                "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count)
+            ]
+        )
+        return succeeded
     }
 
     private func insertCodexProofText(_ acceptedText: String) -> Bool {
