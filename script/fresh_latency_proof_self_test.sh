@@ -19,6 +19,11 @@ set -euo pipefail
 run_number="$(( $(wc -l <"$AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG" | tr -d ' ') + 1 ))"
 printf '%s\n' "$*" >>"$AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG"
 base_timestamp="2026-05-12T12:00:0${run_number}Z"
+if [[ "${1:-}" == "textedit-default-model-latency" ]]; then
+  cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
+$base_timestamp app-proof-mode-started app=com.apple.TextEdit scenario=textedit-default-model-latency
+LOG
+fi
 cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
 $base_timestamp runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 $base_timestamp focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
@@ -209,6 +214,32 @@ fi
 if ! grep -F "Another proof process is already active." "$FULL_SMOKE_BLOCKED_OUTPUT" >/dev/null; then
   echo "fresh latency proof self-test expected full smoke/build process warning" >&2
   cat "$FULL_SMOKE_BLOCKED_OUTPUT" >&2
+  exit 1
+fi
+
+BETA_GATE_BLOCKED_OUTPUT="$TMP_DIR/beta-gate-blocked-output.txt"
+if AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-beta-gate-blocked.lock" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS=0 \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_PROCESS_LIST=$'123 1 123 bash ./script/check_score_targets.sh\n124 123 123 bash ./script/beta_readiness.sh --check-only\n125 124 123 bash ./script/check_controls_diagnostics_readiness.sh' \
+    ./script/fresh_latency_proof.sh --target textedit-default-model-latency --runs 1 >"$BETA_GATE_BLOCKED_OUTPUT" 2>&1; then
+  echo "fresh latency proof self-test expected beta readiness gates to block before selecting a window" >&2
+  cat "$BETA_GATE_BLOCKED_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Another proof process is already active." "$BETA_GATE_BLOCKED_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected beta readiness process warning" >&2
+  cat "$BETA_GATE_BLOCKED_OUTPUT" >&2
+  exit 1
+fi
+
+if grep -F "Fresh latency proof start:" "$BETA_GATE_BLOCKED_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected no default latency window during beta readiness" >&2
+  cat "$BETA_GATE_BLOCKED_OUTPUT" >&2
   exit 1
 fi
 

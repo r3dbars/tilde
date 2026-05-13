@@ -2,8 +2,9 @@
 set -euo pipefail
 
 LOG_FILE="$(mktemp)"
+DEFAULT_PROOF_LOG_FILE="$(mktemp)"
 EMPTY_LOG_FILE="$(mktemp)"
-trap 'rm -f "$LOG_FILE" "$EMPTY_LOG_FILE"' EXIT
+trap 'rm -f "$LOG_FILE" "$DEFAULT_PROOF_LOG_FILE" "$EMPTY_LOG_FILE"' EXIT
 
 cat >"$LOG_FILE" <<'LOG'
 2026-04-26T18:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-9B-MLX-4bit
@@ -14,6 +15,17 @@ cat >"$LOG_FILE" <<'LOG'
 2026-04-26T18:05:02Z mlx-completion-timing app=com.openai.codex cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=70 generationMilliseconds=100 maxTokens=11 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=101
 2026-04-26T18:05:02Z suggestion-presented app=com.openai.codex latencyMilliseconds=130 requestMode=phraseContinuation traceID=stream
 2026-04-26T18:05:02Z suggestion-presented app=com.openai.codex latencyMilliseconds=190 requestMode=phraseContinuation traceID=stream
+LOG
+
+cat >"$DEFAULT_PROOF_LOG_FILE" <<'LOG'
+2026-04-26T18:04:58Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-9B-MLX-4bit
+2026-04-26T18:04:59Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-default-model-latency
+2026-04-26T18:05:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
+2026-04-26T18:05:03Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=80 generationMilliseconds=110 maxTokens=11 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=111
+2026-04-26T18:05:03Z suggestion-presented app=com.apple.TextEdit latencyMilliseconds=135 requestMode=phraseContinuation traceID=textedit-stream
+2026-04-26T18:06:00Z app-proof-mode-started app=md.obsidian
+2026-04-26T18:06:01Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
+2026-04-26T18:06:02Z mlx-completion-timing app=md.obsidian cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=90 generationMilliseconds=120 maxTokens=11 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=121
 LOG
 
 REPORT="$(script/model_latency_report.py --log "$LOG_FILE" --latest)"
@@ -73,8 +85,12 @@ script/model_latency_report.py \
   --require-shown-samples 2 >/dev/null
 
 DEFAULT_PROOF_REPORT="$(script/model_latency_report.py \
-  --log "$LOG_FILE" \
+  --log "$DEFAULT_PROOF_LOG_FILE" \
   --default-model-proof \
+  --start-line 1 \
+  --end-line 5 \
+  --require-sample-app com.apple.TextEdit \
+  --require-proof-scenario textedit-default-model-latency \
   --require-timing-samples 1 \
   --require-shown-samples 1 \
   --require-phrase-timing-samples 1 \
@@ -92,8 +108,12 @@ if script/model_latency_report.py --log "$EMPTY_LOG_FILE" --latest --require-tim
 fi
 
 if script/model_latency_report.py \
-  --log "$LOG_FILE" \
+  --log "$DEFAULT_PROOF_LOG_FILE" \
   --default-model-proof \
+  --start-line 1 \
+  --end-line 5 \
+  --require-sample-app com.apple.TextEdit \
+  --require-proof-scenario textedit-default-model-latency \
   --require-timing-samples 1 \
   --require-shown-samples 1 \
   --require-phrase-timing-samples 1 \
