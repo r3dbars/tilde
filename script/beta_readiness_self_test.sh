@@ -78,6 +78,10 @@ require_contains '--require-model-backed-visible'
 require_contains '--forbid-fast-word-visible'
 reject_contains 'AUTOCOMPLETE_LAB_LOG_START_LINE:-'
 reject_contains 'AUTOCOMPLETE_LAB_TRACE_START_LINE:-'
+require_contains 'print_next_beta_readiness_lanes'
+require_contains './script/scorecard_next_proof_lanes.py --limit 5'
+require_contains 'onboarding_failed=1'
+require_contains './script/check_onboarding_walkthrough_proof.py --print-template'
 require_contains 'xcrun stapler validate "$PRIMARY_ARTIFACT"'
 require_contains 'spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"'
 require_contains 'spctl --assess --type execute --verbose=4 "$app_path"'
@@ -97,6 +101,8 @@ require_order 'run_check "Visual placement proof" ./script/check_visual_placemen
   'run_check "Latency beta gate" latency_beta_gate'
 require_order 'run_check "Latency beta gate" latency_beta_gate' \
   'run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile'
+require_order 'echo "Beta readiness check-only found $failures blocker(s)."' \
+  'print_next_beta_readiness_lanes "$onboarding_failed"'
 require_order 'configure_readiness_scratch_path || exit 1' \
   'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
 require_order 'echo "== Visual placement proof =="' \
