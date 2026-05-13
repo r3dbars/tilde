@@ -1,17 +1,18 @@
 # Runtime Network Egress Proof
 
-- Generated at: `2026-05-12T20:35:36+00:00`
+- Generated at: `2026-05-13T04:18:11+00:00`
 - Phase: `autocomplete`
 - Result: `pass`
 - Process: `SteadyType`
-- PIDs: `13267`
-- Samples: `11`
+- PIDs: `87337`
+- Samples: `30`
 - Assertion: No non-loopback remote endpoints during autocomplete.
 - Remote endpoints observed: `0`
 - Unexpected remote endpoints: `0`
 - Allowed model setup/update endpoints: `0`
-- Activity note: fresh launch after performance typing soak
-- Executable: `/Users/redbars/.codex/worktrees/25ed/transcripted-autocomplete-lab/dist/SteadyType.app/Contents/MacOS/SteadyType`
-- Executable SHA-256: `f43639d3714a07f468711c278344bab21b47021ff43874ad1f382b11f69984d1`
+- Activity note: String(124 chars)
+- Executable name: `SteadyType`
+- Executable SHA-256: `738b3723a2917d3c752fb93b8f51007c2ab51c748e2582318eab1bee0328c8aa`
+- Command line: `String(112 chars)`
 
 Privacy note: this proof stores only process/socket metadata. It does not store typed text, prompts, model output, screenshots, document names, URLs, or trace lines.
