@@ -778,16 +778,17 @@ current_process_ancestor_pids() {
 }
 
 other_smoke_process_lines() {
-  local process_list ancestor_pids
+  local process_list ancestor_pids self_pgid
   ancestor_pids="$(current_process_ancestor_pids || true)"
   ancestor_pids="${ancestor_pids//$'\n'/ }"
+  self_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v ancestorPids="$ancestor_pids" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPgid="$self_pgid" -v ancestorPids="$ancestor_pids" '
     BEGIN {
       split(ancestorPids, rawAncestors, /[[:space:]]+/)
       for (i in rawAncestors) {
@@ -799,9 +800,11 @@ other_smoke_process_lines() {
     {
       pid = $1
       ppid = $2
+      pgid = $3
       command = $0
       rawLine[pid] = $0
       parent[pid] = ppid
+      processGroup[pid] = pgid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
       directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness|check_current_build_privacy_export)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
@@ -816,6 +819,7 @@ other_smoke_process_lines() {
       shellHasSmokeScript[pid] = shellWrapper && hasSmokeScript[pid]
     }
     function relatedToSelf(pid, parentPid, depth) {
+      if (selfPgid != "" && processGroup[pid] == selfPgid) return 1
       if (pid == self || pid in ancestor) return 1
       parentPid = pid
       for (depth = 0; depth < 128; depth++) {
