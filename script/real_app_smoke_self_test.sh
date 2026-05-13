@@ -76,7 +76,10 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'press_key_code_hid()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyboard-event-tap-latency' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- '--require-event-tap-samples "$event_tap_sample_count"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
   exit 1
 fi
@@ -139,11 +142,24 @@ if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigg
     raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
 if "visible_sample_count" not in block or "model_sample_count" not in block:
     raise SystemExit("model-latency proof must count actual visible and timed model-backed samples")
+if "event_tap_sample_count" not in block:
+    raise SystemExit("model-latency proof must count event-tap latency samples")
+if 'wait_for_log_fields "$sample_start" "TextEdit model latency event tap started' not in block:
+    raise SystemExit("model-latency proof must confirm the event tap is active before pressing Escape")
+if 'focus_textedit_smoke_editor "$textedit_window_title"' not in block or 'assert_textedit_frontmost_window "$textedit_window_title" "TextEdit model latency event-tap proof"' not in block:
+    raise SystemExit("model-latency proof must refocus the exact TextEdit proof window before event-tap measurement")
+if 'wait_for_log_fields "$event_tap_start" "TextEdit model latency event-tap Escape' not in block:
+    raise SystemExit("model-latency proof must require an Escape event-tap latency sample after each visible suggestion")
+if "press_key_code_hid 53" not in block:
+    raise SystemExit("model-latency proof must use a HID-posted Escape key for event-tap measurement")
 visible_increment = block.index('visible_sample_count=$((visible_sample_count + 1))')
 model_increment = block.rfind('model_sample_count=$((model_sample_count + 1))', 0, visible_increment)
 visible_wait = block.rfind('candidateSelectionSource=app-model-result', 0, visible_increment)
 if model_increment < visible_wait:
     raise SystemExit("model-latency proof must count model samples only on an attempt with visible model-backed proof")
+event_tap_wait = block.rfind('keyboard-event-tap-latency', 0, visible_increment)
+if event_tap_wait < visible_wait:
+    raise SystemExit("model-latency proof must require event-tap latency after visible model-backed proof")
 if "visible_sample_count >= 5" not in block:
     raise SystemExit("model-latency proof must stop only after five visible model-backed word completions")
 
