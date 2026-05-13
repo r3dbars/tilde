@@ -336,6 +336,7 @@ def manifest_checks(manifest: dict) -> list[Check]:
                 (
                     "CURRENT_PROOF_SOURCE_PATHS",
                     "source_commit_is_current_compatible",
+                    "proof_sensitive_worktree_changes",
                     "script/real_app_smoke.sh",
                     "script/local_completion_runtime.py",
                 ),

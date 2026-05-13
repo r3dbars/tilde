@@ -30,6 +30,7 @@ require_contains "pid_is_current_bundle()"
 require_contains "quarantine_stale_app_bundles"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
 require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
+require_contains "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 require_contains 'current_pid="$(current_bundle_pid || true)"'
 require_contains 'pid_is_current_bundle "$current_pid"'
 require_contains "exited or restarted during the verification stability window"
