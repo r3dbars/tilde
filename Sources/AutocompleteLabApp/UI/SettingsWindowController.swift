@@ -326,7 +326,7 @@ struct SettingsFirstRunTrustState: Equatable {
     }
 
     var detailText: String {
-        "Suggestions appear near the cursor in supported writing apps. Tab accepts one word. Esc dismisses. Pause stops suggestions everywhere. Text, prompts, accepted text, screenshots, and diagnostics stay on this Mac unless you export a redacted Privacy Bundle."
+        "Suggestions appear near the cursor in supported writing apps. Tab accepts one word. Esc dismisses. Pause stops suggestions everywhere; Pause in the current app stops only that app. Text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, subject lines, and diagnostics stay on this Mac unless you export a redacted Privacy Bundle."
     }
 
     var appsText: String {
