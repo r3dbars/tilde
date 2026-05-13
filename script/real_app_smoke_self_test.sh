@@ -727,7 +727,7 @@ fi
 if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
-   ! grep -F "focusAtEnd(editor, text: textValue(of: editor))" script/obsidian_ax_editor.swift >/dev/null; then
+   ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null; then
   echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note through the helper" >&2
   exit 1
 fi
