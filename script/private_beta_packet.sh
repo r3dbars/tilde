@@ -21,6 +21,9 @@ TESTER_DOCS_DIR="$PACKET_DIR/tester-docs"
 MODEL_ASSET_PATH="$PACKET_DIR/model-asset.md"
 PRIVACY_STATUS_PATH="$PACKET_DIR/privacy-status.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
+RELEASE_PROOF_DIR="$DIST_DIR/release-proof"
+RELEASE_CHECKSUM_PATH="$RELEASE_PROOF_DIR/checksums.txt"
+NOTARY_BLOCKER_PATH="$RELEASE_PROOF_DIR/notarization-blocker.txt"
 
 cd "$ROOT_DIR"
 
@@ -89,7 +92,7 @@ recipients, subject lines, or trace excerpts into the report.
 
 ```bash
 ./script/check_trace_eval.sh
-./script/latency_benchmark_report.py --beta-gate
+./script/beta_readiness.sh --check-only
 ./script/model_latency_report.py --latest
 ./script/model_latency_report.py --latest --require-shown-samples 5
 ./script/check_redacted_report_export.sh
@@ -119,7 +122,7 @@ Use this once per beta day. It should take about 2 minutes.
   for a debug session.
 - Use only the apps listed in the beta packet for that day.
 - Know the exits: `Esc` dismisses, menu bar pause stops suggestions, and
-  `Disable <App>` stops the current app.
+  `Pause Current App` stops the current app.
 
 ## During Writing
 
@@ -291,7 +294,7 @@ write_readiness_summary() {
   local sha="$1"
   local generated_at commit
   generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  commit="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+  commit="$(current_commit)"
 
   cat >"$READINESS_SUMMARY_PATH" <<EOF
 # Beta Readiness Summary
@@ -315,6 +318,7 @@ SHA-256: $sha
 ./script/private_beta_packet_self_test.sh
 ./script/validate_beta_issue_template.sh
 ./script/beta_readiness.sh --check-only
+./script/check_current_build_privacy_export.sh
 ./script/check_redacted_report_export.sh
 ./script/private_beta_packet.sh --check
 \`\`\`
@@ -585,6 +589,56 @@ check_primary_artifact_app() {
   rm -rf "$verify_dir"
 }
 
+check_archive_privacy_export() {
+  local verify_dir proof_dir app_path
+  verify_dir="$(mktemp -d)"
+  proof_dir="$(mktemp -d)"
+
+  ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
+  app_path="$verify_dir/SteadyType.app"
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir" "$proof_dir"
+    echo "archive does not contain SteadyType.app" >&2
+    exit 1
+  fi
+
+  AUTOCOMPLETE_LAB_APP_BUNDLE="$app_path" \
+  AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_dir" \
+    ./script/check_current_build_privacy_export.sh >/tmp/autocomplete-private-beta-privacy-proof.txt
+
+  rm -rf "$verify_dir" "$proof_dir"
+}
+
+require_same_file() {
+  local source_path="$1"
+  local packet_path="$2"
+
+  if ! cmp -s "$source_path" "$packet_path"; then
+    echo "beta packet doc is stale: $packet_path" >&2
+    echo "Regenerate with ./script/private_beta_packet.sh create" >&2
+    exit 1
+  fi
+}
+
+require_generated_file() {
+  local packet_path="$1"
+  shift
+
+  local expected_path
+  expected_path="$(mktemp)"
+  "$@" >"$expected_path"
+
+  if ! cmp -s "$expected_path" "$packet_path"; then
+    echo "beta packet generated file is stale: $packet_path" >&2
+    echo "Regenerate with ./script/private_beta_packet.sh create" >&2
+    rm -f "$expected_path"
+    exit 1
+  fi
+
+  rm -f "$expected_path"
+}
+
 create_packet() {
   require_primary_artifact
   ./script/check_model_asset.py
@@ -640,8 +694,9 @@ Useful commands:
 ./script/manual_smoke_status.sh --require-all
 ./script/manual_proof_queue.sh --print
 ./script/check_trace_eval.sh
-./script/latency_benchmark_report.py --beta-gate
+./script/beta_readiness.sh --check-only
 ./script/model_latency_report.py --latest
+./script/check_current_build_privacy_export.sh
 ./script/check_redacted_report_export.sh
 open "\$HOME/Library/Logs/SteadyType"
 \`\`\`
@@ -660,16 +715,17 @@ EOF
 1. Open `SteadyType.dmg`.
 2. Drag `SteadyType.app` to `Applications`.
 3. Open `SteadyType.app`.
-4. Grant Accessibility when macOS asks.
-5. Open Settings from the menu bar item.
-6. Read `tester-docs/FIRST-RUN-BETA.md`.
-7. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
-8. Confirm Settings says the model is ready.
-9. Click `Start TextEdit Practice`.
-10. Use Tab for one-word accept.
-11. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
-12. Press Esc if a suggestion feels wrong.
-13. Use Diagnostics -> Export to create the local redacted trace report and survival report.
+4. Open Settings from the menu bar item.
+5. Click `Allow Accessibility` in SteadyType, then grant Accessibility in System Settings.
+6. Return to Settings and confirm Accessibility updates without restarting.
+7. Read `tester-docs/FIRST-RUN-BETA.md`.
+8. If the local model is not ready, use `Install Local Model` or `Repair Local Model` in Settings and wait for it to finish.
+9. Confirm Settings says the model is ready.
+10. Click `Start TextEdit Practice`.
+11. Use Tab for one-word accept.
+12. Use the key above Tab for full accept only in non-prompt apps where the profile allows it.
+13. Press Esc if a suggestion feels wrong.
+14. Use Diagnostics -> Export to create the local redacted trace report and survival report.
 
 Stop the test if suggestions feel distracting, appear in the wrong app, or
 insert text somewhere surprising.
@@ -750,6 +806,7 @@ check_packet() {
     echo "Run ./script/check_model_asset.py for the exact fix." >&2
     exit 1
   }
+  check_archive_privacy_export
 
   local regeneration_reason
   if regeneration_reason="$(packet_regeneration_reason)"; then
@@ -762,6 +819,34 @@ check_packet() {
     printf '%s\n' "$regeneration_reason" >&2
     exit 1
   fi
+
+  local expected_commit actual_commit
+  expected_commit="$(current_commit)"
+  actual_commit="$(awk -F': ' '/^Commit:/ {print $2; exit}' "$READINESS_SUMMARY_PATH")"
+  if [[ "$expected_commit" != "$actual_commit" ]]; then
+    echo "beta packet commit is stale" >&2
+    echo "expected: $expected_commit" >&2
+    echo "actual:   ${actual_commit:-missing}" >&2
+    echo "Regenerate with ./script/private_beta_packet.sh create" >&2
+    exit 1
+  fi
+
+  require_same_file "PRIVACY-BETA.md" "$TESTER_DOCS_DIR/PRIVACY-BETA.md"
+  require_same_file "FIRST-RUN-BETA.md" "$TESTER_DOCS_DIR/FIRST-RUN-BETA.md"
+  require_same_file "KNOWN-LIMITATIONS.md" "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md"
+  require_same_file "UNINSTALL-DELETE-DATA.md" "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md"
+  require_same_file "DIAGNOSTIC-EXPORT.md" "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md"
+  require_same_file "RELEASE-NOTES.md" "$TESTER_DOCS_DIR/RELEASE-NOTES.md"
+  require_same_file "docs/product/private-beta-ops-loop.md" "$TESTER_DOCS_DIR/private-beta-ops-loop.md"
+  require_same_file ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml" "$TESTER_DOCS_DIR/autocomplete-beta-feedback.yml"
+  require_same_file ".github/labels.yml" "$TESTER_DOCS_DIR/labels.yml"
+  require_generated_file "$FEEDBACK_PATH" ./script/private_beta_packet.sh --print-feedback-template
+  require_generated_file "$SESSION_REPORT_PATH" ./script/private_beta_packet.sh --print-session-report-template
+  require_generated_file "$DAILY_CHECKLIST_PATH" ./script/private_beta_packet.sh --print-daily-checklist-template
+  require_generated_file "$REDACTED_EXPORT_PATH" ./script/private_beta_packet.sh --print-redacted-export-template
+  require_generated_file "$FEEDBACK_TRIAGE_PATH" ./script/private_beta_packet.sh --print-feedback-triage-template
+  require_generated_file "$STOP_DASHBOARD_PATH" ./script/private_beta_packet.sh --print-stop-dashboard-template
+  require_generated_file "$MODEL_ASSET_PATH" ./script/private_beta_packet.sh --print-model-asset-template "$(./script/check_model_asset.py --print-path)"
 
   echo "Private beta packet verified: $PACKET_DIR"
 }

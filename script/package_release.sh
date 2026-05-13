@@ -273,6 +273,14 @@ clear_notary_blocker() {
   rm -f "$NOTARY_BLOCKER_PATH"
 }
 
+invalidate_notary_proof() {
+  rm -f \
+    "$PROOF_DIR/notarytool-submit.txt" \
+    "$PROOF_DIR/stapler-validate.txt" \
+    "$PROOF_DIR/spctl-dmg.txt" \
+    "$PROOF_DIR/spctl-installed-app.txt"
+}
+
 write_proof_checklist() {
   mkdir -p "$PROOF_DIR"
   print_proof_template "$@" >"$PROOF_DIR/release-proof-checklist.md"
@@ -339,6 +347,7 @@ package_existing_app() {
   ./script/check_app_bundle.sh --release "$APP_BUNDLE"
 
   mkdir -p "$PROOF_DIR"
+  invalidate_notary_proof
   record_command "$PROOF_DIR/codesign-verify.txt" \
     codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
   record_command_allow_failure "$PROOF_DIR/signature-and-entitlements.txt" \
@@ -433,7 +442,7 @@ case "$MODE" in
     release_build_jobs="${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-4}"
     AUTOCOMPLETE_LAB_BUILD_CONFIGURATION=release \
       AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH="$release_scratch_path" \
-      AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS="$release_build_jobs" \
+    AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS="$release_build_jobs" \
       SIGN_IDENTITY="$developer_id" \
       ./script/build_and_run.sh --bundle-only
 

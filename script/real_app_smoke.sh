@@ -53,6 +53,7 @@ TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
 CODEX_DRAFT_BACKUP_ACTIVE=0
+SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
@@ -454,6 +455,7 @@ CHROME_LAST_LAUNCHED_PID=""
 SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-real-app-smoke.lock}"
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
+SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
@@ -705,6 +707,27 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
+diagnose_smoke_signal() {
+  local signal_name="$1"
+  echo "real_app_smoke received $signal_name during phase: $SMOKE_PHASE" >&2
+  echo "Smoke lock: $SMOKE_LOCK_DIR" >&2
+  echo "Running SteadyType processes:" >&2
+  ps ax -o pid=,ppid=,pgid=,etime=,command= 2>/dev/null |
+    awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' >&2
+  echo "Tracked TextEdit smoke windows: ${SMOKE_TEXTEDIT_WINDOW_TITLES[*]:-none}" >&2
+  if [[ -f "$LOG_PATH" ]]; then
+    echo "Last diagnostics line:" >&2
+    tail -n 1 "$LOG_PATH" >&2 || true
+  fi
+}
+
+handle_smoke_term() {
+  diagnose_smoke_signal "SIGTERM"
+  exit 143
+}
+
+trap handle_smoke_term TERM
+
 acquire_smoke_lock() {
   local deadline=$((SECONDS + SMOKE_LOCK_WAIT_SECONDS))
   local announced=0
@@ -712,7 +735,7 @@ acquire_smoke_lock() {
   while true; do
     if mkdir "$SMOKE_LOCK_DIR" >/dev/null 2>&1; then
       SMOKE_LOCK_HELD=1
-      echo "$$" >"$SMOKE_LOCK_DIR/pid"
+      echo "$SMOKE_SCRIPT_PID" >"$SMOKE_LOCK_DIR/pid"
       return 0
     fi
 
@@ -764,7 +787,7 @@ other_smoke_process_lines() {
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="${BASHPID:-$$}" -v ancestorPids="$ancestor_pids" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v ancestorPids="$ancestor_pids" '
     BEGIN {
       split(ancestorPids, rawAncestors, /[[:space:]]+/)
       for (i in rawAncestors) {
@@ -1046,6 +1069,75 @@ latest_runtime_bootstrap_line_number() {
   line_count "$LOG_PATH"
 }
 
+wait_for_textedit_acceptance_with_stale_retry() {
+  local start_line="$1"
+  local label="$2"
+  local key_name="$3"
+  local action_name="$4"
+  local window_title="$5"
+  local attempt attempt_start
+
+  for attempt in 1 2 3; do
+    attempt_start="$(line_count "$LOG_PATH")"
+    case "$action_name" in
+      acceptNextWord)
+        press_key_code 48
+        ;;
+      acceptAllVisible)
+        press_accept_all_shortcut
+        ;;
+      *)
+        echo "unknown TextEdit acceptance action: $action_name" >&2
+        exit 2
+        ;;
+    esac
+
+    if wait_for_log_fields_optional "$attempt_start" 4 \
+      "keyboard-action" \
+      "app=com.apple.TextEdit" \
+      "key=$key_name" \
+      "action=$action_name" \
+      "handled=true"; then
+      return 0
+    fi
+
+    if wait_for_log_fields_optional "$attempt_start" 1 \
+      "keyboard-action" \
+      "app=com.apple.TextEdit" \
+      "key=$key_name" \
+      "action=$action_name" \
+      "handled=false" \
+      "reason=text-before-cursor-changed-before-accept"; then
+      wait_for_log_pattern "$attempt_start" "suggestion-presented .*app=com.apple.TextEdit" "$label refreshed suggestion" 12
+      wait_for_screenshot_capture_if_enabled "$attempt_start" "com.apple.TextEdit" "$label refreshed"
+      focus_textedit_smoke_editor "$window_title"
+      assert_textedit_frontmost_window "$window_title" "$label refreshed"
+      continue
+    fi
+
+    if wait_for_log_fields_optional "$attempt_start" 1 \
+      "keyboard-action" \
+      "app=com.apple.TextEdit" \
+      "key=$key_name" \
+      "action=$action_name" \
+      "handled=false" \
+      "reason=text-after-cursor-changed-before-accept"; then
+      wait_for_log_pattern "$attempt_start" "suggestion-presented .*app=com.apple.TextEdit" "$label refreshed suggestion" 12
+      wait_for_screenshot_capture_if_enabled "$attempt_start" "com.apple.TextEdit" "$label refreshed"
+      focus_textedit_smoke_editor "$window_title"
+      assert_textedit_frontmost_window "$window_title" "$label refreshed"
+      continue
+    fi
+  done
+
+  wait_for_log_fields "$start_line" "$label" 1 \
+    "keyboard-action" \
+    "app=com.apple.TextEdit" \
+    "key=$key_name" \
+    "action=$action_name" \
+    "handled=true"
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -1288,7 +1380,9 @@ run_osascript_with_timeout() {
 activate_process_id() {
   local target_pid="$1"
 
-  swift - "$target_pid" <<'SWIFT' >/dev/null
+  local swift_activation_pid
+  {
+    swift - "$target_pid" <<'SWIFT' >/dev/null
 import AppKit
 
 guard CommandLine.arguments.count == 2,
@@ -1299,6 +1393,9 @@ guard CommandLine.arguments.count == 2,
 
 app.activate(options: [.activateAllWindows])
 SWIFT
+  } &
+  swift_activation_pid="$!"
+  wait_for_background_process "$swift_activation_pid" 2 "Swift activation for pid $target_pid" >/dev/null 2>&1 || true
 
   if [[ "${AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION:-0}" =~ ^(1|true|yes|on)$ ]]; then
     return 0
@@ -1347,6 +1444,8 @@ on run argv
   end tell
 end run
 APPLESCRIPT
+  activation_pid="$!"
+  wait_for_background_process "$activation_pid" 2 "System Events activation for pid $target_pid" >/dev/null 2>&1 || true
 }
 
 assert_frontmost_app() {
@@ -4761,6 +4860,7 @@ on run argv
   end tell
 end run
 APPLESCRIPT
+  wait_for_background_process "$!" 5 "TextEdit disposable document AppleScript open" >/dev/null 2>&1 || true
 
   if wait_for_textedit_document_open "$window_title" 6; then
     return 0
@@ -5060,26 +5160,35 @@ normalize_textedit_typed_seed_for_proof() {
 verify_textedit_native_undo() {
   local window_title="$1"
   local expected_text="$2"
-  local start_line="$3"
-  local label="$4"
-  local accept_mode="$5"
-  local acceptance_id
-  acceptance_id="$(latest_log_field_since "$start_line" "accepted-insertion-undo-armed" "acceptanceID")"
+  local label="$3"
+  local timeout_seconds="${4:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local expected_caret
+  expected_caret="$(printf '%s' "$expected_text" | perl -CS -MEncode -e 'local $/; my $text = <STDIN>; $text = "" unless defined $text; print length(encode("UTF-16LE", $text)) / 2')"
 
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  keystroke "z" using command down
-end tell
-APPLESCRIPT
-  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label" 8
-  record_native_undo_proof "com.apple.TextEdit" "$acceptance_id" "$accept_mode" "$label"
+  while ((SECONDS <= deadline)); do
+    local current_text current_caret
+    current_text="$(textedit_document_text "$window_title")"
+    current_caret="$(textedit_document_caret_location "$window_title")"
+    if [[ "$current_text" == "$expected_text" && "$current_caret" == "$expected_caret" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for TextEdit setup during $label." >&2
+  echo "Expected exact text: $expected_text" >&2
+  echo "Actual exact text: $(textedit_document_text "$window_title")" >&2
+  echo "Expected caret: $expected_caret" >&2
+  echo "Actual caret: $(textedit_document_caret_location "$window_title")" >&2
+  return 1
 }
 
-insert_textedit_smoke_fragment() {
+set_textedit_document_text() {
   local window_title="$1"
-  local fragment="$2"
+  local replacement_text="$2"
 
-  swift - "$window_title" "$fragment" <<'SWIFT'
+  swift - "$window_title" "$replacement_text" <<'SWIFT'
 import AppKit
 import ApplicationServices
 import Foundation
@@ -5089,7 +5198,7 @@ guard CommandLine.arguments.count == 3 else {
 }
 
 let targetTitle = CommandLine.arguments[1]
-let fragment = CommandLine.arguments[2]
+let replacementText = CommandLine.arguments[2]
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -5140,6 +5249,18 @@ func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
     return nil
 }
 
+func moveCaret(_ element: AXUIElement, to location: Int) -> Bool {
+    var range = CFRange(location: location, length: 0)
+    guard let rangeValue = AXValueCreate(.cfRange, &range) else {
+        return false
+    }
+    return AXUIElementSetAttributeValue(
+        element,
+        kAXSelectedTextRangeAttribute as CFString,
+        rangeValue
+    ) == .success
+}
+
 for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(appElement, 0.5)
@@ -5155,14 +5276,13 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
 
-        let currentValue = copyAttribute(textInput, kAXValueAttribute) as? String ?? ""
-        var range = CFRange(location: currentValue.utf16.count, length: 0)
-        guard let rangeValue = AXValueCreate(.cfRange, &range) else {
-            exit(1)
-        }
-        AXUIElementSetAttributeValue(textInput, kAXSelectedTextRangeAttribute as CFString, rangeValue)
-        let result = AXUIElementSetAttributeValue(textInput, kAXSelectedTextAttribute as CFString, fragment as CFString)
-        exit(result == .success ? 0 : 1)
+        let valueResult = AXUIElementSetAttributeValue(
+            textInput,
+            kAXValueAttribute as CFString,
+            replacementText as CFString
+        )
+        let caretResult = moveCaret(textInput, to: replacementText.utf16.count)
+        exit(valueResult == .success && caretResult ? 0 : 1)
     }
 }
 
@@ -5249,9 +5369,10 @@ type_textedit_smoke_fragment_and_confirm() {
   local window_title="$1"
   local fragment="$2"
   local label="$3"
-  local expected_text
+  local before_text expected_text
+  before_text="$(textedit_document_text "$window_title")"
+  expected_text="${before_text}${fragment}"
 
-  expected_text="$(textedit_document_text "$window_title")$fragment"
   type_textedit_smoke_fragment "$window_title" "$fragment"
   if wait_for_textedit_document_fragment "$window_title" "$fragment" "$label" 5; then
     trim_textedit_native_completion_suffix "$window_title" "$expected_text" "$label"
@@ -7826,10 +7947,13 @@ describe_plan() {
 }
 
 build_if_needed() {
+  SMOKE_PHASE="build/relaunch current SteadyType"
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
       AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
+      AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
+      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1
     )
     if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
@@ -7845,6 +7969,8 @@ build_bundle_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
+      AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
+      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1
     )
     if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
@@ -7855,6 +7981,7 @@ build_bundle_if_needed() {
   fi
 
   refresh_build_archive_proof
+  SMOKE_PHASE="build proof refreshed"
 }
 
 steadytype_app_process_rows() {
@@ -8012,6 +8139,7 @@ refresh_build_archive_proof() {
 
   [[ -d "$app_bundle" ]] || return 0
 
+  export AUTOCOMPLETE_LAB_ARCHIVE_PATH="$archive_path"
   archive_dir="$(dirname "$archive_path")"
   archive_name="$(basename "$archive_path")"
   mkdir -p "$archive_dir"
@@ -8945,7 +9073,6 @@ run_notes() {
     assert_notes_title_smoke_target
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title suggestion"
-    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes title"
     assert_frontmost_app "Notes" "Notes title"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes title Tab acceptance" 12 \
@@ -8955,6 +9082,7 @@ run_notes() {
       "action=acceptNextWord" \
       "handled=true"
     wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes title first verified insertion"
+    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes title"
 
     if (( notes_requires_undo == 1 )); then
       press_and_wait_for_accepted_insertion_undo "com.apple.Notes" "Notes title"
@@ -8967,7 +9095,6 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title second suggestion"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes title second"
     assert_frontmost_app "Notes" "Notes title"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
@@ -8977,6 +9104,7 @@ run_notes() {
       "key=$full_accept_key" \
       "action=acceptAllVisible" \
       "handled=true"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes title second"
 
     sleep 1
     local manual_check_args=("$manual_app" --check)
@@ -9014,7 +9142,6 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist suggestion"
-    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes checklist"
     assert_frontmost_app "Notes" "Notes checklist"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes checklist Tab acceptance" 12 \
@@ -9024,6 +9151,7 @@ run_notes() {
       "action=acceptNextWord" \
       "handled=true"
     wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes checklist first verified insertion"
+    wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes checklist"
 
     if (( notes_requires_undo == 1 )); then
       local checklist_acceptance_id
@@ -9041,7 +9169,6 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist second suggestion"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes checklist second"
     assert_frontmost_app "Notes" "Notes checklist"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
@@ -9051,6 +9178,7 @@ run_notes() {
       "key=$full_accept_key" \
       "action=acceptAllVisible" \
       "handled=true"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes checklist second"
 
     sleep 1
     local manual_check_args=("$manual_app" --check)
@@ -9077,7 +9205,6 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
   assert_frontmost_app "Notes" "Notes body"
   press_key_code 48
   wait_for_log_fields "$start_line" "Notes body Tab acceptance" 12 \
@@ -9087,6 +9214,7 @@ run_notes() {
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.Notes .*result=verified" "Notes body first verified insertion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.Notes" "Notes body"
 
   if (( notes_requires_undo == 1 )); then
     press_and_wait_for_accepted_insertion_undo "com.apple.Notes" "Notes body"
@@ -9097,7 +9225,6 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_second_fragment"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
-  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
   assert_frontmost_app "Notes" "Notes body"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
@@ -9107,6 +9234,7 @@ run_notes() {
     "key=$full_accept_key" \
     "action=acceptAllVisible" \
     "handled=true"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.Notes" "Notes body second"
 
   sleep 1
   local manual_check_args=("$manual_app" --check)
@@ -9130,6 +9258,7 @@ run_claude_code_blocked() {
 
 run_textedit() {
   local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
+  SMOKE_PHASE="TextEdit setup"
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   if [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]]; then
@@ -9175,6 +9304,8 @@ run_textedit() {
   esac
   export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
+  SMOKE_PHASE="TextEdit stale smoke cleanup"
+  cleanup_stale_textedit_smoke_windows
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-smoke-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
   textedit_window_title="$(basename "$textedit_file")"
@@ -9225,6 +9356,7 @@ run_textedit() {
   first_fragment="$(textedit_first_fragment)"
   manual_app="$(textedit_smoke_session_app)"
 
+  SMOKE_PHASE="TextEdit first suggestion"
   type_textedit_smoke_fragment_and_confirm "$textedit_window_title" "$first_fragment" "first typed"
   wait_for_textedit_document_exact "$textedit_window_title" "$first_fragment" "TextEdit first typed exact" 5
   move_textedit_caret_to_document_end "$textedit_window_title"
@@ -9243,13 +9375,8 @@ run_textedit() {
   assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_one_word_accept_text
   before_one_word_accept_text="$(textedit_document_text "$textedit_window_title")"
-  press_key_code 48
-  wait_for_log_fields "$start_line" "TextEdit Tab acceptance" 12 \
-    "keyboard-action" \
-    "app=com.apple.TextEdit" \
-    "key=tab" \
-    "action=acceptNextWord" \
-    "handled=true"
+  SMOKE_PHASE="TextEdit Tab acceptance"
+  wait_for_textedit_acceptance_with_stale_retry "$start_line" "TextEdit Tab acceptance" "tab" "acceptNextWord" "$textedit_window_title"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   if native_undo_proof_requested; then
@@ -9275,6 +9402,7 @@ APPLESCRIPT
   full_accept_key="$(accept_all_shortcut)"
   second_start_line="$(line_count "$LOG_PATH")"
 
+  SMOKE_PHASE="TextEdit second suggestion"
   type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and stays inst" "second typed"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
@@ -9283,13 +9411,8 @@ APPLESCRIPT
   local before_full_accept_text
   before_full_accept_text="$(textedit_document_text "$textedit_window_title")"
   full_start_line="$(line_count "$LOG_PATH")"
-  press_accept_all_shortcut
-  wait_for_log_fields "$full_start_line" "TextEdit full acceptance" 12 \
-    "keyboard-action" \
-    "app=com.apple.TextEdit" \
-    "key=$full_accept_key" \
-    "action=acceptAllVisible" \
-    "handled=true"
+  SMOKE_PHASE="TextEdit full acceptance"
+  wait_for_textedit_acceptance_with_stale_retry "$full_start_line" "TextEdit full acceptance" "$full_accept_key" "acceptAllVisible" "$textedit_window_title"
   wait_for_log_pattern "$full_start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit full verified insertion"
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
 
@@ -9324,6 +9447,7 @@ APPLESCRIPT
   AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh "$manual_app" --check
+  SMOKE_PHASE="TextEdit proof complete"
 }
 
 run_textedit_model_latency() {

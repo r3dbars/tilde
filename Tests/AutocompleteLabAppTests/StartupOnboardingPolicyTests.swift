@@ -6,8 +6,8 @@ import Testing
 struct StartupOnboardingPolicyTests {
     private let policy = StartupOnboardingPolicy()
 
-    @Test("Does not request Accessibility prompt automatically on launch")
-    func doesNotRequestAccessibilityPromptAutomaticallyOnLaunch() {
+    @Test("Defers Accessibility prompt behind Settings explanation")
+    func defersAccessibilityPromptBehindSettingsExplanation() {
         #expect(!policy.shouldRequestAccessibilityPromptOnLaunch(isTrusted: false))
         #expect(!policy.shouldRequestAccessibilityPromptOnLaunch(isTrusted: true))
     }

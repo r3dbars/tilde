@@ -9,6 +9,7 @@ final class SuggestionOrchestrator {
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
+    private let completionConfidencePolicy: CompletionConfidencePolicy
     private let suggestionPresentationGate: SuggestionPresentationGate
     private let suggestionReplacementPolicy: SuggestionReplacementPolicy
     private var requestGate = SuggestionRequestGate()
@@ -20,6 +21,7 @@ final class SuggestionOrchestrator {
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
         commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
+        completionConfidencePolicy: CompletionConfidencePolicy = CompletionConfidencePolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
         suggestionReplacementPolicy: SuggestionReplacementPolicy = SuggestionReplacementPolicy(),
         prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy = PrefixFamilyCooldownPolicy()
@@ -27,6 +29,7 @@ final class SuggestionOrchestrator {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
         self.commonPhrasePredictor = commonPhrasePredictor
+        self.completionConfidencePolicy = completionConfidencePolicy
         self.suggestionPresentationGate = suggestionPresentationGate
         self.suggestionReplacementPolicy = suggestionReplacementPolicy
         self.prefixFamilyCooldownPolicy = prefixFamilyCooldownPolicy
@@ -516,36 +519,57 @@ final class SuggestionOrchestrator {
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss
         )
-        let adjustedDisplayScorePolicy = displayScorePolicy
+        let adjustedPolicy = displayScorePolicy
             .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
-        let decision: DisplayScoreDecision
-        if triggerReason != "model-stream",
-           latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds {
+        let confidenceDecision = completionConfidencePolicy.decision(
+            suggestion: suggestion,
+            mode: request.mode,
+            textBeforeCursor: request.textBeforeCursor,
+            latencyMilliseconds: latencyMilliseconds,
+            supportLevel: profile.supportLevel
+        )
+        let confidenceMetadata = [
+            "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
+            "completionConfidenceScore": String(confidenceDecision.score),
+            "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
+        ]
+        let shouldSuppressFinalLatency = triggerReason != "model-stream"
+            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
+        let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
+            && confidenceDecision.reasons.contains("too-slow-to-display")
+        if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,
                 mode: request.mode,
                 behaviorProfileID: request.behaviorProfile.id,
-                threshold: adjustedDisplayScorePolicy.threshold(for: request.mode),
-                acceptedAndKeptProbabilityThreshold: adjustedDisplayScorePolicy.acceptedAndKeptProbabilityThreshold(
+                threshold: adjustedPolicy.threshold(for: request.mode),
+                acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
                     for: request.mode,
                     behaviorProfileID: request.behaviorProfile.id
                 )
             )
-            decision = .suppress(DisplayScoreSuppression(
+            let suppression = DisplayScoreSuppression(
                 reason: .tooSlowToDisplay,
                 trace: trace
-            ))
-        } else {
-            decision = adjustedDisplayScorePolicy.decision(
-                for: score,
-                mode: request.mode,
-                behaviorProfileID: request.behaviorProfile.id
+            )
+            return SuggestionDisplayScoreDecision(
+                decision: .suppress(suppression),
+                metadata: suppression.metadata
+                    .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
+                    .merging(confidenceMetadata) { current, _ in current }
             )
         }
+
+        let decision = adjustedPolicy.decision(
+            for: score,
+            mode: request.mode,
+            behaviorProfileID: request.behaviorProfile.id
+        )
         return SuggestionDisplayScoreDecision(
             decision: decision,
             metadata: decision.metadata
                 .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
+                .merging(confidenceMetadata) { current, _ in current }
         )
     }
 

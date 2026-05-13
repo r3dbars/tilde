@@ -132,6 +132,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Write or refresh the local checksum receipt before validating it.",
     )
+    parser.add_argument(
+        "--developer-fix",
+        action="store_true",
+        help="Include shell fallback commands for developers.",
+    )
 
     args = parser.parse_args()
     if args.model not in models:
@@ -153,27 +158,31 @@ def read_json_object(path: Path) -> str | None:
     return None
 
 
-def validation_failure(model: str, path: Path, reason: str) -> str:
+def validation_failure(model: str, path: Path, reason: str, include_developer_fix: bool) -> str:
     display_name = MODEL_VALIDATION[model]["display_name"]
-    return "\n".join(
-        [
-            f"model asset check failed: {reason}",
-            f"Model: {display_name} MLX ({model})",
-            f"Expected: {path}",
-            "",
-            "Fix:",
-            "  Open SteadyType Settings and use the Local model action.",
-            "  The app shows the expected model folder and keeps suggestions off until the model is valid.",
-            f"  The verifier requires the pinned revision and {RECEIPT_NAME} checksum receipt.",
+    lines = [
+        f"model asset check failed: {reason}",
+        f"Model: {display_name} MLX ({model})",
+        f"Expected: {path}",
+        "",
+        "Fix:",
+        "  Open SteadyType Settings and use Install Local Model or Repair Local Model.",
+        "  The app shows the expected model folder and keeps suggestions off until the model is valid.",
+        f"  The verifier requires the pinned revision and {RECEIPT_NAME} checksum receipt.",
+    ]
+    if include_developer_fix:
+        lines += [
             "",
             "Developer fallback:",
             "  python3 -m pip install --user huggingface_hub",
             f"  ./script/download_mlx_model.py --model {model}",
-            "",
-            "Then rerun:",
-            "  ./script/check_model_asset.py",
         ]
-    )
+    lines += [
+        "",
+        "Then rerun:",
+        "  ./script/check_model_asset.py",
+    ]
+    return "\n".join(lines)
 
 
 def validate_model(
@@ -268,7 +277,7 @@ def main() -> int:
         write_receipt=args.write_integrity_receipt,
     )
     if not is_valid:
-        print(validation_failure(args.model, path, reason), file=sys.stderr)
+        print(validation_failure(args.model, path, reason, args.developer_fix), file=sys.stderr)
         return 1
 
     if not args.quiet:

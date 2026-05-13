@@ -21,7 +21,7 @@ Use this template for each private beta artifact.
 - TextEdit one-word Tab accept.
 - Esc dismiss.
 - Pause and resume.
-- Disable the current app.
+- Pause the current app.
 - Redacted diagnostics export.
 - Secure/search/login/payment field suppression.
 
