@@ -8924,7 +8924,6 @@ run_textedit() {
   fi
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   focus_textedit_smoke_editor "$textedit_window_title"
   assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_one_word_accept_text
@@ -8937,6 +8936,7 @@ run_textedit() {
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   if native_undo_proof_requested; then
     verify_textedit_native_undo "$textedit_window_title" "$before_one_word_accept_text" "$start_line" "TextEdit one-word native undo" "acceptNextWord"
   elif [[ "$TEXTEDIT_VARIANT" != "undo-full" ]]; then
@@ -8963,7 +8963,6 @@ APPLESCRIPT
   type_textedit_smoke_fragment_and_confirm "$textedit_window_title" " and stays inst" "second typed"
 
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.TextEdit" "TextEdit second suggestion"
-  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
   focus_textedit_smoke_editor "$textedit_window_title"
   assert_textedit_frontmost_window "$textedit_window_title" "TextEdit"
   local before_full_accept_text
@@ -8977,6 +8976,7 @@ APPLESCRIPT
     "action=acceptAllVisible" \
     "handled=true"
   wait_for_log_pattern "$full_start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit full verified insertion"
+  wait_for_screenshot_capture_if_enabled "$second_start_line" "com.apple.TextEdit" "TextEdit second"
 
   if native_undo_proof_requested; then
     verify_textedit_native_undo "$textedit_window_title" "$before_full_accept_text" "$full_start_line" "TextEdit full native undo" "acceptAllVisible"
