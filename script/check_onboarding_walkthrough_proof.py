@@ -52,6 +52,7 @@ BUILD_TOKEN_PATTERN = re.compile(
     r"(commit:[0-9a-fA-F]{7,40}|app-sha256:[0-9a-fA-F]{64}|archive-sha256:[0-9a-fA-F]{64})"
 )
 PASS_RESULT_PATTERN = re.compile(r"\bpass(?:ed)?\b")
+PLACEHOLDER_PATTERN = re.compile(r"<[^>\n|]+>")
 RECORDING_GUIDE = "docs/product/onboarding-walkthrough-proof.md"
 
 
@@ -216,6 +217,11 @@ def validate_row(row: dict[str, str], tokens: set[str]) -> list[str]:
     for term in UNRESOLVED_TERMS:
         if re.search(rf"\b{re.escape(term)}\b", normalize(row_text)):
             failures.append(f"row still contains unresolved marker: {term}")
+    placeholders = sorted(set(PLACEHOLDER_PATTERN.findall(row_text)))
+    if placeholders:
+        failures.append(
+            "row still contains template placeholder(s): " + ", ".join(placeholders)
+        )
 
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", row["time utc"].strip()):
         failures.append("time utc must be an ISO UTC timestamp like 2026-05-13T12:00:00Z")

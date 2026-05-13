@@ -47,6 +47,17 @@ if ! grep -F "docs/product/onboarding-walkthrough-proof.md" "$TMP_DIR/template.t
   exit 1
 fi
 
+if script/check_onboarding_walkthrough_proof.py --proof "$TMP_DIR/template.txt" >"$TMP_DIR/template-proof.txt" 2>&1; then
+  echo "onboarding proof self-test expected unchanged template proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "row still contains template placeholder(s): <end>, <start>" "$TMP_DIR/template-proof.txt" >/dev/null; then
+  echo "onboarding proof self-test missing placeholder failure" >&2
+  cat "$TMP_DIR/template-proof.txt" >&2
+  exit 1
+fi
+
 if ! grep -F "Do not turn a placeholder into \`pass\`" docs/product/onboarding-walkthrough-proof.md >/dev/null; then
   echo "onboarding proof self-test missing honest-pass warning in runbook" >&2
   exit 1
