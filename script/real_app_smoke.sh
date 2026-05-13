@@ -31,6 +31,9 @@ PROOF_MODE_LAUNCHCTL_PREVIOUS=""
 UNDO_RECOVERY_ENV_KEY="AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY"
 UNDO_RECOVERY_LAUNCHCTL_WAS_PREPARED=0
 UNDO_RECOVERY_LAUNCHCTL_PREVIOUS=""
+PROOF_DISABLE_FAST_WORD_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
+PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=0
+PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
 TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
@@ -523,6 +526,14 @@ cleanup_smoke() {
       launchctl setenv "$UNDO_RECOVERY_ENV_KEY" "$UNDO_RECOVERY_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$UNDO_RECOVERY_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 
@@ -1202,6 +1213,21 @@ prepare_temporary_app_enablement() {
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so temporary enablement/proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_model_latency_runtime_options() {
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "TextEdit model latency proof: fast word completions disabled so every sample must hit the local model."
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so model-latency proof mode only applies if the app was launched with this environment." >&2
   fi
 }
 
@@ -6576,6 +6602,7 @@ describe_plan() {
       echo "Safety: the smoke launch temporarily enables TextEdit only for this proof pass."
       if [[ "$TEXTEDIT_VARIANT" == "model-latency" ]]; then
         echo "Safety: model latency proof seeds stable context into the disposable TextEdit AX target, then types the final partial word through live key events."
+        echo "Safety: model latency proof disables fast word completions for that launch so local model timing is required."
       else
         echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
       fi
@@ -6809,6 +6836,7 @@ launch_steadytype_after_chrome_setup() {
     AUTOCOMPLETE_LAB_MODEL \
     AUTOCOMPLETE_LAB_VISIBLE_WORDS \
     AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
     AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY; do
@@ -8406,6 +8434,7 @@ run_textedit_model_latency() {
   move_textedit_caret_to_document_end "$textedit_window_title"
 
   prepare_temporary_app_enablement
+  prepare_model_latency_runtime_options
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
