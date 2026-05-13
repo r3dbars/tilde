@@ -731,6 +731,11 @@ if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke
   echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note through the helper" >&2
   exit 1
 fi
+if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "beforeChars=\${expected_before_chars}±2" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to allow a tiny CodeMirror file/AX count skew while requiring afterChars=0" >&2
+  exit 1
+fi
 
 python3 - <<'PY'
 from pathlib import Path
