@@ -8498,7 +8498,6 @@ build_bundle_if_needed() {
     local build_run_env=(
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
-      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1
     )
     if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)

@@ -10,7 +10,7 @@ APP_VERSION="${AUTOCOMPLETE_LAB_VERSION:-0.1.0}"
 APP_BUILD="${AUTOCOMPLETE_LAB_BUILD:-$(git rev-list --count HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIST_DIR="$ROOT_DIR/dist"
+DIST_DIR="${AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist}"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
