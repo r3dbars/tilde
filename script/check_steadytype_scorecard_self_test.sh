@@ -17,6 +17,93 @@ if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/pass.txt" >/dev/null; the
   exit 1
 fi
 
+MANUAL_LIVE="$TMP_DIR/manual-live.txt"
+PROOF_LIVE="$TMP_DIR/proof-live.txt"
+python3 - "$MANUAL_LIVE" "$PROOF_LIVE" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_text(
+    "Insertion proof status: docs/product/manual-smoke-runs.md\n"
+    "30 target app pass(es) still need real manual smoke proof.\n",
+    encoding="utf-8",
+)
+Path(sys.argv[2]).write_text(
+    "Proof manifest gaps:\n"
+    "Proof manifest check failed with 7 issue(s).\n",
+    encoding="utf-8",
+)
+PY
+
+python3 script/check_steadytype_scorecard.py \
+  --scorecard "$SCORECARD" \
+  --live \
+  --manual-smoke-output "$MANUAL_LIVE" \
+  --proof-manifest-output "$PROOF_LIVE" \
+  >"$TMP_DIR/live-pass.txt"
+
+if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/live-pass.txt" >/dev/null; then
+  echo "scorecard self-test expected live fixture counts to verify" >&2
+  cat "$TMP_DIR/live-pass.txt" >&2
+  exit 1
+fi
+
+MANUAL_DRIFT="$TMP_DIR/manual-drift.md"
+python3 - "$SCORECARD" "$MANUAL_DRIFT" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace(
+    "30 target app passes are stale or pending",
+    "29 target app passes are stale or pending",
+    1,
+)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py \
+  --scorecard "$MANUAL_DRIFT" \
+  --live \
+  --manual-smoke-output "$MANUAL_LIVE" \
+  --proof-manifest-output "$PROOF_LIVE" \
+  >"$TMP_DIR/manual-drift.txt" 2>&1; then
+  echo "scorecard self-test expected live manual count drift to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "manual smoke stale/pending count claim is 29, live output reports 30" "$TMP_DIR/manual-drift.txt" >/dev/null; then
+  echo "scorecard self-test missing live manual count drift failure" >&2
+  cat "$TMP_DIR/manual-drift.txt" >&2
+  exit 1
+fi
+
+PROOF_DRIFT="$TMP_DIR/proof-drift.md"
+python3 - "$SCORECARD" "$PROOF_DRIFT" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("7 manifest issues", "8 manifest issues", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py \
+  --scorecard "$PROOF_DRIFT" \
+  --live \
+  --manual-smoke-output "$MANUAL_LIVE" \
+  --proof-manifest-output "$PROOF_LIVE" \
+  >"$TMP_DIR/proof-drift.txt" 2>&1; then
+  echo "scorecard self-test expected live proof manifest count drift to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "proof manifest issue count claim is 8, live output reports 7" "$TMP_DIR/proof-drift.txt" >/dev/null; then
+  echo "scorecard self-test missing live proof manifest count drift failure" >&2
+  cat "$TMP_DIR/proof-drift.txt" >&2
+  exit 1
+fi
+
 BAD_SCORE="$TMP_DIR/bad-score.md"
 sed -E 's#(\| Latency \| )[0-9]+/100#\1101/100#' "$SCORECARD" >"$BAD_SCORE"
 
@@ -137,6 +224,90 @@ fi
 if ! grep -F "missing required score area: model readiness" "$TMP_DIR/missing.txt" >/dev/null; then
   echo "scorecard self-test missing required-area failure" >&2
   cat "$TMP_DIR/missing.txt" >&2
+  exit 1
+fi
+
+LIVE_SCORECARD="$TMP_DIR/live-scorecard.md"
+python3 - "$LIVE_SCORECARD" <<'PY'
+from pathlib import Path
+import sys
+
+areas = [
+    "Suggestion quality",
+    "Placement",
+    "Tab safety",
+    "Latency",
+    "Privacy",
+    "App coverage",
+    "Onboarding",
+    "Controls",
+    "Diagnostics",
+    "Model readiness",
+    "Beta readiness",
+    "Test/proof coverage",
+]
+
+lines = [
+    "# Scorecard",
+    "",
+    "Overall score: 75/100.",
+    "",
+    "| Area | Score | Evidence | Why It Is Not Higher | Next Proof |",
+    "| --- | --- | --- | --- | --- |",
+]
+for area in areas:
+    evidence = "`./script/check.sh`: passed."
+    if area == "App coverage":
+        evidence += " `manual_smoke_status.sh --strict`: failed with 7 stale or pending rows."
+    if area == "Test/proof coverage":
+        evidence += " `check_proof_manifest.sh --require-all`: failed with 3 manifest issues."
+    lines.append(
+        f"| {area} | 75/100 | {evidence} | More proof needed. | Run `./script/check.sh`. |"
+    )
+
+Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+
+cat >"$TMP_DIR/manual-smoke-live.txt" <<'EOF'
+7 target app passes still need real manual smoke proof.
+EOF
+
+cat >"$TMP_DIR/proof-manifest-live.txt" <<'EOF'
+Proof manifest check failed with 3 issue(s).
+EOF
+
+python3 script/check_steadytype_scorecard.py \
+  --scorecard "$LIVE_SCORECARD" \
+  --live \
+  --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
+  --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
+  >"$TMP_DIR/live-pass.txt"
+
+cat >"$TMP_DIR/manual-smoke-live-bad.txt" <<'EOF'
+8 target app passes still need real manual smoke proof.
+EOF
+
+if python3 script/check_steadytype_scorecard.py \
+  --scorecard "$LIVE_SCORECARD" \
+  --live \
+  --manual-smoke-output "$TMP_DIR/manual-smoke-live-bad.txt" \
+  --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
+  >"$TMP_DIR/live-bad.txt" 2>&1; then
+  echo "scorecard self-test expected live manual count mismatch to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "manual smoke stale/pending count claim is 7, live output reports 8" "$TMP_DIR/live-bad.txt" >/dev/null; then
+  echo "scorecard self-test missing live manual count mismatch failure" >&2
+  cat "$TMP_DIR/live-bad.txt" >&2
+  exit 1
+fi
+
+if python3 script/check_steadytype_scorecard.py \
+  --scorecard "$LIVE_SCORECARD" \
+  --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
+  >"$TMP_DIR/live-args.txt" 2>&1; then
+  echo "scorecard self-test expected live output files to require --live" >&2
   exit 1
 fi
 
