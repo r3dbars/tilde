@@ -90,6 +90,11 @@ def runtime_launches(path):
                     current_proof_scenario = ""
                 continue
 
+            if " terminate " in f" {stripped} ":
+                current_proof_app = ""
+                current_proof_scenario = ""
+                continue
+
             if " runtime-bootstrap " not in f" {stripped} ":
                 continue
             parts = stripped.split()
@@ -116,6 +121,7 @@ def trace_window(
     timestamp,
     before_timestamp=None,
     required_trace_app=None,
+    required_request_mode=None,
     require_model_backed_visible=False,
     forbid_fast_word_visible=False,
 ):
@@ -127,6 +133,7 @@ def trace_window(
     seen_presented = set()
     seen_model = set()
     model_backed_suggestion_ids = set()
+    relevant_events = []
     last_line_number = 0
 
     if not timestamp or not path.exists():
@@ -159,42 +166,49 @@ def trace_window(
             if required_trace_app and event.get("appBundleIdentifier") != required_trace_app:
                 continue
 
-            event_type = event.get("type")
-            if event_type == "suggestionPresented":
-                key = suggestion_key(event, line_number)
-                if key in seen_presented:
-                    continue
-
-                metadata = event.get("metadata") or {}
-                selection_source = event.get("candidateSelectionSource") or metadata.get(
-                    "candidateSelectionSource"
-                )
-                if forbid_fast_word_visible and selection_source == "fast-word-completion":
-                    fast_word_visible_samples += 1
-
-                if require_model_backed_visible:
-                    if selection_source != "app-model-result" and key not in model_backed_suggestion_ids:
-                        continue
-
-                seen_presented.add(key)
-                if int_value(event.get("latencyMilliseconds")) is not None:
-                    first_visible_samples += 1
+            if required_request_mode and event.get("requestMode") != required_request_mode:
                 continue
 
-            if event_type == "modelResult":
-                key = (suggestion_key(event, line_number), line_number)
-                if key in seen_model:
-                    continue
-                seen_model.add(key)
-                metadata = event.get("metadata") or {}
-                generation_latency = int_value(
-                    metadata.get("totalGenerationLatencyMilliseconds")
-                )
-                if generation_latency is None:
-                    generation_latency = int_value(event.get("latencyMilliseconds"))
-                if generation_latency is not None:
-                    model_backed_suggestion_ids.add(suggestion_key(event, line_number))
-                    model_samples += 1
+            relevant_events.append((line_number, event))
+
+    for line_number, event in relevant_events:
+        if event.get("type") != "modelResult":
+            continue
+        key = (suggestion_key(event, line_number), line_number)
+        if key in seen_model:
+            continue
+        seen_model.add(key)
+        metadata = event.get("metadata") or {}
+        generation_latency = int_value(
+            metadata.get("totalGenerationLatencyMilliseconds")
+        )
+        if generation_latency is None:
+            generation_latency = int_value(event.get("latencyMilliseconds"))
+        if generation_latency is not None:
+            model_backed_suggestion_ids.add(suggestion_key(event, line_number))
+            model_samples += 1
+
+    for line_number, event in relevant_events:
+        if event.get("type") != "suggestionPresented":
+            continue
+        key = suggestion_key(event, line_number)
+        if key in seen_presented:
+            continue
+
+        metadata = event.get("metadata") or {}
+        selection_source = event.get("candidateSelectionSource") or metadata.get(
+            "candidateSelectionSource"
+        )
+        if forbid_fast_word_visible and selection_source == "fast-word-completion":
+            fast_word_visible_samples += 1
+
+        if require_model_backed_visible:
+            if selection_source != "app-model-result" and key not in model_backed_suggestion_ids:
+                continue
+
+        seen_presented.add(key)
+        if int_value(event.get("latencyMilliseconds")) is not None:
+            first_visible_samples += 1
 
     if before_timestamp and trace_end_line is None:
         trace_end_line = last_line_number
@@ -236,6 +250,7 @@ def select_window(
     min_model_samples,
     required_proof_app=None,
     required_trace_app=None,
+    required_request_mode=None,
     require_model_backed_visible=False,
     required_proof_scenario=None,
     forbid_fast_word_visible=False,
@@ -282,6 +297,7 @@ def select_window(
                 trace_log,
                 latest_required_launch.timestamp,
                 required_trace_app=required_trace_app,
+                required_request_mode=required_request_mode,
                 require_model_backed_visible=require_model_backed_visible,
                 forbid_fast_word_visible=forbid_fast_word_visible,
             ),
@@ -312,6 +328,7 @@ def select_window(
             launch.timestamp,
             before_timestamp,
             required_trace_app=required_trace_app,
+            required_request_mode=required_request_mode,
             require_model_backed_visible=require_model_backed_visible,
             forbid_fast_word_visible=forbid_fast_word_visible,
         )
@@ -349,6 +366,7 @@ def select_window(
         trace_log,
         fallback_launch.timestamp,
         required_trace_app=required_trace_app,
+        required_request_mode=required_request_mode,
         require_model_backed_visible=require_model_backed_visible,
         forbid_fast_word_visible=forbid_fast_word_visible,
     )
@@ -382,6 +400,10 @@ def main():
         help="Only count trace samples from this app bundle inside the selected window.",
     )
     parser.add_argument(
+        "--required-request-mode",
+        help="Only count trace samples with this requestMode inside the selected window.",
+    )
+    parser.add_argument(
         "--require-model-backed-visible",
         action="store_true",
         help="Only count visible samples that are explicitly model-backed.",
@@ -401,6 +423,7 @@ def main():
         args.min_model_samples,
         required_proof_app=args.required_proof_app,
         required_trace_app=args.required_trace_app,
+        required_request_mode=args.required_request_mode,
         require_model_backed_visible=args.require_model_backed_visible,
         required_proof_scenario=args.required_proof_scenario,
         forbid_fast_word_visible=args.forbid_fast_word_visible,

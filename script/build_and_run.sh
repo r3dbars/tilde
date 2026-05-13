@@ -395,6 +395,13 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
   fi
 
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
+      "$AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION >/dev/null 2>&1 || true
+  fi
+
   if [[ -n "${AUTOCOMPLETE_LAB_PROOF_SCENARIO:-}" ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_PROOF_SCENARIO "$AUTOCOMPLETE_LAB_PROOF_SCENARIO"
   else
