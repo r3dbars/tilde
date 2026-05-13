@@ -105,6 +105,12 @@ if "wait_for_log_fields_optional \"$seed_start\"" not in block:
     raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
 if "describe_textedit_model_latency_seed_miss" not in block:
     raise SystemExit("model-latency proof must diagnose missing seed logs before the measured sample")
+if 'trigger_prefix="${trigger_text%?}"' not in block or 'trigger_final="${trigger_text: -1}"' not in block:
+    raise SystemExit("model-latency proof must seed the trigger prefix and live-type only the final trigger character")
+if 'stable_context="${stable_context}${trigger_prefix}"' not in block:
+    raise SystemExit("model-latency proof must include the trigger prefix in the stable AX seed")
+if 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS' not in block:
+    raise SystemExit("model-latency proof must allow the prefix seed to settle before the measured final key")
 if 'wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed' in block:
     raise SystemExit("model-latency proof must not hard-fail before typing the measured trigger")
 if 'proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"' not in block:
@@ -118,7 +124,7 @@ sample_window = block.index('start_line="$(line_count "$LOG_PATH")"', runtime_re
 post_runtime_block = block[runtime_ready:sample_window]
 if "focus_textedit_smoke_editor" not in post_runtime_block or "click_textedit_smoke_editor" not in post_runtime_block:
     raise SystemExit("model-latency proof must refocus TextEdit after build/runtime warmup before sampling")
-trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"')
+trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$trigger_final"')
 timing = block.index('wait_for_log_fields_optional "$sample_start" 20', trigger)
 if 'move_textedit_caret_to_document_end "$textedit_window_title"' in block[trigger:timing]:
     raise SystemExit("model-latency proof must not move the caret while the measured model request is in flight")
@@ -411,6 +417,10 @@ fi
 
 if ! grep -F 'AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected proof runs to direct-launch the current app bundle" >&2
+  exit 1
+fi
+if ! grep -F 'AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected build/run relaunches to be marked as smoke-owned" >&2
   exit 1
 fi
 if grep -F '|| screenshot_trace_requested' script/real_app_smoke.sh >/dev/null; then
