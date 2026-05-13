@@ -162,6 +162,26 @@ PY
   echo "production mock fallback surfaces disabled"
 }
 
+check_runtime_no_egress_proof() {
+  local proof_path="${AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json}"
+  local diagnostics_log="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+  local max_age_seconds="${AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400}"
+  local min_samples="${AUTOCOMPLETE_LAB_NO_EGRESS_MIN_SAMPLES:-10}"
+  local args=(
+    --validate-proof "$proof_path"
+    --max-proof-age-seconds "$max_age_seconds"
+    --min-samples "$min_samples"
+    --diagnostics-log "$diagnostics_log"
+    --require-newer-than-latest-launch
+  )
+
+  if [[ -n "${AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-}" ]]; then
+    args+=(--app-binary "$AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY")
+  fi
+
+  ./script/check_runtime_network_egress.py "${args[@]}"
+}
+
 check_current_artifact_checksum() {
   local checksums_path="$ROOT_DIR/dist/release-proof/checksums.txt"
   local expected_sha actual_sha
@@ -425,6 +445,7 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
+  run_check "Runtime no-egress proof" check_runtime_no_egress_proof || failures=$((failures + 1))
   run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
@@ -487,6 +508,11 @@ echo "== Runtime production gate =="
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
   ./script/check_diagnostics_log.sh
+
+echo
+echo "== Runtime no-egress proof =="
+check_runtime_no_egress_proof
+
 echo
 echo "== Controls and diagnostics readiness =="
 ./script/check_controls_diagnostics_readiness.sh

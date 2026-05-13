@@ -117,6 +117,48 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Short privacy-safe note about what was happening during the observation.",
     )
+    parser.add_argument(
+        "--validate-proof",
+        type=Path,
+        help="Validate an existing JSON or Markdown no-egress proof instead of observing a process.",
+    )
+    parser.add_argument(
+        "--max-proof-age-seconds",
+        type=float,
+        default=0,
+        help="When validating, fail if generated_at is older than this many seconds. 0 disables age checks.",
+    )
+    parser.add_argument(
+        "--now",
+        default="",
+        help="UTC timestamp used for validation tests. Defaults to the current time.",
+    )
+    parser.add_argument(
+        "--diagnostics-log",
+        type=Path,
+        help="Diagnostics log used to reject no-egress proof captured before the latest app launch.",
+    )
+    parser.add_argument(
+        "--require-newer-than-latest-launch",
+        action="store_true",
+        help="When validating, require generated_at to be newer than the latest diagnostics launch line.",
+    )
+    parser.add_argument(
+        "--min-samples",
+        type=int,
+        default=1,
+        help="When validating, require at least this many socket samples.",
+    )
+    parser.add_argument(
+        "--expected-executable-sha256",
+        default="",
+        help="When validating, require the proof to contain this executable SHA-256.",
+    )
+    parser.add_argument(
+        "--app-binary",
+        type=Path,
+        help="When validating, hash this app binary and require the proof to match it.",
+    )
     return parser.parse_args()
 
 
@@ -245,6 +287,18 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def parse_iso_datetime(value: object) -> dt.datetime:
+    raw = str(value or "").strip().strip("`")
+    if not raw:
+        raise ValueError("missing timestamp")
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    parsed = dt.datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
 
 
 def string_summary(value: str) -> str:
@@ -390,8 +444,167 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def parse_markdown_proof(path: Path) -> dict[str, object]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+
+    def field(label: str) -> str:
+        pattern = rf"^- {re.escape(label)}:\s*`?([^`\n]+)`?"
+        match = re.search(pattern, text, re.MULTILINE)
+        return match.group(1).strip() if match else ""
+
+    executable_hashes = re.findall(r"^- Executable SHA-256:\s*`?([0-9a-fA-F]+)`?", text, re.MULTILINE)
+    unexpected = field("Unexpected remote endpoints")
+    allowed_model = field("Allowed model setup/update endpoints")
+    samples = field("Samples")
+    return {
+        "generated_at": field("Generated at"),
+        "phase": field("Phase"),
+        "result": field("Result"),
+        "process_name": field("Process"),
+        "samples": int(samples) if samples.isdigit() else 0,
+        "unexpected_remote_endpoint_count": int(unexpected) if unexpected.isdigit() else 0,
+        "allowed_model_endpoint_count": int(allowed_model) if allowed_model.isdigit() else 0,
+        "processes": [{"executable_sha256": item.lower()} for item in executable_hashes],
+    }
+
+
+def load_proof_summary(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        raise FileNotFoundError(f"missing no-egress proof: {path}")
+    if path.suffix.lower() == ".json":
+        return json.loads(path.read_text(encoding="utf-8"))
+    return parse_markdown_proof(path)
+
+
+def latest_launch_timestamp(path: Path) -> dt.datetime:
+    if not path.is_file():
+        raise FileNotFoundError(f"missing diagnostics log: {path}")
+
+    latest = ""
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if "launch accessibility=" in line:
+            latest = line.split(maxsplit=1)[0]
+    if not latest:
+        raise ValueError(f"no launch accessibility= line found in diagnostics log: {path}")
+    return parse_iso_datetime(latest)
+
+
+def proof_executable_hashes(summary: dict[str, object]) -> set[str]:
+    hashes: set[str] = set()
+    raw_processes = summary.get("processes", [])
+    if isinstance(raw_processes, list):
+        for process in raw_processes:
+            if isinstance(process, dict):
+                value = str(process.get("executable_sha256", "")).strip().lower()
+                if value:
+                    hashes.add(value)
+    direct = str(summary.get("executable_sha256", "")).strip().lower()
+    if direct:
+        hashes.add(direct)
+    return hashes
+
+
+def validate_proof(args: argparse.Namespace) -> int:
+    failures: list[str] = []
+    path = args.validate_proof
+    assert path is not None
+
+    try:
+        summary = load_proof_summary(path)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        print("Runtime network egress proof validation: FAIL", file=sys.stderr)
+        print(f"- {error}", file=sys.stderr)
+        return 1
+
+    phase = str(summary.get("phase", "")).lower()
+    result = str(summary.get("result", "")).lower()
+    try:
+        unexpected = int(summary.get("unexpected_remote_endpoint_count", 0))
+    except (TypeError, ValueError):
+        unexpected = -1
+    try:
+        samples = int(summary.get("samples", 0))
+    except (TypeError, ValueError):
+        samples = 0
+
+    if phase != "autocomplete":
+        failures.append(f"phase={phase or 'missing'} does not prove autocomplete no-egress")
+    if result != "pass":
+        failures.append(f"result={result or 'missing'} is not pass")
+    if unexpected != 0:
+        failures.append(f"unexpectedRemoteEndpoints={unexpected}")
+    if samples < args.min_samples:
+        failures.append(f"samples={samples} is below required minimum {args.min_samples}")
+
+    generated_at: dt.datetime | None = None
+    try:
+        generated_at = parse_iso_datetime(summary.get("generated_at", ""))
+    except ValueError as error:
+        failures.append(f"generated_at is invalid: {error}")
+
+    now = dt.datetime.now(dt.timezone.utc)
+    if args.now:
+        try:
+            now = parse_iso_datetime(args.now)
+        except ValueError as error:
+            failures.append(f"--now is invalid: {error}")
+
+    if generated_at is not None and args.max_proof_age_seconds > 0:
+        age_seconds = (now - generated_at).total_seconds()
+        if age_seconds < -300:
+            failures.append(f"generated_at is in the future by {int(abs(age_seconds))}s")
+        elif age_seconds > args.max_proof_age_seconds:
+            failures.append(
+                f"no-egress proof is stale: ageSeconds={int(age_seconds)} "
+                f"maxAgeSeconds={int(args.max_proof_age_seconds)}"
+            )
+
+    if args.require_newer_than_latest_launch:
+        if not args.diagnostics_log:
+            failures.append("--require-newer-than-latest-launch needs --diagnostics-log")
+        elif generated_at is not None:
+            try:
+                latest_launch = latest_launch_timestamp(args.diagnostics_log)
+                if generated_at < latest_launch:
+                    failures.append(
+                        "no-egress proof is older than latest runtime launch "
+                        f"(proofGeneratedAt={generated_at.isoformat(timespec='seconds')}; "
+                        f"latestLaunch={latest_launch.isoformat(timespec='seconds')})"
+                    )
+            except (OSError, ValueError) as error:
+                failures.append(str(error))
+
+    expected_hash = args.expected_executable_sha256.strip().lower()
+    if args.app_binary:
+        if args.app_binary.is_file():
+            expected_hash = sha256_file(args.app_binary)
+        else:
+            failures.append(f"missing app binary for executable hash check: {args.app_binary}")
+    if expected_hash:
+        proof_hashes = proof_executable_hashes(summary)
+        if expected_hash not in proof_hashes:
+            failures.append("proof executable SHA-256 does not match the expected app binary")
+
+    if failures:
+        print("Runtime network egress proof validation: FAIL", file=sys.stderr)
+        print(f"Proof: {path}", file=sys.stderr)
+        for failure in failures:
+            print(f"- {failure}", file=sys.stderr)
+        return 1
+
+    print("Runtime network egress proof validation: PASS")
+    print(f"Proof: {path}")
+    print(f"Generated at: {summary.get('generated_at', '')}")
+    print(f"Samples: {samples}")
+    print("Autocomplete no-egress proof is fresh enough for the current gate.")
+    return 0
+
+
 def main() -> int:
     args = parse_args()
+
+    if args.validate_proof:
+        return validate_proof(args)
 
     try:
         if args.sample:
