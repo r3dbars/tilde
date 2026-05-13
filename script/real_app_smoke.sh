@@ -7538,10 +7538,8 @@ build_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
       AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
+      AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
     )
-    if [[ "$TEXTEDIT_VARIANT" != "model-latency" && "$TEXTEDIT_VARIANT" != "default-model-latency" ]]; then
-      build_run_env+=(AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1)
-    fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
   fi
 
