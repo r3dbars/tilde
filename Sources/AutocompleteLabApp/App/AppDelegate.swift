@@ -1315,6 +1315,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard snapshot != previousSnapshot else {
+            if shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            ) {
+                updateKeyboardEventTapSnapshot()
+                setSuggestionDecision("Shown: preserving current suggestion")
+                recordSuggestionEvent(
+                    "suggestion-preserved",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "transient-empty-context-stable",
+                        "blockReason": CompletionActivationBlockReason.tooLittleContext.rawValue,
+                        "fieldIdentity": fieldIdentity.traceDescription
+                    ]
+                )
+                return
+            }
             setSuggestionDecision(
                 suggestionSession.hasVisibleSuggestion
                     ? "Shown: tracking current field"
@@ -1419,6 +1438,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity
             ) {
+                updateKeyboardEventTapSnapshot()
                 setSuggestionDecision("Shown: preserving current suggestion")
                 recordSuggestionEvent(
                     "suggestion-preserved",
@@ -1967,6 +1987,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         return visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
             blockReason: blockReason,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+    }
+
+    private func shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Bool {
+        visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
+            blockReason: .tooLittleContext,
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
