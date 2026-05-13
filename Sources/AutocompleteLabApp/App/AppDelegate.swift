@@ -6807,35 +6807,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let fallbackChangeCount = pasteboard.changeCount
 
-        let script = """
-        tell application "System Events"
-          tell application process "Obsidian" to set frontmost to true
-          keystroke "v" using command down
-        end tell
-        """
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        NSRunningApplication(processIdentifier: frontmostApp.processIdentifier)?
+            .activate(options: [])
+        Thread.sleep(forTimeInterval: 0.03)
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            restoreOriginalPasteboard()
-            DiagnosticsLog.shared.record(
-                "obsidian-system-events-insert",
-                metadata: [
-                    "app": bundleIdentifier,
-                    "posted": "false",
-                    "reason": "osascript-run-failed"
-                ]
-            )
-            return false
-        }
-
-        let posted = process.terminationStatus == 0
+        let posted = Self.postCommandVKey()
         if posted {
             schedulePasteboardRestore(
                 insertedText: acceptedText,
@@ -6850,8 +6826,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "app": bundleIdentifier,
                 "posted": String(posted),
-                "source": "systemEventsPaste",
-                "terminationStatus": String(process.terminationStatus),
+                "source": "cgEventCommandPaste",
                 "acceptedChars": String(acceptedText.count)
             ]
         )
@@ -7743,6 +7718,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
+    }
+
+    nonisolated private static func postCommandVKey() -> Bool {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+            return false
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
     }
 
     nonisolated private static func axDescendant(

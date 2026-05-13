@@ -11,9 +11,9 @@ Current branch: `codex/obsidian-deep-proof-390d`
 | Default note writing | 90 | Fresh foreground Obsidian proof accepted one visible word suffix in the disposable proof note and the Markdown file ended as `Smoke proof feed` with no literal tab. Needs repetition across many notes before 100. |
 | Non-default theme | 100 | `obsidian-theme` smoke passed with 2 verified insertions and strict screenshots. |
 | Split pane / same-pane insertion | 100 | `obsidian-pane` smoke passed after focused-editor insertion fix. |
-| Accepted words appear on screen | 85 | Fresh Computer Use proof showed the suggestion, then Tab produced `Smoke proof feed` on screen and in the Markdown file. This is a pass for the core issue, but not enough repetitions yet. |
-| CodeMirror stale cursor repair | 90 | Focused repair tests pass, and the live repair recovered from Obsidian's Tab/CodeMirror drift with `keyboard-action ... reason=obsidian-tab-passthrough-repaired`. Long-note caret placement still needs more proof. |
-| Long scrolled note | 60 | The old AX value-replacement path could truncate off-screen lines. The latest live run preserved line 01 through line 90 and appended `Smoke proof feels` at document end, but the harness still received SIGTERM before the second acceptance and formal verification. |
+| Accepted words appear on screen | 82 | Default-note foreground proof has a verified `Smoke proof feed` pass, but the latest long-note Computer Use proof still showed Obsidian indentation instead of a clean accepted suffix. |
+| CodeMirror stale cursor repair | 90 | Focused repair tests pass, and one foreground proof recovered from Obsidian's Tab/CodeMirror drift with `keyboard-action ... reason=obsidian-tab-passthrough-repaired`. Long-note Tab repair still needs a clean repeat. |
+| Long scrolled note | 65 | The old AX value-replacement path could truncate off-screen lines. The latest live run kept the visible long note intact and presented a suggestion at the tail, but Tab still produced CodeMirror indent in the current Computer Use proof. |
 | Font/zoom/dynamic layout | 60 | Theme and pane geometry passed; explicit font-size/zoom sweep is still pending. |
 | Markdown formatting stress | 60 | Plain prose and pane cases passed; bold, dash list, blank lines, and run-on sentence sweeps are still pending. |
 
@@ -41,11 +41,19 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Earlier foreground Computer Use Tab proof was red: `placement-proof.md` contained `Autocomplete Lab Obsidian proof\n\n[TAB]Smoke proof fee` after Tab.
 - Fresh foreground Computer Use Tab proof is green: `placement-proof.md` contained `Autocomplete Lab Obsidian proof\nSmoke proof feed` after Tab, with no `[TAB]`.
 - Fresh diagnostics recorded `obsidian-tab-passthrough-repair`, `obsidian-tab-passthrough-direct-repair success=true`, `keyboard-action ... handled=true ... reason=obsidian-tab-passthrough-repaired`, and `insert-verification ... result=verified`.
+- Latest long-note foreground proof is still red: SteadyType presented an Obsidian suggestion after `obsidian-codemirror-text-after-active-line` repair, but Computer Use Tab inserted CodeMirror indentation instead of a verified accepted suffix.
+- The latest red screenshot is `docs/product/obsidian-proof-screenshots/cua-long-note-latest-tab-indent-red-2026-05-13.png`.
+- Computer Use Tab and synthetic System Events Tab were not reliable accept-path proof tools in the latest run: the visible note changed, but the key-tap log did not record a clean `md.obsidian` Tab accept event before stale runners interfered.
 - Screenshot evidence:
   - `docs/product/obsidian-proof-screenshots/default-computeruse-before-tab-foreground-obsidian-2026-05-13.png`
   - `docs/product/obsidian-proof-screenshots/default-computeruse-after-tab-foreground-obsidian-2026-05-13.png`
   - `docs/product/obsidian-proof-screenshots/frontmost-obsidian-before-tab-2026-05-13.png`
   - `docs/product/obsidian-proof-screenshots/frontmost-obsidian-after-tab-2026-05-13.png`
+  - `docs/product/obsidian-proof-screenshots/cua-long-note-before-type-2026-05-13.png`
+  - `docs/product/obsidian-proof-screenshots/cua-long-note-after-patch-after-type-2026-05-13.png`
+  - `docs/product/obsidian-proof-screenshots/cua-long-note-after-viewport-tail-repair-2026-05-13.png`
+  - `docs/product/obsidian-proof-screenshots/cua-long-note-after-tab-viewport-tail-repair-2026-05-13.png`
+  - `docs/product/obsidian-proof-screenshots/cua-long-note-latest-tab-indent-red-2026-05-13.png`
 - Manual click testing can still place the caret before the suffix, producing `moke proof feelsS` instead of the intended text.
 - A separate `steadytype-score-loop` heartbeat in the old `25ed` worktree repeatedly flipped proof mode to TextEdit and killed/invalidated Obsidian proof attempts. That heartbeat was paused during this goal.
 - Even after the automation file showed `status = "PAUSED"`, already-running stale TextEdit proof jobs continued spawning from the old `25ed` context and repeatedly killed the current app. These runs are not valid Obsidian proof.
@@ -57,7 +65,8 @@ Current branch: `codex/obsidian-deep-proof-390d`
 ## Remaining Gates To Reach 100
 
 - Get `obsidian-long-note` to a clean recorded pass on this branch.
-- Keep the direct repair green and only rely on the undo/paste fallback when direct AX repair fails in live proof.
+- Keep the direct repair green and repeat it in the long scrolled note with real foreground key events.
+- Make the test runner resilient to the old `25ed` TextEdit proof loop so it cannot kill or relaunch the Obsidian proof app mid-run.
 - Fix or harden end-of-document caret placement so clicks and AX range repair land after the suffix, not before it.
 - Run a font-size/zoom sweep.
 - Run markdown formatting cases: bold, dash list, blank lines, indented line, long run-on sentence, and three-line down movement.

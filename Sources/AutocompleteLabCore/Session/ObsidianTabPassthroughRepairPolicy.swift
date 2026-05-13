@@ -32,8 +32,17 @@ public struct ObsidianTabPassthroughRepairPolicy: Equatable, Sendable {
             return .skip("missing-accepted-text")
         }
 
+        let currentFullText = currentTextBeforeCursor + currentTextAfterCursor
+        let hasFullTextLeadingIndent = currentFullText == previousTextBeforeCursorWithCurrentLineIndented(previousTextBeforeCursor)
+            + previousTextAfterCursor
+        let hasFullTextCodeMirrorTabSpacer = currentTextBeforeCursorHasCodeMirrorTabSpacer(
+            previousTextBeforeCursor: previousTextBeforeCursor,
+            currentTextBeforeCursor: currentFullText
+        )
         let afterCursorMatches = previousTextAfterCursor == currentTextAfterCursor
             || currentTextAfterCursor.isEmpty
+            || hasFullTextLeadingIndent
+            || hasFullTextCodeMirrorTabSpacer
         let hasCurrentLineSelectionIndent = currentTextBeforeCursorHasSelectedLineTabSpacer(
             previousTextBeforeCursor: previousTextBeforeCursor,
             currentTextBeforeCursor: currentTextBeforeCursor,
@@ -49,6 +58,8 @@ public struct ObsidianTabPassthroughRepairPolicy: Equatable, Sendable {
                     previousTextBeforeCursor: previousTextBeforeCursor,
                     currentTextBeforeCursor: currentTextBeforeCursor
                 )
+                || hasFullTextLeadingIndent
+                || hasFullTextCodeMirrorTabSpacer
                 || hasCurrentLineSelectionIndent else {
             return .skip("not-leading-tab-indent")
         }
