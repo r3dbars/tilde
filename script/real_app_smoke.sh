@@ -7841,6 +7841,21 @@ assert_obsidian_smoke_target() {
   AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift script/obsidian_ax_editor.swift assert
 }
 
+wait_for_obsidian_smoke_editor_ready() {
+  local timeout_seconds="${1:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if swift script/obsidian_ax_editor.swift assert >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for the disposable Obsidian smoke editor." >&2
+  exit 1
+}
+
 assert_obsidian_initial_smoke_target() {
   case "$1" in
     obsidian-long-note)
@@ -8212,11 +8227,11 @@ run_obsidian() {
   obsidian_reset_text="$(obsidian_reset_text_for_variant "$manual_app")"
   seed_obsidian_proof_vault_note "$obsidian_reset_text"
   open_obsidian_smoke_note_if_configured
-  wait_for_frontmost_app "Obsidian" 8
+  wait_for_obsidian_smoke_editor_ready 8
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     reset_obsidian_smoke_note_file "$obsidian_marker"
     open_obsidian_smoke_note_if_configured
-    wait_for_frontmost_app "Obsidian" 8
+    wait_for_obsidian_smoke_editor_ready 8
   fi
   prepare_obsidian_variant_state "$manual_app"
   assert_obsidian_smoke_target
@@ -8230,9 +8245,8 @@ run_obsidian() {
 
   type_obsidian_raw_smoke_text "$first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
   activate_obsidian_for_smoke
-  assert_frontmost_app "Obsidian" "Obsidian"
+  assert_obsidian_smoke_target
   press_key_code 48
   wait_for_log_fields "$start_line" "Obsidian Tab acceptance" 12 \
     "keyboard-action" \
@@ -8241,6 +8255,7 @@ run_obsidian() {
     "action=acceptNextWord" \
     "handled=true"
   wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
+  wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
 
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     press_key_code 53
@@ -8250,7 +8265,7 @@ run_obsidian() {
     append_obsidian_smoke_note_file_text " and stays inst"
     long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
     open_obsidian_smoke_note_if_configured
-    wait_for_frontmost_app "Obsidian" 8
+    wait_for_obsidian_smoke_editor_ready 8
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
     second_start_line="$(line_count "$LOG_PATH")"
@@ -8286,7 +8301,6 @@ run_obsidian() {
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   else
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
     activate_obsidian_for_smoke
     assert_frontmost_app "Obsidian" "Obsidian"
     full_start_line="$(line_count "$LOG_PATH")"
@@ -8298,6 +8312,7 @@ run_obsidian() {
       "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian full verified insertion"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   fi
 
   sleep 1
