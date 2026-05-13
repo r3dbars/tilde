@@ -50,4 +50,9 @@ reject_contains 'pkill -x "$APP_NAME"'
 reject_contains "kill_running_app_instances"
 reject_contains "is_target_app_running"
 
+if grep -Fq "AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1" script/real_app_smoke.sh; then
+  echo "real app smoke should not move sibling worktree app bundles during proof runs" >&2
+  exit 1
+fi
+
 echo "Build and run self-test passed."

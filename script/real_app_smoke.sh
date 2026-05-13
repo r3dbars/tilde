@@ -7450,7 +7450,6 @@ build_if_needed() {
     local build_run_env=(
       AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
-      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1
     )
     env "${build_run_env[@]}" ./script/build_and_run.sh run
   fi
@@ -7462,7 +7461,6 @@ build_if_needed() {
 build_bundle_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1 \
-      AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1 \
       ./script/build_and_run.sh bundle-only
   else
     wait_for_current_autocomplete_lab_process
