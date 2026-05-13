@@ -233,6 +233,10 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("Suffix: tation", after: "dic", mode: .wordCompletion)?.visibleText == "tation")
         #expect(cleaner.clean("Suffix: tation next", after: "dic", mode: .wordCompletion) == nil)
         #expect(cleaner.clean("Next words: tation next", after: "dic", mode: .wordCompletion) == nil)
+        #expect(cleaner.clean(
+            "occured -> occurred",
+            after: "Correct this spelling: occured ->"
+        )?.visibleText == " occurred")
         #expect(cleaner.clean("Next words:", after: "Let's") == nil)
     }
 
