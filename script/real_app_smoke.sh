@@ -4313,7 +4313,8 @@ type_textedit_smoke_fragment() {
   fi
 
   assert_textedit_frontmost_window "$window_title" "TextEdit proof typing"
-  AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
+  (
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript <<'APPLESCRIPT'
 set smokeText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT"
 tell application "System Events"
   set frontApp to first application process whose frontmost is true
@@ -4323,6 +4324,9 @@ tell application "System Events"
   keystroke smokeText
 end tell
 APPLESCRIPT
+  ) &
+  local osascript_pid="$!"
+  wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"
 }
 
 type_textedit_smoke_fragment_and_confirm() {

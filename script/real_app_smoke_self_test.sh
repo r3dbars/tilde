@@ -177,8 +177,9 @@ if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev
   exit 1
 fi
 if ! grep -F 'textedit_smoke_allows_ax_proof_typing' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected TextEdit proof fragments to default to System Events key typing" >&2
+   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof fragments to default to bounded System Events key typing" >&2
   exit 1
 fi
 if ! grep -F 'move_textedit_caret_to_document_end "$window_title"' script/real_app_smoke.sh >/dev/null ||
