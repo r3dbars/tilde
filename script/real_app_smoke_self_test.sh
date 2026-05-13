@@ -92,7 +92,8 @@ if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/
 fi
 
 if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit document-open diagnostics" >&2
   exit 1
 fi

@@ -3479,8 +3479,12 @@ APPLESCRIPT
 
 raise_textedit_smoke_window() {
   local window_title="$1"
+  local single_window_fallback=0
+  if [[ "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
+    single_window_fallback=1
+  fi
 
-  swift - "$window_title" <<'SWIFT'
+  AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK="$single_window_fallback" swift - "$window_title" <<'SWIFT'
 import AppKit
 import ApplicationServices
 import Foundation
@@ -3490,6 +3494,9 @@ guard CommandLine.arguments.count == 2 else {
 }
 
 let targetTitle = CommandLine.arguments[1]
+let allowSingleWindowFallback = ["1", "true", "yes", "on"].contains(
+    (ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK"] ?? "").lowercased()
+)
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -3507,7 +3514,11 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         continue
     }
 
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    let targetWindow = windows.first(where: {
+        (copyAttribute($0, kAXTitleAttribute) as? String) == targetTitle
+    }) ?? (allowSingleWindowFallback && windows.count == 1 ? windows[0] : nil)
+
+    if let window = targetWindow {
         app.activate(options: [.activateAllWindows])
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         let deadline = Date().addingTimeInterval(2.0)
@@ -3528,8 +3539,12 @@ SWIFT
 
 click_textedit_smoke_window() {
   local window_title="$1"
+  local single_window_fallback=0
+  if [[ "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
+    single_window_fallback=1
+  fi
 
-  swift - "$window_title" <<'SWIFT'
+  AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK="$single_window_fallback" swift - "$window_title" <<'SWIFT'
 import AppKit
 import ApplicationServices
 import CoreGraphics
@@ -3540,6 +3555,9 @@ guard CommandLine.arguments.count == 2 else {
 }
 
 let targetTitle = CommandLine.arguments[1]
+let allowSingleWindowFallback = ["1", "true", "yes", "on"].contains(
+    (ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK"] ?? "").lowercased()
+)
 
 func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
@@ -3596,7 +3614,11 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         continue
     }
 
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    let targetWindow = windows.first(where: {
+        (copyAttribute($0, kAXTitleAttribute) as? String) == targetTitle
+    }) ?? (allowSingleWindowFallback && windows.count == 1 ? windows[0] : nil)
+
+    if let window = targetWindow {
         let textInput = firstTextInput(in: window)
         if let textInput {
             AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
