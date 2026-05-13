@@ -55,12 +55,23 @@ require_contains 'PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"'
 require_contains 'READINESS_SCRATCH_PATH_CREATED=""'
 require_contains 'cleanup_readiness_scratch_path'
 require_contains 'configure_readiness_scratch_path || exit 1'
+require_contains 'AUTOCOMPLETE_LAB_READINESS_ISOLATED_SCRATCH'
+require_contains 'SwiftPM readiness scratch: default SwiftPM build cache'
 require_contains 'mktemp -d "${parent%/}/autocomplete-lab-beta-readiness.XXXXXX"'
 require_contains 'export AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH'
 require_contains 'SwiftPM readiness scratch: $AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH'
 require_contains 'check_release_dmg_signature'
 require_contains 'check_release_archive_signature'
 require_contains 'run_check "Developer ID archive signature" check_release_archive_signature'
+require_contains 'check_runtime_no_egress_proof'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_MIN_SAMPLES:-10'
+require_contains '--validate-proof "$proof_path"'
+require_contains '--require-newer-than-latest-launch'
+require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY'
+require_contains 'run_check "Runtime no-egress proof" check_runtime_no_egress_proof'
 require_contains 'check_notarized_install_proof'
 require_contains 'check_current_artifact_checksum'
 require_contains 'run_release_proof_check'
@@ -78,6 +89,10 @@ require_contains '--require-model-backed-visible'
 require_contains '--forbid-fast-word-visible'
 reject_contains 'AUTOCOMPLETE_LAB_LOG_START_LINE:-'
 reject_contains 'AUTOCOMPLETE_LAB_TRACE_START_LINE:-'
+require_contains 'print_next_beta_readiness_lanes'
+require_contains './script/scorecard_next_proof_lanes.py --limit 5'
+require_contains 'onboarding_failed=1'
+require_contains './script/check_onboarding_walkthrough_proof.py --print-template'
 require_contains 'xcrun stapler validate "$PRIMARY_ARTIFACT"'
 require_contains 'spctl -a -t open --context context:primary-signature -v "$PRIMARY_ARTIFACT"'
 require_contains 'spctl --assess --type execute --verbose=4 "$app_path"'
@@ -97,8 +112,18 @@ require_order 'run_check "Visual placement proof" ./script/check_visual_placemen
   'run_check "Latency beta gate" latency_beta_gate'
 require_order 'run_check "Latency beta gate" latency_beta_gate' \
   'run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile'
+require_order 'echo "Beta readiness check-only found $failures blocker(s)."' \
+  'print_next_beta_readiness_lanes "$onboarding_failed"'
 require_order 'configure_readiness_scratch_path || exit 1' \
   'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
+require_order 'run_check "Runtime production gate" env' \
+  'run_check "Runtime no-egress proof" check_runtime_no_egress_proof'
+require_order 'run_check "Runtime no-egress proof" check_runtime_no_egress_proof' \
+  'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
+require_order 'echo "== Runtime production gate =="' \
+  'echo "== Runtime no-egress proof =="'
+require_order 'echo "== Runtime no-egress proof =="' \
+  'echo "== Controls and diagnostics readiness =="'
 require_order 'echo "== Visual placement proof =="' \
   'echo "== Latency beta gate =="'
 require_order 'echo "== Latency beta gate =="' \

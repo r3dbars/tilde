@@ -130,7 +130,7 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "4.13", build: "3146.101.28", source: "/System/Applications/Notes.app"),
             safetyMode: .notPrompt,
             runtimeState: .userToggleAllowed,
-            proofState: .partial,
+            proofState: .complete,
             killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/notes-title.png"),
@@ -145,12 +145,13 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "1.12.4", build: "0.14.8", source: "/Applications/Obsidian.app"),
             safetyMode: .notPrompt,
             runtimeState: .userToggleAllowed,
-            proofState: .partial,
+            proofState: .complete,
             killSwitch: .perHostDisable,
             proofArtifacts: [
-                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/obsidian.png")
+                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/obsidian.png"),
+                HostProofArtifact(kind: "manual-smoke", reference: "Obsidian/obsidian-long-note")
             ],
-            notes: "Real CodeMirror default, theme, and pane proof is recorded; long-note current-head proof remains blocked."
+            notes: "Real CodeMirror default, theme, pane, and long-note proof is recorded; broader vault variance keeps support yellow."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.mail",

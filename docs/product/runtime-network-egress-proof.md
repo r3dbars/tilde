@@ -13,7 +13,8 @@ active:
   --phase autocomplete \
   --duration 30 \
   --interval 1 \
-  --proof-out docs/product/runtime-network-egress-latest.md
+  --proof-out docs/product/runtime-network-egress-latest.md \
+  --json-out docs/product/runtime-network-egress-latest.json
 ```
 
 Pass means the observer saw no non-loopback remote endpoints from the app
@@ -21,6 +22,23 @@ process during the window.
 
 Fail means autocomplete-time egress happened and the beta privacy score cannot
 claim local-only runtime proof.
+
+## Beta Readiness Gate
+
+Beta readiness validates the latest JSON proof instead of trusting old notes:
+
+```bash
+./script/check_runtime_network_egress.py \
+  --validate-proof docs/product/runtime-network-egress-latest.json \
+  --diagnostics-log "$HOME/Library/Logs/SteadyType/diagnostics.log" \
+  --require-newer-than-latest-launch \
+  --max-proof-age-seconds 86400 \
+  --min-samples 10
+```
+
+`./script/beta_readiness.sh --check-only` runs this gate. It fails if the proof
+is missing, stale, from `model-setup`, has unexpected endpoints, has too few
+samples, or was captured before the latest app launch.
 
 ## Model Setup Check
 
@@ -63,3 +81,5 @@ The self-test verifies three cases:
 - no remote endpoint during autocomplete passes,
 - remote endpoint during autocomplete fails,
 - remote endpoint during model setup passes as setup/update traffic.
+- missing, stale, model-setup, and older-than-latest-launch proofs fail
+  validation.
