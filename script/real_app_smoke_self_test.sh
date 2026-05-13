@@ -66,8 +66,10 @@ source = Path("script/real_app_smoke.sh").read_text()
 start = source.index('run_textedit_model_latency()')
 end = source.index('run_chrome_fixture()', start)
 block = source[start:end]
-if "dismiss_textedit_smoke_suggestion" in block:
-    raise SystemExit("model-latency proof must not press Escape after seeding context")
+if "wait_for_log_fields_optional \"$seed_start\"" not in block:
+    raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
+if "dismiss_textedit_smoke_suggestion" not in block:
+    raise SystemExit("model-latency proof must hide any settled seed suggestion before the measured sample")
 PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
@@ -111,13 +113,15 @@ end = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency 
 block = source[start:end]
 if '"mlx-completion-timing"' not in block or '"app=com.apple.TextEdit"' not in block:
     raise SystemExit("model-latency timing proof must still require TextEdit MLX timing")
-if '"mode=wordCompletion"' not in block:
-    raise SystemExit("model-latency timing proof must require wordCompletion after seed-context drain")
+if '"mode=wordCompletion"' in block:
+    raise SystemExit("model-latency timing proof must not depend on a fragile request mode label")
 start = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index"')
 end = source.index('sleep 0.4', start)
 block = source[start:end]
-if '"candidateSelectionSource=app-model-result"' not in block or '"requestMode=wordCompletion"' not in block:
-    raise SystemExit("model-latency visible proof must require model-backed word completion")
+if '"candidateSelectionSource=app-model-result"' not in block:
+    raise SystemExit("model-latency visible proof must require model-backed display")
+if '"requestMode=wordCompletion"' in block:
+    raise SystemExit("model-latency visible proof must not depend on a fragile request mode label")
 PY
 
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
