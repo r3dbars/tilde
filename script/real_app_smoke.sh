@@ -3959,6 +3959,17 @@ end run
 APPLESCRIPT
 }
 
+dismiss_textedit_smoke_suggestion() {
+  local window_title="$1"
+
+  focus_textedit_smoke_editor "$window_title" >/dev/null 2>&1 || true
+  osascript <<'APPLESCRIPT' >/dev/null 2>&1 || true
+tell application "System Events"
+  key code 53
+end tell
+APPLESCRIPT
+}
+
 wait_for_textedit_document_open() {
   local window_title="$1"
   local timeout_seconds="${2:-5}"
@@ -8503,6 +8514,10 @@ run_textedit_model_latency() {
     fi
     wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index" 5
     move_textedit_caret_to_document_end "$textedit_window_title"
+    # Let any model request caused by AX-seeding settle before the measured key-trigger sample.
+    sleep 1.2
+    dismiss_textedit_smoke_suggestion "$textedit_window_title"
+    move_textedit_caret_to_document_end "$textedit_window_title"
 
     sample_start="$(line_count "$LOG_PATH")"
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
@@ -8511,7 +8526,8 @@ run_textedit_model_latency() {
     move_textedit_caret_to_document_end "$textedit_window_title"
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
       "mlx-completion-timing" \
-      "app=com.apple.TextEdit"
+      "app=com.apple.TextEdit" \
+      "mode=wordCompletion"
     wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index" 20 \
       "suggestion-presented" \
       "app=com.apple.TextEdit" \
