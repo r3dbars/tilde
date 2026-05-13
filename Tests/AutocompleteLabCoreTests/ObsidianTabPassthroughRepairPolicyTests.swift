@@ -33,6 +33,36 @@ struct ObsidianTabPassthroughRepairPolicyTests {
         #expect(decision == .repair)
     }
 
+    @Test("Repairs when Obsidian selects the indented current line after Tab")
+    func repairsSelectedLineIndent() {
+        let decision = policy.decision(
+            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof fee",
+            currentTextBeforeCursor: "Autocomplete Lab Obsidian proof\n\t",
+            previousTextAfterCursor: "",
+            currentTextAfterCursor: "Smoke proof fee",
+            currentSelectedText: "Smoke proof fee",
+            hasVisibleSuggestion: true,
+            acceptedText: "l"
+        )
+
+        #expect(decision == .repair)
+    }
+
+    @Test("Repairs selected-line Obsidian CodeMirror spacer drift")
+    func repairsSelectedLineCodeMirrorSpacerDrift() {
+        let decision = policy.decision(
+            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof fee",
+            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nAutocomplete Lab Obsidian proof\n\u{200B}\t\n",
+            previousTextAfterCursor: "",
+            currentTextAfterCursor: "Smoke proof fee",
+            currentSelectedText: "Smoke proof fee",
+            hasVisibleSuggestion: true,
+            acceptedText: "l"
+        )
+
+        #expect(decision == .repair)
+    }
+
     @Test("Skips when there is no visible suggestion")
     func skipsWithoutVisibleSuggestion() {
         let decision = policy.decision(
