@@ -878,6 +878,55 @@ wait_for_log_fields_optional() {
   return 1
 }
 
+wait_for_obsidian_long_note_second_suggestion() {
+  local start_line="$1"
+  local expected_before_chars="$2"
+  local timeout_seconds="${3:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local max_before_chars=$((expected_before_chars + 2))
+  local min_before_chars=$((expected_before_chars - 1))
+  if (( min_before_chars < 0 )); then
+    min_before_chars=0
+  fi
+
+  while ((SECONDS <= deadline)); do
+    if python3 - "$LOG_PATH" "$start_line" "$min_before_chars" "$max_before_chars" <<'PY'
+import re
+import sys
+
+path, start_line, min_before, max_before = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+field_pattern = re.compile(r"(^| )([A-Za-z][A-Za-z0-9]*)=([^ ]+)")
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if line_number <= start_line or "suggestion-presented" not in line:
+                continue
+            fields = {match.group(2): match.group(3) for match in field_pattern.finditer(line)}
+            if fields.get("app") != "md.obsidian" or fields.get("afterChars") != "0":
+                continue
+            try:
+                before_chars = int(fields.get("beforeChars", "-1"))
+            except ValueError:
+                continue
+            if min_before <= before_chars <= max_before:
+                raise SystemExit(0)
+except FileNotFoundError:
+    pass
+raise SystemExit(1)
+PY
+    then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Obsidian second suggestion." >&2
+  echo "Required fields: suggestion-presented app=md.obsidian beforeChars=${expected_before_chars}±2 afterChars=0" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
+}
+
 describe_textedit_model_latency_seed_miss() {
   local seed_start="$1"
   local window_title="$2"
@@ -8386,11 +8435,7 @@ run_obsidian() {
     type_obsidian_raw_smoke_text " and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    wait_for_log_fields "$second_start_line" "Obsidian second suggestion" 12 \
-      "suggestion-presented" \
-      "app=md.obsidian" \
-      "beforeChars=$long_note_expected_before_chars" \
-      "afterChars=0"
+    wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12
   else
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
   fi
