@@ -184,7 +184,9 @@ struct LocalModelAssetInstaller: Sendable {
             )
         }
 
+        try Self.checkCancellationBeforeFinalizing()
         await progressHandler?(.init(phase: .validating))
+        try Self.checkCancellationBeforeFinalizing()
         do {
             try ModelAssetInstaller.finalizeDownloadedSnapshot(
                 manifest: manifest,
@@ -246,5 +248,9 @@ struct LocalModelAssetInstaller: Sendable {
 
     private func availableBytesForInstallVolume() -> Int64? {
         capacityResolver.availableBytes(for: destinationURL)
+    }
+
+    static func checkCancellationBeforeFinalizing() throws {
+        try Task.checkCancellation()
     }
 }

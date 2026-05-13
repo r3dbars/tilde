@@ -100,7 +100,29 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                     using: #huggingFaceTokenizerLoader()
                 )
             }
+        } catch is CancellationError {
+            stateQueue.sync {
+                if warmGeneration == generation {
+                    storedState = .unavailable(reason: "MLX runtime was canceled.")
+                }
+            }
+            DiagnosticsLog.shared.record(
+                "mlx-model-load-cancelled",
+                metadata: [
+                    "assetDirectory": modelDirectoryURL.path,
+                    "loadMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
+            )
+            throw CancellationError()
         } catch {
+            stateQueue.sync {
+                if warmGeneration == generation {
+                    container = nil
+                    staticPromptCache = RuntimeStaticPromptCache()
+                    storedState = .failed(candidate: .mlx, reason: error.localizedDescription)
+                }
+            }
             DiagnosticsLog.shared.record(
                 "mlx-model-load-failed",
                 metadata: [

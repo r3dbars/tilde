@@ -129,6 +129,63 @@ struct ModelAssetInstallerTests {
         ) == "integrity receipt checksum mismatch for model.safetensors")
     }
 
+    @Test("Known-good source manifests reject locally checksummed but unexpected bytes")
+    func knownGoodSourceManifestRejectsUnexpectedBytes() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("AutocompleteLabInstallerTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        let snapshotURL = rootURL.appendingPathComponent("snapshot", isDirectory: true)
+        let targetURL = rootURL.appendingPathComponent("target", isDirectory: true)
+        try fileManager.createDirectory(at: snapshotURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: snapshotURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: snapshotURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifest = LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: LocalModelAssetSource(
+                repoID: "mlx-community/Test",
+                revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                allowPatterns: ["*.safetensors", "config.json"],
+                expectedFiles: [
+                    .init(path: "config.json", byteCount: 2, sha256: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"),
+                    .init(path: "model.safetensors", byteCount: 7, sha256: String(repeating: "0", count: 64))
+                ]
+            ),
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json"]
+        )
+
+        do {
+            try ModelAssetInstaller.finalizeDownloadedSnapshot(
+                manifest: manifest,
+                snapshotURL: snapshotURL,
+                targetURL: targetURL,
+                fileManager: fileManager
+            )
+            Issue.record("Expected known-good checksum validation to reject the snapshot")
+        } catch ModelAssetInstallerError.invalidDownloadedAsset(let reason) {
+            #expect(reason == "known-good checksum mismatch for model.safetensors")
+        } catch {
+            Issue.record("Expected invalidDownloadedAsset, got \(error)")
+        }
+        #expect(!fileManager.fileExists(atPath: targetURL.path))
+    }
+
     @Test("Integrity receipt validator rejects mismatched or unsafe receipts")
     func integrityReceiptValidatorRejectsMismatchedOrUnsafeReceipts() throws {
         let fileManager = FileManager.default
@@ -200,6 +257,79 @@ struct ModelAssetInstallerTests {
         #expect(try validate(validReceipt) == "model file is not in integrity receipt: extra.txt")
     }
 
+    @Test("Integrity receipt validator enforces known-good expected files")
+    func integrityReceiptValidatorEnforcesExpectedFiles() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("AutocompleteLabInstallerTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        let targetURL = rootURL.appendingPathComponent("target", isDirectory: true)
+        try fileManager.createDirectory(at: targetURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: targetURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: targetURL.appendingPathComponent("model.safetensors"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let baseManifest = sourceBackedManifest()
+        let receiptURL = try #require(try ModelAssetIntegrityReceiptWriter.write(
+            manifest: baseManifest,
+            modelDirectoryURL: targetURL,
+            fileManager: fileManager
+        ))
+        let receipt = try JSONDecoder().decode(
+            ModelAssetIntegrityReceipt.self,
+            from: Data(contentsOf: receiptURL)
+        )
+        let expectedFiles = receipt.files
+            .sorted { $0.path < $1.path }
+            .map {
+                LocalModelAssetSource.ExpectedFile(
+                    path: $0.path,
+                    byteCount: $0.byteCount,
+                    sha256: $0.sha256
+                )
+            }
+
+        func validate(expectedFiles: [LocalModelAssetSource.ExpectedFile]) -> String? {
+            ModelAssetIntegrityReceiptValidator.validate(
+                manifest: sourceBackedManifest(expectedFiles: expectedFiles),
+                modelDirectoryURL: targetURL,
+                fileManager: fileManager
+            )
+        }
+
+        #expect(validate(expectedFiles: expectedFiles) == nil)
+        #expect(validate(expectedFiles: Array(expectedFiles.prefix(1))) == "integrity receipt has unexpected file model.safetensors")
+        #expect(validate(expectedFiles: expectedFiles + [
+            .init(path: "tokenizer.json", byteCount: 1, sha256: String(repeating: "1", count: 64))
+        ]) == "integrity receipt missing expected file tokenizer.json")
+
+        var byteCountMismatch = expectedFiles
+        byteCountMismatch[0] = .init(
+            path: byteCountMismatch[0].path,
+            byteCount: byteCountMismatch[0].byteCount + 1,
+            sha256: byteCountMismatch[0].sha256
+        )
+        #expect(validate(expectedFiles: byteCountMismatch) == "known-good byte count mismatch for config.json")
+
+        var checksumMismatch = expectedFiles
+        checksumMismatch[0] = .init(
+            path: checksumMismatch[0].path,
+            byteCount: checksumMismatch[0].byteCount,
+            sha256: String(repeating: "2", count: 64)
+        )
+        #expect(validate(expectedFiles: checksumMismatch) == "known-good checksum mismatch for config.json")
+    }
+
     @Test("Finalizing an invalid downloaded snapshot keeps the previous model folder")
     func finalizeInvalidSnapshotKeepsTarget() throws {
         let fileManager = FileManager.default
@@ -252,7 +382,9 @@ struct ModelAssetInstallerTests {
         #expect(progress.statusText == "Model install: downloading 50% at 2.0 MiB/s")
     }
 
-    private func sourceBackedManifest() -> LocalModelAssetManifest {
+    private func sourceBackedManifest(
+        expectedFiles: [LocalModelAssetSource.ExpectedFile] = []
+    ) -> LocalModelAssetManifest {
         LocalModelAssetManifest(
             model: .qwen35FourB,
             runtimeCandidate: .mlx,
@@ -261,7 +393,8 @@ struct ModelAssetInstallerTests {
             source: LocalModelAssetSource(
                 repoID: "mlx-community/Test",
                 revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                allowPatterns: ["*.safetensors", "config.json"]
+                allowPatterns: ["*.safetensors", "config.json"],
+                expectedFiles: expectedFiles
             ),
             expectedMinimumBytes: 1,
             requiredFileNames: ["config.json"]

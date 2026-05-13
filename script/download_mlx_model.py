@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -191,6 +192,24 @@ def main() -> int:
             path=target,
         )
         print(f"Integrity receipt: {receipt_path}")
+        if canonical_model == "qwen35-4b":
+            validator = Path(__file__).with_name("check_model_asset.py")
+            validation = subprocess.run(
+                [
+                    sys.executable,
+                    str(validator),
+                    "--model",
+                    canonical_model,
+                    "--quiet",
+                ],
+                check=False,
+            )
+            if validation.returncode != 0:
+                print(
+                    "Downloaded model did not match the app's known-good checksum set.",
+                    file=sys.stderr,
+                )
+                return validation.returncode
 
     print("Model download complete.")
     return 0

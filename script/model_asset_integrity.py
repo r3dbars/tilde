@@ -66,6 +66,7 @@ def validate_integrity_receipt(
     repo_id: str,
     revision: str,
     path: Path,
+    expected_files: dict[str, dict[str, int | str]] | None = None,
 ) -> str | None:
     receipt_path = path / RECEIPT_NAME
     if not receipt_path.exists():
@@ -94,6 +95,7 @@ def validate_integrity_receipt(
         return f"{RECEIPT_NAME} has no file checksums"
 
     seen: set[str] = set()
+    entries_by_path: dict[str, dict[str, Any]] = {}
     for entry in files:
         if not isinstance(entry, dict):
             return f"{RECEIPT_NAME} has an invalid file entry"
@@ -106,15 +108,38 @@ def validate_integrity_receipt(
             return f"{RECEIPT_NAME} has an invalid size for {relative_path}"
         if not isinstance(expected_sha, str) or len(expected_sha) != 64:
             return f"{RECEIPT_NAME} has an invalid sha256 for {relative_path}"
+        if relative_path in entries_by_path:
+            return f"{RECEIPT_NAME} has a duplicate file entry: {relative_path}"
+        entries_by_path[relative_path] = entry
+        seen.add(relative_path)
 
+    if expected_files:
+        expected_paths = set(expected_files)
+        missing_expected = sorted(expected_paths.difference(seen))
+        if missing_expected:
+            return f"{RECEIPT_NAME} is missing known-good file: {missing_expected[0]}"
+        unexpected_files = sorted(seen.difference(expected_paths))
+        if unexpected_files:
+            return f"{RECEIPT_NAME} has unexpected file: {unexpected_files[0]}"
+
+        for relative_path in sorted(expected_paths):
+            expected = expected_files[relative_path]
+            entry = entries_by_path[relative_path]
+            if entry["byte_count"] != expected["byte_count"]:
+                return f"known-good size mismatch: {relative_path}"
+            if str(entry["sha256"]).lower() != str(expected["sha256"]).lower():
+                return f"known-good checksum mismatch: {relative_path}"
+
+    for relative_path, entry in sorted(entries_by_path.items()):
+        expected_size = entry["byte_count"]
+        expected_sha = str(entry["sha256"]).lower()
         file_path = path / relative_path
         if not file_path.is_file():
             return f"receipt file is missing: {relative_path}"
         if file_path.stat().st_size != expected_size:
             return f"receipt size mismatch: {relative_path}"
-        if sha256_file(file_path) != expected_sha.lower():
+        if sha256_file(file_path) != expected_sha:
             return f"receipt checksum mismatch: {relative_path}"
-        seen.add(relative_path)
 
     current_files = {child.name for child in model_files(path)}
     extra_files = sorted(current_files.difference(seen))

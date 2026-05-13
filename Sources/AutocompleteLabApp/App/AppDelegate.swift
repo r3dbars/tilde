@@ -722,6 +722,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtimeWarmTask = Task { [weak self, runtime, candidate] in
             do {
                 try await runtime.warm()
+            } catch is CancellationError {
+                await MainActor.run {
+                    DiagnosticsLog.shared.record(
+                        "runtime-warm-cancelled",
+                        metadata: [
+                            "candidate": candidate.rawValue,
+                            "warmMilliseconds": String(Self.elapsedMilliseconds(since: startedAt))
+                        ]
+                    )
+                }
+                return
             } catch {
                 await MainActor.run {
                     DiagnosticsLog.shared.record(

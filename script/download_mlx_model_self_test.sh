@@ -36,6 +36,11 @@ if ! grep -F "revision=32f3e8ecf65426fc3306969496342d504bfa13f3" /tmp/autocomple
   cat /tmp/autocomplete-download-model-target.txt >&2
   exit 1
 fi
+if ! grep -F "check_model_asset.py" script/download_mlx_model.py >/dev/null ||
+   ! grep -F "known-good checksum" script/download_mlx_model.py >/dev/null; then
+  echo "download helper does not validate the preferred model against known-good checksums" >&2
+  exit 1
+fi
 
 script/download_mlx_model.py --model qwen3.5-4b --print-target >/tmp/autocomplete-download-model-target.txt
 if ! grep -F "repo_id=mlx-community/Qwen3.5-4B-MLX-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then

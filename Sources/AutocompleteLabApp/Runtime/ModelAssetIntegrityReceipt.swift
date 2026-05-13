@@ -198,6 +198,14 @@ enum ModelAssetIntegrityReceiptValidator {
             return "integrity receipt has unsafe file path \(unsafePath)"
         }
 
+        if let expectedFilesError = validateExpectedFiles(
+            source.expectedFiles,
+            receiptPaths: receiptPaths,
+            entriesByPath: entriesByPath
+        ) {
+            return expectedFilesError
+        }
+
         let fileURLs: [URL]
         do {
             fileURLs = try ModelAssetIntegrityReceiptWriter.modelFiles(
@@ -239,6 +247,44 @@ enum ModelAssetIntegrityReceiptValidator {
 
             guard digest == entry.sha256 else {
                 return "integrity receipt checksum mismatch for \(entry.path)"
+            }
+        }
+
+        return nil
+    }
+
+    private static func validateExpectedFiles(
+        _ expectedFiles: [LocalModelAssetSource.ExpectedFile],
+        receiptPaths: Set<String>,
+        entriesByPath: [String: [ModelAssetIntegrityReceipt.FileEntry]]
+    ) -> String? {
+        guard !expectedFiles.isEmpty else {
+            return nil
+        }
+
+        let expectedEntriesByPath = Dictionary(uniqueKeysWithValues: expectedFiles.map { ($0.path, $0) })
+        let expectedPaths = Set(expectedEntriesByPath.keys)
+
+        if let missingPath = expectedPaths.subtracting(receiptPaths).sorted().first {
+            return "integrity receipt missing expected file \(missingPath)"
+        }
+
+        if let unexpectedPath = receiptPaths.subtracting(expectedPaths).sorted().first {
+            return "integrity receipt has unexpected file \(unexpectedPath)"
+        }
+
+        for path in expectedPaths.sorted() {
+            guard let expected = expectedEntriesByPath[path],
+                  let actual = entriesByPath[path]?.first else {
+                return "integrity receipt missing expected file \(path)"
+            }
+
+            guard actual.byteCount == expected.byteCount else {
+                return "known-good byte count mismatch for \(path)"
+            }
+
+            guard actual.sha256.lowercased() == expected.sha256 else {
+                return "known-good checksum mismatch for \(path)"
             }
         }
 

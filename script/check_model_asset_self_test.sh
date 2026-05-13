@@ -13,8 +13,15 @@ MISSING_OUTPUT="$TMP_DIR/missing-output.txt"
 REQUIRED_OUTPUT="$TMP_DIR/required-output.txt"
 SMALL_OUTPUT="$TMP_DIR/small-output.txt"
 RECEIPT_OUTPUT="$TMP_DIR/receipt-output.txt"
+KNOWN_OUTPUT="$TMP_DIR/known-output.txt"
 VALID_OUTPUT="$TMP_DIR/valid-output.txt"
+KNOWN_GOOD_OUTPUT="$TMP_DIR/known-good-output.txt"
 CHECK_ENV=(env AUTOCOMPLETE_LAB_MODEL_MINIMUM_WEIGHT_BYTES=8)
+SYNTHETIC_CHECK_ENV=(
+  env
+  AUTOCOMPLETE_LAB_MODEL_MINIMUM_WEIGHT_BYTES=8
+  AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS=1
+)
 
 if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$MISSING_OUTPUT" 2>&1; then
   echo "model asset self-test expected a missing model to fail" >&2
@@ -87,10 +94,21 @@ if ! grep -F "missing integrity receipt .steadytype-model-integrity.json" "$RECE
   exit 1
 fi
 
-"${CHECK_ENV[@]}" script/check_model_asset.py \
+"${SYNTHETIC_CHECK_ENV[@]}" script/check_model_asset.py \
   --model-root "$MODEL_ROOT" \
   --write-integrity-receipt \
   >"$VALID_OUTPUT"
+
+if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$KNOWN_OUTPUT" 2>&1; then
+  echo "model asset self-test expected synthetic bytes to fail known-good checksum validation" >&2
+  exit 1
+fi
+
+if ! grep -E "known-good|unexpected file" "$KNOWN_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not enforce known-good model checksums" >&2
+  cat "$KNOWN_OUTPUT" >&2
+  exit 1
+fi
 
 if ! grep -F "Model asset verified: Qwen3.5 4B MLX (qwen35-4b)" "$VALID_OUTPUT" >/dev/null; then
   echo "model asset self-test did not pass the synthetic valid model" >&2
@@ -101,6 +119,17 @@ fi
 if ! grep -F "Integrity receipt:" "$VALID_OUTPUT" >/dev/null; then
   echo "model asset self-test did not print the integrity receipt path" >&2
   cat "$VALID_OUTPUT" >&2
+  exit 1
+fi
+
+if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$KNOWN_GOOD_OUTPUT" 2>&1; then
+  echo "model asset self-test expected synthetic files to fail known-good checksum validation" >&2
+  exit 1
+fi
+
+if ! grep -F ".steadytype-model-integrity.json is missing known-good file: chat_template.jinja" "$KNOWN_GOOD_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not report the missing known-good model file" >&2
+  cat "$KNOWN_GOOD_OUTPUT" >&2
   exit 1
 fi
 

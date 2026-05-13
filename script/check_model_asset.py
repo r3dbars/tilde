@@ -18,12 +18,55 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DOWNLOAD_SCRIPT = ROOT_DIR / "script" / "download_mlx_model.py"
 
 PREFERRED_MODEL = "qwen35-4b"
+QWEN35_4B_EXPECTED_FILES = {
+    "chat_template.jinja": {
+        "byte_count": 7756,
+        "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+    },
+    "config.json": {
+        "byte_count": 3366,
+        "sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa",
+    },
+    "model.safetensors": {
+        "byte_count": 3034300695,
+        "sha256": "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db",
+    },
+    "model.safetensors.index.json": {
+        "byte_count": 101944,
+        "sha256": "52e534c41f7b97708329c85f762e5882bf48bd5955a422c6ae74eba321e6048a",
+    },
+    "preprocessor_config.json": {
+        "byte_count": 390,
+        "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+    },
+    "processor_config.json": {
+        "byte_count": 1300,
+        "sha256": "14932921ca485d458a04dafd8069fbb0a4505622a48208d19ed247115801385b",
+    },
+    "tokenizer.json": {
+        "byte_count": 19989343,
+        "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4",
+    },
+    "tokenizer_config.json": {
+        "byte_count": 1139,
+        "sha256": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182",
+    },
+    "video_preprocessor_config.json": {
+        "byte_count": 385,
+        "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+    },
+    "vocab.json": {
+        "byte_count": 6722759,
+        "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+    },
+}
 MODEL_VALIDATION = {
     "qwen35-4b": {
         "display_name": "Qwen3.5 4B",
         "required_files": {"config.json", "tokenizer.json", "tokenizer_config.json"},
         "minimum_weight_bytes": 2 * 1024 * 1024 * 1024,
         "weight_extension": ".safetensors",
+        "expected_files": QWEN35_4B_EXPECTED_FILES,
     },
 }
 
@@ -201,6 +244,11 @@ def validate_model(
         repo_id=repo_id,
         revision=revision,
         path=path,
+        expected_files=(
+            None
+            if os.environ.get("AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS") == "1"
+            else validation.get("expected_files")
+        ),
     )
     if receipt_error:
         return False, receipt_error, len(weight_files), weight_bytes
