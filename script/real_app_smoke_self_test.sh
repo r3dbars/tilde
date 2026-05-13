@@ -132,6 +132,12 @@ if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragm
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
   exit 1
 fi
+if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit model latency proof to remove native completion suffixes before timing" >&2
+  exit 1
+fi
 
 if ! awk '
   /textedit_model_latency_fragments\(\)/ { in_fragments = 1; next }
@@ -262,7 +268,7 @@ fi
 if ! grep -F 'textedit_smoke_allows_ax_proof_typing' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$fragment" osascript' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.08' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.25' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit proof fragments to default to bounded System Events key typing with optional key pacing" >&2
   exit 1
