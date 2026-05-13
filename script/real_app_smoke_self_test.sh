@@ -96,6 +96,9 @@ if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null
    ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_NAME_PROBE_TIMEOUT_SECONDS:-2}" "TextEdit document-name probe"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_LIST_TIMEOUT_SECONDS:-2}" "TextEdit document-list diagnostic"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'run_osascript_with_timeout 2 "frontmost app probe"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'run_osascript_with_timeout 1 "frontmost app wait probe"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'force_quit_textedit_if_only_smoke_windows' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit document-open diagnostics" >&2
   exit 1
@@ -118,6 +121,11 @@ for name in ("raise_textedit_smoke_window", "click_textedit_smoke_window"):
         raise SystemExit(f"{name} must not run the TextEdit document-name AppleScript probe on the focus/click hot path")
     if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
         raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
+
+for name in ("textedit_document_name_exists", "describe_open_textedit_documents", "assert_textedit_frontmost_window", "try_wait_for_frontmost_app"):
+    block = function_body(name)
+    if "run_osascript_with_timeout" not in block:
+        raise SystemExit(f"{name} must use bounded AppleScript")
 PY
 
 if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then

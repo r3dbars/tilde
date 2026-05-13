@@ -281,6 +281,31 @@ def select_window(
     else:
         latest_required_launch = latest_launch
 
+    if (
+        required_proof_app
+        and latest_required_launch
+        and latest_launch.line > latest_required_launch.line
+    ):
+        reason = (
+            "latest runtime launch is newer than the required proof launch "
+            f"(latestDiagnosticsLine={latest_launch.line}; proofDiagnosticsLine={latest_required_launch.line}; "
+            f"proofApp={latest_required_launch.proof_app or 'none'}; "
+            f"proofScenario={latest_required_launch.proof_scenario or 'none'})"
+        )
+        return Selection(
+            latest_launch,
+            trace_window(
+                trace_log,
+                latest_launch.timestamp,
+                required_trace_app=required_trace_app,
+                required_request_mode=required_request_mode,
+                require_model_backed_visible=require_model_backed_visible,
+                forbid_fast_word_visible=forbid_fast_word_visible,
+            ),
+            reason,
+            False,
+        )
+
     if latest_required_launch and not is_eligible_default_launch(latest_required_launch, expected_asset):
         reason = (
             "latest runtime launch is not the expected default runtime "
