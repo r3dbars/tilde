@@ -1520,6 +1520,19 @@ smoke_target_bundle_ids() {
   esac
 }
 
+drop_stale_same_value_launchctl_previous() {
+  local key="$1"
+  local previous_value="$2"
+  local owned_value="$3"
+
+  if [[ -n "$owned_value" && "$previous_value" == "$owned_value" ]]; then
+    launchctl unsetenv "$key" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  return 1
+}
+
 prepare_temporary_app_enablement() {
   local bundle_ids
   bundle_ids="$(smoke_target_bundle_ids | paste -sd, -)"
@@ -1529,10 +1542,16 @@ prepare_temporary_app_enablement() {
 
   if [[ "$TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     TEMP_ENABLE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$TEMP_ENABLE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$TEMP_ENABLE_ENV_KEY" "$TEMP_ENABLE_LAUNCHCTL_PREVIOUS" "$bundle_ids"; then
+      TEMP_ENABLE_LAUNCHCTL_PREVIOUS=""
+    fi
     TEMP_ENABLE_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_MODE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_MODE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_MODE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_MODE_ENV_KEY" "$PROOF_MODE_LAUNCHCTL_PREVIOUS" "$bundle_ids"; then
+      PROOF_MODE_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_MODE_LAUNCHCTL_WAS_PREPARED=1
   fi
 
@@ -1561,18 +1580,30 @@ prepare_temporary_app_enablement() {
 prepare_model_latency_runtime_options() {
   if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "textedit-model-latency"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
   fi
 
@@ -1596,14 +1627,23 @@ prepare_model_latency_runtime_options() {
 prepare_default_model_latency_runtime_options() {
   if [[ "$PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_WORD_ENV_KEY" "$PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED=1
   fi
   if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "textedit-default-model-latency"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
     PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
   fi
 
@@ -4902,6 +4942,16 @@ APPLESCRIPT
   wait_for_textedit_document_exact "$window_title" "$expected_text" "$label native completion trim" 5
 }
 
+normalize_textedit_typed_seed_for_proof() {
+  local window_title="$1"
+  local expected_text="$2"
+  local label="$3"
+
+  set_textedit_document_text "$window_title" "$expected_text"
+  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label typed seed normalize" 5
+  move_textedit_caret_to_document_end "$window_title"
+}
+
 verify_textedit_native_undo() {
   local window_title="$1"
   local expected_text="$2"
@@ -5094,10 +5144,13 @@ type_textedit_smoke_fragment_and_confirm() {
   local window_title="$1"
   local fragment="$2"
   local label="$3"
+  local expected_text
 
+  expected_text="$(textedit_document_text "$window_title")$fragment"
   type_textedit_smoke_fragment "$window_title" "$fragment"
   if wait_for_textedit_document_fragment "$window_title" "$fragment" "$label" 5; then
-    move_textedit_caret_to_document_end "$window_title"
+    trim_textedit_native_completion_suffix "$window_title" "$expected_text" "$label"
+    normalize_textedit_typed_seed_for_proof "$window_title" "$expected_text" "$label"
     return 0
   fi
 
@@ -5105,9 +5158,11 @@ type_textedit_smoke_fragment_and_confirm() {
   focus_textedit_smoke_editor "$window_title"
   click_textedit_smoke_editor "$window_title"
   set_textedit_document_text "$window_title" ""
+  expected_text="$fragment"
   type_textedit_smoke_fragment "$window_title" "$fragment"
   wait_for_textedit_document_fragment "$window_title" "$fragment" "$label retry" 5
-  move_textedit_caret_to_document_end "$window_title"
+  trim_textedit_native_completion_suffix "$window_title" "$expected_text" "$label retry"
+  normalize_textedit_typed_seed_for_proof "$window_title" "$expected_text" "$label retry"
 }
 
 wait_for_textedit_smoke_editor() {
