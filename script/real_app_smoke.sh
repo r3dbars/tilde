@@ -4321,6 +4321,49 @@ wait_for_textedit_document_prefix() {
   exit 1
 }
 
+trim_textedit_native_completion_suffix() {
+  local window_title="$1"
+  local expected_text="$2"
+  local label="$3"
+  local current_text suffix_length
+
+  current_text="$(textedit_document_text "$window_title")"
+  if [[ "$current_text" == "$expected_text" ]]; then
+    return 0
+  fi
+  if [[ "$current_text" != "$expected_text"* ]]; then
+    return 0
+  fi
+
+  suffix_length=$((${#current_text} - ${#expected_text}))
+  if ((suffix_length <= 0)); then
+    return 0
+  fi
+  if ((suffix_length > 20)); then
+    echo "TextEdit native completion suffix during $label was unexpectedly long ($suffix_length chars)." >&2
+    echo "Expected prefix: $expected_text" >&2
+    echo "Actual: $current_text" >&2
+    exit 1
+  fi
+
+  assert_textedit_frontmost_window "$window_title" "$label native completion trim"
+  AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT="$suffix_length" \
+    run_osascript_with_timeout 3 "$label native completion trim" <<'APPLESCRIPT' >/dev/null
+set deleteCountText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT"
+set deleteCount to deleteCountText as integer
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.apple.TextEdit" then
+    error "TextEdit is not frontmost for native completion trim."
+  end if
+  repeat deleteCount times
+    key code 117
+  end repeat
+end tell
+APPLESCRIPT
+  wait_for_textedit_document_exact "$window_title" "$expected_text" "$label native completion trim" 3
+}
+
 verify_textedit_native_undo() {
   local window_title="$1"
   local expected_text="$2"
@@ -8728,9 +8771,10 @@ run_textedit_model_latency() {
 
     sample_start="$(line_count "$LOG_PATH")"
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.08}" \
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.25}" \
       type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
     wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
+    trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
       "mlx-completion-timing" \
       "app=com.apple.TextEdit"

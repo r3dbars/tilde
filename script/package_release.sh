@@ -368,7 +368,9 @@ case "$MODE" in
     if ./script/check_model_asset.py --quiet; then
       echo "Preferred MLX model: ready"
     else
-      echo "Preferred MLX model: missing or invalid (run ./script/check_model_asset.py)"
+      echo "Preferred MLX model: blocked - missing, invalid, corrupt, or not checksum-verified"
+      echo "Run ./script/check_model_asset.py for the exact fix."
+      check_failed=1
     fi
     exit "$check_failed"
     ;;
