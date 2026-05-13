@@ -365,7 +365,7 @@ struct AutocompleteTraceReplayTests {
                 .suggestionRequested,
                 suggestionID: "one",
                 requestMode: CompletionRequestMode.wordCompletion.rawValue,
-                metadata: ["delayMilliseconds": "120"]
+                metadata: ["delayMilliseconds": "20"]
             ),
             event(
                 .suggestionPresented,
@@ -410,6 +410,7 @@ struct AutocompleteTraceReplayTests {
         #expect(!fullReport.passesReplayProofGate)
         #expect(smokeReport.passesReplayProofGate)
         #expect(smokeReport.profile == .smokeSlice)
+        #expect(smokeReport.triggerDelayCoverageRate == 1)
         #expect(smokeReport.acceptedInsertionCoverageRate == 1)
         #expect(smokeReport.requirements.contains {
             $0.name == "candidate selection replay"
