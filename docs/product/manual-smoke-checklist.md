@@ -50,6 +50,9 @@ manual proof pass.
 - Recovered insertion fallbacks are allowed when the same suggestion later verifies.
   Unrecovered insertion failures fail the recorder.
 - After a typing pass, run `AUTOCOMPLETE_LAB_LOG_START_LINE=<mark> ./script/check_typing_performance_log.sh`. It fails on slow event-tap latency or tap disable/timeout events.
+- For the long endurance gate, `script/typing_performance_endurance_soak.sh`
+  also samples live CPU/RSS after typing. It fails above 10% average CPU, 25%
+  p95 CPU, 6144MB RSS, 512MB RSS growth, or if no live process can be sampled.
 - After a visual placement pass, update the scorecard screenshot row and run
   `./script/check_visual_placement_evidence.sh --require-all` when every row
   should have screenshot proof. If a visual row is still below target, label it
