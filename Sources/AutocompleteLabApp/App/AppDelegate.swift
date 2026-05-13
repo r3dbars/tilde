@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let keyboardEventTapIdleStopPolicy = KeyboardEventTapIdleStopPolicy()
     private let insertionVerification = InsertionVerification()
     private let insertionVerificationContextRecoveryPolicy = InsertionVerificationContextRecoveryPolicy()
+    private let obsidianInsertionVerificationFastPathPolicy = ObsidianInsertionVerificationFastPathPolicy()
     private let insertionRetryPolicy = InsertionRetryPolicy()
     private let insertionVerificationTimingPolicy = InsertionVerificationTimingPolicy()
     private let suggestionAcceptanceProofPolicy = SuggestionAcceptanceProofPolicy()
@@ -3952,6 +3953,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "currentAfterChars": String(context.textAfterCursor.count)
                 ]
             )
+
+            if baseline.profile.bundleIdentifier == "md.obsidian",
+               obsidianInsertionVerificationFastPathPolicy.canVerifyLengthMatchedSuffix(
+                   previousTextBeforeCursor: baseline.previousTextBeforeCursor,
+                   acceptedText: acceptedText,
+                   currentTextBeforeCursor: context.textBeforeCursor,
+                   previousTextAfterCursor: baseline.previousTextAfterCursor,
+                   currentTextAfterCursor: context.textAfterCursor,
+                   verificationResult: result
+               ) {
+                result = .verified
+                DiagnosticsLog.shared.record(
+                    "obsidian-length-matched-insert-verification-fast-path",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "acceptedChars": String(acceptedText.count),
+                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "reason": "length-matched-suffix"
+                    ]
+                )
+                DiagnosticsLog.shared.record(
+                    "insert-verification",
+                    metadata: [
+                        "app": baseline.profile.bundleIdentifier,
+                        "result": String(describing: result),
+                        "acceptedChars": String(acceptedText.count),
+                        "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                        "currentBeforeChars": String(context.textBeforeCursor.count),
+                        "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                        "currentAfterChars": String(context.textAfterCursor.count),
+                        "source": "obsidian-length-matched-suffix"
+                    ]
+                )
+            }
 
             if !result.isVerified,
                let recheckDelayMilliseconds = insertionVerificationTimingPolicy.readOnlyRecheckDelayMilliseconds(

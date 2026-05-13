@@ -269,6 +269,53 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorViewportTailLine)
     }
 
+    @Test("Repairs Obsidian last-line text reported after the cursor")
+    func repairsObsidianLineStartTailText() {
+        let policy = TextContextRepairPolicy()
+        let previous = (1...10)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n")
+        let before = previous + "\nAutocomplete Lab Obsidian proof\n"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: before,
+            textAfterCursor: "Smoke proof feels",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == before + "Smoke proof feels")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorLineStartTail)
+    }
+
+    @Test("Keeps Obsidian last-line repair stable after suggestion presentation")
+    func keepsObsidianLineStartTailRepairStableAfterSuggestion() {
+        let policy = TextContextRepairPolicy()
+        let before = (80...90)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n")
+            + "\nAutocomplete Lab Obsidian proof\n"
+        let activeLine = "Smoke proof feels"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: before,
+            textAfterCursor: activeLine,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: before + activeLine,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == before + activeLine)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorLineStartTail)
+    }
+
     @Test("Repairs Obsidian CodeMirror line drift after the first typed character")
     func repairsObsidianCodeMirrorLineDriftAfterFirstCharacter() {
         let policy = TextContextRepairPolicy()
