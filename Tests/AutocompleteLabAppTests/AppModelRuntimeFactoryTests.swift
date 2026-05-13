@@ -242,6 +242,76 @@ struct AppModelRuntimeFactoryTests {
         #expect(MLXModelRuntime.integrityFailureFile(for: "some new integrity failure") == nil)
     }
 
+    @Test("Integrity validation cache skips unchanged duplicate checks and invalidates edits")
+    func integrityValidationCacheSkipsUnchangedDuplicateChecksAndInvalidatesEdits() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("steadytype-runtime-integrity-cache-\(UUID().uuidString)", isDirectory: true)
+        let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
+        let weightsURL = modelURL.appendingPathComponent("model.safetensors")
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        try fileManager.createDirectory(at: modelURL, withIntermediateDirectories: true)
+        try "{}".write(
+            to: modelURL.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "weights".write(
+            to: weightsURL,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let manifest = smallSourceBackedManifest()
+        _ = try ModelAssetIntegrityReceiptWriter.write(
+            manifest: manifest,
+            modelDirectoryURL: modelURL,
+            fileManager: fileManager
+        )
+
+        var cache = ModelAssetIntegrityValidationCache()
+        var checksummedFiles: [String] = []
+        let countingChecksum: (URL) throws -> String = { url in
+            checksummedFiles.append(url.lastPathComponent)
+            return try ModelAssetIntegrityReceiptWriter.sha256(url)
+        }
+
+        #expect(cache.validate(
+            manifest: manifest,
+            modelDirectoryURL: modelURL,
+            fileManager: fileManager,
+            checksum: countingChecksum
+        ) == nil)
+        #expect(checksummedFiles.contains("model.safetensors"))
+
+        checksummedFiles = []
+        #expect(cache.validate(
+            manifest: manifest,
+            modelDirectoryURL: modelURL,
+            fileManager: fileManager,
+            checksum: countingChecksum
+        ) == nil)
+        #expect(checksummedFiles.isEmpty)
+
+        try "WEIGHTS".write(to: weightsURL, atomically: true, encoding: .utf8)
+        try fileManager.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: 5)],
+            ofItemAtPath: weightsURL.path
+        )
+
+        checksummedFiles = []
+        #expect(cache.validate(
+            manifest: manifest,
+            modelDirectoryURL: modelURL,
+            fileManager: fileManager,
+            checksum: countingChecksum
+        ) == "integrity receipt checksum mismatch for model.safetensors")
+        #expect(checksummedFiles.contains("model.safetensors"))
+    }
+
     private func temporaryDefaults() -> UserDefaults {
         let suiteName = "autocomplete-app-model-runtime-factory-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

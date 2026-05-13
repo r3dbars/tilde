@@ -141,6 +141,49 @@ if ! grep -F "Latency beta gate passed." <<<"$REPORT" >/dev/null; then
 fi
 
 cat >"$DIAGNOSTICS_LOG" <<'LOG'
+2026-05-09T09:59:00Z runtime-bootstrap activeCandidate=mlx asset=old-ignored
+2026-05-09T10:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
+2026-05-09T10:00:01Z focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
+LOG
+
+cat >"$TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-09T09:59:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":100,"metadata":{"behaviorProfile":"notes"}}
+{"timestamp":"2026-05-09T10:00:01Z","sessionID":"session","suggestionID":"model-only","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"notes","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"fallback-visible","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"notes","candidateSelectionSource":"predictive-word-fallback"}}
+LOG
+
+if AUTOCOMPLETE_LAB_LOG_START_LINE=1 \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE=1 \
+  script/latency_benchmark_report.py \
+    --diagnostics-log "$DIAGNOSTICS_LOG" \
+    --trace-log "$TRACE_LOG" \
+    --beta-gate \
+    --require-first-visible-samples 1 \
+    --require-model-samples 1 \
+    --require-event-tap-samples 0 \
+    --require-ax-samples 1 \
+    --max-first-visible-p95-ms 250 \
+    --max-first-visible-p99-ms 250 \
+    --max-first-token-p95-ms 650 \
+    --max-total-generation-p95-ms 850 >"$TMP_DIR/unbacked-bounded.txt" 2>&1; then
+  echo "latency benchmark self-test expected bounded unbacked visible trace evidence to fail" >&2
+  cat "$TMP_DIR/unbacked-bounded.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "bounded beta gate needs fresh model-backed visible trace evidence" "$TMP_DIR/unbacked-bounded.txt" >/dev/null; then
+  echo "latency benchmark self-test did not explain missing model-backed trace evidence" >&2
+  cat "$TMP_DIR/unbacked-bounded.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "traceVisible=1; traceModelTiming=1; traceStartLine=1" "$TMP_DIR/unbacked-bounded.txt" >/dev/null; then
+  echo "latency benchmark self-test did not include trace evidence counts in the failure" >&2
+  cat "$TMP_DIR/unbacked-bounded.txt" >&2
+  exit 1
+fi
+
+cat >"$DIAGNOSTICS_LOG" <<'LOG'
 2026-05-09T10:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
 2026-05-09T10:00:01Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=100 generationMilliseconds=180 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=190
 2026-05-09T10:00:02Z focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9

@@ -131,6 +131,8 @@ for name, block in textedit_focus_blocks.items():
         raise SystemExit(f"{name} must not run the TextEdit document-name AppleScript probe on the focus/click hot path")
     if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
         raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
+    if "activateIgnoringOtherApps" not in block:
+        raise SystemExit(f"{name} must force TextEdit foreground activation for live key-event proof")
     if "print(app.processIdentifier)" not in block:
         raise SystemExit(f"{name} must return the TextEdit pid, not the currently frontmost app pid")
     if "allowSingleWindowFallback && windows.count == 1 ? windows[0]" in block:
@@ -174,6 +176,8 @@ activate_process_id_block = source[
     source.index("activate_process_id()"):
     source.index("activate_process_id_osascript()", source.index("activate_process_id()"))
 ]
+if "activateIgnoringOtherApps" not in activate_process_id_block:
+    raise SystemExit("activate_process_id must force foreground activation for live proof focus recovery")
 if 'activate_process_id_osascript "$target_pid" &' not in activate_process_id_block:
     raise SystemExit("activate_process_id must keep bounded System Events activation available")
 PY

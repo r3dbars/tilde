@@ -53,7 +53,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     public func warm() async throws {
         let startedAt = Date()
-        try verifyModelAssetIntegrity(startedAt: startedAt)
+        var integrityValidationCache = ModelAssetIntegrityValidationCache()
+        try verifyModelAssetIntegrity(startedAt: startedAt, cache: &integrityValidationCache)
         var didReuseLoadedContainer = false
         let warmGeneration = stateQueue.sync {
             if container != nil {
@@ -136,7 +137,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         try Task.checkCancellation()
-        try verifyModelAssetIntegrity(startedAt: startedAt)
+        try verifyModelAssetIntegrity(startedAt: startedAt, cache: &integrityValidationCache)
         try Task.checkCancellation()
 
         let wasCancelled = stateQueue.sync {
@@ -169,12 +170,15 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
     }
 
-    private func verifyModelAssetIntegrity(startedAt: Date) throws {
+    private func verifyModelAssetIntegrity(
+        startedAt: Date,
+        cache: inout ModelAssetIntegrityValidationCache
+    ) throws {
         guard let modelManifest else {
             return
         }
 
-        guard let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+        guard let integrityError = cache.validate(
             manifest: modelManifest,
             modelDirectoryURL: modelDirectoryURL,
             fileManager: fileManager

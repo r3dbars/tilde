@@ -118,6 +118,16 @@ def summary_window_line(label, windows, unit):
     )
 
 
+def trace_evidence_line(samples):
+    if not samples:
+        return "Model-backed visible trace evidence: n=0"
+    lines = [sample.line for sample in samples]
+    return (
+        f"Model-backed visible trace evidence: n={len(samples)} "
+        f"firstLine={min(lines)} latestLine={max(lines)}"
+    )
+
+
 def compact_metric(values):
     clean = [value for value in values if value is not None]
     if not clean:
@@ -196,6 +206,8 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
     late_visible = []
     seen_presented = set()
     seen_model = set()
+    model_backed_suggestion_ids = set()
+    presented_records = []
     malformed = []
 
     for line_number, line in line_slice(path, start_line, line_limit, end_line):
@@ -221,6 +233,12 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
                 continue
             sample = Sample(latency, app, profile, mode, "trace", line_number, suggestion_id)
             first_visible.append(sample)
+            selection_source = (
+                event.get("candidateSelectionSource")
+                or metadata.get("candidateSelectionSource")
+                or ""
+            )
+            presented_records.append((sample, str(selection_source)))
             if latency > late_visible_budget_ms:
                 late_visible.append(sample)
             continue
@@ -243,6 +261,7 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
             if generation_latency is None:
                 generation_latency = int_value(event.get("latencyMilliseconds"))
             if generation_latency is not None:
+                model_backed_suggestion_ids.add(suggestion_id)
                 total_generation.append(
                     Sample(generation_latency, app, profile, mode, "trace", line_number, suggestion_id)
                 )
@@ -255,8 +274,16 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
             if is_stale_late_suppression(suppression, late_visible_budget_ms, metadata):
                 stale_late_suppressed.append(suppression)
 
+    model_backed_first_visible = [
+        sample
+        for sample, selection_source in presented_records
+        if sample.label in model_backed_suggestion_ids
+        or selection_source == "app-model-result"
+    ]
+
     return {
         "first_visible": first_visible,
+        "model_backed_first_visible": model_backed_first_visible,
         "first_token": first_token,
         "total_generation": total_generation,
         "stale_late_suppressed": stale_late_suppressed,
@@ -451,6 +478,7 @@ def print_report(args, trace_data, diagnostics_data):
     print(metric_line("First visible / keystroke-to-visible", first_visible, "ms"))
     print(metric_line("First token", first_token, "ms"))
     print(metric_line("Total generation", total_generation, "ms"))
+    print(trace_evidence_line(trace_data["model_backed_first_visible"]))
     print(runtime_proof_line(diagnostics_data["runtime_launches"]))
     print(metric_line("Event-tap overhead raw", diagnostics_data["event_tap"], "us"))
     print(summary_window_line("Event-tap overhead summaries", diagnostics_data["event_tap_windows"], "us"))
@@ -491,6 +519,7 @@ def enforce_gate(args, trace_data, diagnostics_data):
         diagnostics_data["runtime_launches"],
         args.expected_asset,
     )
+    enforce_bounded_trace_evidence(failures, args, trace_data)
 
     require_count(failures, "first-visible samples", first_visible, args.require_first_visible_samples)
     require_count(failures, "model timing samples", total_generation, args.require_model_samples)
@@ -568,11 +597,11 @@ def enforce_gate(args, trace_data, diagnostics_data):
         )
 
     if failures:
-        shown = "; ".join(failures[:10])
+        shown = "\n".join(f"- {failure}" for failure in failures[:10])
         extra = len(failures) - 10
         if extra > 0:
-            shown = f"{shown}; +{extra} more"
-        raise SystemExit(f"latency beta gate failed: {shown}")
+            shown = f"{shown}\n- +{extra} more"
+        raise SystemExit(f"latency beta gate failed:\n{shown}")
 
     print()
     print("Latency beta gate passed.")
@@ -584,6 +613,35 @@ def require_count(failures, label, samples, expected):
     actual = len(samples)
     if actual < expected:
         failures.append(f"expected at least {expected} {label}, found {actual}")
+
+
+def has_bounded_latency_window(args):
+    return (
+        args.diagnostics_start_line > 0
+        or args.trace_start_line > 0
+        or args.diagnostics_end_line is not None
+        or args.trace_end_line is not None
+    )
+
+
+def enforce_bounded_trace_evidence(failures, args, trace_data):
+    if not args.beta_gate or not has_bounded_latency_window(args):
+        return
+
+    expected = max(1, args.require_first_visible_samples or 0)
+    actual = len(trace_data["model_backed_first_visible"])
+    if actual >= expected:
+        return
+
+    failures.append(
+        "bounded beta gate needs fresh model-backed visible trace evidence: "
+        f"expected at least {expected} model-backed visible trace samples, found {actual} "
+        f"(traceVisible={len(trace_data['first_visible'])}; "
+        f"traceModelTiming={len(trace_data['total_generation'])}; "
+        f"traceStartLine={args.trace_start_line}; "
+        f"traceEndLine={args.trace_end_line or 'none'}). "
+        "Diagnostics-only suggestion-presented rows cannot prove current model latency."
+    )
 
 
 def runtime_proof_line(runtime_launches):
