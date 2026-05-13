@@ -453,6 +453,49 @@ if ! grep -F "latest runtime launch is newer than the required proof launch" "$T
   exit 1
 fi
 
+HASH_SCENARIO_DIAGNOSTICS_LOG="$TMP_DIR/hash-scenario-diagnostics.log"
+HASH_SCENARIO_TRACE_LOG="$TMP_DIR/hash-scenario-traces.jsonl"
+
+cat >"$HASH_SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T14:20:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T14:20:01Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-12T14:20:02Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T14:20:10Z app-proof-mode-ended app=com.apple.TextEdit reason=complete
+2026-05-12T14:21:00Z launch accessibility=true executableSHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+2026-05-12T14:21:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$HASH_SCENARIO_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T14:20:03Z","sessionID":"session","suggestionID":"hash-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T14:20:04Z","sessionID":"session","suggestionID":"hash-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T14:20:05Z","sessionID":"session","suggestionID":"hash-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T14:20:06Z","sessionID":"session","suggestionID":"hash-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+HASH_WINDOW="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$HASH_SCENARIO_DIAGNOSTICS_LOG" \
+    --trace-log "$HASH_SCENARIO_TRACE_LOG" \
+    --min-first-visible-samples 2 \
+    --min-model-samples 2 \
+    --required-proof-app com.apple.TextEdit \
+    --required-proof-scenario textedit-model-latency \
+    --required-trace-app com.apple.TextEdit \
+    --required-request-mode wordCompletion \
+    --require-model-backed-visible \
+    --expected-executable-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    2>"$TMP_DIR/hash-scenario.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=2" <<<"$HASH_WINDOW" >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_LOG_END_LINE=5" <<<"$HASH_WINDOW" >/dev/null ||
+   ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/hash-scenario.err" >/dev/null; then
+  echo "latency window self-test did not keep same-executable later launches from staling proof" >&2
+  cat "$TMP_DIR/hash-scenario.err" >&2
+  echo "$HASH_WINDOW" >&2
+  exit 1
+fi
+
 UNSAMPLED_SCENARIO_DIAGNOSTICS_LOG="$TMP_DIR/unsampled-scenario-diagnostics.log"
 UNSAMPLED_SCENARIO_TRACE_LOG="$TMP_DIR/unsampled-scenario-traces.jsonl"
 cp "$SCENARIO_DIAGNOSTICS_LOG" "$UNSAMPLED_SCENARIO_DIAGNOSTICS_LOG"
