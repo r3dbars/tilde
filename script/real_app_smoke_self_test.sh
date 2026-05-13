@@ -483,11 +483,34 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'current_process_ancestor_pids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'selfPgid' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'processGroup[pid]' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'foreign_proof_process_lines' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/beta_readiness.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_score_targets.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_current_build_privacy_export.sh' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
+  exit 1
+fi
+if ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'start_foreign_worktree_quarantine_guard' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run quiet' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'quarantine_foreign_steadytype_apps' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_pid_tree "$pid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'descendant_pids "$pid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'cwd_is_foreign_worktree "$cwd"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'command_path_is_foreign_worktree "$command"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected quarantine mode to stop foreign worktree proof processes and app bundles" >&2
+  exit 1
+fi
+if grep -F 'kill -TERM -"$pgid"' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'kill -TERM "-$pgid"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected proof quarantine to avoid process-group kills" >&2
   exit 1
 fi
 if grep -F 'index(command, app_binary)' script/real_app_smoke.sh >/dev/null ||
@@ -872,8 +895,9 @@ fi
 if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
-   ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null; then
-  echo "real app smoke self-test expected Obsidian reset to move the AX selected range to the end of the disposable note through the helper" >&2
+   ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F "let replacementText = baseText + insertionText" script/obsidian_ax_editor.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian reset and append helpers to update the disposable note through guarded AX value replacement" >&2
   exit 1
 fi
 if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smoke.sh >/dev/null ||
@@ -900,6 +924,18 @@ assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instan
 branch_end = source.index('\n  else', append)
 if not (first_assert < watch < append < suffix < focus < assertion < branch_end):
     raise SystemExit("Obsidian long-note proof must start watching before AX-appending the second fragment and reasserting the caret at the note end")
+non_long_else = source.index('\n  else', branch_end)
+non_long_dismiss = source.index('press_key_code 53', non_long_else)
+non_long_pause = source.index('sleep 0.2', non_long_dismiss)
+non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_pause)
+non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_watch)
+non_long_append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"', non_long_assert)
+non_long_reassert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_append)
+non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_reassert)
+non_long_full_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_wait)
+non_long_full_start = source.index('full_start_line="$(line_count "$LOG_PATH")"', non_long_full_assert)
+if not (non_long_dismiss < non_long_pause < non_long_watch < non_long_assert < non_long_append < non_long_reassert < non_long_wait < non_long_full_assert < non_long_full_start):
+    raise SystemExit("Obsidian default/theme/pane proof must dismiss stale suggestions, AX-append the second fragment, reassert the AX target, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
 PY
 
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
@@ -970,11 +1006,9 @@ SELF_TEST_PGID="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
 SELF_TEST_PGID="${SELF_TEST_PGID//[[:space:]]/}"
 if [[ -n "$SELF_TEST_PGID" ]]; then
   if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="123 1 $SELF_TEST_PGID bash ./script/build_and_run.sh --verify"$'\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/same-pgid-build-run-process-fail.txt"; then
-    echo "real app smoke self-test expected same-PGID sibling build/run process scan to fail" >&2
-    exit 1
-  fi
-  if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/same-pgid-build-run-process-fail.txt" >/dev/null; then
-    echo "real app smoke self-test did not explain the same-PGID sibling process scan" >&2
+    :
+  elif grep -F "Another real app smoke process is already active" "$TMP_DIR/same-pgid-build-run-process-fail.txt" >/dev/null; then
+    echo "real app smoke self-test expected same-PGID child/sibling process scan to be treated as the active proof, not a competing proof" >&2
     exit 1
   fi
 fi

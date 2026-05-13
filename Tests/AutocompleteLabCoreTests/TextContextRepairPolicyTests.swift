@@ -373,6 +373,42 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorTextAfterTypingGrowth)
     }
 
+    @Test("Repairs Obsidian active line drift after a single previous line")
+    func repairsObsidianActiveLineDriftAfterSinglePreviousLine() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: "Smoke proof feels instant",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\nSmoke proof feels instant")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTextAfterActiveLine)
+    }
+
+    @Test("Repairs Obsidian typing growth after a single previous line")
+    func repairsObsidianTypingGrowthAfterSinglePreviousLine() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof",
+            textAfterCursor: "Smoke proof feels instant",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof",
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\nSmoke proof feels instant")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorTextAfterTypingGrowth)
+    }
+
     @Test("Does not repair Obsidian typing growth when later content remains")
     func doesNotRepairObsidianTextAfterTypingGrowthWithLaterContent() {
         let policy = TextContextRepairPolicy()
