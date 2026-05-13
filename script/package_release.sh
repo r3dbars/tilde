@@ -296,8 +296,9 @@ record_command_allow_failure() {
 }
 
 create_zip() {
+  local source_app="${1:-$APP_BUNDLE}"
   rm -f "$ZIP_PATH"
-  ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+  ditto -c -k --keepParent "$source_app" "$ZIP_PATH"
 }
 
 create_dmg() {
@@ -451,9 +452,6 @@ case "$MODE" in
       gatekeeper_failed=1
     fi
 
-    create_zip
-    write_checksums
-
     verify_dir="$(mktemp -d)"
     trap 'rm -rf "$verify_dir"' EXIT
     mkdir -p "$verify_dir/mount"
@@ -469,6 +467,7 @@ case "$MODE" in
       echo "Gatekeeper assessment failed; saved spctl output in $PROOF_DIR" >&2
       exit 1
     fi
+    create_zip "$verify_dir/SteadyType.app"
     write_checksums
     write_proof_checklist "notarized" "accepted" "validated" "accepted"
     write_fresh_install_proof_instructions

@@ -102,4 +102,24 @@ if grep -F "Fresh latency proof start:" "$BLOCKED_OUTPUT" >/dev/null; then
   exit 1
 fi
 
+FULL_SMOKE_BLOCKED_OUTPUT="$TMP_DIR/full-smoke-blocked-output.txt"
+if AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-full-smoke-blocked.lock" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS=0 \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_PROCESS_LIST=$'123 1 123 bash ./script/smoke_test.sh\n124 1 124 bash ./script/build_and_run.sh --verify' \
+    ./script/fresh_latency_proof.sh --runs 1 >"$FULL_SMOKE_BLOCKED_OUTPUT" 2>&1; then
+  echo "fresh latency proof self-test expected full smoke/build processes to block before selecting a window" >&2
+  cat "$FULL_SMOKE_BLOCKED_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Another proof process is already active." "$FULL_SMOKE_BLOCKED_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected full smoke/build process warning" >&2
+  cat "$FULL_SMOKE_BLOCKED_OUTPUT" >&2
+  exit 1
+fi
+
 echo "Fresh latency proof self-test passed."
