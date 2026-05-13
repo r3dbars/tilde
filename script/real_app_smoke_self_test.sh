@@ -107,7 +107,7 @@ if "describe_textedit_model_latency_seed_miss" not in block:
     raise SystemExit("model-latency proof must diagnose missing seed logs before the measured sample")
 if 'wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed' in block:
     raise SystemExit("model-latency proof must not hard-fail before typing the measured trigger")
-if 'proof_runtime_guard_line="$(line_count "$LOG_PATH")"' not in block:
+if 'proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"' not in block:
     raise SystemExit("model-latency proof must remember the tagged runtime launch before opening TextEdit")
 if block.count('assert_no_runtime_relaunch_since "$proof_runtime_guard_line"') < 2:
     raise SystemExit("model-latency proof must fail clearly if another runtime relaunches before sampling")
