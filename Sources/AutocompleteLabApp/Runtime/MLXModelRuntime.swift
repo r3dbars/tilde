@@ -21,6 +21,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private var container: ModelContainer?
     private var staticPromptCache = RuntimeStaticPromptCache()
     private var generation = 0
+    private var warmTaskID = 0
+    private var warmTask: (id: Int, task: Task<Void, Error>)?
 
     public init(
         modelDirectoryURL: URL,
@@ -52,6 +54,27 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func warm() async throws {
+        let task = stateQueue.sync {
+            if let warmTask {
+                return warmTask.task
+            }
+
+            warmTaskID += 1
+            let taskID = warmTaskID
+            let task = Task { [self] in
+                defer {
+                    clearWarmTask(id: taskID)
+                }
+                try await performWarm()
+            }
+            warmTask = (taskID, task)
+            return task
+        }
+
+        try await task.value
+    }
+
+    private func performWarm() async throws {
         let startedAt = Date()
         var integrityValidationCache = ModelAssetIntegrityValidationCache()
         try verifyModelAssetIntegrity(startedAt: startedAt, cache: &integrityValidationCache)
@@ -269,10 +292,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func cancel() {
-        stateQueue.sync {
+        let taskToCancel = stateQueue.sync {
+            let task = warmTask?.task
+            warmTask = nil
             generation += 1
             storedState = .unavailable(reason: "MLX runtime was canceled.")
+            return task
         }
+        taskToCancel?.cancel()
     }
 
     public func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion? {
@@ -317,14 +344,20 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
                 rawOutput += chunk
 
-                if let partialSuggestion = requestCleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
+                let partialSuggestion = requestCleaner.clean(
+                    rawOutput,
+                    after: request.textBeforeCursor,
+                    mode: request.mode
+                )
+
+                if let partialSuggestion,
                    !partialSuggestion.isEmpty,
                    partialSuggestion.visibleText != lastPartialVisibleText {
                     lastPartialVisibleText = partialSuggestion.visibleText
                     onPartialSuggestion(partialSuggestion)
                 }
 
-                if shouldStopEarly(rawOutput, request: request, cleaner: requestCleaner) {
+                if shouldStopEarly(partialSuggestion, rawOutput: rawOutput, request: request) {
                     break
                 }
             }
@@ -402,11 +435,11 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     private func shouldStopEarly(
-        _ rawOutput: String,
-        request: CompletionRequest,
-        cleaner requestCleaner: CompletionOutputCleaner
+        _ suggestion: CompletionSuggestion?,
+        rawOutput: String,
+        request: CompletionRequest
     ) -> Bool {
-        guard let suggestion = requestCleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode) else {
+        guard let suggestion else {
             return false
         }
 
@@ -434,6 +467,14 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private func cachedStaticPrompt(systemPrompt: String) -> RuntimeStaticPromptCacheLookup {
         stateQueue.sync {
             staticPromptCache.lookup(systemPrompt: systemPrompt)
+        }
+    }
+
+    private func clearWarmTask(id: Int) {
+        stateQueue.sync {
+            if warmTask?.id == id {
+                warmTask = nil
+            }
         }
     }
 
