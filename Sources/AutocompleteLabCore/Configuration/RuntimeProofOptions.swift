@@ -18,6 +18,14 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         )
     }
 
+    public func disablesFastWordCompletion(
+        appBundleIdentifier: String,
+        activeProofBundleIdentifiers: Set<String>
+    ) -> Bool {
+        disablesFastWordCompletion
+            && activeProofBundleIdentifiers.contains(appBundleIdentifier)
+    }
+
     public static func fromProcessEnvironment() -> RuntimeProofOptions {
         RuntimeProofOptions(environment: ProcessInfo.processInfo.environment)
     }

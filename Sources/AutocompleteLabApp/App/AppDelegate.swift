@@ -4964,8 +4964,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(requestMetadata) { current, _ in current }
         )
 
+        let disablesFastWordCompletionForProof = runtimeProofOptions.disablesFastWordCompletion(
+            appBundleIdentifier: appBundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        )
+
         if requestMode == .wordCompletion,
-           !runtimeProofOptions.disablesFastWordCompletion {
+           !disablesFastWordCompletionForProof {
             let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
                 + (visiblePageContext?.completionCandidateWords ?? [])
             let allowPredictiveFallback = shouldUsePredictiveWordFallback(
@@ -5070,7 +5075,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hideSuggestion()
                 return
             }
-        } else if requestMode == .wordCompletion {
+        } else if requestMode == .wordCompletion,
+                  disablesFastWordCompletionForProof {
             DiagnosticsLog.shared.record(
                 "fast-word-completion-disabled",
                 metadata: [

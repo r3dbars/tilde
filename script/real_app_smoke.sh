@@ -99,6 +99,8 @@ normal terminal suggestions.
 --skip-build reuses the already-running AutocompleteLab app. It fails closed unless
 the only running SteadyType process is this checkout's dist/SteadyType.app binary
 and that process already has any proof-mode environment needed by the smoke pass.
+The textedit-model-latency lane does not allow --skip-build because it must
+relaunch SteadyType with fast word completions disabled before sampling.
 
 --native-undo-proof relaunches AutocompleteLab with app rollback disabled,
 passes Command-Z through to the target app, and records native single-edit undo
@@ -396,6 +398,12 @@ fi
 
 if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$SKIP_BUILD" == "1" ]]; then
   echo "--native-undo-proof cannot be combined with --skip-build because the app must relaunch with app rollback disabled." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_BUILD" == "1" ]]; then
+  echo "textedit-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions disabled before sampling." >&2
   usage >&2
   exit 2
 fi
@@ -3933,19 +3941,50 @@ print("0")
 SWIFT
 }
 
+textedit_document_name_exists() {
+  local window_title="$1"
+
+  osascript - "$window_title" <<'APPLESCRIPT' 2>/dev/null || true
+on run argv
+  set targetTitle to item 1 of argv
+  tell application "TextEdit"
+    repeat with docRef in documents
+      if (name of docRef) is targetTitle then
+        return "1"
+      end if
+    end repeat
+  end tell
+  return "0"
+end run
+APPLESCRIPT
+}
+
 wait_for_textedit_document_open() {
   local window_title="$1"
   local timeout_seconds="${2:-5}"
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    if [[ "$(textedit_document_exists "$window_title")" == "1" ]]; then
+    if [[ "$(textedit_document_exists "$window_title")" == "1" ||
+          "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
       return 0
     fi
     sleep 0.2
   done
 
   return 1
+}
+
+describe_open_textedit_documents() {
+  osascript <<'APPLESCRIPT' 2>/dev/null || true
+tell application "TextEdit"
+  set out to ""
+  repeat with docRef in documents
+    set out to out & (name of docRef) & linefeed
+  end repeat
+  return out
+end tell
+APPLESCRIPT
 }
 
 open_textedit_smoke_document() {
@@ -3981,6 +4020,8 @@ APPLESCRIPT
   fi
 
   echo "Timed out waiting for TextEdit to open disposable document '$window_title'." >&2
+  echo "Open TextEdit documents:" >&2
+  describe_open_textedit_documents >&2
   return 1
 }
 
@@ -4316,11 +4357,11 @@ textedit_scrolled_prefill() {
 
 textedit_model_latency_fragments() {
   cat <<'EOF'
-The local runtime hardening pass keeps every model checksum verifi
+The local runtime hardening pass keeps every model checksum verif
 Private beta recovery should explain the next safe repair before it confu
 Offline launch proof needs the embedded model to stay boringly relia
-The app owned runtime should catch a corrupt weight file immedia
-The tester facing failure state should make recovery feel trustw
+The app owned runtime should catch a corrupt weight file immed
+The tester facing failure state should make recovery feel trust
 EOF
 }
 

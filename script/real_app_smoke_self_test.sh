@@ -39,10 +39,39 @@ if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency.
   exit 1
 fi
 
+if script/real_app_smoke.sh textedit-model-latency --skip-build --dry-run >"$TMP_DIR/textedit-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected TextEdit model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions disabled" "$TMP_DIR/textedit-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected TextEdit model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing" >&2
+  exit 1
+fi
+
+if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit document-open diagnostics" >&2
+  exit 1
+fi
+
+if ! awk '
+  /textedit_model_latency_fragments\(\)/ { in_fragments = 1; next }
+  in_fragments && /^EOF$/ { exit }
+  in_fragments && $0 !~ /^  cat <<'\''EOF'\''$/ {
+    word_count = split($0, words, /[[:space:]]+/)
+    if (length(words[word_count]) > 5) {
+      exit 1
+    }
+  }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected TextEdit model latency triggers to stay within word-completion length" >&2
   exit 1
 fi
 
