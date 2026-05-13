@@ -26,7 +26,7 @@ import sys
 
 Path(sys.argv[1]).write_text(
     "Insertion proof status: docs/product/manual-smoke-runs.md\n"
-    "29 target app pass(es) still need real manual smoke proof.\n",
+    "30 target app pass(es) still need real manual smoke proof.\n",
     encoding="utf-8",
 )
 Path(sys.argv[2]).write_text(
@@ -35,11 +35,11 @@ Path(sys.argv[2]).write_text(
     encoding="utf-8",
 )
 Path(sys.argv[3]).write_text(
-    "AUTOCOMPLETE_LAB_LOG_START_LINE=24210\n"
-    "AUTOCOMPLETE_LAB_TRACE_START_LINE=6225\n"
-    "Latency window: selected latest sampled default runtime launch; "
-    "diagnosticsLine=24211; traceStartLine=6225; diagnosticsEndLine=none; "
-    "traceEndLine=none; firstVisibleSamples=5; modelSamples=20; "
+    "Latency window: latest runtime launch is newer than the required proof launch "
+    "(latestDiagnosticsLine=28192; proofDiagnosticsLine=28009; "
+    "proofApp=com.apple.TextEdit; proofScenario=textedit-model-latency); "
+    "diagnosticsLine=28192; traceStartLine=6997; diagnosticsEndLine=none; "
+    "traceEndLine=none; firstVisibleSamples=0; modelSamples=0; "
     "fastWordVisibleSamples=0\n",
     encoding="utf-8",
 )
@@ -85,12 +85,12 @@ if python3 script/check_steadytype_scorecard.py \
   --proof-manifest-output "$PROOF_LIVE" \
   --latency-selector-output "$LATENCY_SELECTOR_RED" \
   >"$TMP_DIR/live-latency-red.txt" 2>&1; then
-  echo "scorecard self-test expected old green latency text to fail against red latest selector output" >&2
+  echo "scorecard self-test expected stale red latency count to fail" >&2
   exit 1
 fi
 
-if ! grep -F "latency selector live output is red: latest default runtime launch has too few samples" "$TMP_DIR/live-latency-red.txt" >/dev/null; then
-  echo "scorecard self-test missing red latest latency selector failure" >&2
+if ! grep -F "diagnosticsLine claim is 28192, live output reports 25000" "$TMP_DIR/live-latency-red.txt" >/dev/null; then
+  echo "scorecard self-test missing stale red latency selector failure" >&2
   cat "$TMP_DIR/live-latency-red.txt" >&2
   exit 1
 fi
@@ -101,7 +101,7 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("modelSamples=20", "modelSamples=19", 1)
+source = source.replace("modelSamples=0", "modelSamples=1", 1)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -116,7 +116,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "modelSamples claim is 20, live output reports 19" "$TMP_DIR/live-latency-drift.txt" >/dev/null; then
+if ! grep -F "modelSamples claim is 0, live output reports 1" "$TMP_DIR/live-latency-drift.txt" >/dev/null; then
   echo "scorecard self-test missing stale latency selector count failure" >&2
   cat "$TMP_DIR/live-latency-drift.txt" >&2
   exit 1
@@ -129,8 +129,8 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 source = source.replace(
+    "30 target app passes are stale or pending",
     "29 target app passes are stale or pending",
-    "28 target app passes are stale or pending",
     1,
 )
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
@@ -146,7 +146,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "manual smoke stale/pending count claim is 28, live output reports 29" "$TMP_DIR/manual-drift.txt" >/dev/null; then
+if ! grep -F "manual smoke stale/pending count claim is 29, live output reports 30" "$TMP_DIR/manual-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live manual count drift failure" >&2
   cat "$TMP_DIR/manual-drift.txt" >&2
   exit 1
@@ -221,7 +221,7 @@ if ! grep -F "Tab safety: contains 'pending', so score must stay <= 75/100" "$TM
 fi
 
 PERFECT_UNRESOLVED="$TMP_DIR/perfect-unresolved.md"
-sed -e 's#Overall score: 80/100\.#Overall score: 81/100.#' \
+sed -e 's#Overall score: 78/100\.#Overall score: 79/100.#' \
   -e 's#| Diagnostics | 90/100 |#| Diagnostics | 100/100 |#' \
   "$SCORECARD" >"$PERFECT_UNRESOLVED"
 
@@ -302,6 +302,13 @@ if ! grep -F "missing required score area: model readiness" "$TMP_DIR/missing.tx
 fi
 
 LIVE_SCORECARD="$TMP_DIR/live-scorecard.md"
+LATENCY_SELECTOR_GREEN="$TMP_DIR/latency-selector-green.txt"
+cat >"$LATENCY_SELECTOR_GREEN" <<'EOF'
+AUTOCOMPLETE_LAB_LOG_START_LINE=24210
+AUTOCOMPLETE_LAB_TRACE_START_LINE=6225
+Latency window: selected latest sampled default runtime launch; diagnosticsLine=24211; traceStartLine=6225; diagnosticsEndLine=none; traceEndLine=none; firstVisibleSamples=5; modelSamples=20; fastWordVisibleSamples=0
+EOF
+
 python3 - "$LIVE_SCORECARD" <<'PY'
 from pathlib import Path
 import sys
@@ -361,7 +368,7 @@ python3 script/check_steadytype_scorecard.py \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
   --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
-  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_GREEN" \
   >"$TMP_DIR/live-pass.txt"
 
 cat >"$TMP_DIR/manual-smoke-live-bad.txt" <<'EOF'
@@ -373,7 +380,7 @@ if python3 script/check_steadytype_scorecard.py \
   --live \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live-bad.txt" \
   --proof-manifest-output "$TMP_DIR/proof-manifest-live.txt" \
-  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_GREEN" \
   >"$TMP_DIR/live-bad.txt" 2>&1; then
   echo "scorecard self-test expected live manual count mismatch to fail" >&2
   exit 1
