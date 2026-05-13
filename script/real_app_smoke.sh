@@ -505,6 +505,53 @@ end run
 APPLESCRIPT
   local osascript_pid="$!"
   wait_for_background_process "$osascript_pid" 4 "stale TextEdit smoke cleanup" >/dev/null 2>&1 || true
+  force_quit_textedit_if_only_smoke_windows
+}
+
+force_quit_textedit_if_only_smoke_windows() {
+  swift - <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+let smokePrefixes = [
+    "textedit-smoke-",
+    "textedit-model-latency-",
+    "autocomplete-lab-typing-soak-",
+    "textedit-ax-retention-proof.",
+    "textedit-retention-proof."
+]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+let textEditApps = NSWorkspace.shared.runningApplications.filter {
+    $0.bundleIdentifier == "com.apple.TextEdit"
+}
+
+for app in textEditApps {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement],
+          !windows.isEmpty else {
+        continue
+    }
+
+    let titles = windows.compactMap { copyAttribute($0, kAXTitleAttribute) as? String }
+    guard !titles.isEmpty,
+          titles.allSatisfy({ title in smokePrefixes.contains { title.hasPrefix($0) } }) else {
+        continue
+    }
+
+    app.forceTerminate()
+}
+SWIFT
 }
 
 cleanup_smoke() {
@@ -636,12 +683,15 @@ other_smoke_process_lines() {
       pgid = $3
       command = $0
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-    }
-    pid != self &&
-      (selfPGID == "" || pgid != selfPGID) &&
-      command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?bash|\/usr\/bin\/env[[:space:]]+bash)[[:space:]]+(\.\/)?script\/real_app_smoke\.sh([[:space:]]|$)/ {
+      directScript = command ~ /^(\.\/)?script\/real_app_smoke\.sh([[:space:]]|$)/
+      shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
+      hasSmokeScript = index(command, "script/real_app_smoke.sh") > 0
+      if (pid == self) next
+      if (selfPGID != "" && pgid == selfPGID) next
+      if (directScript || (shellWrapper && hasSmokeScript)) {
         print
       }
+    }
   ' <<<"$process_list"
 }
 
@@ -896,7 +946,7 @@ try_wait_for_frontmost_app() {
 
   while ((SECONDS <= deadline)); do
     local frontmost
-    frontmost="$(osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
+    frontmost="$(run_osascript_with_timeout 1 "frontmost app wait probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
     if [[ "$frontmost" == "$expected" ]]; then
       return 0
     fi
@@ -929,6 +979,27 @@ wait_for_background_process() {
   fi
 
   return $?
+}
+
+run_osascript_with_timeout() {
+  local timeout_seconds="$1"
+  local label="$2"
+  shift 2
+
+  local run_dir stdout_path stderr_path status
+  run_dir="$(make_tmp_dir)"
+  stdout_path="$run_dir/osascript-stdout.txt"
+  stderr_path="$run_dir/osascript-stderr.txt"
+
+  osascript "$@" >"$stdout_path" 2>"$stderr_path" &
+  local osascript_pid="$!"
+  if wait_for_background_process "$osascript_pid" "$timeout_seconds" "$label"; then
+    cat "$stdout_path"
+    return 0
+  fi
+
+  status=$?
+  return "$status"
 }
 
 activate_process_id() {
@@ -979,7 +1050,7 @@ assert_frontmost_app() {
   local expected="$1"
   local label="$2"
   local frontmost
-  frontmost="$(osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
+  frontmost="$(run_osascript_with_timeout 2 "frontmost app assertion probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
   if [[ "$frontmost" != "$expected" ]]; then
     echo "$label lost focus before accept. Expected frontmost app '$expected', got '${frontmost:-unknown}'." >&2
     exit 1
@@ -3479,10 +3550,7 @@ APPLESCRIPT
 
 raise_textedit_smoke_window() {
   local window_title="$1"
-  local single_window_fallback=0
-  if [[ "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
-    single_window_fallback=1
-  fi
+  local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"
 
   AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK="$single_window_fallback" swift - "$window_title" <<'SWIFT'
 import AppKit
@@ -3539,10 +3607,7 @@ SWIFT
 
 click_textedit_smoke_window() {
   local window_title="$1"
-  local single_window_fallback=0
-  if [[ "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
-    single_window_fallback=1
-  fi
+  local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"
 
   AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK="$single_window_fallback" swift - "$window_title" <<'SWIFT'
 import AppKit
@@ -3744,7 +3809,7 @@ assert_textedit_frontmost_window() {
 
   if [[ "$(textedit_frontmost_window_is "$window_title")" != "1" ]]; then
     local frontmost
-    frontmost="$(osascript -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
+    frontmost="$(run_osascript_with_timeout 2 "frontmost app probe" -e 'tell application "System Events" to name of first application process whose frontmost is true' 2>/dev/null || true)"
     echo "$label lost focus before accept. Expected frontmost TextEdit window '$window_title', got frontmost app '${frontmost:-unknown}'." >&2
     exit 1
   fi
@@ -4004,8 +4069,9 @@ SWIFT
 
 textedit_document_name_exists() {
   local window_title="$1"
+  local result
 
-  osascript - "$window_title" <<'APPLESCRIPT' 2>/dev/null || true
+  result="$(run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_NAME_PROBE_TIMEOUT_SECONDS:-2}" "TextEdit document-name probe" - "$window_title" <<'APPLESCRIPT' 2>/dev/null || true
 on run argv
   set targetTitle to item 1 of argv
   tell application "TextEdit"
@@ -4018,6 +4084,13 @@ on run argv
   return "0"
 end run
 APPLESCRIPT
+)"
+
+  if [[ "$result" == "1" ]]; then
+    echo "1"
+  else
+    echo "0"
+  fi
 }
 
 wait_for_textedit_document_open() {
@@ -4037,7 +4110,7 @@ wait_for_textedit_document_open() {
 }
 
 describe_open_textedit_documents() {
-  osascript <<'APPLESCRIPT' 2>/dev/null || true
+  run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_LIST_TIMEOUT_SECONDS:-2}" "TextEdit document-list diagnostic" <<'APPLESCRIPT' 2>/dev/null || true
 tell application "TextEdit"
   set out to ""
   repeat with docRef in documents
@@ -6910,25 +6983,39 @@ build_bundle_if_needed() {
   refresh_build_archive_proof
 }
 
-current_steadytype_app_bundle_pids() {
-  local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
-  local current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
-
-  ps ax -o pid=,pgid=,command= |
-    awk -v app_binary="$app_binary" -v self="$$" -v selfPGID="$current_pgid" '
+steadytype_app_process_rows() {
+  ps ax -o pid=,pgid=,command= 2>/dev/null |
+    awk '
       {
         pid = $1
         pgid = $2
         command = $0
         sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
       }
-      pid != self &&
-        (selfPGID == "" || pgid != selfPGID) &&
-        index(command, app_binary) > 0 {
-          print pid
+      command ~ /^\/.*\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ {
+        print pid "\t" pgid "\t" command
       }
     '
+}
+
+command_matches_steadytype_binary() {
+  local command="$1"
+  local app_binary="$2"
+  [[ "$command" == "$app_binary" || "$command" == "$app_binary "* ]]
+}
+
+current_steadytype_app_bundle_pids() {
+  local app_binary="$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType"
+  local current_pgid
+  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+
+  while IFS=$'\t' read -r pid pgid command; do
+    [[ -z "$pid" ]] && continue
+    [[ "$pid" == "$$" ]] && continue
+    [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
+    command_matches_steadytype_binary "$command" "$app_binary" || continue
+    printf '%s\n' "$pid"
+  done < <(steadytype_app_process_rows)
 }
 
 stop_current_steadytype_app_bundle() {
@@ -7016,16 +7103,15 @@ wait_for_current_autocomplete_lab_process() {
     local found_current=0
     local stale_processes=""
     local pid command
-    while IFS= read -r pid; do
+    while IFS=$'\t' read -r pid _pgid command; do
       [[ -z "$pid" ]] && continue
-      command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
       [[ -z "$command" ]] && continue
-      if [[ "$command" == "$expected_binary" ]]; then
+      if command_matches_steadytype_binary "$command" "$expected_binary"; then
         found_current=1
       else
         stale_processes+="${pid} ${command}"$'\n'
       fi
-    done < <(pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType" 2>/dev/null || true)
+    done < <(steadytype_app_process_rows)
 
     if [[ "$found_current" == "1" && -z "$stale_processes" ]]; then
       return 0
@@ -7036,11 +7122,8 @@ wait_for_current_autocomplete_lab_process() {
   echo "SteadyType smoke launch did not settle on this checkout's app bundle." >&2
   echo "Expected binary: $expected_binary" >&2
   echo "Running SteadyType processes:" >&2
-  pgrep -f "/[S]teadyType.app/Contents/MacOS/SteadyType" 2>/dev/null |
-    while IFS= read -r pid; do
-      [[ -z "$pid" ]] && continue
-      ps -p "$pid" -o pid=,command= 2>/dev/null || true
-    done >&2
+  steadytype_app_process_rows |
+    awk -F '\t' '{ print $1 " " $3 }' >&2
   exit 1
 }
 
@@ -8562,6 +8645,7 @@ run_textedit_model_latency() {
   local runtime_start_line start_line textedit_file textedit_tmp_dir textedit_window_title trace_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   export AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1
+  export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
