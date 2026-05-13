@@ -912,11 +912,15 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
-first_long_insert = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"')
-first_long_suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels"', first_long_insert)
+long_seed = source.index('obsidian_long_note_text_before_trigger()')
+long_seed_tail = source.index("printf 'Smoke proof feel'", long_seed)
+long_reset = source.index('reset_obsidian_smoke_note_file "$(obsidian_long_note_text_before_trigger)"', long_seed_tail)
+long_caret = source.index('set_obsidian_caret_to_value_end', long_reset)
+long_trigger = source.index('type_obsidian_raw_smoke_text "s"', long_caret)
+first_long_suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels"', long_trigger)
 first_suggestion = source.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"', first_long_suffix)
-if not (first_long_insert < first_long_suffix < first_suggestion):
-    raise SystemExit("Obsidian long-note proof must AX-insert the first fragment, verify the disposable file suffix, then wait for the first suggestion")
+if not (long_seed < long_seed_tail < long_reset < long_caret < long_trigger < first_long_suffix < first_suggestion):
+    raise SystemExit("Obsidian long-note proof must seed the note before the trigger, type only the final live character, verify the disposable file suffix, then wait for the first suggestion")
 first_preservation = source.index('assert_obsidian_long_note_file_preserved "Smoke proof feels instant"')
 append = source.index('append_obsidian_smoke_note_file_text " and stays inst"', first_preservation)
 watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', append)
@@ -956,9 +960,11 @@ if ! grep -F "assert_obsidian_long_note_file_preserved" script/real_app_smoke.sh
   exit 1
 fi
 
-if ! grep -F 'first_fragment="moke proof feel"' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'obsidian_long_note_text_before_trigger()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "printf 'Smoke proof feel'" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'first_fragment=""' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'type_obsidian_raw_smoke_text "s"' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Obsidian long-note proof to type the final trigger character after caret-end repair" >&2
+  echo "real app smoke self-test expected Obsidian long-note proof to seed the trigger prefix, then type the final trigger character after caret-end repair" >&2
   exit 1
 fi
 
