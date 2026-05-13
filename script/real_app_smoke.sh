@@ -760,28 +760,37 @@ acquire_smoke_lock() {
 }
 
 other_smoke_process_lines() {
-  local process_list current_pgid
+  local process_list current_pgid protected_pgids
   current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d ' ' || true)"
+  protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" '
+    BEGIN {
+      split(protectedPGIDs, protectedList, " ")
+      for (i in protectedList) {
+        if (protectedList[i] != "") protected[protectedList[i]] = 1
+      }
+    }
     {
       pid = $1
       pgid = $3
       command = $0
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|manual_proof_refresh|smoke_test|build_and_run)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasSmokeScript = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
+        index(command, "script/manual_proof_refresh.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
         index(command, "script/build_and_run.sh") > 0
       if (pid == self) next
       if (selfPGID != "" && pgid == selfPGID) next
+      if (pgid in protected) next
       if (directScript || (shellWrapper && hasSmokeScript)) {
         print
       }
@@ -789,26 +798,57 @@ other_smoke_process_lines() {
   ' <<<"$process_list"
 }
 
+current_process_family_pgids() {
+  if [[ -n "${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS:-}" ]]; then
+    tr ', ' '\n\n' <<<"$AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS" |
+      awk 'NF && !seen[$1]++ { print $1 }'
+  fi
+
+  local pid="$SMOKE_SCRIPT_PID"
+  local seen_pids=" "
+  local row parent_pid pgid
+
+  while [[ -n "$pid" && "$pid" != "0" && "$seen_pids" != *" $pid "* ]]; do
+    seen_pids+="$pid "
+    row="$(ps -o ppid=,pgid= -p "$pid" 2>/dev/null | awk 'NR == 1 { print $1 "\t" $2 }' || true)"
+    [[ -z "$row" ]] && break
+
+    IFS=$'\t' read -r parent_pid pgid <<<"$row"
+    [[ -n "$pgid" ]] && printf '%s\n' "$pgid"
+    [[ -z "$parent_pid" || "$parent_pid" == "$pid" ]] && break
+    pid="$parent_pid"
+  done | awk 'NF && !seen[$1]++ { print $1 }'
+}
+
 other_autocomplete_proof_pgids() {
-  local process_list current_pgid
+  local process_list current_pgid protected_pgids
   current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d ' ' || true)"
   [[ -z "$current_pgid" ]] && return 0
+  protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
   process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" '
+    BEGIN {
+      split(protectedPGIDs, protectedList, " ")
+      for (i in protectedList) {
+        if (protectedList[i] != "") protected[protectedList[i]] = 1
+      }
+    }
     {
       pid = $1
       pgid = $3
       command = $0
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|obsidian_deep_sweep|build_and_run)\.sh([[:space:]]|$)/
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|manual_proof_refresh|obsidian_deep_sweep|build_and_run)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasProofScript = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
+        index(command, "script/manual_proof_refresh.sh") > 0 ||
         index(command, "script/obsidian_deep_sweep.sh") > 0 ||
         index(command, "script/build_and_run.sh") > 0
       if (pid == self) next
       if (selfPGID != "" && pgid == selfPGID) next
+      if (pgid in protected) next
       if (directScript || (shellWrapper && hasProofScript)) {
         print pgid
       }
@@ -9035,7 +9075,7 @@ run_obsidian() {
   obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
   first_fragment="Smoke proof feels"
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    first_fragment="moke proof feels"
+    first_fragment="moke proof feel"
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=1
@@ -9106,10 +9146,19 @@ run_obsidian() {
   fi
   prepare_obsidian_variant_state "$manual_app"
 
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    type_obsidian_raw_smoke_text "$first_fragment"
+    set_obsidian_caret_to_value_end
+  fi
+
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  type_obsidian_raw_smoke_text "$first_fragment"
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    type_obsidian_raw_smoke_text "s"
+  else
+    type_obsidian_raw_smoke_text "$first_fragment"
+  fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
   if [[ "$manual_app" == "obsidian-font-zoom" ]]; then
@@ -9172,6 +9221,9 @@ run_obsidian() {
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     full_start_line="$(line_count "$LOG_PATH")"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
+    activate_obsidian_for_smoke
+    assert_frontmost_app "Obsidian" "Obsidian long-note"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
       "keyboard-action" \
@@ -9181,7 +9233,6 @@ run_obsidian() {
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   else
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
     activate_obsidian_for_smoke

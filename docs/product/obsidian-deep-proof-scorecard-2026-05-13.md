@@ -8,13 +8,13 @@ Current branch: `codex/obsidian-deep-proof-390d`
 
 | Category | Grade | Evidence |
 | --- | ---: | --- |
-| Default note writing | 96 | Current-branch default-note smoke passed at 09:53 UTC with 2 verified insertions and strict screenshots. Needs high-repeat sampling before 100. |
+| Default note writing | 97 | Current-branch default-note smoke passed at 09:53 UTC and repeated at 10:31/10:36 UTC with 2 verified insertions and strict screenshots. Needs high-repeat sampling before 100. |
 | Non-default theme | 100 | Current-branch `obsidian-theme` smoke passed at 09:51 UTC with 2 verified insertions and strict screenshots after the Escape/reset fixes. |
 | Split pane / same-pane insertion | 96 | Current-branch `obsidian-pane` passed at 10:28 UTC with 2 verified insertions and strict screenshots after the quiet marker and visual-shadow verifier fix. Needs repeat sampling before 100. |
-| Accepted words appear on screen | 99 | Current-branch default/theme/font/bold/list/multiline/run-on/pane plus long-note proofs have strict screenshot-backed passes with 2 verified insertions. Needs repeat sampling before 100. |
-| CodeMirror stale cursor repair | 98 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, long-note viewport-tail repair reaches suggestion presentation, and the latest long-note/list/multiline/run-on/pane proofs verified insertion. Needs high-repeat split-pane sampling before 100. |
-| Long scrolled note | 96 | Current-branch `obsidian-long-note` passed at 09:34 UTC with strict visual trace, 2 verified insertions, and preserved long-note file content. Needs repeated clean matrix runs before 100. |
-| Font/zoom/dynamic layout | 100 | Current-branch `obsidian-font-zoom` passed at 09:56 UTC with 2 verified insertions and strict screenshots after the reset/pane cleanup fixes. |
+| Accepted words appear on screen | 97 | Current-branch lanes have strict screenshot-backed passes, but the latest repeat long-note run showed AX can report visible tail text as middle-of-line before acceptance. Needs repeat proof before 100. |
+| CodeMirror stale cursor repair | 92 | Focused repair tests pass and many lanes verify insertion, but fresh long-note repeats still hit `middleOfLine`/cadence after visible tail typing. |
+| Long scrolled note | 88 | Earlier current-branch `obsidian-long-note` passed with strict visual trace and preserved file content, but the latest repeat exposed stale CodeMirror cursor state and runner interference. |
+| Font/zoom/dynamic layout | 96 | Current-branch `obsidian-font-zoom` passed at 09:56 UTC with 2 verified insertions and strict screenshots; the 10:35 repeat fail was poisoned by a prior long-note miss and `--skip-build` state. |
 | Markdown formatting stress | 96 | Current-branch bold, list, multiline, and run-on lanes all passed strict screenshot proof after the reset/exclusive-run fixes. Needs repeats before 100. |
 
 ## Fixes Landed In This Pass
@@ -49,6 +49,8 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - The Obsidian pane lane now actively focuses the disposable note tail and sets the AX selected range to the value end before typing.
 - The Obsidian pane marker now ends with punctuation so the proof does not begin with a live completion on the word `proof`.
 - Strict visual trace eval now treats same-second, same-geometry duplicate presentations as one visual proof unit when at least one paired event has screenshot evidence.
+- Exclusive proof guards now protect ancestor process groups and include `script/manual_proof_refresh.sh`, because a stale `25ed` manual refresh watchdog repeatedly killed this `390d` Obsidian goal.
+- The long-note harness now types the setup phrase, repairs the caret to the visible value end, then types the final trigger character live before waiting for the screenshot-backed suggestion.
 
 ## Fresh Findings This Pass
 
@@ -104,6 +106,9 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Current-branch multiline proof passed cleanly at `2026-05-13T10:09:37Z`, diagnostics lines 53652-53709, trace lines 12576-12584.
 - Current-branch run-on proof passed cleanly at `2026-05-13T10:15:03Z`, diagnostics lines 54238-54295, trace lines 12692-12700.
 - Current-branch pane proof passed cleanly at `2026-05-13T10:28:09Z`, diagnostics lines 55812-55871, trace lines 13043-13051.
+- The 10:35 UTC repeat sweep proved default and theme again, then went red on long-note. The useful failure was `middleOfLine`/cadence from stale CodeMirror cursor state after visible-tail typing, not missing visible text.
+- The same repeat batch also showed that `--skip-build` can poison later lanes after a miss by carrying quiet/cadence state into font/zoom and Markdown lanes.
+- A stale `25ed` `script/manual_proof_refresh.sh --target chrome-chat-like` process repeatedly spawned a Python watchdog with `stale_root` set to this `390d` worktree and killed current Obsidian proof runs. This is now a first-class proof-runner blocker.
 - Earlier pane reruns were red. The improved pane harness verified 2 accepted insertions, but strict trace eval failed because same-second duplicate presentations were emitted without screenshot path and `screenshotCaptureRect`.
 - A model-only pane isolation attempt with `AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1` failed setup focus with `Refusing Obsidian proof because the focused smoke note does not end with the expected disposable text.`
 - The old `25ed` proof loop spawned a watchdog process group `89610` that killed any process touching this `390d` worktree every 0.5 seconds; that process group was terminated before the latest pane reruns.

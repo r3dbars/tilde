@@ -325,7 +325,10 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
   exit 1
 fi
 if ! grep -F 'while kill -0 "$SMOKE_SCRIPT_PID"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F '[[ -z "$current_pgid" ]] && return 0' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F '[[ -z "$current_pgid" ]] && return 0' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'current_process_family_pgids' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'pgid in protected' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exclusive proof guards to exit with their parent and fail closed without a self process group" >&2
   exit 1
 fi
@@ -726,6 +729,12 @@ if ! grep -F "assert_obsidian_long_note_file_preserved" script/real_app_smoke.sh
   exit 1
 fi
 
+if ! grep -F 'first_fragment="moke proof feel"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_obsidian_raw_smoke_text "s"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to type the final trigger character after caret-end repair" >&2
+  exit 1
+fi
+
 python3 - <<'PY'
 from pathlib import Path
 
@@ -740,6 +749,20 @@ if not append_index < start_index < open_index:
 if '"beforeChars=$long_note_expected_before_chars"' in source:
     raise SystemExit(
         "real app smoke self-test expected Obsidian long-note proof not to require full-file AX beforeChars"
+    )
+
+full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('wait_for_log_fields "$second_start_line"')):]
+full_branch = full_branch[:full_branch.index('else')]
+required = [
+    'wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"',
+    'activate_obsidian_for_smoke',
+    'assert_frontmost_app "Obsidian" "Obsidian long-note"',
+    'press_accept_all_shortcut',
+]
+positions = [full_branch.find(text) for text in required]
+if any(position < 0 for position in positions) or positions != sorted(positions):
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian long-note proof to capture the second visual frame and reassert focus before full accept"
     )
 PY
 
@@ -789,6 +812,18 @@ if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/proces
   exit 1
 fi
 
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 424242 bash ./script/real_app_smoke.sh chrome --fixture textarea\n' \
+  AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS=424242 \
+  script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/protected-process.txt"; then
+  echo "real app smoke self-test expected Codex to still require --manual-gate" >&2
+  exit 1
+fi
+if grep -F "Another real app smoke process is already active" "$TMP_DIR/protected-process.txt" >/dev/null; then
+  echo "real app smoke self-test expected protected proof parent groups not to block child lanes" >&2
+  exit 1
+fi
+
 if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/smoke_test.sh\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/full-smoke-process-fail.txt"; then
   echo "real app smoke self-test expected full smoke test process scan to fail" >&2
   exit 1
@@ -804,6 +839,15 @@ if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP
 fi
 if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/build-run-process-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the build/run process scan" >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'123 1 999 bash ./script/manual_proof_refresh.sh --run --target chrome-chat-like\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/manual-refresh-process-fail.txt"; then
+  echo "real app smoke self-test expected manual proof refresh process scan to fail" >&2
+  exit 1
+fi
+if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/manual-refresh-process-fail.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the manual proof refresh process scan" >&2
   exit 1
 fi
 
