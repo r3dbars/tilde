@@ -865,13 +865,15 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
-append = source.index('append_obsidian_smoke_note_file_text " and stays inst"')
-watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', append)
-focus = source.index('move_obsidian_caret_to_document_end', append)
-assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', append)
+first_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"')
+watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', first_assert)
+append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays inst"', watch)
+suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant and stays inst"', append)
+focus = source.index('move_obsidian_caret_to_document_end', suffix)
+assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', suffix)
 branch_end = source.index('\n  else', append)
-if not (append < watch < focus < assertion < branch_end):
-    raise SystemExit("Obsidian long-note proof must start watching before focus/assert can trigger the second suggestion")
+if not (first_assert < watch < append < suffix < focus < assertion < branch_end):
+    raise SystemExit("Obsidian long-note proof must start watching before AX-appending the second fragment and reasserting the caret at the note end")
 PY
 
 for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
