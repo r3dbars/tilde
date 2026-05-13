@@ -360,6 +360,11 @@ secondary_archive_sha() {
   return 0
 }
 
+packet_checksum_for() {
+  local artifact_name="$1"
+  awk -v artifact_name="$artifact_name" '$1 == artifact_name { print $2; exit }' "$CHECKSUM_PATH"
+}
+
 require_primary_artifact() {
   if [[ ! -s "$DMG_PATH" ]]; then
     echo "missing primary beta artifact: $DMG_PATH" >&2
@@ -655,14 +660,28 @@ check_packet() {
     fi
   done
 
-  local expected_sha actual_sha
+  local expected_sha actual_sha expected_zip_sha actual_zip_sha
   expected_sha="$(primary_artifact_sha)"
-  actual_sha="$(awk '/SteadyType\.dmg/ {print $2; exit}' "$CHECKSUM_PATH")"
+  actual_sha="$(packet_checksum_for "SteadyType.dmg")"
 
-  if [[ "$expected_sha" != "$actual_sha" ]]; then
+  if [[ -z "$actual_sha" || "$expected_sha" != "$actual_sha" ]]; then
     echo "beta packet checksum is stale for SteadyType.dmg" >&2
     echo "expected: $expected_sha" >&2
-    echo "actual:   $actual_sha" >&2
+    echo "actual:   ${actual_sha:-missing}" >&2
+    exit 1
+  fi
+
+  expected_zip_sha="$(secondary_archive_sha)"
+  actual_zip_sha="$(packet_checksum_for "SteadyType.zip")"
+  if [[ -n "$expected_zip_sha" ]]; then
+    if [[ -z "$actual_zip_sha" || "$expected_zip_sha" != "$actual_zip_sha" ]]; then
+      echo "beta packet checksum is stale for SteadyType.zip" >&2
+      echo "expected: $expected_zip_sha" >&2
+      echo "actual:   ${actual_zip_sha:-missing}" >&2
+      exit 1
+    fi
+  elif [[ -n "$actual_zip_sha" ]]; then
+    echo "beta packet checksum references missing SteadyType.zip" >&2
     exit 1
   fi
 
