@@ -48,6 +48,17 @@ struct InsertionEngineTests {
             .insertText(text: "ant", allowDescendantTextFallback: false)
         ])
     }
+
+    @Test("Electron key-event profiles prefer hardware events")
+    func electronKeyEventProfilesPreferHardwareEvents() throws {
+        let obsidian = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+
+        #expect(InsertionEngine.prefersHardwareKeyEvents(for: obsidian))
+        #expect(InsertionEngine.prefersHardwareKeyEvents(for: chrome))
+        #expect(!InsertionEngine.prefersHardwareKeyEvents(for: textEdit))
+    }
 }
 
 private final class TextInsertionClientSpy: TextInsertionClient {

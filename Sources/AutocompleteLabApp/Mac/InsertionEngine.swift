@@ -92,12 +92,16 @@ final class InsertionEngine {
     }
 
     private func insertWithKeyEvents(_ text: String, profile: CompatibilityProfile) -> Bool {
-        if profile.appFamily == .chromium,
+        if Self.prefersHardwareKeyEvents(for: profile),
            insertWithHardwareKeyEvents(text) {
             return true
         }
 
         return insertWithUnicodeKeyEvents(text)
+    }
+
+    static func prefersHardwareKeyEvents(for profile: CompatibilityProfile) -> Bool {
+        profile.appFamily == .chromium || profile.appFamily == .electron
     }
 
     private func insertWithUnicodeKeyEvents(_ text: String) -> Bool {

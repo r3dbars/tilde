@@ -224,9 +224,11 @@ final class KeyboardEventTap: @unchecked Sendable {
 
         let startedAt = DispatchTime.now().uptimeNanoseconds
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        let physicalKey = AutocompletePhysicalKey(keyCode: keyCode)
+        let modifiers = AutocompleteKeyModifiers(flags: event.flags)
         let key = keyMapper.key(
-            physicalKey: AutocompletePhysicalKey(keyCode: keyCode),
-            modifiers: AutocompleteKeyModifiers(flags: event.flags)
+            physicalKey: physicalKey,
+            modifiers: modifiers
         )
         let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         let replay = KeyboardEventReplay(keyCode: keyCode, flagsRawValue: event.flags.rawValue)
@@ -240,7 +242,28 @@ final class KeyboardEventTap: @unchecked Sendable {
             )
         }
 
+        if key == .other, isModifierOnlyMacVirtualKeyCode(keyCode) {
+            return finish(
+                Unmanaged.passUnretained(event),
+                key: key,
+                decision: "passthrough-modifier",
+                startedAt: startedAt
+            )
+        }
+
         if key == .other {
+            guard shouldTreatOtherKeyAsTypingPassthrough(
+                physicalKey: physicalKey,
+                modifiers: modifiers
+            ) else {
+                return finish(
+                    Unmanaged.passUnretained(event),
+                    key: key,
+                    decision: "passthrough-non-typing-chord",
+                    startedAt: startedAt
+                )
+            }
+
             if shouldSuppressPassthroughObservation() {
                 return finish(
                     Unmanaged.passUnretained(event),
@@ -267,18 +290,20 @@ final class KeyboardEventTap: @unchecked Sendable {
 
         let hadPassthroughKeyDown = consumePassthroughObservation()
         if hadPassthroughKeyDown {
-            markSnapshotInvalidatedByTyping()
-            if let passthroughKeyDownObserver {
-                Task { @MainActor in
-                    passthroughKeyDownObserver()
+            if shouldPassThroughAutocompleteKeyAfterPassthroughObservation(snapshot: currentSnapshot()) {
+                markSnapshotInvalidatedByTyping()
+                if let passthroughKeyDownObserver {
+                    Task { @MainActor in
+                        passthroughKeyDownObserver()
+                    }
                 }
+                return finish(
+                    Unmanaged.passUnretained(event),
+                    key: key,
+                    decision: "passthrough-after-typing",
+                    startedAt: startedAt
+                )
             }
-            return finish(
-                Unmanaged.passUnretained(event),
-                key: key,
-                decision: "passthrough-after-typing",
-                startedAt: startedAt
-            )
         }
 
         guard shouldConsume(key, isAutorepeat: isAutorepeat) else {
@@ -445,6 +470,13 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
         snapshotLock.unlock()
         return shouldConsume
+    }
+
+    private func currentSnapshot() -> KeyboardEventTapSnapshot {
+        snapshotLock.lock()
+        let snapshot = self.snapshot
+        snapshotLock.unlock()
+        return snapshot
     }
 
     private func markSnapshotInvalidatedByTyping() {
@@ -667,6 +699,40 @@ func autocompletePhysicalKey(forMacVirtualKeyCode keyCode: Int64) -> Autocomplet
         .escape
     default:
         .other
+    }
+}
+
+func isModifierOnlyMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
+    switch keyCode {
+    case 54, 55, 56, 57, 58, 59, 60, 61, 62, 63:
+        true
+    default:
+        false
+    }
+}
+
+func shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
+    snapshot: KeyboardEventTapSnapshot
+) -> Bool {
+    snapshot.isInvalidatedByUserTyping
+}
+
+func shouldTreatOtherKeyAsTypingPassthrough(
+    physicalKey: AutocompletePhysicalKey,
+    modifiers: AutocompleteKeyModifiers
+) -> Bool {
+    if modifiers.contains(.command)
+        || modifiers.contains(.control)
+        || modifiers.contains(.option)
+        || modifiers.contains(.function) {
+        return false
+    }
+
+    switch physicalKey {
+    case .tab, .escape:
+        return false
+    case .backtick, .z, .other:
+        return true
     }
 }
 

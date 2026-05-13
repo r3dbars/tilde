@@ -11,9 +11,9 @@ Current branch: `codex/obsidian-deep-proof-390d`
 | Default note writing | 94 | Default-note smoke has multiple strict screenshot-backed passes with two verified insertions. Needs repetition across many notes before 100. |
 | Non-default theme | 100 | `obsidian-theme` smoke passed with 2 verified insertions and strict screenshots. |
 | Split pane / same-pane insertion | 100 | `obsidian-pane` smoke passed after focused-editor insertion fix. |
-| Accepted words appear on screen | 92 | Default/theme/pane/font/bold/list/multiline/run-on have green strict screenshot-backed passes. Fresh Computer Use inspection after the current long-note run confirmed `Smoke proof feels` rendered at the scrolled tail; the app verifier still downgraded that run because Obsidian focus flipped to another tab before post-insert verification. |
-| CodeMirror stale cursor repair | 97 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, long-note viewport-tail repair reaches suggestion presentation, and Obsidian accept now avoids a second flaky AX read. Needs clean long-note repeat before 100. |
-| Long scrolled note | 84 | Historical `obsidian-long-note` pass exists with strict screenshots and preserved line 01/90. The latest current-branch CUA check proves the accepted word appeared at the visible scrolled tail, but the strict runner is still red because post-insert AX verification can lose focus and later reruns receive SIGTERM. |
+| Accepted words appear on screen | 96 | Default/theme/pane/font/bold/list/multiline/run-on have green strict screenshot-backed passes. The latest current-branch long-note proof accepted text by Tab and Option-Tab, diagnostics/traces marked both insertions verified, the Markdown file ended with the expected text, and Computer Use saw the same text on screen. Needs high-repeat sampling before 100. |
+| CodeMirror stale cursor repair | 98 | Focused repair tests pass, foreground Tab/CodeMirror drift repaired, long-note viewport-tail repair reaches suggestion presentation, and the latest long-note proof verified insertion without the stale AX reread. Needs clean runner exits and broader repeats before 100. |
+| Long scrolled note | 92 | Historical `obsidian-long-note` pass exists with strict screenshots and preserved line 01/90. The latest current-branch proof showed correct tail insertion on screen and in file, including full-accept, but the wrapper still exited with SIGTERM after proof instead of ending cleanly. |
 | Font/zoom/dynamic layout | 90 | `obsidian-font-zoom` has a green strict screenshot-backed pass. Needs repeat after the latest Obsidian accept/insertion changes before 100. |
 | Markdown formatting stress | 92 | Bold, dash-list, multiline, and run-on lanes have green strict screenshot-backed passes. Needs repeated mixed-format notes and clean long-note coexistence before 100. |
 
@@ -41,6 +41,9 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - Updated Obsidian proof manifest/status coverage so the new lanes stay visible as pending gates instead of being hidden inside the default lane.
 - Made Obsidian marker matching whitespace-tolerant because zoomed Obsidian can expose `Autocomplete Lab Obsidian proof` as `Autocomplete Lab \nObsidian proof` through AX.
 - Made the smoke harness's direct child-process launch opt-out so Obsidian proofs can launch through LaunchServices when Codex process-group cleanup interferes.
+- Electron and Chromium compatibility profiles now prefer hardware key events, so Obsidian receives accepted text through the focused CodeMirror editor instead of a softer synthetic path.
+- Modifier-only key downs and command/control/option/function shortcut chords no longer count as normal typing passthrough, which keeps Option-Tab full-accept from being poisoned by its own modifier event.
+- The smoke harness can temporarily switch the full-accept shortcut to Option-Tab for a proof run and restore the user's previous default afterward.
 
 ## Fresh Findings This Pass
 
@@ -83,11 +86,16 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - That same 08:25 run is still not a strict pass because Obsidian focus moved to an extra blank tab before the app's post-insert verifier could read the original CodeMirror text area, producing `insert-verification ... result=fieldChanged`.
 - After closing the extra blank tab, the next strict long-note rerun was killed by SIGTERM after build/signing and target confirmation, before suggestion proof could finish.
 - The latest screenshot trace artifacts include `/Users/redbars/Library/Logs/SteadyType/screenshots/DF696F28-2CD6-439E-BE0E-C69CB3615E3A.png`, `/Users/redbars/Library/Logs/SteadyType/screenshots/A8FF3AF7-2BE8-45AF-BB4B-1ED412031C6C.png`, and `/Users/redbars/Library/Logs/SteadyType/screenshots/4A55A7D2-4457-4C0A-94C2-6E2FEC2581D8.png`.
+- Fresh 09:17-09:18 UTC long-note proof is green for core behavior: Tab accepted ` instant`, Option-Tab accepted the remaining `ant`, diagnostics recorded both `keyboard-action ... handled=true` events, and the final file text was `Smoke proof feels instant and stays instant`.
+- That 09:17-09:18 UTC run recorded diagnostics lines 48549-48608 and trace lines 11449-11456, including `suggestion-presented`, `suggestionAccepted`, and `insertionVerified` events for Obsidian.
+- The latest screenshot trace artifacts for that proof are `/Users/redbars/Library/Logs/SteadyType/screenshots/4855D777-547F-4D04-86E8-B65B272B99DC.png` and `/Users/redbars/Library/Logs/SteadyType/screenshots/C67D31F4-6965-4EE3-955C-13AC2539E97B.png`.
+- Computer Use inspected the live Obsidian editor after that proof and saw filler lines 68-90 plus `Smoke proof feels instant and stays instant`, matching `/Users/redbars/Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md`.
+- The proof wrapper still exited 143/SIGTERM after product verification, so this is product-behavior proof, not a clean strict-runner pass.
 
 ## Remaining Gates To Reach 100
 
-- Make the test runner resilient to the old `25ed` TextEdit proof loop so it cannot kill or relaunch the Obsidian proof app mid-run.
-- Make Obsidian post-insert verification tolerate the exact "accepted text landed, but focus moved to another Obsidian tab" shape without recording a false `wrongInsertion`.
-- Get the current-branch `obsidian-long-note` runner back to a clean verified Tab/full-accept pass after the latest accept and insertion changes.
+- Make the test runner resilient to stale `25ed` / watchdog process cleanup so it cannot SIGTERM current Obsidian proof runs after verification.
+- Get the current-branch `obsidian-long-note` runner to exit cleanly after the verified Tab and Option-Tab pass.
+- Keep Obsidian post-insert verification tolerant of the exact "accepted text landed, but focus moved to another Obsidian tab" shape without recording a false `wrongInsertion`.
 - Keep hardening end-of-document caret placement across wrapped lines, split panes, and different zoom levels.
-- Repeat default/theme/pane/long-note/font/bold/list/multiline/run-on enough times to turn this from smoke proof into a real reliability sample.
+- Repeat default/theme/pane/long-note/font/bold/list/multiline/run-on 150+ times with screenshot traces to turn this from smoke proof into a real reliability sample.
