@@ -886,6 +886,11 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
+first_long_insert = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"')
+first_long_suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels"', first_long_insert)
+first_suggestion = source.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"', first_long_suffix)
+if not (first_long_insert < first_long_suffix < first_suggestion):
+    raise SystemExit("Obsidian long-note proof must AX-insert the first fragment, verify the disposable file suffix, then wait for the first suggestion")
 first_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"')
 watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', first_assert)
 append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays inst"', watch)
