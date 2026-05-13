@@ -362,6 +362,8 @@ if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh
    ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fell back to AX replacement' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'unexpectedly long ($suffix_length chars); falling back to AX replacement' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$label native completion fallback"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'set_textedit_document_text "$window_title" "$expected_text"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency proof to remove native completion suffixes before timing" >&2
   exit 1
