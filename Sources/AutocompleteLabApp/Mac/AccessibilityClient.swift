@@ -663,7 +663,6 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         guard allowWindowDescendantFallback,
-              app.bundleIdentifier == "com.google.Chrome",
               let focusedWindow = focusedWindow(for: app.processIdentifier),
               let windowTitle = copyAttribute(focusedWindow, attribute: kAXTitleAttribute) as? String,
               descendantTextFallbackPolicy.allowsFallback(
@@ -690,35 +689,87 @@ final class AccessibilityClient: @unchecked Sendable {
 
     private func bestEditableDescendant(in element: AXUIElement) -> AXUIElement? {
         let result = editableDescendantSearchResult(in: element)
-        return result.focused ?? result.first
+        return result.focusedTextEntry ?? result.firstTextEntry ?? result.focusedWebArea ?? result.firstWebArea
     }
 
     private func editableDescendantSearchResult(
         in element: AXUIElement,
         depth: Int = 0
-    ) -> (focused: AXUIElement?, first: AXUIElement?) {
-        guard depth < 8 else {
-            return (focused: nil, first: nil)
+    ) -> (
+        focusedTextEntry: AXUIElement?,
+        firstTextEntry: AXUIElement?,
+        focusedWebArea: AXUIElement?,
+        firstWebArea: AXUIElement?
+    ) {
+        guard depth < 24 else {
+            return (
+                focusedTextEntry: nil,
+                firstTextEntry: nil,
+                focusedWebArea: nil,
+                firstWebArea: nil
+            )
         }
 
         configureMessagingTimeout(for: element)
         let role = copyAttribute(element, attribute: kAXRoleAttribute) as? String
-        if ["AXTextArea", "AXTextField", "AXWebArea"].contains(role ?? "") {
-            let isFocused = (copyAttribute(element, attribute: kAXFocusedAttribute) as? Bool) == true
-            return (focused: isFocused ? element : nil, first: element)
+        let isFocused = (copyAttribute(element, attribute: kAXFocusedAttribute) as? Bool) == true
+        if ["AXTextArea", "AXTextField"].contains(role ?? "") {
+            return (
+                focusedTextEntry: isFocused ? element : nil,
+                firstTextEntry: element,
+                focusedWebArea: nil,
+                firstWebArea: nil
+            )
         }
 
+        if role == "AXWebArea" {
+            var result = editableDescendantChildrenSearchResult(in: element, depth: depth)
+            if result.focusedWebArea == nil, isFocused {
+                result.focusedWebArea = element
+            }
+            if result.firstWebArea == nil {
+                result.firstWebArea = element
+            }
+            return result
+        }
+
+        return editableDescendantChildrenSearchResult(in: element, depth: depth)
+    }
+
+    private func editableDescendantChildrenSearchResult(
+        in element: AXUIElement,
+        depth: Int
+    ) -> (
+        focusedTextEntry: AXUIElement?,
+        firstTextEntry: AXUIElement?,
+        focusedWebArea: AXUIElement?,
+        firstWebArea: AXUIElement?
+    ) {
         let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
-        var first: AXUIElement?
+        var firstTextEntry: AXUIElement?
+        var focusedWebArea: AXUIElement?
+        var firstWebArea: AXUIElement?
         for child in children {
             let result = editableDescendantSearchResult(in: child, depth: depth + 1)
-            if let focused = result.focused {
-                return (focused: focused, first: first ?? result.first)
+            if let focusedTextEntry = result.focusedTextEntry {
+                return (
+                    focusedTextEntry: focusedTextEntry,
+                    firstTextEntry: firstTextEntry ?? result.firstTextEntry,
+                    focusedWebArea: focusedWebArea ?? result.focusedWebArea,
+                    firstWebArea: firstWebArea ?? result.firstWebArea
+                )
             }
-            first = first ?? result.first
+            firstTextEntry = firstTextEntry ?? result.firstTextEntry
+            focusedWebArea = focusedWebArea ?? result.focusedWebArea
+            firstWebArea = firstWebArea ?? result.firstWebArea
         }
 
-        return (focused: nil, first: first)
+        return (
+            focusedTextEntry: nil,
+            firstTextEntry: firstTextEntry,
+            focusedWebArea: focusedWebArea,
+            firstWebArea: firstWebArea
+        )
     }
 
     private func copyAttribute(_ element: AXUIElement, attribute: String) -> CFTypeRef? {
