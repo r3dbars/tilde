@@ -365,6 +365,68 @@ packet_checksum_for() {
   awk -v artifact_name="$artifact_name" '$1 == artifact_name { print $2; exit }' "$CHECKSUM_PATH"
 }
 
+packet_required_paths() {
+  printf '%s\n' \
+    "$README_PATH" \
+    "$INSTALL_PATH" \
+    "$DAILY_CHECKLIST_PATH" \
+    "$REDACTED_EXPORT_PATH" \
+    "$FEEDBACK_TRIAGE_PATH" \
+    "$STOP_DASHBOARD_PATH" \
+    "$ISSUE_TEMPLATE_VALIDATION_PATH" \
+    "$READINESS_SUMMARY_PATH" \
+    "$TESTER_DOCS_DIR/PRIVACY-BETA.md" \
+    "$TESTER_DOCS_DIR/FIRST-RUN-BETA.md" \
+    "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md" \
+    "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md" \
+    "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md" \
+    "$TESTER_DOCS_DIR/RELEASE-NOTES.md" \
+    "$TESTER_DOCS_DIR/private-beta-ops-loop.md" \
+    "$TESTER_DOCS_DIR/autocomplete-beta-feedback.yml" \
+    "$TESTER_DOCS_DIR/labels.yml" \
+    "$MODEL_ASSET_PATH" \
+    "$FEEDBACK_PATH" \
+    "$SESSION_REPORT_PATH" \
+    "$PRIVACY_STATUS_PATH" \
+    "$CHECKSUM_PATH"
+}
+
+packet_regeneration_reason() {
+  local path expected_sha actual_sha expected_zip_sha actual_zip_sha
+
+  while IFS= read -r path; do
+    if [[ ! -s "$path" ]]; then
+      echo "missing beta packet file: $path"
+      return 0
+    fi
+  done < <(packet_required_paths)
+
+  expected_sha="$(primary_artifact_sha)"
+  actual_sha="$(packet_checksum_for "SteadyType.dmg")"
+  if [[ -z "$actual_sha" || "$expected_sha" != "$actual_sha" ]]; then
+    echo "beta packet checksum is stale for SteadyType.dmg"
+    echo "expected: $expected_sha"
+    echo "actual:   ${actual_sha:-missing}"
+    return 0
+  fi
+
+  expected_zip_sha="$(secondary_archive_sha)"
+  actual_zip_sha="$(packet_checksum_for "SteadyType.zip")"
+  if [[ -n "$expected_zip_sha" ]]; then
+    if [[ -z "$actual_zip_sha" || "$expected_zip_sha" != "$actual_zip_sha" ]]; then
+      echo "beta packet checksum is stale for SteadyType.zip"
+      echo "expected: $expected_zip_sha"
+      echo "actual:   ${actual_zip_sha:-missing}"
+      return 0
+    fi
+  elif [[ -n "$actual_zip_sha" ]]; then
+    echo "beta packet checksum references missing SteadyType.zip"
+    return 0
+  fi
+
+  return 1
+}
+
 check_secondary_archive_app() {
   local verify_dir app_path
 
@@ -689,57 +751,15 @@ check_packet() {
     exit 1
   }
 
-  for path in \
-    "$README_PATH" \
-    "$INSTALL_PATH" \
-    "$DAILY_CHECKLIST_PATH" \
-    "$REDACTED_EXPORT_PATH" \
-    "$FEEDBACK_TRIAGE_PATH" \
-    "$STOP_DASHBOARD_PATH" \
-    "$ISSUE_TEMPLATE_VALIDATION_PATH" \
-    "$READINESS_SUMMARY_PATH" \
-    "$TESTER_DOCS_DIR/PRIVACY-BETA.md" \
-    "$TESTER_DOCS_DIR/FIRST-RUN-BETA.md" \
-    "$TESTER_DOCS_DIR/KNOWN-LIMITATIONS.md" \
-    "$TESTER_DOCS_DIR/UNINSTALL-DELETE-DATA.md" \
-    "$TESTER_DOCS_DIR/DIAGNOSTIC-EXPORT.md" \
-    "$TESTER_DOCS_DIR/RELEASE-NOTES.md" \
-    "$TESTER_DOCS_DIR/private-beta-ops-loop.md" \
-    "$TESTER_DOCS_DIR/autocomplete-beta-feedback.yml" \
-    "$TESTER_DOCS_DIR/labels.yml" \
-    "$MODEL_ASSET_PATH" \
-    "$FEEDBACK_PATH" \
-    "$SESSION_REPORT_PATH" \
-    "$PRIVACY_STATUS_PATH" \
-    "$CHECKSUM_PATH"; do
-    if [[ ! -s "$path" ]]; then
-      echo "missing beta packet file: $path" >&2
-      exit 1
-    fi
-  done
-
-  local expected_sha actual_sha expected_zip_sha actual_zip_sha
-  expected_sha="$(primary_artifact_sha)"
-  actual_sha="$(packet_checksum_for "SteadyType.dmg")"
-
-  if [[ -z "$actual_sha" || "$expected_sha" != "$actual_sha" ]]; then
-    echo "beta packet checksum is stale for SteadyType.dmg" >&2
-    echo "expected: $expected_sha" >&2
-    echo "actual:   ${actual_sha:-missing}" >&2
-    exit 1
+  local regeneration_reason
+  if regeneration_reason="$(packet_regeneration_reason)"; then
+    printf '%s\n' "$regeneration_reason" >&2
+    echo "Regenerating private beta packet from current artifacts..." >&2
+    create_packet
   fi
 
-  expected_zip_sha="$(secondary_archive_sha)"
-  actual_zip_sha="$(packet_checksum_for "SteadyType.zip")"
-  if [[ -n "$expected_zip_sha" ]]; then
-    if [[ -z "$actual_zip_sha" || "$expected_zip_sha" != "$actual_zip_sha" ]]; then
-      echo "beta packet checksum is stale for SteadyType.zip" >&2
-      echo "expected: $expected_zip_sha" >&2
-      echo "actual:   ${actual_zip_sha:-missing}" >&2
-      exit 1
-    fi
-  elif [[ -n "$actual_zip_sha" ]]; then
-    echo "beta packet checksum references missing SteadyType.zip" >&2
+  if regeneration_reason="$(packet_regeneration_reason)"; then
+    printf '%s\n' "$regeneration_reason" >&2
     exit 1
   fi
 
