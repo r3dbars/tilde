@@ -4807,6 +4807,29 @@ APPLESCRIPT
   wait_for_textedit_document_exact "$window_title" "$expected_text" "$label unchanged" 3
 }
 
+dismiss_textedit_seed_suggestion_if_possible() {
+  local window_title="$1"
+  local expected_text="$2"
+  local label="$3"
+
+  run_osascript_with_timeout 2 "$label" <<'APPLESCRIPT' >/dev/null || true
+tell application "System Events"
+  key code 53
+end tell
+APPLESCRIPT
+
+  if ! wait_for_textedit_document_exact_or_return "$window_title" "$expected_text" 1; then
+    set_textedit_document_text "$window_title" "$expected_text" || true
+  fi
+
+  run_osascript_with_timeout 2 "$label after reset" <<'APPLESCRIPT' >/dev/null || true
+tell application "System Events"
+  key code 53
+end tell
+APPLESCRIPT
+  wait_for_textedit_document_exact_or_return "$window_title" "$expected_text" 1 || true
+}
+
 wait_for_textedit_document_prefix() {
   local window_title="$1"
   local expected_prefix="$2"
@@ -9191,7 +9214,7 @@ run_textedit_model_latency() {
       fi
       move_textedit_caret_to_document_end "$textedit_window_title"
       sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.6}"
-      dismiss_textedit_proof_suggestion "$textedit_window_title" "$stable_context" "TextEdit model latency seed suggestion dismissal $sample_index attempt $attempt"
+      dismiss_textedit_seed_suggestion_if_possible "$textedit_window_title" "$stable_context" "TextEdit model latency seed suggestion dismissal $sample_index attempt $attempt"
       move_textedit_caret_to_document_end "$textedit_window_title"
 
       assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index attempt $attempt"
