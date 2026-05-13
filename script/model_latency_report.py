@@ -93,18 +93,43 @@ def resource_metric(values, unit, precision=0):
     )
 
 
-def resource_line(samples):
+def rss_growth(values):
+    return max(values) - min(values) if len(values) >= 2 else 0
+
+
+def resource_samples_after_ready(launch):
+    ready_timestamp = launch.get("readyTimestamp")
+    if ready_timestamp is None:
+        return launch["resourceSamples"]
+
+    samples = []
+    for sample in launch["resourceSamples"]:
+        timestamp = parse_timestamp(sample.get("timestamp", ""))
+        if timestamp is not None and timestamp >= ready_timestamp:
+            samples.append(sample)
+    return samples
+
+
+def resource_line(launch):
+    samples = launch["resourceSamples"]
     if not samples:
         return "resource samples: n=0"
 
     cpu_values = [sample["cpuPercent"] for sample in samples if sample.get("cpuPercent") is not None]
     rss_values = [sample["rssMB"] for sample in samples if sample.get("rssMB") is not None]
-    rss_growth = max(rss_values) - min(rss_values) if len(rss_values) >= 2 else 0
+    post_ready_rss_values = [
+        sample["rssMB"]
+        for sample in resource_samples_after_ready(launch)
+        if sample.get("rssMB") is not None
+    ]
+    model_load_delta = rss_growth(rss_values)
+    post_ready_growth = rss_growth(post_ready_rss_values)
     return (
         f"resource samples: n={len(samples)} "
         f"cpu {resource_metric(cpu_values, '%', precision=1)} "
         f"rss {resource_metric(rss_values, 'MB')} "
-        f"rssGrowth={rss_growth}MB"
+        f"rssModelLoadDelta={model_load_delta}MB "
+        f"rssPostReadyGrowth={post_ready_growth}MB"
     )
 
 
@@ -170,6 +195,7 @@ def parse_launches(lines):
                 "modelLoads": [],
                 "runtimeWarm": [],
                 "launchToReady": [],
+                "readyTimestamp": None,
                 "resourceSamples": [],
             }
             launches.append(current)
@@ -239,6 +265,8 @@ def parse_launches(lines):
                     round((timestamp - pending_launch_timestamp).total_seconds() * 1000)
                 )
                 pending_launch_timestamp = None
+                if current["readyTimestamp"] is None:
+                    current["readyTimestamp"] = timestamp
             continue
 
         presented = PRESENTED_RE.search(line)
@@ -442,7 +470,7 @@ def print_launch(launch):
     print(f"  {metric_line('cold model load', cold_loads)}")
     print(f"  {metric_line('warm model reuse', warm_reuse)}")
     print(f"  {metric_line('runtime warm succeeded', warm_succeeded)}")
-    print(f"  {resource_line(launch['resourceSamples'])}")
+    print(f"  {resource_line(launch)}")
     risk, reasons = energy_risk(launch)
     print(f"  energy risk: {risk} ({'; '.join(reasons)})")
 
@@ -549,6 +577,14 @@ def enforce_resource_gate(launches, args):
     enforce_minimum("resource", len(samples), args.require_resource_samples)
     cpu_values = [sample["cpuPercent"] for sample in samples if sample.get("cpuPercent") is not None]
     rss_values = [sample["rssMB"] for sample in samples if sample.get("rssMB") is not None]
+    post_ready_samples = [
+        sample
+        for launch in launches
+        for sample in resource_samples_after_ready(launch)
+    ]
+    post_ready_rss_values = [
+        sample["rssMB"] for sample in post_ready_samples if sample.get("rssMB") is not None
+    ]
     enforce_float_maximum(
         "resource cpu max",
         max(cpu_values) if cpu_values else None,
@@ -562,12 +598,14 @@ def enforce_resource_gate(launches, args):
         "MB",
     )
     if args.max_rss_growth_mb is not None:
-        if len(rss_values) < 2:
+        growth_values = post_ready_rss_values if post_ready_rss_values else rss_values
+        growth_label = "post-ready resource rss growth" if post_ready_rss_values else "resource rss growth"
+        if len(growth_values) < 2:
             raise SystemExit("resource rss growth missing")
-        growth = max(rss_values) - min(rss_values)
+        growth = rss_growth(growth_values)
         if growth > args.max_rss_growth_mb:
             raise SystemExit(
-                f"resource rss growth too high: expected <= {args.max_rss_growth_mb}MB, found {growth}MB"
+                f"{growth_label} too high: expected <= {args.max_rss_growth_mb}MB, found {growth}MB"
             )
 
 
