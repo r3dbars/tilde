@@ -316,4 +316,101 @@ if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/targe
   exit 1
 fi
 
+SCENARIO_DIAGNOSTICS_LOG="$TMP_DIR/scenario-diagnostics.log"
+SCENARIO_TRACE_LOG="$TMP_DIR/scenario-traces.jsonl"
+
+cat >"$SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T14:00:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T14:00:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+2026-05-12T14:05:00Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T14:05:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >"$SCENARIO_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T14:00:02Z","sessionID":"session","suggestionID":"scenario-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T14:00:03Z","sessionID":"session","suggestionID":"scenario-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T14:00:04Z","sessionID":"session","suggestionID":"scenario-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
+{"timestamp":"2026-05-12T14:00:05Z","sessionID":"session","suggestionID":"scenario-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
+{"timestamp":"2026-05-12T14:05:02Z","sessionID":"session","suggestionID":"generic-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":100,"metadata":{"totalGenerationLatencyMilliseconds":"100"}}
+{"timestamp":"2026-05-12T14:05:03Z","sessionID":"session","suggestionID":"generic-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":110,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+SCENARIO_WINDOW="$(
+  script/select_latency_window.py \
+    --diagnostics-log "$SCENARIO_DIAGNOSTICS_LOG" \
+    --trace-log "$SCENARIO_TRACE_LOG" \
+    --min-first-visible-samples 2 \
+    --min-model-samples 2 \
+    --required-proof-app com.apple.TextEdit \
+    --required-proof-scenario textedit-model-latency \
+    --required-trace-app com.apple.TextEdit \
+    --require-model-backed-visible \
+    --forbid-fast-word-visible 2>"$TMP_DIR/scenario-window.err"
+)"
+
+if ! grep -F "AUTOCOMPLETE_LAB_LOG_START_LINE=1" <<<"$SCENARIO_WINDOW" >/dev/null; then
+  echo "latency window self-test did not select the explicit TextEdit model-latency scenario" >&2
+  cat "$TMP_DIR/scenario-window.err" >&2
+  echo "$SCENARIO_WINDOW" >&2
+  exit 1
+fi
+
+cat >>"$SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T14:10:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
+2026-05-12T14:10:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+cat >>"$SCENARIO_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T14:10:02Z","sessionID":"session","suggestionID":"scenario-partial","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"2026-05-12T14:10:03Z","sessionID":"session","suggestionID":"scenario-partial","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$SCENARIO_DIAGNOSTICS_LOG" \
+  --trace-log "$SCENARIO_TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 \
+  --required-proof-app com.apple.TextEdit \
+  --required-proof-scenario textedit-model-latency \
+  --required-trace-app com.apple.TextEdit \
+  --require-model-backed-visible \
+  --forbid-fast-word-visible 2>"$TMP_DIR/scenario-partial.err" >/dev/null; then
+  echo "latency window self-test expected partial latest model-latency scenario to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "latest default runtime launch has too few samples" "$TMP_DIR/scenario-partial.err" >/dev/null ||
+   ! grep -F "firstVisibleSamples=1; modelSamples=1" "$TMP_DIR/scenario-partial.err" >/dev/null; then
+  echo "latency window self-test did not keep partial model-latency scenario red" >&2
+  cat "$TMP_DIR/scenario-partial.err" >&2
+  exit 1
+fi
+
+FAST_TRACE_LOG="$TMP_DIR/fast-word-scenario-traces.jsonl"
+cp "$SCENARIO_TRACE_LOG" "$FAST_TRACE_LOG"
+cat >>"$FAST_TRACE_LOG" <<'LOG'
+{"timestamp":"2026-05-12T14:10:04Z","sessionID":"session","suggestionID":"fast-word","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"fast-word-completion"}}
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$SCENARIO_DIAGNOSTICS_LOG" \
+  --trace-log "$FAST_TRACE_LOG" \
+  --min-first-visible-samples 1 \
+  --min-model-samples 1 \
+  --required-proof-app com.apple.TextEdit \
+  --required-proof-scenario textedit-model-latency \
+  --required-trace-app com.apple.TextEdit \
+  --require-model-backed-visible \
+  --forbid-fast-word-visible 2>"$TMP_DIR/scenario-fast-word.err" >/dev/null; then
+  echo "latency window self-test expected fast word completion inside model-latency scenario to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "selected latency window has fast word completion samples" "$TMP_DIR/scenario-fast-word.err" >/dev/null ||
+   ! grep -F "fastWordVisibleSamples=1" "$TMP_DIR/scenario-fast-word.err" >/dev/null; then
+  echo "latency window self-test did not report fast word completion contamination" >&2
+  cat "$TMP_DIR/scenario-fast-word.err" >&2
+  exit 1
+fi
+
 echo "Latency window self-test passed."
