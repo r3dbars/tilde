@@ -699,13 +699,12 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
-start = source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('append_obsidian_smoke_note_file_text " and stays inst"'))
-end = source.index('else', start)
-block = source[start:end]
-watch = block.index('second_start_line="$(line_count "$LOG_PATH")"')
-focus = block.index('move_obsidian_caret_to_document_end')
-assertion = block.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"')
-if not (watch < focus < assertion):
+append = source.index('append_obsidian_smoke_note_file_text " and stays inst"')
+watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', append)
+focus = source.index('move_obsidian_caret_to_document_end', append)
+assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', append)
+branch_end = source.index('\n  else', append)
+if not (append < watch < focus < assertion < branch_end):
     raise SystemExit("Obsidian long-note proof must start watching before focus/assert can trigger the second suggestion")
 PY
 
