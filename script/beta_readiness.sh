@@ -73,6 +73,29 @@ check_clipboard_fallback_disabled() {
   echo "clipboard fallback insertion disabled"
 }
 
+check_production_mock_fallback_disabled() {
+  local failed=0
+
+  if rg -n \
+    'Mock Fallback|Mock Suggestions|gemmaLocalWithMockFallback|mockOnly' \
+    Sources/AutocompleteLabApp; then
+    failed=1
+  fi
+
+  if rg -n 'fallback: \(any CompletionEngine\)|fallbackCandidate: \.liteRTLM' \
+    Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift \
+    Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift; then
+    failed=1
+  fi
+
+  if ((failed > 0)); then
+    echo "production mock fallback surfaces are not beta-safe"
+    return 1
+  fi
+
+  echo "production mock fallback surfaces disabled"
+}
+
 check_current_artifact_checksum() {
   local checksums_path="$ROOT_DIR/dist/release-proof/checksums.txt"
   local expected_sha actual_sha
@@ -341,6 +364,7 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
+  run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
@@ -408,6 +432,10 @@ echo "== Issue template validation =="
 echo
 echo "== Clipboard fallback disabled =="
 check_clipboard_fallback_disabled
+
+echo
+echo "== Production mock fallback disabled =="
+check_production_mock_fallback_disabled
 
 echo
 echo "== Prompt app proof gate =="

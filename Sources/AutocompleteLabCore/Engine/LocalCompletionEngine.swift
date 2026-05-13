@@ -118,12 +118,23 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
 
     public init(
         runner: any LocalCompletionRuntimeRunner,
-        fallback: (any CompletionEngine)? = nil,
         promptBuilder: CompletionPromptBuilder = CompletionPromptBuilder(),
         configuration: LocalCompletionRuntimeConfiguration = LocalCompletionRuntimeConfiguration()
     ) {
         self.runner = runner
-        self.fallback = fallback
+        self.fallback = nil
+        self.promptBuilder = promptBuilder
+        self.configuration = configuration
+    }
+
+    init(
+        runner: any LocalCompletionRuntimeRunner,
+        testFallback: (any CompletionEngine)?,
+        promptBuilder: CompletionPromptBuilder = CompletionPromptBuilder(),
+        configuration: LocalCompletionRuntimeConfiguration = LocalCompletionRuntimeConfiguration()
+    ) {
+        self.runner = runner
+        self.fallback = testFallback
         self.promptBuilder = promptBuilder
         self.configuration = configuration
     }

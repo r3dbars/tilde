@@ -98,7 +98,7 @@ struct RuntimePolicyTests {
         let decision = EmbeddedRuntimeDecision.mvp
 
         #expect(decision.preferredCandidate == .mlx)
-        #expect(decision.fallbackCandidate == .liteRTLM)
+        #expect(decision.fallbackCandidate == .unavailable)
         #expect(decision.allowsUserManagedServer == false)
     }
 
