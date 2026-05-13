@@ -112,6 +112,7 @@ final class SuggestionOrchestrator {
         fieldClassification: AXFieldClassification?,
         suggestionTuning: SuggestionTuning?
     ) -> SuggestionOrchestration {
+        clearStreamingPresentations()
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
             previous: currentRequestStorage,
             current: request
@@ -226,7 +227,9 @@ final class SuggestionOrchestrator {
         mode: CompletionRequestMode,
         nowMilliseconds: Int
     ) -> Bool {
-        var state = streamingPresentationStates[suggestionID] ?? StreamingPresentationState()
+        guard var state = streamingPresentationStates[suggestionID] else {
+            return false
+        }
         guard suggestionPresentationGate.shouldPresentStreamingPartial(
             suggestion,
             mode: mode,

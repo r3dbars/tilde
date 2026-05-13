@@ -655,8 +655,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Streaming partial pacing is scoped by suggestion")
-    func streamingPartialPacingIsScopedBySuggestion() {
+    @Test("Streaming partial pacing requires an active suggestion stream")
+    func streamingPartialPacingRequiresActiveSuggestionStream() {
         let orchestrator = SuggestionOrchestrator(
             engine: EchoCompletionEngine(),
             suggestionPresentationGate: SuggestionPresentationGate(
@@ -694,19 +694,52 @@ struct SuggestionOrchestratorTests {
         ))
 
         orchestrator.finishStreamingPresentation(suggestionID: "stream")
-        #expect(orchestrator.shouldPresentStreamingPartial(
+        #expect(!orchestrator.shouldPresentStreamingPartial(
             CompletionSuggestion(text: " make this", maxVisibleWords: 3),
             suggestionID: "stream",
             mode: .phraseContinuation,
             nowMilliseconds: 300
         ))
 
-        orchestrator.clearStreamingPresentations()
+        orchestrator.startStreamingPresentation(suggestionID: "stream")
         #expect(orchestrator.shouldPresentStreamingPartial(
             CompletionSuggestion(text: " make this", maxVisibleWords: 3),
             suggestionID: "stream",
             mode: .phraseContinuation,
+            nowMilliseconds: 320
+        ))
+
+        orchestrator.clearStreamingPresentations()
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
             nowMilliseconds: 360
+        ))
+    }
+
+    @MainActor
+    @Test("Beginning a new request clears older streaming state")
+    func beginningNewRequestClearsOlderStreamingState() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        orchestrator.startStreamingPresentation(suggestionID: "old-stream")
+
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            suggestionID: "old-stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 100
+        ))
+
+        _ = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "Can we make", suggestionID: "new-stream")
+        )
+
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            suggestionID: "old-stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 200
         ))
     }
 
