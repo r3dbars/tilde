@@ -287,6 +287,32 @@ def source_commit_is_current_compatible(source_commit: str, head: str) -> bool:
         return False
 
 
+def proof_sensitive_worktree_changes() -> list[str]:
+    try:
+        output = subprocess.check_output(
+            [
+                "git",
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                *CURRENT_PROOF_SOURCE_PATHS,
+            ],
+            cwd=ROOT_DIR,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return ["unable to inspect proof-sensitive worktree paths"]
+
+    changes: list[str] = []
+    for line in output.splitlines():
+        path = line[3:].strip() if len(line) > 3 else line.strip()
+        if path:
+            changes.append(path)
+    return changes
+
+
 def compatibility_profiles(path: Path) -> dict[str, dict[str, str]]:
     if not path.exists():
         fail(f"missing compatibility profile source {path}")
@@ -860,6 +886,13 @@ def verify_manifest(
             f"sourceCommit is {manifest_commit or 'missing'}; expected current HEAD {head} "
             "or a source-compatible commit with no changes in proof-sensitive app/smoke paths"
         )
+    if require_current_commit:
+        dirty_proof_paths = proof_sensitive_worktree_changes()
+        if dirty_proof_paths:
+            failures.append(
+                "proof-sensitive source paths have uncommitted changes: "
+                + ", ".join(dirty_proof_paths[:8])
+            )
 
     surfaces = manifest.get("surfaces")
     if not isinstance(surfaces, list) or not surfaces:

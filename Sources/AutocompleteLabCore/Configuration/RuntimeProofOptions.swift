@@ -3,18 +3,26 @@ import Foundation
 public struct RuntimeProofOptions: Equatable, Sendable {
     public static let disableFastWordCompletionEnvironmentKey =
         "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
+    public static let proofScenarioEnvironmentKey =
+        "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
 
     public let disablesFastWordCompletion: Bool
+    public let proofScenario: String?
 
-    public init(disablesFastWordCompletion: Bool = false) {
+    public init(
+        disablesFastWordCompletion: Bool = false,
+        proofScenario: String? = nil
+    ) {
         self.disablesFastWordCompletion = disablesFastWordCompletion
+        self.proofScenario = Self.normalizedScenario(proofScenario)
     }
 
     public init(environment: [String: String]) {
         self.init(
             disablesFastWordCompletion: Self.isTruthy(
                 environment[Self.disableFastWordCompletionEnvironmentKey]
-            )
+            ),
+            proofScenario: environment[Self.proofScenarioEnvironmentKey]
         )
     }
 
@@ -39,5 +47,13 @@ public struct RuntimeProofOptions: Equatable, Sendable {
         }
 
         return ["1", "true", "yes", "on"].contains(normalized)
+    }
+
+    private static func normalizedScenario(_ value: String?) -> String? {
+        let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized, !normalized.isEmpty else {
+            return nil
+        }
+        return normalized
     }
 }

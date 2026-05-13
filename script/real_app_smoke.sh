@@ -34,6 +34,9 @@ UNDO_RECOVERY_LAUNCHCTL_PREVIOUS=""
 PROOF_DISABLE_FAST_WORD_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=0
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+PROOF_SCENARIO_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_SCENARIO"
+PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=0
+PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
 TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
@@ -542,6 +545,14 @@ cleanup_smoke() {
       launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 
@@ -1229,10 +1240,17 @@ prepare_model_latency_runtime_options() {
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
     PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
   fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
 
   export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"
   launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "textedit-model-latency" >/dev/null 2>&1 || true
   echo "TextEdit model latency proof: fast word completions disabled so every sample must hit the local model."
+  echo "TextEdit model latency proof scenario: textedit-model-latency"
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so model-latency proof mode only applies if the app was launched with this environment." >&2
@@ -6889,6 +6907,7 @@ launch_steadytype_after_chrome_setup() {
     AUTOCOMPLETE_LAB_VISIBLE_WORDS \
     AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
+    AUTOCOMPLETE_LAB_PROOF_SCENARIO \
     AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY; do

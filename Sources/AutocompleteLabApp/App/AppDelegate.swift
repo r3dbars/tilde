@@ -9227,11 +9227,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.endAppProofMode(for: bundleIdentifier, reason: "expired")
             }
         }
+        var metadata = [
+            "app": bundleIdentifier
+        ]
+        if let proofScenario = runtimeProofOptions.proofScenario {
+            metadata["scenario"] = proofScenario
+        }
         DiagnosticsLog.shared.record(
             "app-proof-mode-started",
-            metadata: [
-                "app": bundleIdentifier
-            ]
+            metadata: metadata
         )
     }
 

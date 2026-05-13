@@ -5,10 +5,12 @@ struct RuntimeProofOptionsTests {
     @Test("Reads proof-only fast word completion disable flag")
     func readsProofOnlyFastWordCompletionDisableFlag() {
         let options = RuntimeProofOptions(environment: [
-            RuntimeProofOptions.disableFastWordCompletionEnvironmentKey: "yes"
+            RuntimeProofOptions.disableFastWordCompletionEnvironmentKey: "yes",
+            RuntimeProofOptions.proofScenarioEnvironmentKey: " textedit-model-latency "
         ])
 
         #expect(options.disablesFastWordCompletion)
+        #expect(options.proofScenario == "textedit-model-latency")
     }
 
     @Test("Leaves fast word completions enabled unless the proof flag is truthy")
@@ -17,6 +19,13 @@ struct RuntimeProofOptionsTests {
         #expect(!RuntimeProofOptions(environment: [
             RuntimeProofOptions.disableFastWordCompletionEnvironmentKey: "0"
         ]).disablesFastWordCompletion)
+    }
+
+    @Test("Ignores blank proof scenario")
+    func ignoresBlankProofScenario() {
+        #expect(RuntimeProofOptions(environment: [
+            RuntimeProofOptions.proofScenarioEnvironmentKey: "   "
+        ]).proofScenario == nil)
     }
 
     @Test("Disables fast word completion only inside active proof scope")

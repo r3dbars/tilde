@@ -395,6 +395,12 @@ open_app() {
     launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
   fi
 
+  if [[ -n "${AUTOCOMPLETE_LAB_PROOF_SCENARIO:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_SCENARIO "$AUTOCOMPLETE_LAB_PROOF_SCENARIO"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SCENARIO >/dev/null 2>&1 || true
+  fi
+
   if [[ -n "${AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS:-}" ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS "$AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS"
   else
