@@ -32,6 +32,12 @@ configure_readiness_scratch_path() {
     return 0
   fi
 
+  if ! [[ "${AUTOCOMPLETE_LAB_READINESS_ISOLATED_SCRATCH:-}" =~ ^(1|true|yes|on)$ ]]; then
+    unset AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH
+    echo "SwiftPM readiness scratch: default SwiftPM build cache"
+    return 0
+  fi
+
   parent="${TMPDIR:-/tmp}"
   if ! AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH="$(mktemp -d "${parent%/}/autocomplete-lab-beta-readiness.XXXXXX")"; then
     echo "SwiftPM readiness scratch blocked: could not create a unique SwiftPM scratch path under $parent." >&2
