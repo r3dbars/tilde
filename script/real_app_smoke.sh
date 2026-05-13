@@ -766,12 +766,15 @@ other_smoke_process_lines() {
       rawLine[pid] = $0
       parent[pid] = ppid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|check_current_build_privacy_export)\.sh([[:space:]]|$)/
+      directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness|check_current_build_privacy_export)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasSmokeScript[pid] = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
         index(command, "script/build_and_run.sh") > 0 ||
+        index(command, "script/beta_readiness.sh") > 0 ||
+        index(command, "script/check_score_targets.sh") > 0 ||
+        index(command, "script/check_controls_diagnostics_readiness.sh") > 0 ||
         index(command, "script/check_current_build_privacy_export.sh") > 0
       shellHasSmokeScript[pid] = shellWrapper && hasSmokeScript[pid]
     }
@@ -9116,7 +9119,12 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text trigger_prefix trigger_final
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text trigger_prefix trigger_final attempt max_attempts attempt_had_model attempt_had_visible
+  max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
+    echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
+    exit 2
+  fi
   while IFS= read -r fragment; do
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
@@ -9134,58 +9142,69 @@ run_textedit_model_latency() {
     trigger_final="${trigger_text: -1}"
     stable_context="${stable_context}${trigger_prefix}"
 
-    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency seed $sample_index"
-    clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"
-    move_textedit_caret_to_document_end "$textedit_window_title"
-    seed_start="$(line_count "$LOG_PATH")"
-    if ! insert_textedit_smoke_fragment "$textedit_window_title" "$stable_context"; then
-      echo "TextEdit model latency sample $sample_index could not seed the stable AX context." >&2
-      exit 1
-    fi
-    wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index" 5
-    move_textedit_caret_to_document_end "$textedit_window_title"
-    if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
-      if wait_for_log_fields_optional "$seed_start" 8 \
-        "phrase-continuation-disabled" \
-        "app=com.apple.TextEdit"; then
-        echo "TextEdit model latency seed settled by disabled phrase continuation $sample_index."
-      else
-        describe_textedit_model_latency_seed_miss "$seed_start" "$textedit_window_title" "$sample_index" "$stable_context"
+    attempt_had_model=0
+    attempt_had_visible=0
+    for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+      assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency seed $sample_index attempt $attempt"
+      clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index attempt $attempt"
+      move_textedit_caret_to_document_end "$textedit_window_title"
+      seed_start="$(line_count "$LOG_PATH")"
+      if ! insert_textedit_smoke_fragment "$textedit_window_title" "$stable_context"; then
+        echo "TextEdit model latency sample $sample_index attempt $attempt could not seed the stable AX context." >&2
+        exit 1
       fi
-    elif wait_for_log_fields_optional "$seed_start" 4 \
-      "mlx-completion-timing" \
-      "app=com.apple.TextEdit" \
-      "mode=phraseContinuation"; then
-      echo "TextEdit model latency seed settled $sample_index."
-    else
-      echo "TextEdit model latency seed produced no model timing before sample $sample_index."
-    fi
-    move_textedit_caret_to_document_end "$textedit_window_title"
-    sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.6}"
+      wait_for_textedit_document_exact "$textedit_window_title" "$stable_context" "TextEdit model latency stable context $sample_index attempt $attempt" 5
+      move_textedit_caret_to_document_end "$textedit_window_title"
+      if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
+        if wait_for_log_fields_optional "$seed_start" 8 \
+          "phrase-continuation-disabled" \
+          "app=com.apple.TextEdit"; then
+          echo "TextEdit model latency seed settled by disabled phrase continuation $sample_index attempt $attempt."
+        else
+          describe_textedit_model_latency_seed_miss "$seed_start" "$textedit_window_title" "$sample_index" "$stable_context"
+        fi
+      elif wait_for_log_fields_optional "$seed_start" 4 \
+        "mlx-completion-timing" \
+        "app=com.apple.TextEdit" \
+        "mode=phraseContinuation"; then
+        echo "TextEdit model latency seed settled $sample_index attempt $attempt."
+      else
+        echo "TextEdit model latency seed produced no model timing before sample $sample_index attempt $attempt."
+      fi
+      move_textedit_caret_to_document_end "$textedit_window_title"
+      sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.6}"
 
-    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index"
-    sample_start="$(line_count "$LOG_PATH")"
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
-    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
-      type_textedit_smoke_fragment "$textedit_window_title" "$trigger_final"
-    wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
-    trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"
-    if wait_for_log_fields_optional "$sample_start" 20 \
-      "mlx-completion-timing" \
-      "app=com.apple.TextEdit"; then
-      model_sample_count=$((model_sample_count + 1))
-    else
-      echo "TextEdit model latency sample $sample_index produced no model timing; trying the next stable context." >&2
+      assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index attempt $attempt"
+      sample_start="$(line_count "$LOG_PATH")"
+      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
+      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
+        type_textedit_smoke_fragment "$textedit_window_title" "$trigger_final"
+      wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt" 5
+      trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"
+      if wait_for_log_fields_optional "$sample_start" 20 \
+        "mlx-completion-timing" \
+        "app=com.apple.TextEdit"; then
+        attempt_had_model=1
+      else
+        echo "TextEdit model latency sample $sample_index attempt $attempt produced no model timing; retrying this stable context if attempts remain." >&2
+        sleep 0.4
+        continue
+      fi
+      if wait_for_log_fields_optional "$sample_start" 20 \
+        "suggestion-presented" \
+        "app=com.apple.TextEdit" \
+        "candidateSelectionSource=app-model-result"; then
+        attempt_had_visible=1
+        model_sample_count=$((model_sample_count + 1))
+        visible_sample_count=$((visible_sample_count + 1))
+        break
+      else
+        echo "TextEdit model latency sample $sample_index attempt $attempt produced no visible model-backed word completion; retrying this stable context if attempts remain." >&2
+      fi
       sleep 0.4
-      continue
-    fi
-    if wait_for_log_fields_optional "$sample_start" 20 \
-      "suggestion-presented" \
-      "app=com.apple.TextEdit" \
-      "candidateSelectionSource=app-model-result"; then
-      visible_sample_count=$((visible_sample_count + 1))
-    else
-      echo "TextEdit model latency sample $sample_index produced no visible model-backed word completion; trying the next stable context." >&2
+    done
+    if ((attempt_had_model == 1 && attempt_had_visible == 0)); then
+      echo "TextEdit model latency sample $sample_index exhausted $max_attempts attempts with model timing but no visible model-backed word completion." >&2
     fi
     if ((visible_sample_count >= 5 && model_sample_count >= 5)); then
       break
