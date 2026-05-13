@@ -387,13 +387,13 @@ attach_dmg_for_inspection() {
   local mount_path="$2"
   local output
 
-  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse 2>&1)"; then
+  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse -quiet 2>&1)"; then
     [[ -n "$output" ]] && printf '%s\n' "$output"
     return 0
   fi
 
   sleep 1
-  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse 2>&1)"; then
+  if output="$(hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse -quiet 2>&1)"; then
     [[ -n "$output" ]] && printf '%s\n' "$output"
     return 0
   fi

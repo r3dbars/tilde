@@ -99,7 +99,7 @@ require_contains "$SCRIPT_TEXT" '2>&1'
 require_contains "$SCRIPT_TEXT" '"$proof_dir/spctl-dmg.txt"'
 require_contains "$SCRIPT_TEXT" '"$proof_dir/spctl-installed-app.txt"'
 require_contains "$SCRIPT_TEXT" "attach_dmg_for_inspection"
-require_contains "$SCRIPT_TEXT" 'hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse'
+require_contains "$SCRIPT_TEXT" 'hdiutil attach "$dmg_path" -readonly -mountpoint "$mount_path" -nobrowse -quiet'
 require_contains "$SCRIPT_TEXT" "DMG inspection blocked: could not mount primary beta artifact"
 require_contains "$SCRIPT_TEXT" "xcrun stapler validate"
 require_contains "$SCRIPT_TEXT" "spctl -a -t open --context context:primary-signature"
