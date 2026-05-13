@@ -325,6 +325,9 @@ final class AccessibilityClient: @unchecked Sendable {
             ? nil
             : containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
         let selectedTextLength = max(0, selectedRange?.length ?? 0)
+        let selectedTextValue = selectedRange.flatMap {
+            selectedText(in: focusedElement, selectedRange: $0)
+        } ?? ""
         let caretRect = options.skipParameterizedTextGeometry ? nil : selectedRange.flatMap {
             AccessibilityTextBoundsPolicy.usableTextBounds(
                 caretBounds(for: focusedElement, range: $0),
@@ -365,6 +368,7 @@ final class AccessibilityClient: @unchecked Sendable {
             fingerprint: fingerprint,
             textBeforeCursor: textSnapshot.slice.textBeforeCursor,
             textAfterCursor: textSnapshot.slice.textAfterCursor,
+            selectedText: selectedTextValue,
             selectedTextLength: selectedTextLength,
             caretRect: caretRect,
             elementRect: elementRect,
@@ -1177,6 +1181,19 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         return range
+    }
+
+    private func selectedText(in element: AXUIElement, selectedRange: CFRange) -> String {
+        if let selectedText = copyAttribute(element, attribute: kAXSelectedTextAttribute) as? String {
+            return selectedText
+        }
+
+        guard selectedRange.length > 0,
+              let selectedText = stringForRange(in: element, range: selectedRange) else {
+            return ""
+        }
+
+        return selectedText
     }
 
     private func caretBounds(for element: AXUIElement, range: CFRange) -> CGRect? {

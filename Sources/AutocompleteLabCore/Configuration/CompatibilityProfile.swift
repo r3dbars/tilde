@@ -397,12 +397,12 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportLevel: .yellow,
             supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
             renderMode: .floatingMirror,
-            insertionMode: .axValueReplacement,
+            insertionMode: .keyEvents,
             fallbackRenderMode: .floatingMirror,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
-            knownFailureModes: ["CodeMirror may hide caret bounds", "whole-editor anchors look detached"],
+            knownFailureModes: ["CodeMirror may hide caret bounds", "whole-editor anchors look detached", "AX value can expose only the visible viewport in long notes"],
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
             requiresValidatedCaret: true,
@@ -410,7 +410,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsDescendantTextFallback: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and exact AX value replacement because CodeMirror can report a stale AX selected range near the visual caret. Do not show detached suggestions when CodeMirror hides usable caret bounds."
+            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and key-event insertion because CodeMirror AX values can represent only the visible viewport in long virtualized notes. Do not show detached suggestions when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",

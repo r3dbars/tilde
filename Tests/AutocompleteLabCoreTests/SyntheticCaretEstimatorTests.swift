@@ -166,6 +166,25 @@ struct SyntheticCaretEstimatorTests {
         #expect(proseMirrorCaret.maxY <= 467)
     }
 
+    @Test("Places synthetic carets in a derived Obsidian scrolled tail row")
+    func placesSyntheticCaretsInDerivedObsidianScrolledTailRow() throws {
+        let caret = try #require(SyntheticCaretEstimator.caretRect(
+            textBeforeCursor: "Smoke proof feels",
+            elementRect: CGRect(x: 901, y: 751, width: 320, height: 42),
+            windowRect: CGRect(x: 0, y: 0, width: 1352, height: 878),
+            lineHeight: 21,
+            horizontalPadding: 18,
+            verticalPadding: 4,
+            inlineGap: 8,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(caret.minX > 1_050)
+        #expect(caret.maxX <= 1_221)
+        #expect(caret.minY >= 751)
+        #expect(caret.maxY <= 793)
+    }
+
     private func fixedWidth(_ text: String) -> CGFloat {
         CGFloat(text.count * 10)
     }
