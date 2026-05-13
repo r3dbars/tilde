@@ -149,4 +149,8 @@ script/typing_performance_endurance_soak.sh
 ```
 
 The default target is 10 minutes in a disposable TextEdit file. Use
-`--dry-run` for a fast command/config check.
+`--dry-run` for a fast command/config check. After the typing pass, the
+endurance gate automatically samples the live SteadyType process with the
+no-sudo runtime reporter and fails if average CPU is above 10%, p95 CPU is
+above 25%, RSS is above 6144MB, RSS growth is above 512MB, or no live process
+sample can be collected.

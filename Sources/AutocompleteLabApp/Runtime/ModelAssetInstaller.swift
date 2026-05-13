@@ -43,6 +43,7 @@ struct ModelAssetInstallProgress: Equatable, Sendable {
 
 enum ModelAssetInstallerError: LocalizedError {
     case missingSource(LocalModelID)
+    case sourceRevisionNotImmutable(String)
     case missingDownloadedSnapshot(String)
     case invalidDownloadedAsset(String)
 
@@ -50,6 +51,8 @@ enum ModelAssetInstallerError: LocalizedError {
         switch self {
         case let .missingSource(model):
             return "No download source is configured for \(model.rawValue)."
+        case let .sourceRevisionNotImmutable(reason):
+            return reason
         case let .missingDownloadedSnapshot(path):
             return "Downloaded model snapshot was not found at \(path)."
         case let .invalidDownloadedAsset(reason):
@@ -72,6 +75,9 @@ struct ModelAssetInstaller {
     ) async throws {
         guard let source = manifest.source else {
             throw ModelAssetInstallerError.missingSource(manifest.model)
+        }
+        if let sourceRevisionError = source.immutableRevisionError {
+            throw ModelAssetInstallerError.sourceRevisionNotImmutable(sourceRevisionError)
         }
 
         let scratchURL = targetURL
@@ -157,6 +163,19 @@ struct ModelAssetInstaller {
             throw ModelAssetInstallerError.invalidDownloadedAsset("missing model asset at \(expectedPath)")
         case let .invalid(_, reason):
             throw ModelAssetInstallerError.invalidDownloadedAsset(reason)
+        }
+
+        _ = try ModelAssetIntegrityReceiptWriter.write(
+            manifest: manifest,
+            modelDirectoryURL: snapshotURL,
+            fileManager: fileManager
+        )
+        if let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: snapshotURL,
+            fileManager: fileManager
+        ) {
+            throw ModelAssetInstallerError.invalidDownloadedAsset(integrityError)
         }
 
         let parentURL = targetURL.deletingLastPathComponent()

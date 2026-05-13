@@ -8,6 +8,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 PASS_TRACE="$TMP_DIR/pass.jsonl"
 FAIL_TRACE="$TMP_DIR/fail.jsonl"
 SUPPRESSED_TRACE="$TMP_DIR/suppressed.jsonl"
+PAUSE_TRACE="$TMP_DIR/pause.jsonl"
 
 cat >"$PASS_TRACE" <<'JSONL'
 {"timestamp":"2026-05-08T20:00:00Z","sessionID":"s","suggestionID":"p1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","displayedText":"private shown"}
@@ -34,9 +35,16 @@ cat >"$SUPPRESSED_TRACE" <<'JSONL'
 {"timestamp":"2026-05-08T20:00:01Z","sessionID":"s","suggestionID":"s1","type":"acceptedTextEdited","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","outcome":"rejectedAfterAccept","reason":"accepted-then-deleted","metadata":{"acceptanceID":"a1","prefixCooldownReason":"acceptedThenDeleted"}}
 JSONL
 
+cat >"$PAUSE_TRACE" <<'JSONL'
+{"timestamp":"2026-05-08T20:00:00Z","sessionID":"s","suggestionID":"p1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion"}
+{"timestamp":"2026-05-08T20:00:10Z","sessionID":"s","suggestionID":"p1","type":"appPaused","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"timed-pause","metadata":{"durationSeconds":"900"}}
+{"timestamp":"2026-05-08T20:01:10Z","sessionID":"s","suggestionID":"","type":"fieldPaused","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"manual-field","metadata":{"scope":"field"}}
+JSONL
+
 PASS_OUTPUT="$TMP_DIR/pass.out"
 FAIL_OUTPUT="$TMP_DIR/fail.out"
 SUPPRESSED_OUTPUT="$TMP_DIR/suppressed.out"
+PAUSE_OUTPUT="$TMP_DIR/pause.out"
 
 "$ROOT_DIR/script/non_annoyance_report.py" "$PASS_TRACE" >"$PASS_OUTPUT"
 grep -q "Gate: pass" "$PASS_OUTPUT"
@@ -63,5 +71,12 @@ grep -q "Severe suppression coverage: 0/1 (0%)" "$FAIL_OUTPUT"
   >"$SUPPRESSED_OUTPUT"
 grep -q "Severe suppression coverage: 1/1 (100%)" "$SUPPRESSED_OUTPUT"
 grep -q "Gate: pass" "$SUPPRESSED_OUTPUT"
+
+"$ROOT_DIR/script/non_annoyance_report.py" \
+  "$PAUSE_TRACE" \
+  --max-pause-disable-per-shown 2.0 \
+  >"$PAUSE_OUTPUT"
+grep -q "Pause/disable events: 2" "$PAUSE_OUTPUT"
+grep -q "Gate: pass" "$PAUSE_OUTPUT"
 
 echo "non_annoyance_report_self_test passed"

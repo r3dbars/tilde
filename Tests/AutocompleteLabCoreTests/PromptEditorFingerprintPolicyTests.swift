@@ -51,9 +51,9 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Allows native prompt text fields with prompt fingerprints")
     func allowsNativePromptTextFieldsWithPromptFingerprints() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextField",
-            fingerprintText: "Ask Codex prompt input",
+            fingerprintText: "Ask Claude prompt input",
             elementRect: nil,
             windowRect: nil
         )
@@ -65,9 +65,9 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Allows prompt-like dogfood wrappers")
     func allowsPromptLikeDogfoodWrappers() {
         let groupDecision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXGroup",
-            fingerprintText: "Ask Codex prompt input",
+            fingerprintText: "Ask Claude prompt input",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
             windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
         )
@@ -99,9 +99,9 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Blocks prompt wrapper fingerprints away from composer geometry")
     func blocksPromptWrapperFingerprintsAwayFromComposerGeometry() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXGroup",
-            fingerprintText: "Ask Codex prompt input",
+            fingerprintText: "Ask Claude prompt input",
             elementRect: CGRect(x: 100, y: 180, width: 700, height: 340),
             windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
         )
@@ -113,14 +113,14 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Allows generic prompt fingerprints only with composer geometry")
     func genericPromptFingerprintRequiresComposerGeometry() {
         let goodDecision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "chat input",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
             windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
         )
         let centralDecision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "chat input",
             elementRect: CGRect(x: 100, y: 180, width: 700, height: 340),
@@ -188,17 +188,44 @@ struct PromptEditorFingerprintPolicyTests {
         )
 
         #expect(!withoutProofMode.canSuggest)
-        #expect(withoutProofMode.reason == "generic-prompt-not-composer")
+        #expect(withoutProofMode.reason == "codex-proof-marker-required")
         #expect(!withSelection.canSuggest)
-        #expect(withSelection.reason == "generic-prompt-not-composer")
+        #expect(withSelection.reason == "codex-proof-marker-required")
         #expect(!withTextAfterCursor.canSuggest)
-        #expect(withTextAfterCursor.reason == "generic-prompt-not-composer")
+        #expect(withTextAfterCursor.reason == "codex-proof-marker-required")
+    }
+
+    @Test("Blocks Codex prompt geometry without proof marker")
+    func blocksCodexPromptGeometryWithoutProofMarker() {
+        let promptFingerprint = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "Ask Codex prompt input",
+            elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: false,
+            textBeforeCursor: "ordinary prompt"
+        )
+        let promptGeometry = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "",
+            elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true,
+            textBeforeCursor: "ordinary prompt"
+        )
+
+        #expect(!promptFingerprint.canSuggest)
+        #expect(promptFingerprint.reason == "codex-proof-marker-required")
+        #expect(!promptGeometry.canSuggest)
+        #expect(promptGeometry.reason == "codex-proof-marker-required")
     }
 
     @Test("Blocks generic prompt fingerprints without geometry")
     func blocksGenericPromptFingerprintWithoutGeometry() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "input",
             elementRect: nil,
@@ -212,7 +239,7 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Blocks bare prompt fingerprints without composer geometry")
     func blocksBarePromptFingerprintWithoutGeometry() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "prompt",
             elementRect: nil,
@@ -240,7 +267,7 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Blocks dogfood wrappers without prompt fingerprints")
     func blocksDogfoodWrappersWithoutPromptFingerprints() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXGroup",
             fingerprintText: "main content",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
@@ -254,7 +281,7 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Allows prompt-like composer geometry near a window edge")
     func allowsPromptGeometry() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
@@ -268,7 +295,7 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Blocks top-edge dogfood text areas")
     func blocksTopEdgeTextAreas() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: CGRect(x: 100, y: 8, width: 700, height: 56),
@@ -282,7 +309,7 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Blocks large central dogfood text areas")
     func blocksLargeCentralTextAreas() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: CGRect(x: 120, y: 180, width: 680, height: 360),
@@ -296,7 +323,7 @@ struct PromptEditorFingerprintPolicyTests {
     @Test("Blocks dogfood text areas without usable bounds")
     func blocksMissingPromptBounds() {
         let decision = policy.decision(
-            bundleIdentifier: "com.openai.codex",
+            bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: nil,

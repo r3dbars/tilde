@@ -41,8 +41,20 @@ if ! grep -F "Synthetic text: 1200 generated chars from a built-in neutral fixtu
   exit 1
 fi
 
-if ! grep -F "Typed text proof: exact TextEdit clipboard capture match required" "$TMP_DIR/default.txt" >/dev/null; then
+if ! grep -F "Typed text proof: exact TextEdit target capture match required" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain exact typed-text verification" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typed text capture: direct AX value read from the target TextEdit window; no clipboard read/write" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain direct target-window capture" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if grep -F "clipboard capture" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test still describes clipboard capture" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
@@ -55,6 +67,24 @@ fi
 
 if ! grep -F "Typing batches: up to 250 chars per Swift process" "$TMP_DIR/default.txt" >/dev/null; then
   echo "typing soak self-test did not explain segmented Swift typing batches" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Typing focus guard: verifies TextEdit is frontmost before each generated key" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the frontmost app guard" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Concurrency guard: serializes TextEdit soak build, launch, setup, and typing" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the TextEdit soak lock" >&2
+  cat "$TMP_DIR/default.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Setup cleanup: closes old generated TextEdit soak documents before typing" "$TMP_DIR/default.txt" >/dev/null; then
+  echo "typing soak self-test did not explain generated TextEdit cleanup" >&2
   cat "$TMP_DIR/default.txt" >&2
   exit 1
 fi
@@ -192,6 +222,118 @@ fi
 
 if script/typing_performance_soak.sh --dry-run --unknown >/dev/null 2>&1; then
   echo "typing soak self-test expected unknown options to fail" >&2
+  exit 1
+fi
+
+if grep -E 'pbcopy|pbpaste|keystroke "c" using|keystroke "a" using' script/typing_performance_soak.sh >/dev/null; then
+  echo "typing soak self-test found clipboard-based capture commands in the soak script" >&2
+  grep -En 'pbcopy|pbpaste|keystroke "c" using|keystroke "a" using' script/typing_performance_soak.sh >&2
+  exit 1
+fi
+
+printf 'abc\n' >"$TMP_DIR/osascript-stdout-single-newline.txt"
+printf 'abc' >"$TMP_DIR/expected-single-newline.txt"
+script/typing_performance_soak.sh \
+  --self-test-normalize-osascript-stdout \
+  "$TMP_DIR/osascript-stdout-single-newline.txt" \
+  "$TMP_DIR/actual-single-newline.txt"
+
+if ! cmp -s "$TMP_DIR/expected-single-newline.txt" "$TMP_DIR/actual-single-newline.txt"; then
+  echo "typing soak self-test did not remove exactly one osascript stdout newline" >&2
+  exit 1
+fi
+
+printf 'abc\n\n' >"$TMP_DIR/osascript-stdout-document-newline.txt"
+printf 'abc\n' >"$TMP_DIR/expected-document-newline.txt"
+script/typing_performance_soak.sh \
+  --self-test-normalize-osascript-stdout \
+  "$TMP_DIR/osascript-stdout-document-newline.txt" \
+  "$TMP_DIR/actual-document-newline.txt"
+
+if ! cmp -s "$TMP_DIR/expected-document-newline.txt" "$TMP_DIR/actual-document-newline.txt"; then
+  echo "typing soak self-test did not preserve a real trailing document newline" >&2
+  exit 1
+fi
+
+script/typing_performance_soak.sh --self-test-osascript-timeout
+
+lock_dir="$TMP_DIR/typing-soak.lock"
+AUTOCOMPLETE_LAB_SOAK_LOCK_DIR="$lock_dir" \
+  script/typing_performance_soak.sh --self-test-soak-lock
+
+if [[ -e "$lock_dir" ]]; then
+  echo "typing soak self-test expected the soak lock to be released" >&2
+  exit 1
+fi
+
+mkdir "$lock_dir"
+if AUTOCOMPLETE_LAB_SOAK_LOCK_DIR="$lock_dir" \
+  AUTOCOMPLETE_LAB_SOAK_LOCK_TIMEOUT_SECONDS=1 \
+  script/typing_performance_soak.sh --self-test-soak-lock >/dev/null 2>"$TMP_DIR/locked.txt"; then
+  echo "typing soak self-test expected an already-held lock to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Timed out waiting for another TextEdit typing soak to finish." "$TMP_DIR/locked.txt" >/dev/null; then
+  echo "typing soak self-test did not explain the held soak lock" >&2
+  cat "$TMP_DIR/locked.txt" >&2
+  exit 1
+fi
+rmdir "$lock_dir"
+
+large_log="$TMP_DIR/large-diagnostics.log"
+for _ in $(seq 1 8000); do
+  printf '2026-05-12T00:00:00Z status decision=waiting\n'
+done >"$large_log"
+printf '2026-05-12T00:00:01Z focused-text-poll-latency-summary count=60 maxMilliseconds=8\n' >>"$large_log"
+for _ in $(seq 1 8000); do
+  printf '2026-05-12T00:00:02Z status decision=waiting\n'
+done >>"$large_log"
+
+if ! script/typing_performance_soak.sh --self-test-log-scan "$large_log" 7000; then
+  echo "typing soak self-test expected large post-start log scan to find focused-text summary" >&2
+  exit 1
+fi
+
+if script/typing_performance_soak.sh --self-test-log-scan "$large_log" 9000; then
+  echo "typing soak self-test expected post-summary log scan to fail" >&2
+  exit 1
+fi
+
+runtime_ready_log="$TMP_DIR/runtime-ready-diagnostics.log"
+cat >"$runtime_ready_log" <<'EOF'
+2026-05-12T00:00:00Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+2026-05-12T00:00:01Z status decision=waiting
+EOF
+
+if ! script/typing_performance_soak.sh --self-test-runtime-ready "$runtime_ready_log" 1 1; then
+  echo "typing soak self-test expected existing ready runtime to be reusable" >&2
+  exit 1
+fi
+
+runtime_warming_log="$TMP_DIR/runtime-warming-diagnostics.log"
+cat >"$runtime_warming_log" <<'EOF'
+2026-05-12T00:00:00Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+2026-05-12T00:00:01Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T00:00:01Z runtime-bootstrap activeCandidate=mlx
+2026-05-12T00:00:01Z runtime completionLength=5 words / 11 tokens readinessAction=wait readinessStage=warming state=warming MLX
+EOF
+
+if script/typing_performance_soak.sh --self-test-runtime-ready "$runtime_warming_log" 1 1; then
+  echo "typing soak self-test expected stale ready runtime to be rejected during fresh warmup" >&2
+  exit 1
+fi
+
+runtime_fresh_ready_log="$TMP_DIR/runtime-fresh-ready-diagnostics.log"
+cat >"$runtime_fresh_ready_log" <<'EOF'
+2026-05-12T00:00:00Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+2026-05-12T00:00:01Z app-proof-mode-started app=com.apple.TextEdit
+2026-05-12T00:00:01Z runtime completionLength=5 words / 11 tokens readinessAction=wait readinessStage=warming state=warming MLX
+2026-05-12T00:00:03Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+EOF
+
+if ! script/typing_performance_soak.sh --self-test-runtime-ready "$runtime_fresh_ready_log" 1 1; then
+  echo "typing soak self-test expected fresh ready runtime to satisfy the gate" >&2
   exit 1
 fi
 

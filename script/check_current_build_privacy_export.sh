@@ -8,14 +8,21 @@ APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
 OUTPUT_DIR="${AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT:-$ROOT_DIR/docs/diagnostics/runs/current-build-privacy-export-proof}"
 
+BUILD_LOG=/tmp/autocomplete-current-build-privacy-build.log
+
 if [[ ! -x "$APP_BINARY" || "${AUTOCOMPLETE_LAB_REBUILD_PRIVACY_PROOF:-0}" =~ ^(1|true|yes|on)$ ]]; then
-  ./script/build_and_run.sh --bundle-only >/tmp/autocomplete-current-build-privacy-build.log
+  if ! ./script/build_and_run.sh --bundle-only >"$BUILD_LOG" 2>&1; then
+    echo "failed to build app bundle for privacy export proof" >&2
+    echo "build output:" >&2
+    cat "$BUILD_LOG" >&2 2>/dev/null || true
+    exit 1
+  fi
 fi
 
 if [[ ! -x "$APP_BINARY" ]]; then
   echo "missing app binary for privacy export proof: $APP_BINARY" >&2
   echo "build output:" >&2
-  cat /tmp/autocomplete-current-build-privacy-build.log >&2 2>/dev/null || true
+  cat "$BUILD_LOG" >&2 2>/dev/null || true
   exit 1
 fi
 
@@ -33,7 +40,7 @@ if find "$OUTPUT_DIR" \( -name 'traces.jsonl' -o -name 'raw-traces.jsonl' \) -pr
   exit 1
 fi
 
-if grep -R -I -E 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject' "$OUTPUT_DIR" >/tmp/autocomplete-current-build-privacy-leaks.txt 2>/dev/null; then
+if grep -R -I -E 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject|private-cache-redbars|freeform-reason-redbars|/Users/redbars/Library/Application Support/SteadyType/private-cache-redbars|/Users/redbars/private/freeform-reason-redbars\.md' "$OUTPUT_DIR" >/tmp/autocomplete-current-build-privacy-leaks.txt 2>/dev/null; then
   echo "privacy proof output leaked private sentinel text" >&2
   cat /tmp/autocomplete-current-build-privacy-leaks.txt >&2
   exit 1

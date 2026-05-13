@@ -141,6 +141,12 @@ struct SuggestionAcceptanceGuardTests {
         #expect(guardPolicy.decision(shown: shown, current: nil) == .block(.missingCurrentSnapshot))
     }
 
+    @Test("Suppressed field before accept is not counted as focus mismatch")
+    func suppressedFieldBeforeAcceptIsNotFocusMismatch() {
+        #expect(SuggestionAcceptanceBlockReason.currentBecameSuppressedField.rawValue == "suppressed-field-before-accept")
+        #expect(!SuggestionAcceptanceBlockReason.currentBecameSuppressedField.isFocusMismatch)
+    }
+
     private func snapshot(
         fieldIdentity: FocusedFieldIdentity = identity(),
         targetFingerprint: FocusedTargetFingerprint = Self.targetFingerprint(),

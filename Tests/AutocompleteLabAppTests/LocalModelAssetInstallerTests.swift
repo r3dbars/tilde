@@ -33,11 +33,44 @@ struct LocalModelAssetInstallerTests {
         }
     }
 
+    @Test("Installer fails before network when source revision is mutable")
+    func installerFailsBeforeNetworkWhenSourceRevisionIsMutable() async {
+        let installer = LocalModelAssetInstaller(
+            manifest: LocalModelAssetManifest(
+                model: .qwen35FourB,
+                runtimeCandidate: .mlx,
+                cacheDirectoryName: "Models/Test/MLX",
+                fileName: "test-model",
+                source: LocalModelAssetSource(
+                    repoID: "mlx-community/Test",
+                    revision: "main",
+                    allowPatterns: ["*.safetensors", "config.json"]
+                ),
+                expectedMinimumBytes: 1,
+                requiredFileNames: ["config.json"]
+            ),
+            destinationURL: URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("autocomplete-installer-test-\(UUID().uuidString)")
+        )
+
+        await #expect(throws: LocalModelAssetInstallerError.sourceRevisionNotImmutable(
+            LocalModelAssetSource.immutableRevisionRequirement
+        )) {
+            try await installer.install()
+        }
+    }
+
     @Test("Installer errors use plain recovery copy")
     func installerErrorsUsePlainRecoveryCopy() {
         #expect(
             LocalModelAssetInstallerError.missingSource(model: "qwen35-9b").errorDescription
                 == "This model cannot be installed in the app yet: qwen35-9b. Open the model folder or choose the default model."
+        )
+        #expect(
+            LocalModelAssetInstallerError.sourceRevisionNotImmutable(
+                LocalModelAssetSource.immutableRevisionRequirement
+            ).errorDescription
+                == "This model cannot be installed safely: \(LocalModelAssetSource.immutableRevisionRequirement)."
         )
         #expect(
             LocalModelAssetInstallerError.invalidRepository("bad repo").errorDescription
@@ -77,6 +110,21 @@ struct LocalModelAssetInstallerTests {
 
         try policy.validate(availableBytes: nil, expectedMinimumBytes: 4_000_000_000)
         try policy.validate(availableBytes: 5_000_000_000, expectedMinimumBytes: 4_000_000_000)
+    }
+
+    @Test("Installer cancellation check fails closed before finalize")
+    func installerCancellationCheckFailsClosedBeforeFinalize() async {
+        let task = Task {
+            while !Task.isCancelled {
+                await Task.yield()
+            }
+            try LocalModelAssetInstaller.checkCancellationBeforeFinalizing()
+        }
+
+        task.cancel()
+        await #expect(throws: CancellationError.self) {
+            try await task.value
+        }
     }
 
     @Test("Volume resolver falls back to an existing ancestor for first install")

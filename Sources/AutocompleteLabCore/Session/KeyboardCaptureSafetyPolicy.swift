@@ -29,6 +29,10 @@ public enum KeyboardCaptureDropReason: String, Equatable, Sendable {
     case acceptanceProofFailed = "acceptance-proof-failed"
     case insertionFailed = "insertion-failed"
     case unsafeAcceptedText = "unsafe-accepted-text"
+    case acceptanceTargetChangedBeforeAccept = "acceptance-target-changed-before-accept"
+    case secureFieldBeforeAccept = "secure-field-before-accept"
+    case suppressedFieldBeforeAccept = "suppressed-field-before-accept"
+    case promptTargetChangedBeforeAccept = "prompt-target-changed-before-accept"
 }
 
 public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
@@ -36,6 +40,13 @@ public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
 
     public func handlingResult(
         forAcceptanceBlock reason: SuggestionAcceptanceBlockReason
+    ) -> KeyboardEventTapHandlingResult {
+        handlingResult(forAcceptanceBlock: reason, key: .other)
+    }
+
+    public func handlingResult(
+        forAcceptanceBlock reason: SuggestionAcceptanceBlockReason,
+        key: AutocompleteKey
     ) -> KeyboardEventTapHandlingResult {
         switch reason {
         case .appChanged,
@@ -45,10 +56,28 @@ public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
              .textAfterCursorChanged,
              .missingShownSnapshot,
              .missingCurrentSnapshot,
-             .currentBecameSecure,
-             .promptTargetChanged,
              .targetFingerprintChanged:
-            .replayOriginalKey(.acceptanceTargetChanged)
+            if shouldDropConsumedAcceptKey(key) {
+                .dropOriginalKey(.acceptanceTargetChangedBeforeAccept)
+            } else {
+                .replayOriginalKey(.acceptanceTargetChanged)
+            }
+        case .currentBecameSecure:
+            .dropOriginalKey(.secureFieldBeforeAccept)
+        case .currentBecameSuppressedField:
+            .dropOriginalKey(.suppressedFieldBeforeAccept)
+        case .promptTargetChanged:
+            .dropOriginalKey(.promptTargetChangedBeforeAccept)
+        }
+    }
+
+    public func handlingResultForFocusMismatch(
+        key: AutocompleteKey
+    ) -> KeyboardEventTapHandlingResult {
+        if shouldDropConsumedAcceptKey(key) {
+            .dropOriginalKey(.acceptanceTargetChangedBeforeAccept)
+        } else {
+            .replayOriginalKey(.focusChanged)
         }
     }
 
@@ -56,6 +85,15 @@ public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
         forAcceptanceFailure reason: KeyboardCaptureDropReason
     ) -> KeyboardEventTapHandlingResult {
         .dropOriginalKey(reason)
+    }
+
+    private func shouldDropConsumedAcceptKey(_ key: AutocompleteKey) -> Bool {
+        switch key {
+        case .tab, .backtick, .optionTab:
+            true
+        case .commandZ, .escape, .other:
+            false
+        }
     }
 }
 

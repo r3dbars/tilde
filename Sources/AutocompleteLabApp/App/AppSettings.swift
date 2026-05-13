@@ -4,15 +4,12 @@ import AutocompleteLabCore
 @MainActor
 final class AppSettings {
     enum RuntimeMode: String, CaseIterable {
-        case appOwnedLocalModel = "gemmaLocalWithMockFallback"
-        case mockOnly
+        case appOwnedLocalModel
 
         var menuTitle: String {
             switch self {
             case .appOwnedLocalModel:
                 return "App-Owned Local Model"
-            case .mockOnly:
-                return "Mock Suggestions Only (Tests)"
             }
         }
     }

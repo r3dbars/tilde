@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "a17647484961cc573e074b1c83c7f07a18bdecbf",
+  "sourceCommit": "76ac537d87b9c1dcd73b546f70f1f3cc2e2bd5d4",
   "proofFingerprint": {
     "traceProofVersion": "2026-05-07.1",
     "placementProofVersion": "placement-v4",
@@ -78,7 +78,7 @@
             "reference": "docs/product/visual-placement-screenshots/obsidian.png"
           }
         ],
-        "notes": "Real CodeMirror proof is current across default, non-default theme, pane, and long scrolled-note lanes."
+        "notes": "Real CodeMirror proof is current across default, non-default theme, and pane lanes; long-note current-head proof remains blocked."
       },
       {
         "bundle": "com.apple.mail",
@@ -157,7 +157,7 @@
             "reference": "docs/product/visual-placement-screenshots/chrome-chat-like.png"
           }
         ],
-        "notes": "Local fixtures and the public textarea lane are proven on the current app fingerprint; public contenteditable is stale after the latest rerun could not find the AX editor, default AX ProseMirror is current, default AX Monaco is pending after setup verification stayed unchanged, and production official Monaco remains open."
+        "notes": "Local fixtures and public text-field lanes are proven on recorded app fingerprints; Google Docs, Notion, browser ChatGPT, Slack, Discord, current CodeMirror, and default/official Monaco remain blocked until exact proof exists."
       },
       {
         "bundle": "com.openai.codex",
@@ -334,6 +334,209 @@
       }
     ]
   },
+  "graduationDecisions": [
+    {
+      "surface": "Google Docs in Chrome",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture google-docs",
+      "requiredProof": [
+        "correct placement",
+        "safe Tab",
+        "no submit/send",
+        "no sensitive-field leak",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "Hosted Google Docs remains blocked by unsupported-browser-surface policy until a disposable document proof exists."
+    },
+    {
+      "surface": "Notion browser or desktop",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome",
+        "notion.id"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture notion",
+      "requiredProof": [
+        "correct placement",
+        "safe Tab",
+        "no submit/send",
+        "no sensitive-field leak",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "Browser Notion and desktop Notion stay blocked until a disposable ProseMirror page proof exists."
+    },
+    {
+      "surface": "Slack browser or desktop",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome",
+        "com.tinyspeck.slackmacgap"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-slack",
+      "requiredProof": [
+        "correct placement",
+        "safe Tab",
+        "no submit/send",
+        "no sensitive-field leak",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "Slack message composition stays blocked until disposable-channel no-send proof exists."
+    },
+    {
+      "surface": "Discord browser or desktop",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome",
+        "com.hnc.Discord",
+        "com.hnc.DiscordPTB",
+        "com.hnc.DiscordCanary"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-discord",
+      "requiredProof": [
+        "correct placement",
+        "safe Tab",
+        "no submit/send",
+        "no sensitive-field leak",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "Discord message composition stays blocked until disposable-server no-send proof exists."
+    },
+    {
+      "surface": "Mail compose",
+      "decision": "diagnostics-only",
+      "profileBundles": [
+        "com.apple.mail"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift",
+      "proofState": "blocked",
+      "smokeCommand": null,
+      "requiredProof": [
+        "compose-body-only placement",
+        "safe Tab",
+        "no recipient/search/account-field leak",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "Mail compose can be diagnosed, but suggestions and insertion remain disabled."
+    },
+    {
+      "surface": "Browser ChatGPT",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome",
+        "com.openai.chat",
+        "com.openai.ChatGPT",
+        "com.openai.atlas"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-chatgpt",
+      "requiredProof": [
+        "correct placement",
+        "safe one-word Tab",
+        "no submit/send",
+        "no tool/context side effect",
+        "no sensitive-field leak",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "The local browser-chat harness is not real-service ChatGPT proof; keep Browser ChatGPT blocked until real-service no-submit proof exists."
+    },
+    {
+      "surface": "Claude desktop layouts",
+      "decision": "word-only",
+      "profileBundles": [
+        "com.anthropic.claudefordesktop"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift",
+      "proofState": "partial",
+      "smokeCommand": "script/real_app_smoke.sh claude-empty --manual-gate",
+      "requiredProof": [
+        "empty prompt layout",
+        "long prompt layout",
+        "wrapped prompt layout",
+        "narrow window layout",
+        "context layout",
+        "light appearance",
+        "dark appearance"
+      ],
+      "notes": "Default Claude desktop one-word no-submit proof exists; full accept stays disabled."
+    },
+    {
+      "surface": "Codex layouts",
+      "decision": "word-only",
+      "profileBundles": [
+        "com.openai.codex"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift",
+      "proofState": "complete",
+      "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
+      "requiredProof": [
+        "more prompt layouts before raising beyond word-only",
+        "separate full-accept no-submit proof before enabling full accept"
+      ],
+      "notes": "Default Codex proof has one-word Tab accept, insertion verification, no submit, and draft restoration."
+    },
+    {
+      "surface": "Obsidian long notes",
+      "decision": "blocked",
+      "profileBundles": [
+        "md.obsidian"
+      ],
+      "policySource": "script/real_app_smoke.sh",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh obsidian-long-note --manual-gate",
+      "requiredProof": [
+        "correct scrolled CodeMirror caret source",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "General Obsidian support remains yellow; the long-note lane is blocked until current-head proof passes."
+    },
+    {
+      "surface": "Real Monaco and CodeMirror editors",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome",
+        "com.microsoft.VSCode",
+        "com.todesktop.230313mzl4w4u92"
+      ],
+      "policySource": "script/real_app_smoke.sh",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture monaco-official",
+      "requiredProof": [
+        "official CodeMirror proof",
+        "official Monaco proof",
+        "default-AX Monaco proof",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "notes": "Forced local editor fixtures do not unblock production Monaco or CodeMirror editors; keep them blocked until official/default editor proof exists."
+    }
+  ],
   "surfaces": [
     {
       "surface": "TextEdit",
@@ -535,13 +738,13 @@
         {
           "id": "production-chrome-chat-no-submit",
           "status": "pending",
-          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact no-submit proof. The browser-chat harness is disposable proof only."
+          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact no-submit proof. The browser-chat harness is disposable proof only, and the existing local chat-like fixture still includes full-accept-without-proof events."
         }
       ]
     },
     {
       "surface": "Codex",
-      "status": "complete",
+      "status": "partial",
       "manualSmoke": {
         "app": "Codex",
         "bundle": "com.openai.codex",
@@ -553,7 +756,35 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/codex-inline.png"
       ],
-      "gaps": []
+      "gaps": [
+        "Default one-word no-submit proof exists, but broader Codex prompt layouts and full-accept no-submit proof remain gated."
+      ],
+      "requirements": [
+        {
+          "id": "codex-one-word-no-submit",
+          "status": "complete",
+          "summary": "Default one-word Tab accept proof has bounded strict screenshot evidence and prompt no-submit confirmation.",
+          "manualSmoke": {
+            "app": "Codex",
+            "bundle": "com.openai.codex",
+            "proof": "default",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        },
+        {
+          "id": "codex-layout-variants",
+          "status": "pending",
+          "summary": "Refresh current-head Codex proof across more prompt layouts before raising this above A-."
+        },
+        {
+          "id": "codex-full-accept-no-submit",
+          "status": "pending",
+          "summary": "Keep full accept disabled until a dedicated Codex no-submit full-accept lane exists."
+        }
+      ]
     },
     {
       "surface": "Obsidian",
@@ -846,8 +1077,8 @@
         {
           "id": "claude-code-warp-host-no-submit",
           "status": "blocked",
-          "summary": "Warp proof is blocked on this Mac because Warp is not installed.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host warp --manual-gate"
+          "blockerType": "unavailable-host",
+          "summary": "Warp proof is blocked on this Mac because Warp is not installed."
         }
       ]
     },
@@ -943,9 +1174,9 @@
       "displayName": "Obsidian",
       "supportLevel": "yellow",
       "surface": "Obsidian",
-      "status": "complete",
+      "status": "partial",
       "owner": "electron editor adapter lane",
-      "safetyNote": "Defined Obsidian proof rows are current across default, theme, pane, and long-note lanes; broader vault variance and hidden-caret edge cases keep support yellow."
+      "safetyNote": "Defined Obsidian proof rows are current across default, theme, and pane lanes, but current-head long-note proof is blocked; broader vault variance and hidden-caret edge cases keep support yellow."
     },
     {
       "bundle": "com.apple.mail",

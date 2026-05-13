@@ -31,6 +31,12 @@ Use this in the first 10 minutes of a private beta session.
 10. Press `Esc` when a suggestion feels wrong.
 11. Export only the redacted Privacy Bundle if feedback needs diagnostics.
 
+After a tester walkthrough, record the row in
+`docs/product/onboarding-permission-qa-checklist.md` and run
+`./script/check_onboarding_walkthrough_proof.py`. The row must prove the app
+owned the runtime; testers should not start Ollama, llama.cpp, Python, or a
+separate model server.
+
 ## What Stays Local
 
 Typed text, prompts, model output, accepted text, screenshots, document names,

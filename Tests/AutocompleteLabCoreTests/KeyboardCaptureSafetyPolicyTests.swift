@@ -3,8 +3,8 @@ import Testing
 
 @Suite("Keyboard capture safety policy")
 struct KeyboardCaptureSafetyPolicyTests {
-    @Test("Acceptance blocks replay the original captured key")
-    func acceptanceBlocksReplayOriginalCapturedKey() {
+    @Test("Ordinary acceptance blocks replay the original captured key")
+    func ordinaryAcceptanceBlocksReplayOriginalCapturedKey() {
         let policy = KeyboardCaptureSafetyPolicy()
         let blockReasons: [SuggestionAcceptanceBlockReason] = [
             .appChanged,
@@ -14,17 +14,78 @@ struct KeyboardCaptureSafetyPolicyTests {
             .textAfterCursorChanged,
             .missingShownSnapshot,
             .missingCurrentSnapshot,
-            .currentBecameSecure,
-            .promptTargetChanged,
             .targetFingerprintChanged
         ]
 
         for reason in blockReasons {
             #expect(
-                policy.handlingResult(forAcceptanceBlock: reason)
+                policy.handlingResult(forAcceptanceBlock: reason, key: .other)
                     == .replayOriginalKey(.acceptanceTargetChanged)
             )
         }
+    }
+
+    @Test("Ordinary acceptance blocks drop consumed accept keys")
+    func ordinaryAcceptanceBlocksDropConsumedAcceptKeys() {
+        let policy = KeyboardCaptureSafetyPolicy()
+        let blockReasons: [SuggestionAcceptanceBlockReason] = [
+            .appChanged,
+            .fieldChanged,
+            .selectedTextChanged,
+            .textBeforeCursorChanged,
+            .textAfterCursorChanged,
+            .missingShownSnapshot,
+            .missingCurrentSnapshot,
+            .targetFingerprintChanged
+        ]
+
+        for key in [AutocompleteKey.tab, .backtick, .optionTab] {
+            for reason in blockReasons {
+                #expect(
+                    policy.handlingResult(forAcceptanceBlock: reason, key: key)
+                        == .dropOriginalKey(.acceptanceTargetChangedBeforeAccept)
+                )
+            }
+        }
+    }
+
+    @Test("Focus mismatch before accept drops consumed accept keys")
+    func focusMismatchBeforeAcceptDropsConsumedAcceptKeys() {
+        let policy = KeyboardCaptureSafetyPolicy()
+
+        for key in [AutocompleteKey.tab, .backtick, .optionTab] {
+            #expect(
+                policy.handlingResultForFocusMismatch(key: key)
+                    == .dropOriginalKey(.acceptanceTargetChangedBeforeAccept)
+            )
+        }
+
+        #expect(
+            policy.handlingResultForFocusMismatch(key: .escape)
+                == .replayOriginalKey(.focusChanged)
+        )
+        #expect(
+            policy.handlingResultForFocusMismatch(key: .other)
+                == .replayOriginalKey(.focusChanged)
+        )
+    }
+
+    @Test("Sensitive acceptance blocks drop the captured key")
+    func sensitiveAcceptanceBlocksDropCapturedKey() {
+        let policy = KeyboardCaptureSafetyPolicy()
+
+        #expect(
+            policy.handlingResult(forAcceptanceBlock: .currentBecameSecure)
+                == .dropOriginalKey(.secureFieldBeforeAccept)
+        )
+        #expect(
+            policy.handlingResult(forAcceptanceBlock: .currentBecameSuppressedField)
+                == .dropOriginalKey(.suppressedFieldBeforeAccept)
+        )
+        #expect(
+            policy.handlingResult(forAcceptanceBlock: .promptTargetChanged)
+                == .dropOriginalKey(.promptTargetChangedBeforeAccept)
+        )
     }
 
     @Test("Unsafe acceptance failures drop the original captured key")

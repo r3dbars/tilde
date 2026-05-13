@@ -28,6 +28,7 @@ for expected in \
   "sendKeyCollisionCount: 0" \
   "promptMutationWithoutUserIntentCount: 0" \
   "wrongContextInsertionCount: 0" \
+  "fullAcceptWithoutProofCount: 0" \
   "suggestionContentViolationCount: 0" \
   "Prompt app proof gate passed."; do
   if ! grep -F "$expected" "$TMP_DIR/pass.txt" >/dev/null; then
@@ -42,6 +43,7 @@ cat >"$FAIL_TRACE" <<'JSONL'
 {"type":"suggestionSuppressed","suggestionID":"send-key","appBundleIdentifier":"com.anthropic.claude-code","reason":"tab-conflict","metadata":{"sendKeyCollision":"true"}}
 {"type":"insertionFailed","suggestionID":"mutation","appBundleIdentifier":"com.anthropic.claudefordesktop","reason":"prompt-mutation-outside-accepted-span","metadata":{"promptMutationWithoutUserIntent":"true"}}
 {"type":"suggestionSuppressed","suggestionID":"wrong-context","appBundleIdentifier":"com.openai.chat","reason":"wrong-app-or-field-before-accept","metadata":{"acceptanceGuardReason":"app-changed-before-accept"}}
+{"type":"suggestionAccepted","suggestionID":"full-accept","appBundleIdentifier":"com.openai.codex","requestMode":"phrase","acceptedText":"unsafe full phrase","metadata":{"acceptMode":"acceptAllVisible","promptSafetyMode":"wordOnly"}}
 {"type":"suggestionSuppressed","suggestionID":"content-policy","appBundleIdentifier":"ru.keepcoder.Telegram","reason":"accepted-text-prompt-action-word","displayedText":"send it","metadata":{"contentPolicyViolation":"true"}}
 {"type":"suggestionSuppressed","suggestionID":"metadata-prompt","appBundleIdentifier":"com.example.UnknownPrompt","reason":"wrong-context","metadata":{"behaviorProfile":"ai_chat"}}
 JSONL
@@ -57,8 +59,9 @@ for expected in \
   "sendKeyCollisionCount: 1" \
   "promptMutationWithoutUserIntentCount: 1" \
   "wrongContextInsertionCount: 2" \
+  "fullAcceptWithoutProofCount: 1" \
   "suggestionContentViolationCount: 1" \
-  "Prompt app proof gate failed with 5 nonzero metric(s)."; do
+  "Prompt app proof gate failed with 6 nonzero metric(s)."; do
   if ! grep -F "$expected" "$TMP_DIR/fail.txt" >/dev/null; then
     echo "prompt proof self-test missing failure output: $expected" >&2
     cat "$TMP_DIR/fail.txt" >&2
@@ -101,6 +104,7 @@ for expected in \
   "sendKeyCollisionCount: 0" \
   "promptMutationWithoutUserIntentCount: 0" \
   "wrongContextInsertionCount: 0" \
+  "fullAcceptWithoutProofCount: 0" \
   "Prompt app proof gate passed."; do
   if ! grep -F "$expected" "$TMP_DIR/browser-chat-pass.txt" >/dev/null; then
     echo "prompt proof self-test missing browser-chat output: $expected" >&2

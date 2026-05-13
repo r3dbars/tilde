@@ -127,6 +127,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if mode.isContinuation,
+           looksLikeRepeatedListMarker(withoutPromptEchoLabel) {
+            return nil
+        }
+
         guard !looksLikeAssistantMeta(withoutPromptEchoLabel) else {
             return nil
         }
@@ -136,6 +141,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         guard !looksLikeUnsafePromptAction(withoutPromptEchoLabel) else {
+            return nil
+        }
+
+        if mode.isContinuation,
+           startsSecondSentence(withoutPromptEchoLabel) {
             return nil
         }
 
@@ -321,6 +331,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("recommendation:")
             || normalized.hasPrefix("return only")
             || normalized.hasPrefix("return exactly")
+            || normalized.hasPrefix("return the exact")
+            || normalized.hasPrefix("return the same")
             || normalized.hasPrefix("rewrite:")
             || normalized.hasPrefix("no spaces")
             || normalized.hasPrefix("continue the current sentence")
@@ -359,6 +371,13 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return Self.genericFillerPrefixes.contains { normalized.hasPrefix($0) }
     }
 
+    private func looksLikeRepeatedListMarker(_ text: String) -> Bool {
+        text.range(
+            of: #"^\s*(?:[-*+]|\d+[\.\)]|\[[ xX]\])\s+"#,
+            options: .regularExpression
+        ) != nil
+    }
+
     private func looksLikeUnsafePromptAction(_ text: String) -> Bool {
         if containsUnsafePromptHiddenOrControlCharacter(text) {
             return true
@@ -376,8 +395,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return true
         }
 
-        return normalized.hasPrefix("press enter")
+        return containsUnsafePromptActionPhrase(normalized)
+            || normalized.hasPrefix("press enter")
             || normalized.hasPrefix("press return")
+            || normalized.hasPrefix("press tab")
+            || normalized.hasPrefix("press option-tab")
+            || normalized.hasPrefix("use backtick")
             || normalized.hasPrefix("hit enter")
             || normalized.hasPrefix("hit return")
             || normalized.hasPrefix("send the prompt")
@@ -386,7 +409,18 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("run this command")
             || normalized.hasPrefix("execute this command")
             || normalized.hasPrefix("execute the command")
+            || normalized.hasPrefix("accept all visible")
+            || normalized.hasPrefix("accept the whole suggestion")
             || Self.unsafePromptActionWords.contains(normalized)
+    }
+
+    private func containsUnsafePromptActionPhrase(_ normalized: String) -> Bool {
+        Self.unsafePromptActionPhrases.contains { phrase in
+            normalized.range(
+                of: #"(?<![a-z0-9])\#(NSRegularExpression.escapedPattern(for: phrase))(?![a-z0-9])"#,
+                options: .regularExpression
+            ) != nil
+        }
     }
 
     private func containsUnsafePromptHiddenOrControlCharacter(_ text: String) -> Bool {
@@ -492,6 +526,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         return Self.adviceOrToneDriftStarters.contains { starter in
             words.starts(with: starter)
         }
+    }
+
+    private func startsSecondSentence(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for index in trimmed.indices where ".!?".contains(trimmed[index]) {
+            let afterBoundary = trimmed.index(after: index)
+            guard afterBoundary < trimmed.endIndex else {
+                continue
+            }
+
+            let remaining = trimmed[afterBoundary...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !remaining.isEmpty {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func looksLikeVisibleUIChromeCandidate(_ text: String, mode: CompletionRequestMode) -> Bool {
@@ -701,6 +753,29 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "submit"
     ]
 
+    private static let unsafePromptActionPhrases = [
+        "accept all visible text",
+        "accept the change",
+        "accept the terms",
+        "accept the whole suggestion",
+        "click send",
+        "execute the command",
+        "execute this command",
+        "hit enter",
+        "hit return",
+        "option-tab",
+        "press enter",
+        "press option-tab",
+        "press return",
+        "press tab",
+        "run this command",
+        "send it",
+        "send the prompt",
+        "submit it",
+        "submit the prompt",
+        "use backtick"
+    ]
+
     private static let unsafePromptHiddenScalars: Set<Unicode.Scalar> = [
         "\u{200B}",
         "\u{200C}",
@@ -733,6 +808,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "boost productivity",
         "absolutely,",
         "certainly,",
+        "comes to life",
+        "comprehensive recovery plan",
         "drive better outcomes",
         "enhance the experience",
         "enhance user experience",
@@ -743,7 +820,10 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "i would like to",
         "i will do that",
         "i'll do that",
+        "implement a comprehensive",
+        "key features and benefits",
         "let me know",
+        "like a formal announcement",
         "leverage the system",
         "make users more productive",
         "maximize efficiency",
@@ -757,6 +837,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "streamline workflows",
         "sure,",
         "that makes a lot of sense",
+        "the key features",
+        "to acknowledge the user",
         "unlock efficiency"
     ]
 
@@ -766,6 +848,8 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["absolutely"],
         ["analyze", "the", "request"],
         ["boost", "productivity"],
+        ["comes", "to", "life"],
+        ["comprehensive", "recovery", "plan"],
         ["drive", "better", "outcomes"],
         ["great", "question"],
         ["happy", "to", "help"],
@@ -779,19 +863,24 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         ["i", "would", "recommend"],
         ["i", "would", "suggest"],
         ["i", "think", "we", "should"],
+        ["implement", "a", "comprehensive"],
         ["it", "is", "important"],
         ["it's", "important"],
         ["let's"],
         ["lets"],
+        ["like", "a", "formal", "announcement"],
         ["make", "sure", "to"],
         ["make", "users", "more", "productive"],
         ["maximize", "efficiency"],
+        ["key", "features", "and", "benefits"],
         ["one", "thing", "to", "consider"],
         ["one", "option", "is"],
         ["next", "action"],
         ["next", "step"],
         ["optimize", "the", "workflow"],
         ["rewrite", "this"],
+        ["the", "key", "features"],
+        ["to", "acknowledge", "the", "user"],
         ["save", "time", "and", "effort"],
         ["seamless", "experience"],
         ["sounds", "great"],

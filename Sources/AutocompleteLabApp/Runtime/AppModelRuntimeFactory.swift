@@ -44,13 +44,21 @@ struct AppModelRuntimeBundle {
 
 enum AppModelRuntimeFactory {
     static let experimentArmDefaultsKey = "AutocompleteLabCurrentExperimentArm"
+    #if DEBUG
+    static let defaultAllowsEnvironmentOverrides = true
+    #else
+    static let defaultAllowsEnvironmentOverrides = false
+    #endif
 
     static func makeRuntime(
         fileManager: FileManager = .default,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        allowEnvironmentOverrides: Bool = defaultAllowsEnvironmentOverrides
     ) -> AppModelRuntimeBundle {
-        let modelOverrideName = environment["AUTOCOMPLETE_LAB_MODEL"]
+        let modelOverrideName = allowEnvironmentOverrides
+            ? environment["AUTOCOMPLETE_LAB_MODEL"]
+            : nil
         let experimentArm = resolvedExperimentArm(environment: environment, defaults: defaults)
         let lengthEnvironment = environment.merging([
             "AUTOCOMPLETE_LAB_EXPERIMENT_ARM": experimentArm.rawValue
@@ -60,7 +68,8 @@ enum AppModelRuntimeFactory {
         let modelDirectoryURL = modelAssetURL(
             for: manifest,
             fileManager: fileManager,
-            environment: environment
+            environment: environment,
+            allowEnvironmentOverrides: allowEnvironmentOverrides
         )
         let assetState = modelAssetState(
             for: manifest,
@@ -77,6 +86,8 @@ enum AppModelRuntimeFactory {
         if plan.canWarmPreferredRuntime {
             runtime = MLXModelRuntime(
                 modelDirectoryURL: modelDirectoryURL,
+                modelManifest: manifest,
+                fileManager: fileManager,
                 usesVisionLanguageFactory: manifest.requiresVisionLanguageFactory,
                 lengthConfiguration: lengthConfiguration
             )
@@ -129,12 +140,16 @@ enum AppModelRuntimeFactory {
             .isEmpty != false
     }
 
-    private static func modelAssetState(
+    static func modelAssetState(
         for manifest: LocalModelAssetManifest,
         at modelDirectoryURL: URL,
         fileManager: FileManager
     ) -> LocalModelAssetState {
         let path = modelDirectoryURL.path
+        if let sourceRevisionError = manifest.source?.immutableRevisionError {
+            return .invalid(path: path, reason: sourceRevisionError)
+        }
+
         var isDirectory = ObjCBool(false)
         guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
             return .missing(expectedPath: path)
@@ -155,21 +170,37 @@ enum AppModelRuntimeFactory {
             return total + size
         }
 
-        return manifest.validatedDirectoryState(
+        let structureState = manifest.validatedDirectoryState(
             path: path,
             isDirectory: isDirectory.boolValue,
             childFileNames: childFileNames,
             modelBytes: modelBytes
         )
+
+        guard structureState.isUsable else {
+            return structureState
+        }
+
+        if let integrityError = ModelAssetIntegrityReceiptValidator.validate(
+            manifest: manifest,
+            modelDirectoryURL: modelDirectoryURL,
+            fileManager: fileManager
+        ) {
+            return .invalid(path: path, reason: integrityError)
+        }
+
+        return structureState
     }
 
     private static func modelAssetURL(
         for manifest: LocalModelAssetManifest,
         fileManager: FileManager,
-        environment: [String: String]
+        environment: [String: String],
+        allowEnvironmentOverrides: Bool
     ) -> URL {
         let baseDirectory: URL
-        if let override = environment["AUTOCOMPLETE_LAB_MODEL_ROOT"]?
+        if allowEnvironmentOverrides,
+           let override = environment["AUTOCOMPLETE_LAB_MODEL_ROOT"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
             baseDirectory = URL(fileURLWithPath: override, isDirectory: true)

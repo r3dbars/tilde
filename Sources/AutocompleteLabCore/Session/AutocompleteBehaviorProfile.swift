@@ -94,8 +94,8 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .email:
             return AutocompleteBehaviorProfile(
                 id: .email,
-                maxVisibleWords: 8,
-                maxGeneratedTokens: 14,
+                maxVisibleWords: 5,
+                maxGeneratedTokens: 11,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesFreshParagraphStart: true,
                     suppressesBlankLine: true
@@ -108,8 +108,8 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .notes:
             return AutocompleteBehaviorProfile(
                 id: .notes,
-                maxVisibleWords: 8,
-                maxGeneratedTokens: 14,
+                maxVisibleWords: 5,
+                maxGeneratedTokens: 11,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesBlankLine: true
                 ),
@@ -134,8 +134,8 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .docsProse:
             return AutocompleteBehaviorProfile(
                 id: .docsProse,
-                maxVisibleWords: 8,
-                maxGeneratedTokens: 14,
+                maxVisibleWords: 5,
+                maxGeneratedTokens: 11,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesFreshParagraphStart: true,
                     suppressesBlankLine: true
@@ -148,8 +148,8 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .bullets:
             return AutocompleteBehaviorProfile(
                 id: .bullets,
-                maxVisibleWords: 8,
-                maxGeneratedTokens: 14,
+                maxVisibleWords: 5,
+                maxGeneratedTokens: 11,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(),
                 promptGuidance: [
                     "Preserve the current bullet marker, checkbox state, numbering style, and indentation.",
@@ -191,8 +191,8 @@ public struct AutocompleteBehaviorProfile: Equatable, Sendable {
         case .aiChat:
             return AutocompleteBehaviorProfile(
                 id: .aiChat,
-                maxVisibleWords: 8,
-                maxGeneratedTokens: 12,
+                maxVisibleWords: 5,
+                maxGeneratedTokens: 9,
                 suppressionDefaults: AutocompleteBehaviorSuppressionDefaults(
                     suppressesQuestions: true,
                     allowsFullAccept: false

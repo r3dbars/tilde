@@ -35,10 +35,28 @@ if [[ -n "${AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS:-}" ]]; then
   SWIFT_JOB_ARGS+=(--jobs "$AUTOCOMPLETE_LAB_SWIFT_BUILD_JOBS")
 fi
 
+running_app_process_rows() {
+  ps ax -o pid=,command= 2>/dev/null |
+    awk -v app_name="$APP_NAME" '
+      {
+        pid = $1
+        command = $0
+        sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", command)
+      }
+      command ~ ("^/.*/" app_name "\\.app/Contents/MacOS/" app_name "([[:space:]]|$)") {
+        print pid "\t" command
+      }
+    '
+}
+
 running_app_pids() {
-  local app_process_pattern
-  app_process_pattern="/[${APP_NAME:0:1}]${APP_NAME:1}.app/Contents/MacOS/$APP_NAME"
-  pgrep -f "$app_process_pattern" 2>/dev/null || true
+  running_app_process_rows | awk -F '\t' '{ print $1 }'
+}
+
+command_matches_binary() {
+  local command="$1"
+  local binary="$2"
+  [[ "$command" == "$binary" || "$command" == "$binary "* ]]
 }
 
 running_app_services() {
@@ -101,7 +119,6 @@ stop_running_apps() {
     launchctl bootout "gui/$(id -u)/$service" >/dev/null 2>&1 || true
   done < <(running_app_services)
 
-  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
   while IFS= read -r pid; do
     [[ -z "$pid" ]] && continue
     kill "$pid" >/dev/null 2>&1 || true
@@ -119,31 +136,41 @@ stop_running_apps() {
 }
 
 current_bundle_is_running() {
+  [[ -n "$(current_bundle_pid)" ]]
+}
+
+current_bundle_pid() {
   local command
   local pid
 
-  while IFS= read -r pid; do
+  while IFS=$'\t' read -r pid command; do
     [[ -z "$pid" ]] && continue
-    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-    if [[ "$command" == "$APP_BINARY" ]]; then
+    if command_matches_binary "$command" "$APP_BINARY"; then
+      echo "$pid"
       return 0
     fi
-  done < <(running_app_pids)
+  done < <(running_app_process_rows)
 
   return 1
+}
+
+pid_is_current_bundle() {
+  local pid="$1"
+  local command
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  command_matches_binary "$command" "$APP_BINARY"
 }
 
 stale_bundle_is_running() {
   local command
   local pid
 
-  while IFS= read -r pid; do
+  while IFS=$'\t' read -r pid command; do
     [[ -z "$pid" ]] && continue
-    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-    if [[ -n "$command" && "$command" != "$APP_BINARY" ]]; then
+    if [[ -n "$command" ]] && ! command_matches_binary "$command" "$APP_BINARY"; then
       return 0
     fi
-  done < <(running_app_pids)
+  done < <(running_app_process_rows)
 
   return 1
 }
@@ -152,16 +179,35 @@ print_running_apps() {
   local command
   local pid
 
-  while IFS= read -r pid; do
+  while IFS=$'\t' read -r pid command; do
     [[ -z "$pid" ]] && continue
-    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
     [[ -z "$command" ]] && continue
     echo "$pid $command" >&2
-  done < <(running_app_pids)
+  done < <(running_app_process_rows)
 }
 
 skip_stale_app_bundle_scan() {
   [[ "${AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+truthy() {
+  [[ "${1:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+proof_launch_requested() {
+  truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION:-}" ||
+    truthy "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" ||
+    [[ -n "${AUTOCOMPLETE_LAB_PROOF_SCENARIO:-}" ]] ||
+    [[ -n "${AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS:-}" ]]
+}
+
+scrub_proof_model_root_if_needed() {
+  if proof_launch_requested && ! truthy "${AUTOCOMPLETE_LAB_ALLOW_PROOF_MODEL_ROOT:-}"; then
+    unset AUTOCOMPLETE_LAB_MODEL_ROOT
+    unset AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS
+    launchctl unsetenv AUTOCOMPLETE_LAB_MODEL_ROOT >/dev/null 2>&1 || true
+    launchctl unsetenv AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS >/dev/null 2>&1 || true
+  fi
 }
 
 if skip_stale_app_bundle_scan; then
@@ -348,6 +394,7 @@ fi
 
 open_app() {
   stop_running_apps
+  scrub_proof_model_root_if_needed
 
   if [[ "${AUTOCOMPLETE_LAB_TRACE:-}" =~ ^(0|false|no|off)$ ]]; then
     launchctl setenv AUTOCOMPLETE_LAB_TRACE "$AUTOCOMPLETE_LAB_TRACE"
@@ -383,6 +430,26 @@ open_app() {
     launchctl setenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS "$AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"
   else
     launchctl unsetenv AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS >/dev/null 2>&1 || true
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
+      "$AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION:-}" =~ ^(1|true|yes|on)$ ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
+      "$AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION >/dev/null 2>&1 || true
+  fi
+
+  if [[ -n "${AUTOCOMPLETE_LAB_PROOF_SCENARIO:-}" ]]; then
+    launchctl setenv AUTOCOMPLETE_LAB_PROOF_SCENARIO "$AUTOCOMPLETE_LAB_PROOF_SCENARIO"
+  else
+    launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SCENARIO >/dev/null 2>&1 || true
   fi
 
   if [[ -n "${AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS:-}" ]]; then
@@ -427,6 +494,7 @@ case "$MODE" in
     for attempt in {1..2}; do
       open_app
       for _ in {1..30}; do
+        current_pid=""
         if stale_bundle_is_running; then
           if [[ "$attempt" == "1" ]]; then
             stop_running_apps
@@ -437,7 +505,8 @@ case "$MODE" in
           print_running_apps
           exit 1
         fi
-        if current_bundle_is_running; then
+        current_pid="$(current_bundle_pid || true)"
+        if [[ -n "$current_pid" ]]; then
           sleep "${AUTOCOMPLETE_LAB_VERIFY_STABILITY_SECONDS:-20}"
           if stale_bundle_is_running; then
             if [[ "$attempt" == "1" ]]; then
@@ -449,8 +518,15 @@ case "$MODE" in
             print_running_apps
             exit 1
           fi
-          current_bundle_is_running
-          exit 0
+          if pid_is_current_bundle "$current_pid"; then
+            exit 0
+          fi
+          if [[ "$attempt" == "1" ]]; then
+            stop_running_apps
+            break
+          fi
+          echo "$APP_NAME exited or restarted during the verification stability window; expected pid $current_pid at $APP_BINARY to keep running" >&2
+          exit 1
         fi
         sleep 1
       done

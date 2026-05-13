@@ -28,7 +28,7 @@ struct AppSettingsTests {
         settings.toggleShortTextSuppression()
         settings.toggleAfterNewlineSuppression()
         settings.minimumCharacters = 0
-        settings.runtimeMode = .mockOnly
+        settings.runtimeMode = .appOwnedLocalModel
 
         let privacy = settings.privacySettings(allowedBundleIdentifiers: ["com.apple.TextEdit"])
         let routing = settings.compatibilityRoutingSettings()
@@ -38,8 +38,8 @@ struct AppSettingsTests {
         #expect(!settings.suppressShortText)
         #expect(!settings.suppressAfterNewline)
         #expect(settings.minimumCharacters == 1)
-        #expect(settings.runtimeMode == .mockOnly)
-        #expect(settings.runtimeMode.menuTitle == "Mock Suggestions Only (Tests)")
+        #expect(settings.runtimeMode == .appOwnedLocalModel)
+        #expect(settings.runtimeMode.menuTitle == "App-Owned Local Model")
         #expect(!privacy.isAppAllowlistEnabled)
         #expect(privacy.minimumCharactersBeforeSuggestion == 1)
         #expect(!privacy.suppressEmptyText)

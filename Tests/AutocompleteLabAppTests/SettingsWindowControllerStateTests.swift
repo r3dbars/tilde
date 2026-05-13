@@ -502,6 +502,81 @@ struct SettingsWindowControllerStateTests {
         #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
     }
 
+    @MainActor
+    @Test("Settings local model detail shows runtime guidance")
+    func settingsLocalModelDetailShowsRuntimeGuidance() {
+        _ = NSApplication.shared
+        let controller = SettingsWindowController(
+            requestPermission: {},
+            openAccessibilitySettings: {},
+            toggleSuggestionsPaused: {},
+            silenceCurrentField: {},
+            performRuntimeAction: { _ in },
+            toggleCurrentApp: {},
+            toggleCurrentAppMirrorMode: {},
+            startCurrentAppProof: {},
+            enableAllApps: {},
+            toggleTracingPaused: {},
+            toggleRawContentTracing: {},
+            toggleScreenshotTracing: {},
+            toggleVisiblePageContext: {},
+            deleteLocalLogs: {},
+            clearLearningData: {},
+            cycleAcceptAllShortcut: {},
+            setAcceptAllShortcut: { _ in },
+            setSuggestionAggressivenessLevel: { _ in },
+            setSuggestionMaxVisibleWords: { _ in }
+        )
+
+        controller.refresh(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: RuntimeReadinessReport(
+                stage: .downloadNeeded,
+                summary: "download needed",
+                detail: "short detail",
+                action: .installModel,
+                isReady: false
+            ),
+            runtimeTargetSummary: "Qwen local - short completions - normal",
+            modelDirectoryPath: "/tmp/SteadyType/Models",
+            modelInstallStatusText: nil,
+            isModelInstallInProgress: false,
+            currentApp: SettingsCurrentAppState(
+                displayName: "TextEdit",
+                bundleIdentifier: "com.apple.TextEdit",
+                supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+                isEnabled: true,
+                disabledAppCount: 0
+            ),
+            fieldControl: SettingsFieldControlState(
+                appDisplayName: "TextEdit",
+                hasFieldTarget: true,
+                isCurrentField: true,
+                isSilenced: false
+            ),
+            privacy: SettingsPrivacyState(
+                tracingPaused: false,
+                rawContentTracingEnabled: false,
+                rawContentTracingExpiresAt: nil,
+                screenshotTracingEnabled: false,
+                screenshotTracingExpiresAt: nil,
+                visiblePageContextEnabled: false,
+                screenCaptureAccessGranted: false,
+                diagnosticsPath: "/tmp/diagnostics.log",
+                tracePath: "/tmp/traces.jsonl"
+            ),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
+            lastSuggestionDecision: "Blocked"
+        )
+
+        #expect(controller.runtimeDetailTextForTesting.contains("pinned Hugging Face revision"))
+        #expect(controller.runtimeDetailTextForTesting.contains("You do not need Ollama or a model server"))
+        #expect(controller.runtimeDetailTextForTesting.contains("Runtime detail: short detail"))
+        #expect(controller.runtimeDetailTextForTesting.contains("Suggestions stay off"))
+    }
+
     @Test("Practice state guides safe TextEdit smoke")
     func practiceStateGuidesSafeTextEditSmoke() {
         let missingPermission = SettingsPracticeState(
@@ -551,6 +626,44 @@ struct SettingsWindowControllerStateTests {
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Tab once"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Esc"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Delete Traces"))
+    }
+
+    @Test("Practice model line exposes missing corrupt and unlinked runtime detail")
+    func practiceModelLineExposesRuntimeFailureDetail() {
+        let reports = [
+            RuntimeReadinessReport(
+                stage: .downloadNeeded,
+                summary: "download needed",
+                detail: "The local model is not installed yet. Expected folder: /tmp/SteadyType/model",
+                action: .installModel
+            ),
+            RuntimeReadinessReport(
+                stage: .repairNeeded,
+                summary: "model folder needs repair",
+                detail: "The local model folder is incomplete: missing tokenizer.json. Folder: /tmp/SteadyType/model",
+                action: .repairModel
+            ),
+            RuntimeReadinessReport(
+                stage: .runtimeUnavailable,
+                summary: "runtime unavailable (MLX)",
+                detail: "This build is missing its local model engine. A separate model server will not fix it.",
+                action: .none
+            )
+        ]
+
+        for report in reports {
+            let state = SettingsPracticeState(
+                isTrusted: true,
+                suggestionsPaused: false,
+                runtimeReport: report,
+                isModelInstallInProgress: false,
+                isTextEditEnabled: true
+            )
+
+            #expect(state.modelText.contains(report.summary))
+            #expect(state.modelText.contains(report.detail ?? ""))
+            #expect(state.modelText.contains("Runtime detail:"))
+        }
     }
 
     @Test("Field control copy scopes silence to the current field")
@@ -690,7 +803,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(quiet.statusText == "Aggressiveness: 1/5 - Quiet")
         #expect(quiet.detailText == "Waits longer and needs stronger scores before showing.")
-        #expect(quiet.maxWordsText == "Words shown: 8")
+        #expect(quiet.maxWordsText == "Words shown: 5")
         #expect(normal.statusText == "Aggressiveness: 2/5 - Normal")
         #expect(normal.detailText == "Shows a little sooner with balanced filtering.")
         #expect(normal.maxWordsText == "Words shown: 4")

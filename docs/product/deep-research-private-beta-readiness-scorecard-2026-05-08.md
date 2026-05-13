@@ -66,9 +66,10 @@ better after this pass, but the missing live proof still blocks beta.
 Current local evidence:
 
 - `./script/package_release.sh --check` found a Developer ID identity and ready
-  model asset, but no `NOTARYTOOL_PROFILE`.
-- `./script/package_release.sh archive` created `dist/AutocompleteLab.zip`,
-  `dist/AutocompleteLab.dmg`, checksums, and `dist/release-proof/`.
+  model asset. Current packaging checks resolve explicit `NOTARYTOOL_PROFILE`
+  first, then stored profile aliases such as `Transcripted`.
+- `./script/package_release.sh archive` creates `dist/SteadyType.zip`,
+  `dist/SteadyType.dmg`, checksums, and `dist/release-proof/`.
 - `./script/private_beta_packet.sh` created and verified
   `dist/private-beta/`.
 - `./script/check_proof_manifest.sh` now passes; the remaining proof problems
@@ -102,7 +103,7 @@ Score movement: +4
 
 ## Implementation Progress
 
-- Added preferred `dist/AutocompleteLab.dmg` packaging next to the existing ZIP
+- Added preferred `dist/SteadyType.dmg` packaging next to the `dist/SteadyType.zip`
   path in `script/package_release.sh`.
 - Added `dist/release-proof/` checklist/checksum/proof output scaffolding for
   codesign, entitlements, notarization, stapler, and Gatekeeper evidence.
@@ -149,8 +150,8 @@ Score movement: +4
 - Weight: 20
 - Current score: 15/20
 - Why this score: The repo can find a Developer ID identity, verify a release
-  app bundle, create `dist/AutocompleteLab.zip`, create a preferred
-  `dist/AutocompleteLab.dmg`, and write release-proof/checksum outputs. The
+  app bundle, create `dist/SteadyType.zip`, create a preferred
+  `dist/SteadyType.dmg`, and write release-proof/checksum outputs. The
   latest local archive path ran successfully, but the artifact is still
   unnotarized. The current checkout has no saved successful notary/stapler
   proof, no quarantine/fresh-VM proof, and no current notary profile in the

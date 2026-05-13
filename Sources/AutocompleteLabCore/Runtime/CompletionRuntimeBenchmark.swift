@@ -94,7 +94,7 @@ public struct EmbeddedRuntimeDecision: Equatable, Sendable {
 
     public static let mvp = EmbeddedRuntimeDecision(
         preferredCandidate: .mlx,
-        fallbackCandidate: .liteRTLM,
+        fallbackCandidate: .unavailable,
         allowsUserManagedServer: false
     )
 }

@@ -7,8 +7,8 @@ Use this before inviting private beta testers.
 - [ ] `./script/beta_readiness.sh --check-only` reports only expected external
   blockers before the full gate.
 - [ ] `./script/beta_readiness.sh` passes.
-- [ ] `dist/SteadyType.zip` exists.
-- [ ] `dist/private-beta/checksums.txt` matches the archive.
+- [ ] `dist/SteadyType.dmg` exists as the primary tester artifact.
+- [ ] `dist/private-beta/checksums.txt` matches the current DMG.
 - [ ] The app is signed and the package check passes.
 - [x] Notarization status is known before sending the build.
 
@@ -47,6 +47,8 @@ Use this before inviting private beta testers.
   stays local, and supported apps are limited.
 - [ ] `docs/product/onboarding-permission-qa-checklist.md` passes on a clean
   macOS user account.
+- [ ] `./script/check_onboarding_walkthrough_proof.py` passes for the current
+  guided TextEdit walkthrough row.
 - [ ] Raw debug tracing is off.
 - [ ] Screenshot tracing is off.
 - [ ] The tester knows how to pause tracing.
@@ -71,7 +73,7 @@ Use this before inviting private beta testers.
   redacted export, triage labels, stop dashboard, and readiness summary
   together.
 - [ ] `dist/private-beta/beta-readiness-summary.md` is regenerated from the
-  exact tester archive after the next app-code change.
+  exact tester DMG after the next app-code change.
 - [ ] The first real tester feedback issue has been triaged with the new labels
   and a redacted report, or there are no tester issues yet.
 
@@ -90,25 +92,25 @@ Use this before inviting private beta testers.
 
 Invite testers only when every applicable box is checked.
 
-## Current Blockers - 2026-05-07
+## Current Blockers - 2026-05-12
 
-- Screenshot-backed proof now exists for Obsidian, Notes title, Notes body, and
-  Notes checklist in `docs/product/visual-placement-screenshots/`, but rerun
-  those proof paths after app code changes before treating this branch as
+- `./script/beta_readiness.sh --check-only` currently blocks on fresh latency
+  proof, current manual app proof refresh, release package proof, and
+  notarized install proof.
+- `./script/manual_smoke_status.sh --strict` still requires current-head proof
+  refresh for 30 target app rows. Do not treat stale screenshot-backed rows as
   beta-current.
-- Manual proof is still pending for Codex one-word no-submit, Claude Code
-  one-word no-submit, and Claude desktop one-word no-submit. Run
-  `script/manual_proof_queue.sh --print` for the exact user-gated proof
-  sequence.
-- Screenshot-backed proof is still pending for Claude Code and Claude desktop.
-- Codex has a screenshot, but still needs one strict same-slice proof that shows
-  screenshot, one-word Tab accept, verified insertion, and no prompt submit.
-- `dist/SteadyType.zip` and `dist/private-beta/checksums.txt` have been
-  created and verified locally, but `dist/` is ignored; recreate them if app
-  code changes after the remaining proof blockers close.
-- Current local `dist/SteadyType.zip` was submitted with
-  `NOTARYTOOL_PROFILE=Transcripted`, accepted by Apple, stapled, validated, and
-  Gatekeeper-accepted on 2026-05-07. Submission:
-  `9b9c09f5-585b-4007-b8e1-55a9ac0f6ae2`.
+- `./script/check_onboarding_walkthrough_proof.py` is expected to block until
+  the guided TextEdit walkthrough table has a current clean-user pass row.
+- `./script/private_beta_packet.sh --check` must be rerun after any app-code or
+  artifact change and now validates the current DMG with stapler and spctl.
+- Current local SteadyType artifacts are not beta-current until a Developer ID
+  signed DMG, Apple notarization, stapling, and fresh-install Gatekeeper proof
+  are all regenerated. A stored notarytool profile may exist under a shared
+  product alias such as `Transcripted`, but older `AutocompleteLab.zip`
+  notarization does not count for the current SteadyType DMG.
+- Recreate `dist/SteadyType.dmg`, the secondary `dist/SteadyType.zip`, and
+  `dist/private-beta/checksums.txt` if app code changes after the remaining
+  proof blockers close.
 - All-history trace eval is diagnostic only; beta proof must use fresh marked
   slices from disposable text.

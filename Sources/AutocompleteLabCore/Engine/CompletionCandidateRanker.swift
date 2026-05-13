@@ -167,7 +167,8 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             score -= visibleText.contains(where: { !$0.isLetter }) ? 0.45 : 0
         case .phraseContinuation:
             score += phraseLengthScore(wordCount)
-            score -= visibleText.hasSuffix("?") ? 0.35 : 0
+            score -= visibleText.hasSuffix("?") ? 0.55 : 0
+            score -= longPhraseAnnoyancePenalty(wordCount)
         case .sentenceContinuation:
             score += sentenceLengthScore(wordCount)
             score -= visibleText.hasSuffix("?") ? 0.35 : 0
@@ -237,14 +238,25 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
 
     private func phraseLengthScore(_ wordCount: Int) -> Double {
         switch wordCount {
-        case 3...4:
+        case 3...5:
             return 0.35
         case 2:
             return 0.26
-        case 5:
-            return 0.18
         default:
             return 0.08
+        }
+    }
+
+    private func longPhraseAnnoyancePenalty(_ wordCount: Int) -> Double {
+        switch wordCount {
+        case 0...5:
+            return 0
+        case 6:
+            return 0.12
+        case 7:
+            return 0.20
+        default:
+            return 0.28
         }
     }
 

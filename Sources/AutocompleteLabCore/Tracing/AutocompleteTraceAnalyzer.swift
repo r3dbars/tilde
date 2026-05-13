@@ -2017,6 +2017,9 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         if promptMetrics.wrongContextInsertionCount > 0 {
             counters["prompt-wrong-context-insertion"] = promptMetrics.wrongContextInsertionCount
         }
+        if promptMetrics.fullAcceptWithoutProofCount > 0 {
+            counters["prompt-full-accept-without-proof"] = promptMetrics.fullAcceptWithoutProofCount
+        }
         if promptMetrics.suggestionContentViolationCount > 0 {
             counters["prompt-suggestion-content-violation"] = promptMetrics.suggestionContentViolationCount
         }

@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 HELP_OUTPUT="$(./script/package_release.sh --help)"
 PROOF_TEMPLATE="$(./script/package_release.sh --print-proof-template)"
+SCRIPT_TEXT="$(cat script/package_release.sh)"
 PATCH_SCRIPT="$(cat script/patch_mlx_swift_lm.sh)"
 MLX_PATCH="$(cat patches/mlx-swift-lm/gemma4-optiq-scaled-linear.patch)"
 BETA_READINESS_SCRIPT="$(cat script/beta_readiness.sh)"
@@ -19,31 +20,89 @@ require_contains() {
   fi
 }
 
-require_contains "$HELP_OUTPUT" "dist/SteadyType.zip plus preferred dist/SteadyType.dmg"
+reject_contains() {
+  local text="$1"
+  local rejected="$2"
+  if grep -Fq -- "$rejected" <<<"$text"; then
+    echo "unsafe package release text remains: $rejected" >&2
+    exit 1
+  fi
+}
+
+require_contains "$HELP_OUTPUT" "primary dist/SteadyType.dmg plus secondary dist/SteadyType.zip"
 require_contains "$HELP_OUTPUT" "--print-proof-template"
+require_contains "$HELP_OUTPUT" "--require-developer-id"
 require_contains "$HELP_OUTPUT" "Submit the DMG to Apple notarytool"
+require_contains "$HELP_OUTPUT" "AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES"
 
 require_contains "$PROOF_TEMPLATE" "Preferred artifact: dist/SteadyType.dmg"
 require_contains "$PROOF_TEMPLATE" "Secondary artifact: dist/SteadyType.zip"
+require_contains "$PROOF_TEMPLATE" "Developer ID app signature: required before private-beta packet"
 require_contains "$PROOF_TEMPLATE" "Notarization status:"
 require_contains "$PROOF_TEMPLATE" "Stapler status:"
 require_contains "$PROOF_TEMPLATE" "Gatekeeper status:"
 require_contains "$PROOF_TEMPLATE" "Fresh quarantined download"
+require_contains "$SCRIPT_TEXT" "2>&1 | tee dist/release-proof/spctl-installed-app.txt"
+require_contains "$SCRIPT_TEXT" 'record_command "$PROOF_DIR/stapler-staple.txt"'
+require_contains "$SCRIPT_TEXT" "gatekeeper_failed=0"
+require_contains "$SCRIPT_TEXT" 'Gatekeeper assessment failed; saved spctl output in $PROOF_DIR'
+require_contains "$SCRIPT_TEXT" 'local source_app="${1:-$APP_BUNDLE}"'
+require_contains "$SCRIPT_TEXT" 'create_zip "$verify_dir/SteadyType.app"'
+require_contains "$SCRIPT_TEXT" '--output-format json >/dev/null 2>&1'
+reject_contains "$SCRIPT_TEXT" "/tmp/autocomplete-notary-profile-check.txt"
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"
 require_contains "$PROOF_TEMPLATE" "uninstall/delete-data instructions"
-
 require_contains "$PATCH_SCRIPT" 'SWIFT_SCRATCH_PATH="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build}"'
 require_contains "$PATCH_SCRIPT" 'patch -d "$SWIFT_SCRATCH_PATH" -p0'
 require_contains "$MLX_PATCH" '--- checkouts/mlx-swift-lm/Libraries/MLXLLM/Models/Gemma4Text.swift'
 require_contains "$BETA_READINESS_SCRIPT" "release proof checksum is stale"
 require_contains "$BETA_READINESS_SCRIPT" "SteadyType.dmg SteadyType.zip"
 
-if env -u NOTARYTOOL_PROFILE ./script/package_release.sh --check --require-notary-profile >/tmp/autocomplete-package-check.txt 2>&1; then
-  echo "package release check should fail when --require-notary-profile is used without NOTARYTOOL_PROFILE" >&2
+MISSING_MODEL_HOME="$(mktemp -d)"
+trap 'rm -rf "$MISSING_MODEL_HOME"' EXIT
+NOTARY_PROFILE_CHECK_PATH="/tmp/autocomplete-notary-profile-check.txt"
+rm -f "$NOTARY_PROFILE_CHECK_PATH"
+if HOME="$MISSING_MODEL_HOME" ./script/package_release.sh --check >/tmp/autocomplete-package-missing-model-check.txt 2>&1; then
+  echo "package release check should fail when the required app-owned model asset is missing" >&2
+  cat /tmp/autocomplete-package-missing-model-check.txt >&2
+  exit 1
+fi
+
+if [[ -e "$NOTARY_PROFILE_CHECK_PATH" ]]; then
+  echo "package release check should not leave a fixed notary profile proof file in /tmp" >&2
+  exit 1
+fi
+
+require_contains "$(cat /tmp/autocomplete-package-missing-model-check.txt)" "Preferred MLX model: blocked - required app-owned model is missing, invalid, corrupt, or not checksum-verified"
+require_contains "$(cat /tmp/autocomplete-package-missing-model-check.txt)" "Run ./script/check_model_asset.py for the exact fix."
+
+if env -u NOTARYTOOL_PROFILE \
+  AUTOCOMPLETE_LAB_NOTARY_PROFILE_CANDIDATES=not-a-real-profile \
+  ./script/package_release.sh --check --require-notary-profile >/tmp/autocomplete-package-check.txt 2>&1; then
+  echo "package release check should fail when no usable notary profile is available" >&2
   cat /tmp/autocomplete-package-check.txt >&2
   exit 1
 fi
 
-require_contains "$(cat /tmp/autocomplete-package-check.txt)" "Notary profile: missing"
+require_contains "$(cat /tmp/autocomplete-package-check.txt)" "Apple notary credentials: blocked - no usable NOTARYTOOL_PROFILE or stored profile alias was found"
+if [[ -e "$NOTARY_PROFILE_CHECK_PATH" ]]; then
+  echo "package release check should not leave a fixed notary profile proof file in /tmp" >&2
+  exit 1
+fi
+
+if SIGN_IDENTITY=not-a-real-developer-id \
+  NOTARYTOOL_PROFILE=not-a-real-profile \
+  ./script/package_release.sh --check --require-developer-id --require-notary-profile >/tmp/autocomplete-package-fake-check.txt 2>&1; then
+  echo "package release check should fail with fake signing and notary env values" >&2
+  cat /tmp/autocomplete-package-fake-check.txt >&2
+  exit 1
+fi
+
+require_contains "$(cat /tmp/autocomplete-package-fake-check.txt)" "Developer ID signing identity: blocked - missing Developer ID Application identity"
+require_contains "$(cat /tmp/autocomplete-package-fake-check.txt)" "Apple notary credentials: blocked - NOTARYTOOL_PROFILE is not usable"
+if [[ -e "$NOTARY_PROFILE_CHECK_PATH" ]]; then
+  echo "package release check should not leave a fixed notary profile proof file in /tmp" >&2
+  exit 1
+fi
 
 echo "Package release self-test passed."

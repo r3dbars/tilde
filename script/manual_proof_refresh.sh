@@ -38,6 +38,9 @@ declare -a TARGETS=(
   "notes-body|Notes body|Notes|com.apple.Notes|notes-body|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
   "notes-checklist|Notes checklist|Notes|com.apple.Notes|notes-checklist|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
   "obsidian|Obsidian|Obsidian|md.obsidian|default|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+  "obsidian-theme|Obsidian theme|Obsidian|md.obsidian|obsidian-theme|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
+  "obsidian-pane|Obsidian panes|Obsidian|md.obsidian|obsidian-pane|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
+  "obsidian-long-note|Obsidian long note|Obsidian|md.obsidian|obsidian-long-note|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
   "chrome-textarea|Chrome textarea|Chrome|com.google.Chrome|textarea|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea"
   "chrome-contenteditable|Chrome contenteditable|Chrome|com.google.Chrome|contenteditable|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable"
   "chrome-production-textarea|Chrome production textarea|Chrome|com.google.Chrome|textarea-public|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public"
@@ -135,7 +138,7 @@ collect_current_proofs() {
     fi
   fi
 
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip}"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType.zip}"
   if [[ -s "$archive_path" ]]; then
     local archive_sha
     archive_sha="$(shasum -a 256 "$archive_path" | awk '{print $1}')"

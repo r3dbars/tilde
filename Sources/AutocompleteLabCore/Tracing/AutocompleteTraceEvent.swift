@@ -224,7 +224,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
 
     public func redactedForDefaultTrace() -> AutocompleteTraceEvent {
         var safeMetadata = metadata.reduce(into: [String: String]()) { result, item in
-            result[item.key] = DiagnosticsMetadataRedactor.logSafeValue(
+            result[item.key] = AutocompleteTracePrivacyFilter.metadataValue(
                 forKey: item.key,
                 value: item.value
             )
@@ -255,10 +255,19 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
-            triggerReason: triggerReason,
+            triggerReason: AutocompleteTracePrivacyFilter.traceSignalValue(
+                triggerReason,
+                rawContentEnabled: false
+            ),
             latencyMilliseconds: latencyMilliseconds,
-            outcome: outcome,
-            reason: reason,
+            outcome: AutocompleteTracePrivacyFilter.traceSignalValue(
+                outcome,
+                rawContentEnabled: false
+            ),
+            reason: AutocompleteTracePrivacyFilter.traceSignalValue(
+                reason,
+                rawContentEnabled: false
+            ),
             metadata: safeMetadata
         )
     }
@@ -430,7 +439,10 @@ public struct RedactedAutocompleteTraceEvent: Codable, Equatable, Sendable, Iden
             appBundleIdentifier: event.appBundleIdentifier,
             fieldIdentity: event.fieldIdentity,
             requestMode: event.requestMode,
-            triggerReason: event.triggerReason,
+            triggerReason: AutocompleteTracePrivacyFilter.traceSignalValue(
+                event.triggerReason,
+                rawContentEnabled: false
+            ),
             textBeforeCursorCharacterCount: event.textBeforeCursor.count,
             textAfterCursorCharacterCount: event.textAfterCursor.count,
             systemPromptCharacterCount: event.systemPrompt.count,
@@ -441,8 +453,14 @@ public struct RedactedAutocompleteTraceEvent: Codable, Equatable, Sendable, Iden
             acceptedTextCharacterCount: event.acceptedText.count,
             remainingVisibleTextCharacterCount: event.remainingVisibleText.count,
             latencyMilliseconds: event.latencyMilliseconds,
-            outcome: event.outcome,
-            reason: event.reason,
+            outcome: AutocompleteTracePrivacyFilter.traceSignalValue(
+                event.outcome,
+                rawContentEnabled: false
+            ),
+            reason: AutocompleteTracePrivacyFilter.traceSignalValue(
+                event.reason,
+                rawContentEnabled: false
+            ),
             hasScreenshot: !event.screenshotPath.isEmpty,
             metadata: Dictionary(
                 uniqueKeysWithValues: event.metadata.map { key, value in
@@ -453,11 +471,13 @@ public struct RedactedAutocompleteTraceEvent: Codable, Equatable, Sendable, Iden
     }
 
     private static func redactedMetadataValue(forKey key: String, value: String) -> String {
-        guard isTraceSafeMetadataKey(key) || DiagnosticsMetadataRedactor.isSensitiveKey(key) else {
+        guard isTraceSafeMetadataKey(key)
+            || AutocompleteTracePrivacyFilter.isTraceSignalMetadataKey(key)
+            || DiagnosticsMetadataRedactor.isSensitiveKey(key) else {
             return DiagnosticValueRedactor.stringSummary(length: value.count)
         }
 
-        return DiagnosticsMetadataRedactor.logSafeValue(forKey: key, value: value)
+        return AutocompleteTracePrivacyFilter.metadataValue(forKey: key, value: value)
     }
 
     private static func isTraceSafeMetadataKey(_ key: String) -> Bool {

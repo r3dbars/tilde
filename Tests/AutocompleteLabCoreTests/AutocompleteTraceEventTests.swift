@@ -50,6 +50,7 @@ struct AutocompleteTraceEventTests {
             suggestionID: "suggestion",
             type: .suggestionPresented,
             fieldIdentity: "com.apple.TextEdit|pid:1|element:2",
+            triggerReason: "violet-trigger-token",
             textBeforeCursor: "secret draft",
             textAfterCursor: "private tail",
             systemPrompt: "secret system prompt",
@@ -59,11 +60,15 @@ struct AutocompleteTraceEventTests {
             displayedText: "secret suggestion",
             acceptedText: "secret",
             remainingVisibleText: "suggestion",
+            outcome: "violet-outcome-token",
+            reason: "violet-reason-token",
             screenshotPath: "/tmp/private.png",
             metadata: [
                 "selectedText": "private selection",
                 "visibleChars": "17",
-                "fieldKind": "multilineCompose"
+                "fieldKind": "multilineCompose",
+                "fieldKindReason": "violet-field-reason-token",
+                "suppressionOutcome": "violet-suppression-outcome-token"
             ]
         )
 
@@ -82,14 +87,20 @@ struct AutocompleteTraceEventTests {
         #expect(redacted.acceptedText.isEmpty)
         #expect(redacted.remainingVisibleText.isEmpty)
         #expect(redacted.screenshotPath.isEmpty)
+        #expect(redacted.triggerReason == DiagnosticValueRedactor.stringSummary(length: "violet-trigger-token".count))
+        #expect(redacted.outcome == DiagnosticValueRedactor.stringSummary(length: "violet-outcome-token".count))
+        #expect(redacted.reason == DiagnosticValueRedactor.stringSummary(length: "violet-reason-token".count))
         #expect(redacted.metadata["textBeforeCursorChars"] == "12")
         #expect(redacted.metadata["displayedTextChars"] == "17")
         #expect(redacted.metadata["acceptedTextChars"] == "6")
         #expect(redacted.metadata["screenshotCaptured"] == "true")
         #expect(redacted.metadata["selectedText"] == "String(17 chars)")
         #expect(redacted.metadata["visibleChars"] == "17")
+        #expect(redacted.metadata["fieldKindReason"] == DiagnosticValueRedactor.stringSummary(length: "violet-field-reason-token".count))
+        #expect(redacted.metadata["suppressionOutcome"] == DiagnosticValueRedactor.stringSummary(length: "violet-suppression-outcome-token".count))
         #expect(!json.contains("secret"))
         #expect(!json.contains("private"))
+        #expect(!json.contains("violet"))
         #expect(!json.contains("/tmp/private.png"))
     }
 

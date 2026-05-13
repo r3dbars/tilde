@@ -12,9 +12,12 @@ MODEL_PATH="$(script/check_model_asset.py --model-root "$MODEL_ROOT" --print-pat
 MISSING_OUTPUT="$TMP_DIR/missing-output.txt"
 REQUIRED_OUTPUT="$TMP_DIR/required-output.txt"
 SMALL_OUTPUT="$TMP_DIR/small-output.txt"
-VALID_OUTPUT="$TMP_DIR/valid-output.txt"
+RECEIPT_OUTPUT="$TMP_DIR/receipt-output.txt"
+KNOWN_OUTPUT="$TMP_DIR/known-output.txt"
+KNOWN_GOOD_OUTPUT="$TMP_DIR/known-good-output.txt"
+CHECK_ENV=(env AUTOCOMPLETE_LAB_MODEL_MINIMUM_WEIGHT_BYTES=8)
 
-if script/check_model_asset.py --model-root "$MODEL_ROOT" >"$MISSING_OUTPUT" 2>&1; then
+if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$MISSING_OUTPUT" 2>&1; then
   echo "model asset self-test expected a missing model to fail" >&2
   exit 1
 fi
@@ -57,7 +60,7 @@ cat >"$MODEL_PATH/tokenizer.json" <<'JSON'
 {"version":"1.0"}
 JSON
 
-if script/check_model_asset.py --model-root "$MODEL_ROOT" >"$REQUIRED_OUTPUT" 2>&1; then
+if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$REQUIRED_OUTPUT" 2>&1; then
   echo "model asset self-test expected missing tokenizer_config.json to fail" >&2
   exit 1
 fi
@@ -73,7 +76,7 @@ cat >"$MODEL_PATH/tokenizer_config.json" <<'JSON'
 JSON
 printf 'tiny' >"$MODEL_PATH/model.safetensors"
 
-if script/check_model_asset.py --model-root "$MODEL_ROOT" >"$SMALL_OUTPUT" 2>&1; then
+if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$SMALL_OUTPUT" 2>&1; then
   echo "model asset self-test expected small weights to fail" >&2
   exit 1
 fi
@@ -84,21 +87,49 @@ if ! grep -F "model weights are too small" "$SMALL_OUTPUT" >/dev/null; then
   exit 1
 fi
 
-python3 - "$MODEL_PATH/model.safetensors" <<'PY'
-from pathlib import Path
-import sys
+printf 'large-enough' >"$MODEL_PATH/model.safetensors"
 
-path = Path(sys.argv[1])
-with path.open("wb") as handle:
-    handle.seek((2 * 1024 * 1024 * 1024) + 1)
-    handle.write(b"\0")
-PY
+if "${CHECK_ENV[@]}" script/check_model_asset.py --model-root "$MODEL_ROOT" >"$RECEIPT_OUTPUT" 2>&1; then
+  echo "model asset self-test expected a missing integrity receipt to fail" >&2
+  exit 1
+fi
 
-script/check_model_asset.py --model-root "$MODEL_ROOT" >"$VALID_OUTPUT"
+if ! grep -F "missing integrity receipt .steadytype-model-integrity.json" "$RECEIPT_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not report the missing integrity receipt" >&2
+  cat "$RECEIPT_OUTPUT" >&2
+  exit 1
+fi
 
-if ! grep -F "Model asset verified: Qwen3.5 4B MLX (qwen35-4b)" "$VALID_OUTPUT" >/dev/null; then
-  echo "model asset self-test did not pass the synthetic valid model" >&2
-  cat "$VALID_OUTPUT" >&2
+if "${CHECK_ENV[@]}" script/check_model_asset.py \
+  --model-root "$MODEL_ROOT" \
+  --write-integrity-receipt \
+  >"$KNOWN_OUTPUT" 2>&1; then
+  echo "model asset self-test expected synthetic files to fail known-good checksum validation" >&2
+  exit 1
+fi
+
+if [[ ! -s "$MODEL_PATH/.steadytype-model-integrity.json" ]]; then
+  echo "model asset self-test did not write an integrity receipt before known-good validation" >&2
+  exit 1
+fi
+
+if ! grep -F ".steadytype-model-integrity.json is missing known-good file: chat_template.jinja" "$KNOWN_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not enforce known-good model checksums" >&2
+  cat "$KNOWN_OUTPUT" >&2
+  exit 1
+fi
+
+if env \
+  AUTOCOMPLETE_LAB_MODEL_MINIMUM_WEIGHT_BYTES=8 \
+  AUTOCOMPLETE_LAB_SKIP_KNOWN_MODEL_CHECKSUMS=1 \
+  script/check_model_asset.py --model-root "$MODEL_ROOT" >"$KNOWN_GOOD_OUTPUT" 2>&1; then
+  echo "model asset self-test expected checksum-skip env to be ignored" >&2
+  exit 1
+fi
+
+if ! grep -F ".steadytype-model-integrity.json is missing known-good file: chat_template.jinja" "$KNOWN_GOOD_OUTPUT" >/dev/null; then
+  echo "model asset self-test did not keep known-good checks enabled with checksum-skip env set" >&2
+  cat "$KNOWN_GOOD_OUTPUT" >&2
   exit 1
 fi
 

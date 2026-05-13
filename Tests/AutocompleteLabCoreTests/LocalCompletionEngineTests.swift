@@ -15,9 +15,26 @@ struct LocalCompletionEngineTests {
 
         let configuration = await runner.lastConfiguration
         #expect(configuration?.model == .qwen35FourB)
-        #expect(configuration?.maxGeneratedTokens == 14)
-        #expect(configuration?.maxVisibleWords == 8)
+        #expect(configuration?.maxGeneratedTokens == 11)
+        #expect(configuration?.maxVisibleWords == 5)
         #expect(configuration?.reasoningEnabled == false)
+    }
+
+    @Test("Passes request mode to runtime runner")
+    func passesRequestModeToRuntimeRunner() async throws {
+        let runner = FakeLocalRunner(result: .success("tion"))
+        let engine = LocalCompletionEngine(runner: runner)
+
+        _ = try await engine.suggestion(
+            for: CompletionRequest(
+                textBeforeCursor: "The explanation needs a simple transi",
+                maxVisibleWords: 1,
+                mode: .wordCompletion
+            )
+        )
+
+        #expect(await runner.lastMode == .wordCompletion)
+        #expect(await runner.lastPrompt?.user.hasSuffix("Suffix:") == true)
     }
 
     @Test("Cleans runtime output and trims repeated typed prefix")
@@ -81,28 +98,16 @@ struct LocalCompletionEngineTests {
         #expect(suggestion == nil)
     }
 
-    @Test("Explicit test fallback can still exercise unmatched words")
-    func explicitTestFallbackSuggestsAfterTrailingWhitespace() async throws {
-        let runner = FakeLocalRunner(result: .success("   "))
-        let engine = LocalCompletionEngine(runner: runner, fallback: MockCompletionEngine())
-
-        let suggestion = try await engine.suggestion(
-            for: CompletionRequest(textBeforeCursor: "I wrote test ", maxVisibleWords: 8)
-        )
-
-        #expect(suggestion?.visibleText == " and keep moving")
-    }
-
-    @Test("Explicit test fallback can still exercise echoed context")
-    func explicitTestFallbackCanExerciseEchoedContext() async throws {
+    @Test("Does not fall back to mock suggestions for echoed context")
+    func doesNotFallbackToMockSuggestionsForEchoedContext() async throws {
         let runner = FakeLocalRunner(result: .success("Hey. How are"))
-        let engine = LocalCompletionEngine(runner: runner, fallback: MockCompletionEngine())
+        let engine = LocalCompletionEngine(runner: runner)
 
         let suggestion = try await engine.suggestion(
             for: CompletionRequest(textBeforeCursor: "Hey. How are we going to do th", maxVisibleWords: 8)
         )
 
-        #expect(suggestion?.visibleText == " and keep moving")
+        #expect(suggestion == nil)
     }
 
     @Test("Keeps cleaned runtime suggestions for unmatched typo fragments")
@@ -137,6 +142,7 @@ struct LocalCompletionEngineTests {
 private actor FakeLocalRunner: LocalCompletionRuntimeRunner {
     private let result: Result<String, any Error>
     private(set) var lastPrompt: CompletionPrompt?
+    private(set) var lastMode: CompletionRequestMode?
     private(set) var lastConfiguration: LocalCompletionRuntimeConfiguration?
 
     init(result: Result<String, any Error>) {
@@ -145,9 +151,11 @@ private actor FakeLocalRunner: LocalCompletionRuntimeRunner {
 
     func complete(
         prompt: CompletionPrompt,
+        mode: CompletionRequestMode,
         configuration: LocalCompletionRuntimeConfiguration
     ) async throws -> String {
         lastPrompt = prompt
+        lastMode = mode
         lastConfiguration = configuration
         return try result.get()
     }

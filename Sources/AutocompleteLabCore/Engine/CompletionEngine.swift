@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CompletionRequestMode: String, Equatable, Sendable {
+public enum CompletionRequestMode: String, Codable, Equatable, Sendable {
     case phraseContinuation
     case sentenceContinuation
     case wordCompletion

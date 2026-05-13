@@ -12,14 +12,26 @@ CHUNK_SIZE="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_CHUNK_SIZE:-5}"
 DELAY_MS="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_DELAY_MS:-250}"
 MIN_EVENT_TAP_SAMPLES="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MIN_EVENT_TAP_SAMPLES:-0}"
 MIN_AX_SAMPLES="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MIN_AX_SAMPLES:-0}"
+LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
+ENERGY_GATE="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_ENERGY_GATE:-1}"
+ENERGY_SAMPLE_SECONDS="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_ENERGY_SAMPLE_SECONDS:-15}"
+ENERGY_SAMPLE_INTERVAL_SECONDS="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_ENERGY_SAMPLE_INTERVAL_SECONDS:-2}"
+ENERGY_MAX_AVERAGE_CPU="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_AVERAGE_CPU:-10}"
+ENERGY_MAX_P95_CPU="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_P95_CPU:-25}"
+ENERGY_MAX_RSS_MB="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_RSS_MB:-6144}"
+ENERGY_MAX_RSS_GROWTH_MB="${AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_RSS_GROWTH_MB:-512}"
 
 usage() {
   cat <<'EOF'
-Usage: script/typing_performance_endurance_soak.sh [--dry-run] [--skip-build] [--strict-ax] [--minutes N] [--chunk-size N] [--delay-ms N] [--require-event-tap-samples N] [--require-ax-samples N]
+Usage: script/typing_performance_endurance_soak.sh [--dry-run] [--skip-build] [--strict-ax] [--skip-energy-gate] [--minutes N] [--chunk-size N] [--delay-ms N] [--require-event-tap-samples N] [--require-ax-samples N]
 
 Runs the long disposable TextEdit typing endurance pass used for the
 Apple-native "typing feels untouched" gate. The default is a 10-minute target.
 EOF
+}
+
+is_truthy() {
+  [[ "$1" =~ ^(1|true|yes|on)$ ]]
 }
 
 require_non_negative_int() {
@@ -52,6 +64,9 @@ while (($#)); do
       ;;
     --strict-ax)
       STRICT_AX=1
+      ;;
+    --skip-energy-gate)
+      ENERGY_GATE=0
       ;;
     --minutes)
       shift
@@ -126,6 +141,12 @@ require_positive_int "$CHUNK_SIZE" "--chunk-size"
 require_positive_int "$DELAY_MS" "--delay-ms"
 require_non_negative_int "$MIN_EVENT_TAP_SAMPLES" "--require-event-tap-samples"
 require_non_negative_int "$MIN_AX_SAMPLES" "--require-ax-samples"
+require_non_negative_int "$ENERGY_SAMPLE_SECONDS" "AUTOCOMPLETE_LAB_ENDURANCE_SOAK_ENERGY_SAMPLE_SECONDS"
+require_positive_int "$ENERGY_SAMPLE_INTERVAL_SECONDS" "AUTOCOMPLETE_LAB_ENDURANCE_SOAK_ENERGY_SAMPLE_INTERVAL_SECONDS"
+require_positive_int "$ENERGY_MAX_AVERAGE_CPU" "AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_AVERAGE_CPU"
+require_positive_int "$ENERGY_MAX_P95_CPU" "AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_P95_CPU"
+require_positive_int "$ENERGY_MAX_RSS_MB" "AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_RSS_MB"
+require_non_negative_int "$ENERGY_MAX_RSS_GROWTH_MB" "AUTOCOMPLETE_LAB_ENDURANCE_SOAK_MAX_RSS_GROWTH_MB"
 
 if ((CHUNK_SIZE > 80)); then
   echo "--chunk-size must be 80 or lower so the soak stays typing-like." >&2
@@ -146,6 +167,12 @@ echo "Typing endurance soak"
 echo "Duration target: $MINUTES minute(s)"
 echo "Computed text: $TARGET_CHARS generated chars"
 echo "Underlying command: script/typing_performance_soak.sh --characters $TARGET_CHARS --chunk-size $CHUNK_SIZE --delay-ms $DELAY_MS --require-event-tap-samples $MIN_EVENT_TAP_SAMPLES --require-ax-samples $MIN_AX_SAMPLES"
+if is_truthy "$ENERGY_GATE"; then
+  echo "Post-run energy gate: enabled; samples live SteadyType process for ${ENERGY_SAMPLE_SECONDS}s after typing"
+  echo "Energy thresholds: average CPU <=${ENERGY_MAX_AVERAGE_CPU}%, p95 CPU <=${ENERGY_MAX_P95_CPU}%, RSS <=${ENERGY_MAX_RSS_MB}MB, RSS growth <=${ENERGY_MAX_RSS_GROWTH_MB}MB"
+else
+  echo "Post-run energy gate: disabled"
+fi
 
 args=(
   --characters "$TARGET_CHARS"
@@ -168,3 +195,21 @@ if ((STRICT_AX == 1)); then
 fi
 
 ./script/typing_performance_soak.sh "${args[@]}"
+
+if ((DRY_RUN == 1)); then
+  exit 0
+fi
+
+if is_truthy "$ENERGY_GATE"; then
+  echo
+  echo "== Endurance energy gate =="
+  ./script/runtime_performance_report.py \
+    --diagnostics-log "$LOG_PATH" \
+    --energy-gate \
+    --sample-duration-seconds "$ENERGY_SAMPLE_SECONDS" \
+    --sample-interval-seconds "$ENERGY_SAMPLE_INTERVAL_SECONDS" \
+    --max-average-cpu "$ENERGY_MAX_AVERAGE_CPU" \
+    --max-p95-cpu "$ENERGY_MAX_P95_CPU" \
+    --max-rss-mb "$ENERGY_MAX_RSS_MB" \
+    --max-rss-growth-mb "$ENERGY_MAX_RSS_GROWTH_MB"
+fi

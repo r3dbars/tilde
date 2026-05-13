@@ -150,7 +150,7 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/obsidian.png")
             ],
-            notes: "Real CodeMirror proof exists, but theme, pane, and long-note variants remain open."
+            notes: "Real CodeMirror default, theme, and pane proof is recorded; long-note current-head proof remains blocked."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.mail",
@@ -205,7 +205,7 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-contenteditable.png"),
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-chat-like.png")
             ],
-            notes: "Local fixtures are proven, but production sites and default AX editor variants remain open."
+            notes: "Local fixtures and public text fields are proven; Google Docs, Notion, browser ChatGPT, Slack, Discord, official CodeMirror, and default Monaco remain blocked until exact proof exists."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.openai.codex",
