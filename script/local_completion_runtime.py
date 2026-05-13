@@ -126,6 +126,7 @@ def system_prompt_text(payload: dict[str, str]) -> str:
             "Never use generic filler like comes to life, key features and benefits, comprehensive plan, or acknowledge the user's point.",
             "When the text discusses Tab or acceptance behavior, continue the safety rule itself; never suggest accepting terms.",
             "If the best continuation sounds like advice, a plan, a command, or a reply to the user, return <NO_SUGGESTION>.",
+            "Ordinary drafting with should or need is allowed when it is not telling the app to act; continue it with concrete next words.",
             "Examples: The draft feels calmer when it -> stays short and specific; The review should focus on -> real user risk; A good reply here would be -> short, kind, and specific.",
             "More examples: The quiet mode should stay quiet mode should stay -> calm in the background; Hold the risky path until -> proof exists; the next step is to -> write a small repro; autocomplete should -> stay silent.",
             "More examples: This bug is easiest to test with -> small fixture case; After the demo, capture the -> open questions quickly; tested the button, tested the button, and now need -> one fresh check; should not echo -> new detail; next words should -> move forward; starts repeating the model starts repeating, prefer -> noisy output blocked; product update should mention -> one clear change; press Tab and confirm -> next word only.",

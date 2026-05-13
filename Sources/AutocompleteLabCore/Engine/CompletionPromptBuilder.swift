@@ -108,6 +108,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         If the user is writing about Tab, acceptance behavior, or shortcuts, continue the safety rule itself; do not suggest accepting terms or permissions.
         When the continuation is a common phrase, put that boring obvious phrase first.
         If the best continuation sounds like advice, a plan, a command, or a reply to the user, return \(Self.noSuggestionToken).
+        Ordinary drafting with should or need is allowed when it is not telling the app to act; continue it with concrete next words.
         Avoid generic filler like "comes to life", "key features and benefits", "comprehensive plan", or "acknowledge the user's point".
         Shape examples: "The draft feels calmer when it" -> "stays short and specific"; "The review should focus on" -> "real user risk"; "A good reply here would be" -> "short, kind, and specific".
         More examples: "quiet mode should stay quiet mode should stay" -> "calm in the background"; "Hold the risky path until" -> "proof exists"; "the next step is to" -> "write a small repro"; "autocomplete should" -> "stay silent".

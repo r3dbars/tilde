@@ -243,15 +243,18 @@ case "reset":
     }
 
 case "insert":
-    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText)),
+    let baseText = focusTextForDocumentEnd(currentText: currentText)
+    let replacementText = baseText + insertionText
+    guard focusAtEnd(editor, text: baseText),
           AXUIElementSetAttributeValue(
               editor,
-              kAXSelectedTextAttribute as CFString,
-              insertionText as CFTypeRef
+              kAXValueAttribute as CFString,
+              replacementText as CFTypeRef
           ) == .success else {
         exit(3)
     }
-    _ = focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: textValue(of: editor)))
+
+    _ = focusAtEnd(editor, text: replacementText)
 
 default:
     fputs("Unknown Obsidian AX editor action: \(action)\n", stderr)

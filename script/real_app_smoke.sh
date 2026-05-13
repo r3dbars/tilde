@@ -456,6 +456,8 @@ SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/auto
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
+SMOKE_QUARANTINE_GUARD_PID=""
+EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
@@ -601,6 +603,12 @@ SWIFT
 }
 
 cleanup_smoke() {
+  if [[ -n "$SMOKE_QUARANTINE_GUARD_PID" ]]; then
+    kill "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
+    wait "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
+    SMOKE_QUARANTINE_GUARD_PID=""
+  fi
+
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
   cleanup_smoke_chrome_pids
@@ -745,6 +753,13 @@ acquire_smoke_lock() {
     fi
 
     if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+      if quarantine_foreign_worktree_pid "$existing_pid"; then
+        sleep 1
+        if ! kill -0 "$existing_pid" >/dev/null 2>&1; then
+          rm -rf "$SMOKE_LOCK_DIR" >/dev/null 2>&1 || true
+        fi
+        continue
+      fi
       if ((SECONDS >= deadline)); then
         echo "Another real app smoke run is already active (pid $existing_pid)." >&2
         echo "Timed out waiting for the real app smoke lock: $SMOKE_LOCK_DIR" >&2
@@ -762,6 +777,154 @@ acquire_smoke_lock() {
   done
 }
 
+quarantine_other_worktrees_enabled() {
+  [[ "${AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES:-}" =~ ^(1|true|yes|on)$ ]]
+}
+
+process_cwd() {
+  local pid="$1"
+  lsof -a -p "$pid" -d cwd -Fn 2>/dev/null |
+    sed -n 's/^n//p' |
+    head -n 1 || true
+}
+
+descendant_pids() {
+  local root_pid="$1"
+  ps -axo pid=,ppid= 2>/dev/null |
+    awk -v root="$root_pid" '
+      {
+        pid = $1
+        ppid = $2
+        if (pid == "") next
+        parent[pid] = ppid
+        seen[pid] = 1
+      }
+      END {
+        changed = 1
+        while (changed) {
+          changed = 0
+          for (pid in seen) {
+            if (parent[pid] == root || family[parent[pid]]) {
+              if (!family[pid]) {
+                family[pid] = 1
+                changed = 1
+              }
+            }
+          }
+        }
+        for (pid in family) {
+          print pid
+        }
+      }
+    '
+}
+
+terminate_pid_tree() {
+  local pid="$1"
+  local child
+
+  descendant_pids "$pid" | sort -rn | while IFS= read -r child; do
+    [[ -n "$child" && "$child" != "$SMOKE_SCRIPT_PID" ]] || continue
+    kill -TERM "$child" >/dev/null 2>&1 || true
+  done
+  kill -TERM "$pid" >/dev/null 2>&1 || true
+}
+
+command_path_is_foreign_worktree() {
+  local command="$1"
+  local worktree_root="$HOME/.codex/worktrees"
+
+  [[ "$command" == "$worktree_root/"* ]] || return 1
+  [[ "$command" == "$ROOT_DIR" || "$command" == "$ROOT_DIR/"* ]] && return 1
+  return 0
+}
+
+cwd_is_foreign_worktree() {
+  local cwd="$1"
+  local worktree_root="$HOME/.codex/worktrees"
+
+  [[ -n "$cwd" && "$cwd" == "$worktree_root/"* ]] || return 1
+  [[ "$cwd" == "$ROOT_DIR" || "$cwd" == "$ROOT_DIR/"* ]] && return 1
+  return 0
+}
+
+quarantine_foreign_worktree_pid() {
+  local pid="$1"
+  local command="${2:-}"
+  local cwd
+
+  quarantine_other_worktrees_enabled || return 1
+  [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" && "$pid" != "$SMOKE_QUARANTINE_GUARD_PID" ]] || return 1
+  kill -0 "$pid" >/dev/null 2>&1 || return 1
+
+  if [[ -z "$command" ]]; then
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  fi
+  cwd="$(process_cwd "$pid")"
+
+  if ! cwd_is_foreign_worktree "$cwd" && ! command_path_is_foreign_worktree "$command"; then
+    return 1
+  fi
+
+  echo "Stopping foreign worktree proof process pid $pid (${cwd:-unknown cwd})." >&2
+  terminate_pid_tree "$pid"
+  return 0
+}
+
+quarantine_foreign_smoke_processes() {
+  local processes="$1"
+  local line
+  local pid
+  local command
+  local stopped=1
+
+  quarantine_other_worktrees_enabled || return 1
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    pid="$(awk '{ print $1 }' <<<"$line")"
+    command="$line"
+    command="${command#"$pid"}"
+    command="${command#"${command%%[![:space:]]*}"}"
+    if quarantine_foreign_worktree_pid "$pid" "$command"; then
+      stopped=0
+    fi
+  done <<<"$processes"
+
+  return "$stopped"
+}
+
+quarantine_foreign_steadytype_apps() {
+  local pid
+  local command
+  local line
+  local rows
+
+  quarantine_other_worktrees_enabled || return 0
+  rows="$(ps ax -o pid=,command= 2>/dev/null |
+    awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' || true)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    pid="$(awk '{ print $1 }' <<<"$line")"
+    command="$line"
+    command="${command#"$pid"}"
+    command="${command#"${command%%[![:space:]]*}"}"
+    quarantine_foreign_worktree_pid "$pid" "$command" >/dev/null 2>&1 || true
+  done <<<"$rows"
+}
+
+start_foreign_worktree_quarantine_guard() {
+  quarantine_other_worktrees_enabled || exclusive_proof_run_enabled || return 0
+  (
+    while true; do
+      terminate_foreign_proof_processes_for_exclusive_run quiet >/dev/null 2>&1 || true
+      quarantine_foreign_smoke_processes "$(other_smoke_process_lines || true)" >/dev/null 2>&1 || true
+      quarantine_foreign_steadytype_apps >/dev/null 2>&1 || true
+      sleep "${AUTOCOMPLETE_LAB_QUARANTINE_GUARD_INTERVAL_SECONDS:-1}"
+    done
+  ) &
+  SMOKE_QUARANTINE_GUARD_PID="$!"
+}
+
 current_process_ancestor_pids() {
   local pid="${BASHPID:-$$}"
   local parent
@@ -777,17 +940,76 @@ current_process_ancestor_pids() {
   printf '%s\n' "${ancestors[@]}"
 }
 
+exclusive_proof_run_enabled() {
+  [[ "$EXCLUSIVE_PROOF_RUN" =~ ^(1|true|yes|on)$ ]]
+}
+
+foreign_proof_process_lines() {
+  local current_pgid
+  current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+
+  ps -axo pid=,pgid=,command= 2>/dev/null |
+    while read -r pid pgid command; do
+      [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+      [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
+
+      case "$command" in
+        *script/real_app_smoke.sh*|*script/manual_proof_refresh.sh*|*script/obsidian_deep_sweep.sh*|*script/build_and_run.sh*|*script/local_quality_audit.py*|*script/local_completion_runtime.py*|*/SteadyType.app/Contents/MacOS/SteadyType*)
+          ;;
+        *)
+          continue
+          ;;
+      esac
+
+      local cwd
+      cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
+      if [[ "$cwd" == "$ROOT_DIR"* ]]; then
+        continue
+      fi
+
+      if [[ "$cwd" == */transcripted-autocomplete-lab* ||
+            "$cwd" == /private/tmp/steadytype-* ||
+            "$command" == */transcripted-autocomplete-lab/* ||
+            "$command" == /private/tmp/steadytype-* ]]; then
+        printf '%s\t%s\t%s\t%s\n' "$pid" "$pgid" "${cwd:-unknown-cwd}" "$command"
+      fi
+    done
+}
+
+terminate_foreign_proof_processes_for_exclusive_run() {
+  local quiet="${1:-0}"
+  exclusive_proof_run_enabled || return 0
+
+  local lines
+  lines="$(foreign_proof_process_lines || true)"
+  [[ -n "$lines" ]] || return 0
+
+  if [[ "$quiet" != "quiet" ]]; then
+    echo "Exclusive proof run terminating foreign proof process(es):" >&2
+    echo "$lines" >&2
+  fi
+
+  local pid pgid cwd command
+  while IFS=$'\t' read -r pid pgid cwd command; do
+    [[ -n "$pid" ]] || continue
+    terminate_pid_tree "$pid"
+  done <<<"$lines"
+
+  sleep 1
+}
+
 other_smoke_process_lines() {
-  local process_list ancestor_pids
+  local process_list ancestor_pids self_pgid
   ancestor_pids="$(current_process_ancestor_pids || true)"
   ancestor_pids="${ancestor_pids//$'\n'/ }"
+  self_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
   if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v ancestorPids="$ancestor_pids" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPgid="$self_pgid" -v ancestorPids="$ancestor_pids" '
     BEGIN {
       split(ancestorPids, rawAncestors, /[[:space:]]+/)
       for (i in rawAncestors) {
@@ -799,9 +1021,11 @@ other_smoke_process_lines() {
     {
       pid = $1
       ppid = $2
+      pgid = $3
       command = $0
       rawLine[pid] = $0
       parent[pid] = ppid
+      processGroup[pid] = pgid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
       directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness|check_current_build_privacy_export)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
@@ -816,6 +1040,7 @@ other_smoke_process_lines() {
       shellHasSmokeScript[pid] = shellWrapper && hasSmokeScript[pid]
     }
     function relatedToSelf(pid, parentPid, depth) {
+      if (selfPgid != "" && processGroup[pid] == selfPgid) return 1
       if (pid == self || pid in ancestor) return 1
       parentPid = pid
       for (depth = 0; depth < 128; depth++) {
@@ -844,6 +1069,10 @@ refuse_other_smoke_processes() {
 
   while true; do
     processes="$(other_smoke_process_lines || true)"
+    if [[ -n "$processes" ]] && quarantine_foreign_smoke_processes "$processes"; then
+      sleep 1
+      continue
+    fi
     if [[ -z "$processes" ]]; then
       return 0
     fi
@@ -8941,9 +9170,12 @@ run_obsidian() {
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
+    press_key_code 53
+    sleep 0.2
     second_start_line="$(line_count "$LOG_PATH")"
     assert_obsidian_smoke_target "Smoke proof feels instant"
-    type_obsidian_raw_smoke_text " and stays"
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12
@@ -8966,7 +9198,7 @@ run_obsidian() {
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   else
     activate_obsidian_for_smoke
-    assert_obsidian_smoke_target "Smoke proof feels instant"
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
@@ -9964,6 +10196,8 @@ if [[ "$APP" == "chrome" ]] && chrome_fixture_is_blocked_high_value_surface "$CH
   exit 1
 fi
 
+terminate_foreign_proof_processes_for_exclusive_run
+start_foreign_worktree_quarantine_guard
 refuse_other_smoke_processes
 acquire_smoke_lock
 
