@@ -19,7 +19,8 @@ fi
 
 MANUAL_LIVE="$TMP_DIR/manual-live.txt"
 PROOF_LIVE="$TMP_DIR/proof-live.txt"
-python3 - "$MANUAL_LIVE" "$PROOF_LIVE" <<'PY'
+LATENCY_SELECTOR_LIVE="$TMP_DIR/latency-selector-live.txt"
+python3 - "$MANUAL_LIVE" "$PROOF_LIVE" "$LATENCY_SELECTOR_LIVE" <<'PY'
 from pathlib import Path
 import sys
 
@@ -31,6 +32,15 @@ Path(sys.argv[1]).write_text(
 Path(sys.argv[2]).write_text(
     "Proof manifest gaps:\n"
     "Proof manifest check failed with 7 issue(s).\n",
+    encoding="utf-8",
+)
+Path(sys.argv[3]).write_text(
+    "AUTOCOMPLETE_LAB_LOG_START_LINE=24210\n"
+    "AUTOCOMPLETE_LAB_TRACE_START_LINE=6225\n"
+    "Latency window: selected latest sampled default runtime launch; "
+    "diagnosticsLine=24211; traceStartLine=6225; diagnosticsEndLine=none; "
+    "traceEndLine=none; firstVisibleSamples=5; modelSamples=20; "
+    "fastWordVisibleSamples=0\n",
     encoding="utf-8",
 )
 PY
@@ -45,6 +55,69 @@ python3 script/check_steadytype_scorecard.py \
 if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/live-pass.txt" >/dev/null; then
   echo "scorecard self-test expected live fixture counts to verify" >&2
   cat "$TMP_DIR/live-pass.txt" >&2
+  exit 1
+fi
+
+python3 script/check_steadytype_scorecard.py \
+  --scorecard "$SCORECARD" \
+  --live \
+  --manual-smoke-output "$MANUAL_LIVE" \
+  --proof-manifest-output "$PROOF_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
+  >"$TMP_DIR/live-latency-pass.txt"
+
+if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/live-latency-pass.txt" >/dev/null; then
+  echo "scorecard self-test expected strict latency selector fixture to verify" >&2
+  cat "$TMP_DIR/live-latency-pass.txt" >&2
+  exit 1
+fi
+
+LATENCY_SELECTOR_RED="$TMP_DIR/latency-selector-red.txt"
+cat >"$LATENCY_SELECTOR_RED" <<'EOF'
+Latency window: latest default runtime launch has too few samples; diagnosticsLine=25000; traceStartLine=6300; diagnosticsEndLine=none; traceEndLine=none; firstVisibleSamples=1; modelSamples=1; fastWordVisibleSamples=0
+EOF
+
+if python3 script/check_steadytype_scorecard.py \
+  --scorecard "$SCORECARD" \
+  --live \
+  --manual-smoke-output "$MANUAL_LIVE" \
+  --proof-manifest-output "$PROOF_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_RED" \
+  >"$TMP_DIR/live-latency-red.txt" 2>&1; then
+  echo "scorecard self-test expected old green latency text to fail against red latest selector output" >&2
+  exit 1
+fi
+
+if ! grep -F "latency selector live output is red: latest default runtime launch has too few samples" "$TMP_DIR/live-latency-red.txt" >/dev/null; then
+  echo "scorecard self-test missing red latest latency selector failure" >&2
+  cat "$TMP_DIR/live-latency-red.txt" >&2
+  exit 1
+fi
+
+LATENCY_SELECTOR_DRIFT="$TMP_DIR/latency-selector-drift.txt"
+python3 - "$LATENCY_SELECTOR_LIVE" "$LATENCY_SELECTOR_DRIFT" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("modelSamples=20", "modelSamples=19", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py \
+  --scorecard "$SCORECARD" \
+  --live \
+  --manual-smoke-output "$MANUAL_LIVE" \
+  --proof-manifest-output "$PROOF_LIVE" \
+  --latency-selector-output "$LATENCY_SELECTOR_DRIFT" \
+  >"$TMP_DIR/live-latency-drift.txt" 2>&1; then
+  echo "scorecard self-test expected stale latency selector count to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "modelSamples claim is 20, live output reports 19" "$TMP_DIR/live-latency-drift.txt" >/dev/null; then
+  echo "scorecard self-test missing stale latency selector count failure" >&2
+  cat "$TMP_DIR/live-latency-drift.txt" >&2
   exit 1
 fi
 
@@ -308,6 +381,14 @@ if python3 script/check_steadytype_scorecard.py \
   --manual-smoke-output "$TMP_DIR/manual-smoke-live.txt" \
   >"$TMP_DIR/live-args.txt" 2>&1; then
   echo "scorecard self-test expected live output files to require --live" >&2
+  exit 1
+fi
+
+if python3 script/check_steadytype_scorecard.py \
+  --scorecard "$SCORECARD" \
+  --latency-selector-output "$LATENCY_SELECTOR_LIVE" \
+  >"$TMP_DIR/latency-live-args.txt" 2>&1; then
+  echo "scorecard self-test expected latency selector output files to require --live" >&2
   exit 1
 fi
 
