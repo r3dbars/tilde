@@ -4807,29 +4807,6 @@ APPLESCRIPT
   wait_for_textedit_document_exact "$window_title" "$expected_text" "$label unchanged" 3
 }
 
-dismiss_textedit_seed_suggestion_if_possible() {
-  local window_title="$1"
-  local expected_text="$2"
-  local label="$3"
-
-  run_osascript_with_timeout 2 "$label" <<'APPLESCRIPT' >/dev/null || true
-tell application "System Events"
-  key code 53
-end tell
-APPLESCRIPT
-
-  if ! wait_for_textedit_document_exact_or_return "$window_title" "$expected_text" 1; then
-    set_textedit_document_text "$window_title" "$expected_text" || true
-  fi
-
-  run_osascript_with_timeout 2 "$label after reset" <<'APPLESCRIPT' >/dev/null || true
-tell application "System Events"
-  key code 53
-end tell
-APPLESCRIPT
-  wait_for_textedit_document_exact_or_return "$window_title" "$expected_text" 1 || true
-}
-
 wait_for_textedit_document_prefix() {
   local window_title="$1"
   local expected_prefix="$2"
@@ -9166,7 +9143,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text trigger_prefix trigger_final attempt max_attempts attempt_had_model attempt_had_visible
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible
   max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
@@ -9185,10 +9162,6 @@ run_textedit_model_latency() {
       echo "TextEdit model latency sample $sample_index trigger word must contain at least two characters." >&2
       exit 1
     fi
-    trigger_prefix="${trigger_text%?}"
-    trigger_final="${trigger_text: -1}"
-    stable_context="${stable_context}${trigger_prefix}"
-
     attempt_had_model=0
     attempt_had_visible=0
     for ((attempt = 1; attempt <= max_attempts; attempt++)); do
@@ -9220,14 +9193,12 @@ run_textedit_model_latency() {
       fi
       move_textedit_caret_to_document_end "$textedit_window_title"
       sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.6}"
-      dismiss_textedit_seed_suggestion_if_possible "$textedit_window_title" "$stable_context" "TextEdit model latency seed suggestion dismissal $sample_index attempt $attempt"
-      move_textedit_caret_to_document_end "$textedit_window_title"
 
       assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index attempt $attempt"
       sample_start="$(line_count "$LOG_PATH")"
       AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
-      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
-        type_textedit_smoke_fragment "$textedit_window_title" "$trigger_final"
+      AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.03}" \
+        type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
       wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt" 5
       trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"
       if wait_for_log_fields_optional "$sample_start" 20 \
