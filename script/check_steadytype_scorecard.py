@@ -118,6 +118,28 @@ PROOF_MANIFEST_LIVE_COUNT = re.compile(
     re.IGNORECASE,
 )
 
+LATENCY_SELECTOR_SCORECARD_PATTERN = re.compile(
+    r"select_latency_window[.]py\b[^|]*?:\s*selected\s+"
+    r"diagnosticsLine=([0-9]+),\s*"
+    r"traceStartLine=([0-9]+),\s*"
+    r"firstVisibleSamples=([0-9]+),\s*"
+    r"modelSamples=([0-9]+),\s*"
+    r"fastWordVisibleSamples=([0-9]+)",
+    re.IGNORECASE,
+)
+
+LATENCY_SELECTOR_LIVE_PATTERN = re.compile(
+    r"\bLatency window:\s*([^;\n]+);\s*"
+    r"diagnosticsLine=([0-9]+);\s*"
+    r"traceStartLine=([0-9]+);\s*"
+    r"diagnosticsEndLine=(?:[0-9]+|none);\s*"
+    r"traceEndLine=(?:[0-9]+|none);\s*"
+    r"firstVisibleSamples=([0-9]+);\s*"
+    r"modelSamples=([0-9]+);\s*"
+    r"fastWordVisibleSamples=([0-9]+)",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class CountClaim:
@@ -125,6 +147,28 @@ class CountClaim:
     count: int
     line_number: int
     snippet: str
+
+
+@dataclass(frozen=True)
+class LatencySelectorClaim:
+    diagnostics_line: int
+    trace_start_line: int
+    first_visible_samples: int
+    model_samples: int
+    fast_word_visible_samples: int
+    line_number: int
+    snippet: str
+
+
+@dataclass(frozen=True)
+class LatencySelectorResult:
+    ok: bool
+    reason: str
+    diagnostics_line: int | None = None
+    trace_start_line: int | None = None
+    first_visible_samples: int | None = None
+    model_samples: int | None = None
+    fast_word_visible_samples: int | None = None
 
 
 def split_markdown_row(line: str) -> list[str]:
@@ -263,6 +307,27 @@ def extract_count_claims(source: str) -> list[CountClaim]:
     return claims
 
 
+def extract_latency_selector_claims(source: str) -> list[LatencySelectorClaim]:
+    claims: list[LatencySelectorClaim] = []
+    for line_number, line in enumerate(source.splitlines(), start=1):
+        snippet = compact_snippet(line)
+        if "select_latency_window.py" not in snippet:
+            continue
+        for match in LATENCY_SELECTOR_SCORECARD_PATTERN.finditer(snippet):
+            claims.append(
+                LatencySelectorClaim(
+                    diagnostics_line=int(match.group(1)),
+                    trace_start_line=int(match.group(2)),
+                    first_visible_samples=int(match.group(3)),
+                    model_samples=int(match.group(4)),
+                    fast_word_visible_samples=int(match.group(5)),
+                    line_number=line_number,
+                    snippet=snippet,
+                )
+            )
+    return claims
+
+
 def read_or_run_output(fixture_path: Path | None, command: list[str]) -> str:
     if fixture_path is not None:
         return fixture_path.read_text(encoding="utf-8")
@@ -275,6 +340,32 @@ def read_or_run_output(fixture_path: Path | None, command: list[str]) -> str:
         check=False,
     )
     return f"{result.stdout}\n{result.stderr}"
+
+
+def strict_latency_selector_command() -> list[str]:
+    return [
+        "./script/select_latency_window.py",
+        "--diagnostics-log",
+        str(Path.home() / "Library/Logs/SteadyType/diagnostics.log"),
+        "--trace-log",
+        str(Path.home() / "Library/Logs/SteadyType/traces.jsonl"),
+        "--expected-asset",
+        "Qwen3.5-4B-4bit",
+        "--min-first-visible-samples",
+        "5",
+        "--min-model-samples",
+        "5",
+        "--required-proof-app",
+        "com.apple.TextEdit",
+        "--required-proof-scenario",
+        "textedit-model-latency",
+        "--required-trace-app",
+        "com.apple.TextEdit",
+        "--required-request-mode",
+        "wordCompletion",
+        "--require-model-backed-visible",
+        "--forbid-fast-word-visible",
+    ]
 
 
 def parse_manual_smoke_live_count(output: str) -> int | None:
@@ -295,15 +386,42 @@ def parse_proof_manifest_live_count(output: str) -> int | None:
     return None
 
 
+def parse_latency_selector_result(output: str) -> LatencySelectorResult:
+    matches = list(LATENCY_SELECTOR_LIVE_PATTERN.finditer(output))
+    if not matches:
+        reason_match = re.search(r"\bLatency window:\s*([^\n]+)", output)
+        reason = reason_match.group(1).strip() if reason_match else "missing Latency window output"
+        return LatencySelectorResult(False, reason)
+
+    match = matches[-1]
+    has_start_lines = (
+        "AUTOCOMPLETE_LAB_LOG_START_LINE=" in output
+        and "AUTOCOMPLETE_LAB_TRACE_START_LINE=" in output
+    )
+    return LatencySelectorResult(
+        ok=has_start_lines and match.group(1).strip().startswith("selected"),
+        reason=match.group(1).strip(),
+        diagnostics_line=int(match.group(2)),
+        trace_start_line=int(match.group(3)),
+        first_visible_samples=int(match.group(4)),
+        model_samples=int(match.group(5)),
+        fast_word_visible_samples=int(match.group(6)),
+    )
+
+
 def validate_live_counts(
     source: str,
     manual_smoke_output: Path | None,
     proof_manifest_output: Path | None,
+    *,
+    latency_selector_output: Path | None = None,
+    require_latency_selector: bool = False,
 ) -> list[str]:
     failures: list[str] = []
     claims = extract_count_claims(source)
     manual_claims = [claim for claim in claims if claim.kind == "manual"]
     proof_manifest_claims = [claim for claim in claims if claim.kind == "proof-manifest"]
+    latency_selector_claims = extract_latency_selector_claims(source)
 
     if manual_claims:
         output = read_or_run_output(
@@ -337,6 +455,42 @@ def validate_live_counts(
                         f"{claim.count}, live output reports {live_count}: {claim.snippet}"
                     )
 
+    if latency_selector_output is not None or require_latency_selector:
+        if not latency_selector_claims:
+            failures.append("latency selector live check requires a select_latency_window.py scorecard claim")
+        output = read_or_run_output(latency_selector_output, strict_latency_selector_command())
+        live_result = parse_latency_selector_result(output)
+        if not live_result.ok:
+            failures.append(f"latency selector live output is red: {live_result.reason}")
+        else:
+            for claim in latency_selector_claims:
+                mismatches: list[str] = []
+                if claim.diagnostics_line != live_result.diagnostics_line:
+                    mismatches.append(
+                        f"diagnosticsLine claim is {claim.diagnostics_line}, live output reports {live_result.diagnostics_line}"
+                    )
+                if claim.trace_start_line != live_result.trace_start_line:
+                    mismatches.append(
+                        f"traceStartLine claim is {claim.trace_start_line}, live output reports {live_result.trace_start_line}"
+                    )
+                if claim.first_visible_samples != live_result.first_visible_samples:
+                    mismatches.append(
+                        f"firstVisibleSamples claim is {claim.first_visible_samples}, live output reports {live_result.first_visible_samples}"
+                    )
+                if claim.model_samples != live_result.model_samples:
+                    mismatches.append(
+                        f"modelSamples claim is {claim.model_samples}, live output reports {live_result.model_samples}"
+                    )
+                if claim.fast_word_visible_samples != live_result.fast_word_visible_samples:
+                    mismatches.append(
+                        f"fastWordVisibleSamples claim is {claim.fast_word_visible_samples}, live output reports {live_result.fast_word_visible_samples}"
+                    )
+                if mismatches:
+                    failures.append(
+                        f"line {claim.line_number}: latency selector claim is stale: "
+                        f"{'; '.join(mismatches)}: {claim.snippet}"
+                    )
+
     return failures
 
 
@@ -346,6 +500,8 @@ def validate_scorecard(
     live: bool = False,
     manual_smoke_output: Path | None = None,
     proof_manifest_output: Path | None = None,
+    latency_selector_output: Path | None = None,
+    require_latency_selector: bool = False,
 ) -> list[str]:
     failures: list[str] = []
     try:
@@ -410,7 +566,15 @@ def validate_scorecard(
             failures.append(f"overall score is {overall}/100, expected rounded average {expected}/100")
 
     if live:
-        failures.extend(validate_live_counts(source, manual_smoke_output, proof_manifest_output))
+        failures.extend(
+            validate_live_counts(
+                source,
+                manual_smoke_output,
+                proof_manifest_output,
+                latency_selector_output=latency_selector_output,
+                require_latency_selector=require_latency_selector,
+            )
+        )
 
     return failures
 
@@ -442,9 +606,23 @@ def main() -> int:
         "--proof-manifest-output",
         help="Read check_proof_manifest output from this file instead of running the live command.",
     )
+    parser.add_argument(
+        "--latency-selector-output",
+        help="Read strict select_latency_window output from this file instead of running the live command.",
+    )
+    parser.add_argument(
+        "--require-latency-selector",
+        action="store_true",
+        help="Require the scorecard latency selector claim to match strict live selector output.",
+    )
     args = parser.parse_args()
-    if (args.manual_smoke_output or args.proof_manifest_output) and not args.live:
-        parser.error("--manual-smoke-output and --proof-manifest-output require --live")
+    if (
+        args.manual_smoke_output
+        or args.proof_manifest_output
+        or args.latency_selector_output
+        or args.require_latency_selector
+    ) and not args.live:
+        parser.error("--manual-smoke-output, --proof-manifest-output, and latency selector live options require --live")
 
     path = Path(args.scorecard)
     if not path.is_absolute():
@@ -452,11 +630,14 @@ def main() -> int:
 
     manual_smoke_output = Path(args.manual_smoke_output) if args.manual_smoke_output else None
     proof_manifest_output = Path(args.proof_manifest_output) if args.proof_manifest_output else None
+    latency_selector_output = Path(args.latency_selector_output) if args.latency_selector_output else None
     failures = validate_scorecard(
         path,
         live=args.live,
         manual_smoke_output=manual_smoke_output,
         proof_manifest_output=proof_manifest_output,
+        latency_selector_output=latency_selector_output,
+        require_latency_selector=args.require_latency_selector or latency_selector_output is not None,
     )
     if failures:
         print("SteadyType scorecard check failed:", file=sys.stderr)
