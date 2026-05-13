@@ -118,6 +118,22 @@ check_notarized_install_proof() {
     done
   fi
 
+  local archive_path="$ROOT_DIR/dist/SteadyType.zip"
+  if [[ -s "$archive_path" ]]; then
+    local verify_dir
+    verify_dir="$(mktemp -d)"
+    if ditto -x -k "$archive_path" "$verify_dir" &&
+      [[ -d "$verify_dir/SteadyType.app" ]]; then
+      if ! ./script/check_app_bundle.sh --release "$verify_dir/SteadyType.app"; then
+        failed=1
+      fi
+    else
+      echo "release archive cannot be expanded for signature proof: $archive_path"
+      failed=1
+    fi
+    rm -rf "$verify_dir"
+  fi
+
   if ((failed > 0)); then
     return 1
   fi
@@ -241,6 +257,10 @@ echo
 echo "== Release package =="
 ./script/package_release.sh --check
 ./script/package_release.sh archive
+
+echo
+echo "== Notarized install proof =="
+check_notarized_install_proof
 
 echo
 echo "== Private beta packet =="
