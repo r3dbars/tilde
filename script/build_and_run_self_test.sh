@@ -44,6 +44,7 @@ require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION"
 require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
 require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
 require_contains "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
+require_contains "AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING"
 require_contains 'current_pid="$(current_bundle_pid || true)"'
 require_contains 'pid_is_current_bundle "$current_pid"'
 require_contains "exited or restarted during the verification stability window"

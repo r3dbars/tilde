@@ -74,6 +74,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null ||
@@ -200,10 +201,12 @@ if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/
    ! grep -F 'PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_WORD_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'launchctl unsetenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof scenario cleanup" >&2
   exit 1
 fi
