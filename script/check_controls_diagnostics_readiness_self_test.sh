@@ -28,6 +28,8 @@ reject_contains() {
 require_contains "$READINESS_SCRIPT" 'run_logged_check "Current build privacy export proof"'
 require_contains "$READINESS_SCRIPT" 'check_controls_diagnostics_readiness_self_test.sh'
 require_contains "$READINESS_SCRIPT" 'DiagnosticsTypingHealthTests'
+require_contains "$READINESS_SCRIPT" "SwiftPM module SDK mismatch detected; cleaning package cache and retrying controls tests."
+require_contains "$READINESS_SCRIPT" 'swift package clean'
 reject_contains "$READINESS_SCRIPT" 'run_check "Current build privacy export proof"'
 
 require_contains "$PRIVACY_SCRIPT" 'BUILD_LOG=/tmp/autocomplete-current-build-privacy-build.log'

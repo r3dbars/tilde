@@ -70,7 +70,23 @@ require_executable() {
 
 run_swift_tests() {
   local filter="$1"
+  local first_attempt_log="$LOG_DIR/swift-controls-first-attempt.log"
 
+  if [[ "$SWIFT_TEST_ARGS_CONFIGURED" == "1" ]]; then
+    swift test "${SWIFT_TEST_ARGS[@]}" --filter "$filter" >"$first_attempt_log" 2>&1 && return 0
+  else
+    swift test --filter "$filter" >"$first_attempt_log" 2>&1 && return 0
+  fi
+
+  local first_status=$?
+  cat "$first_attempt_log" >&2
+
+  if ! grep -E "cannot load module '.*' built with SDK '.*' when using SDK" "$first_attempt_log" >/dev/null; then
+    return "$first_status"
+  fi
+
+  echo "SwiftPM module SDK mismatch detected; cleaning package cache and retrying controls tests." >&2
+  swift package clean >&2
   if [[ "$SWIFT_TEST_ARGS_CONFIGURED" == "1" ]]; then
     swift test "${SWIFT_TEST_ARGS[@]}" --filter "$filter"
   else
