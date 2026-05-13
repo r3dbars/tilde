@@ -250,8 +250,6 @@ cat >"$TARGET_DIAGNOSTICS_LOG" <<'LOG'
 2026-05-12T13:00:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 2026-05-12T13:05:00Z app-proof-mode-started app=com.apple.TextEdit
 2026-05-12T13:05:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
-2026-05-12T13:10:00Z app-proof-mode-started app=com.apple.Notes
-2026-05-12T13:10:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 LOG
 
 cat >"$TARGET_TRACE_LOG" <<'LOG'
@@ -260,7 +258,6 @@ cat >"$TARGET_TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T13:05:03Z","sessionID":"session","suggestionID":"textedit-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"candidateSelectionSource":"app-model-result"}}
 {"timestamp":"2026-05-12T13:05:04Z","sessionID":"session","suggestionID":"textedit-two","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
 {"timestamp":"2026-05-12T13:05:05Z","sessionID":"session","suggestionID":"textedit-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{}}
-{"timestamp":"2026-05-12T13:10:02Z","sessionID":"session","suggestionID":"notes-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.Notes","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-word-fallback"}}
 LOG
 
 TARGET_WINDOW="$(
@@ -356,8 +353,6 @@ SCENARIO_TRACE_LOG="$TMP_DIR/scenario-traces.jsonl"
 cat >"$SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
 2026-05-12T14:00:00Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-model-latency
 2026-05-12T14:00:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
-2026-05-12T14:05:00Z app-proof-mode-started app=com.apple.TextEdit
-2026-05-12T14:05:01Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
 LOG
 
 cat >"$SCENARIO_TRACE_LOG" <<'LOG'
@@ -367,8 +362,6 @@ cat >"$SCENARIO_TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-12T14:00:05Z","sessionID":"session","suggestionID":"scenario-two","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
 {"timestamp":"2026-05-12T14:00:06Z","sessionID":"session","suggestionID":"scenario-phrase","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":140,"metadata":{"totalGenerationLatencyMilliseconds":"140"}}
 {"timestamp":"2026-05-12T14:00:07Z","sessionID":"session","suggestionID":"scenario-phrase","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":150,"metadata":{"candidateSelectionSource":"app-model-result"}}
-{"timestamp":"2026-05-12T14:05:02Z","sessionID":"session","suggestionID":"generic-one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":100,"metadata":{"totalGenerationLatencyMilliseconds":"100"}}
-{"timestamp":"2026-05-12T14:05:03Z","sessionID":"session","suggestionID":"generic-one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":110,"metadata":{"candidateSelectionSource":"app-model-result"}}
 LOG
 
 SCENARIO_WINDOW="$(
@@ -395,6 +388,36 @@ fi
 if ! grep -F "firstVisibleSamples=2; modelSamples=2" "$TMP_DIR/scenario-window.err" >/dev/null; then
   echo "latency window self-test did not exclude phrase-continuation rows from model-latency scenario counts" >&2
   cat "$TMP_DIR/scenario-window.err" >&2
+  exit 1
+fi
+
+STALE_SCENARIO_DIAGNOSTICS_LOG="$TMP_DIR/stale-scenario-diagnostics.log"
+STALE_SCENARIO_TRACE_LOG="$TMP_DIR/stale-scenario-traces.jsonl"
+cp "$SCENARIO_DIAGNOSTICS_LOG" "$STALE_SCENARIO_DIAGNOSTICS_LOG"
+cp "$SCENARIO_TRACE_LOG" "$STALE_SCENARIO_TRACE_LOG"
+cat >>"$STALE_SCENARIO_DIAGNOSTICS_LOG" <<'LOG'
+2026-05-12T14:05:30Z app-proof-mode-ended app=com.apple.TextEdit reason=expired
+2026-05-12T14:06:00Z runtime-bootstrap activeCandidate=mlx allowsUserManagedServer=false asset=Qwen3.5-4B-4bit modelOverride= nativeRuntimeAvailable=true
+LOG
+
+if script/select_latency_window.py \
+  --diagnostics-log "$STALE_SCENARIO_DIAGNOSTICS_LOG" \
+  --trace-log "$STALE_SCENARIO_TRACE_LOG" \
+  --min-first-visible-samples 2 \
+  --min-model-samples 2 \
+  --required-proof-app com.apple.TextEdit \
+  --required-proof-scenario textedit-model-latency \
+  --required-trace-app com.apple.TextEdit \
+  --required-request-mode wordCompletion \
+  --require-model-backed-visible \
+  --forbid-fast-word-visible 2>"$TMP_DIR/stale-scenario.err" >/dev/null; then
+  echo "latency window self-test expected old model-latency proof to fail after a newer runtime launch" >&2
+  exit 1
+fi
+
+if ! grep -F "latest runtime launch is newer than the required proof launch" "$TMP_DIR/stale-scenario.err" >/dev/null; then
+  echo "latency window self-test did not reject stale proof after a newer runtime launch" >&2
+  cat "$TMP_DIR/stale-scenario.err" >&2
   exit 1
 fi
 

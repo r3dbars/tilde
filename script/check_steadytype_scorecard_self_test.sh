@@ -75,6 +75,57 @@ if ! grep -F "Diagnostics: 100/100 requires resolved row gates" "$TMP_DIR/perfec
   exit 1
 fi
 
+PERFECT_RUN_AGAIN="$TMP_DIR/perfect-run-again.md"
+python3 - "$PERFECT_RUN_AGAIN" <<'PY'
+from pathlib import Path
+import sys
+
+areas = [
+    "Suggestion quality",
+    "Placement",
+    "Tab safety",
+    "Latency",
+    "Privacy",
+    "App coverage",
+    "Onboarding",
+    "Controls",
+    "Diagnostics",
+    "Model readiness",
+    "Beta readiness",
+    "Test/proof coverage",
+]
+
+lines = [
+    "# Scorecard",
+    "",
+    "Overall score: 100/100.",
+    "",
+    "| Area | Score | Evidence | Why It Is Not Higher | Next Proof |",
+    "| --- | --- | --- | --- | --- |",
+]
+for area in areas:
+    next_proof = "`./script/check.sh`: passed gate."
+    if area == "Latency":
+        next_proof = "Run `./script/check.sh` again."
+    lines.append(
+        f"| {area} | 100/100 | `./script/check.sh`: passed. | Complete. | {next_proof} |"
+    )
+
+Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py --scorecard "$PERFECT_RUN_AGAIN" >"$TMP_DIR/perfect-run-again.txt" 2>&1; then
+  echo "scorecard self-test expected 100/100 row with future run proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency: 100/100 requires resolved row gates" "$TMP_DIR/perfect-run-again.txt" >/dev/null ||
+   ! grep -F "unfinished next proof" "$TMP_DIR/perfect-run-again.txt" >/dev/null; then
+  echo "scorecard self-test missing future run proof 100/100 failure" >&2
+  cat "$TMP_DIR/perfect-run-again.txt" >&2
+  exit 1
+fi
+
 MISSING_AREA="$TMP_DIR/missing-area.md"
 grep -v '^| Model readiness |' "$SCORECARD" >"$MISSING_AREA"
 

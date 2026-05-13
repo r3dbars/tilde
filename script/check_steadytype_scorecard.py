@@ -83,7 +83,7 @@ PERFECT_SCORE_UNRESOLVED_PATTERNS = (
 )
 
 PERFECT_SCORE_NEXT_PROOF_ACTION = re.compile(
-    r"^\s*(?:add|close|finish|produce|record|refresh|rerun\b.*\bafter\b|notarize|staple)\b"
+    r"^\s*(?:add|check|close|finish|notarize|produce|record|refresh|recheck|rerun|run|staple|validate|verify)\b"
 )
 
 
