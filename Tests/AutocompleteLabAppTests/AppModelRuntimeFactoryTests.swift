@@ -139,6 +139,42 @@ struct AppModelRuntimeFactoryTests {
         ))
     }
 
+    @Test("Rejects mutable source revisions before model lookup")
+    func rejectsMutableSourceRevisionsBeforeModelLookup() {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("steadytype-runtime-mutable-revision-\(UUID().uuidString)", isDirectory: true)
+        let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        let manifest = LocalModelAssetManifest(
+            model: .qwen35FourB,
+            runtimeCandidate: .mlx,
+            cacheDirectoryName: "Models/Test/MLX",
+            fileName: "test-model",
+            source: LocalModelAssetSource(
+                repoID: "mlx-community/Test",
+                revision: "main",
+                allowPatterns: ["*.safetensors", "config.json"]
+            ),
+            expectedMinimumBytes: 1,
+            requiredFileNames: ["config.json"]
+        )
+
+        let state = AppModelRuntimeFactory.modelAssetState(
+            for: manifest,
+            at: modelURL,
+            fileManager: fileManager
+        )
+
+        #expect(state == .invalid(
+            path: modelURL.path,
+            reason: LocalModelAssetSource.immutableRevisionRequirement
+        ))
+    }
+
     @Test("MLX warm revalidates source-backed integrity before loading")
     func mlxWarmRevalidatesSourceBackedIntegrityBeforeLoading() async throws {
         let fileManager = FileManager.default
@@ -198,6 +234,9 @@ struct AppModelRuntimeFactoryTests {
         let missingReason = "integrity receipt missing expected file tokenizer.json"
         #expect(MLXModelRuntime.integrityFailureCode(for: missingReason) == "missing-file")
         #expect(MLXModelRuntime.integrityFailureFile(for: missingReason) == "tokenizer.json")
+
+        let mutableRevisionReason = LocalModelAssetSource.immutableRevisionRequirement
+        #expect(MLXModelRuntime.integrityFailureCode(for: mutableRevisionReason) == "mutable-revision")
 
         #expect(MLXModelRuntime.integrityFailureCode(for: "some new integrity failure") == "unknown")
         #expect(MLXModelRuntime.integrityFailureFile(for: "some new integrity failure") == nil)
