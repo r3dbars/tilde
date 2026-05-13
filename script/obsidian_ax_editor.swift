@@ -145,6 +145,22 @@ func focusAtEnd(_ editor: AXUIElement, text: String) -> Bool {
     ) == .success
 }
 
+func focusTextForDocumentEnd(currentText: String, fileText: String = proofFileText()) -> String {
+    guard fileText.localizedCaseInsensitiveContains(marker),
+          fileText.utf16.count > currentText.utf16.count else {
+        return currentText
+    }
+
+    if !expectedSuffix.isEmpty {
+        let trimmedFileText = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedFileText.hasSuffix(expectedSuffix) else {
+            return currentText
+        }
+    }
+
+    return fileText
+}
+
 guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
     fputs("Obsidian is not running. Open a disposable smoke note first.\n", stderr)
     exit(3)
@@ -183,14 +199,14 @@ case "assert":
         }
     }
 
-    guard focusAtEnd(editor, text: currentText) else {
+    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText, fileText: fileText)) else {
         fputs("Could not place the Obsidian caret at the disposable editor end.\n", stderr)
         exit(3)
     }
     print("Obsidian smoke target confirmed")
 
 case "focus":
-    guard focusAtEnd(editor, text: currentText) else {
+    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText)) else {
         exit(3)
     }
 
@@ -210,7 +226,7 @@ case "reset":
     }
 
 case "insert":
-    guard focusAtEnd(editor, text: currentText),
+    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText)),
           AXUIElementSetAttributeValue(
               editor,
               kAXSelectedTextAttribute as CFString,
@@ -218,7 +234,7 @@ case "insert":
           ) == .success else {
         exit(3)
     }
-    _ = focusAtEnd(editor, text: textValue(of: editor))
+    _ = focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: textValue(of: editor)))
 
 default:
     fputs("Unknown Obsidian AX editor action: \(action)\n", stderr)
