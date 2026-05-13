@@ -53,6 +53,29 @@ struct RuntimeCancellationCoordinatorTests {
             try coordinator.check(epoch: epoch)
         }
     }
+
+    @Test("Caller cancellation cancels registered operations")
+    func callerCancellationCancelsRegisteredOperations() async {
+        let coordinator = RuntimeCancellationCoordinator()
+        let latch = AsyncLatch()
+        let task = Task {
+            try await coordinator.withRegisteredTask { _ in
+                await latch.signal()
+                try await Task.sleep(for: .seconds(30))
+                return "late"
+            }
+        }
+
+        await latch.wait()
+        #expect(coordinator.activeOperationCount == 1)
+
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await task.value
+        }
+        #expect(coordinator.activeOperationCount == 0)
+    }
 }
 
 private actor AsyncLatch {
