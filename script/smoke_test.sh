@@ -20,6 +20,7 @@ swift test
 ./script/real_app_smoke_self_test.sh
 ./script/manual_proof_queue_self_test.sh
 ./script/manual_proof_refresh_self_test.sh
+./script/check_onboarding_walkthrough_proof_self_test.sh
 ./script/check_score_targets_self_test.sh
 ./script/scorecard_goal_loop_self_test.sh
 ./script/check_steadytype_scorecard_self_test.sh

@@ -60,7 +60,7 @@ if ! grep -F "Tab safety: contains 'pending', so score must stay <= 75/100" "$TM
 fi
 
 PERFECT_UNRESOLVED="$TMP_DIR/perfect-unresolved.md"
-sed -e 's#Overall score: 77/100\.#Overall score: 78/100.#' \
+sed -e 's#Overall score: 80/100\.#Overall score: 81/100.#' \
   -e 's#| Diagnostics | 90/100 |#| Diagnostics | 100/100 |#' \
   "$SCORECARD" >"$PERFECT_UNRESOLVED"
 
