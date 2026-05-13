@@ -190,7 +190,7 @@ app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_tex
 if "pollTimer?.fireDate" in app_delegate:
     raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
 insert_start = app_delegate.index("private func insertObsidianDirectValueText(")
-insert_end = app_delegate.index("private func moveFrontmostInsertionPointToLineEnd()", insert_start)
+insert_end = app_delegate.index("private func insertObsidianSystemEventsPasteText(", insert_start)
 insert_block = app_delegate[insert_start:insert_end]
 if "focusedTextAreaElementIdentifier" not in insert_block:
     raise SystemExit("Obsidian direct insertion fallback must verify the currently focused AX text area")
@@ -917,27 +917,25 @@ first_long_suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smok
 first_suggestion = source.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"', first_long_suffix)
 if not (first_long_insert < first_long_suffix < first_suggestion):
     raise SystemExit("Obsidian long-note proof must AX-insert the first fragment, verify the disposable file suffix, then wait for the first suggestion")
-first_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"')
-watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', first_assert)
-append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays inst"', watch)
-suffix = source.index('wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels instant and stays inst"', append)
-focus = source.index('move_obsidian_caret_to_document_end', suffix)
-assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', suffix)
+first_preservation = source.index('assert_obsidian_long_note_file_preserved "Smoke proof feels instant"')
+append = source.index('append_obsidian_smoke_note_file_text " and stays inst"', first_preservation)
+watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', append)
+open_note = source.index('open_obsidian_smoke_note_if_configured', watch)
+focus = source.index('move_obsidian_caret_to_document_end', open_note)
+assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', focus)
 branch_end = source.index('\n  else', append)
-if not (first_assert < watch < append < suffix < focus < assertion < branch_end):
-    raise SystemExit("Obsidian long-note proof must start watching before AX-appending the second fragment and reasserting the caret at the note end")
+if not (first_preservation < append < watch < open_note < focus < assertion < branch_end):
+    raise SystemExit("Obsidian long-note proof must append the second fragment through the disposable note file, refocus Obsidian, and reassert the caret at the note end")
 non_long_else = source.index('\n  else', branch_end)
-non_long_dismiss = source.index('press_key_code 53', non_long_else)
-non_long_pause = source.index('sleep 0.2', non_long_dismiss)
-non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_pause)
-non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_watch)
-non_long_append = source.index('AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text " and stays"', non_long_assert)
-non_long_reassert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_append)
-non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_reassert)
+non_long_settle = source.index('settle_obsidian_focus_for_smoke "Obsidian post-accept setup"', non_long_else)
+non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_settle)
+non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_assert)
+non_long_append = source.index('type_obsidian_raw_smoke_text " and stays"', non_long_watch)
+non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_append)
 non_long_full_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_wait)
 non_long_full_start = source.index('full_start_line="$(line_count "$LOG_PATH")"', non_long_full_assert)
-if not (non_long_dismiss < non_long_pause < non_long_watch < non_long_assert < non_long_append < non_long_reassert < non_long_wait < non_long_full_assert < non_long_full_start):
-    raise SystemExit("Obsidian default/theme/pane proof must dismiss stale suggestions, AX-append the second fragment, reassert the AX target, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
+if not (non_long_settle < non_long_assert < non_long_watch < non_long_append < non_long_wait < non_long_full_assert < non_long_full_start):
+    raise SystemExit("Obsidian default/theme/pane proof must settle focus, append the second fragment, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
 PY
 
 if ! grep -F 'insertionMode: .keyEvents' Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift >/dev/null ||
@@ -1003,7 +1001,7 @@ if '"beforeChars=$long_note_expected_before_chars"' in source:
         "real app smoke self-test expected Obsidian long-note proof not to require full-file AX beforeChars"
     )
 
-full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('wait_for_log_fields "$second_start_line"')):]
+full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('wait_for_obsidian_long_note_second_suggestion "$second_start_line"')):]
 full_branch = full_branch[:full_branch.index('else')]
 required = [
     'wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"',
