@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import datetime as dt
+import hashlib
 import os
 import re
 import statistics
@@ -22,7 +23,7 @@ DEFAULT_WARM_SUCCEEDED_MAX_MS = 10000
 BOOTSTRAP_RE = re.compile(
     r"^(?P<timestamp>\S+) runtime-bootstrap .*?\basset=(?P<asset>\S+)"
 )
-LAUNCH_RE = re.compile(r"^(?P<timestamp>\S+) launch\b")
+LAUNCH_RE = re.compile(r"^(?P<timestamp>\S+) launch\b(?P<fields>.*)$")
 TIMING_RE = re.compile(
     r"^(?P<timestamp>\S+) mlx-completion-timing (?P<fields>.*)$"
 )
@@ -140,6 +141,14 @@ def field_value(fields, key):
     return match.group("value")
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def int_field(fields, key):
     value = field_value(fields, key)
     if value is None or value == "none" or not value.isdigit():
@@ -170,11 +179,16 @@ def parse_launches(lines):
     pending_proof_app = None
     pending_proof_scenario = None
     pending_launch_timestamp = None
+    pending_executable_sha256 = None
 
     for line in lines:
         launch_line = LAUNCH_RE.search(line)
         if launch_line:
             pending_launch_timestamp = parse_timestamp(launch_line.group("timestamp"))
+            pending_executable_sha256 = field_value(
+                launch_line.group("fields"),
+                "executableSHA256",
+            )
 
         proof_mode = PROOF_MODE_RE.search(line)
         if proof_mode:
@@ -190,6 +204,7 @@ def parse_launches(lines):
                 "asset": bootstrap.group("asset"),
                 "proofApp": pending_proof_app,
                 "proofScenario": pending_proof_scenario,
+                "executableSHA256": pending_executable_sha256,
                 "timings": [],
                 "presented": [],
                 "modelLoads": [],
@@ -201,6 +216,7 @@ def parse_launches(lines):
             launches.append(current)
             pending_proof_app = None
             pending_proof_scenario = None
+            pending_executable_sha256 = None
             continue
 
         if current is None:
@@ -631,6 +647,14 @@ def main():
     parser.add_argument("--latest", action="store_true", help="show only the latest model launch")
     parser.add_argument("--asset", help="show only launches whose asset contains this text")
     parser.add_argument(
+        "--expected-executable-sha256",
+        help="show only launches whose diagnostics launch line matches this executable hash",
+    )
+    parser.add_argument(
+        "--app-binary",
+        help="hash this app binary and show only matching diagnostics launches",
+    )
+    parser.add_argument(
         "--start-line",
         type=int,
         default=env_line("AUTOCOMPLETE_LAB_LOG_START_LINE"),
@@ -741,6 +765,18 @@ def main():
     )
     if args.asset:
         launches = [launch for launch in launches if args.asset in launch["asset"]]
+    expected_executable_sha256 = (args.expected_executable_sha256 or "").strip().lower()
+    if args.app_binary:
+        app_binary = Path(args.app_binary).expanduser()
+        if not app_binary.is_file():
+            raise SystemExit(f"missing app binary: {app_binary}")
+        expected_executable_sha256 = sha256_file(app_binary)
+    if expected_executable_sha256:
+        launches = [
+            launch
+            for launch in launches
+            if str(launch.get("executableSHA256") or "").lower() == expected_executable_sha256
+        ]
     if args.require_proof_scenario:
         launches = [
             launch
