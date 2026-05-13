@@ -10,6 +10,8 @@ let sourceURL = URL(fileURLWithPath: sourcePath)
 let fileManager = FileManager.default
 let iconsetURL = URL(fileURLWithPath: NSTemporaryDirectory())
     .appendingPathComponent("SteadyType-\(UUID().uuidString).iconset", isDirectory: true)
+let temporaryOutputURL = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("SteadyType-\(UUID().uuidString).icns")
 
 guard let sourceImage = NSImage(contentsOf: sourceURL) else {
     throw NSError(
@@ -21,6 +23,7 @@ guard let sourceImage = NSImage(contentsOf: sourceURL) else {
 
 try fileManager.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
 defer { try? fileManager.removeItem(at: iconsetURL) }
+defer { try? fileManager.removeItem(at: temporaryOutputURL) }
 
 let iconFiles: [(name: String, points: CGFloat, scale: CGFloat)] = [
     ("icon_16x16.png", 16, 1),
@@ -74,7 +77,7 @@ for file in iconFiles {
 try fileManager.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 let process = Process()
 process.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
-process.arguments = ["-c", "icns", iconsetURL.path, "-o", outputURL.path]
+process.arguments = ["-c", "icns", iconsetURL.path, "-o", temporaryOutputURL.path]
 try process.run()
 process.waitUntilExit()
 
@@ -85,3 +88,6 @@ guard process.terminationStatus == 0 else {
         userInfo: [NSLocalizedDescriptionKey: "iconutil failed"]
     )
 }
+
+try? fileManager.removeItem(at: outputURL)
+try fileManager.moveItem(at: temporaryOutputURL, to: outputURL)
