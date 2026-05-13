@@ -5094,6 +5094,12 @@ The diagnostics panel should explain latency proof clea
 Privacy checks should keep typed text local priv
 Onboarding should make permission prompts feel cal
 Beta readiness should require current manual proof fres
+Current proof should reject stale latency windows curr
+The beta packet should include a quiet recovery note recov
+Model readiness should prefer the bundled runtime read
+Diagnostics should keep redacted export proof visi
+Controls should pause suggestions before tester paus
+Tab safety should accept one word without sending subm
 EOF
 }
 
@@ -7591,6 +7597,7 @@ build_if_needed() {
     local build_run_env=(
       AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
       AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
+      AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
     )
     env "${build_run_env[@]}" ./script/build_and_run.sh run
   fi
@@ -7601,7 +7608,9 @@ build_if_needed() {
 
 build_bundle_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 ./script/build_and_run.sh bundle-only
+    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
+      AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1 \
+      ./script/build_and_run.sh bundle-only
   else
     wait_for_current_autocomplete_lab_process
   fi
@@ -9107,7 +9116,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text trigger_prefix trigger_final
   while IFS= read -r fragment; do
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
@@ -9117,6 +9126,13 @@ run_textedit_model_latency() {
       echo "TextEdit model latency sample $sample_index does not contain a stable context plus trigger word." >&2
       exit 1
     fi
+    if ((${#trigger_text} < 2)); then
+      echo "TextEdit model latency sample $sample_index trigger word must contain at least two characters." >&2
+      exit 1
+    fi
+    trigger_prefix="${trigger_text%?}"
+    trigger_final="${trigger_text: -1}"
+    stable_context="${stable_context}${trigger_prefix}"
 
     assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency seed $sample_index"
     clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"
@@ -9145,12 +9161,13 @@ run_textedit_model_latency() {
       echo "TextEdit model latency seed produced no model timing before sample $sample_index."
     fi
     move_textedit_caret_to_document_end "$textedit_window_title"
+    sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.6}"
 
     assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency trigger $sample_index"
     sample_start="$(line_count "$LOG_PATH")"
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
     AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0}" \
-      type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
+      type_textedit_smoke_fragment "$textedit_window_title" "$trigger_final"
     wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index" 5
     trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"
     if wait_for_log_fields_optional "$sample_start" 20 \

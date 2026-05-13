@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SCRIPT_TEXT="$(sed -n '1,560p' script/build_and_run.sh)"
+SCRIPT_TEXT="$(sed -n '1,680p' script/build_and_run.sh)"
 
 require_contains() {
   local expected="$1"
@@ -31,6 +31,9 @@ require_contains "current_bundle_pid()"
 require_contains "pid_is_current_bundle()"
 require_contains "quarantine_stale_app_bundles"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
+require_contains "wait_for_proof_locks_if_needed"
+require_contains "AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE"
+require_contains "Waiting for active proof run before build/run relaunch."
 require_contains '--privacy-export-proof([[:space:]]|$)'
 require_contains "scrub_proof_model_root_if_needed"
 require_contains "AUTOCOMPLETE_LAB_ALLOW_PROOF_MODEL_ROOT"
