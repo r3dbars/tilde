@@ -415,7 +415,8 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'steadytype_app_process_rows' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'current_process_ancestor_pids' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'script/check_current_build_privacy_export.sh' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi

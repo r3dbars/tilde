@@ -218,7 +218,8 @@ if ! grep -F "Another proof process is already active." "$FULL_SMOKE_BLOCKED_OUT
 fi
 
 if ! grep -F 'current_process_ancestor_pids' script/fresh_latency_proof.sh >/dev/null ||
-   ! grep -F 'relatedToSelf(pid)' script/fresh_latency_proof.sh >/dev/null; then
+   ! grep -F 'relatedToSelf(pid)' script/fresh_latency_proof.sh >/dev/null ||
+   ! grep -F 'script/check_current_build_privacy_export.sh' script/fresh_latency_proof.sh >/dev/null; then
   echo "fresh latency proof self-test expected ancestor-only process exclusion" >&2
   exit 1
 fi

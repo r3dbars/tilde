@@ -726,7 +726,7 @@ acquire_smoke_lock() {
 }
 
 current_process_ancestor_pids() {
-  local pid="$$"
+  local pid="${BASHPID:-$$}"
   local parent
   local ancestors=()
 
@@ -750,7 +750,7 @@ other_smoke_process_lines() {
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$$" -v ancestorPids="$ancestor_pids" '
+  awk -v self="${BASHPID:-$$}" -v ancestorPids="$ancestor_pids" '
     BEGIN {
       split(ancestorPids, rawAncestors, /[[:space:]]+/)
       for (i in rawAncestors) {
@@ -766,12 +766,13 @@ other_smoke_process_lines() {
       rawLine[pid] = $0
       parent[pid] = ppid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|check_current_build_privacy_export)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasSmokeScript[pid] = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
-        index(command, "script/build_and_run.sh") > 0
+        index(command, "script/build_and_run.sh") > 0 ||
+        index(command, "script/check_current_build_privacy_export.sh") > 0
       shellHasSmokeScript[pid] = shellWrapper && hasSmokeScript[pid]
     }
     function relatedToSelf(pid, parentPid, depth) {
