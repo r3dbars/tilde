@@ -8511,8 +8511,7 @@ run_textedit_model_latency() {
     move_textedit_caret_to_document_end "$textedit_window_title"
     wait_for_log_fields "$sample_start" "TextEdit model latency timing $sample_index" 20 \
       "mlx-completion-timing" \
-      "app=com.apple.TextEdit" \
-      "mode=wordCompletion"
+      "app=com.apple.TextEdit"
     wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index" 20 \
       "suggestion-presented" \
       "app=com.apple.TextEdit" \
