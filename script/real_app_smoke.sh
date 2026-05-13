@@ -34,6 +34,9 @@ UNDO_RECOVERY_LAUNCHCTL_PREVIOUS=""
 PROOF_DISABLE_FAST_WORD_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=0
 PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+PROOF_DISABLE_WORD_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION"
+PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED=0
+PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS=""
 PROOF_DISABLE_PHRASE_ENV_KEY="AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
 PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=0
 PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
@@ -423,7 +426,7 @@ if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_B
 fi
 
 if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]]; then
-  echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with the fast phrase fallback disabled before sampling." >&2
+  echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with word completions and the fast phrase fallback disabled before sampling." >&2
   usage >&2
   exit 2
 fi
@@ -633,6 +636,14 @@ cleanup_smoke() {
       launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
     else
       launchctl unsetenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ "$PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED" == "1" ]]; then
+    if [[ -n "$PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS" ]]; then
+      launchctl setenv "$PROOF_DISABLE_WORD_ENV_KEY" "$PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS" >/dev/null 2>&1 || true
+    else
+      launchctl unsetenv "$PROOF_DISABLE_WORD_ENV_KEY" >/dev/null 2>&1 || true
     fi
   fi
 
@@ -1507,6 +1518,10 @@ prepare_model_latency_runtime_options() {
 }
 
 prepare_default_model_latency_runtime_options() {
+  if [[ "$PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_WORD_ENV_KEY" 2>/dev/null || true)"
+    PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
   if [[ "$PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" 2>/dev/null || true)"
     PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_WAS_PREPARED=1
@@ -1516,11 +1531,13 @@ prepare_default_model_latency_runtime_options() {
     PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
   fi
 
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1
   export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK=1
   export AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-default-model-latency"
+  launchctl setenv "$PROOF_DISABLE_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
   launchctl setenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
   launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "textedit-default-model-latency" >/dev/null 2>&1 || true
-  echo "TextEdit default model latency proof: fast phrase fallback disabled so every measured phrase sample must hit the local model path."
+  echo "TextEdit default model latency proof: word completions and fast phrase fallback disabled so every measured phrase sample must hit the local model path."
   echo "TextEdit default model latency proof scenario: textedit-default-model-latency"
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
@@ -7360,7 +7377,7 @@ describe_plan() {
         echo "Safety: model latency proof tags the runtime launch with scenario textedit-model-latency so generic TextEdit samples cannot satisfy the beta gate."
       elif [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]]; then
         echo "Safety: default model latency proof seeds stable context into the disposable TextEdit AX target, then types a trailing space through live key events."
-        echo "Safety: default model latency proof disables fast phrase fallback for that launch so local phrase-continuation model timing is required."
+        echo "Safety: default model latency proof disables word completions and fast phrase fallback for that launch so local phrase-continuation model timing is required."
         echo "Safety: default model latency proof tags the runtime launch with scenario textedit-default-model-latency so generic TextEdit samples cannot satisfy the beta gate."
       else
         echo "Safety: proof fragments are typed through System Events key events by default, so the latency proof exercises the live key-capture path."
@@ -7629,6 +7646,7 @@ launch_steadytype_after_chrome_setup() {
     AUTOCOMPLETE_LAB_VISIBLE_WORDS \
     AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
     AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK \
     AUTOCOMPLETE_LAB_PROOF_SCENARIO \
@@ -9124,6 +9142,10 @@ run_textedit_default_model_latency() {
 
   prepare_temporary_app_enablement
   prepare_default_model_latency_runtime_options
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION:-}" != "1" ]]; then
+    echo "TextEdit default model latency requires AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1." >&2
+    exit 1
+  fi
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit default model latency Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit default model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
@@ -9160,8 +9182,6 @@ run_textedit_default_model_latency() {
       exit 1
     fi
     wait_for_textedit_document_exact "$textedit_window_title" "$fragment" "TextEdit default model latency stable context $sample_index" 5
-    move_textedit_caret_to_document_end "$textedit_window_title"
-    dismiss_textedit_proof_suggestion "$textedit_window_title" "$fragment" "TextEdit default model latency seed suggestion dismiss $sample_index"
     move_textedit_caret_to_document_end "$textedit_window_title"
 
     assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit default model latency trigger $sample_index"

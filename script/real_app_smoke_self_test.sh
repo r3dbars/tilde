@@ -54,7 +54,7 @@ script/real_app_smoke.sh textedit-default-model-latency --dry-run >"$TMP_DIR/tex
 if ! grep -F "TextEdit variant: default-model-latency" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
    ! grep -F "default phrase model suggestions" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
    ! grep -F "trailing space through live key events" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
-   ! grep -F "disables fast phrase fallback for that launch" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
+   ! grep -F "disables word completions and fast phrase fallback for that launch" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
    ! grep -F "scenario textedit-default-model-latency" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
    ! grep -F "proof scenario: textedit-default-model-latency" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test did not print the TextEdit default model latency dry-run plan" >&2
@@ -65,7 +65,7 @@ if script/real_app_smoke.sh textedit-default-model-latency --skip-build --dry-ru
   echo "real app smoke self-test expected TextEdit default model latency --skip-build to fail closed" >&2
   exit 1
 fi
-if ! grep -F "must relaunch with the fast phrase fallback disabled" "$TMP_DIR/textedit-default-model-latency-skip-build.txt" >/dev/null; then
+if ! grep -F "must relaunch with word completions and the fast phrase fallback disabled" "$TMP_DIR/textedit-default-model-latency-skip-build.txt" >/dev/null; then
   echo "real app smoke self-test expected TextEdit default model latency --skip-build failure to explain the proof env requirement" >&2
   exit 1
 fi
@@ -82,6 +82,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
 fi
 
 if ! grep -F 'run_textedit_default_model_latency()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit default model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"mode=phraseContinuation"' script/real_app_smoke.sh >/dev/null ||
@@ -129,10 +130,15 @@ if "visible_sample_count >= 5" not in block:
 default_start = source.index('run_textedit_default_model_latency()')
 default_end = source.index('run_chrome_fixture()', default_start)
 default_block = source[default_start:default_end]
-if "dismiss_textedit_proof_suggestion" not in default_block:
-    raise SystemExit("default-model phrase proof must dismiss seed suggestions before measuring the trailing-space trigger")
-if 'wait_for_textedit_document_exact "$window_title" "$expected_text" "$label unchanged"' not in source:
-    raise SystemExit("default-model phrase proof dismissal must verify the seeded TextEdit document is unchanged")
+default_prepare_start = source.index('prepare_default_model_latency_runtime_options()')
+default_prepare_end = source.index('accept_all_shortcut()', default_prepare_start)
+default_prepare_block = source[default_prepare_start:default_prepare_end]
+if "dismiss_textedit_proof_suggestion" in default_block or "key code 53" in default_block:
+    raise SystemExit("default-model phrase proof must not press Escape after seeding context")
+if "prepare_default_model_latency_runtime_options" not in default_block:
+    raise SystemExit("default-model phrase proof must prepare its proof-only runtime flags")
+if "AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1" not in default_prepare_block:
+    raise SystemExit("default-model phrase proof must disable seed word completions before measuring the trailing-space trigger")
 
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "pollTimer?.fireDate" in app_delegate:
@@ -152,8 +158,10 @@ if "Int(CFHash(element)) == elementIdentifier" not in fallback_block:
 PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_WORD_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_DISABLE_FAST_PHRASE_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then

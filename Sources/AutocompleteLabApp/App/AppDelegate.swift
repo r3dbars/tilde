@@ -4972,6 +4972,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
         )
+        let disablesWordCompletionForProof = runtimeProofOptions.disablesWordCompletion(
+            appBundleIdentifier: appBundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        )
         let disablesPhraseContinuationForProof = runtimeProofOptions.disablesPhraseContinuation(
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
@@ -4980,6 +4984,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: appBundleIdentifier,
             activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
         )
+
+        if requestMode == .wordCompletion,
+           disablesWordCompletionForProof {
+            DiagnosticsLog.shared.record(
+                "word-completion-disabled",
+                metadata: [
+                    "app": appBundleIdentifier,
+                    "reason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
+                ]
+            )
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentityDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: "proof-word-completion-disabled",
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                reason: "proof-word-completion-disabled",
+                metadata: [
+                    "renderMode": renderMode.rawValue,
+                    "proofDisableReason": RuntimeProofOptions.disableWordCompletionEnvironmentKey
+                ]
+                .merging(requestMetadata) { current, _ in current }
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                metadata: [
+                    "reason": "proof-word-completion-disabled"
+                ]
+            )
+            setSuggestionDecision("Blocked: proof word completion disabled")
+            hideSuggestion()
+            return
+        }
 
         if requestMode == .wordCompletion,
            !disablesFastWordCompletionForProof {
