@@ -375,6 +375,14 @@ def select_window(
             return Selection(launch, window, reason, True, diagnostics_end_line)
 
         if window.first_visible_samples == 0 and window.model_samples == 0:
+            if required_proof_app or required_proof_scenario:
+                return Selection(
+                    launch,
+                    window,
+                    "latest default runtime launch has too few samples",
+                    False,
+                    diagnostics_end_line,
+                )
             skipped_unsampled_default_launches += 1
             continue
 
