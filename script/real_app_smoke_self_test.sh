@@ -124,6 +124,12 @@ for name in ("raise_textedit_smoke_window", "click_textedit_smoke_window"):
     if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
         raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
 
+frontmost_start = source.index("textedit_frontmost_window_is()")
+frontmost_end = source.index("wait_for_textedit_frontmost_window()", frontmost_start)
+frontmost_block = source[frontmost_start:frontmost_end]
+if 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' not in frontmost_block or 'allowSingleWindowFallback && windows.count == 1' not in frontmost_block:
+    raise SystemExit("TextEdit frontmost proof must honor the single-window fallback")
+
 for name in ("textedit_document_name_exists", "describe_open_textedit_documents", "assert_textedit_frontmost_window", "try_wait_for_frontmost_app"):
     block = function_body(name)
     if "run_osascript_with_timeout" not in block:
