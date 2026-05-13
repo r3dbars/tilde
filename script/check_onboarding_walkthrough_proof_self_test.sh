@@ -27,10 +27,33 @@ MARKDOWN
 PASS_PROOF="$TMP_DIR/pass.md"
 write_proof "$PASS_PROOF"
 script/check_onboarding_walkthrough_proof.py --proof "$PASS_PROOF" >"$TMP_DIR/pass.txt"
+script/check_onboarding_walkthrough_proof.py --print-template >"$TMP_DIR/template.txt"
 
 if ! grep -F "Onboarding walkthrough proof passed" "$TMP_DIR/pass.txt" >/dev/null; then
   echo "onboarding proof self-test expected passing output" >&2
   cat "$TMP_DIR/pass.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Only add a pass row after a real clean-user walkthrough." "$TMP_DIR/template.txt" >/dev/null; then
+  echo "onboarding proof self-test missing real-run warning in template output" >&2
+  cat "$TMP_DIR/template.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "docs/product/onboarding-walkthrough-proof.md" "$TMP_DIR/template.txt" >/dev/null; then
+  echo "onboarding proof self-test missing runbook link in template output" >&2
+  cat "$TMP_DIR/template.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Do not turn a placeholder into \`pass\`" docs/product/onboarding-walkthrough-proof.md >/dev/null; then
+  echo "onboarding proof self-test missing honest-pass warning in runbook" >&2
+  exit 1
+fi
+
+if ! grep -F "./script/check_onboarding_walkthrough_proof.py --print-template" docs/product/onboarding-permission-qa-checklist.md >/dev/null; then
+  echo "onboarding proof self-test missing template command in checklist" >&2
   exit 1
 fi
 
@@ -48,9 +71,33 @@ if script/check_onboarding_walkthrough_proof.py --proof "$PENDING_PROOF" >"$TMP_
   exit 1
 fi
 
-if ! grep -F "row still contains unresolved marker: pending" "$TMP_DIR/pending.txt" >/dev/null; then
-  echo "onboarding proof self-test missing pending failure" >&2
+if ! grep -F "no completed passing walkthrough proof row found" "$TMP_DIR/pending.txt" >/dev/null; then
+  echo "onboarding proof self-test missing no-pass failure" >&2
   cat "$TMP_DIR/pending.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "template: ./script/check_onboarding_walkthrough_proof.py --print-template" "$TMP_DIR/pending.txt" >/dev/null; then
+  echo "onboarding proof self-test missing template hint" >&2
+  cat "$TMP_DIR/pending.txt" >&2
+  exit 1
+fi
+
+PENDING_THEN_PASS="$TMP_DIR/pending-then-pass.md"
+cat >"$PENDING_THEN_PASS" <<MARKDOWN
+# Onboarding Walkthrough Proof
+
+| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |
+| 2026-05-13T12:00:00Z | \`commit:$CURRENT_COMMIT\` | steadytype-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | ready; app-owned MLX; no external server | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Esc dismissed with no text change | Pause stopped suggestions | Delete traces removed local trace/log files | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
+MARKDOWN
+
+script/check_onboarding_walkthrough_proof.py --proof "$PENDING_THEN_PASS" >"$TMP_DIR/pending-then-pass.txt"
+
+if ! grep -F "Onboarding walkthrough proof passed" "$TMP_DIR/pending-then-pass.txt" >/dev/null; then
+  echo "onboarding proof self-test expected placeholder followed by pass to succeed" >&2
+  cat "$TMP_DIR/pending-then-pass.txt" >&2
   exit 1
 fi
 
