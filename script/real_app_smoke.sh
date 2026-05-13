@@ -1841,6 +1841,18 @@ obsidian_smoke_marker_text() {
   printf '%s\n' "$marker"
 }
 
+obsidian_long_note_text_before_trigger() {
+  local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
+  local line
+
+  printf '%s\n' "$marker"
+  for line in $(seq 1 90); do
+    printf 'Autocomplete Lab Obsidian scroll filler line %02d\n' "$line"
+  done
+  printf '%s\n' "$marker"
+  printf 'Smoke proof feel'
+}
+
 obsidian_marker_text_area_count() {
   swift - <<'SWIFT'
 import AppKit
@@ -9195,7 +9207,7 @@ run_obsidian() {
   obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
   first_fragment="Smoke proof feels"
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    first_fragment="moke proof feel"
+    first_fragment=""
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=1
@@ -9252,7 +9264,7 @@ run_obsidian() {
     wait_for_frontmost_app "Obsidian" 8
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    reset_obsidian_smoke_note_file "$obsidian_marker"
+    reset_obsidian_smoke_note_file "$(obsidian_long_note_text_before_trigger)"
     open_obsidian_smoke_note_if_configured
     wait_for_frontmost_app "Obsidian" 8
   fi
@@ -9271,7 +9283,6 @@ run_obsidian() {
   prepare_obsidian_variant_state "$manual_app"
 
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    type_obsidian_raw_smoke_text "$first_fragment"
     set_obsidian_caret_to_value_end
   fi
 
