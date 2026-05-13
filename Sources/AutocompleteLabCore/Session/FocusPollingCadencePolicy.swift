@@ -68,20 +68,39 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
         hasVisibleSuggestion: Bool,
         hasRecentTextChange: Bool = false
     ) -> Bool {
-        guard let lastPollAt else {
+        if let lastPollAt, now.timeIntervalSince(lastPollAt) < 0 {
             return true
         }
 
-        let elapsed = now.timeIntervalSince(lastPollAt)
-        guard elapsed >= 0 else {
-            return true
-        }
-
-        return elapsed >= interval(
+        guard let nextPollDate = nextPollDate(
+            lastPollAt: lastPollAt,
             isTrustedForAccessibility: isTrustedForAccessibility,
             hasSupportedProfile: hasSupportedProfile,
             hasVisibleSuggestion: hasVisibleSuggestion,
             hasRecentTextChange: hasRecentTextChange
-        )
+        ) else {
+            return true
+        }
+
+        return now >= nextPollDate
+    }
+
+    public func nextPollDate(
+        lastPollAt: Date?,
+        isTrustedForAccessibility: Bool,
+        hasSupportedProfile: Bool,
+        hasVisibleSuggestion: Bool,
+        hasRecentTextChange: Bool = false
+    ) -> Date? {
+        guard let lastPollAt else {
+            return nil
+        }
+
+        return lastPollAt.addingTimeInterval(interval(
+            isTrustedForAccessibility: isTrustedForAccessibility,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: hasVisibleSuggestion,
+            hasRecentTextChange: hasRecentTextChange
+        ))
     }
 }

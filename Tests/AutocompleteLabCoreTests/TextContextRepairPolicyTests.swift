@@ -454,6 +454,57 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorEndOfDocumentGrowth)
     }
 
+    @Test("Repairs Obsidian CodeMirror viewport cursor drift at the document end")
+    func repairsObsidianCodeMirrorViewportEndOfDocumentDrift() {
+        let policy = TextContextRepairPolicy()
+        let previousLines = (1...89)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n")
+        let textBefore = previousLines + "\nAutoc"
+        let textAfter = [
+            "omplete Lab Obsidian scroll filler line 90",
+            "Autocomplete Lab Obsidian proof",
+            "Smoke proof feels"
+        ].joined(separator: "\n")
+        let currentText = textBefore + textAfter
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: textBefore,
+            textAfterCursor: textAfter,
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == currentText)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorViewportEndOfDocument)
+    }
+
+    @Test("Does not repair Obsidian viewport drift without a numbered stale line")
+    func doesNotRepairObsidianViewportDriftWithoutNumberedLine() {
+        let policy = TextContextRepairPolicy()
+        let previousLines = (1...20)
+            .map { "Long Obsidian paragraph with enough words for context \($0)" }
+            .joined(separator: "\n")
+        let textBefore = previousLines + "\nDraft"
+        let textAfter = [
+            " idea",
+            "Another note section",
+            "Smoke proof feels"
+        ].joined(separator: "\n")
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: textBefore,
+            textAfterCursor: textAfter,
+            selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
     @Test("Does not repair Obsidian capped window without document-end overlap")
     func doesNotRepairObsidianCappedEndOfDocumentGrowthWithoutOverlap() {
         let policy = TextContextRepairPolicy()

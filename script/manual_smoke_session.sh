@@ -707,17 +707,31 @@ elif [[ -n "${AUTOCOMPLETE_LAB_TRACE_START_LINE:-}" ]]; then
   TRACE_START_LINE="$AUTOCOMPLETE_LAB_TRACE_START_LINE"
 fi
 
+wait_for_manual_confirmation() {
+  local prompt="$1"
+  local ignored_reply
+
+  if read -r -p "$prompt" ignored_reply; then
+    return 0
+  fi
+
+  echo "Manual smoke run mode needs an interactive terminal; stdin ended before validation." >&2
+  echo "Use --print for steps, or complete the manual steps and validate the captured slice with:" >&2
+  echo "AUTOCOMPLETE_LAB_LOG_START_LINE=$START_LINE AUTOCOMPLETE_LAB_TRACE_START_LINE=$TRACE_START_LINE script/manual_smoke_session.sh ${REQUESTED_APP:-$APP} --check" >&2
+  exit 2
+}
+
 if [[ "$MODE" == "run" ]]; then
   echo "Starting at diagnostics line $START_LINE."
   echo "Starting at trace line $TRACE_START_LINE."
   if [[ "$APP" == "codex" ]]; then
-    read -r -p "Run the steps above with marker $CODEX_PROOF_MARKER, do not submit, then press Enter to validate this app pass. " _
+    wait_for_manual_confirmation "Run the steps above with marker $CODEX_PROOF_MARKER, do not submit, then press Enter to validate this app pass. "
     AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1
   elif [[ "$APP" == "claude-code" ]]; then
-    read -r -p "Run the steps above with marker $CLAUDE_CODE_PROOF_MARKER, do not submit, then press Enter to validate this app pass. " _
+    wait_for_manual_confirmation "Run the steps above with marker $CLAUDE_CODE_PROOF_MARKER, do not submit, then press Enter to validate this app pass. "
     AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1
   else
-    read -r -p "Run the steps above, then press Enter to validate this app pass. " _
+    wait_for_manual_confirmation "Run the steps above, then press Enter to validate this app pass. "
   fi
 elif [[ "$MODE" != "--check" ]]; then
   usage >&2

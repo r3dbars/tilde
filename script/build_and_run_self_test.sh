@@ -8,7 +8,7 @@ SCRIPT_TEXT="$(cat script/build_and_run.sh)"
 
 require_contains() {
   local expected="$1"
-  if ! grep -Fq "$expected" <<<"$SCRIPT_TEXT"; then
+  if ! grep -Fq -- "$expected" <<<"$SCRIPT_TEXT"; then
     echo "missing expected build/run script text: $expected" >&2
     exit 1
   fi
@@ -16,7 +16,7 @@ require_contains() {
 
 reject_contains() {
   local rejected="$1"
-  if grep -Fq "$rejected" <<<"$SCRIPT_TEXT"; then
+  if grep -Fq -- "$rejected" <<<"$SCRIPT_TEXT"; then
     echo "stale build/run script reference remains: $rejected" >&2
     exit 1
   fi
@@ -33,13 +33,20 @@ require_contains "quarantine_stale_app_bundles"
 require_contains "AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES"
 require_contains "AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
+require_contains "wait_for_proof_locks_if_needed"
+require_contains "AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE"
+require_contains "Waiting for active proof run before build/run relaunch."
+require_contains '--privacy-export-proof([[:space:]]|$)'
 require_contains "scrub_proof_model_root_if_needed"
 require_contains "AUTOCOMPLETE_LAB_ALLOW_PROOF_MODEL_ROOT"
 require_contains "unset AUTOCOMPLETE_LAB_MODEL_ROOT"
 require_contains "launchctl unsetenv AUTOCOMPLETE_LAB_MODEL_ROOT"
 require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION"
+require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION"
 require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION"
+require_contains "AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK"
 require_contains "AUTOCOMPLETE_LAB_PROOF_SCENARIO"
+require_contains "AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING"
 require_contains 'current_pid="$(current_bundle_pid || true)"'
 require_contains 'pid_is_current_bundle "$current_pid"'
 require_contains "exited or restarted during the verification stability window"

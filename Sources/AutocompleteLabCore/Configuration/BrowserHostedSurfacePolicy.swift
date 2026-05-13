@@ -56,6 +56,20 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "browser-sensitive"
         }
     }
+
+    public var requiredProofKind: String {
+        switch self {
+        case .chatGPT, .slack, .discord:
+            return "exact-disposable-real-service-one-word-no-submit-screenshot-insertion"
+        case .googleDocs, .notion:
+            return "exact-disposable-real-service-safe-tab-no-submit-screenshot-insertion-undo"
+        case .unproven:
+            return "exact-disposable-production-page-screenshot-insertion"
+        case .login, .payment, .passwordManager, .privateSearch,
+             .browserSearchOrAddressBar, .browserDeveloperTool:
+            return "blocked-sensitive-browser-surface"
+        }
+    }
 }
 
 public enum BrowserHostedSurfaceBlockReason: String, Equatable, Sendable {
@@ -89,6 +103,8 @@ public struct BrowserHostedSurfaceBlock: Equatable, Sendable {
             "browserSurfaceDecision": "blocked",
             "browserSurfaceReason": reason.rawValue,
             "browserSurfaceSafetyClass": surface.safetyClass,
+            "browserSurfaceRequiredProof": surface.requiredProofKind,
+            "localFixtureProofCountsForProduction": "false",
             "promptSafetyMetricSurface": surface.safetyClass
         ]
     }
@@ -175,11 +191,21 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesDiscord(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
         }
+        if matchesPublicTextFieldProofPage(searchableText) {
+            return .allowed
+        }
         if matchesLocalProofFixture(searchableText) {
             return .allowed
         }
 
         return .blocked(BrowserHostedSurfaceBlock(surface: .unproven))
+    }
+
+    private func matchesPublicTextFieldProofPage(_ searchableText: String) -> Bool {
+        searchableText.contains("editpad - online notepad")
+            || searchableText.contains("online notepad & wordpad")
+            || searchableText.contains("mediumeditor")
+            || searchableText.contains("medium editor")
     }
 
     private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
@@ -208,6 +234,7 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("notion.site")
             || searchableText.contains("notion -")
             || searchableText.contains("- notion")
+            || containsStandaloneWord("notion", in: searchableText)
             || searchableText == "notion"
     }
 
@@ -218,6 +245,7 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("| chatgpt")
             || searchableText.contains("chatgpt -")
             || searchableText.contains("- chatgpt")
+            || containsStandaloneWord("chatgpt", in: searchableText)
             || searchableText == "chatgpt"
     }
 
@@ -228,6 +256,7 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("| slack")
             || searchableText.contains("slack -")
             || searchableText.contains("- slack")
+            || containsStandaloneWord("slack", in: searchableText)
             || searchableText == "slack"
     }
 
@@ -238,7 +267,16 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("| discord")
             || searchableText.contains("discord -")
             || searchableText.contains("- discord")
+            || containsStandaloneWord("discord", in: searchableText)
             || searchableText == "discord"
+    }
+
+    private func containsStandaloneWord(_ word: String, in searchableText: String) -> Bool {
+        searchableText
+            .split { character in
+                !(character.isLetter || character.isNumber)
+            }
+            .contains { $0 == word }
     }
 
     private func matchesPayment(_ searchableText: String) -> Bool {

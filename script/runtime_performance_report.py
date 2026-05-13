@@ -128,6 +128,7 @@ def line_slice(path, line_limit):
 def parse_diagnostics(path, line_limit):
     data = {
         "launches": [],
+        "launch_to_ready": [],
         "warm_starts": [],
         "warm_results": [],
         "warm_succeeded": [],
@@ -151,6 +152,7 @@ def parse_diagnostics(path, line_limit):
         "cancellations": 0,
     }
     warm_start_by_candidate = {}
+    pending_launch_timestamp = None
 
     for line_number, line in line_slice(path, line_limit):
         parts = line.split()
@@ -159,6 +161,10 @@ def parse_diagnostics(path, line_limit):
         timestamp = parse_timestamp(parts[0])
         event = parts[1]
         fields = fields_from(parts[2:])
+
+        if event == "launch":
+            pending_launch_timestamp = timestamp
+            continue
 
         if event == "runtime-bootstrap":
             data["launches"].append((line_number, fields))
@@ -179,6 +185,15 @@ def parse_diagnostics(path, line_limit):
             data["warm_results"].append(row)
             if event == "runtime-warm-succeeded":
                 data["warm_succeeded"].append(row)
+                if timestamp and pending_launch_timestamp:
+                    launch_to_ready = max(
+                        0,
+                        round((timestamp - pending_launch_timestamp).total_seconds() * 1000),
+                    )
+                    data["launch_to_ready"].append(
+                        (line_number, event, fields, launch_to_ready)
+                    )
+                    pending_launch_timestamp = None
             elif event == "runtime-warm-failed":
                 data["warm_failed"].append(row)
             elif event == "runtime-warm-skipped":
@@ -284,6 +299,10 @@ def scorecard_caveats(data):
     if not duration_values(data["warm_succeeded"]):
         caveats.append(
             "Missing runtime warm success duration samples; do not score warm readiness timing from this report."
+        )
+    if not duration_values(data["launch_to_ready"]):
+        caveats.append(
+            "Missing app launch-to-ready samples; do not score cold app start from this report."
         )
     if not duration_values(data["model_load_succeeded"]):
         caveats.append(
@@ -470,6 +489,7 @@ def print_report(args, data, live_process, models, energy_gate=None):
     print(f"Diagnostics log: {args.diagnostics_log}")
     print(f"Line limit: {args.line_limit if args.line_limit > 0 else 'all'}")
     print(format_latest_launch(data["launches"]))
+    print(timing_metric_line("App launch to ready", data["launch_to_ready"]))
     print(format_latest_timing("Latest warm event", data["warm_results"]))
     print(timing_metric_line("Runtime warm succeeded", data["warm_succeeded"]))
     if data["warm_failed"]:

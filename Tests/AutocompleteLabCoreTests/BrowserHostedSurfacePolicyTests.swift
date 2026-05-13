@@ -103,16 +103,46 @@ struct BrowserHostedSurfacePolicyTests {
 
     @Test("Chrome local editor fixtures stay eligible")
     func allowsChromeLocalEditorFixtures() {
-        let decision = policy.decision(
-            bundleIdentifier: "com.google.Chrome",
-            fingerprint: FocusedElementFingerprint(
+        let cases = [
+            FocusedElementFingerprint(
+                title: "Local CodeMirror-style smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local Monaco-like smoke fixture editor input",
+                windowTitle: "SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local ProseMirror-like smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local chat-like smoke fixture message composer",
+                windowTitle: "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local real Monaco smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local Real Monaco Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local real ProseMirror smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
                 title: "Local ProseMirror-like smoke fixture",
                 description: "Real ProseMirror smoke editor",
                 windowTitle: "SteadyType Chrome Real ProseMirror Smoke [ready=1]"
             )
-        )
+        ]
 
-        #expect(decision.canSuggest)
+        for fingerprint in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(decision.canSuggest)
+        }
     }
 
     @Test("Chrome local textarea smoke fixture stays eligible")
@@ -126,6 +156,29 @@ struct BrowserHostedSurfacePolicyTests {
         )
 
         #expect(decision.canSuggest)
+    }
+
+    @Test("Chrome public text field proof pages stay eligible")
+    func allowsChromePublicTextFieldProofPages() {
+        let cases = [
+            FocusedElementFingerprint(
+                title: "Public textarea proof field",
+                windowTitle: "Editpad - Online Notepad & Wordpad (Text Editor) for Notes"
+            ),
+            FocusedElementFingerprint(
+                title: "Public contenteditable proof field",
+                windowTitle: "MediumEditor - The dead simple inline editor toolbar"
+            )
+        ]
+
+        for fingerprint in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(decision.canSuggest)
+        }
     }
 
     @Test("Chrome fixture titles need local proof tokens")
@@ -188,6 +241,58 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: login)).surface == .login)
         #expect(try #require(blockedSurface(from: addressBar)).surface == .browserSearchOrAddressBar)
         #expect(try #require(blockedSurface(from: terminal)).surface == .browserDeveloperTool)
+    }
+
+    @Test("Chrome local fixture tokens do not unlock real hosted services")
+    func localFixtureTokensDoNotUnlockRealHostedServices() throws {
+        let cases: [(BrowserHostedSurface, FocusedElementFingerprint)] = [
+            (
+                .googleDocs,
+                FocusedElementFingerprint(
+                    title: "Autocomplete Lab Chrome smoke local fixture",
+                    windowTitle: "https://docs.google.com/document/d/disposable/edit [ready=1]"
+                )
+            ),
+            (
+                .notion,
+                FocusedElementFingerprint(
+                    title: "SteadyType Chrome smoke local fixture",
+                    windowTitle: "Disposable proof - Notion [ready=1]"
+                )
+            ),
+            (
+                .chatGPT,
+                FocusedElementFingerprint(
+                    title: "Autocomplete Lab Chrome browser-chat smoke local fixture",
+                    windowTitle: "ChatGPT [ready=1]"
+                )
+            ),
+            (
+                .slack,
+                FocusedElementFingerprint(
+                    title: "SteadyType Chrome browser-chat smoke local fixture",
+                    windowTitle: "Transcripted | Slack [ready=1]"
+                )
+            ),
+            (
+                .discord,
+                FocusedElementFingerprint(
+                    title: "SteadyType Chrome browser-chat smoke local fixture",
+                    windowTitle: "Discord [ready=1]"
+                )
+            )
+        ]
+
+        for (expectedSurface, fingerprint) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            let block = try #require(blockedSurface(from: decision))
+            #expect(block.surface == expectedSurface)
+            #expect(block.traceMetadata["localFixtureProofCountsForProduction"] == "false")
+        }
     }
 
     @Test("Chrome risky browser-hosted fields stay blocked")
@@ -398,6 +503,11 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(metadata["browserSurfaceDecision"] == "blocked")
         #expect(metadata["browserSurfaceReason"] == "unsupported-surface-needs-proof")
         #expect(metadata["browserSurfaceSafetyClass"] == "browser-editor")
+        #expect(
+            metadata["browserSurfaceRequiredProof"]
+                == "exact-disposable-real-service-safe-tab-no-submit-screenshot-insertion-undo"
+        )
+        #expect(metadata["localFixtureProofCountsForProduction"] == "false")
         #expect(!metadata.values.contains(secretTitle))
         #expect(!metadata.values.contains("https://docs.google.com/document/d/private-id/edit"))
     }
@@ -433,6 +543,11 @@ struct BrowserHostedSurfacePolicyTests {
 
         #expect(metadata["browserSurface"] == "slack")
         #expect(metadata["browserSurfaceSafetyClass"] == "browser-chat")
+        #expect(
+            metadata["browserSurfaceRequiredProof"]
+                == "exact-disposable-real-service-one-word-no-submit-screenshot-insertion"
+        )
+        #expect(metadata["localFixtureProofCountsForProduction"] == "false")
         #expect(metadata["promptSafetyMetricSurface"] == "browser-chat")
     }
 
