@@ -117,7 +117,7 @@ if 'for ((attempt = 1; attempt <= max_attempts; attempt++))' not in block:
     raise SystemExit("model-latency proof must retry a stable context before moving to the next fragment")
 if 'wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed' in block:
     raise SystemExit("model-latency proof must not hard-fail before typing the measured trigger")
-if 'dismiss_textedit_proof_suggestion "$textedit_window_title" "$stable_context"' not in block:
+if 'dismiss_textedit_seed_suggestion_if_possible "$textedit_window_title" "$stable_context"' not in block:
     raise SystemExit("model-latency proof must dismiss seed suggestions before timing the final trigger key")
 if 'proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"' not in block:
     raise SystemExit("model-latency proof must remember the tagged runtime launch before opening TextEdit")
@@ -131,7 +131,7 @@ post_runtime_block = block[runtime_ready:sample_window]
 if "focus_textedit_smoke_editor" not in post_runtime_block or "click_textedit_smoke_editor" not in post_runtime_block:
     raise SystemExit("model-latency proof must refocus TextEdit after build/runtime warmup before sampling")
 trigger = block.index('type_textedit_smoke_fragment "$textedit_window_title" "$trigger_final"')
-dismissal = block.index('dismiss_textedit_proof_suggestion "$textedit_window_title" "$stable_context"')
+dismissal = block.index('dismiss_textedit_seed_suggestion_if_possible "$textedit_window_title" "$stable_context"')
 sample_start = block.index('sample_start="$(line_count "$LOG_PATH")"', dismissal)
 if dismissal > sample_start or sample_start > trigger:
     raise SystemExit("model-latency proof must dismiss seed suggestions after seed settle and before sample timing")
