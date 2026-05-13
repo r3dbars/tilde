@@ -314,6 +314,11 @@ if ! grep -F 'clear_textedit_document_for_proof()' script/real_app_smoke.sh >/de
   echo "real app smoke self-test expected TextEdit model latency reset to recover through a disposable-window keyboard clear" >&2
   exit 1
 fi
+if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_AX_WRITE_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'TextEdit AX value replacement' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit AX document writes to be timeout-bounded" >&2
+  exit 1
+fi
 if ! grep -F 'trim_textedit_native_completion_suffix' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then

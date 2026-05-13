@@ -4293,8 +4293,13 @@ SWIFT
 set_textedit_document_text() {
   local window_title="$1"
   local text="$2"
+  local run_dir stdout_path stderr_path status swift_pid
 
-  swift - "$window_title" "$text" <<'SWIFT'
+  run_dir="$(make_tmp_dir)"
+  stdout_path="$run_dir/textedit-ax-write-stdout.txt"
+  stderr_path="$run_dir/textedit-ax-write-stderr.txt"
+
+  swift - "$window_title" "$text" >"$stdout_path" 2>"$stderr_path" <<'SWIFT' &
 import AppKit
 import ApplicationServices
 import Foundation
@@ -4395,6 +4400,16 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
 
 exit(1)
 SWIFT
+  swift_pid="$!"
+
+  if wait_for_background_process "$swift_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_AX_WRITE_TIMEOUT_SECONDS:-5}" "TextEdit AX value replacement"; then
+    cat "$stdout_path"
+    return 0
+  fi
+
+  status=$?
+  cat "$stderr_path" >&2 || true
+  return "$status"
 }
 
 textedit_document_exists() {
