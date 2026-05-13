@@ -33,6 +33,34 @@ struct ObsidianTabPassthroughRepairPolicyTests {
         #expect(decision == .repair)
     }
 
+    @Test("Repairs when Obsidian moves the AX cursor into the indented line")
+    func repairsLeadingTabIndentWhenTextAfterCursorChanges() {
+        let decision = policy.decision(
+            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels inst",
+            currentTextBeforeCursor: "Autocomplete Lab Obsidian proof\n\tSmoke proof fee",
+            previousTextAfterCursor: "",
+            currentTextAfterCursor: "ls inst",
+            hasVisibleSuggestion: true,
+            acceptedText: "ant"
+        )
+
+        #expect(decision == .repair)
+    }
+
+    @Test("Repairs CodeMirror tab spacer when Obsidian moves the AX cursor into the line")
+    func repairsCodeMirrorTabSpacerWhenTextAfterCursorChanges() {
+        let decision = policy.decision(
+            previousTextBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels inst",
+            currentTextBeforeCursor: "\u{200B}\n\u{200B}\n\nAutocomplete Lab Obsidian proof\n\u{200B}\t\nSmoke proof fee",
+            previousTextAfterCursor: "",
+            currentTextAfterCursor: "ls inst",
+            hasVisibleSuggestion: true,
+            acceptedText: "ant"
+        )
+
+        #expect(decision == .repair)
+    }
+
     @Test("Repairs when Obsidian selects the indented current line after Tab")
     func repairsSelectedLineIndent() {
         let decision = policy.decision(

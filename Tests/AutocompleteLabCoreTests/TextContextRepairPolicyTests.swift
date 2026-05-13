@@ -166,6 +166,23 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorLineDrift)
     }
 
+    @Test("Repairs Obsidian CodeMirror line drift with trailing newline noise")
+    func repairsObsidianCodeMirrorLineDriftWithTrailingNewlineNoise() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proo",
+            textAfterCursor: "f feels inst\n",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == "Autocomplete Lab Obsidian proof\nSmoke proof feels inst")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorLineDrift)
+    }
+
     @Test("Repairs Obsidian CodeMirror active line reported after the AX cursor")
     func repairsObsidianCodeMirrorTextAfterActiveLine() {
         let policy = TextContextRepairPolicy()
@@ -228,6 +245,28 @@ struct TextContextRepairPolicyTests {
         ))
 
         #expect(!result.wasRepaired)
+    }
+
+    @Test("Repairs Obsidian viewport tail line when AX stays in the previous visible line")
+    func repairsObsidianViewportTailLineWithoutNumberedAnchor() {
+        let policy = TextContextRepairPolicy()
+        let beforeCursor = (80...90)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n")
+            + "\nAutocomplete Lab Obs"
+        let afterCursor = "idian proof\nSmoke proof feels inst\n"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: beforeCursor,
+            textAfterCursor: afterCursor,
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == beforeCursor + afterCursor)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorViewportTailLine)
     }
 
     @Test("Repairs Obsidian CodeMirror line drift after the first typed character")
@@ -420,6 +459,34 @@ struct TextContextRepairPolicyTests {
         #expect(result.textBeforeCursor == current)
         #expect(result.textAfterCursor == "")
         #expect(result.reason == .obsidianCodeMirrorEndOfDocumentGrowth)
+    }
+
+    @Test("Repairs Obsidian end-of-document typing drift inside the new suffix")
+    func repairsObsidianEndOfDocumentTypingDriftInsideNewSuffix() {
+        let policy = TextContextRepairPolicy()
+        let previous = [
+            "Autocomplete Lab Obsidian scroll filler line 89",
+            "Autocomplete Lab Obsidian scroll filler line 90",
+            "Autocomplete Lab Obsidian proof",
+            ""
+        ].joined(separator: "\n")
+        let current = previous + "Smoke proof feels inst"
+        let staleBefore = previous + "Smoke proo"
+        let staleAfter = "f feels inst"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == current)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorEndOfDocumentTypingDrift)
     }
 
     @Test("Repairs Obsidian CodeMirror capped end-of-document text window")

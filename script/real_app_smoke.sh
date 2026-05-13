@@ -8182,7 +8182,8 @@ type_obsidian_raw_smoke_text() {
   local text="$1"
 
   activate_obsidian_for_smoke
-  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE:-0}" == "1" ]] &&
+  if [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE:-0}" != "1" ]] &&
+    [[ "${AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE:-0}" == "1" ]] &&
     AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT="$text" swift - <<'SWIFT' >/dev/null 2>&1; then
 import AppKit
 import ApplicationServices
@@ -8574,6 +8575,7 @@ run_obsidian() {
   first_fragment="Smoke proof feels"
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     first_fragment="moke proof feels"
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
