@@ -1,25 +1,23 @@
 # Obsidian Deep Sweep Latest
 
-- Started UTC: 2026-05-13T10:35:36Z
-- Mode: repeat sweep after pane proof fix
+- Started UTC: 2026-05-13T11:00:12Z
+- Iterations: 1
 - Lanes: obsidian obsidian-theme obsidian-long-note obsidian-font-zoom obsidian-markdown-bold obsidian-markdown-list obsidian-multiline obsidian-run-on obsidian-pane
 
 | Iteration | Lane | Result | Command |
 | ---: | --- | --- | --- |
-| 1 | `obsidian` | `pass` | `script/real_app_smoke.sh obsidian --manual-gate` |
-| 1 | `obsidian-theme` | `pass` | `script/real_app_smoke.sh obsidian-theme --manual-gate --skip-build` |
-| 1 | `obsidian-long-note` | `fail` | `script/real_app_smoke.sh obsidian-long-note --manual-gate --skip-build` |
-| 1 | `obsidian-font-zoom` | `fail` | `script/real_app_smoke.sh obsidian-font-zoom --manual-gate --skip-build` |
-| 1 | `obsidian-markdown-bold` | `fail` | `script/real_app_smoke.sh obsidian-markdown-bold --skip-build` |
 
 ## Summary
 
-- Default and theme repeated strict screenshot-backed passes on commit `44c3b52c`.
-- The long-note repeat exposed stale CodeMirror cursor state: the accepted words were visible in Obsidian, but AX sometimes reported the caret in the middle of the visible tail line, so suggestion triggering blocked as `middleOfLine` or later hit cadence policy.
-- Font/zoom and bold were not valid product failures in isolation; they ran after the long-note miss with `--skip-build`, which let quiet/cadence state and app-process loss poison the batch.
-- A stale `25ed` `script/manual_proof_refresh.sh` watchdog repeatedly targeted this `390d` worktree and killed current proof runs. The proof guard now protects ancestor process groups and treats `manual_proof_refresh` as competing proof work.
-- The long-note harness now types the setup phrase, repairs the caret to the visible value end, then types the final trigger character live before waiting for screenshot-backed suggestions.
+- The one-pass deep sweep started at `2026-05-13T11:00:12Z`, but the wrapper did not produce trustworthy lane rows in this desktop session.
+- Separate strict runs on the current branch proved two important lanes:
+  - `obsidian-long-note` passed at `2026-05-13T10:55:02Z` with 2 accepted insertions and strict visual trace evidence.
+  - `obsidian` default passed at `2026-05-13T11:00:07Z` with 2 accepted insertions and strict visual trace evidence.
+- Fresh `obsidian-theme` reruns still failed strict visual proof. The accepted words landed and verified, but extra post-accept/stale Obsidian suggestions were presented without screenshot-backed trace rows.
+- A patched `obsidian-theme` rerun at 11:12 UTC armed the new post-acceptance settle gate after the first accepted Tab and verified that insertion, but it still did not complete because focus jumped back to Codex before the second accept.
+- `AUTOCOMPLETE_LAB_OBSIDIAN_ESCAPE_BEFORE_TYPING=1` is not a safe workaround yet; it can put the CodeMirror field into `suppressedField` / quiet mode and block the next suggestion.
+- The goal is still open. This is not a 150+ attempt reliability sample and not a 100/100 Obsidian result.
 
 ## Next Gate
 
-Run fresh no-skip Obsidian lanes after confirming no stale proof watchdog is active. The goal is still open: repeat 150+ strict screenshot-backed Obsidian attempts before raising every category to 100/100.
+Keep Obsidian quiet after accepted text, rerun `obsidian-theme`, then repeat default/theme/pane/long-note/font-zoom/bold/list/multiline/run-on until the matrix can run cleanly with strict screenshot traces.

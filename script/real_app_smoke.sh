@@ -769,7 +769,7 @@ other_smoke_process_lines() {
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" -v rootDir="$ROOT_DIR" '
     BEGIN {
       split(protectedPGIDs, protectedList, " ")
       for (i in protectedList) {
@@ -788,10 +788,11 @@ other_smoke_process_lines() {
         index(command, "script/manual_proof_refresh.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
         index(command, "script/build_and_run.sh") > 0
+      staleRootWatchdog = index(command, "stale_root") > 0 && index(command, rootDir) > 0
       if (pid == self) next
       if (selfPGID != "" && pgid == selfPGID) next
       if (pgid in protected) next
-      if (directScript || (shellWrapper && hasSmokeScript)) {
+      if (directScript || (shellWrapper && hasSmokeScript) || staleRootWatchdog) {
         print
       }
     }
@@ -827,7 +828,7 @@ other_autocomplete_proof_pgids() {
   protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
   process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
 
-  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" '
+  awk -v self="$SMOKE_SCRIPT_PID" -v selfPGID="$current_pgid" -v protectedPGIDs="$protected_pgids" -v rootDir="$ROOT_DIR" '
     BEGIN {
       split(protectedPGIDs, protectedList, " ")
       for (i in protectedList) {
@@ -839,17 +840,19 @@ other_autocomplete_proof_pgids() {
       pgid = $3
       command = $0
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|manual_proof_refresh|obsidian_deep_sweep|build_and_run)\.sh([[:space:]]|$)/
+      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|manual_proof_refresh|obsidian_deep_sweep|smoke_test|build_and_run)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasProofScript = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
         index(command, "script/manual_proof_refresh.sh") > 0 ||
         index(command, "script/obsidian_deep_sweep.sh") > 0 ||
+        index(command, "script/smoke_test.sh") > 0 ||
         index(command, "script/build_and_run.sh") > 0
+      staleRootWatchdog = index(command, "stale_root") > 0 && index(command, rootDir) > 0
       if (pid == self) next
       if (selfPGID != "" && pgid == selfPGID) next
       if (pgid in protected) next
-      if (directScript || (shellWrapper && hasProofScript)) {
+      if (directScript || (shellWrapper && hasProofScript) || staleRootWatchdog) {
         print pgid
       }
     }
@@ -857,11 +860,21 @@ other_autocomplete_proof_pgids() {
 }
 
 terminate_other_autocomplete_proof_runs() {
-  local pgid
+  local pgid pgids=()
   while IFS= read -r pgid; do
     [[ -z "$pgid" ]] && continue
+    pgids+=("$pgid")
     kill -TERM "-$pgid" >/dev/null 2>&1 || true
   done < <(other_autocomplete_proof_pgids)
+
+  ((${#pgids[@]} == 0)) && return 0
+  sleep 0.25
+
+  for pgid in "${pgids[@]}"; do
+    if ps -axo pgid= 2>/dev/null | awk -v pgid="$pgid" '$1 == pgid { found = 1; exit } END { exit found ? 0 : 1 }'; then
+      kill -KILL "-$pgid" >/dev/null 2>&1 || true
+    fi
+  done
 }
 
 start_smoke_interference_guard() {
