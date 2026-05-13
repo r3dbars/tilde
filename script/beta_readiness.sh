@@ -337,7 +337,6 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
-  run_check "Latency beta gate" latency_beta_gate || failures=$((failures + 1))
   run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
   run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
@@ -345,6 +344,9 @@ if [[ "$MODE" == "check-only" ]]; then
   run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
+  # Run latency after proof/readiness checks so a later app relaunch cannot make
+  # the sampled TextEdit proof stale.
+  run_check "Latency beta gate" latency_beta_gate || failures=$((failures + 1))
   run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile || failures=$((failures + 1))
 
   echo
@@ -352,6 +354,7 @@ if [[ "$MODE" == "check-only" ]]; then
   if [[ -s "$PRIMARY_ARTIFACT" ]]; then
     echo "Private beta artifact: OK - $PRIMARY_ARTIFACT"
     run_check "Developer ID DMG signature" check_release_dmg_signature || failures=$((failures + 1))
+    run_check "Developer ID archive signature" check_release_archive_signature || failures=$((failures + 1))
     run_check "Notarized install proof" check_notarized_install_proof || failures=$((failures + 1))
   else
     echo "Private beta artifact: blocked"
@@ -391,11 +394,6 @@ AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
   ./script/check_diagnostics_log.sh
 echo
-echo "== Latency beta gate =="
-latency_beta_gate
-
-
-echo
 echo "== Controls and diagnostics readiness =="
 ./script/check_controls_diagnostics_readiness.sh
 
@@ -424,10 +422,15 @@ echo "== Visual placement proof =="
 ./script/check_visual_placement_evidence.sh --require-all
 
 echo
+echo "== Latency beta gate =="
+latency_beta_gate
+
+echo
 echo "== Release package =="
 ./script/package_release.sh --check --require-developer-id --require-notary-profile
 ./script/package_release.sh archive
 check_release_dmg_signature
+check_release_archive_signature
 if [[ "${AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE:-0}" =~ ^(1|true|yes|on)$ ]]; then
   ./script/package_release.sh --notarize
 else

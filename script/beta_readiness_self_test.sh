@@ -30,9 +30,31 @@ reject_line() {
   fi
 }
 
+require_order() {
+  local earlier="$1"
+  local later="$2"
+  local earlier_line
+  local later_line
+
+  earlier_line="$(grep -n -F -- "$earlier" <<<"$SCRIPT_TEXT" | head -n 1 | cut -d: -f1)"
+  later_line="$(grep -n -F -- "$later" <<<"$SCRIPT_TEXT" | head -n 1 | cut -d: -f1)"
+
+  if [[ -z "$earlier_line" || -z "$later_line" ]]; then
+    echo "missing beta readiness ordering text: $earlier -> $later" >&2
+    exit 1
+  fi
+
+  if (( earlier_line >= later_line )); then
+    echo "unsafe beta readiness order: expected '$earlier' before '$later'" >&2
+    exit 1
+  fi
+}
+
 require_contains './script/package_release.sh --check --require-developer-id --require-notary-profile'
 require_contains 'PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"'
 require_contains 'check_release_dmg_signature'
+require_contains 'check_release_archive_signature'
+require_contains 'run_check "Developer ID archive signature" check_release_archive_signature'
 require_contains 'check_notarized_install_proof'
 require_contains 'check_current_artifact_checksum'
 require_contains 'write_current_artifact_checksums'
@@ -58,5 +80,13 @@ require_contains './script/package_release.sh --notarize'
 reject_contains 'Developer ID DMG signature blocked: could not mount'
 reject_line './script/package_release.sh --check'
 reject_contains 'Notarization is still pending'
+require_order 'run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all' \
+  'run_check "Latency beta gate" latency_beta_gate'
+require_order 'run_check "Latency beta gate" latency_beta_gate' \
+  'run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile'
+require_order 'echo "== Visual placement proof =="' \
+  'echo "== Latency beta gate =="'
+require_order 'echo "== Latency beta gate =="' \
+  'echo "== Release package =="'
 
 echo "Beta readiness self-test passed."
