@@ -149,7 +149,7 @@ LOG
 cat >"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-09T09:59:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":100,"metadata":{"behaviorProfile":"notes"}}
 {"timestamp":"2026-05-09T10:00:01Z","sessionID":"session","suggestionID":"model-only","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"notes","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
-{"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"fallback-visible","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"notes","candidateSelectionSource":"predictive-word-fallback"}}
+{"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"unpaired-visible","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"notes","candidateSelectionSource":"app-model-result"}}
 LOG
 
 if AUTOCOMPLETE_LAB_LOG_START_LINE=1 \
@@ -173,6 +173,12 @@ fi
 
 if ! grep -F "bounded beta gate needs fresh model-backed visible trace evidence" "$TMP_DIR/unbacked-bounded.txt" >/dev/null; then
   echo "latency benchmark self-test did not explain missing model-backed trace evidence" >&2
+  cat "$TMP_DIR/unbacked-bounded.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "paired modelResult/suggestionPresented trace samples, found 0" "$TMP_DIR/unbacked-bounded.txt" >/dev/null; then
+  echo "latency benchmark self-test did not explain the required trace pairing" >&2
   cat "$TMP_DIR/unbacked-bounded.txt" >&2
   exit 1
 fi
