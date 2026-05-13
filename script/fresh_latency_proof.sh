@@ -10,13 +10,14 @@ LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 REAL_APP_SMOKE_SCRIPT="${AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT:-./script/real_app_smoke.sh}"
 LATENCY_REPORT_SCRIPT="${AUTOCOMPLETE_LAB_FRESH_LATENCY_REPORT_SCRIPT:-./script/latency_benchmark_report.py}"
+DEFAULT_MODEL_REPORT_SCRIPT="${AUTOCOMPLETE_LAB_FRESH_DEFAULT_MODEL_REPORT_SCRIPT:-./script/model_latency_report.py}"
 FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-fresh-latency.lock}"
 FRESH_LATENCY_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS:-300}"
 FRESH_LATENCY_LOCK_HELD=0
 
 usage() {
   cat <<'EOF'
-Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency]
+Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency]
 
 Runs a fresh bounded latency proof: one current-app smoke launch, repeated
 TextEdit smoke passes with rebuilds skipped, then latency_benchmark_report.py
@@ -70,16 +71,16 @@ if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || ((RUNS < 1)); then
 fi
 
 case "$TARGET_APP" in
-  textedit|textedit-model-latency)
+  textedit|textedit-model-latency|textedit-default-model-latency)
     ;;
   *)
-    echo "--target must be textedit or textedit-model-latency" >&2
+    echo "--target must be textedit, textedit-model-latency, or textedit-default-model-latency" >&2
     exit 2
     ;;
 esac
 
-if [[ "$TARGET_APP" == "textedit-model-latency" && "$RUNS" != "1" ]]; then
-  echo "textedit-model-latency collects the beta sample set in one launch; forcing --runs 1."
+if [[ "$TARGET_APP" =~ ^textedit-(default-)?model-latency$ && "$RUNS" != "1" ]]; then
+  echo "$TARGET_APP collects the proof sample set in one launch; forcing --runs 1."
   RUNS=1
 fi
 
@@ -96,6 +97,9 @@ cleanup_fresh_latency_lock() {
 }
 
 trap cleanup_fresh_latency_lock EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 line_count() {
   local path="$1"
@@ -110,8 +114,8 @@ run_smoke() {
   local index="$1"
   local args=("$TARGET_APP")
 
-  if [[ "$TARGET_APP" == "textedit-model-latency" && "$index" != "1" ]]; then
-    echo "textedit-model-latency cannot use --skip-build reruns because proof mode must relaunch cleanly." >&2
+  if [[ "$TARGET_APP" =~ ^textedit-(default-)?model-latency$ && "$index" != "1" ]]; then
+    echo "$TARGET_APP cannot use --skip-build reruns because proof mode must relaunch cleanly." >&2
     exit 1
   fi
 
@@ -126,8 +130,11 @@ run_smoke() {
 
 clear_stale_proof_launchctl_env() {
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SCENARIO >/dev/null 2>&1 || true
+  launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS >/dev/null 2>&1 || true
   launchctl unsetenv AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS >/dev/null 2>&1 || true
 }
@@ -166,33 +173,78 @@ acquire_fresh_latency_lock() {
   done
 }
 
+current_process_ancestor_pids() {
+  local pid="${BASHPID:-$$}"
+  local parent
+  local ancestors=()
+
+  while parent="$(ps -o ppid= -p "$pid" 2>/dev/null || true)"; do
+    parent="${parent//[[:space:]]/}"
+    [[ -n "$parent" && "$parent" != "0" && "$parent" != "$pid" ]] || break
+    ancestors+=("$parent")
+    pid="$parent"
+  done
+
+  printf '%s\n' "${ancestors[@]}"
+}
+
 other_proof_process_lines() {
-  local process_list current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ' || true)"
+  local process_list ancestor_pids
+  ancestor_pids="$(current_process_ancestor_pids || true)"
+  ancestor_pids="${ancestor_pids//$'\n'/ }"
   if [[ "${AUTOCOMPLETE_LAB_FRESH_LATENCY_PROCESS_LIST+x}" == "x" ]]; then
     process_list="$AUTOCOMPLETE_LAB_FRESH_LATENCY_PROCESS_LIST"
   else
     process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
   fi
 
-  awk -v self="$$" -v selfPGID="$current_pgid" '
+  awk -v self="${BASHPID:-$$}" -v ancestorPids="$ancestor_pids" '
+    BEGIN {
+      split(ancestorPids, rawAncestors, /[[:space:]]+/)
+      for (i in rawAncestors) {
+        if (rawAncestors[i] != "") {
+          ancestor[rawAncestors[i]] = 1
+        }
+      }
+    }
     {
       pid = $1
-      pgid = $3
+      ppid = $2
       command = $0
+      rawLine[pid] = $0
+      parent[pid] = ppid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
-      directScript = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run)\.sh([[:space:]]|$)/
+      directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness|check_current_build_privacy_export)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
-      hasProofScript = index(command, "script/real_app_smoke.sh") > 0 ||
+      hasProofScript[pid] = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
         index(command, "script/smoke_test.sh") > 0 ||
-        index(command, "script/build_and_run.sh") > 0
+        index(command, "script/build_and_run.sh") > 0 ||
+        index(command, "script/beta_readiness.sh") > 0 ||
+        index(command, "script/check_score_targets.sh") > 0 ||
+        index(command, "script/check_controls_diagnostics_readiness.sh") > 0 ||
+        index(command, "script/check_current_build_privacy_export.sh") > 0
+      shellHasProofScript[pid] = shellWrapper && hasProofScript[pid]
     }
-    pid != self &&
-      (selfPGID == "" || pgid != selfPGID) &&
-      (directScript || (shellWrapper && hasProofScript)) {
-        print
+    function relatedToSelf(pid, parentPid, depth) {
+      if (pid == self || pid in ancestor) return 1
+      parentPid = pid
+      for (depth = 0; depth < 128; depth++) {
+        if (!(parentPid in parent)) return 0
+        parentPid = parent[parentPid]
+        if (parentPid == self) return 1
+        if (parentPid == "" || parentPid == "0" || parentPid == parent[parentPid]) return 0
       }
+      return 0
+    }
+    END {
+      for (pid in rawLine) {
+        if (relatedToSelf(pid)) continue
+        if (directScript[pid] || shellHasProofScript[pid]) {
+          print rawLine[pid]
+        }
+      }
+    }
   ' <<<"$process_list"
 }
 
@@ -252,12 +304,23 @@ echo "AUTOCOMPLETE_LAB_LOG_END_LINE=$diagnostics_end_line"
 echo "AUTOCOMPLETE_LAB_TRACE_START_LINE=$trace_start_line"
 echo "AUTOCOMPLETE_LAB_TRACE_END_LINE=$trace_end_line"
 
-env \
-  AUTOCOMPLETE_LAB_LOG_START_LINE="$diagnostics_start_line" \
-  AUTOCOMPLETE_LAB_LOG_END_LINE="$diagnostics_end_line" \
-  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
-  AUTOCOMPLETE_LAB_TRACE_END_LINE="$trace_end_line" \
-  "$LATENCY_REPORT_SCRIPT" \
-    --diagnostics-log "$LOG_PATH" \
-    --trace-log "$TRACE_PATH" \
-    --beta-gate
+if [[ "$TARGET_APP" == "textedit-default-model-latency" ]]; then
+  env \
+    AUTOCOMPLETE_LAB_LOG_START_LINE="$diagnostics_start_line" \
+    AUTOCOMPLETE_LAB_LOG_END_LINE="$diagnostics_end_line" \
+    "$DEFAULT_MODEL_REPORT_SCRIPT" \
+      --log "$LOG_PATH" \
+      --default-model-proof \
+      --require-sample-app com.apple.TextEdit \
+      --require-proof-scenario textedit-default-model-latency
+else
+  env \
+    AUTOCOMPLETE_LAB_LOG_START_LINE="$diagnostics_start_line" \
+    AUTOCOMPLETE_LAB_LOG_END_LINE="$diagnostics_end_line" \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    AUTOCOMPLETE_LAB_TRACE_END_LINE="$trace_end_line" \
+    "$LATENCY_REPORT_SCRIPT" \
+      --diagnostics-log "$LOG_PATH" \
+      --trace-log "$TRACE_PATH" \
+      --beta-gate
+fi

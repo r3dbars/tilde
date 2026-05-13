@@ -16,18 +16,46 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let candidateRanker: CompletionCandidateRanker
     private let lengthConfiguration: CompletionLengthConfiguration
     private let stateQueue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-model-runtime")
+    private let cancellationCoordinator = RuntimeCancellationCoordinator()
 
     private var storedState: LocalRuntimeState
+    private var integrityValidationCache: ModelAssetIntegrityValidationCache
     private var container: ModelContainer?
     private var staticPromptCache = RuntimeStaticPromptCache()
     private var generation = 0
+    private var warmTaskID = 0
+    private var warmTask: (id: Int, task: Task<Void, Error>, gate: MLXRuntimeWarmGate)?
 
-    public init(
+    public convenience init(
         modelDirectoryURL: URL,
         modelManifest: LocalModelAssetManifest? = nil,
         fileManager: FileManager = .default,
         usesVisionLanguageFactory: Bool = false,
         lengthConfiguration: CompletionLengthConfiguration = .default,
+        promptBuilder: CompletionPromptBuilder? = nil,
+        cleaner: CompletionOutputCleaner? = nil,
+        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
+    ) {
+        self.init(
+            modelDirectoryURL: modelDirectoryURL,
+            modelManifest: modelManifest,
+            fileManager: fileManager,
+            usesVisionLanguageFactory: usesVisionLanguageFactory,
+            lengthConfiguration: lengthConfiguration,
+            integrityValidationCache: ModelAssetIntegrityValidationCache(),
+            promptBuilder: promptBuilder,
+            cleaner: cleaner,
+            candidateRanker: candidateRanker
+        )
+    }
+
+    init(
+        modelDirectoryURL: URL,
+        modelManifest: LocalModelAssetManifest? = nil,
+        fileManager: FileManager = .default,
+        usesVisionLanguageFactory: Bool = false,
+        lengthConfiguration: CompletionLengthConfiguration = .default,
+        integrityValidationCache: ModelAssetIntegrityValidationCache,
         promptBuilder: CompletionPromptBuilder? = nil,
         cleaner: CompletionOutputCleaner? = nil,
         candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
@@ -40,6 +68,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.candidateRanker = candidateRanker
+        self.integrityValidationCache = integrityValidationCache
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
     }
 
@@ -52,8 +81,41 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func warm() async throws {
+        let warmTask = warmTaskSnapshot()
+        try await warmTask.task.value
+    }
+
+    private func warmTaskSnapshot() -> (task: Task<Void, Error>, gate: MLXRuntimeWarmGate) {
+        stateQueue.sync {
+            if let warmTask {
+                return (warmTask.task, warmTask.gate)
+            }
+
+            warmTaskID += 1
+            let taskID = warmTaskID
+            let gate = MLXRuntimeWarmGate()
+            let task = Task { [self] in
+                do {
+                    try await performWarm()
+                    finishWarmTask(id: taskID, gate: gate, result: .success(()))
+                } catch {
+                    finishWarmTask(id: taskID, gate: gate, result: .failure(error))
+                    throw error
+                }
+            }
+            warmTask = (taskID, task, gate)
+            return (task, gate)
+        }
+    }
+
+    private func performWarm() async throws {
         let startedAt = Date()
-        var integrityValidationCache = ModelAssetIntegrityValidationCache()
+        var integrityValidationCache = stateQueue.sync {
+            self.integrityValidationCache
+        }
+        defer {
+            storeIntegrityValidationCache(integrityValidationCache)
+        }
         try verifyModelAssetIntegrity(startedAt: startedAt, cache: &integrityValidationCache)
         var didReuseLoadedContainer = false
         let warmGeneration = stateQueue.sync {
@@ -269,10 +331,17 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     public func cancel() {
-        stateQueue.sync {
+        let taskToCancel = stateQueue.sync {
+            let task = warmTask?.task
+            warmTask = nil
             generation += 1
+            container = nil
+            staticPromptCache = RuntimeStaticPromptCache()
             storedState = .unavailable(reason: "MLX runtime was canceled.")
+            return task
         }
+        cancellationCoordinator.cancelAll()
+        taskToCancel?.cancel()
     }
 
     public func complete(_ request: CompletionRequest) async throws -> CompletionSuggestion? {
@@ -283,8 +352,22 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         _ request: CompletionRequest,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> CompletionSuggestion? {
+        try await cancellationCoordinator.withRegisteredTask { [self] cancellationEpoch in
+            try await performCompletion(
+                request,
+                cancellationEpoch: cancellationEpoch,
+                onPartialSuggestion: onPartialSuggestion
+            )
+        }
+    }
+
+    private func performCompletion(
+        _ request: CompletionRequest,
+        cancellationEpoch: Int,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> CompletionSuggestion? {
         let container = try await readyContainer()
-        try Task.checkCancellation()
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
 
         let startedAt = Date()
         let prompt = promptBuilder.prompt(for: request)
@@ -309,7 +392,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         let stream = session.streamResponse(to: prompt.user)
         do {
             for try await chunk in stream {
-                try Task.checkCancellation()
+                try cancellationCoordinator.check(epoch: cancellationEpoch)
 
                 if firstChunkMilliseconds == nil {
                     firstChunkMilliseconds = Self.milliseconds(from: sessionBuiltAt, to: Date())
@@ -317,14 +400,21 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
                 rawOutput += chunk
 
-                if let partialSuggestion = requestCleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode),
+                let partialSuggestion = requestCleaner.clean(
+                    rawOutput,
+                    after: request.textBeforeCursor,
+                    mode: request.mode
+                )
+
+                if let partialSuggestion,
                    !partialSuggestion.isEmpty,
                    partialSuggestion.visibleText != lastPartialVisibleText {
+                    try cancellationCoordinator.check(epoch: cancellationEpoch)
                     lastPartialVisibleText = partialSuggestion.visibleText
                     onPartialSuggestion(partialSuggestion)
                 }
 
-                if shouldStopEarly(rawOutput, request: request, cleaner: requestCleaner) {
+                if shouldStopEarly(partialSuggestion, rawOutput: rawOutput, request: request) {
                     break
                 }
             }
@@ -341,7 +431,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             throw CancellationError()
         }
         let generatedAt = Date()
-        try Task.checkCancellation()
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
 
         let cleanedCandidates = requestCleaner.cleanCandidates(
             rawOutput,
@@ -398,15 +488,16 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             firstTokenLatencyMilliseconds: firstChunkMilliseconds
         )
 
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
         return cleanedSuggestion
     }
 
     private func shouldStopEarly(
-        _ rawOutput: String,
-        request: CompletionRequest,
-        cleaner requestCleaner: CompletionOutputCleaner
+        _ suggestion: CompletionSuggestion?,
+        rawOutput: String,
+        request: CompletionRequest
     ) -> Bool {
-        guard let suggestion = requestCleaner.clean(rawOutput, after: request.textBeforeCursor, mode: request.mode) else {
+        guard let suggestion else {
             return false
         }
 
@@ -434,6 +525,21 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private func cachedStaticPrompt(systemPrompt: String) -> RuntimeStaticPromptCacheLookup {
         stateQueue.sync {
             staticPromptCache.lookup(systemPrompt: systemPrompt)
+        }
+    }
+
+    private func finishWarmTask(id: Int, gate: MLXRuntimeWarmGate, result: Result<Void, Error>) {
+        stateQueue.sync {
+            if warmTask?.id == id {
+                warmTask = nil
+            }
+        }
+        gate.finish(with: result)
+    }
+
+    private func storeIntegrityValidationCache(_ cache: ModelAssetIntegrityValidationCache) {
+        stateQueue.sync {
+            integrityValidationCache = cache
         }
     }
 
@@ -468,7 +574,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func readyContainer() async throws -> ModelContainer {
         let initialSnapshot = stateQueue.sync {
-            (storedState, container)
+            (storedState, container, warmTask?.gate)
         }
 
         if case let .failed(_, reason) = initialSnapshot.0 {
@@ -479,34 +585,93 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return existing
         }
 
-        for _ in 0..<3_000 {
-            let isWarming = stateQueue.sync {
-                if case .warming = storedState {
-                    return true
-                }
-
-                return false
-            }
-
-            guard isWarming else {
-                break
-            }
-
+        if let warmGate = initialSnapshot.2 {
+            try await warmGate.wait()
             try Task.checkCancellation()
-            try await Task.sleep(for: .milliseconds(10))
-
-            if let existing = stateQueue.sync(execute: { container }) {
-                return existing
+            guard let warmed = stateQueue.sync(execute: { container }) else {
+                throw MLXModelRuntimeError.warmCompletedWithoutContainer
             }
+            return warmed
         }
 
-        try await warm()
+        let startedWarmTask = warmTaskSnapshot()
+        try await startedWarmTask.gate.wait()
 
         guard let warmed = stateQueue.sync(execute: { container }) else {
             throw MLXModelRuntimeError.warmCompletedWithoutContainer
         }
 
         return warmed
+    }
+}
+
+final class MLXRuntimeWarmGate: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "app.transcripted.autocomplete.mlx-runtime-warm-gate")
+    private var nextWaiterID = 0
+    private var waiters: [Int: CheckedContinuation<Void, Error>] = [:]
+    private var canceledBeforeRegistration = Set<Int>()
+    private var completion: Result<Void, Error>?
+
+    func wait() async throws {
+        let waiterID = queue.sync {
+            nextWaiterID += 1
+            return nextWaiterID
+        }
+
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await withCheckedThrowingContinuation { continuation in
+                let immediateResult: Result<Void, Error>? = queue.sync {
+                    if let completion {
+                        return completion
+                    }
+                    if canceledBeforeRegistration.remove(waiterID) != nil {
+                        return .failure(CancellationError())
+                    }
+
+                    waiters[waiterID] = continuation
+                    return nil
+                }
+
+                if let immediateResult {
+                    continuation.resume(with: immediateResult)
+                }
+            }
+        } onCancel: {
+            cancelWaiter(id: waiterID)
+        }
+    }
+
+    func finish(with result: Result<Void, Error>) {
+        let continuations = queue.sync {
+            guard completion == nil else {
+                return [CheckedContinuation<Void, Error>]()
+            }
+
+            completion = result
+            let continuations = Array(waiters.values)
+            waiters.removeAll()
+            canceledBeforeRegistration.removeAll()
+            return continuations
+        }
+
+        for continuation in continuations {
+            continuation.resume(with: result)
+        }
+    }
+
+    private func cancelWaiter(id: Int) {
+        let continuation: CheckedContinuation<Void, Error>? = queue.sync {
+            if let continuation = waiters.removeValue(forKey: id) {
+                return continuation
+            }
+            if completion == nil {
+                canceledBeforeRegistration.insert(id)
+            }
+            return nil
+        }
+
+        continuation?.resume(throwing: CancellationError())
     }
 }
 

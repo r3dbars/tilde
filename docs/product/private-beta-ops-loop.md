@@ -133,6 +133,10 @@ Validate the packet with:
 ./script/private_beta_packet.sh --check
 ```
 
+The `--check` path validates the current DMG/ZIP first. If those artifacts pass
+but `dist/private-beta/` is missing or stale, it regenerates the packet and then
+verifies the new checksums.
+
 ## Score Impact
 
 - Documentation and feedback operations: `10/10` once the packet and issue form
