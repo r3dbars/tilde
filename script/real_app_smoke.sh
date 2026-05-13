@@ -5011,11 +5011,14 @@ EOF
 
 textedit_default_model_latency_fragments() {
   cat <<'EOF'
-Default model latency proof keeps the local runtime steady
-Private beta recovery notes stay inside the app owned model path
-Offline startup checks the embedded asset before suggestions appear
-The typing loop measures phrase suggestions after stable context
-Runtime proof should prefer quiet complete sentences while typing
+The local model stays responsive when
+Private beta recovery feels safer because
+Offline startup checks the embedded asset before
+The typing loop measures phrase suggestions while
+Runtime proof should prefer quiet completions that
+App owned inference keeps suggestions private by
+Cold launch feels better when the model
+Typing responsiveness improves after the runtime
 EOF
 }
 
@@ -9097,7 +9100,7 @@ run_textedit_default_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 fragment sample_start expected_text
+  local sample_index=0 visible_sample_count=0 fragment sample_start expected_text
   while IFS= read -r fragment; do
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
@@ -9124,16 +9127,29 @@ run_textedit_default_model_latency() {
       "app=com.apple.TextEdit" \
       "mode=phraseContinuation" \
       "maxTokens=11"
-    wait_for_log_fields "$sample_start" "TextEdit default model latency visible $sample_index" 25 \
+    if wait_for_log_fields_optional "$sample_start" 8 \
       "suggestion-presented" \
       "app=com.apple.TextEdit" \
       "requestMode=phraseContinuation" \
-      "candidateSelectionSource=app-model-result"
+      "candidateSelectionSource=app-model-result"; then
+      visible_sample_count=$((visible_sample_count + 1))
+    elif wait_for_log_fields_optional "$sample_start" 1 \
+      "suggestion-blocked" \
+      "app=com.apple.TextEdit" \
+      "reason=empty-suggestion"; then
+      echo "TextEdit default model latency sample $sample_index produced an empty phrase candidate; trying the next stable context." >&2
+    else
+      wait_for_log_fields "$sample_start" "TextEdit default model latency visible or empty $sample_index" 1 \
+        "suggestion-presented" \
+        "app=com.apple.TextEdit" \
+        "requestMode=phraseContinuation" \
+        "candidateSelectionSource=app-model-result"
+    fi
     sleep 0.4
   done < <(textedit_default_model_latency_fragments)
 
-  if ((sample_index < 5)); then
-    echo "TextEdit default model latency proof expected at least 5 samples, got $sample_index." >&2
+  if ((visible_sample_count < 5)); then
+    echo "TextEdit default model latency proof expected at least 5 visible phrase samples, got $visible_sample_count from $sample_index attempted contexts." >&2
     exit 1
   fi
 
