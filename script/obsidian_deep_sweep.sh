@@ -3,27 +3,29 @@ set -euo pipefail
 
 ITERATIONS="${AUTOCOMPLETE_LAB_OBSIDIAN_DEEP_SWEEP_ITERATIONS:-1}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_OBSIDIAN_DEEP_SWEEP_REPORT:-docs/product/obsidian-deep-sweep-latest.md}"
-SKIP_BUILD_AFTER_FIRST=1
+SKIP_BUILD_AFTER_FIRST="${AUTOCOMPLETE_LAB_OBSIDIAN_DEEP_SWEEP_SKIP_BUILD_AFTER_FIRST:-0}"
 
 LANES=(
   obsidian
   obsidian-theme
-  obsidian-pane
   obsidian-long-note
   obsidian-font-zoom
   obsidian-markdown-bold
   obsidian-markdown-list
   obsidian-multiline
   obsidian-run-on
+  obsidian-pane
 )
 
 usage() {
   cat <<'EOF'
-Usage: script/obsidian_deep_sweep.sh [--iterations N] [--lanes lane1,lane2] [--no-skip-build-after-first]
+Usage: script/obsidian_deep_sweep.sh [--iterations N] [--lanes lane1,lane2] [--skip-build-after-first|--no-skip-build-after-first]
 
 Runs screenshot-backed Obsidian smoke lanes repeatedly and writes a compact
 pass/fail report. Each lane still uses script/real_app_smoke.sh --manual-gate
 because it focuses the real Obsidian app and a disposable proof vault note.
+By default each lane rebuilds/relaunches the app so Obsidian editor state stays
+isolated. Use --skip-build-after-first only for faster exploratory runs.
 EOF
 }
 
@@ -49,6 +51,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-skip-build-after-first)
       SKIP_BUILD_AFTER_FIRST=0
+      ;;
+    --skip-build-after-first)
+      SKIP_BUILD_AFTER_FIRST=1
       ;;
     *)
       echo "unknown option: $1" >&2
@@ -99,7 +104,6 @@ for iteration in $(seq 1 "$ITERATIONS"); do
 
     echo "[$iteration/$ITERATIONS] Running $lane"
     if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$lock_dir" \
-      AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
       AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS=md.obsidian \
       AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS=md.obsidian \
       AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 \
