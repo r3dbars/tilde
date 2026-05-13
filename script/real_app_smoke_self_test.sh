@@ -59,6 +59,17 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
   exit 1
 fi
 
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index('run_textedit_model_latency()')
+end = source.index('run_chrome_fixture()', start)
+block = source[start:end]
+if "dismiss_textedit_smoke_suggestion" in block:
+    raise SystemExit("model-latency proof must not press Escape after seeding context")
+PY
+
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof scenario cleanup" >&2
@@ -102,6 +113,11 @@ if '"mlx-completion-timing"' not in block or '"app=com.apple.TextEdit"' not in b
     raise SystemExit("model-latency timing proof must still require TextEdit MLX timing")
 if '"mode=wordCompletion"' not in block:
     raise SystemExit("model-latency timing proof must require wordCompletion after seed-context drain")
+start = source.index('wait_for_log_fields "$sample_start" "TextEdit model latency visible $sample_index"')
+end = source.index('sleep 0.4', start)
+block = source[start:end]
+if '"candidateSelectionSource=app-model-result"' not in block or '"requestMode=wordCompletion"' not in block:
+    raise SystemExit("model-latency visible proof must require model-backed word completion")
 PY
 
 script/real_app_smoke.sh chrome --dry-run >"$TMP_DIR/chrome.txt"
