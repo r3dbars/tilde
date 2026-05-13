@@ -103,16 +103,38 @@ struct BrowserHostedSurfacePolicyTests {
 
     @Test("Chrome local editor fixtures stay eligible")
     func allowsChromeLocalEditorFixtures() {
-        let decision = policy.decision(
-            bundleIdentifier: "com.google.Chrome",
-            fingerprint: FocusedElementFingerprint(
+        let cases = [
+            FocusedElementFingerprint(
+                title: "Local CodeMirror-style smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local Monaco-like smoke fixture editor input",
+                windowTitle: "SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local ProseMirror-like smoke fixture editor",
+                windowTitle: "SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local chat-like smoke fixture message composer",
+                windowTitle: "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]"
+            ),
+            FocusedElementFingerprint(
                 title: "Local ProseMirror-like smoke fixture",
                 description: "Real ProseMirror smoke editor",
                 windowTitle: "SteadyType Chrome Real ProseMirror Smoke [ready=1]"
             )
-        )
+        ]
 
-        #expect(decision.canSuggest)
+        for fingerprint in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(decision.canSuggest)
+        }
     }
 
     @Test("Chrome local textarea smoke fixture stays eligible")

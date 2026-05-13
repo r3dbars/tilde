@@ -623,7 +623,7 @@ if ! grep -F "disposable Chrome editor-like fixture" "$TMP_DIR/chrome-editor-lik
   echo "real app smoke self-test did not print the Chrome editor-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome Editor-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome editor-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
@@ -633,7 +633,7 @@ if ! grep -F "disposable Chrome monaco-like fixture" "$TMP_DIR/chrome-monaco-lik
   echo "real app smoke self-test did not print the Chrome Monaco-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome Monaco-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome Monaco-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
@@ -643,7 +643,7 @@ if ! grep -F "disposable Chrome prosemirror-like fixture" "$TMP_DIR/chrome-prose
   echo "real app smoke self-test did not print the Chrome ProseMirror-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome ProseMirror-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome ProseMirror-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
@@ -681,7 +681,7 @@ if ! grep -F "disposable Chrome chat-like fixture" "$TMP_DIR/chrome-chat-like.tx
   echo "real app smoke self-test did not print the Chrome chat-like dry-run plan" >&2
   exit 1
 fi
-if ! grep -F "SteadyType Chrome Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]" script/real_app_smoke.sh >/dev/null; then
+if ! grep -F "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected the Chrome chat-like fixture title to carry the local ready proof marker" >&2
   exit 1
 fi
