@@ -800,7 +800,7 @@
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
       "gaps": [
-        "Current-head long-note proof is blocked because CodeMirror reports the AX cursor before the bottom typed line and the live proof times out before suggestion-presented."
+        "Font/zoom, Markdown bold, Markdown list, multiline, and run-on Obsidian proof lanes must pass separately before Obsidian can graduate beyond partial."
       ],
     "requirements": [
       {
@@ -824,9 +824,27 @@
       },
       {
         "id": "obsidian-long-note-variants",
-        "status": "pending",
-        "summary": "Current-head bounded proof in a long scrolled note is blocked; rerun after the CodeMirror cursor source is repaired.",
+        "status": "complete",
+        "summary": "Current-head bounded proof in a long scrolled note is recorded with strict visual evidence.",
         "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
+      },
+      {
+        "id": "obsidian-font-zoom-variants",
+        "status": "pending",
+        "summary": "Font/zoom proof must show placement and insertion after Obsidian zoom changes.",
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-font-zoom --manual-gate"
+      },
+      {
+        "id": "obsidian-markdown-variants",
+        "status": "pending",
+        "summary": "Markdown bold and dash-list proof must show accepted words appear in the right formatted line.",
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-bold --manual-gate && AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate"
+      },
+      {
+        "id": "obsidian-multiline-run-on-variants",
+        "status": "pending",
+        "summary": "Multiline blank-line and run-on/wrapped sentence proof must show correct visual placement and insertion.",
+        "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate && AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate"
       }
     ],
     "requiredManualSmokes": [
@@ -851,6 +869,46 @@
         "app": "Obsidian",
         "bundle": "md.obsidian",
         "proof": "obsidian-long-note",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      {
+        "id": "obsidian-font-zoom",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-font-zoom",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      {
+        "id": "obsidian-markdown-bold",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-markdown-bold",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      {
+        "id": "obsidian-markdown-list",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-markdown-list",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      {
+        "id": "obsidian-multiline",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-multiline",
+        "minVerifiedAccepts": 2,
+        "requiresVisualStrictComplete": true
+      },
+      {
+        "id": "obsidian-run-on",
+        "app": "Obsidian",
+        "bundle": "md.obsidian",
+        "proof": "obsidian-run-on",
         "minVerifiedAccepts": 2,
         "requiresVisualStrictComplete": true
       }
@@ -1176,7 +1234,7 @@
       "surface": "Obsidian",
       "status": "partial",
       "owner": "electron editor adapter lane",
-      "safetyNote": "Defined Obsidian proof rows are current across default, theme, and pane lanes, but current-head long-note proof is blocked; broader vault variance and hidden-caret edge cases keep support yellow."
+      "safetyNote": "Defined Obsidian proof rows are current across default, theme, pane, and long-note lanes, but font/zoom, Markdown, multiline, and run-on proof must pass before support can move beyond yellow."
     },
     {
       "bundle": "com.apple.mail",
