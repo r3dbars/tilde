@@ -20,6 +20,7 @@ public struct ObsidianTabPassthroughRepairPolicy: Equatable, Sendable {
         currentTextBeforeCursor: String,
         previousTextAfterCursor: String,
         currentTextAfterCursor: String,
+        currentSelectedText: String = "",
         hasVisibleSuggestion: Bool,
         acceptedText: String?
     ) -> ObsidianTabPassthroughRepairDecision {
@@ -31,7 +32,15 @@ public struct ObsidianTabPassthroughRepairPolicy: Equatable, Sendable {
             return .skip("missing-accepted-text")
         }
 
-        guard previousTextAfterCursor == currentTextAfterCursor || currentTextAfterCursor.isEmpty else {
+        let afterCursorMatches = previousTextAfterCursor == currentTextAfterCursor
+            || currentTextAfterCursor.isEmpty
+        let hasCurrentLineSelectionIndent = currentTextBeforeCursorHasSelectedLineTabSpacer(
+            previousTextBeforeCursor: previousTextBeforeCursor,
+            currentTextBeforeCursor: currentTextBeforeCursor,
+            currentTextAfterCursor: currentTextAfterCursor,
+            currentSelectedText: currentSelectedText
+        )
+        guard afterCursorMatches || hasCurrentLineSelectionIndent else {
             return .skip("text-after-changed")
         }
 
@@ -39,7 +48,8 @@ public struct ObsidianTabPassthroughRepairPolicy: Equatable, Sendable {
                 || currentTextBeforeCursorHasCodeMirrorTabSpacer(
                     previousTextBeforeCursor: previousTextBeforeCursor,
                     currentTextBeforeCursor: currentTextBeforeCursor
-                ) else {
+                )
+                || hasCurrentLineSelectionIndent else {
             return .skip("not-leading-tab-indent")
         }
 
@@ -76,6 +86,40 @@ public struct ObsidianTabPassthroughRepairPolicy: Equatable, Sendable {
             && spacerLine.trimmingCodeMirrorInvisibleScaffolding().isEmpty
     }
 
+    private func currentTextBeforeCursorHasSelectedLineTabSpacer(
+        previousTextBeforeCursor: String,
+        currentTextBeforeCursor: String,
+        currentTextAfterCursor: String,
+        currentSelectedText: String
+    ) -> Bool {
+        let previousLine = currentLine(in: previousTextBeforeCursor)
+        guard previousLine.count >= 2,
+              currentSelectedText == previousLine || currentTextAfterCursor.hasPrefix(previousLine) else {
+            return false
+        }
+
+        let previousPrefix = textBeforeCurrentLine(in: previousTextBeforeCursor)
+        let spacerSource: String
+        if previousPrefix.isEmpty {
+            spacerSource = currentTextBeforeCursor
+        } else if let prefixRange = currentTextBeforeCursor.range(of: previousPrefix, options: .backwards) {
+            spacerSource = String(currentTextBeforeCursor[prefixRange.upperBound...])
+        } else {
+            return false
+        }
+
+        return spacerSource.contains("\t")
+            && spacerSource.trimmingCodeMirrorInvisibleScaffoldingAndLineBreaks().isEmpty
+    }
+
+    private func textBeforeCurrentLine(in text: String) -> String {
+        guard let lastNewline = text.lastIndex(of: "\n") else {
+            return ""
+        }
+
+        return String(text[...lastNewline])
+    }
+
     private func currentLine(in text: String) -> String {
         text.split(
             omittingEmptySubsequences: false,
@@ -92,6 +136,27 @@ private extension String {
                  0x200B, // zero-width space
                  0x200C, // zero-width non-joiner
                  0x200D, // zero-width joiner
+                 0x2060, // word joiner
+                 0xFEFF, // zero-width no-break space
+                 0xFFFC: // object replacement character
+                return false
+            default:
+                return true
+            }
+        })
+    }
+
+    func trimmingCodeMirrorInvisibleScaffoldingAndLineBreaks() -> String {
+        String(unicodeScalars.filter { scalar in
+            switch scalar.value {
+            case 0x0009, // tab
+                 0x000A, // line feed
+                 0x000D, // carriage return
+                 0x200B, // zero-width space
+                 0x200C, // zero-width non-joiner
+                 0x200D, // zero-width joiner
+                 0x2028, // line separator
+                 0x2029, // paragraph separator
                  0x2060, // word joiner
                  0xFEFF, // zero-width no-break space
                  0xFFFC: // object replacement character

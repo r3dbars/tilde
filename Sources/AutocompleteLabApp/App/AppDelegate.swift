@@ -6890,12 +6890,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentTextBeforeCursor: currentSnapshot.textBeforeCursor,
             previousTextAfterCursor: previousSnapshot.textAfterCursor,
             currentTextAfterCursor: currentSnapshot.textAfterCursor,
+            currentSelectedText: context.selectedText,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion || hasRecentSuggestion,
             acceptedText: acceptedText
         )
         guard decision.shouldRepair, let acceptedText, !acceptedText.isEmpty else {
             if profile.bundleIdentifier == bundleIdentifier,
-               currentSnapshot.textBeforeCursor.contains("\t") {
+               currentSnapshot.textBeforeCursor.contains("\t")
+                    || context.selectedTextLength > 0 {
                 DiagnosticsLog.shared.record(
                     "obsidian-tab-passthrough-repair-skipped",
                     metadata: [
@@ -6906,7 +6908,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "suggestionVisible": String(suggestionSession.hasVisibleSuggestion),
                         "acceptedChars": String(acceptedText?.count ?? 0),
                         "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
-                        "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count)
+                        "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count),
+                        "currentAfterChars": String(currentSnapshot.textAfterCursor.count),
+                        "selectedChars": String(context.selectedText.count),
+                        "selectedTextLength": String(context.selectedTextLength)
                     ]
                 )
             }
@@ -6945,16 +6950,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "acceptedChars": String(acceptedText.count),
                 "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
                 "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count),
+                "currentAfterChars": String(currentSnapshot.textAfterCursor.count),
+                "selectedChars": String(context.selectedText.count),
+                "selectedTextLength": String(context.selectedTextLength),
                 "suggestionAgeMilliseconds": suggestionAgeMilliseconds.map(String.init) ?? "unknown",
                 "suggestionVisible": String(suggestionSession.hasVisibleSuggestion)
             ]
         )
 
-        guard repairObsidianTabPassthroughByReplacingFocusedText(
+        let repairSucceeded = repairObsidianTabPassthroughByReplacingFocusedText(
             previousSnapshot: previousSnapshot,
             currentSnapshot: currentSnapshot,
             acceptedText: acceptedText
-        ) else {
+        ) || repairObsidianTabPassthroughByUndoingThenPasting(
+            previousSnapshot: previousSnapshot,
+            acceptedText: acceptedText
+        )
+        guard repairSucceeded else {
             recordKeyboardAction(key: key, action: action, handled: false, reason: "obsidian-tab-passthrough-direct-repair-failed")
             return false
         }
@@ -7105,6 +7117,130 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "currentChars": String(currentValue?.count ?? -1),
                 "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
                 "currentBeforeChars": String(currentSnapshot.textBeforeCursor.count)
+            ]
+        )
+        return succeeded
+    }
+
+    private func repairObsidianTabPassthroughByUndoingThenPasting(
+        previousSnapshot: FocusedTextSnapshot,
+        acceptedText: String
+    ) -> Bool {
+        let bundleIdentifier = "md.obsidian"
+        guard !acceptedText.isEmpty,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == bundleIdentifier else {
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "precondition-failed"
+                ]
+            )
+            return false
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "pasteboard-set-failed"
+                ]
+            )
+            return false
+        }
+        let fallbackChangeCount = pasteboard.changeCount
+
+        let script = """
+        tell application "System Events"
+          tell application process "Obsidian" to set frontmost to true
+          keystroke "z" using command down
+          delay 0.05
+          keystroke "v" using command down
+        end tell
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "osascript-run-failed"
+                ]
+            )
+            return false
+        }
+
+        guard process.terminationStatus == 0 else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "obsidian-tab-passthrough-undo-paste-repair",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "success": "false",
+                    "reason": "osascript-failed",
+                    "terminationStatus": String(process.terminationStatus)
+                ]
+            )
+            return false
+        }
+
+        schedulePasteboardRestore(
+            insertedText: acceptedText,
+            fallbackChangeCount: fallbackChangeCount,
+            originalItems: originalItems
+        )
+
+        let expectedText = previousSnapshot.textBeforeCursor + acceptedText + previousSnapshot.textAfterCursor
+        var succeeded = false
+        var currentChars = -1
+        for _ in 0..<8 {
+            if let context = accessibilityClient.focusedTextContext(allowDescendantTextFallback: true) {
+                let currentText = context.textBeforeCursor + context.textAfterCursor
+                currentChars = currentText.count
+                if currentText == expectedText {
+                    succeeded = true
+                    break
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        DiagnosticsLog.shared.record(
+            "obsidian-tab-passthrough-undo-paste-repair",
+            metadata: [
+                "app": bundleIdentifier,
+                "success": String(succeeded),
+                "acceptedChars": String(acceptedText.count),
+                "currentChars": String(currentChars),
+                "expectedChars": String(expectedText.count),
+                "previousBeforeChars": String(previousSnapshot.textBeforeCursor.count),
+                "previousAfterChars": String(previousSnapshot.textAfterCursor.count)
             ]
         )
         return succeeded

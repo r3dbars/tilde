@@ -76,6 +76,20 @@ struct AcceptanceSurvivalClassifierTests {
         #expect(measurement.deletedWithinTwoSeconds == false)
     }
 
+    @Test("Counts one-letter suffix accepts at the exact insertion offset")
+    func countsOneLetterSuffixAcceptsAtExactInsertionOffset() {
+        let measurement = classifier.classifyAroundExpectedInsertion(
+            acceptedText: "d",
+            currentFullText: "Autocomplete Lab Obsidian proof\nSmoke proof feed",
+            expectedInsertionUTF16Offset: "Autocomplete Lab Obsidian proof\nSmoke proof fee".utf16.count,
+            checkpoint: .twoSeconds
+        )
+
+        #expect(measurement.survivalClass == .lightlyEditedKept)
+        #expect(measurement.tokenRecall == 1.0)
+        #expect(!measurement.deletedWithinTwoSeconds)
+    }
+
     @Test("Combines exact and suffix-kept tokens")
     func combinesExactAndSuffixKeptTokens() {
         let measurement = classifier.classifyAroundExpectedInsertion(

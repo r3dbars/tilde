@@ -162,6 +162,15 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
                     return true
                 }
 
+                if Self.tokenWasKeptAtExpectedInsertion(
+                    acceptedTokenSpan: acceptedTokenSpan,
+                    currentTokenSpan: currentTokenSpan,
+                    currentTextWindow: window,
+                    localExpectedInsertionUTF16Offset: localExpectedInsertionOffset
+                ) {
+                    return true
+                }
+
                 return Self.tokenWasKeptAsWordCompletionSuffix(
                     acceptedTokenSpan: acceptedTokenSpan,
                     currentTokenSpan: currentTokenSpan,
@@ -456,5 +465,24 @@ public struct AcceptanceSurvivalClassifier: Equatable, Sendable {
         }
 
         return true
+    }
+
+    private static func tokenWasKeptAtExpectedInsertion(
+        acceptedTokenSpan: TokenSpan,
+        currentTokenSpan: TokenSpan,
+        currentTextWindow: String,
+        localExpectedInsertionUTF16Offset: Int
+    ) -> Bool {
+        let expectedStart = localExpectedInsertionUTF16Offset + acceptedTokenSpan.startUTF16Offset
+        let expectedEnd = localExpectedInsertionUTF16Offset + acceptedTokenSpan.endUTF16Offset
+        guard expectedStart >= currentTokenSpan.startUTF16Offset,
+              expectedEnd <= currentTokenSpan.endUTF16Offset,
+              expectedStart <= expectedEnd else {
+            return false
+        }
+
+        let startIndex = String.Index(utf16Offset: expectedStart, in: currentTextWindow)
+        let endIndex = String.Index(utf16Offset: expectedEnd, in: currentTextWindow)
+        return normalizedToken(String(currentTextWindow[startIndex..<endIndex])) == acceptedTokenSpan.token
     }
 }
