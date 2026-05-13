@@ -8536,6 +8536,8 @@ tell application "System Events"
   if bundle identifier of frontApp is not "md.obsidian" then
     error "Obsidian is not frontmost for smoke-note setup."
   end if
+  key code 125 using command down
+  delay 0.2
   keystroke rawText
 end tell
 APPLESCRIPT
