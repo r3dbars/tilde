@@ -20,6 +20,7 @@ class Launch:
     native_runtime_available: str
     model_override: str
     proof_app: str
+    proof_scenario: str
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class TraceWindow:
     end_line: int | None
     first_visible_samples: int
     model_samples: int
+    fast_word_visible_samples: int
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ def suggestion_key(event, line_number):
 def runtime_launches(path):
     launches = []
     current_proof_app = ""
+    current_proof_scenario = ""
     if not path.exists():
         return launches
 
@@ -75,6 +78,7 @@ def runtime_launches(path):
                 parts = stripped.split()
                 fields = fields_from(parts[1:])
                 current_proof_app = fields.get("app", "")
+                current_proof_scenario = fields.get("scenario", "")
                 continue
 
             if " runtime-bootstrap " not in f" {stripped} ":
@@ -92,6 +96,7 @@ def runtime_launches(path):
                     native_runtime_available=fields.get("nativeRuntimeAvailable", ""),
                     model_override=fields.get("modelOverride", ""),
                     proof_app=current_proof_app,
+                    proof_scenario=current_proof_scenario,
                 )
             )
     return launches
@@ -103,11 +108,13 @@ def trace_window(
     before_timestamp=None,
     required_trace_app=None,
     require_model_backed_visible=False,
+    forbid_fast_word_visible=False,
 ):
     trace_start_line = None
     trace_end_line = None
     first_visible_samples = 0
     model_samples = 0
+    fast_word_visible_samples = 0
     seen_presented = set()
     seen_model = set()
     model_backed_suggestion_ids = set()
@@ -144,10 +151,13 @@ def trace_window(
                     continue
 
                 metadata = event.get("metadata") or {}
+                selection_source = event.get("candidateSelectionSource") or metadata.get(
+                    "candidateSelectionSource"
+                )
+                if forbid_fast_word_visible and selection_source == "fast-word-completion":
+                    fast_word_visible_samples += 1
+
                 if require_model_backed_visible:
-                    selection_source = event.get("candidateSelectionSource") or metadata.get(
-                        "candidateSelectionSource"
-                    )
                     if selection_source != "app-model-result" and key not in model_backed_suggestion_ids:
                         continue
 
@@ -179,6 +189,7 @@ def trace_window(
         trace_end_line,
         first_visible_samples,
         model_samples,
+        fast_word_visible_samples,
     )
 
 
@@ -211,12 +222,18 @@ def select_window(
     required_proof_app=None,
     required_trace_app=None,
     require_model_backed_visible=False,
+    required_proof_scenario=None,
+    forbid_fast_word_visible=False,
 ):
     launches = runtime_launches(diagnostics_log)
     eligible_launches = eligible_default_launches(launches, expected_asset)
     if required_proof_app:
         eligible_launches = [
             launch for launch in eligible_launches if launch.proof_app == required_proof_app
+        ]
+    if required_proof_scenario:
+        eligible_launches = [
+            launch for launch in eligible_launches if launch.proof_scenario == required_proof_scenario
         ]
 
     if not eligible_launches:
@@ -225,7 +242,10 @@ def select_window(
     latest_launch = launches[-1]
     if required_proof_app:
         required_launches = [
-            launch for launch in launches if launch.proof_app == required_proof_app
+            launch
+            for launch in launches
+            if launch.proof_app == required_proof_app
+            and (not required_proof_scenario or launch.proof_scenario == required_proof_scenario)
         ]
         latest_required_launch = required_launches[-1] if required_launches else None
     else:
@@ -236,9 +256,10 @@ def select_window(
             "latest runtime launch is not the expected default runtime "
             f"(diagnosticsLine={latest_required_launch.line}; asset={latest_required_launch.asset or 'unknown'}; "
             f"candidate={latest_required_launch.candidate or 'unknown'}; "
-            f"modelOverride={latest_required_launch.model_override or 'none'}; "
-            f"nativeRuntimeAvailable={latest_required_launch.native_runtime_available or 'unknown'}; "
-            f"proofApp={latest_required_launch.proof_app or 'none'})"
+                f"modelOverride={latest_required_launch.model_override or 'none'}; "
+                f"nativeRuntimeAvailable={latest_required_launch.native_runtime_available or 'unknown'}; "
+                f"proofApp={latest_required_launch.proof_app or 'none'}; "
+                f"proofScenario={latest_required_launch.proof_scenario or 'none'})"
         )
         return Selection(
             latest_required_launch,
@@ -247,6 +268,7 @@ def select_window(
                 latest_required_launch.timestamp,
                 required_trace_app=required_trace_app,
                 require_model_backed_visible=require_model_backed_visible,
+                forbid_fast_word_visible=forbid_fast_word_visible,
             ),
             reason,
             False,
@@ -264,6 +286,7 @@ def select_window(
         for index, launch in enumerate(launches[current_segment_start:], start=current_segment_start)
         if is_eligible_default_launch(launch, expected_asset)
         and (not required_proof_app or launch.proof_app == required_proof_app)
+        and (not required_proof_scenario or launch.proof_scenario == required_proof_scenario)
     ]
     for index, launch in reversed(eligible_indexed_launches):
         next_launch = launches[index + 1] if index + 1 < len(launches) else None
@@ -275,7 +298,16 @@ def select_window(
             before_timestamp,
             required_trace_app=required_trace_app,
             require_model_backed_visible=require_model_backed_visible,
+            forbid_fast_word_visible=forbid_fast_word_visible,
         )
+        if forbid_fast_word_visible and window.fast_word_visible_samples > 0:
+            return Selection(
+                launch,
+                window,
+                "selected latency window has fast word completion samples",
+                False,
+                diagnostics_end_line,
+            )
         if (
             window.first_visible_samples >= min_first_visible_samples
             and window.model_samples >= min_model_samples
@@ -303,6 +335,7 @@ def select_window(
         fallback_launch.timestamp,
         required_trace_app=required_trace_app,
         require_model_backed_visible=require_model_backed_visible,
+        forbid_fast_word_visible=forbid_fast_word_visible,
     )
     return Selection(
         fallback_launch,
@@ -326,6 +359,10 @@ def main():
         help="Only select runtime launches started by this proof-mode app bundle.",
     )
     parser.add_argument(
+        "--required-proof-scenario",
+        help="Only select runtime launches tagged with this proof scenario.",
+    )
+    parser.add_argument(
         "--required-trace-app",
         help="Only count trace samples from this app bundle inside the selected window.",
     )
@@ -333,6 +370,11 @@ def main():
         "--require-model-backed-visible",
         action="store_true",
         help="Only count visible samples that are explicitly model-backed.",
+    )
+    parser.add_argument(
+        "--forbid-fast-word-visible",
+        action="store_true",
+        help="Fail if the selected window contains a fast word completion presentation.",
     )
     args = parser.parse_args()
 
@@ -345,6 +387,8 @@ def main():
         required_proof_app=args.required_proof_app,
         required_trace_app=args.required_trace_app,
         require_model_backed_visible=args.require_model_backed_visible,
+        required_proof_scenario=args.required_proof_scenario,
+        forbid_fast_word_visible=args.forbid_fast_word_visible,
     )
     launch = selection.launch
     window = selection.window
@@ -359,7 +403,8 @@ def main():
         f"{reason}; diagnosticsLine={launch.line}; traceStartLine={window.start_line}; "
         f"diagnosticsEndLine={selection.diagnostics_end_line or 'none'}; "
         f"traceEndLine={window.end_line or 'none'}; "
-        f"firstVisibleSamples={window.first_visible_samples}; modelSamples={window.model_samples}",
+        f"firstVisibleSamples={window.first_visible_samples}; modelSamples={window.model_samples}; "
+        f"fastWordVisibleSamples={window.fast_word_visible_samples}",
         file=sys.stderr,
     )
     if not selection.ok:
