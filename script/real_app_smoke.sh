@@ -7702,8 +7702,22 @@ refresh_build_archive_proof() {
     exit 1
   fi
 
-  rm -f "$archive_abs"
-  (cd dist && ditto -c -k --keepParent "SteadyType.app" "$archive_abs")
+  local archive_attempt archive_status
+  archive_status=1
+  for archive_attempt in 1 2 3; do
+    rm -f "$archive_abs"
+    if (cd dist && ditto -c -k --keepParent "SteadyType.app" "$archive_abs"); then
+      archive_status=0
+      break
+    fi
+    archive_status=$?
+    echo "Archive proof attempt $archive_attempt failed with status $archive_status; retrying." >&2
+    sleep 0.5
+  done
+  if ((archive_status != 0)); then
+    echo "Archive proof failed after 3 attempts." >&2
+    return "$archive_status"
+  fi
 
   local archive_sha
   archive_sha="$(shasum -a 256 "$archive_abs" | awk '{print $1}')"

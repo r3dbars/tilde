@@ -484,6 +484,8 @@ if "wait_for_current_autocomplete_lab_process\n  refresh_build_archive_proof" no
     raise SystemExit("build_if_needed must verify the current checkout process before proof")
 if 'else\n    wait_for_current_autocomplete_lab_process' not in build_bundle_if_needed:
     raise SystemExit("build_bundle_if_needed must verify the current checkout process when --skip-build is used")
+if "Archive proof failed after 3 attempts." not in source:
+    raise SystemExit("archive proof must retry transient ditto failures before failing the smoke")
 if "SteadyType smoke launch did not settle on this checkout" not in source:
     raise SystemExit("stale process failure message is missing")
 PY
