@@ -5038,6 +5038,25 @@ APPLESCRIPT
   wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit proof key typing"
 }
 
+press_textedit_event_tap_probe_key() {
+  local probe_key="${1:-x}"
+
+  (
+    AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT="$probe_key" osascript <<'APPLESCRIPT'
+set smokeText to system attribute "AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_TEXT"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.apple.TextEdit" then
+    error "TextEdit is not frontmost for event-tap proof typing."
+  end if
+  keystroke smokeText
+end tell
+APPLESCRIPT
+  ) &
+  local osascript_pid="$!"
+  wait_for_background_process "$osascript_pid" "${AUTOCOMPLETE_LAB_TEXTEDIT_KEY_TYPING_TIMEOUT_SECONDS:-4}" "TextEdit event-tap proof key typing"
+}
+
 type_textedit_smoke_fragment_and_confirm() {
   local window_title="$1"
   local fragment="$2"
@@ -9143,7 +9162,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible event_tap_start
   max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
@@ -9215,6 +9234,16 @@ run_textedit_model_latency() {
         "app=com.apple.TextEdit" \
         "candidateSelectionSource=app-model-result"; then
         attempt_had_visible=1
+        wait_for_log_fields "$sample_start" "TextEdit model latency event tap started $sample_index attempt $attempt" 5 \
+          "keyboard-event-tap-started"
+        assert_textedit_frontmost_window "$textedit_window_title" "TextEdit model latency event-tap proof"
+        event_tap_start="$(line_count "$LOG_PATH")"
+        press_textedit_event_tap_probe_key "x"
+        wait_for_log_fields "$event_tap_start" "TextEdit model latency event-tap printable key $sample_index attempt $attempt" 5 \
+          "keyboard-event-tap-latency" \
+          "key=other" \
+          "decision=passthrough-other"
+        event_tap_sample_count=$((event_tap_sample_count + 1))
         model_sample_count=$((model_sample_count + 1))
         visible_sample_count=$((visible_sample_count + 1))
         break
@@ -9240,7 +9269,7 @@ run_textedit_model_latency() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/latency_benchmark_report.py --beta-gate \
-      --require-event-tap-samples 5
+      --require-event-tap-samples "$event_tap_sample_count"
 }
 
 run_textedit_default_model_latency() {
