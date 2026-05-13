@@ -8,13 +8,13 @@ public final class RuntimeCancellationCoordinator: @unchecked Sendable {
 
     public init() {}
 
-    public var activeOperationCount: Int {
+    var activeOperationCount: Int {
         queue.sync {
             activeOperationCancellations.count
         }
     }
 
-    public func snapshot() -> Int {
+    func snapshot() -> Int {
         queue.sync {
             epoch
         }

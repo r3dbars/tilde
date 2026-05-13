@@ -97,6 +97,18 @@ if ! grep -F "Runtime network egress proof validation: PASS" "$TMP_DIR/validate-
   exit 1
 fi
 
+./script/check_runtime_network_egress.py \
+  --validate-proof "$TMP_DIR/no-egress.md" \
+  --max-proof-age-seconds 315360000 \
+  --min-samples 1 \
+  >"$TMP_DIR/validate-current-markdown.out"
+
+if ! grep -F "Runtime network egress proof validation: PASS" "$TMP_DIR/validate-current-markdown.out" >/dev/null; then
+  echo "runtime network self-test expected generated markdown proof validation to pass" >&2
+  cat "$TMP_DIR/validate-current-markdown.out" >&2
+  exit 1
+fi
+
 cat >"$FRESH_PROOF" <<'JSON'
 {
   "generated_at": "2026-05-13T05:05:00+00:00",
