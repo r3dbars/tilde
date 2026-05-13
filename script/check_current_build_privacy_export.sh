@@ -7,8 +7,60 @@ cd "$ROOT_DIR"
 APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
 OUTPUT_DIR="${AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT:-$ROOT_DIR/docs/diagnostics/runs/current-build-privacy-export-proof}"
+LOCK_DIR="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-current-build-privacy-export.lock}"
+LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_WAIT_SECONDS:-300}"
+LOCK_HELD=0
 
 BUILD_LOG=/tmp/autocomplete-current-build-privacy-build.log
+
+cleanup() {
+  if [[ "$LOCK_HELD" == "1" ]]; then
+    rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+acquire_lock() {
+  local deadline=$((SECONDS + LOCK_WAIT_SECONDS))
+  local existing_pid=""
+  local announced=0
+
+  while true; do
+    if mkdir "$LOCK_DIR" >/dev/null 2>&1; then
+      LOCK_HELD=1
+      printf '%s\n' "$$" >"$LOCK_DIR/pid"
+      return 0
+    fi
+
+    existing_pid=""
+    if [[ -f "$LOCK_DIR/pid" ]]; then
+      existing_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+    fi
+
+    if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+      if ((SECONDS >= deadline)); then
+        echo "current build privacy export is already active (pid $existing_pid)" >&2
+        echo "timed out waiting for lock: $LOCK_DIR" >&2
+        exit 1
+      fi
+      if [[ "$announced" == "0" ]]; then
+        echo "Waiting for active current build privacy export (pid $existing_pid)." >&2
+        announced=1
+      fi
+      sleep 2
+      continue
+    fi
+
+    rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true
+  done
+}
+
+if ! [[ "$LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_WAIT_SECONDS must be a non-negative integer" >&2
+  exit 2
+fi
+
+acquire_lock
 
 if [[ ! -x "$APP_BINARY" || "${AUTOCOMPLETE_LAB_REBUILD_PRIVACY_PROOF:-0}" =~ ^(1|true|yes|on)$ ]]; then
   if ! ./script/build_and_run.sh --bundle-only >"$BUILD_LOG" 2>&1; then
