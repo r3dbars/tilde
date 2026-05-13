@@ -414,7 +414,8 @@ fi
 if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadytype_app_process_rows' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'selfPGID' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'current_process_ancestor_pids' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi
@@ -864,6 +865,19 @@ fi
 if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/build-run-process-fail.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the build/run process scan" >&2
   exit 1
+fi
+
+SELF_TEST_PGID="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
+SELF_TEST_PGID="${SELF_TEST_PGID//[[:space:]]/}"
+if [[ -n "$SELF_TEST_PGID" ]]; then
+  if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS=0 AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST="123 1 $SELF_TEST_PGID bash ./script/build_and_run.sh --verify"$'\n' script/real_app_smoke.sh codex >/dev/null 2>"$TMP_DIR/same-pgid-build-run-process-fail.txt"; then
+    echo "real app smoke self-test expected same-PGID sibling build/run process scan to fail" >&2
+    exit 1
+  fi
+  if ! grep -F "Another real app smoke process is already active" "$TMP_DIR/same-pgid-build-run-process-fail.txt" >/dev/null; then
+    echo "real app smoke self-test did not explain the same-PGID sibling process scan" >&2
+    exit 1
+  fi
 fi
 
 if script/real_app_smoke.sh chrome --fixture >/dev/null 2>&1; then
