@@ -8289,7 +8289,7 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     sleep 0.15
     activate_obsidian_for_smoke
-    assert_frontmost_app "Obsidian" "Obsidian"
+    assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
@@ -8302,7 +8302,7 @@ run_obsidian() {
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
   else
     activate_obsidian_for_smoke
-    assert_frontmost_app "Obsidian" "Obsidian"
+    assert_obsidian_smoke_target "Smoke proof feels instant"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
