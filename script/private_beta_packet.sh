@@ -20,6 +20,9 @@ TESTER_DOCS_DIR="$PACKET_DIR/tester-docs"
 MODEL_ASSET_PATH="$PACKET_DIR/model-asset.md"
 PRIVACY_STATUS_PATH="$PACKET_DIR/privacy-status.md"
 CHECKSUM_PATH="$PACKET_DIR/checksums.txt"
+RELEASE_PROOF_DIR="$DIST_DIR/release-proof"
+RELEASE_CHECKSUM_PATH="$RELEASE_PROOF_DIR/checksums.txt"
+NOTARY_BLOCKER_PATH="$RELEASE_PROOF_DIR/notarization-blocker.txt"
 
 cd "$ROOT_DIR"
 
@@ -362,6 +365,56 @@ require_archive() {
   fi
 }
 
+require_release_proof_current() {
+  local failed=0
+
+  if [[ -s "$NOTARY_BLOCKER_PATH" ]]; then
+    cat "$NOTARY_BLOCKER_PATH" >&2
+    failed=1
+  fi
+
+  for path in \
+    "$RELEASE_PROOF_DIR/notarytool-submit.txt" \
+    "$RELEASE_PROOF_DIR/stapler-validate.txt" \
+    "$RELEASE_PROOF_DIR/spctl-dmg.txt" \
+    "$RELEASE_PROOF_DIR/spctl-installed-app.txt" \
+    "$RELEASE_CHECKSUM_PATH" \
+    "$RELEASE_PROOF_DIR/fresh-install-gatekeeper-proof.md"; do
+    if [[ ! -s "$path" ]]; then
+      echo "missing release proof: $path" >&2
+      failed=1
+    fi
+  done
+
+  for artifact_name in SteadyType.dmg SteadyType.zip; do
+    local artifact_path="$DIST_DIR/$artifact_name"
+    if [[ ! -s "$artifact_path" ]]; then
+      echo "missing release artifact: $artifact_path" >&2
+      failed=1
+      continue
+    fi
+
+    local expected_sha actual_sha
+    expected_sha="$(shasum -a 256 "$artifact_path" | awk '{print $1}')"
+    actual_sha="$(awk -v artifact="$artifact_name" '$1 == artifact {print $2; exit}' "$RELEASE_CHECKSUM_PATH" 2>/dev/null || true)"
+
+    if [[ -z "$actual_sha" ]]; then
+      echo "release proof checksum is missing $artifact_name" >&2
+      failed=1
+    elif [[ "$expected_sha" != "$actual_sha" ]]; then
+      echo "release proof checksum is stale for $artifact_name" >&2
+      echo "expected: $expected_sha" >&2
+      echo "actual:   $actual_sha" >&2
+      failed=1
+    fi
+  done
+
+  if ((failed > 0)); then
+    echo "Run ./script/package_release.sh archive, then ./script/package_release.sh --notarize before creating the private beta packet." >&2
+    exit 1
+  fi
+}
+
 check_archive_app() {
   local verify_dir app_path
   verify_dir="$(mktemp -d)"
@@ -436,6 +489,7 @@ require_generated_file() {
 
 create_packet() {
   require_archive
+  require_release_proof_current
   ./script/check_model_asset.py
   ./script/validate_beta_issue_template.sh --quiet
   check_archive_app
@@ -585,6 +639,7 @@ EOF
 
 check_packet() {
   require_archive
+  require_release_proof_current
   check_archive_app
   ./script/validate_beta_issue_template.sh --quiet
 

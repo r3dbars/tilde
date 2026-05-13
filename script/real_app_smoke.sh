@@ -6643,11 +6643,12 @@ wait_for_current_autocomplete_lab_process() {
 
 refresh_build_archive_proof() {
   local app_bundle="dist/SteadyType.app"
-  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/SteadyType.zip}"
+  local archive_path="${AUTOCOMPLETE_LAB_ARCHIVE_PATH:-dist/smoke-proof/SteadyType-smoke.zip}"
   local archive_dir archive_name archive_abs
 
   [[ -d "$app_bundle" ]] || return 0
 
+  export AUTOCOMPLETE_LAB_ARCHIVE_PATH="$archive_path"
   archive_dir="$(dirname "$archive_path")"
   archive_name="$(basename "$archive_path")"
   mkdir -p "$archive_dir"
