@@ -485,6 +485,9 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'selfPgid' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'processGroup[pid]' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'foreign_proof_process_lines' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/beta_readiness.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_score_targets.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null ||

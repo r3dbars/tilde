@@ -456,6 +456,7 @@ SMOKE_LOCK_DIR="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR:-${TMPDIR:-/tmp}/auto
 SMOKE_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS:-300}"
 SMOKE_LOCK_HELD=0
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
+EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
@@ -775,6 +776,64 @@ current_process_ancestor_pids() {
   done
 
   printf '%s\n' "${ancestors[@]}"
+}
+
+exclusive_proof_run_enabled() {
+  [[ "$EXCLUSIVE_PROOF_RUN" =~ ^(1|true|yes|on)$ ]]
+}
+
+foreign_proof_process_lines() {
+  local current_pgid
+  current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+
+  ps -axo pid=,pgid=,command= 2>/dev/null |
+    while read -r pid pgid command; do
+      [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
+      [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
+
+      case "$command" in
+        *script/real_app_smoke.sh*|*script/manual_proof_refresh.sh*|*script/obsidian_deep_sweep.sh*|*script/build_and_run.sh*|*script/local_quality_audit.py*|*script/local_completion_runtime.py*|*/SteadyType.app/Contents/MacOS/SteadyType*)
+          ;;
+        *)
+          continue
+          ;;
+      esac
+
+      local cwd
+      cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
+      if [[ "$cwd" == "$ROOT_DIR"* ]]; then
+        continue
+      fi
+
+      if [[ "$cwd" == */transcripted-autocomplete-lab* ||
+            "$cwd" == /private/tmp/steadytype-* ||
+            "$command" == */transcripted-autocomplete-lab/* ||
+            "$command" == /private/tmp/steadytype-* ]]; then
+        printf '%s\t%s\t%s\t%s\n' "$pid" "$pgid" "${cwd:-unknown-cwd}" "$command"
+      fi
+    done
+}
+
+terminate_foreign_proof_processes_for_exclusive_run() {
+  exclusive_proof_run_enabled || return 0
+
+  local lines
+  lines="$(foreign_proof_process_lines || true)"
+  [[ -n "$lines" ]] || return 0
+
+  echo "Exclusive proof run terminating foreign proof process(es):" >&2
+  echo "$lines" >&2
+
+  local pid pgid cwd command
+  while IFS=$'\t' read -r pid pgid cwd command; do
+    [[ -n "$pid" ]] || continue
+    if [[ -n "$pgid" ]]; then
+      kill -TERM -"$pgid" >/dev/null 2>&1 || true
+    fi
+    kill -TERM "$pid" >/dev/null 2>&1 || true
+  done <<<"$lines"
+
+  sleep 1
 }
 
 other_smoke_process_lines() {
@@ -9971,6 +10030,7 @@ if [[ "$APP" == "chrome" ]] && chrome_fixture_is_blocked_high_value_surface "$CH
   exit 1
 fi
 
+terminate_foreign_proof_processes_for_exclusive_run
 refuse_other_smoke_processes
 acquire_smoke_lock
 
