@@ -286,6 +286,11 @@ if ! grep -F 'AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line"' script/real
   echo "real app smoke self-test expected latency reports to include the tagged runtime launch" >&2
   exit 1
 fi
+if ! grep -F 'latest_runtime_bootstrap_line_number' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected latency relaunch guard to anchor to the tagged runtime bootstrap line" >&2
+  exit 1
+fi
 if ! grep -F 'clear_textedit_document_for_proof()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency initial reset"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index"' script/real_app_smoke.sh >/dev/null ||

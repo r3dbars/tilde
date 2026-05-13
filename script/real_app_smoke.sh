@@ -1019,6 +1019,16 @@ assert_no_runtime_relaunch_since() {
   exit 1
 }
 
+latest_runtime_bootstrap_line_number() {
+  local latest_line
+  latest_line="$(grep -n "runtime-bootstrap" "$LOG_PATH" 2>/dev/null | tail -n 1 | cut -d: -f1 || true)"
+  if [[ "$latest_line" =~ ^[0-9]+$ ]]; then
+    echo "$latest_line"
+    return 0
+  fi
+  line_count "$LOG_PATH"
+}
+
 latest_runtime_is_ready() {
   local latest_runtime_line
   latest_runtime_line="$(grep -E " runtime .*readinessStage=" "$LOG_PATH" 2>/dev/null | tail -n 1 || true)"
@@ -9077,7 +9087,7 @@ run_textedit_model_latency() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit model latency Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
-  proof_runtime_guard_line="$(line_count "$LOG_PATH")"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
 
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
@@ -9190,7 +9200,7 @@ run_textedit_default_model_latency() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "TextEdit default model latency Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "TextEdit default model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
-  proof_runtime_guard_line="$(line_count "$LOG_PATH")"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
 
   textedit_tmp_dir="$(make_tmp_dir)"
   textedit_file="$textedit_tmp_dir/textedit-default-model-latency-$(date +%Y%m%d%H%M%S)-$$-$RANDOM.txt"
