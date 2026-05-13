@@ -221,24 +221,22 @@ model_open = model_latency.index('open_textedit_smoke_document "$textedit_file" 
 if model_build > model_open:
     raise SystemExit("TextEdit model-latency proof must relaunch SteadyType before opening the disposable TextEdit window")
 default_model_latency = function_body("run_textedit_default_model_latency")
-if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" not in default_model_latency:
-    raise SystemExit("TextEdit default-model latency proof must skip the flaky System Events activation fallback")
-default_focus = default_model_latency.index('focus_textedit_smoke_editor "$textedit_window_title"')
-default_click = default_model_latency.index('click_textedit_smoke_editor "$textedit_window_title"')
-if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" not in default_model_latency[:default_focus]:
-    raise SystemExit("TextEdit default-model latency proof must skip System Events activation while focusing")
-if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" not in default_model_latency[default_focus:default_click]:
-    raise SystemExit("TextEdit default-model latency proof must skip System Events activation while clicking")
+if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in default_model_latency:
+    raise SystemExit("TextEdit default-model latency proof must keep bounded System Events focus recovery available")
 if "wait_for_textedit_frontmost_window" not in function_body("focus_textedit_smoke_editor"):
-    raise SystemExit("TextEdit focus must still verify the expected frontmost window after skipping System Events activation")
+    raise SystemExit("TextEdit focus must still verify the expected frontmost window after activation")
 activate_process_id_block = source[
     source.index("activate_process_id()"):
     source.index("activate_process_id_osascript()", source.index("activate_process_id()"))
 ]
 if "activateIgnoringOtherApps" not in activate_process_id_block:
     raise SystemExit("activate_process_id must force foreground activation for live proof focus recovery")
+if 'wait_for_appkit_activation_frontmost "$target_pid"' not in activate_process_id_block:
+    raise SystemExit("activate_process_id must skip System Events activation when AppKit already made the process frontmost")
 if 'activate_process_id_osascript "$target_pid" &' not in activate_process_id_block:
     raise SystemExit("activate_process_id must keep bounded System Events activation available")
+if "wait_for_appkit_activation_frontmost()" not in source or "frontmost_process_id" not in function_body("wait_for_appkit_activation_frontmost"):
+    raise SystemExit("real app smoke must probe the frontmost process before falling back to System Events activation")
 PY
 
 if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
