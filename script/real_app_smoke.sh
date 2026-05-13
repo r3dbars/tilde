@@ -7120,11 +7120,11 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Editor-Like Fixture Smoke [ready=1]</title>
+<title>SteadyType Chrome Local Editor-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <div class="cm-editor" role="application" aria-label="Local editor-like smoke fixture" style="display: grid; grid-template-columns: 48px 1fr; font: 18px -apple-system; width: 720px; min-height: 180px; margin: 80px; border: 1px solid #bbb;">
   <div aria-hidden="true" style="padding-top: 14px; border-right: 1px solid #ddd; background: #f5f5f2; color: #777; font: 14px Menlo, monospace; text-align: center;">1</div>
-  <div data-smoke-editor class="cm-content" role="textbox" aria-label="CodeMirror-style editor" aria-multiline="true" contenteditable="true" spellcheck="false" style="min-height: 160px; padding: 12px; outline: none; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
+  <div data-smoke-editor class="cm-content" role="textbox" aria-label="Local CodeMirror-style smoke fixture editor" aria-multiline="true" contenteditable="true" spellcheck="false" style="min-height: 160px; padding: 12px; outline: none; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
 </div>
 <script>
 window.focusSmokeEditor = function () {
@@ -7145,7 +7145,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Monaco-Like Fixture Smoke [ready=1]</title>
+<title>SteadyType Chrome Local Monaco-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #f7f7f7; }
@@ -7183,7 +7183,7 @@ body { margin: 0; background: #f7f7f7; }
   <div class="overflow-guard">
     <div class="monaco-scrollable-element">
       <div class="view-lines">
-        <div data-smoke-editor class="view-line inputarea monaco-mouse-cursor-text" role="textbox" aria-label="Monaco-like editor input" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
+        <div data-smoke-editor class="view-line inputarea monaco-mouse-cursor-text" role="textbox" aria-label="Local Monaco-like smoke fixture editor input" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
       </div>
     </div>
   </div>
@@ -7284,7 +7284,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome ProseMirror-Like Fixture Smoke [ready=1]</title>
+<title>SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body { margin: 0; background: #fbfbfb; }
@@ -7315,7 +7315,7 @@ body { margin: 0; background: #fbfbfb; }
 </style>
 <article class="editor-shell" aria-label="Local ProseMirror-like smoke fixture">
   <div class="menubar" aria-hidden="true"><span>B</span><span>I</span><span>H1</span></div>
-  <div data-smoke-editor class="ProseMirror" role="textbox" aria-label="ProseMirror-like editor" aria-multiline="true" contenteditable="true" spellcheck="false"><p><br></p></div>
+  <div data-smoke-editor class="ProseMirror" role="textbox" aria-label="Local ProseMirror-like smoke fixture editor" aria-multiline="true" contenteditable="true" spellcheck="false"><p><br></p></div>
 </article>
 <script>
 window.focusSmokeEditor = function () {
@@ -7382,7 +7382,7 @@ HTML
       cat <<'HTML'
 <!doctype html>
 <meta charset="utf-8">
-<title>SteadyType Chrome Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]</title>
+<title>SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
 <style>
 body {
@@ -7436,7 +7436,7 @@ button {
 <section class="thread" aria-label="Local chat-like smoke fixture">
   <div class="message">Local disposable chat fixture.</div>
   <form data-smoke-form>
-    <div data-smoke-editor role="textbox" aria-label="Chat message composer" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
+    <div data-smoke-editor role="textbox" aria-label="Local chat-like smoke fixture message composer" aria-multiline="true" contenteditable="true" spellcheck="false"></div>
     <button type="submit">Send</button>
   </form>
   <div class="meter" aria-live="polite">Submits: <span data-smoke-submit-count>0</span></div>
@@ -7444,7 +7444,7 @@ button {
 <script>
 window.autocompleteSmokeSubmitCount = 0;
 window.updateSmokeSubmitCount = function () {
-  document.title = "SteadyType Chrome Chat-Like No-Submit Smoke [submits=" + window.autocompleteSmokeSubmitCount + "]";
+  document.title = "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=" + window.autocompleteSmokeSubmitCount + "]";
   document.querySelector("[data-smoke-submit-count]").textContent = String(window.autocompleteSmokeSubmitCount);
 };
 window.autocompleteSmokeEditorText = function () {
