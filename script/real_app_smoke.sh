@@ -7639,10 +7639,12 @@ describe_plan() {
 build_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
-      AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1
       AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
     )
+    if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
+      build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
+    fi
     env "${build_run_env[@]}" ./script/build_and_run.sh run
   fi
 
@@ -7652,9 +7654,13 @@ build_if_needed() {
 
 build_bundle_if_needed() {
   if [[ "$SKIP_BUILD" != "1" ]]; then
-    AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1 \
-      AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1 \
-      ./script/build_and_run.sh bundle-only
+    local build_run_env=(
+      AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
+    )
+    if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
+      build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
+    fi
+    env "${build_run_env[@]}" ./script/build_and_run.sh bundle-only
   else
     wait_for_current_autocomplete_lab_process
   fi
