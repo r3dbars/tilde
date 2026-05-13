@@ -672,7 +672,7 @@
         "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
       ],
       "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for ProseMirror only; Monaco default AX exposes too little verified text context. The official ProseMirror and CodeMirror pages now have strict screenshot-backed isolated-CDP proof. Monaco production-site display reaches floatingMirror after cramped inline placement, but verified accept remains open."
+        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for ProseMirror only; Monaco default AX exposes too little verified text context. The official ProseMirror and CodeMirror pages have strict screenshot-backed isolated-CDP proof. Monaco production-site display reaches floatingMirror after cramped inline placement, but verified accept remains open."
       ],
       "requirements": [
         {
@@ -696,17 +696,18 @@
         },
         {
           "id": "production-chrome-codemirror",
-          "status": "blocked",
-          "summary": "Run the guarded official CodeMirror demo lane after SteadyType has macOS Accessibility permission on this host.",
+          "status": "complete",
+          "summary": "Bounded strict screenshot-backed proof covers the official CodeMirror try page through an isolated temporary Chrome profile plus DevTools setup.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official",
           "safePath": [
             "codemirror-official: https://codemirror.net/try/"
           ],
-          "latestAttempt": {
-            "timeUTC": "2026-05-12T12:18:03Z",
-            "result": "failed-closed-before-typing",
-            "diagnostics": "lines 1-6 in `/Users/redbars/Library/Logs/SteadyType/diagnostics.log`",
-            "reason": "SteadyType launch reported accessibility=false and status accessibility=AX missing; no Chrome editor text was typed."
+          "manualSmoke": {
+            "app": "Chrome",
+            "bundle": "com.google.Chrome",
+            "proof": "codemirror-official",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
           }
         }
       ]
@@ -1107,7 +1108,7 @@
         "docs/product/visual-placement-screenshots/claude-code-terminal.png"
       ],
       "gaps": [
-        "Terminal-host proof is stricter and host-labelable. The current Terminal lane has no-submit insertion proof on commit ca41cdc33e5e, but the strict screenshot refresh was blocked by an ungranted macOS screen/audio permission prompt. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
+        "Terminal-host proof is stricter and host-labelable. The current Terminal lane has strict screenshot-backed no-submit insertion proof on commit f7d0b5a8352c. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
       ],
       "requirements": [
         {
@@ -1126,9 +1127,17 @@
         },
         {
           "id": "claude-code-terminal-strict-screenshot-refresh",
-          "status": "pending",
-          "summary": "Refresh Terminal-host proof with strict screenshot evidence after the local macOS screen/audio permission prompt is granted by the user.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
+          "status": "complete",
+          "summary": "Terminal-host one-word Tab proof now includes strict screenshot evidence and prompt no-submit confirmation.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate",
+          "manualSmoke": {
+            "app": "Claude Code",
+            "bundle": "com.anthropic.claude-code",
+            "proof": "default",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": true
+          }
         },
         {
           "id": "claude-code-iterm2-host-no-submit",
