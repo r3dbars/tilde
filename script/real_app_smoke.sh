@@ -8905,7 +8905,16 @@ run_obsidian() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  type_obsidian_raw_smoke_text "$first_fragment"
+  if [[ "$manual_app" == "obsidian-long-note" ]]; then
+    move_obsidian_caret_to_document_end
+    assert_obsidian_smoke_target
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$first_fragment"
+    wait_for_obsidian_smoke_note_file_suffix "Smoke proof feels" 5
+    move_obsidian_caret_to_document_end
+    assert_obsidian_smoke_target "Smoke proof feels"
+  else
+    type_obsidian_raw_smoke_text "$first_fragment"
+  fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   activate_obsidian_for_smoke
   assert_obsidian_smoke_target
