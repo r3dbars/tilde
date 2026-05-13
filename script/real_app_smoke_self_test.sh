@@ -738,6 +738,12 @@ if ! grep -F 'first_fragment="moke proof feel"' script/real_app_smoke.sh >/dev/n
   exit 1
 fi
 
+if ! grep -F 'wait_for_frontmost_app "Obsidian" "${AUTOCOMPLETE_LAB_OBSIDIAN_ACTIVATION_WAIT_SECONDS:-5}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_obsidian_focus_for_smoke()' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian activation to wait for frontmost focus before proof actions" >&2
+  exit 1
+fi
+
 python3 - <<'PY'
 from pathlib import Path
 
@@ -758,14 +764,27 @@ full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]
 full_branch = full_branch[:full_branch.index('else')]
 required = [
     'wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"',
-    'activate_obsidian_for_smoke',
-    'assert_frontmost_app "Obsidian" "Obsidian long-note"',
+    'settle_obsidian_focus_for_smoke "Obsidian long-note"',
     'press_accept_all_shortcut',
 ]
 positions = [full_branch.find(text) for text in required]
 if any(position < 0 for position in positions) or positions != sorted(positions):
     raise SystemExit(
-        "real app smoke self-test expected Obsidian long-note proof to capture the second visual frame and reassert focus before full accept"
+        "real app smoke self-test expected Obsidian long-note proof to capture the second visual frame and settle focus before full accept"
+    )
+
+normal_branch = source[source.index('else', source.index('wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified"')):]
+normal_branch = normal_branch[:normal_branch.index('fi', normal_branch.index('type_obsidian_raw_smoke_text " and stays"'))]
+normal_required = [
+    'settle_obsidian_focus_for_smoke "Obsidian post-accept setup"',
+    'assert_obsidian_smoke_target "Smoke proof feels instant"',
+    'second_start_line="$(line_count "$LOG_PATH")"',
+    'type_obsidian_raw_smoke_text " and stays"',
+]
+normal_positions = [normal_branch.find(text) for text in normal_required]
+if any(position < 0 for position in normal_positions) or normal_positions != sorted(normal_positions):
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian normal proof to settle focus before second typing"
     )
 PY
 

@@ -1369,6 +1369,15 @@ APPLESCRIPT
 
 activate_obsidian_for_smoke() {
   activate_app_by_process_name "Obsidian"
+  wait_for_frontmost_app "Obsidian" "${AUTOCOMPLETE_LAB_OBSIDIAN_ACTIVATION_WAIT_SECONDS:-5}"
+}
+
+settle_obsidian_focus_for_smoke() {
+  local label="${1:-Obsidian}"
+
+  activate_obsidian_for_smoke
+  sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.25}"
+  assert_frontmost_app "Obsidian" "$label"
 }
 
 frontmost_process_id() {
@@ -9182,8 +9191,7 @@ run_obsidian() {
       wait_for_screenshot_capture_if_enabled "$zoom_resync_line" "md.obsidian" "Obsidian zoom-resynced"
     fi
   fi
-  activate_obsidian_for_smoke
-  assert_frontmost_app "Obsidian" "Obsidian"
+  settle_obsidian_focus_for_smoke "Obsidian"
   press_key_code 48
   wait_for_log_fields "$start_line" "Obsidian Tab acceptance" 12 \
     "keyboard-action" \
@@ -9205,6 +9213,7 @@ run_obsidian() {
     move_obsidian_caret_to_document_end
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
+    settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
     assert_obsidian_smoke_target "Smoke proof feels instant"
     if [[ "$manual_app" == "obsidian-pane" ]]; then
       move_obsidian_caret_to_line_end
@@ -9235,8 +9244,7 @@ run_obsidian() {
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     full_start_line="$(line_count "$LOG_PATH")"
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
-    activate_obsidian_for_smoke
-    assert_frontmost_app "Obsidian" "Obsidian long-note"
+    settle_obsidian_focus_for_smoke "Obsidian long-note"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
       "keyboard-action" \
@@ -9248,8 +9256,7 @@ run_obsidian() {
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
   else
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian second"
-    activate_obsidian_for_smoke
-    assert_frontmost_app "Obsidian" "Obsidian"
+    settle_obsidian_focus_for_smoke "Obsidian"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
