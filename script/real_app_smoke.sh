@@ -8850,7 +8850,6 @@ run_textedit() {
       set_textedit_appearance dark
       ;;
   esac
-  export AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1
   export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1
 
   textedit_tmp_dir="$(make_tmp_dir)"
