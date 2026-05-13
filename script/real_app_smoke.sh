@@ -9178,7 +9178,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible event_tap_start
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
   max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
@@ -9199,6 +9199,7 @@ run_textedit_model_latency() {
     fi
     attempt_had_model=0
     attempt_had_visible=0
+    attempt_had_event_tap=0
     for ((attempt = 1; attempt <= max_attempts; attempt++)); do
       assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "TextEdit model latency seed $sample_index attempt $attempt"
       clear_textedit_document_for_proof "$textedit_window_title" "TextEdit model latency reset $sample_index attempt $attempt"
@@ -9256,12 +9257,21 @@ run_textedit_model_latency() {
           event_tap_started=1
         fi
         assert_textedit_frontmost_window "$textedit_window_title" "TextEdit model latency event-tap proof"
+        if wait_for_log_fields_optional "$sample_start" 2 \
+          "keyboard-event-tap-started"; then
+          sleep "${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_EVENT_TAP_SETTLE_SECONDS:-0.25}"
+        fi
         event_tap_start="$(line_count "$LOG_PATH")"
         press_textedit_event_tap_probe_key
-        wait_for_log_fields "$event_tap_start" "TextEdit model latency event-tap Tab key $sample_index attempt $attempt" 5 \
+        if ! wait_for_log_fields_optional "$event_tap_start" 5 \
           "keyboard-event-tap-latency" \
           "key=tab" \
-          "decision=consume"
+          "decision=consume"; then
+          echo "TextEdit model latency sample $sample_index attempt $attempt missed the event-tap Tab consume proof; retrying this stable context if attempts remain." >&2
+          sleep 0.4
+          continue
+        fi
+        attempt_had_event_tap=1
         event_tap_sample_count=$((event_tap_sample_count + 1))
         model_sample_count=$((model_sample_count + 1))
         visible_sample_count=$((visible_sample_count + 1))
@@ -9273,6 +9283,9 @@ run_textedit_model_latency() {
     done
     if ((attempt_had_model == 1 && attempt_had_visible == 0)); then
       echo "TextEdit model latency sample $sample_index exhausted $max_attempts attempts with model timing but no visible model-backed word completion." >&2
+    fi
+    if ((attempt_had_visible == 1 && attempt_had_event_tap == 0)); then
+      echo "TextEdit model latency sample $sample_index exhausted $max_attempts attempts with visible model-backed word completion but no event-tap Tab consume proof." >&2
     fi
     if ((visible_sample_count >= 5 && model_sample_count >= 5)); then
       break
