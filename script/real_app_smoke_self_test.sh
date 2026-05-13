@@ -70,6 +70,10 @@ end = source.index('run_chrome_fixture()', start)
 block = source[start:end]
 if "wait_for_log_fields_optional \"$seed_start\"" not in block:
     raise SystemExit("model-latency proof must wait briefly for seed timing before the measured sample")
+if "describe_textedit_model_latency_seed_miss" not in block:
+    raise SystemExit("model-latency proof must diagnose missing seed logs before the measured sample")
+if 'wait_for_log_fields "$seed_start" "TextEdit model latency disabled phrase seed' in block:
+    raise SystemExit("model-latency proof must not hard-fail before typing the measured trigger")
 if "dismiss_textedit_smoke_suggestion" in block or "key code 53" in block:
     raise SystemExit("model-latency proof must not press Escape after seeding context")
 runtime_ready = block.index('"TextEdit model latency runtime readiness"')
