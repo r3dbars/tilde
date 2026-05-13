@@ -31,6 +31,8 @@ require_contains "$READINESS_SCRIPT" 'DiagnosticsTypingHealthTests'
 reject_contains "$READINESS_SCRIPT" 'run_check "Current build privacy export proof"'
 
 require_contains "$PRIVACY_SCRIPT" 'BUILD_LOG=/tmp/autocomplete-current-build-privacy-build.log'
+require_contains "$PRIVACY_SCRIPT" 'AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_DIR'
+require_contains "$PRIVACY_SCRIPT" 'current build privacy export is already active'
 require_contains "$PRIVACY_SCRIPT" 'failed to build app bundle for privacy export proof'
 require_contains "$PRIVACY_SCRIPT" 'find "$OUTPUT_DIR" \( -name '\''traces.jsonl'\'' -o -name '\''raw-traces.jsonl'\'' \)'
 require_contains "$PRIVACY_SCRIPT" 'proof-private-|private\.example|private-screenshot|private-recipient|private document|private subject'
