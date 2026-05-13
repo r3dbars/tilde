@@ -187,6 +187,14 @@ def int_value(value: str | None) -> int | None:
         return None
 
 
+def first_int_field(fields: dict[str, str], *keys: str) -> int | None:
+    for key in keys:
+        value = int_value(fields.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 def percentile(values: list[int], fraction: float) -> int | None:
     if not values:
         return None
@@ -349,9 +357,7 @@ def parse_diagnostics(path: Path, line_limit: int) -> tuple[dict[str, dict[str, 
 
         if event == "mlx-completion-timing":
             first = int_value(fields.get("firstChunkMilliseconds"))
-            total = int_value(fields.get("totalMilliseconds")) or int_value(
-                fields.get("generationMilliseconds")
-            )
+            total = first_int_field(fields, "totalMilliseconds", "generationMilliseconds")
             if first is not None:
                 values[current_alias]["first_token"].append(first)
             if total is not None:
@@ -442,7 +448,8 @@ def merge_runtime_reports(paths: list[Path]) -> RuntimeReportEvidence:
         report = parse_runtime_report(path)
         merged.sources.extend(report.sources)
         merged.installed_models.update(report.installed_models)
-        merged.metrics.update(report.metrics)
+        for alias, metrics in report.metrics.items():
+            merged.metrics[alias].update(metrics)
         if report.active_alias is not None:
             merged.active_alias = report.active_alias
         if report.cpu_percent is not None:
