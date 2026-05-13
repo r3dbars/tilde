@@ -98,6 +98,11 @@ if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null
   exit 1
 fi
 
+if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
+  exit 1
+fi
+
 if ! awk '
   /textedit_model_latency_fragments\(\)/ { in_fragments = 1; next }
   in_fragments && /^EOF$/ { exit }
