@@ -106,10 +106,13 @@ require_contains "$SCRIPT_TEXT" "spctl -a -t open --context context:primary-sign
 require_contains "$SCRIPT_TEXT" "spctl --assess --type execute --verbose=4"
 require_contains "$SCRIPT_TEXT" "SteadyType.dmg"
 require_contains "$SCRIPT_TEXT" "packet_checksum_for"
+require_contains "$SCRIPT_TEXT" "check_secondary_archive_app"
 require_contains "$SCRIPT_TEXT" "SteadyType.zip"
 require_contains "$SCRIPT_TEXT" "beta packet checksum is stale for SteadyType.zip"
 require_contains "$SCRIPT_TEXT" "beta packet checksum references missing SteadyType.zip"
 require_contains "$SCRIPT_TEXT" "Developer ID DMG signature blocked"
+require_contains "$SCRIPT_TEXT" "Developer ID archive signature blocked"
+require_contains "$SCRIPT_TEXT" "refresh or remove the secondary ZIP"
 require_contains "$SCRIPT_TEXT" "This is separate from Apple notarization credentials."
 reject_contains "$SCRIPT_TEXT" '1. Unzip `SteadyType.zip`.'
 

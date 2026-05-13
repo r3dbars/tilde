@@ -365,6 +365,38 @@ packet_checksum_for() {
   awk -v artifact_name="$artifact_name" '$1 == artifact_name { print $2; exit }' "$CHECKSUM_PATH"
 }
 
+check_secondary_archive_app() {
+  local verify_dir app_path
+
+  if [[ ! -s "$ZIP_PATH" ]]; then
+    return 0
+  fi
+
+  verify_dir="$(mktemp -d)"
+  app_path="$verify_dir/SteadyType.app"
+
+  if ! ditto -x -k "$ZIP_PATH" "$verify_dir"; then
+    rm -rf "$verify_dir"
+    echo "Developer ID archive signature blocked: could not expand secondary archive: $ZIP_PATH" >&2
+    exit 1
+  fi
+
+  if [[ ! -d "$app_path" ]]; then
+    rm -rf "$verify_dir"
+    echo "Developer ID archive signature blocked: secondary archive does not contain SteadyType.app" >&2
+    exit 1
+  fi
+
+  if ! ./script/check_app_bundle.sh --release "$app_path"; then
+    rm -rf "$verify_dir"
+    echo "Developer ID archive signature blocked: secondary archive app is not signed with Developer ID Application" >&2
+    echo "Send testers the DMG, and refresh or remove the secondary ZIP before shipping the packet." >&2
+    exit 1
+  fi
+
+  rm -rf "$verify_dir"
+}
+
 require_primary_artifact() {
   if [[ ! -s "$DMG_PATH" ]]; then
     echo "missing primary beta artifact: $DMG_PATH" >&2
@@ -623,6 +655,7 @@ EOF
 check_packet() {
   require_primary_artifact
   check_primary_artifact_app
+  check_secondary_archive_app
   ./script/validate_beta_issue_template.sh --quiet
 
   ./script/check_model_asset.py --quiet || {
