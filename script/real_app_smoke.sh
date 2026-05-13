@@ -3575,6 +3575,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
 for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(appElement, 0.5)
@@ -3583,8 +3600,15 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
     }
 
     let targetWindow = windows.first(where: {
-        (copyAttribute($0, kAXTitleAttribute) as? String) == targetTitle
-    }) ?? (allowSingleWindowFallback && windows.count == 1 ? windows[0] : nil)
+        textEditTitleMatches(copyAttribute($0, kAXTitleAttribute) as? String)
+    }) ?? (allowSingleWindowFallback && windows.count == 1 && {
+        let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
+        return title.hasPrefix("textedit-smoke-") ||
+            title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("autocomplete-lab-typing-soak-") ||
+            title.hasPrefix("textedit-ax-retention-proof.") ||
+            title.hasPrefix("textedit-retention-proof.")
+    }() ? windows[0] : nil)
 
     if let window = targetWindow {
         app.activate(options: [.activateAllWindows])
@@ -3596,7 +3620,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? app.processIdentifier)
+        print(app.processIdentifier)
         exit(0)
     }
 }
@@ -3631,6 +3655,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
         return nil
     }
     return value
+}
+
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
 }
 
 func bounds(for element: AXUIElement) -> CGRect? {
@@ -3680,8 +3721,15 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
     }
 
     let targetWindow = windows.first(where: {
-        (copyAttribute($0, kAXTitleAttribute) as? String) == targetTitle
-    }) ?? (allowSingleWindowFallback && windows.count == 1 ? windows[0] : nil)
+        textEditTitleMatches(copyAttribute($0, kAXTitleAttribute) as? String)
+    }) ?? (allowSingleWindowFallback && windows.count == 1 && {
+        let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
+        return title.hasPrefix("textedit-smoke-") ||
+            title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("autocomplete-lab-typing-soak-") ||
+            title.hasPrefix("textedit-ax-retention-proof.") ||
+            title.hasPrefix("textedit-retention-proof.")
+    }() ? windows[0] : nil)
 
     if let window = targetWindow {
         let textInput = firstTextInput(in: window)
@@ -3716,7 +3764,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? app.processIdentifier)
+        print(app.processIdentifier)
         exit(0)
     }
 }
@@ -3756,6 +3804,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
 guard let frontmost = NSWorkspace.shared.frontmostApplication,
       frontmost.bundleIdentifier == "com.apple.TextEdit" else {
     print("0")
@@ -3768,7 +3833,7 @@ AXUIElementSetMessagingTimeout(appElement, 0.5)
 for attribute in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
     if let rawWindow = copyAttribute(appElement, attribute) {
         let window = rawWindow as! AXUIElement
-        if (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+        if textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
             print("1")
             exit(0)
         }
@@ -3776,12 +3841,21 @@ for attribute in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
 }
 
 if let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] {
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
         print("1")
         exit(0)
     }
 
     if allowSingleWindowFallback && windows.count == 1 {
+        let title = copyAttribute(windows[0], kAXTitleAttribute) as? String ?? ""
+        guard title.hasPrefix("textedit-smoke-") ||
+            title.hasPrefix("textedit-model-latency-") ||
+            title.hasPrefix("autocomplete-lab-typing-soak-") ||
+            title.hasPrefix("textedit-ax-retention-proof.") ||
+            title.hasPrefix("textedit-retention-proof.") else {
+            print("0")
+            exit(0)
+        }
         print("1")
         exit(0)
     }
@@ -3899,6 +3973,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
 func children(of element: AXUIElement) -> [AXUIElement] {
     copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
 }
@@ -3932,7 +4023,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
     }
 
     for window in windows {
-        guard (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle else {
+        guard textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) else {
             continue
         }
 
@@ -3968,6 +4059,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
         return nil
     }
     return value
+}
+
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
 }
 
 func children(of element: AXUIElement) -> [AXUIElement] {
@@ -4008,7 +4116,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         continue
     }
 
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
         guard let textInput = firstTextInput(in: window) else {
             exit(1)
         }
@@ -4058,6 +4166,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
 for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(appElement, 0.5)
@@ -4065,7 +4190,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         continue
     }
 
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
         print("1")
         exit(0)
     }
@@ -4101,7 +4226,7 @@ APPLESCRIPT
   fi
 }
 
-textedit_window_count() {
+textedit_single_smoke_window_ready() {
   swift - <<'SWIFT' 2>/dev/null || true
 import AppKit
 import ApplicationServices
@@ -4116,16 +4241,30 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
-var count = 0
+var titles: [String] = []
 for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(appElement, 0.5)
     if let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] {
-        count += windows.count
+        titles.append(contentsOf: windows.map {
+            copyAttribute($0, kAXTitleAttribute) as? String ?? ""
+        })
     }
 }
 
-print(count)
+if titles.count == 1 {
+    let title = titles[0]
+    if title.hasPrefix("textedit-smoke-") ||
+        title.hasPrefix("textedit-model-latency-") ||
+        title.hasPrefix("autocomplete-lab-typing-soak-") ||
+        title.hasPrefix("textedit-ax-retention-proof.") ||
+        title.hasPrefix("textedit-retention-proof.") {
+        print("1")
+        exit(0)
+    }
+}
+
+print("0")
 SWIFT
 }
 
@@ -4140,7 +4279,7 @@ wait_for_textedit_document_open() {
     fi
     if [[ "$(textedit_document_name_exists "$window_title")" == "1" ]]; then
       nudge_textedit_frontmost
-      if [[ "$(textedit_window_count)" =~ ^[1-9][0-9]*$ ]]; then
+      if [[ "$(textedit_single_smoke_window_ready)" == "1" ]]; then
         return 0
       fi
     fi
@@ -4444,6 +4583,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
 func children(of element: AXUIElement) -> [AXUIElement] {
     copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
 }
@@ -4474,7 +4630,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         continue
     }
 
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
         guard let textInput = firstTextInput(in: window) else {
             exit(1)
         }
@@ -4680,6 +4836,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
 for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(appElement, 0.5)
@@ -4687,7 +4860,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         continue
     }
 
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
         var position = CGPoint(x: x, y: y)
         var size = CGSize(width: width, height: height)
         guard let positionValue = AXValueCreate(.cgPoint, &position),
@@ -4733,6 +4906,23 @@ func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     return value
 }
 
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
 func children(of element: AXUIElement) -> [AXUIElement] {
     copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
 }
@@ -4763,7 +4953,7 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
         continue
     }
 
-    for window in windows where (copyAttribute(window, kAXTitleAttribute) as? String) == targetTitle {
+    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
         guard let textInput = firstTextInput(in: window) else {
             exit(1)
         }

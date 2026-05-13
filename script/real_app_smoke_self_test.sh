@@ -95,7 +95,7 @@ fi
 if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Open TextEdit documents:' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'textedit_window_count' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'textedit_single_smoke_window_ready' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout 4 "TextEdit AppleScript open"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_NAME_PROBE_TIMEOUT_SECONDS:-2}" "TextEdit document-name probe"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'run_osascript_with_timeout "${AUTOCOMPLETE_LAB_TEXTEDIT_DOCUMENT_LIST_TIMEOUT_SECONDS:-2}" "TextEdit document-list diagnostic"' script/real_app_smoke.sh >/dev/null ||
@@ -117,18 +117,35 @@ def function_body(name: str) -> str:
     end = source.index("\n}\n\n", start) + 3
     return source[start:end]
 
-for name in ("raise_textedit_smoke_window", "click_textedit_smoke_window"):
-    block = function_body(name)
+textedit_focus_blocks = {
+    "raise_textedit_smoke_window": source[
+        source.index("raise_textedit_smoke_window()"):
+        source.index("click_textedit_smoke_window()", source.index("raise_textedit_smoke_window()"))
+    ],
+    "click_textedit_smoke_window": source[
+        source.index("click_textedit_smoke_window()"):
+        source.index("nudge_textedit_frontmost()", source.index("click_textedit_smoke_window()"))
+    ],
+}
+for name, block in textedit_focus_blocks.items():
     if 'textedit_document_name_exists "$window_title"' in block:
         raise SystemExit(f"{name} must not run the TextEdit document-name AppleScript probe on the focus/click hot path")
     if 'local single_window_fallback="${AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK:-0}"' not in block:
         raise SystemExit(f"{name} must make single-window fallback an explicit proof flag")
+    if "print(app.processIdentifier)" not in block:
+        raise SystemExit(f"{name} must return the TextEdit pid, not the currently frontmost app pid")
+    if "allowSingleWindowFallback && windows.count == 1 ? windows[0]" in block:
+        raise SystemExit(f"{name} must not treat any single TextEdit window as safe fallback")
+    if 'title.hasPrefix("textedit-model-latency-")' not in block:
+        raise SystemExit(f"{name} fallback must be limited to disposable smoke/proof windows")
 
 frontmost_start = source.index("textedit_frontmost_window_is()")
 frontmost_end = source.index("wait_for_textedit_frontmost_window()", frontmost_start)
 frontmost_block = source[frontmost_start:frontmost_end]
 if 'AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK' not in frontmost_block or 'allowSingleWindowFallback && windows.count == 1' not in frontmost_block:
     raise SystemExit("TextEdit frontmost proof must honor the single-window fallback")
+if 'title.hasPrefix("textedit-model-latency-")' not in frontmost_block:
+    raise SystemExit("TextEdit frontmost fallback must be limited to disposable smoke/proof windows")
 
 for name in ("textedit_document_name_exists", "describe_open_textedit_documents", "assert_textedit_frontmost_window", "try_wait_for_frontmost_app"):
     block = function_body(name)
@@ -138,8 +155,8 @@ for name in ("textedit_document_name_exists", "describe_open_textedit_documents"
 wait_for_open = function_body("wait_for_textedit_document_open")
 if 'textedit_document_name_exists "$window_title"' not in wait_for_open:
     raise SystemExit("TextEdit open wait must keep document-name fallback")
-if "textedit_window_count" not in wait_for_open:
-    raise SystemExit("TextEdit open wait must require a real AX window before focus")
+if "textedit_single_smoke_window_ready" not in wait_for_open:
+    raise SystemExit("TextEdit open wait must require a real disposable AX window before focus")
 if "nudge_textedit_frontmost" not in wait_for_open:
     raise SystemExit("TextEdit open wait must activate TextEdit when only the document name is visible")
 
