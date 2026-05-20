@@ -25,21 +25,45 @@ struct DiagnosticsInspectorState: Equatable {
 
     var summaryText: String {
         """
-        Current state:
-          Accessibility: \(appTrusted ? "allowed" : "needed")
+        Status:
           Suggestions: \(lastSuggestionDecision)
+          Next action: \(nextActionText)
+          Accessibility: \(appTrusted ? "allowed" : "needed")
           \(pauseControl.statusText)
           App: \(compatibilityStatus.userFacingSummary), \(appEnabled ? "allowed" : "blocked")
           Mode: \(Self.modeText(for: compatibilityStatus))
           Local model: \(runtimeReport.summary)
           Runtime target: \(runtimeTargetSummary)
-          Next action: \(runtimeReport.action == .none ? "Model ready" : runtimeReport.action.displayName)
-          Traces: \(tracingPaused ? "paused" : "recording")
+          Local recording: \(tracingPaused ? "paused" : "recording")
           Screenshots: \(screenshotTracingEnabled ? "on" : "off")
-          Trace file: \(tracePath)
+          Check data file: \(tracePath)
           Learning file: \(compatibilityLearningPath)
           Learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
         """
+    }
+
+    private var nextActionText: String {
+        if !appTrusted {
+            return "Allow Accessibility"
+        }
+
+        if runtimeReport.action != .none {
+            return runtimeReport.action.displayName
+        }
+
+        if pauseControl.isPaused {
+            return "Resume Suggestions"
+        }
+
+        if !compatibilityStatus.canToggleSuggestions {
+            return "Open TextEdit or another supported writing app"
+        }
+
+        if !appEnabled {
+            return "Resume this app if you want suggestions here"
+        }
+
+        return "Type in a supported writing app"
     }
 
     private static func modeText(for status: CompatibilitySupportStatus) -> String {
@@ -95,11 +119,11 @@ final class DiagnosticsWindowController {
         textView.textContainerInset = NSSize(width: 12, height: 12)
 
         refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
-        pauseTracingButton = NSButton(title: "Pause", target: nil, action: nil)
-        screenshotTracingButton = NSButton(title: "Screenshots", target: nil, action: nil)
-        openTraceFolderButton = NSButton(title: "Trace Folder", target: nil, action: nil)
+        pauseTracingButton = NSButton(title: "Pause Recording", target: nil, action: nil)
+        screenshotTracingButton = NSButton(title: "Placement Screenshots", target: nil, action: nil)
+        openTraceFolderButton = NSButton(title: "Logs Folder", target: nil, action: nil)
         exportReportButton = NSButton(title: "Export Privacy Bundle", target: nil, action: nil)
-        deleteTracesButton = NSButton(title: "Delete", target: nil, action: nil)
+        deleteTracesButton = NSButton(title: "Delete Logs", target: nil, action: nil)
 
         let scrollView = NSScrollView(frame: .zero)
         scrollView.hasVerticalScroller = true
@@ -164,8 +188,10 @@ final class DiagnosticsWindowController {
         refreshButton.action = #selector(refresh)
         pauseTracingButton.target = self
         pauseTracingButton.action = #selector(toggleTracing)
+        pauseTracingButton.toolTip = "Pauses diagnostics recording only. Suggestions use the Suggestion controls."
         screenshotTracingButton.target = self
         screenshotTracingButton.action = #selector(toggleScreenshotTracing)
+        screenshotTracingButton.toolTip = "Saves local screenshots for placement checks."
         openTraceFolderButton.target = self
         openTraceFolderButton.action = #selector(openTraceFolder)
         exportReportButton.target = self
@@ -206,8 +232,8 @@ final class DiagnosticsWindowController {
         self.openTraceFolderAction = openTraceFolderAction
         self.exportReportAction = exportReportAction
         self.deleteTracesAction = deleteTracesAction
-        pauseTracingButton.title = tracingPaused ? "Resume" : "Pause"
-        screenshotTracingButton.title = screenshotTracingEnabled ? "Screenshots On" : "Screenshots Off"
+        pauseTracingButton.title = tracingPaused ? "Resume Recording" : "Pause Recording"
+        screenshotTracingButton.title = screenshotTracingEnabled ? "Placement Screenshots On" : "Placement Screenshots Off"
 
         var sections: [String] = []
 
@@ -226,7 +252,7 @@ final class DiagnosticsWindowController {
         ).text)
         sections.append(
             """
-            Local model detail:
+            Local model check:
               target: \(runtimeTargetSummary)
               stage: \(runtimeReport.stage.rawValue)
               action: \(runtimeReport.action.displayName)
@@ -332,11 +358,11 @@ final class DiagnosticsWindowController {
         compatibilityLearningProfile: CompatibilityLearningProfile?
     ) -> String {
         """
-        Trace eval:
+        Local check data:
           path: \(tracePath)
-          tracing: \(tracingPaused ? "paused" : "on")
-          screenshot tracing: \(screenshotTracingEnabled ? "on" : "off")
-          compatibility learning: \(compatibilityLearningPath)
+          recording: \(tracingPaused ? "paused" : "on")
+          placement screenshots: \(screenshotTracingEnabled ? "on" : "off")
+          app learning file: \(compatibilityLearningPath)
           current learned adapter: \(compatibilityLearningProfile?.debugSummary ?? "none")
           events: \(summary.totalEvents)
           presented: \(summary.presentedCount)
@@ -464,6 +490,7 @@ final class DiagnosticsWindowController {
 struct DiagnosticsOverviewState: Equatable {
     let accessibilityText: String
     let suggestionText: String
+    let nextActionText: String
     let localModelText: String
     let pauseText: String
     let currentAppText: String
@@ -484,11 +511,15 @@ struct DiagnosticsOverviewState: Equatable {
     ) {
         accessibilityText = appTrusted ? "On" : "Needs permission"
         suggestionText = Self.suggestionSummary(lastSuggestionDecision)
-        localModelText = Self.oneLine(
-            "\(runtimeReport.summary) | stage \(runtimeReport.stage.rawValue) | action \(runtimeReport.action.displayName) | target \(runtimeTargetSummary)",
-            maxLength: 140
+        nextActionText = Self.nextActionText(
+            appTrusted: appTrusted,
+            appEnabled: appEnabled,
+            runtimeReport: runtimeReport,
+            pauseControl: pauseControl,
+            compatibilityStatus: compatibilityStatus
         )
-        pauseText = pauseControl.statusText
+        localModelText = Self.oneLine(runtimeReport.summary, maxLength: 140)
+        pauseText = Self.pauseSummary(pauseControl.statusText)
 
         let appName = diagnostics?.localizedAppName ?? "No focused app"
         let bundle = diagnostics?.bundleIdentifier.map { " (\($0))" } ?? ""
@@ -498,21 +529,56 @@ struct DiagnosticsOverviewState: Equatable {
             maxLength: 140
         )
         tracingText = Self.oneLine(
-            "traces \(tracingPaused ? "paused" : "on") | screenshots \(screenshotTracingEnabled ? "on" : "off") | events \(traceSummary.totalEvents) | accept \(Self.percent(traceSummary.acceptRate)) | useful \(Self.percent(traceSummary.usefulRate))",
+            "recording \(tracingPaused ? "paused" : "on") | placement screenshots \(screenshotTracingEnabled ? "on" : "off") | events \(traceSummary.totalEvents) | accept \(Self.percent(traceSummary.acceptRate)) | useful \(Self.percent(traceSummary.usefulRate))",
             maxLength: 140
         )
     }
 
     var text: String {
         [
-            "Overview",
+            "Status",
+            "Suggestions: \(suggestionText)",
+            "Next action: \(nextActionText)",
             "Accessibility: \(accessibilityText)",
-            "Suggestion: \(suggestionText)",
-            "Suggestions control: \(pauseText)",
+            "Suggestion pause: \(pauseText)",
             "Local model: \(localModelText)",
             "Current app: \(currentAppText)",
-            "Tracing: \(tracingText)"
+            "Local recording: \(tracingText)"
         ].joined(separator: "\n")
+    }
+
+    private static func nextActionText(
+        appTrusted: Bool,
+        appEnabled: Bool,
+        runtimeReport: RuntimeReadinessReport,
+        pauseControl: ControlPauseState,
+        compatibilityStatus: CompatibilitySupportStatus
+    ) -> String {
+        if !appTrusted {
+            return "Allow Accessibility"
+        }
+
+        if runtimeReport.action != .none {
+            return runtimeReport.action.displayName
+        }
+
+        if pauseControl.isPaused {
+            return "Resume Suggestions"
+        }
+
+        if !compatibilityStatus.canToggleSuggestions {
+            return "Open TextEdit or another supported writing app"
+        }
+
+        if !appEnabled {
+            return "Resume this app if you want suggestions here"
+        }
+
+        return "Type in a supported writing app"
+    }
+
+    private static func pauseSummary(_ text: String) -> String {
+        text.replacingOccurrences(of: "Suggestion pause: ", with: "")
     }
 
     private static func suggestionSummary(_ decision: String) -> String {

@@ -28,18 +28,18 @@ struct DiagnosticsTypingHealthTests {
         #expect(
             state.summaryText
                 == """
-                Current state:
-                  Accessibility: allowed
+                Status:
                   Suggestions: Blocked: field quieted
-                  Global pause: off
+                  Next action: Resume this app if you want suggestions here
+                  Accessibility: allowed
+                  Suggestion pause: off
                   App: Yellow: Notes, blocked
                   Mode: mirror
                   Local model: ready
                   Runtime target: Qwen3.5 4B MLX
-                  Next action: Model ready
-                  Traces: recording
+                  Local recording: recording
                   Screenshots: on
-                  Trace file: /tmp/traces.jsonl
+                  Check data file: /tmp/traces.jsonl
                   Learning file: /tmp/learning.json
                   Learned adapter: none
                 """

@@ -43,8 +43,8 @@ manual proof pass.
   recorder rejects stale app processes from other checkouts.
 - Confirm the menu says `AX ok`.
 - Keep test text local and disposable.
-- Watch `~/Library/Logs/AutocompleteLab/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
-- Watch `~/Library/Logs/AutocompleteLab/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
+- Watch `~/Library/Logs/SteadyType/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
+- Watch `~/Library/Logs/SteadyType/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
 - Prefer a real hardware key press for Tab and the configured full-accept shortcut. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 - If a recorder fails, read its layer summary. `suggestion-presented` with `Tab autocomplete action: 0` means rendering worked but key routing did not.
 - Recovered insertion fallbacks are allowed when the same suggestion later verifies.
@@ -156,7 +156,7 @@ developer machine. Use the helper as a manual-gated proof path:
 script/no_accessibility_smoke.sh --print
 ```
 
-After disabling AutocompleteLab in System Settings and relaunching it, run:
+After disabling SteadyType in System Settings and relaunching it, run:
 
 ```bash
 AUTOCOMPLETE_LAB_LOG_START_LINE=<mark> script/no_accessibility_smoke.sh --check

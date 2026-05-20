@@ -45,14 +45,17 @@ URLs, recipients, and subject lines stay on this Mac by default.
 Default diagnostics are local and redacted. They can include app bundle IDs,
 field kind, timing, counters, failure labels, and text lengths.
 
-## Supported Test Apps
+## Test App Scope
 
-Write-test only in these apps:
+Write-test only in the currently enabled proof lanes for these apps:
 
 - TextEdit
 - Notes
 - Obsidian
 - Chrome included local practice pages
+
+Treat them as beta targets, not system-wide support. If the current proof gate
+marks a lane stale or pending, use it only for proof refresh.
 
 Do not write-test these as normal beta apps. Use them only as proof targets:
 

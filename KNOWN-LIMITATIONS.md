@@ -2,6 +2,10 @@
 
 This is a lab app, not a broad system-wide promise.
 
+Current proof truth: strict manual smoke still has 35 stale or pending target
+app passes. Stale screenshots and old insertion rows do not make a beta lane
+current.
+
 ## Supported First
 
 - TextEdit
@@ -13,6 +17,8 @@ This is a lab app, not a broad system-wide promise.
 
 - Codex, Claude Code, and Claude desktop require one-word no-submit proof before
   they can be treated as beta-safe prompt apps.
+- Full accept stays off in prompt apps until a separate no-submit full-accept
+  proof exists.
 - Mail is diagnostics-only until compose insertion is proven safe.
 - Terminal apps are blocked.
 - Password managers, login fields, payment fields, address fields, search

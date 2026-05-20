@@ -79,12 +79,13 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.modeText == "Mode: next to the cursor, floating backup fallback")
         #expect(allowed.acceptanceText == "Keys: Tab accepts one word. The whole-suggestion shortcut works here.")
         #expect(allowed.fallbackText == "Fallback: not needed; cursor placement is available.")
-        #expect(allowed.proofText == "Test: use disposable text, press Tab once, then the whole-suggestion shortcut.")
-        #expect(allowed.proofCommandText == "Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
+        #expect(allowed.proofText == "Check: use disposable text, press Tab once, then the whole-suggestion shortcut.")
+        #expect(allowed.proofCommandText == "Check command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
         #expect(allowed.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
-        #expect(allowed.copyProofCommandButtonTitle == "Copy Test Command")
+        #expect(allowed.copyProofCommandButtonTitle == "Copy Check Command")
         #expect(allowed.canCopyProofCommand)
-        #expect(allowed.proofButtonTitle == "Run TextEdit Test")
+        #expect(allowed.proofButtonTitle == "Check TextEdit")
+        #expect(allowed.shouldShowCheckControls)
         #expect(allowed.toggleTitle == "Suggestions in this app")
         #expect(allowed.menuToggleTitle == "Pause in TextEdit")
         #expect(allowed.blockedAppsText == "Paused apps: none")
@@ -98,10 +99,11 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(chrome.proofButtonTitle == "Run Chrome Test")
-        #expect(chrome.proofCommandText == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
+        #expect(chrome.proofButtonTitle == "Check Chrome")
+        #expect(chrome.proofCommandText == "Manual check: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
         #expect(chrome.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
         #expect(chrome.canStartProof)
+        #expect(chrome.shouldShowCheckControls)
 
         let blocked = SettingsCurrentAppState(
             displayName: "Notes",
@@ -114,16 +116,17 @@ struct SettingsWindowControllerStateTests {
         #expect(blocked.statusText == "Current app: Notes is yellow and off")
         #expect(
             blocked.detailText
-                == "Rich text can drift; display can use a floating backup, and insertion fails closed. Suggestions are paused in this app. Resume only where you want to test."
+                == "Rich text can drift; display can use a floating backup, and insertion fails closed. Suggestions are paused in this app. Resume only where you want suggestions."
         )
         #expect(blocked.modeText == "Mode: next to the cursor, floating backup fallback")
         #expect(blocked.acceptanceText == "Keys: Tab accepts one word. The whole-suggestion shortcut works here.")
         #expect(blocked.fallbackText == "Fallback: off while this app is paused.")
-        #expect(blocked.proofText == "Test: turn on suggestions for this app first.")
+        #expect(blocked.proofText == "Check: turn on suggestions for this app first.")
         #expect(blocked.proofCommandText == nil)
         #expect(blocked.proofCommandClipboardText == nil)
-        #expect(blocked.copyProofCommandButtonTitle == "No Test Command")
+        #expect(blocked.copyProofCommandButtonTitle == "No Check Command")
         #expect(!blocked.canCopyProofCommand)
+        #expect(blocked.shouldShowCheckControls)
         #expect(blocked.menuToggleTitle == "Resume in Notes")
         #expect(blocked.blockedAppsText == "Paused apps: 2")
         #expect(blocked.canToggle)
@@ -169,7 +172,7 @@ struct SettingsWindowControllerStateTests {
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
         #expect(diagnosticsOnly.fallbackText == "Fallback: unavailable in sensitive apps or fields.")
-        #expect(diagnosticsOnly.proofText == "Test: unavailable here.")
+        #expect(diagnosticsOnly.proofText == "Check: unavailable here.")
         #expect(diagnosticsOnly.proofCommandText == nil)
         #expect(diagnosticsOnly.proofCommandClipboardText == nil)
         #expect(!diagnosticsOnly.canCopyProofCommand)
@@ -186,10 +189,10 @@ struct SettingsWindowControllerStateTests {
 
         #expect(unsupported.statusText == "Current app: Unknown is unsupported")
         #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
-        #expect(unsupported.modeText == "Mode: not tested yet")
+        #expect(unsupported.modeText == "Mode: not set up here")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
         #expect(unsupported.fallbackText == "Fallback: unavailable until this app has a profile.")
-        #expect(unsupported.proofText == "Test: unavailable here.")
+        #expect(unsupported.proofText == "Check: unavailable here.")
         #expect(unsupported.proofCommandText == nil)
         #expect(unsupported.proofCommandClipboardText == nil)
         #expect(!unsupported.canCopyProofCommand)
@@ -209,7 +212,7 @@ struct SettingsWindowControllerStateTests {
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
         #expect(missing.fallbackText == "Fallback: choose a writing app first.")
-        #expect(missing.proofText == "Test: choose a writing app first.")
+        #expect(missing.proofText == "Check: choose a writing app first.")
         #expect(missing.proofCommandText == nil)
         #expect(missing.proofCommandClipboardText == nil)
         #expect(!missing.canCopyProofCommand)
@@ -232,7 +235,7 @@ struct SettingsWindowControllerStateTests {
         #expect(safari.modeText == "Mode: disabled")
         #expect(safari.acceptanceText == "Acceptance: off here")
         #expect(safari.fallbackText == "Fallback: copy-only; cursor placement and auto-insert stay off until testing passes.")
-        #expect(safari.proofText == "Test: unavailable here.")
+        #expect(safari.proofText == "Check: unavailable here.")
         #expect(!safari.canToggle)
     }
 
@@ -250,10 +253,10 @@ struct SettingsWindowControllerStateTests {
         #expect(codex.statusText == "Current app: Codex is yellow and on")
         #expect(codex.modeText == "Mode: next to the cursor, floating backup fallback")
         #expect(codex.acceptanceText == "Keys: Tab accepts one word. Whole-suggestion accept is off for safety.")
-        #expect(codex.proofText == "Test: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter.")
+        #expect(codex.proofText == "Check: use the guided prompt-app check, press Tab once, and do not press Enter.")
         #expect(
             codex.proofCommandText
-                == "Manual command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+                == "Manual check: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
         )
         #expect(
             codex.proofCommandClipboardText
@@ -277,7 +280,7 @@ struct SettingsWindowControllerStateTests {
         #expect(forcedMirror.modeText == "Mode: floating backup forced (profile next to the cursor)")
         #expect(forcedMirror.modeButtonTitle == "Use Default Placement")
         #expect(forcedMirror.canOverrideMode)
-        #expect(forcedMirror.proofButtonTitle == "Run TextEdit Test")
+        #expect(forcedMirror.proofButtonTitle == "Check TextEdit")
         #expect(forcedMirror.canStartProof)
 
         let profileMode = SettingsCurrentAppState(
@@ -290,7 +293,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(profileMode.modeButtonTitle == "Use Floating Backup")
         #expect(profileMode.canOverrideMode)
-        #expect(profileMode.proofButtonTitle == "Run TextEdit Test")
+        #expect(profileMode.proofButtonTitle == "Check TextEdit")
         #expect(profileMode.canStartProof)
 
         let diagnosticsOnly = SettingsCurrentAppState(
@@ -312,7 +315,7 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(disabled.proofButtonTitle == "Enable App First")
+        #expect(disabled.proofButtonTitle == "Enable Suggestions First")
         #expect(!disabled.canStartProof)
         #expect(!disabled.canCopyProofCommand)
     }
@@ -324,7 +327,7 @@ struct SettingsWindowControllerStateTests {
         #expect(needed.statusText == "Accessibility permission: needed")
         #expect(
             needed.detailText
-                == "Click Allow Accessibility when you are ready. macOS will ask for access so SteadyType can read the focused text field, place suggestions near the cursor, and insert text only after you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
+                == "Click Allow Accessibility when you are ready. macOS asks so SteadyType can read the focused text field and insert only after you accept. Text stays on this Mac. Screen Recording is not needed for normal use."
         )
 
         let allowed = SettingsPermissionState(isTrusted: true)
@@ -332,7 +335,7 @@ struct SettingsWindowControllerStateTests {
         #expect(allowed.statusText == "Accessibility permission: allowed")
         #expect(
             allowed.detailText
-                == "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac. Normal setup does not need Screen Recording."
+                == "SteadyType can read the focused text field and insert only after you accept. Text stays on this Mac. Screen Recording is not needed for normal use."
         )
     }
 
@@ -340,20 +343,16 @@ struct SettingsWindowControllerStateTests {
     func firstRunTrustCopyExplainsPlacementControlsPrivacyAndAppScope() {
         let state = SettingsFirstRunTrustState()
 
-        #expect(state.statusText == "First 10 minutes: start in TextEdit")
+        #expect(state.statusText == "First run: practice in TextEdit")
         #expect(state.detailText.contains("near the cursor"))
         #expect(state.detailText.contains("Tab accepts one word"))
         #expect(state.detailText.contains("Esc dismisses"))
-        #expect(state.detailText.contains("Pause stops suggestions everywhere"))
-        #expect(state.detailText.contains("Pause in the current app stops only that app"))
-        #expect(state.detailText.contains("model output"))
-        #expect(state.detailText.contains("document names"))
-        #expect(state.detailText.contains("stay on this Mac"))
-        #expect(state.detailText.contains("redacted Privacy Bundle"))
-        #expect(state.appsText.contains("TextEdit, Notes, Obsidian, and Chrome only on the included local practice pages"))
-        #expect(state.appsText.contains("Do not test random websites"))
-        #expect(state.appsText.contains("Do not use Codex or Claude for normal testing unless asked"))
-        #expect(state.appsText.contains("special safety tests"))
+        #expect(state.detailText.contains("Pause Suggestions stops suggestions everywhere"))
+        #expect(state.detailText.contains("Pause in Current App stops only that app"))
+        #expect(state.appsText.contains("Text stays on this Mac"))
+        #expect(state.appsText.contains("Start with TextEdit"))
+        #expect(state.appsText.contains("Chrome practice pages"))
+        #expect(state.appsText.contains("Avoid random websites"))
     }
 
     @Test("Privacy copy exposes diagnostics and raw content state")
@@ -370,26 +369,26 @@ struct SettingsWindowControllerStateTests {
             tracePath: "/tmp/traces.jsonl"
         )
 
-        #expect(privacy.statusText == "Privacy: local diagnostics only")
+        #expect(privacy.statusText == "Privacy: stays on this Mac")
         #expect(
             privacy.diagnosticsStatusText
-                == "Diagnostics: performance + placement traces recording, screenshots on"
+                == "Local check data: recording, screenshots on"
         )
-        #expect(privacy.contentStatusText == "Raw text capture: off")
-        #expect(privacy.visiblePageContextStatusText == "Visible page context: off. OCR runs locally and is used only as prompt context.")
+        #expect(privacy.contentStatusText == "Raw text in local logs: off")
+        #expect(privacy.visiblePageContextStatusText == "Screen context: off. OCR is local and only helps suggestions.")
         #expect(
             privacy.sharingStatusText
-                == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
+                == "Nothing leaves automatically. Share Privacy Bundles, not raw logs or screenshots."
         )
         #expect(
             privacy.learningStatusText
-                == "Learning: accepted-kept scores, style sketch, and recent words stay local"
+                == "Learning: local usefulness scores only"
         )
         #expect(
             privacy.screenRecordingPermissionText
-                == "Screen Recording: used only while screenshot test mode is on to capture local placement screenshots."
+                == "Screen Recording: used only for local placement screenshots while enabled."
         )
-        #expect(privacy.pathText == "Logs: /tmp/diagnostics.log | Traces: /tmp/traces.jsonl")
+        #expect(privacy.pathText == "Diagnostics log: /tmp/diagnostics.log | Check data: /tmp/traces.jsonl")
 
         let paused = SettingsPrivacyState(
             tracingPaused: true,
@@ -405,15 +404,15 @@ struct SettingsWindowControllerStateTests {
 
         #expect(
             paused.diagnosticsStatusText
-                == "Diagnostics: performance + placement traces paused, screenshots off"
+                == "Local check data: paused, screenshots off"
         )
-        #expect(paused.contentStatusText == "Raw text capture: on temporarily")
-        #expect(paused.visiblePageContextStatusText == "Visible page context: on, waiting for Screen Recording permission.")
+        #expect(paused.contentStatusText == "Raw text in local logs: on temporarily")
+        #expect(paused.visiblePageContextStatusText == "Screen context: on, waiting for Screen Recording permission.")
         #expect(
             paused.sharingStatusText
-                == "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
+                == "Nothing leaves automatically. Share Privacy Bundles, not raw logs or screenshots."
         )
-        #expect(paused.screenRecordingPermissionText == "Screen Recording: required for visible page context OCR.")
+        #expect(paused.screenRecordingPermissionText == "Screen Recording: required for screen context.")
 
         let temporaryScreenshots = SettingsPrivacyState(
             tracingPaused: false,
@@ -446,7 +445,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(
             shareSafe.sharingStatusText
-                == "Data leaving Mac: none automatically. Model install downloads once; Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
+                == "Nothing leaves automatically. Privacy Bundles exclude raw text and screenshots."
         )
     }
 
@@ -467,7 +466,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(
             missingPermission.text
-                == "Allow Accessibility in System Settings so suggestions can appear at the cursor and insert only when you accept. Text stays on this Mac."
+                == "Allow Accessibility so suggestions can appear near the cursor and insert only when you accept. Text stays on this Mac."
         )
 
         let paused = SettingsOnboardingState(
@@ -483,7 +482,7 @@ struct SettingsWindowControllerStateTests {
             )
         )
 
-        #expect(paused.text == "Paused. Resume when you want to test suggestions.")
+        #expect(paused.text == "Paused. Resume when you want suggestions.")
 
         let ready = SettingsOnboardingState(
             isTrusted: true,
@@ -498,7 +497,7 @@ struct SettingsWindowControllerStateTests {
             )
         )
 
-        #expect(ready.text == "Ready: use Practice to open TextEdit, try Tab for one word, press Esc to dismiss, then pause or delete traces.")
+        #expect(ready.text == "Ready: use Practice to open TextEdit, try Tab for one word, press Esc to dismiss, then pause or delete local logs.")
         #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
     }
 
@@ -622,10 +621,10 @@ struct SettingsWindowControllerStateTests {
         #expect(ready.primaryAction == .openTextEditPractice)
         #expect(ready.primaryButtonTitle == "Start TextEdit Practice")
         #expect(ready.detailText.localizedCaseInsensitiveContains("near the cursor"))
-        #expect(ready.detailText.localizedCaseInsensitiveContains("does not ask for Screen Recording"))
+        #expect(ready.detailText.localizedCaseInsensitiveContains("No Screen Recording needed"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Tab once"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Esc"))
-        #expect(ready.stepsText.localizedCaseInsensitiveContains("Delete Traces"))
+        #expect(ready.stepsText.localizedCaseInsensitiveContains("delete local logs"))
     }
 
     @Test("Practice model line exposes missing corrupt and unlinked runtime detail")
@@ -758,9 +757,9 @@ struct SettingsWindowControllerStateTests {
         let ready = ControlPauseState(isPaused: false, pausedUntil: nil)
 
         #expect(ready.statusName == "running")
-        #expect(ready.statusText == "Global pause: off")
-        #expect(ready.settingsSummaryText == "Suggestions: ready")
-        #expect(ready.settingsDetailText == "Global suggestions are on. You can still pause one app or one field.")
+        #expect(ready.statusText == "Suggestion pause: off")
+        #expect(ready.settingsSummaryText == "Suggestions: on")
+        #expect(ready.settingsDetailText == "Suggestions are on. You can still pause one app or one field.")
         #expect(ready.toggleTitle == "Pause Suggestions")
 
         let until = try #require(Calendar(identifier: .gregorian).date(from: DateComponents(
@@ -777,7 +776,7 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(paused.statusName == "paused")
-        #expect(paused.statusText.contains("Global pause: until"))
+        #expect(paused.statusText.contains("Suggestion pause: until"))
         #expect(paused.settingsSummaryText.contains("Suggestions: paused until"))
         #expect(paused.menuPausedTitle.contains("Paused until"))
         #expect(paused.toggleTitle == "Resume Suggestions")
