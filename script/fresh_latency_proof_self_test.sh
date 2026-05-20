@@ -144,6 +144,30 @@ fi
 : >"$SMOKE_LOG"
 : >"$DIAGNOSTICS_LOG"
 : >"$TRACE_LOG"
+SIGNED_MODEL_OUTPUT="$(
+  AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-signed-model.lock" \
+    ./script/fresh_latency_proof.sh --target textedit-model-latency --runs 1 --relaunch-current-bundle
+)"
+
+if ! grep -F "Latency beta gate passed." <<<"$SIGNED_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected signed-bundle model-latency target to pass" >&2
+  echo "$SIGNED_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if [[ "$(sed -n '1p' "$SMOKE_LOG")" != "textedit-model-latency --relaunch-current-bundle" ]]; then
+  echo "fresh latency proof self-test expected model-latency signed-bundle relaunch flag" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+: >"$SMOKE_LOG"
+: >"$DIAGNOSTICS_LOG"
+: >"$TRACE_LOG"
 DEFAULT_MODEL_OUTPUT="$(
   AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
   AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \

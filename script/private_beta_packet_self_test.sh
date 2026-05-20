@@ -140,6 +140,8 @@ require_contains "$SCRIPT_TEXT" "Developer ID DMG signature blocked"
 require_contains "$SCRIPT_TEXT" "Developer ID archive signature blocked"
 require_contains "$SCRIPT_TEXT" "refresh or remove the secondary ZIP"
 require_contains "$SCRIPT_TEXT" "This is separate from Apple notarization credentials."
+require_contains "$SCRIPT_TEXT" 'ditto -x -k "$ZIP_PATH" "$verify_dir"'
+reject_contains "$SCRIPT_TEXT" 'ditto -x -k "$ARCHIVE_PATH" "$verify_dir"'
 require_contains "$SCRIPT_TEXT" 'Click `Allow Accessibility` in SteadyType'
 require_contains "$SCRIPT_TEXT" "confirm Accessibility updates without restarting"
 reject_contains "$SCRIPT_TEXT" '1. Unzip `SteadyType.zip`.'
@@ -164,6 +166,8 @@ for expected_doc in \
 done
 
 require_contains "$SCRIPT_TEXT" "beta packet commit is stale"
+require_contains "$SCRIPT_TEXT" "current_commit()"
+require_contains "$SCRIPT_TEXT" "git rev-parse --short=12 HEAD"
 require_contains "$SCRIPT_TEXT" "require_generated_file"
 
 ./script/validate_beta_issue_template.sh --quiet

@@ -14,10 +14,11 @@ DEFAULT_MODEL_REPORT_SCRIPT="${AUTOCOMPLETE_LAB_FRESH_DEFAULT_MODEL_REPORT_SCRIP
 FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tmp}/autocomplete-lab-fresh-latency.lock}"
 FRESH_LATENCY_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_WAIT_SECONDS:-300}"
 FRESH_LATENCY_LOCK_HELD=0
+RELAUNCH_CURRENT_BUNDLE="${AUTOCOMPLETE_LAB_FRESH_LATENCY_RELAUNCH_CURRENT_BUNDLE:-0}"
 
 usage() {
   cat <<'EOF'
-Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency]
+Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency] [--relaunch-current-bundle]
 
 Runs a fresh bounded latency proof: one current-app smoke launch, repeated
 TextEdit smoke passes with rebuilds skipped, then latency_benchmark_report.py
@@ -25,6 +26,9 @@ against only the new diagnostics and trace lines.
 
 This helper is for making beta latency proof repeatable. It does not fall back
 to older sampled launches.
+
+--relaunch-current-bundle skips rebuilding and relaunches dist/SteadyType.app
+for the smoke pass. Use it when proving the current signed beta artifact.
 EOF
 }
 
@@ -52,6 +56,10 @@ while (($#)); do
       ;;
     --target=*)
       TARGET_APP="${1#--target=}"
+      shift
+      ;;
+    --relaunch-current-bundle)
+      RELAUNCH_CURRENT_BUNDLE=1
       shift
       ;;
     -h|--help|help)
@@ -113,6 +121,10 @@ line_count() {
 run_smoke() {
   local index="$1"
   local args=("$TARGET_APP")
+
+  if [[ "$RELAUNCH_CURRENT_BUNDLE" =~ ^(1|true|yes|on)$ ]]; then
+    args+=(--relaunch-current-bundle)
+  fi
 
   if [[ "$TARGET_APP" =~ ^textedit-(default-)?model-latency$ && "$index" != "1" ]]; then
     echo "$TARGET_APP cannot use --skip-build reruns because proof mode must relaunch cleanly." >&2

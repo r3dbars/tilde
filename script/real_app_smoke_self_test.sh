@@ -50,6 +50,13 @@ if ! grep -F "must relaunch with fast word completions and phrase continuations 
   exit 1
 fi
 
+script/real_app_smoke.sh textedit-model-latency --relaunch-current-bundle --dry-run >"$TMP_DIR/textedit-model-latency-relaunch-current.txt"
+if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency-relaunch-current.txt" >/dev/null ||
+   ! grep -F "scenario textedit-model-latency" "$TMP_DIR/textedit-model-latency-relaunch-current.txt" >/dev/null; then
+  echo "real app smoke self-test expected TextEdit model latency to allow signed-bundle relaunch proof" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh textedit-default-model-latency --dry-run >"$TMP_DIR/textedit-default-model-latency.txt"
 if ! grep -F "TextEdit variant: default-model-latency" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
    ! grep -F "default phrase model suggestions" "$TMP_DIR/textedit-default-model-latency.txt" >/dev/null ||
@@ -70,7 +77,15 @@ if ! grep -F "must relaunch with word completions and the fast phrase fallback d
   exit 1
 fi
 
+script/real_app_smoke.sh textedit-default-model-latency --relaunch-current-bundle --dry-run >"$TMP_DIR/textedit-default-model-latency-relaunch-current.txt"
+if ! grep -F "TextEdit variant: default-model-latency" "$TMP_DIR/textedit-default-model-latency-relaunch-current.txt" >/dev/null ||
+   ! grep -F "scenario textedit-default-model-latency" "$TMP_DIR/textedit-default-model-latency-relaunch-current.txt" >/dev/null; then
+  echo "real app smoke self-test expected TextEdit default model latency to allow signed-bundle relaunch proof" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'insert_textedit_smoke_fragment()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
@@ -79,7 +94,9 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_textedit_event_tap_probe_key' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F -- '--require-event-tap-samples "$event_tap_sample_count"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F -- '--require-event-tap-samples "$event_tap_sample_count"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'relaunch_current_steadytype_bundle()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype_launch_env()' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
   exit 1
 fi

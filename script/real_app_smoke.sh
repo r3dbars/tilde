@@ -13,6 +13,7 @@ TEXTEDIT_VARIANT=""
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
+RELAUNCH_CURRENT_BUNDLE="${AUTOCOMPLETE_LAB_REAL_APP_RELAUNCH_CURRENT_BUNDLE:-0}"
 CHROME_FIXTURE="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-textarea}"
 CHROME_FIXTURE_WAS_SET=0
 CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}"
@@ -60,7 +61,7 @@ SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--relaunch-current-bundle] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -122,6 +123,9 @@ the only running SteadyType process is this checkout's dist/SteadyType.app binar
 and that process already has any proof-mode environment needed by the smoke pass.
 The textedit-model-latency lane does not allow --skip-build because it must
 relaunch SteadyType with fast word completions disabled before sampling.
+--relaunch-current-bundle skips rebuilding but relaunches this checkout's
+dist/SteadyType.app after proof-mode environment is prepared. Use it for signed
+artifact proof where rebuilding would replace the release bundle under test.
 
 --native-undo-proof relaunches AutocompleteLab with app rollback disabled,
 passes Command-Z through to the target app, and records native single-edit undo
@@ -140,6 +144,9 @@ while (($#)); do
       ;;
     --skip-build)
       SKIP_BUILD=1
+      ;;
+    --relaunch-current-bundle)
+      RELAUNCH_CURRENT_BUNDLE=1
       ;;
     --native-undo-proof)
       NATIVE_UNDO_PROOF=1
@@ -447,13 +454,17 @@ if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$SKIP_BUILD" == "1" ]]; then
   exit 2
 fi
 
-if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$RELAUNCH_CURRENT_BUNDLE" =~ ^(1|true|yes|on)$ ]]; then
+  SKIP_BUILD=1
+fi
+
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_BUILD" == "1" && ! "$RELAUNCH_CURRENT_BUNDLE" =~ ^(1|true|yes|on)$ ]]; then
   echo "textedit-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
 
-if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" && ! "$RELAUNCH_CURRENT_BUNDLE" =~ ^(1|true|yes|on)$ ]]; then
   echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with word completions and the fast phrase fallback disabled before sampling." >&2
   usage >&2
   exit 2
@@ -5859,6 +5870,15 @@ exit(1)
 SWIFT
 }
 
+insert_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+  local current_text
+
+  current_text="$(textedit_document_text "$window_title")"
+  set_textedit_document_text "$window_title" "${current_text}${fragment}"
+}
+
 textedit_smoke_allows_ax_proof_typing() {
   [[ "${AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION:-0}" =~ ^(1|true|yes|on)$ ]]
 }
@@ -8532,7 +8552,9 @@ describe_plan() {
 
 build_if_needed() {
   SMOKE_PHASE="build/relaunch current SteadyType"
-  if [[ "$SKIP_BUILD" != "1" ]]; then
+  if [[ "$RELAUNCH_CURRENT_BUNDLE" =~ ^(1|true|yes|on)$ ]]; then
+    relaunch_current_steadytype_bundle
+  elif [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
       AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
@@ -8591,6 +8613,52 @@ steadytype_app_bundle() {
 
 steadytype_app_binary() {
   printf '%s/Contents/MacOS/SteadyType\n' "$(steadytype_app_bundle)"
+}
+
+steadytype_launch_env() {
+  printf '%s\n' "AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1"
+
+  local env_key
+  for env_key in \
+    AUTOCOMPLETE_LAB_SCREENSHOT_TRACE \
+    AUTOCOMPLETE_LAB_RAW_TRACE \
+    AUTOCOMPLETE_LAB_TRACE \
+    AUTOCOMPLETE_LAB_MODEL \
+    AUTOCOMPLETE_LAB_VISIBLE_WORDS \
+    AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
+    AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK \
+    AUTOCOMPLETE_LAB_PROOF_SCENARIO \
+    AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING \
+    AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
+    AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
+    AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY; do
+    if [[ -n "${!env_key+x}" ]]; then
+      printf '%s=%s\n' "$env_key" "${!env_key}"
+    fi
+  done
+}
+
+relaunch_current_steadytype_bundle() {
+  local app_binary launch_log
+  app_binary="$(steadytype_app_binary)"
+  launch_log="$(steadytype_dist_dir)/SteadyType.launch.log"
+
+  if [[ ! -x "$app_binary" ]]; then
+    echo "SteadyType app binary is missing: $app_binary" >&2
+    exit 1
+  fi
+
+  local launch_env=()
+  while IFS= read -r assignment; do
+    launch_env+=("$assignment")
+  done < <(steadytype_launch_env)
+  stop_current_steadytype_app_bundle
+  env "${launch_env[@]}" \
+    nohup "$app_binary" >"$launch_log" 2>&1 </dev/null &
+  disown "$!" 2>/dev/null || true
 }
 
 command_matches_steadytype_binary() {
@@ -8690,31 +8758,10 @@ launch_steadytype_after_chrome_setup() {
     exit 1
   fi
 
-  local launch_env=(
-    AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
-  )
-  local env_key
-  for env_key in \
-    AUTOCOMPLETE_LAB_SCREENSHOT_TRACE \
-    AUTOCOMPLETE_LAB_RAW_TRACE \
-    AUTOCOMPLETE_LAB_TRACE \
-    AUTOCOMPLETE_LAB_MODEL \
-    AUTOCOMPLETE_LAB_VISIBLE_WORDS \
-    AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS \
-    AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION \
-    AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION \
-    AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION \
-    AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK \
-    AUTOCOMPLETE_LAB_PROOF_SCENARIO \
-    AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING \
-    AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
-    AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
-    AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY; do
-    if [[ -n "${!env_key+x}" ]]; then
-      launch_env+=("$env_key=${!env_key}")
-    fi
-  done
-
+  local launch_env=()
+  while IFS= read -r assignment; do
+    launch_env+=("$assignment")
+  done < <(steadytype_launch_env)
   env "${launch_env[@]}" \
     nohup "$app_binary" >"$launch_log" 2>&1 </dev/null &
   disown "$!" 2>/dev/null || true

@@ -290,6 +290,10 @@ Status at packet generation: passed.
 EOF
 }
 
+current_commit() {
+  git rev-parse --short=12 HEAD
+}
+
 write_readiness_summary() {
   local sha="$1"
   local generated_at commit
@@ -594,7 +598,7 @@ check_archive_privacy_export() {
   verify_dir="$(mktemp -d)"
   proof_dir="$(mktemp -d)"
 
-  ditto -x -k "$ARCHIVE_PATH" "$verify_dir"
+  ditto -x -k "$ZIP_PATH" "$verify_dir"
   app_path="$verify_dir/SteadyType.app"
 
   if [[ ! -d "$app_path" ]]; then
