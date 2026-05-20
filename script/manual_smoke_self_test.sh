@@ -273,6 +273,11 @@ run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
 run_passing_case obsidian-theme Obsidian md.obsidian floatingMirror floatingMirror obsidian-theme
 run_passing_case obsidian-pane Obsidian md.obsidian floatingMirror floatingMirror obsidian-pane
 run_passing_case obsidian-long-note Obsidian md.obsidian floatingMirror floatingMirror obsidian-long-note
+run_passing_case obsidian-font-zoom Obsidian md.obsidian floatingMirror floatingMirror obsidian-font-zoom
+run_passing_case obsidian-markdown-bold Obsidian md.obsidian floatingMirror floatingMirror obsidian-markdown-bold
+run_passing_case obsidian-markdown-list Obsidian md.obsidian floatingMirror floatingMirror obsidian-markdown-list
+run_passing_case obsidian-multiline Obsidian md.obsidian floatingMirror floatingMirror obsidian-multiline
+run_passing_case obsidian-run-on Obsidian md.obsidian floatingMirror floatingMirror obsidian-run-on
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent textarea
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent contenteditable
 run_passing_case chrome Chrome com.google.Chrome 'inlineAdjacent|floatingMirror' inlineAdjacent textarea-public
@@ -566,7 +571,7 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" Obsidian "Obsidian theme" "Obsidian panes" "Obsidian long note" "Chrome textarea" "Chrome contenteditable" "Chrome production textarea" "Chrome production contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop" "Claude desktop empty composer" "Claude desktop long prompt" "Claude desktop wrapped prompt" "Claude desktop narrow window" "Claude desktop context layout" "Claude desktop light appearance" "Claude desktop dark appearance"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" Obsidian "Obsidian theme" "Obsidian panes" "Obsidian long note" "Obsidian font zoom" "Obsidian Markdown bold" "Obsidian Markdown list" "Obsidian multiline" "Obsidian run-on sentence" "Chrome textarea" "Chrome contenteditable" "Chrome production textarea" "Chrome production contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop" "Claude desktop empty composer" "Claude desktop long prompt" "Claude desktop wrapped prompt" "Claude desktop narrow window" "Claude desktop context layout" "Claude desktop light appearance" "Claude desktop dark appearance"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
@@ -732,7 +737,7 @@ if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null &&
   exit 1
 fi
 
-for app_name in "Obsidian theme" "Obsidian panes" "Obsidian long note"; do
+for app_name in "Obsidian theme" "Obsidian panes" "Obsidian long note" "Obsidian font zoom" "Obsidian Markdown bold" "Obsidian Markdown list" "Obsidian multiline" "Obsidian run-on sentence"; do
   if ! grep -F -- "- $app_name: pending" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test should not accept default Obsidian proof for $app_name" >&2
     exit 1

@@ -1042,11 +1042,26 @@ if any(position < 0 for position in normal_positions) or normal_positions != sor
     )
 PY
 
-for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note; do
+for obsidian_variant in obsidian-theme obsidian-pane obsidian-long-note obsidian-font-zoom obsidian-markdown-bold obsidian-markdown-list obsidian-multiline obsidian-run-on; do
   script/real_app_smoke.sh "$obsidian_variant" --dry-run >"$TMP_DIR/$obsidian_variant.txt"
   case "$obsidian_variant" in
     obsidian-theme)
       expected_plan="guarded Obsidian non-default theme proof"
+      ;;
+    obsidian-font-zoom)
+      expected_plan="guarded Obsidian font/zoom proof"
+      ;;
+    obsidian-markdown-bold)
+      expected_plan="guarded Obsidian bold Markdown proof"
+      ;;
+    obsidian-markdown-list)
+      expected_plan="guarded Obsidian list Markdown proof"
+      ;;
+    obsidian-multiline)
+      expected_plan="guarded Obsidian multiline proof"
+      ;;
+    obsidian-run-on)
+      expected_plan="guarded Obsidian run-on/wrapped sentence proof"
       ;;
     *)
       expected_plan="manual-gated Obsidian"

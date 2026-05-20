@@ -70,7 +70,7 @@
         "versionSource": "/Applications/Obsidian.app",
         "safetyMode": "notPrompt",
         "runtimeState": "userToggleAllowed",
-        "proofState": "complete",
+        "proofState": "partial",
         "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
@@ -82,7 +82,7 @@
             "reference": "Obsidian/obsidian-long-note"
           }
         ],
-        "notes": "Real CodeMirror proof is current across default, non-default theme, pane, and long-note lanes; broader vault variance still keeps support yellow."
+        "notes": "Recorded CodeMirror proof exists for default, non-default theme, pane, and long-note lanes, but current-head support stays partial until the newer font/zoom, Markdown, multiline, and run-on lanes have screenshot-backed rows."
       },
       {
         "bundle": "com.apple.mail",
@@ -552,7 +552,7 @@
         "md.obsidian"
       ],
       "policySource": "script/real_app_smoke.sh",
-      "proofState": "complete",
+      "proofState": "partial",
       "smokeCommand": "script/real_app_smoke.sh obsidian-long-note --manual-gate",
       "requiredProof": [
         "correct scrolled CodeMirror caret source",
@@ -560,7 +560,7 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Fresh current-head long-note proof at 2026-05-13T02:53:49Z recorded the CodeMirror viewport repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior. General Obsidian support remains yellow for broader vault variance."
+      "notes": "Recorded long-note proof at 2026-05-13T02:53:49Z showed CodeMirror viewport repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior. Refresh current-head long-note proof before calling this lane complete again."
     },
     {
       "surface": "Real Monaco and CodeMirror editors",
@@ -863,12 +863,14 @@
       "screenshots": [
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
-      "gaps": [],
+      "gaps": [
+        "Obsidian current-head proof is variant-incomplete: font/zoom, Markdown bold/list, multiline, and run-on lanes still need bounded screenshot-backed rows before broad Obsidian support can be complete."
+      ],
       "requirements": [
         {
           "id": "obsidian-theme-variants",
-          "status": "complete",
-          "summary": "Bounded proof across the non-default proof-vault theme is recorded.",
+          "status": "pending",
+          "summary": "Refresh bounded screenshot-backed proof across the non-default proof-vault theme.",
           "manualSmoke": {
             "app": "Obsidian",
             "bundle": "md.obsidian",
@@ -880,14 +882,14 @@
         },
         {
           "id": "obsidian-pane-variants",
-          "status": "complete",
-          "summary": "Bounded proof with split panes or side panes visible is recorded.",
+          "status": "pending",
+          "summary": "Refresh bounded screenshot-backed proof with split panes or side panes visible.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
         },
         {
           "id": "obsidian-long-note-variants",
-          "status": "complete",
-          "summary": "Current-head bounded proof in a long scrolled note passed with the CodeMirror viewport-end repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior.",
+          "status": "pending",
+          "summary": "Refresh current-head bounded proof in a long scrolled note with the CodeMirror viewport-end repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior.",
           "manualSmoke": {
             "app": "Obsidian",
             "bundle": "md.obsidian",
@@ -896,6 +898,36 @@
             "requiresVisualStrictComplete": true
           },
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
+        },
+        {
+          "id": "obsidian-font-zoom-variants",
+          "status": "pending",
+          "summary": "Add bounded screenshot-backed proof for an Obsidian font/zoom layout.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-font-zoom --manual-gate"
+        },
+        {
+          "id": "obsidian-markdown-bold-variants",
+          "status": "pending",
+          "summary": "Add bounded screenshot-backed proof for bold Markdown context.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-bold --manual-gate"
+        },
+        {
+          "id": "obsidian-markdown-list-variants",
+          "status": "pending",
+          "summary": "Add bounded screenshot-backed proof for Markdown list context.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate"
+        },
+        {
+          "id": "obsidian-multiline-variants",
+          "status": "pending",
+          "summary": "Add bounded screenshot-backed proof for multiline spacing context.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate"
+        },
+        {
+          "id": "obsidian-run-on-variants",
+          "status": "pending",
+          "summary": "Add bounded screenshot-backed proof for long wrapped/run-on sentence context.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate"
         }
       ],
       "requiredManualSmokes": [
@@ -920,6 +952,46 @@
           "app": "Obsidian",
           "bundle": "md.obsidian",
           "proof": "obsidian-long-note",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-font-zoom",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-font-zoom",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-markdown-bold",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-markdown-bold",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-markdown-list",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-markdown-list",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-multiline",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-multiline",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-run-on",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-run-on",
           "minVerifiedAccepts": 2,
           "requiresVisualStrictComplete": true
         }

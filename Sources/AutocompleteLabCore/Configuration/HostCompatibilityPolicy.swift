@@ -145,13 +145,13 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "1.12.4", build: "0.14.8", source: "/Applications/Obsidian.app"),
             safetyMode: .notPrompt,
             runtimeState: .userToggleAllowed,
-            proofState: .complete,
+            proofState: .partial,
             killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/obsidian.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "Obsidian/obsidian-long-note")
             ],
-            notes: "Real CodeMirror default, theme, pane, and long-note proof is recorded; broader vault variance keeps support yellow."
+            notes: "Recorded CodeMirror proof exists for default, theme, pane, and long-note lanes. Font/zoom, Markdown, multiline, and run-on lanes keep current support partial until screenshot-backed rows exist."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.mail",

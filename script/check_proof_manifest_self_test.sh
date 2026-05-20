@@ -171,18 +171,12 @@ write_obsidian_trace() {
     printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
   done
   append_obsidian_trace_segment "$path"
-  for _ in $(seq 1 4); do
-    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+  for _ in $(seq 1 8); do
+    for _ in $(seq 1 4); do
+      printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
+    done
+    append_obsidian_trace_segment "$path"
   done
-  append_obsidian_trace_segment "$path"
-  for _ in $(seq 1 4); do
-    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
-  done
-  append_obsidian_trace_segment "$path"
-  for _ in $(seq 1 4); do
-    printf '{"type":"renderModeChanged","appBundleIdentifier":"com.example.other","metadata":{}}\n' >>"$path"
-  done
-  append_obsidian_trace_segment "$path"
 }
 
 write_obsidian_required_manual_smoke() {
@@ -201,6 +195,11 @@ MARKDOWN
 | 2026-05-07T12:21:00Z | Obsidian | \`md.obsidian\` | \`obsidian-theme\` | 2 | \`floatingMirror\` | lines 20+ | lines 30-35 in \`$trace_path\`; visual \`strict-complete\` |
 | 2026-05-07T12:22:00Z | Obsidian | \`md.obsidian\` | \`obsidian-pane\` | 2 | \`floatingMirror\` | lines 30+ | lines 40-45 in \`$trace_path\`; visual \`strict-complete\` |
 | 2026-05-07T12:23:00Z | Obsidian | \`md.obsidian\` | \`obsidian-long-note\` | 2 | \`floatingMirror\` | lines 40+ | lines 50-55 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:24:00Z | Obsidian | \`md.obsidian\` | \`obsidian-font-zoom\` | 2 | \`floatingMirror\` | lines 50+ | lines 60-65 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:25:00Z | Obsidian | \`md.obsidian\` | \`obsidian-markdown-bold\` | 2 | \`floatingMirror\` | lines 60+ | lines 70-75 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:26:00Z | Obsidian | \`md.obsidian\` | \`obsidian-markdown-list\` | 2 | \`floatingMirror\` | lines 70+ | lines 80-85 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:27:00Z | Obsidian | \`md.obsidian\` | \`obsidian-multiline\` | 2 | \`floatingMirror\` | lines 80+ | lines 90-95 in \`$trace_path\`; visual \`strict-complete\` |
+| 2026-05-07T12:28:00Z | Obsidian | \`md.obsidian\` | \`obsidian-run-on\` | 2 | \`floatingMirror\` | lines 90+ | lines 100-105 in \`$trace_path\`; visual \`strict-complete\` |
 MARKDOWN
   fi
 }
@@ -328,7 +327,7 @@ write_obsidian_required_manifest() {
   local gaps_json="[]"
   local requirements_json="[]"
   if [[ "$status" != "complete" ]]; then
-    gaps_json='["theme, pane, and long-note variants are still pending"]'
+    gaps_json='["Obsidian theme, pane, long-note, font/zoom, Markdown, multiline, and run-on variants are still pending"]'
     requirements_json='[
         {
           "id": "obsidian-theme-variants",
@@ -347,6 +346,36 @@ write_obsidian_required_manifest() {
           "status": "pending",
           "summary": "Run long scrolled Obsidian note proof.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
+        },
+        {
+          "id": "obsidian-font-zoom-variants",
+          "status": "pending",
+          "summary": "Run Obsidian font/zoom proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-font-zoom --manual-gate"
+        },
+        {
+          "id": "obsidian-markdown-bold-variants",
+          "status": "pending",
+          "summary": "Run Obsidian bold Markdown proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-bold --manual-gate"
+        },
+        {
+          "id": "obsidian-markdown-list-variants",
+          "status": "pending",
+          "summary": "Run Obsidian list Markdown proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate"
+        },
+        {
+          "id": "obsidian-multiline-variants",
+          "status": "pending",
+          "summary": "Run Obsidian multiline proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate"
+        },
+        {
+          "id": "obsidian-run-on-variants",
+          "status": "pending",
+          "summary": "Run Obsidian run-on sentence proof.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate"
         }
       ]'
   fi
@@ -394,6 +423,46 @@ write_obsidian_required_manifest() {
           "app": "Obsidian",
           "bundle": "md.obsidian",
           "proof": "obsidian-long-note",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-font-zoom",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-font-zoom",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-markdown-bold",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-markdown-bold",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-markdown-list",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-markdown-list",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-multiline",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-multiline",
+          "minVerifiedAccepts": 2,
+          "requiresVisualStrictComplete": true
+        },
+        {
+          "id": "obsidian-run-on",
+          "app": "Obsidian",
+          "bundle": "md.obsidian",
+          "proof": "obsidian-run-on",
           "minVerifiedAccepts": 2,
           "requiresVisualStrictComplete": true
         }
@@ -932,7 +1001,7 @@ script/check_proof_manifest.sh \
   --skip-profile-coverage \
   --strict >"$TMP_DIR/obsidian-required-pass.out"
 
-if ! grep -F "Verified trace slices: 4" "$TMP_DIR/obsidian-required-pass.out" >/dev/null; then
+if ! grep -F "Verified trace slices: 9" "$TMP_DIR/obsidian-required-pass.out" >/dev/null; then
   echo "proof manifest self-test did not verify all required Obsidian variant trace slices" >&2
   cat "$TMP_DIR/obsidian-required-pass.out" >&2
   exit 1
