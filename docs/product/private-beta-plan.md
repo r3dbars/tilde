@@ -1,9 +1,9 @@
 # Private Beta Plan
 
-Goal: learn whether Autocomplete Lab makes real writing easier without hurting
+Goal: learn whether SteadyType makes real writing easier without hurting
 trust.
 
-This is still an experiment. Do not treat it as a Transcripted feature or a
+This is still an experiment. Do not treat it as part of another product or a
 general release.
 
 ## Before Inviting Anyone

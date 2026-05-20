@@ -39,7 +39,14 @@ require_contains 'MLX_METALLIB="$SWIFT_BUILD_ROOT/mlx-metal/default.metallib"'
 require_contains 'local mlx_checkout="$SWIFT_BUILD_ROOT/checkouts/mlx-swift"'
 require_contains "wait_for_proof_locks_if_needed"
 require_contains "AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE"
+require_contains "print_proof_lock_status"
+require_contains "--proof-lock-status"
 require_contains "Waiting for active proof run before build/run relaunch."
+require_contains "Timed out after \${PROOF_LOCK_WAIT_SECONDS}s waiting for active proof run"
+require_contains "elapsed: \${elapsed:-unknown}"
+require_contains "command: \${command:-unknown}"
+require_contains "Retry after the proof run finishes"
+require_contains "Fail fast instead of waiting"
 require_contains '--privacy-export-proof([[:space:]]|$)'
 require_contains "scrub_proof_model_root_if_needed"
 require_contains "AUTOCOMPLETE_LAB_ALLOW_PROOF_MODEL_ROOT"
@@ -65,5 +72,80 @@ if grep -Fq "AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES=1" script/real_app_smoke.sh
   echo "real app smoke should not move sibling worktree app bundles during proof runs" >&2
   exit 1
 fi
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+SMOKE_LOCK_DIR="$TMP_DIR/smoke.lock"
+FRESH_LOCK_DIR="$TMP_DIR/fresh.lock"
+mkdir -p "$SMOKE_LOCK_DIR"
+echo "$$" >"$SMOKE_LOCK_DIR/pid"
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$SMOKE_LOCK_DIR" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$FRESH_LOCK_DIR" \
+  script/build_and_run.sh --proof-lock-status >"$TMP_DIR/status-active.txt" 2>&1; then
+  echo "build/run proof-lock status should return non-zero while a proof lock is active" >&2
+  exit 1
+fi
+
+for expected in \
+  "Proof lock status for SteadyType build/run:" \
+  "real app smoke: active" \
+  "pid: $$" \
+  "elapsed:" \
+  "command:" \
+  "lock: $SMOKE_LOCK_DIR" \
+  "Build/run would wait up to 300s before relaunching." \
+  "Check lock status without launching: ./script/build_and_run.sh --proof-lock-status" \
+  "Retry your original build/run command after the proof run finishes." \
+  "Common retry: ./script/build_and_run.sh --verify" \
+  "Fail fast instead of waiting by setting AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS=0 on the build/run command."; do
+  if ! grep -F "$expected" "$TMP_DIR/status-active.txt" >/dev/null; then
+    echo "build/run proof-lock status output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$SMOKE_LOCK_DIR" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$FRESH_LOCK_DIR" \
+  AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS=0 \
+  script/build_and_run.sh --verify >"$TMP_DIR/lock-timeout.txt" 2>&1; then
+  echo "build/run should fail closed instead of relaunching during an active proof lock" >&2
+  exit 1
+fi
+
+for expected in \
+  "Timed out after 0s waiting for active proof run; refusing to relaunch SteadyType." \
+  "real app smoke: active" \
+  "pid: $$" \
+  "elapsed:" \
+  "command:" \
+  "Retry after the proof run finishes: ./script/build_and_run.sh --verify" \
+  "Check lock status without launching: ./script/build_and_run.sh --proof-lock-status" \
+  "Fail fast instead of waiting: AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS=0 ./script/build_and_run.sh --verify"; do
+  if ! grep -F "$expected" "$TMP_DIR/lock-timeout.txt" >/dev/null; then
+    echo "build/run proof-lock timeout output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+rm -rf "$SMOKE_LOCK_DIR" "$FRESH_LOCK_DIR"
+
+if ! AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$SMOKE_LOCK_DIR" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$FRESH_LOCK_DIR" \
+  script/build_and_run.sh --proof-lock-status >"$TMP_DIR/status-clear.txt" 2>&1; then
+  echo "build/run proof-lock status should pass when no proof locks are active" >&2
+  exit 1
+fi
+
+for expected in \
+  "real app smoke: idle" \
+  "fresh latency proof: idle" \
+  "No active proof locks. Build/run can proceed."; do
+  if ! grep -F "$expected" "$TMP_DIR/status-clear.txt" >/dev/null; then
+    echo "build/run clear proof-lock status output missing: $expected" >&2
+    exit 1
+  fi
+done
 
 echo "Build and run self-test passed."

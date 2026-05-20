@@ -2,17 +2,23 @@
 
 Created: 2026-05-07
 
-This is the working checklist for making Autocomplete Lab feel natural,
+This is the working checklist for making SteadyType feel natural,
 intuitive, fast, quiet, and almost native to macOS.
+
+This file is historical and aspirational. It preserves the Apple-native polish
+loop, but it is not the current beta-readiness scorecard. Use
+`docs/product/steadytype-product-scorecard.md` for current product truth. As of
+2026-05-20, strict manual smoke still reports 35 stale or pending target app
+passes, and the proof manifest still has 6 partial surfaces.
 
 The product bar is not "AI appears everywhere." The bar is:
 
 > Typing feels completely normal. Help appears only when it is useful, aligned,
 > reversible, and calm.
 
-## Current Executive Score
+## Historical Apple-Native Score
 
-Overall Apple-native feel: 94/100.
+Historical/aspirational Apple-native feel: 94/100.
 
 This app has real engineering depth now. It is not a toy. It has local model
 runtime support, strong privacy defaults, app compatibility profiles, insertion
@@ -84,7 +90,7 @@ fail quietly when it is unsure. Wrong-place text is worse than no suggestion.
 | Onboarding and setup | 4 | 100 | 100 | Settings explains Accessibility in one short paragraph, only mentions Screen Recording when screenshot capture is on, starts fresh installs with suggestion-capable apps off, points first success at enabling TextEdit, and installs or repairs the local model in-app with plain no-model-server recovery copy, progress, cancellation, failure retry, validation, and runtime warmup. The Apps section now shows visible proof instructions, shows the exact smoke command where one exists, copies the runnable command in one click, disables proof until the current app is enabled, and can launch TextEdit and Chrome smoke proof directly from Settings. TextEdit and Chrome automatic proof plans are unit-tested, the Settings action dispatch is unit-tested, and the current TextEdit skip-build proof passed against a proof-mode app with strict visual trace evidence. |
 | Evidence and QA loop | 4 | 100 | 100 | Tests now include app-target settings state, privacy expiry, support status, serial AX reader, focused AX-health cooldown, deterministic stable-bounds field identity, key-capture failure classification, trace eval, strict manual-smoke status, executable score-target gates, a 10-iteration score loop, a self-tested 10-minute typing endurance command with exact TextEdit text checks, Notes text-context repair, Claude Code terminal-host adapter checks, and 16 screenshot artifacts including real Monaco/ProseMirror, same-baseline Codex/Claude desktop, and terminal-hosted Claude Code. |
 
-Weighted score: 95/100.
+Historical weighted checklist score: 95/100.
 
 ## Non-Negotiable Native Feel Rules
 
@@ -364,7 +370,7 @@ like an assistant trying to talk.
 - [x] Fast word completions also obey repeated-miss suppression.
 - [x] Word completion can use recent accepted words scoped to the current app.
 - [x] Word completion waits for 3+ typed letters in trigger, activation, and fast ranking paths.
-- [x] Global word completion defaults no longer include Codex, Transcripted, autocomplete, trace, diagnostics, or other lab-specific words.
+- [x] Global word completion defaults no longer include app names, debug terms, or other lab-specific words.
 - [x] Dogfood prompt guidance no longer triggers from loose substrings like `table`, `stable`, `model`, or `test`.
 - [x] Assistant-y prefixes like "as an AI", "happy to", "you could", and "would you like" are suppressed before display.
 - [x] Word-completion mode rejects unrelated whole-word completions.
@@ -413,7 +419,7 @@ Native target: a user can understand and control the app in 20 seconds.
 
 ### Checklist
 
-- [x] Global pause exists.
+- [x] Suggestion pause exists.
 - [x] Per-app enable/disable exists.
 - [x] Current app state appears in diagnostics/menu.
 - [x] Full-accept toggle exists.

@@ -17,19 +17,19 @@ struct ControlPauseState: Equatable {
 
     var statusText: String {
         guard isPaused else {
-            return "Global pause: off"
+            return "Suggestion pause: off"
         }
 
         guard let timeText else {
-            return "Global pause: on"
+            return "Suggestion pause: on"
         }
 
-        return "Global pause: until \(timeText)"
+        return "Suggestion pause: until \(timeText)"
     }
 
     var settingsSummaryText: String {
         guard isPaused else {
-            return "Suggestions: ready"
+            return "Suggestions: on"
         }
 
         guard let timeText else {
@@ -41,14 +41,14 @@ struct ControlPauseState: Equatable {
 
     var settingsDetailText: String {
         guard isPaused else {
-            return "Global suggestions are on. You can still pause one app or one field."
+            return "Suggestions are on. You can still pause one app or one field."
         }
 
         guard let timeText else {
-            return "Global suggestions are paused until you resume them."
+            return "Suggestions are paused until you resume them."
         }
 
-        return "Global suggestions are paused until \(timeText). App and field pauses stay separate."
+        return "Suggestions are paused until \(timeText). App and field pauses stay separate."
     }
 
     var menuPausedTitle: String {

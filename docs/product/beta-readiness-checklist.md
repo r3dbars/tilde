@@ -92,13 +92,13 @@ Use this before inviting private beta testers.
 
 Invite testers only when every applicable box is checked.
 
-## Current Blockers - 2026-05-12
+## Current Blockers - 2026-05-20
 
 - `./script/beta_readiness.sh --check-only` currently blocks on fresh latency
   proof, current manual app proof refresh, release package proof, and
   notarized install proof.
 - `./script/manual_smoke_status.sh --strict` still requires current-head proof
-  refresh for 30 target app rows. Do not treat stale screenshot-backed rows as
+  refresh for 35 target app rows. Do not treat stale screenshot-backed rows as
   beta-current.
 - `./script/check_onboarding_walkthrough_proof.py` is expected to block until
   the guided TextEdit walkthrough table has a current clean-user pass row.
@@ -106,9 +106,9 @@ Invite testers only when every applicable box is checked.
   artifact change and now validates the current DMG with stapler and spctl.
 - Current local SteadyType artifacts are not beta-current until a Developer ID
   signed DMG, Apple notarization, stapling, and fresh-install Gatekeeper proof
-  are all regenerated. A stored notarytool profile may exist under a shared
-  product alias such as `Transcripted`, but older `AutocompleteLab.zip`
-  notarization does not count for the current SteadyType DMG.
+  are all regenerated. A stored notarytool profile may exist under a legacy
+  shared alias, but older legacy ZIP notarization does not count for the
+  current SteadyType DMG.
 - Recreate `dist/SteadyType.dmg`, the secondary `dist/SteadyType.zip`, and
   `dist/private-beta/checksums.txt` if app code changes after the remaining
   proof blockers close.

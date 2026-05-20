@@ -85,6 +85,17 @@ struct SettingsCurrentAppState: Equatable {
         return supportStatus.supportLevel != .unsupported
     }
 
+    var shouldShowCheckControls: Bool {
+        guard bundleIdentifier != nil,
+              case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return false
+        }
+
+        return true
+    }
+
     var statusText: String {
         guard bundleIdentifier != nil else {
             return "Current app: no app selected"
@@ -110,7 +121,7 @@ struct SettingsCurrentAppState: Equatable {
             return "\(supportStatus.userFacingReason) Suggestions are on for this app."
         }
 
-        return "\(supportStatus.userFacingReason) Suggestions are paused in this app. Resume only where you want to test."
+        return "\(supportStatus.userFacingReason) Suggestions are paused in this app. Resume only where you want suggestions."
     }
 
     var modeText: String {
@@ -119,7 +130,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         guard case let .supported(profile) = supportStatus else {
-            return "Mode: not tested yet"
+            return "Mode: not set up here"
         }
 
         let primary = Self.renderModeName(profile.renderMode)
@@ -189,18 +200,18 @@ struct SettingsCurrentAppState: Equatable {
 
     var proofButtonTitle: String {
         if bundleIdentifier == "com.apple.TextEdit", isEnabled {
-            return "Run TextEdit Test"
+            return "Check TextEdit"
         }
 
         if bundleIdentifier == "com.google.Chrome", isEnabled {
-            return "Run Chrome Test"
+            return "Check Chrome"
         }
 
-        return isEnabled ? "Start App Test" : "Enable App First"
+        return isEnabled ? "Check This App" : "Enable Suggestions First"
     }
 
     var copyProofCommandButtonTitle: String {
-        canCopyProofCommand ? "Copy Test Command" : "No Test Command"
+        canCopyProofCommand ? "Copy Check Command" : "No Check Command"
     }
 
     var canCopyProofCommand: Bool {
@@ -209,32 +220,32 @@ struct SettingsCurrentAppState: Equatable {
 
     var proofText: String {
         guard bundleIdentifier != nil else {
-            return "Test: choose a writing app first."
+            return "Check: choose a writing app first."
         }
 
         guard case let .supported(profile) = supportStatus,
               profile.canPresentSuggestions,
               !profile.isSensitive else {
-            return "Test: unavailable here."
+            return "Check: unavailable here."
         }
 
         guard isEnabled else {
-            return "Test: turn on suggestions for this app first."
+            return "Check: turn on suggestions for this app first."
         }
 
         if bundleIdentifier == "com.openai.codex" {
-            return "Test: include AUTOCOMPLETE_LAB_CODEX_PROOF, press Tab once, and do not press Enter."
+            return "Check: use the guided prompt-app check, press Tab once, and do not press Enter."
         }
 
         if profile.supportsOneWordAcceptance && !profile.supportsFullAcceptance {
-            return "Test: use disposable prompt text, press Tab once, and do not press Enter."
+            return "Check: use disposable prompt text, press Tab once, and do not press Enter."
         }
 
         if profile.supportsOneWordAcceptance && profile.supportsFullAcceptance {
-            return "Test: use disposable text, press Tab once, then the whole-suggestion shortcut."
+            return "Check: use disposable text, press Tab once, then the whole-suggestion shortcut."
         }
 
-        return "Test: use disposable text and verify accepted text stays in the field."
+        return "Check: use disposable text and confirm accepted text stays in the field."
     }
 
     var proofCommandText: String? {
@@ -243,14 +254,14 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if bundleIdentifier == "com.apple.Notes" {
-            return "Manual commands: \(command.replacingOccurrences(of: "\n", with: "; "))"
+            return "Manual checks: \(command.replacingOccurrences(of: "\n", with: "; "))"
         }
 
         if supportStatus.supportLevel == .yellow {
-            return "Manual command: \(command)"
+            return "Manual check: \(command)"
         }
 
-        return "Command: \(command)"
+        return "Check command: \(command)"
     }
 
     var proofCommandClipboardText: String? {
@@ -313,24 +324,24 @@ struct SettingsPermissionState: Equatable {
 
     var detailText: String {
         if isTrusted {
-            return "SteadyType can see the focused text field, place suggestions at the cursor, and insert text only when you accept. Text stays on this Mac. Normal setup does not need Screen Recording."
+            return "SteadyType can read the focused text field and insert only after you accept. Text stays on this Mac. Screen Recording is not needed for normal use."
         }
 
-        return "Click Allow Accessibility when you are ready. macOS will ask for access so SteadyType can read the focused text field, place suggestions near the cursor, and insert text only after you accept. If you denied it, use Open Privacy Settings and turn SteadyType back on. Text stays on this Mac. Normal setup does not need Screen Recording."
+        return "Click Allow Accessibility when you are ready. macOS asks so SteadyType can read the focused text field and insert only after you accept. Text stays on this Mac. Screen Recording is not needed for normal use."
     }
 }
 
 struct SettingsFirstRunTrustState: Equatable {
     var statusText: String {
-        "First 10 minutes: start in TextEdit"
+        "First run: practice in TextEdit"
     }
 
     var detailText: String {
-        "Suggestions appear near the cursor in supported writing apps. Tab accepts one word. Esc dismisses. Pause stops suggestions everywhere; Pause in the current app stops only that app. Text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, subject lines, and diagnostics stay on this Mac unless you export a redacted Privacy Bundle."
+        "Suggestions appear near the cursor. Tab accepts one word. Esc dismisses. Pause Suggestions stops suggestions everywhere; Pause in Current App stops only that app."
     }
 
     var appsText: String {
-        "Supported test apps: TextEdit, Notes, Obsidian, and Chrome only on the included local practice pages. Do not test random websites, search boxes, login, address, payment, or private fields. Do not use Codex or Claude for normal testing unless asked; they are special safety tests."
+        "Text stays on this Mac. Start with TextEdit. Use Notes, Obsidian, and Chrome practice pages only when needed. Avoid random websites, search, login, payment, and private fields."
     }
 }
 
@@ -346,7 +357,7 @@ struct SettingsPrivacyState: Equatable {
     let tracePath: String
 
     var statusText: String {
-        "Privacy: local diagnostics only"
+        "Privacy: stays on this Mac"
     }
 
     var diagnosticsStatusText: String {
@@ -354,34 +365,34 @@ struct SettingsPrivacyState: Equatable {
         let screenshotState = screenshotTracingEnabled
             ? (screenshotTracingExpiresAt == nil ? "screenshots on" : "screenshots on temporarily")
             : "screenshots off"
-        return "Diagnostics: performance + placement traces \(traceState), \(screenshotState)"
+        return "Local check data: \(traceState), \(screenshotState)"
     }
 
     var contentStatusText: String {
         let state = rawContentTracingEnabled
             ? (rawContentTracingExpiresAt == nil ? "on" : "on temporarily")
             : "off"
-        return "Raw text capture: \(state)"
+        return "Raw text in local logs: \(state)"
     }
 
     var visiblePageContextStatusText: String {
         if visiblePageContextEnabled && !screenCaptureAccessGranted {
-            return "Visible page context: on, waiting for Screen Recording permission."
+            return "Screen context: on, waiting for Screen Recording permission."
         }
 
-        return "Visible page context: \(visiblePageContextEnabled ? "on" : "off"). OCR runs locally and is used only as prompt context."
+        return "Screen context: \(visiblePageContextEnabled ? "on" : "off"). OCR is local and only helps suggestions."
     }
 
     var sharingStatusText: String {
         if rawContentTracingEnabled || screenshotTracingEnabled || visiblePageContextEnabled {
-            return "Data leaving Mac: none automatically. Share only the redacted Privacy Bundle, not debug traces or screenshots."
+            return "Nothing leaves automatically. Share Privacy Bundles, not raw logs or screenshots."
         }
 
-        return "Data leaving Mac: none automatically. Model install downloads once; Privacy Bundle excludes raw text, prompts, accepted text, and screenshots."
+        return "Nothing leaves automatically. Privacy Bundles exclude raw text and screenshots."
     }
 
     var learningStatusText: String {
-        "Learning: accepted-kept scores, style sketch, and recent words stay local"
+        "Learning: local usefulness scores only"
     }
 
     var screenRecordingPermissionText: String? {
@@ -390,22 +401,22 @@ struct SettingsPrivacyState: Equatable {
         }
 
         if visiblePageContextEnabled && !screenCaptureAccessGranted {
-            return "Screen Recording: required for visible page context OCR."
+            return "Screen Recording: required for screen context."
         }
 
         if screenshotTracingEnabled && screenshotTracingExpiresAt == nil {
-            return "Screen Recording: used only while screenshot test mode is on to capture local placement screenshots."
+            return "Screen Recording: used only for local placement screenshots while enabled."
         }
 
         if screenshotTracingEnabled && !visiblePageContextEnabled {
             return "Screen Recording: used only for temporary local placement screenshots."
         }
 
-        return "Screen Recording: used only for local screenshots and OCR context while enabled."
+        return "Screen Recording: used only for local screenshots and screen context while enabled."
     }
 
     var pathText: String {
-        "Logs: \(diagnosticsPath) | Traces: \(tracePath)"
+        "Diagnostics log: \(diagnosticsPath) | Check data: \(tracePath)"
     }
 }
 
@@ -523,14 +534,14 @@ struct SettingsPracticeState: Equatable {
         }
 
         if suggestionsPaused {
-            return "Practice: ready, currently paused"
+            return "Practice: ready, suggestions paused"
         }
 
         return "Practice: ready in TextEdit"
     }
 
     var detailText: String {
-        "Safe target: TextEdit. Start Practice enables TextEdit, opens a disposable local file, and shows suggestions near the cursor. It does not ask for Screen Recording."
+        "Safe target: TextEdit. Start Practice opens a disposable local file and lets you try suggestions near the cursor. No Screen Recording needed."
     }
 
     var modelText: String {
@@ -544,7 +555,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var stepsText: String {
-        "Try: press Tab once to accept one word, type again and press Esc to dismiss, then use Pause Suggestions or Delete Traces before leaving."
+        "Try: press Tab once for one word, type again and press Esc to dismiss, then pause suggestions or delete local logs before leaving."
     }
 
     var primaryAction: SettingsPracticePrimaryAction {
@@ -590,7 +601,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var deleteTracesButtonTitle: String {
-        "Delete Traces"
+        "Delete Local Logs"
     }
 }
 
@@ -637,14 +648,14 @@ struct SettingsOnboardingState: Equatable {
 
     var text: String {
         if !isTrusted {
-            return "Allow Accessibility in System Settings so suggestions can appear at the cursor and insert only when you accept. Text stays on this Mac."
+            return "Allow Accessibility so suggestions can appear near the cursor and insert only when you accept. Text stays on this Mac."
         }
 
         if suggestionsPaused {
-            return "Paused. Resume when you want to test suggestions."
+            return "Paused. Resume when you want suggestions."
         }
 
-        return runtimeGuidance.message
+        return runtimeGuidance.message.replacingOccurrences(of: "delete traces", with: "delete local logs")
     }
 }
 
@@ -715,10 +726,10 @@ final class SettingsWindowController: NSObject {
     private let practiceStepsLabel = NSTextField(labelWithString: "")
     private let practicePrimaryButton = NSButton(title: "Start TextEdit Practice", target: nil, action: nil)
     private let practicePauseButton = NSButton(title: "Pause Suggestions", target: nil, action: nil)
-    private let practiceDeleteTracesButton = NSButton(title: "Delete Traces", target: nil, action: nil)
+    private let practiceDeleteTracesButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let controlLabel = NSTextField(labelWithString: "")
     private let controlDetailLabel = NSTextField(labelWithString: "")
-    private let togglePauseButton = NSButton(checkboxWithTitle: "Global suggestions", target: nil, action: nil)
+    private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions everywhere", target: nil, action: nil)
     private let pause15MinutesButton = NSButton(title: "15 Minutes", target: nil, action: nil)
     private let pause1HourButton = NSButton(title: "1 Hour", target: nil, action: nil)
     private let pauseUntilTomorrowButton = NSButton(title: "Until Tomorrow", target: nil, action: nil)
@@ -741,8 +752,8 @@ final class SettingsWindowController: NSObject {
         action: nil
     )
     private let forceMirrorModeButton = NSButton(title: "Use Floating Backup", target: nil, action: nil)
-    private let startAppProofButton = NSButton(title: "Start App Test", target: nil, action: nil)
-    private let copyProofCommandButton = NSButton(title: "Copy Test Command", target: nil, action: nil)
+    private let startAppProofButton = NSButton(title: "Check This App", target: nil, action: nil)
+    private let copyProofCommandButton = NSButton(title: "Copy Check Command", target: nil, action: nil)
     private let enableAllAppsButton = NSButton(title: "Resume Every Paused App", target: nil, action: nil)
     private let privacyLabel = NSTextField(labelWithString: "")
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
@@ -756,22 +767,22 @@ final class SettingsWindowController: NSObject {
     private let feedbackDetailLabel = NSTextField(labelWithString: "")
     private let exportPrivacyBundleButton = NSButton(title: "Export Privacy Bundle", target: nil, action: nil)
     private let toggleTracingButton = NSButton(
-        checkboxWithTitle: "Performance and placement traces",
+        checkboxWithTitle: "Record local check data",
         target: nil,
         action: nil
     )
     private let toggleRawTraceButton = NSButton(
-        checkboxWithTitle: "Include raw text in traces",
+        checkboxWithTitle: "Include raw text in local logs",
         target: nil,
         action: nil
     )
     private let toggleScreenshotTraceButton = NSButton(
-        checkboxWithTitle: "Capture placement screenshots",
+        checkboxWithTitle: "Save placement screenshots",
         target: nil,
         action: nil
     )
     private let toggleVisiblePageContextButton = NSButton(
-        checkboxWithTitle: "Use visible page context",
+        checkboxWithTitle: "Use screen context",
         target: nil,
         action: nil
     )
@@ -1039,6 +1050,7 @@ final class SettingsWindowController: NSObject {
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
         currentAppFallbackLabel.stringValue = currentApp.fallbackText
         currentAppProofLabel.stringValue = currentApp.proofText
+        currentAppProofLabel.isHidden = !currentApp.shouldShowCheckControls
         currentAppProofCommandLabel.stringValue = currentApp.proofCommandText ?? ""
         currentAppProofCommandLabel.isHidden = currentApp.proofCommandText == nil
         currentProofCommandClipboardText = currentApp.proofCommandClipboardText
@@ -1050,8 +1062,10 @@ final class SettingsWindowController: NSObject {
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
         forceMirrorModeButton.title = currentApp.modeButtonTitle
         forceMirrorModeButton.isEnabled = currentApp.canOverrideMode
+        forceMirrorModeButton.isHidden = !currentApp.canOverrideMode
         startAppProofButton.title = currentApp.proofButtonTitle
         startAppProofButton.isEnabled = currentApp.canStartProof
+        startAppProofButton.isHidden = !currentApp.shouldShowCheckControls
         disabledAppsLabel.stringValue = currentApp.blockedAppsText
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
         privacyLabel.stringValue = privacy.statusText
@@ -1246,27 +1260,27 @@ final class SettingsWindowController: NSObject {
         startAppProofButton.target = self
         startAppProofButton.action = #selector(startAppProofControl)
         startAppProofButton.bezelStyle = .rounded
-        startAppProofButton.toolTip = "Turns on temporary screenshot test mode for the enabled current app and opens Diagnostics."
+        startAppProofButton.toolTip = "Starts a local app check and opens Diagnostics."
         copyProofCommandButton.target = self
         copyProofCommandButton.action = #selector(copyProofCommandControl)
         copyProofCommandButton.bezelStyle = .rounded
-        copyProofCommandButton.toolTip = "Copies the exact local test command for the current app."
+        copyProofCommandButton.toolTip = "Copies the local check command for the current app."
         enableAllAppsButton.target = self
         enableAllAppsButton.action = #selector(enableAllAppsControl)
         enableAllAppsButton.bezelStyle = .rounded
         enableAllAppsButton.toolTip = "Resumes every app you paused in SteadyType."
         toggleTracingButton.target = self
         toggleTracingButton.action = #selector(toggleTracingControl)
-        toggleTracingButton.toolTip = "Keeps local performance and placement events available for debugging."
+        toggleTracingButton.toolTip = "Pauses diagnostics recording only. Suggestions use the Suggestion controls."
         toggleRawTraceButton.target = self
         toggleRawTraceButton.action = #selector(toggleRawTraceControl)
-        toggleRawTraceButton.toolTip = "Off by default. Turn on only when you need local raw-text debugging."
+        toggleRawTraceButton.toolTip = "Off by default. Turn on only when support asks for local raw-text logs."
         toggleScreenshotTraceButton.target = self
         toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
-        toggleScreenshotTraceButton.toolTip = "Captures local screenshots for placement debugging."
+        toggleScreenshotTraceButton.toolTip = "Saves local screenshots for placement checks."
         toggleVisiblePageContextButton.target = self
         toggleVisiblePageContextButton.action = #selector(toggleVisiblePageContextControl)
-        toggleVisiblePageContextButton.toolTip = "Uses local OCR from the visible screen around the active editor as extra prompt context."
+        toggleVisiblePageContextButton.toolTip = "Uses local OCR around the active editor as extra suggestion context."
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
@@ -1299,7 +1313,7 @@ final class SettingsWindowController: NSObject {
         [
             title,
             makeSection(
-                title: "First 10 Minutes",
+                title: "First Run",
                 views: [
                     firstRunTrustLabel,
                     firstRunTrustDetailLabel,

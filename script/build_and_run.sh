@@ -28,9 +28,6 @@ FRESH_LATENCY_LOCK_DIR="${AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR:-${TMPDIR:-/tm
 PROOF_LOCK_WAIT_SECONDS="${AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS:-300}"
 
 cd "$ROOT_DIR"
-trap 'rm -f "$GENERATED_APP_ICON"' EXIT
-mkdir -p "$DIST_DIR"
-swift script/generate_app_icon.swift "$GENERATED_APP_ICON_REL"
 
 SWIFT_SCRATCH_ARGS=()
 SWIFT_JOB_ARGS=()
@@ -48,15 +45,141 @@ truthy() {
   [[ "${1:-}" =~ ^(1|true|yes|on)$ ]]
 }
 
-active_lock_pid() {
+proof_lock_status_requested() {
+  case "$MODE" in
+    --proof-lock-status|proof-lock-status|--status|status)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+lock_pid_value() {
   local lock_dir="$1"
   local pid=""
 
   [[ -f "$lock_dir/pid" ]] || return 1
   pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
   [[ -n "$pid" ]] || return 1
+  printf '%s\n' "$pid"
+}
+
+active_lock_pid() {
+  local lock_dir="$1"
+  local pid=""
+
+  pid="$(lock_pid_value "$lock_dir" || true)"
+  [[ -n "$pid" ]] || return 1
   kill -0 "$pid" >/dev/null 2>&1 || return 1
   printf '%s\n' "$pid"
+}
+
+process_elapsed() {
+  local pid="$1"
+  ps -p "$pid" -o etime= 2>/dev/null | awk '{$1=$1; print; exit}'
+}
+
+process_command() {
+  local pid="$1"
+  ps -p "$pid" -o command= 2>/dev/null | sed -n 's/^[[:space:]]*//p' | head -n 1
+}
+
+describe_proof_lock() {
+  local label="$1"
+  local lock_dir="$2"
+  local show_idle="${3:-0}"
+  local pid=""
+  local raw_pid=""
+  local elapsed=""
+  local command=""
+
+  pid="$(active_lock_pid "$lock_dir" || true)"
+  if [[ -n "$pid" ]]; then
+    elapsed="$(process_elapsed "$pid")"
+    command="$(process_command "$pid")"
+    echo "$label: active"
+    echo "  pid: $pid"
+    echo "  elapsed: ${elapsed:-unknown}"
+    echo "  command: ${command:-unknown}"
+    echo "  lock: $lock_dir"
+    return 0
+  fi
+
+  if [[ "$show_idle" == "1" ]]; then
+    raw_pid="$(lock_pid_value "$lock_dir" || true)"
+    if [[ -n "$raw_pid" ]]; then
+      echo "$label: stale lock (pid $raw_pid is not running)"
+      echo "  lock: $lock_dir"
+    elif [[ -d "$lock_dir" ]]; then
+      echo "$label: stale lock (missing pid)"
+      echo "  lock: $lock_dir"
+    else
+      echo "$label: idle"
+      echo "  lock: $lock_dir"
+    fi
+  fi
+
+  return 1
+}
+
+print_active_proof_locks() {
+  local active_count=0
+
+  if describe_proof_lock "real app smoke" "$SMOKE_LOCK_DIR"; then
+    active_count=$((active_count + 1))
+  fi
+  if describe_proof_lock "fresh latency proof" "$FRESH_LATENCY_LOCK_DIR"; then
+    active_count=$((active_count + 1))
+  fi
+
+  ((active_count > 0))
+}
+
+proof_lock_retry_command() {
+  if [[ "$MODE" == "run" ]]; then
+    printf './script/build_and_run.sh\n'
+  else
+    printf './script/build_and_run.sh %s\n' "$MODE"
+  fi
+}
+
+print_proof_lock_retry_hint() {
+  local retry_command=""
+
+  echo "Build/run will not relaunch or kill another proof run while these locks are active."
+  echo "Check lock status without launching: ./script/build_and_run.sh --proof-lock-status"
+  if proof_lock_status_requested; then
+    echo "Retry your original build/run command after the proof run finishes."
+    echo "Common retry: ./script/build_and_run.sh --verify"
+    echo "Fail fast instead of waiting by setting AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS=0 on the build/run command."
+  else
+    retry_command="$(proof_lock_retry_command)"
+    echo "Retry after the proof run finishes: $retry_command"
+    echo "Fail fast instead of waiting: AUTOCOMPLETE_LAB_BUILD_RUN_PROOF_LOCK_WAIT_SECONDS=0 $retry_command"
+  fi
+}
+
+print_proof_lock_status() {
+  local active_count=0
+
+  echo "Proof lock status for $APP_NAME build/run:"
+  if describe_proof_lock "real app smoke" "$SMOKE_LOCK_DIR" 1; then
+    active_count=$((active_count + 1))
+  fi
+  if describe_proof_lock "fresh latency proof" "$FRESH_LATENCY_LOCK_DIR" 1; then
+    active_count=$((active_count + 1))
+  fi
+
+  if ((active_count > 0)); then
+    echo "Build/run would wait up to ${PROOF_LOCK_WAIT_SECONDS}s before relaunching."
+    print_proof_lock_retry_hint
+    return 1
+  fi
+
+  echo "No active proof locks. Build/run can proceed."
+  return 0
 }
 
 wait_for_proof_locks_if_needed() {
@@ -71,6 +194,7 @@ wait_for_proof_locks_if_needed() {
 
   local deadline=$((SECONDS + PROOF_LOCK_WAIT_SECONDS))
   local announced=0
+  local next_update=0
   local smoke_pid fresh_pid
 
   while true; do
@@ -81,21 +205,29 @@ wait_for_proof_locks_if_needed() {
     fi
 
     if ((SECONDS >= deadline)); then
-      echo "Another proof run is active; refusing to relaunch $APP_NAME." >&2
-      [[ -n "$smoke_pid" ]] && echo "real app smoke pid: $smoke_pid" >&2
-      [[ -n "$fresh_pid" ]] && echo "fresh latency proof pid: $fresh_pid" >&2
+      echo "Timed out after ${PROOF_LOCK_WAIT_SECONDS}s waiting for active proof run; refusing to relaunch $APP_NAME." >&2
+      print_active_proof_locks >&2 || true
+      print_proof_lock_retry_hint >&2
       exit 1
     fi
 
-    if [[ "$announced" == "0" ]]; then
-      echo "Waiting for active proof run before build/run relaunch." >&2
-      [[ -n "$smoke_pid" ]] && echo "real app smoke pid: $smoke_pid" >&2
-      [[ -n "$fresh_pid" ]] && echo "fresh latency proof pid: $fresh_pid" >&2
+    if [[ "$announced" == "0" ]] || ((SECONDS >= next_update)); then
+      echo "Waiting for active proof run before build/run relaunch. Timeout: ${PROOF_LOCK_WAIT_SECONDS}s." >&2
+      print_active_proof_locks >&2 || true
+      print_proof_lock_retry_hint >&2
       announced=1
+      next_update=$((SECONDS + 30))
     fi
     sleep 2
   done
 }
+
+if proof_lock_status_requested; then
+  if print_proof_lock_status; then
+    exit 0
+  fi
+  exit 1
+fi
 
 running_app_process_rows() {
   ps ax -o pid=,command= 2>/dev/null |
@@ -273,6 +405,10 @@ scrub_proof_model_root_if_needed() {
 }
 
 wait_for_proof_locks_if_needed
+
+trap 'rm -f "$GENERATED_APP_ICON"' EXIT
+mkdir -p "$DIST_DIR"
+swift script/generate_app_icon.swift "$GENERATED_APP_ICON_REL"
 
 if skip_stale_app_bundle_scan; then
   echo "Skipping stale app bundle scan because AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN is enabled." >&2
@@ -633,7 +769,7 @@ case "$MODE" in
     echo "App bundle built: $APP_BUNDLE"
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--bundle-only]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--bundle-only|--proof-lock-status]" >&2
     exit 2
     ;;
 esac
