@@ -7240,6 +7240,19 @@ func postCommandRight(to pid: pid_t) {
     keyUp.postToPid(pid)
 }
 
+func postCommandN(to pid: pid_t) {
+    guard let source = CGEventSource(stateID: .hidSystemState),
+          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 45, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 45, keyDown: false) else {
+        return
+    }
+
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+    keyDown.postToPid(pid)
+    keyUp.postToPid(pid)
+}
+
 func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) -> Bool {
     guard let rangeValue = copyAttribute(element, kAXSelectedTextRangeAttribute) else {
         return false
@@ -7310,6 +7323,15 @@ func collectTextAreas(in element: AXUIElement, depth: Int = 0, candidates: inout
     }
 }
 
+func bestCandidate(from candidates: [Candidate]) -> Candidate? {
+    candidates.sorted(by: { lhs, rhs in
+        if lhs.score == rhs.score {
+            return lhs.frame.minY < rhs.frame.minY
+        }
+        return lhs.score > rhs.score
+    }).first
+}
+
 guard let app = NSRunningApplication.runningApplications(
     withBundleIdentifier: "com.openai.codex"
 ).first else {
@@ -7326,12 +7348,14 @@ AXUIElementSetMessagingTimeout(appElement, 0.75)
 var candidates: [Candidate] = []
 collectTextAreas(in: appElement, candidates: &candidates)
 
-guard let candidate = candidates.sorted(by: { lhs, rhs in
-    if lhs.score == rhs.score {
-        return lhs.frame.minY < rhs.frame.minY
-    }
-    return lhs.score > rhs.score
-}).first else {
+if candidates.isEmpty {
+    postCommandN(to: app.processIdentifier)
+    Thread.sleep(forTimeInterval: 0.65)
+    candidates = []
+    collectTextAreas(in: appElement, candidates: &candidates)
+}
+
+guard let candidate = bestCandidate(from: candidates) else {
     fputs("Could not find a safe Codex composer. Clear the prompt, open a new Codex start screen, or keep focus in the draft prompt so it can be backed up and restored.\n", stderr)
     exit(1)
 }

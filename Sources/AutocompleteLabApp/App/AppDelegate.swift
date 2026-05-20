@@ -3741,7 +3741,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let snapshot,
               let rawContext = accessibilityClient.focusedTextContext(
                   for: frontmostApp,
-                  allowDescendantTextFallback: profile.allowsDescendantTextFallback
+                  allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+                  options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)
               ) else {
             return nil
         }
