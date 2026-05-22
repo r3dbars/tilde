@@ -171,6 +171,103 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Final result display guard blocks stale field identity before display")
+    func finalResultDisplayGuardBlocksStaleFieldIdentityBeforeDisplay() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "final")
+        let ticket = orchestrator.beginRequest(request).ticket
+        let field = testFieldIdentity(elementIdentifier: 7)
+        let otherField = testFieldIdentity(elementIdentifier: 8)
+
+        let reason = orchestrator.presentationSuppressionReason(
+            requestTicket: ticket,
+            request: request,
+            fieldIdentity: field,
+            currentFieldIdentity: otherField,
+            currentSnapshot: FocusedTextSnapshot(
+                fieldIdentity: otherField,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor
+            ),
+            invalidatedByUserTyping: false
+        )
+
+        #expect(reason == .staleField)
+    }
+
+    @MainActor
+    @Test("Fast fallback display guard blocks stale text before display")
+    func fastFallbackDisplayGuardBlocksStaleTextBeforeDisplay() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "fast")
+        let ticket = orchestrator.beginRequest(request).ticket
+        let field = testFieldIdentity(elementIdentifier: 7)
+
+        let reason = orchestrator.presentationSuppressionReason(
+            requestTicket: ticket,
+            request: request,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            currentSnapshot: FocusedTextSnapshot(
+                fieldIdentity: field,
+                textBeforeCursor: "Can we still",
+                textAfterCursor: request.textAfterCursor
+            ),
+            invalidatedByUserTyping: false
+        )
+
+        #expect(reason == .staleText)
+    }
+
+    @MainActor
+    @Test("Streaming partial display guard blocks user typing invalidation before display")
+    func streamingPartialDisplayGuardBlocksUserTypingInvalidationBeforeDisplay() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "stream")
+        let ticket = orchestrator.beginRequest(request).ticket
+        let field = testFieldIdentity(elementIdentifier: 7)
+
+        let reason = orchestrator.presentationSuppressionReason(
+            requestTicket: ticket,
+            request: request,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            currentSnapshot: FocusedTextSnapshot(
+                fieldIdentity: field,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor
+            ),
+            invalidatedByUserTyping: true
+        )
+
+        #expect(reason == .staleAfterKeydown)
+    }
+
+    @MainActor
+    @Test("Display guard allows current unchanged request")
+    func displayGuardAllowsCurrentUnchangedRequest() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let request = CompletionRequest(textBeforeCursor: "Can we", suggestionID: "current")
+        let ticket = orchestrator.beginRequest(request).ticket
+        let field = testFieldIdentity(elementIdentifier: 7)
+
+        let reason = orchestrator.presentationSuppressionReason(
+            requestTicket: ticket,
+            request: request,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            currentSnapshot: FocusedTextSnapshot(
+                fieldIdentity: field,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor
+            ),
+            invalidatedByUserTyping: false
+        )
+
+        #expect(reason == nil)
+    }
+
+    @MainActor
     @Test("Failure visibility uses current request and current field")
     func failureVisibilityUsesCurrentRequestAndCurrentField() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -943,6 +1040,14 @@ private func acceptedAndKeptKey(
         fieldKind: fieldKind,
         requestMode: request.mode,
         behaviorProfileID: request.behaviorProfile.id
+    )
+}
+
+private func testFieldIdentity(elementIdentifier: Int) -> FocusedFieldIdentity {
+    FocusedFieldIdentity(
+        bundleIdentifier: "com.example.editor",
+        processIdentifier: 42,
+        elementIdentifier: elementIdentifier
     )
 }
 
