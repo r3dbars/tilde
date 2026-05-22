@@ -41,7 +41,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "Message composer prompt",
             elementRect: nil,
-            windowRect: nil
+            windowRect: nil,
+            proofModeEnabled: true
         )
 
         #expect(decision.canSuggest)
@@ -55,11 +56,27 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextField",
             fingerprintText: "Ask Claude prompt input",
             elementRect: nil,
-            windowRect: nil
+            windowRect: nil,
+            proofModeEnabled: true
         )
 
         #expect(decision.canSuggest)
         #expect(decision.reason == "prompt-fingerprint")
+    }
+
+    @Test("Blocks Claude prompt apps outside explicit proof mode")
+    func blocksClaudePromptAppsOutsideProofMode() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.anthropic.claudefordesktop",
+            role: "AXTextArea",
+            fingerprintText: "Ask Claude prompt input",
+            elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: false
+        )
+
+        #expect(!decision.canSuggest)
+        #expect(decision.reason == "prompt-proof-mode-required")
     }
 
     @Test("Allows prompt-like dogfood wrappers")
@@ -69,14 +86,16 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXGroup",
             fingerprintText: "Ask Claude prompt input",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
         let webAreaDecision = policy.decision(
             bundleIdentifier: "com.anthropic.claude-code",
             role: "AXWebArea",
             fingerprintText: "Claude message composer",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(groupDecision.canSuggest)
@@ -89,7 +108,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "Describe a task or ask a question",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(desktopDecision.canSuggest)
@@ -103,7 +123,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXGroup",
             fingerprintText: "Ask Claude prompt input",
             elementRect: CGRect(x: 100, y: 180, width: 700, height: 340),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)
@@ -117,14 +138,16 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "chat input",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
         let centralDecision = policy.decision(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             role: "AXTextArea",
             fingerprintText: "chat input",
             elementRect: CGRect(x: 100, y: 180, width: 700, height: 340),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(goodDecision.canSuggest)
@@ -229,7 +252,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "input",
             elementRect: nil,
-            windowRect: nil
+            windowRect: nil,
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)
@@ -243,7 +267,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "prompt",
             elementRect: nil,
-            windowRect: nil
+            windowRect: nil,
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)
@@ -257,7 +282,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "composer",
             elementRect: nil,
-            windowRect: nil
+            windowRect: nil,
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)
@@ -271,7 +297,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXGroup",
             fingerprintText: "main content",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)
@@ -285,7 +312,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: CGRect(x: 100, y: 620, width: 700, height: 84),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(decision.canSuggest)
@@ -299,7 +327,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: CGRect(x: 100, y: 8, width: 700, height: 56),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)
@@ -313,7 +342,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: CGRect(x: 120, y: 180, width: 680, height: 360),
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720)
+            windowRect: CGRect(x: 0, y: 0, width: 900, height: 720),
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)
@@ -327,7 +357,8 @@ struct PromptEditorFingerprintPolicyTests {
             role: "AXTextArea",
             fingerprintText: "",
             elementRect: nil,
-            windowRect: nil
+            windowRect: nil,
+            proofModeEnabled: true
         )
 
         #expect(!decision.canSuggest)

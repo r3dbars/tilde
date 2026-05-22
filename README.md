@@ -7,8 +7,8 @@ SteadyType is a small Mac app for quiet writing suggestions near your cursor.
 It watches the active text field, shows a short suggestion, and only inserts text when you accept it. The question for this beta is simple: does this make writing feel easier, or does it get in the way?
 
 Current proof truth: the private beta is still blocked until the live proof
-gates are green. The strict manual smoke gate currently reports 35 stale or
-pending target app passes, so app support should stay narrow and proof-gated.
+gates are green. The strict manual smoke gate now tracks only the boring
+beta-safe rows, so app support stays narrow and proof-gated.
 
 ## What It Does
 
@@ -27,7 +27,7 @@ The first target apps are:
 - TextEdit
 - Apple Notes
 - Obsidian
-- Chrome included local practice pages and local fixtures only
+- Chrome local textarea/contenteditable practice fixtures only
 
 These are beta targets, not a broad compatibility promise. Prompt and chat apps
 stay heavily guarded. Codex and Claude-style fields are proof-gated because

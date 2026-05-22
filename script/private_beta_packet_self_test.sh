@@ -92,11 +92,11 @@ require_contains "$FIRST_RUN_DOC" "Pause Current App stops suggestions only in t
 require_contains "$FIRST_RUN_DOC" '`Install Local Model` or `Repair Local Model`'
 require_contains "$FIRST_RUN_DOC" "do not run Ollama, Python, shell scripts, or a separate model"
 require_contains "$FIRST_RUN_DOC" "Typed text, prompts, model output, accepted text, screenshots"
-require_contains "$FIRST_RUN_DOC" "Write-test only in these apps:"
+require_contains "$FIRST_RUN_DOC" "Write-test only in the currently enabled proof lanes"
 require_contains "$FIRST_RUN_DOC" "Do not write-test these as normal beta apps."
 require_contains "$FIRST_RUN_DOC" "Mail"
 require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
-require_contains "$FIRST_RUN_DOC" "Chrome included local practice pages"
+require_contains "$FIRST_RUN_DOC" "Chrome local textarea/contenteditable practice fixtures"
 
 require_contains "$PRIVACY_DOC" "no default remote crash, analytics, or behavior telemetry path"
 require_contains "$PRIVACY_DOC" "Raw text traces and placement screenshots are debug opt-ins"
@@ -106,6 +106,8 @@ require_contains "$PRIVACY_DOC" "Pause the current app from the menu bar"
 SCRIPT_TEXT="$(cat script/private_beta_packet.sh)"
 require_contains "$SCRIPT_TEXT" "Primary artifact: ../SteadyType.dmg"
 require_contains "$SCRIPT_TEXT" "Send testers the DMG, not the ZIP."
+require_contains "$SCRIPT_TEXT" "Chrome local"
+require_contains "$SCRIPT_TEXT" "textarea/contenteditable fixtures are sanity checks"
 require_contains "$SCRIPT_TEXT" "record_proof_command"
 require_contains "$SCRIPT_TEXT" "run_artifact_proof_command"
 require_contains "$SCRIPT_TEXT" 'if [[ "$MODE" == "--check" || "$MODE" == "check" ]]; then'

@@ -52,7 +52,7 @@ Write-test only in the currently enabled proof lanes for these apps:
 - TextEdit
 - Notes
 - Obsidian
-- Chrome included local practice pages
+- Chrome local textarea/contenteditable practice fixtures
 
 Treat them as beta targets, not system-wide support. If the current proof gate
 marks a lane stale or pending, use it only for proof refresh.
