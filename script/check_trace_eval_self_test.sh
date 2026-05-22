@@ -5,7 +5,8 @@ TRACE_FILE="$(mktemp)"
 CLAUDE_CODE_TRACE_FILE="$(mktemp)"
 VISUAL_TRACE_FILE="$(mktemp)"
 VISUAL_SCREENSHOT_FILE="$(mktemp)"
-trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE" "$VISUAL_TRACE_FILE" "$VISUAL_SCREENSHOT_FILE"' EXIT
+TMP_DIR="$(mktemp -d)"
+trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE" "$VISUAL_TRACE_FILE" "$VISUAL_SCREENSHOT_FILE"; rm -rf "$TMP_DIR"' EXIT
 printf "png" >"$VISUAL_SCREENSHOT_FILE"
 
 cat >"$TRACE_FILE" <<'JSONL'
@@ -401,6 +402,41 @@ fi
 if ! grep -F "com.apple.TextEdit: support state experimental below caveated" /tmp/autocomplete-trace-eval-self-test-support-fail.txt >/dev/null; then
   echo "trace eval self-test did not explain the low support state" >&2
   cat /tmp/autocomplete-trace-eval-self-test-support-fail.txt >&2
+  exit 1
+fi
+
+DIAGNOSTIC_HOME="$TMP_DIR/default-home"
+DIAGNOSTIC_TRACE="$DIAGNOSTIC_HOME/Library/Logs/SteadyType/traces.jsonl"
+mkdir -p "$(dirname "$DIAGNOSTIC_TRACE")"
+cat >"$DIAGNOSTIC_TRACE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"diag-failed","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":10,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+{"type":"insertionFailed","suggestionID":"diag-failed","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","reason":"insert-verification-failed"}
+JSONL
+
+env -u AUTOCOMPLETE_LAB_TRACE_PATH \
+  -u AUTOCOMPLETE_LAB_TRACE_START_LINE \
+  -u AUTOCOMPLETE_LAB_TRACE_END_LINE \
+  -u AUTOCOMPLETE_LAB_TRACE_STRICT \
+  HOME="$DIAGNOSTIC_HOME" \
+  script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-diagnostic.txt
+
+if ! grep -F "Guardrail mode: diagnostic-only all-history trace" /tmp/autocomplete-trace-eval-self-test-diagnostic.txt >/dev/null ||
+   ! grep -F "insertion recovery guardrail failed: unrecovered insertion failure: com.apple.TextEdit/diag-failed" /tmp/autocomplete-trace-eval-self-test-diagnostic.txt >/dev/null; then
+  echo "trace eval self-test did not keep default all-history mode diagnostic-only" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-diagnostic.txt >&2
+  exit 1
+fi
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$DIAGNOSTIC_TRACE" \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-strict-explicit.txt 2>&1; then
+  echo "trace eval self-test expected explicit trace paths to stay strict" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-strict-explicit.txt >&2
+  exit 1
+fi
+
+if ! grep -F "insertion recovery guardrail failed" /tmp/autocomplete-trace-eval-self-test-strict-explicit.txt >/dev/null; then
+  echo "trace eval self-test did not fail explicit traces on guardrail findings" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-strict-explicit.txt >&2
   exit 1
 fi
 
