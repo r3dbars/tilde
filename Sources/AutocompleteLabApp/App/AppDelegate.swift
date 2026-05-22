@@ -2094,7 +2094,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for: triggerBehaviorProfile.id,
                 currentLineStructure: currentLineStructure
             ),
-            behaviorProfileID: triggerBehaviorProfile.id
+            behaviorProfileID: triggerBehaviorProfile.id,
+            requestMode: requestMode
         )
 
         guard case let .request(delayMilliseconds) = triggerDecision else {

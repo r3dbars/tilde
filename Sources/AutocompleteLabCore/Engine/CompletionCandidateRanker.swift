@@ -278,7 +278,7 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         case .wordCompletion:
             return 0.80
         case .phraseContinuation:
-            return 0.78
+            return 0.90
         case .sentenceContinuation:
             return 0.82
         }

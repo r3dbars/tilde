@@ -552,7 +552,7 @@ struct SuggestionOrchestratorTests {
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentifier: field.traceDescription,
             requestMode: .phraseContinuation,
-            textBeforeCursor: "Can we"
+            textBeforeCursor: "Can we make this safer today"
         )
 
         #expect(orchestrator.prefixCooldownDecision(for: input, now: now).canRequest)
@@ -568,7 +568,7 @@ struct SuggestionOrchestratorTests {
 
         let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
         let request = CompletionRequest(
-            textBeforeCursor: "Can we",
+            textBeforeCursor: "Can we make this safer today",
             textAfterCursor: "",
             appBundleIdentifier: profile.bundleIdentifier,
             fieldKind: classification.kind,
@@ -588,7 +588,7 @@ struct SuggestionOrchestratorTests {
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
             request: request,
-            context: makeContext(textBeforeCursor: "Can we", textAfterCursor: ""),
+            context: makeContext(textBeforeCursor: "Can we make this safer today", textAfterCursor: ""),
             fieldClassification: classification,
             profile: profile,
             fieldIdentity: field,
@@ -603,7 +603,7 @@ struct SuggestionOrchestratorTests {
         #expect(display.decision.shouldDisplay)
         #expect(display.metadata["prefixEagernessApplied"] == "true")
         #expect(display.metadata["prefixEagernessThresholdAdjustment"] == "0.18")
-        #expect(display.metadata["displayScoreThreshold"] == "1.18")
+        #expect(display.metadata["displayScoreThreshold"] == "1.28")
 
         orchestrator.resetPrefixFamilyCooldownPolicy(
             PrefixFamilyCooldownPolicy(traceFingerprintSecret: Data("unit-test-secret".utf8))
