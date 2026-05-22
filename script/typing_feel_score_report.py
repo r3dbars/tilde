@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--start-line",
         type=int,
-        default=int(os.environ.get("AUTOCOMPLETE_LAB_TRACE_START_LINE", "1")),
+        default=int(os.environ.get("AUTOCOMPLETE_LAB_TRACE_START_LINE", "0")),
     )
     parser.add_argument(
         "--end-line",
@@ -86,7 +86,7 @@ def load_events(path: str, start_line: int, end_line: int | None) -> list[dict[s
     events: list[dict[str, Any]] = []
     with open(path, "r", encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
-            if line_number < start_line:
+            if line_number <= start_line:
                 continue
             if end_line is not None and line_number > end_line:
                 break
@@ -271,21 +271,19 @@ def immediate_resurfacing_count(
     window_seconds: float,
 ) -> int:
     rejections: list[dict[str, Any]] = []
-    seen_shown: set[str] = set()
     count = 0
 
     for event in events:
         current_time = event_time(event)
         if event_type(event) == "suggestionPresented":
             key = suggestion_key(event)
-            if key in shown_keys and key not in seen_shown:
+            if key in shown_keys:
                 if any(
                     same_surface(rejection, event)
                     and 0 < (current_time - event_time(rejection)).total_seconds() <= window_seconds
                     for rejection in rejections
                 ):
                     count += 1
-                seen_shown.add(key)
             rejections = [
                 rejection
                 for rejection in rejections
