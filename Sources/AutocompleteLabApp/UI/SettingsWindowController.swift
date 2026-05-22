@@ -253,7 +253,7 @@ struct SettingsCurrentAppState: Equatable {
             return nil
         }
 
-        if bundleIdentifier == "com.apple.Notes" {
+        if command.contains("\n") {
             return "Manual checks: \(command.replacingOccurrences(of: "\n", with: "; "))"
         }
 
@@ -277,7 +277,10 @@ struct SettingsCurrentAppState: Equatable {
         case "com.apple.TextEdit":
             return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
         case "com.google.Chrome":
-            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
+            return """
+            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
+            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
+            """
         case "md.obsidian":
             return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
         case "com.apple.Notes":

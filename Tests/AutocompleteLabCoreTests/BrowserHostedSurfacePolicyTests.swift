@@ -101,8 +101,35 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: discordDecision)).surface == .discord)
     }
 
-    @Test("Chrome local editor fixtures stay eligible")
-    func allowsChromeLocalEditorFixtures() {
+    @Test("Chrome local textarea and contenteditable fixtures stay eligible")
+    func allowsChromeLocalTextareaAndContenteditableFixtures() {
+        let cases = [
+            FocusedElementFingerprint(
+                title: "Local smoke textarea fixture",
+                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local smoke contenteditable fixture",
+                windowTitle: "SteadyType Chrome Contenteditable Fixture Smoke [ready=1]"
+            ),
+            FocusedElementFingerprint(
+                title: "Local smoke contenteditable fixture",
+                windowTitle: "Autocomplete Lab Chrome Contenteditable Fixture Smoke file:///tmp/fixture.html"
+            )
+        ]
+
+        for fingerprint in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            #expect(decision.canSuggest)
+        }
+    }
+
+    @Test("Chrome local editor and chat fixtures stay blocked for beta")
+    func blocksChromeLocalEditorAndChatFixtures() throws {
         let cases = [
             FocusedElementFingerprint(
                 title: "Local CodeMirror-style smoke fixture editor",
@@ -117,21 +144,8 @@ struct BrowserHostedSurfacePolicyTests {
                 windowTitle: "SteadyType Chrome Local ProseMirror-Like Fixture Smoke [ready=1]"
             ),
             FocusedElementFingerprint(
-                title: "Local chat-like smoke fixture message composer",
+                title: "Local chat-like smoke fixture message composer contenteditable",
                 windowTitle: "SteadyType Chrome Local Chat-Like Fixture No-Submit Smoke [ready=1 submits=0]"
-            ),
-            FocusedElementFingerprint(
-                title: "Local real Monaco smoke fixture editor",
-                windowTitle: "SteadyType Chrome Local Real Monaco Fixture Smoke [ready=1]"
-            ),
-            FocusedElementFingerprint(
-                title: "Local real ProseMirror smoke fixture editor",
-                windowTitle: "SteadyType Chrome Local Real ProseMirror Fixture Smoke [ready=1]"
-            ),
-            FocusedElementFingerprint(
-                title: "Local ProseMirror-like smoke fixture",
-                description: "Real ProseMirror smoke editor",
-                windowTitle: "SteadyType Chrome Real ProseMirror Smoke [ready=1]"
             )
         ]
 
@@ -141,25 +155,12 @@ struct BrowserHostedSurfacePolicyTests {
                 fingerprint: fingerprint
             )
 
-            #expect(decision.canSuggest)
+            #expect(try #require(blockedSurface(from: decision)).surface == .unproven)
         }
     }
 
-    @Test("Chrome local textarea smoke fixture stays eligible")
-    func allowsChromeLocalTextareaSmokeFixture() {
-        let decision = policy.decision(
-            bundleIdentifier: "com.google.Chrome",
-            fingerprint: FocusedElementFingerprint(
-                title: "Local smoke textarea fixture",
-                windowTitle: "SteadyType Chrome Textarea Fixture Smoke [ready=1]"
-            )
-        )
-
-        #expect(decision.canSuggest)
-    }
-
-    @Test("Chrome public text field proof pages stay eligible")
-    func allowsChromePublicTextFieldProofPages() {
+    @Test("Chrome public text field proof pages stay blocked for beta")
+    func blocksChromePublicTextFieldProofPages() throws {
         let cases = [
             FocusedElementFingerprint(
                 title: "Public textarea proof field",
@@ -177,7 +178,7 @@ struct BrowserHostedSurfacePolicyTests {
                 fingerprint: fingerprint
             )
 
-            #expect(decision.canSuggest)
+            #expect(try #require(blockedSurface(from: decision)).surface == .unproven)
         }
     }
 

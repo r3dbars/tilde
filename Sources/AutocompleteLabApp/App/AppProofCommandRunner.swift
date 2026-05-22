@@ -60,8 +60,7 @@ struct AppProofCommandPlan: Equatable {
                     "script/real_app_smoke.sh",
                     "chrome",
                     "--fixture",
-                    "all",
-                    "--include-default-real-editor-proof",
+                    "textarea",
                     "--skip-build"
                 ],
                 environmentOverrides: proofEnvironment

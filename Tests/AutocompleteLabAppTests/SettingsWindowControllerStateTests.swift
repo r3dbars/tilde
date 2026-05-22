@@ -100,8 +100,17 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(chrome.proofButtonTitle == "Check Chrome")
-        #expect(chrome.proofCommandText == "Manual check: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
-        #expect(chrome.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
+        #expect(
+            chrome.proofCommandText
+                == "Manual checks: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea; AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable"
+        )
+        #expect(
+            chrome.proofCommandClipboardText
+                == """
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
+                """
+        )
         #expect(chrome.canStartProof)
         #expect(chrome.shouldShowCheckControls)
 
