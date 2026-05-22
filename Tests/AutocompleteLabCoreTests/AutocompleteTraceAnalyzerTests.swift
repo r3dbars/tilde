@@ -620,6 +620,7 @@ struct AutocompleteTraceAnalyzerTests {
                 metadata: [
                     "fieldKind": "multilineCompose",
                     "effectiveRenderMode": "floatingMirror",
+                    "insertionMode": "axValueReplacement",
                     "model": "qwen35-4b"
                 ]
             )

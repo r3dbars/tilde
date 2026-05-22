@@ -70,22 +70,22 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
 
         if mode == .phraseContinuation {
             let wordCount = suggestion.visibleWordCount
-            if wordCount > 6 {
-                score -= 40
+            if wordCount > 5 {
+                score -= 45
                 reasons.append("too-many-visible-words")
             } else if wordCount > 4 {
-                score -= 30
+                score -= 35
                 reasons.append("long-visible-suggestion")
             }
 
             let contextWords = textBeforeCursor
                 .split(whereSeparator: { $0.isWhitespace })
                 .count
-            if contextWords < 3 {
-                score -= 45
+            if contextWords < 4 {
+                score -= 55
                 reasons.append("thin-context")
-            } else if contextWords < 5 {
-                score -= 18
+            } else if contextWords < 6 {
+                score -= 20
                 reasons.append("thin-context")
             }
         }

@@ -57,20 +57,20 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
         case .quiet:
             return DisplayScorePolicy(
                 wordCompletionThreshold: 0.75,
-                phraseContinuationThreshold: 1.25,
-                sentenceContinuationThreshold: 1.45
+                phraseContinuationThreshold: 1.40,
+                sentenceContinuationThreshold: 1.50
             )
         case .normal:
             return DisplayScorePolicy(
                 wordCompletionThreshold: 0.55,
-                phraseContinuationThreshold: 0.90,
-                sentenceContinuationThreshold: 1.10
+                phraseContinuationThreshold: 1.15,
+                sentenceContinuationThreshold: 1.25
             )
         case .eager:
             return DisplayScorePolicy(
                 wordCompletionThreshold: 0.40,
-                phraseContinuationThreshold: 0.65,
-                sentenceContinuationThreshold: 0.85
+                phraseContinuationThreshold: 1.00,
+                sentenceContinuationThreshold: 1.10
             )
         }
     }
@@ -190,16 +190,20 @@ public struct SuggestionTuning: Equatable, Sendable {
         case 3:
             DisplayScorePolicy(
                 wordCompletionThreshold: 0.45,
-                phraseContinuationThreshold: 0.75,
-                sentenceContinuationThreshold: 0.95
+                phraseContinuationThreshold: 1.10,
+                sentenceContinuationThreshold: 1.20
             )
         case 4:
-            SuggestionAggressiveness.eager.displayScorePolicy
+            DisplayScorePolicy(
+                wordCompletionThreshold: 0.40,
+                phraseContinuationThreshold: 1.00,
+                sentenceContinuationThreshold: 1.10
+            )
         default:
             DisplayScorePolicy(
                 wordCompletionThreshold: 0.35,
-                phraseContinuationThreshold: 0.55,
-                sentenceContinuationThreshold: 0.75
+                phraseContinuationThreshold: 0.90,
+                sentenceContinuationThreshold: 1.00
             )
         }
     }
@@ -213,11 +217,11 @@ public struct SuggestionTuning: Equatable, Sendable {
             return CompletionActivationPolicy(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: 1,
+                minimumPhraseContinuationWords: 3,
                 minimumWordCompletionCharacters: 1,
                 maximumWordCompletionCharacters: 18,
-                allowsTerminalSentenceBoundary: true,
-                allowsUnfinishedWordPhraseContinuation: true
+                allowsTerminalSentenceBoundary: false,
+                allowsUnfinishedWordPhraseContinuation: false
             )
         }
 
@@ -225,11 +229,11 @@ public struct SuggestionTuning: Equatable, Sendable {
             return CompletionActivationPolicy(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: 1,
+                minimumPhraseContinuationWords: 3,
                 minimumWordCompletionCharacters: 2,
                 maximumWordCompletionCharacters: 16,
-                allowsTerminalSentenceBoundary: true,
-                allowsUnfinishedWordPhraseContinuation: true
+                allowsTerminalSentenceBoundary: false,
+                allowsUnfinishedWordPhraseContinuation: false
             )
         }
 
@@ -248,31 +252,33 @@ public struct SuggestionTuning: Equatable, Sendable {
             return SuggestionTriggerPolicy(
                 charactersBeforePauseRequest: 1,
                 wordCompletionDelayMilliseconds: 20,
-                wordBoundaryDelayMilliseconds: 40,
-                softPunctuationDelayMilliseconds: 90,
-                structuralPunctuationDelayMilliseconds: 90,
-                closingPunctuationDelayMilliseconds: 90,
-                sentenceBoundaryDelayMilliseconds: 120,
-                pauseDelayMilliseconds: 40,
+                wordBoundaryDelayMilliseconds: 100,
+                softPunctuationDelayMilliseconds: 140,
+                structuralPunctuationDelayMilliseconds: 140,
+                closingPunctuationDelayMilliseconds: 140,
+                sentenceBoundaryDelayMilliseconds: 240,
+                pauseDelayMilliseconds: 100,
                 minimumWordCompletionCharacters: 2,
+                minimumPhraseContinuationWords: 3,
                 allowsPlainLineStartWordCompletion: true,
-                allowsPlainLineStartPhraseContinuation: true,
-                allowsSentenceBoundaryRequest: true
+                allowsPlainLineStartPhraseContinuation: false,
+                allowsSentenceBoundaryRequest: false
             )
         case 5:
             return SuggestionTriggerPolicy(
                 charactersBeforePauseRequest: 1,
                 wordCompletionDelayMilliseconds: 20,
-                wordBoundaryDelayMilliseconds: 20,
-                softPunctuationDelayMilliseconds: 40,
-                structuralPunctuationDelayMilliseconds: 40,
-                closingPunctuationDelayMilliseconds: 40,
-                sentenceBoundaryDelayMilliseconds: 60,
-                pauseDelayMilliseconds: 20,
+                wordBoundaryDelayMilliseconds: 80,
+                softPunctuationDelayMilliseconds: 120,
+                structuralPunctuationDelayMilliseconds: 120,
+                closingPunctuationDelayMilliseconds: 120,
+                sentenceBoundaryDelayMilliseconds: 200,
+                pauseDelayMilliseconds: 80,
                 minimumWordCompletionCharacters: 1,
+                minimumPhraseContinuationWords: 3,
                 allowsPlainLineStartWordCompletion: true,
-                allowsPlainLineStartPhraseContinuation: true,
-                allowsSentenceBoundaryRequest: true
+                allowsPlainLineStartPhraseContinuation: false,
+                allowsSentenceBoundaryRequest: false
             )
         default:
             return SuggestionTriggerPolicy(pace: supportPace)
