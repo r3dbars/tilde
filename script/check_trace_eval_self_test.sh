@@ -5,8 +5,9 @@ TRACE_FILE="$(mktemp)"
 CLAUDE_CODE_TRACE_FILE="$(mktemp)"
 VISUAL_TRACE_FILE="$(mktemp)"
 VISUAL_SCREENSHOT_FILE="$(mktemp)"
+UNRECOVERED_TRACE_FILE="$(mktemp)"
 TMP_DIR="$(mktemp -d)"
-trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE" "$VISUAL_TRACE_FILE" "$VISUAL_SCREENSHOT_FILE"; rm -rf "$TMP_DIR"' EXIT
+trap 'rm -f "$TRACE_FILE" "$CLAUDE_CODE_TRACE_FILE" "$VISUAL_TRACE_FILE" "$VISUAL_SCREENSHOT_FILE" "$UNRECOVERED_TRACE_FILE"; rm -rf "$TMP_DIR"' EXIT
 printf "png" >"$VISUAL_SCREENSHOT_FILE"
 
 cat >"$TRACE_FILE" <<'JSONL'
@@ -447,6 +448,25 @@ AUTOCOMPLETE_LAB_TRACE_START_LINE=3 \
 if ! grep -F "Start line: 3" /tmp/autocomplete-trace-eval-self-test-slice.txt >/dev/null; then
   echo "trace eval self-test did not honor AUTOCOMPLETE_LAB_TRACE_START_LINE" >&2
   cat /tmp/autocomplete-trace-eval-self-test-slice.txt >&2
+  exit 1
+fi
+
+cat >"$UNRECOVERED_TRACE_FILE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"failed","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","hasCaretRect":"true","placementConfidenceBand":"high"}}
+{"type":"suggestionAccepted","suggestionID":"failed","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","acceptedText":"at"}
+{"type":"insertionFailed","suggestionID":"failed","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","reason":"verification-failed"}
+JSONL
+
+if AUTOCOMPLETE_LAB_TRACE_PATH="$UNRECOVERED_TRACE_FILE" \
+   script/check_trace_eval.sh >/tmp/autocomplete-trace-eval-self-test-insertion-fail.txt 2>&1; then
+  echo "trace eval self-test expected explicit trace path insertion failure to fail" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-insertion-fail.txt >&2
+  exit 1
+fi
+
+if ! grep -F "unrecovered insertion failure" /tmp/autocomplete-trace-eval-self-test-insertion-fail.txt >/dev/null; then
+  echo "trace eval self-test did not report unrecovered insertion failure" >&2
+  cat /tmp/autocomplete-trace-eval-self-test-insertion-fail.txt >&2
   exit 1
 fi
 
