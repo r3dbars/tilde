@@ -130,7 +130,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             self.init(
                 minimumContextCharacters: 2,
                 minimumContextWords: 2,
-                minimumPhraseContinuationWords: 3,
+                minimumPhraseContinuationWords: 4,
                 minimumWordCompletionCharacters: 2,
                 maximumWordCompletionCharacters: 5,
                 allowsTerminalSentenceBoundary: false
@@ -139,7 +139,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             self.init(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: 2,
+                minimumPhraseContinuationWords: 4,
                 minimumWordCompletionCharacters: 2,
                 maximumWordCompletionCharacters: 16,
                 allowsTerminalSentenceBoundary: false

@@ -38,6 +38,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let largeTextChangeCharacterThreshold: Int
     public let largeTextChangeDelayMilliseconds: Int
     public let minimumWordCompletionCharacters: Int
+    public let minimumPhraseContinuationWords: Int
     public let allowsPlainLineStartWordCompletion: Bool
     public let allowsPlainLineStartPhraseContinuation: Bool
     public let allowsSentenceBoundaryRequest: Bool
@@ -54,6 +55,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         largeTextChangeCharacterThreshold: Int = 24,
         largeTextChangeDelayMilliseconds: Int = 250,
         minimumWordCompletionCharacters: Int = 3,
+        minimumPhraseContinuationWords: Int = 4,
         allowsPlainLineStartWordCompletion: Bool = false,
         allowsPlainLineStartPhraseContinuation: Bool = false,
         allowsSentenceBoundaryRequest: Bool = false
@@ -69,6 +71,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
         self.largeTextChangeDelayMilliseconds = max(self.pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
+        self.minimumPhraseContinuationWords = max(1, minimumPhraseContinuationWords)
         self.allowsPlainLineStartWordCompletion = allowsPlainLineStartWordCompletion
         self.allowsPlainLineStartPhraseContinuation = allowsPlainLineStartPhraseContinuation
         self.allowsSentenceBoundaryRequest = allowsSentenceBoundaryRequest
@@ -86,30 +89,33 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
                 closingPunctuationDelayMilliseconds: 220,
                 sentenceBoundaryDelayMilliseconds: 450,
                 pauseDelayMilliseconds: 240,
-                largeTextChangeDelayMilliseconds: 320
+                largeTextChangeDelayMilliseconds: 320,
+                minimumPhraseContinuationWords: 6
             )
         case .normal:
             self.init(
                 charactersBeforePauseRequest: 1,
                 wordCompletionDelayMilliseconds: 70,
-                wordBoundaryDelayMilliseconds: 100,
-                softPunctuationDelayMilliseconds: 140,
-                structuralPunctuationDelayMilliseconds: 140,
+                wordBoundaryDelayMilliseconds: 160,
+                softPunctuationDelayMilliseconds: 180,
+                structuralPunctuationDelayMilliseconds: 200,
                 closingPunctuationDelayMilliseconds: 140,
                 sentenceBoundaryDelayMilliseconds: 260,
-                pauseDelayMilliseconds: 100
+                pauseDelayMilliseconds: 160,
+                minimumPhraseContinuationWords: 4
             )
         case .eager:
             self.init(
                 charactersBeforePauseRequest: 1,
                 wordCompletionDelayMilliseconds: 40,
-                wordBoundaryDelayMilliseconds: 70,
-                softPunctuationDelayMilliseconds: 120,
-                structuralPunctuationDelayMilliseconds: 120,
-                closingPunctuationDelayMilliseconds: 120,
+                wordBoundaryDelayMilliseconds: 140,
+                softPunctuationDelayMilliseconds: 180,
+                structuralPunctuationDelayMilliseconds: 180,
+                closingPunctuationDelayMilliseconds: 160,
                 sentenceBoundaryDelayMilliseconds: 200,
-                pauseDelayMilliseconds: 70,
+                pauseDelayMilliseconds: 140,
                 minimumWordCompletionCharacters: 2,
+                minimumPhraseContinuationWords: 4,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: false,
                 allowsSentenceBoundaryRequest: false
@@ -121,13 +127,15 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         previousTextBeforeCursor: String?,
         currentTextBeforeCursor: String,
         lineStartBehavior: SuggestionLineStartBehavior = .plain,
-        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        requestMode: CompletionRequestMode? = nil
     ) -> Bool {
         switch decision(
             previousTextBeforeCursor: previousTextBeforeCursor,
             currentTextBeforeCursor: currentTextBeforeCursor,
             lineStartBehavior: lineStartBehavior,
-            behaviorProfileID: behaviorProfileID
+            behaviorProfileID: behaviorProfileID,
+            requestMode: requestMode
         ) {
         case .request:
             return true
@@ -140,13 +148,19 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         previousTextBeforeCursor: String?,
         currentTextBeforeCursor: String,
         lineStartBehavior: SuggestionLineStartBehavior = .plain,
-        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        requestMode: CompletionRequestMode? = nil
     ) -> SuggestionTriggerDecision {
         if shouldSuppressAtLineStart(
             currentTextBeforeCursor,
             behavior: lineStartBehavior,
             behaviorProfileID: behaviorProfileID
         ) {
+            return .skip
+        }
+
+        if requestMode == .phraseContinuation,
+           contentWordCount(in: currentLine(in: currentTextBeforeCursor)) < minimumPhraseContinuationWords {
             return .skip
         }
 

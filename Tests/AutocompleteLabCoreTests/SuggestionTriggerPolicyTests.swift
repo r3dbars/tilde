@@ -156,28 +156,40 @@ struct SuggestionTriggerPolicyTests {
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I feel",
-            currentTextBeforeCursor: "I feel "
-        ) == .request(delayMilliseconds: 70))
+            currentTextBeforeCursor: "I feel ",
+            requestMode: .phraseContinuation
+        ) == .skip)
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I feel ready now",
+            currentTextBeforeCursor: "I feel ready now ",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 140))
     }
 
-    @Test("Very proactive tuning asks after a single starter word")
-    func veryProactiveTuningAsksAfterSingleStarterWord() {
+    @Test("Very proactive tuning still waits for phrase context")
+    func veryProactiveTuningStillWaitsForPhraseContext() {
         let policy = SuggestionTuning(aggressivenessLevel: 4).triggerPolicy(supportPace: .eager)
 
         #expect(policy.decision(
             previousTextBeforeCursor: "Um",
-            currentTextBeforeCursor: "Um "
-        ) == .request(delayMilliseconds: 40))
+            currentTextBeforeCursor: "Um ",
+            requestMode: .phraseContinuation
+        ) == .skip)
+        #expect(policy.decision(
+            previousTextBeforeCursor: "This feels ready",
+            currentTextBeforeCursor: "This feels ready ",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 100))
     }
 
-    @Test("Very proactive tuning asks after sentence boundaries")
-    func veryProactiveTuningAsksAfterSentenceBoundaries() {
+    @Test("Very proactive tuning stays quiet after sentence boundaries")
+    func veryProactiveTuningStaysQuietAfterSentenceBoundaries() {
         let policy = SuggestionTuning(aggressivenessLevel: 4).triggerPolicy(supportPace: .eager)
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works",
             currentTextBeforeCursor: "I think this works."
-        ) == .request(delayMilliseconds: 120))
+        ) == .skip)
     }
 
     @Test("Sentence boundaries stay quiet by default")

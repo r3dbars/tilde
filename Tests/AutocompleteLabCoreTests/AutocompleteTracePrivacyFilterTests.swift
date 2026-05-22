@@ -55,6 +55,12 @@ struct AutocompleteTracePrivacyFilterTests {
         )
         #expect(
             AutocompleteTracePrivacyFilter.traceSignalValue(
+                "low-confidence",
+                rawContentEnabled: false
+            ) == "low-confidence"
+        )
+        #expect(
+            AutocompleteTracePrivacyFilter.traceSignalValue(
                 "private-draft-before",
                 rawContentEnabled: false
             ) == DiagnosticValueRedactor.stringSummary(length: "private-draft-before".count)
