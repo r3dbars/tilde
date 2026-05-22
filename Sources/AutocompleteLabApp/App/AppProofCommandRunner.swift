@@ -57,11 +57,8 @@ struct AppProofCommandPlan: Equatable {
                 executableURL: URL(fileURLWithPath: "/usr/bin/env"),
                 arguments: [
                     "bash",
-                    "script/real_app_smoke.sh",
-                    "chrome",
-                    "--fixture",
-                    "textarea",
-                    "--skip-build"
+                    "-lc",
+                    "script/real_app_smoke.sh chrome --fixture textarea --skip-build && script/real_app_smoke.sh chrome --fixture contenteditable --skip-build"
                 ],
                 environmentOverrides: proofEnvironment
             )
