@@ -47,6 +47,23 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
         ]
     }
 
+    public var guidanceText: String {
+        guard sampleCount > 0 else {
+            return "Learning: no local accepted-and-kept evidence yet."
+        }
+
+        let counts = "\(keptCount) kept, \(rejectedCount) rejected"
+        if keptCount > rejectedCount {
+            return "Learning: this surface is earning trust locally (\(counts))."
+        }
+
+        if rejectedCount > keptCount {
+            return "Learning: this surface is getting quieter locally (\(counts))."
+        }
+
+        return "Learning: mixed local signal (\(counts))."
+    }
+
     static func format(_ value: Double) -> String {
         String(format: "%.3f", value)
     }

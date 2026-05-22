@@ -114,7 +114,7 @@ struct CommandContextPanelState: Equatable {
     }
 
     var normalTypingText: String {
-        "Normal typing: untouched; this opens only from the menu or Settings."
+        "Fallback: this panel never auto-types. Copy is manual, and normal typing stays untouched."
     }
 
     var contextText: String {

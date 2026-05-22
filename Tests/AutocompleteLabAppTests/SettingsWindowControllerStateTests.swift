@@ -76,6 +76,10 @@ struct SettingsWindowControllerStateTests {
             allowed.detailText
                 == "Verified suggestions near the cursor and native text insertion. Suggestions are on for this app."
         )
+        #expect(
+            allowed.supportMatrixText
+                == "Support: green target. Inline suggestions and one-word Tab are proven here."
+        )
         #expect(allowed.modeText == "Mode: next to the cursor, floating backup fallback")
         #expect(allowed.acceptanceText == "Keys: Tab accepts one word. The whole-suggestion shortcut works here.")
         #expect(allowed.fallbackText == "Fallback: not needed; cursor placement is available.")
@@ -117,6 +121,10 @@ struct SettingsWindowControllerStateTests {
         #expect(
             blocked.detailText
                 == "Rich text can drift; display can use a floating backup, and insertion fails closed. Suggestions are paused in this app. Resume only where you want suggestions."
+        )
+        #expect(
+            blocked.supportMatrixText
+                == "Support: yellow target. Suggestions are available, but checks and fallback matter."
         )
         #expect(blocked.modeText == "Mode: next to the cursor, floating backup fallback")
         #expect(blocked.acceptanceText == "Keys: Tab accepts one word. The whole-suggestion shortcut works here.")
@@ -169,6 +177,10 @@ struct SettingsWindowControllerStateTests {
             diagnosticsOnly.detailText
                 == "Mail compose is sensitive and insertion is not proven. Suggestions stay off here."
         )
+        #expect(
+            diagnosticsOnly.supportMatrixText
+                == "Support: diagnostics only. Inline suggestions stay off; use check and copy flows only."
+        )
         #expect(diagnosticsOnly.modeText == "Mode: disabled")
         #expect(diagnosticsOnly.acceptanceText == "Acceptance: off here")
         #expect(diagnosticsOnly.fallbackText == "Fallback: unavailable in sensitive apps or fields.")
@@ -189,6 +201,10 @@ struct SettingsWindowControllerStateTests {
 
         #expect(unsupported.statusText == "Current app: Unknown is unsupported")
         #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
+        #expect(
+            unsupported.supportMatrixText
+                == "Support: unsupported. Select text for Command Context copy fallback."
+        )
         #expect(unsupported.modeText == "Mode: not set up here")
         #expect(unsupported.acceptanceText == "Acceptance: off here")
         #expect(unsupported.fallbackText == "Fallback: unavailable until this app has a profile.")
@@ -209,6 +225,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(missing.statusText == "Current app: no app selected")
         #expect(missing.detailText == "Open a writing app to see whether suggestions are supported.")
+        #expect(missing.supportMatrixText == "Support: choose a writing app to see its lane.")
         #expect(missing.modeText == "Mode: choose a writing app")
         #expect(missing.acceptanceText == "Acceptance: off until an app is selected")
         #expect(missing.fallbackText == "Fallback: choose a writing app first.")
@@ -349,6 +366,9 @@ struct SettingsWindowControllerStateTests {
         #expect(state.detailText.contains("Esc dismisses"))
         #expect(state.detailText.contains("Pause Suggestions stops suggestions everywhere"))
         #expect(state.detailText.contains("Pause in Current App stops only that app"))
+        #expect(state.quickStartText.contains("60-second path"))
+        #expect(state.quickStartText.contains("Start TextEdit Practice"))
+        #expect(state.quickStartText.contains("Delete Local Logs"))
         #expect(state.appsText.contains("Text stays on this Mac"))
         #expect(state.appsText.contains("Start with TextEdit"))
         #expect(state.appsText.contains("Chrome practice pages"))
@@ -802,6 +822,10 @@ struct SettingsWindowControllerStateTests {
 
         #expect(quiet.statusText == "Aggressiveness: 1/5 - Quiet")
         #expect(quiet.detailText == "Waits longer and needs stronger scores before showing.")
+        #expect(
+            quiet.boringGuardrailText
+                == "Guardrail: short, boring next words first. Raise sliders only after accepted-and-kept data supports it."
+        )
         #expect(quiet.maxWordsText == "Words shown: 5")
         #expect(normal.statusText == "Aggressiveness: 2/5 - Normal")
         #expect(normal.detailText == "Shows a little sooner with balanced filtering.")
@@ -812,6 +836,36 @@ struct SettingsWindowControllerStateTests {
         #expect(max.maxWordsText == "Words shown: 8")
         #expect(max.aggressivenessSliderValue == 5)
         #expect(max.maxWordsSliderValue == 8)
+    }
+
+    @Test("Suggestion decision copy explains quiet waiting visible and local thinking states")
+    func suggestionDecisionCopyExplainsStates() {
+        let blocked = SettingsSuggestionDecisionState("Blocked: display score accepted-and-kept-low")
+        #expect(blocked.statusText == "Suggestion status: quiet")
+        #expect(
+            blocked.detailText
+                == "Why quiet: display score accepted-and-kept-low. Keep typing, or use Command Context for copy-only fallback."
+        )
+
+        let waiting = SettingsSuggestionDecisionState("Waiting: AX cooldown")
+        #expect(waiting.statusText == "Suggestion status: waiting")
+        #expect(waiting.detailText == "Waiting: AX cooldown. This prevents jumpy suggestions.")
+
+        let queued = SettingsSuggestionDecisionState("Queued: model word completion")
+        #expect(queued.statusText == "Suggestion status: thinking locally")
+        #expect(queued.detailText == "Thinking locally. Text stays on this Mac.")
+
+        let shown = SettingsSuggestionDecisionState("Shown: private phrase should not be repeated")
+        #expect(shown.statusText == "Suggestion status: visible")
+        #expect(shown.detailText == "Visible near the cursor. Tab accepts one word; Esc dismisses.")
+
+        let ready = SettingsSuggestionDecisionState("")
+        #expect(ready.statusText == "Suggestion status: ready")
+        #expect(ready.detailText == "Ready when you type in a supported writing field.")
+
+        let acceptedUndo = SettingsSuggestionDecisionState("Accepted insertion undone")
+        #expect(acceptedUndo.statusText == "Suggestion status: accepted")
+        #expect(acceptedUndo.detailText == "Accepted. SteadyType will recompute after the field settles.")
     }
 
     @MainActor
