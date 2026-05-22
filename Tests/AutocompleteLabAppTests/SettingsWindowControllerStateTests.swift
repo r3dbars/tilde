@@ -100,8 +100,17 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(chrome.proofButtonTitle == "Check Chrome")
-        #expect(chrome.proofCommandText == "Manual check: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
-        #expect(chrome.proofCommandClipboardText == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all")
+        #expect(
+            chrome.proofCommandText
+                == "Manual checks: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea; AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable"
+        )
+        #expect(
+            chrome.proofCommandClipboardText
+                == """
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
+                """
+        )
         #expect(chrome.canStartProof)
         #expect(chrome.shouldShowCheckControls)
 
@@ -179,6 +188,23 @@ struct SettingsWindowControllerStateTests {
         #expect(diagnosticsOnly.menuToggleTitle == "Suggestions unavailable in Mail")
         #expect(!diagnosticsOnly.canToggle)
 
+        let claudeCode = SettingsCurrentAppState(
+            displayName: "Claude Code",
+            bundleIdentifier: "com.anthropic.claude-code",
+            supportStatus: store.supportStatus(for: "com.anthropic.claude-code"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+
+        #expect(claudeCode.statusText == "Current app: Claude Code is diagnostics-only")
+        #expect(
+            claudeCode.detailText
+                == "The installed Claude Code bundle is a background-only CLI helper; interactive Claude Code typing usually happens inside a terminal host, which is blocked until a separate safe adapter exists. Suggestions stay off here."
+        )
+        #expect(claudeCode.proofText == "Check: unavailable here.")
+        #expect(claudeCode.proofCommandText == nil)
+        #expect(!claudeCode.canToggle)
+
         let unsupported = SettingsCurrentAppState(
             displayName: "Unknown",
             bundleIdentifier: "com.example.UnknownEditor",
@@ -250,7 +276,11 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(codex.statusText == "Current app: Codex is yellow and on")
+        #expect(codex.statusText == "Current app: Codex is proof-only and checks are on")
+        #expect(
+            codex.detailText
+                == "Codex prompt support is proof-only: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Suggestions only run during an explicit proof check."
+        )
         #expect(codex.modeText == "Mode: next to the cursor, floating backup fallback")
         #expect(codex.acceptanceText == "Keys: Tab accepts one word. Whole-suggestion accept is off for safety.")
         #expect(codex.proofText == "Check: use the guided prompt-app check, press Tab once, and do not press Enter.")
@@ -263,6 +293,42 @@ struct SettingsWindowControllerStateTests {
                 == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
         )
         #expect(codex.canCopyProofCommand)
+        #expect(codex.toggleTitle == "Proof checks in this app")
+        #expect(codex.menuToggleTitle == "Pause checks in Codex")
+        #expect(!codex.canOverrideMode)
+        #expect(codex.canToggle)
+
+        let forcedCodex = SettingsCurrentAppState(
+            displayName: "Codex",
+            bundleIdentifier: "com.openai.codex",
+            supportStatus: store.supportStatus(for: "com.openai.codex"),
+            isEnabled: true,
+            disabledAppCount: 0,
+            renderModeOverride: .floatingMirror
+        )
+
+        #expect(forcedCodex.modeButtonTitle == "Use Default Placement")
+        #expect(forcedCodex.canOverrideMode)
+
+        let disabledCodex = SettingsCurrentAppState(
+            displayName: "Codex",
+            bundleIdentifier: "com.openai.codex",
+            supportStatus: store.supportStatus(for: "com.openai.codex"),
+            isEnabled: false,
+            disabledAppCount: 1
+        )
+
+        #expect(disabledCodex.statusText == "Current app: Codex is proof-only and checks are paused")
+        #expect(
+            disabledCodex.detailText
+                == "Codex prompt support is proof-only: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Proof checks are paused in this app. Resume this app before running an explicit check."
+        )
+        #expect(disabledCodex.proofText == "Check: resume proof checks for this app first.")
+        #expect(disabledCodex.proofButtonTitle == "Resume Checks First")
+        #expect(disabledCodex.proofCommandText == nil)
+        #expect(disabledCodex.proofCommandClipboardText == nil)
+        #expect(disabledCodex.menuToggleTitle == "Resume checks in Codex")
+        #expect(disabledCodex.canToggle)
     }
 
     @Test("Per-app mode copy exposes forced mirror overrides")

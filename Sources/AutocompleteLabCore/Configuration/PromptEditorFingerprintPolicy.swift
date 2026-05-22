@@ -53,6 +53,10 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "codex-proof-marker-required")
         }
 
+        guard proofModeEnabled else {
+            return PromptEditorFingerprintDecision(canSuggest: false, reason: "prompt-proof-mode-required")
+        }
+
         let searchable = fingerprintText.lowercased()
         if Self.strongPromptTerms.contains(where: { searchable.contains($0) }) {
             guard !Self.promptTextInputRoles.contains(role ?? "") else {

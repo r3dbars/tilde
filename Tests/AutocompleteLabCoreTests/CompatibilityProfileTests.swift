@@ -330,7 +330,7 @@ struct CompatibilityProfileTests {
         #expect(claude.requiresNoSubmitAcceptanceProof == true)
         #expect(claude.canPresentSuggestions == true)
 
-        #expect(codex.supportReason.contains("dogfood-only"))
+        #expect(codex.supportReason.contains("proof-only"))
         #expect(codex.notes.contains("one-word no-submit proof"))
         #expect(codex.supportsFullAcceptance == false)
         #expect(codex.allowsDetachedSuggestions == false)
@@ -339,6 +339,7 @@ struct CompatibilityProfileTests {
         #expect(codex.promptAppSafetyMode == .wordOnly)
         #expect(codex.allowsStrictVisualProofSyntheticCaretPlacement == true)
         #expect(claude.notes.contains("Same-slice one-word no-submit proof exists"))
+        #expect(claude.notes.contains("normal beta use"))
         #expect(claude.promptAppSafetyMode == .wordOnly)
         #expect(claude.allowsStrictVisualProofSyntheticCaretPlacement == true)
 

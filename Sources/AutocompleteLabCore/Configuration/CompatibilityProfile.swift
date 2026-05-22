@@ -505,7 +505,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Chrome",
             appFamily: .chromium,
             supportLevel: .yellow,
-            supportReason: "Browser editors vary; display can fall back to floating and insertion can fall back to AX.",
+            supportReason: "Only local textarea and contenteditable fixtures are beta-safe; other browser surfaces need proof.",
             renderMode: .inlineAdjacent,
             insertionMode: .axThenKeyEvents,
             fallbackRenderMode: .floatingMirror,
@@ -513,14 +513,14 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             anchorLadder: [.caret, .field],
             knownFailureModes: ["textarea support differs from rich editors", "zero-height caret bounds can occur"],
             allowsDescendantTextFallback: true,
-            notes: "Yellow browser target. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached surfaces. Prefer AX selected-text insertion and hardware key events first, then verified AX value replacement when public browser editors report selected-text success without changing value."
+            notes: "Yellow browser target for local textarea and contenteditable fixtures only. Prefer proof-gated synthetic caret inline placement when Chrome hides usable caret bounds, with mirror fallback for unreadable or detached local fixture surfaces. Production browser apps, public pages, chat, hosted docs, Monaco, CodeMirror, and ProseMirror stay blocked until current exact proof exists."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
             appFamily: .customCanvas,
             supportLevel: .yellow,
-            supportReason: "Codex prompt support is dogfood-only: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on.",
+            supportReason: "Codex prompt support is proof-only: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -535,7 +535,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
-            notes: "Dogfood target is enabled only for Codex one-word no-submit proof. Full accept, detached suggestions, generic key-event insertion, and clipboard fallback stay off."
+            notes: "Proof-only target is enabled only for Codex one-word no-submit proof. Full accept, detached suggestions, generic key-event insertion, and clipboard fallback stay off."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",
@@ -566,7 +566,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Claude",
             appFamily: .electron,
             supportLevel: .yellow,
-            supportReason: "Composer placement still needs more layout proof before it is green.",
+            supportReason: "Claude desktop is proof-only; composer placement still needs more layout proof before any normal beta use.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -581,7 +581,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
-            notes: "Dogfood target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Same-slice one-word no-submit proof exists; full accept stays disabled until separate full-accept no-submit proof is current."
+            notes: "Proof-only target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Same-slice one-word no-submit proof exists; normal beta use and full accept stay disabled until separate current proof exists."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Safari",

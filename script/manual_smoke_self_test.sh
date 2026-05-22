@@ -566,16 +566,16 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" Obsidian "Obsidian theme" "Obsidian panes" "Obsidian long note" "Chrome textarea" "Chrome contenteditable" "Chrome production textarea" "Chrome production contenteditable" "Chrome editor-like" "Chrome Monaco-like" "Chrome ProseMirror-like" "Chrome real Monaco" "Chrome real ProseMirror" "Chrome real Monaco default AX" "Chrome real ProseMirror default AX" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop" "Claude desktop empty composer" "Claude desktop long prompt" "Claude desktop wrapped prompt" "Claude desktop narrow window" "Claude desktop context layout" "Claude desktop light appearance" "Claude desktop dark appearance"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" Obsidian "Obsidian theme" "Obsidian panes" "Obsidian long note" "Chrome textarea" "Chrome contenteditable"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
   fi
 done
 
-for app_name in Codex "Claude Code" "Claude desktop" "Claude desktop empty composer" "Claude desktop long prompt" "Claude desktop wrapped prompt" "Claude desktop narrow window" "Claude desktop context layout" "Claude desktop light appearance" "Claude desktop dark appearance"; do
-  if ! grep -F -- "- $app_name: passed (one-word no-submit profile)" "$STATUS_OUTPUT" >/dev/null; then
-    echo "manual smoke self-test did not keep $app_name on one-word proof" >&2
+for app_name in "Chrome production textarea" "Chrome chat-like no-submit" Codex "Claude Code" "Claude desktop"; do
+  if grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
+    echo "manual smoke self-test should not report $app_name as beta-safe passed" >&2
     exit 1
   fi
 done
@@ -603,7 +603,9 @@ fi
 if ! grep -F -- "Focused graduation decisions:" "$STATUS_OUTPUT" >/dev/null ||
    ! grep -F -- "- Google Docs browser: blocked" "$STATUS_OUTPUT" >/dev/null ||
    ! grep -F -- "- Mail compose: diagnostics-only" "$STATUS_OUTPUT" >/dev/null ||
-   ! grep -F -- "- Claude desktop layouts: word-only" "$STATUS_OUTPUT" >/dev/null; then
+   ! grep -F -- "- Chrome production text fields: blocked" "$STATUS_OUTPUT" >/dev/null ||
+   ! grep -F -- "- Claude desktop layouts: proof-only" "$STATUS_OUTPUT" >/dev/null ||
+   ! grep -F -- "- Codex layouts: proof-only" "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not print focused graduation decisions" >&2
   exit 1
 fi

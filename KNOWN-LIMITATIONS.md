@@ -2,21 +2,20 @@
 
 This is a lab app, not a broad system-wide promise.
 
-Current proof truth: strict manual smoke still has 35 stale or pending target
-app passes. Stale screenshots and old insertion rows do not make a beta lane
-current.
+Current proof truth: strict manual smoke tracks only the boring beta-safe rows.
+Stale screenshots and old insertion rows do not make a beta lane current.
 
 ## Supported First
 
 - TextEdit
 - Apple Notes title, body, and checklist surfaces with current proof
 - Obsidian when current proof is green
-- Chrome local text fixtures
+- Chrome local textarea/contenteditable fixtures
 
 ## Diagnostics Or Proof-Only
 
-- Codex, Claude Code, and Claude desktop require one-word no-submit proof before
-  they can be treated as beta-safe prompt apps.
+- Codex, Claude Code, and Claude desktop are proof-only prompt/terminal targets,
+  not beta-safe normal writing apps.
 - Full accept stays off in prompt apps until a separate no-submit full-accept
   proof exists.
 - Mail is diagnostics-only until compose insertion is proven safe.
