@@ -113,13 +113,13 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     private var typedOverEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
 
     public init(
-        typedOverCooldownMilliseconds: Int = 750,
-        repeatedTypedOverCooldownMilliseconds: Int = 5_000,
+        typedOverCooldownMilliseconds: Int = 2_500,
+        repeatedTypedOverCooldownMilliseconds: Int = 15_000,
         escapeCooldownMilliseconds: Int = 15_000,
         repeatedEscapeCooldownMilliseconds: Int = 60_000,
         deletionCooldownMilliseconds: Int = 250,
-        acceptedThenDeletedCooldownMilliseconds: Int = 60_000,
-        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 120_000,
+        acceptedThenDeletedCooldownMilliseconds: Int = 180_000,
+        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 600_000,
         prefixFamilyTokenLimit: Int = 3,
         typedOverEagernessThreshold: Double = 1.5,
         typedOverEagernessHalfLifeSeconds: TimeInterval = 20 * 60,

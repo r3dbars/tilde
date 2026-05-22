@@ -297,7 +297,7 @@ public struct AnnoyanceSuppressor: Equatable, Sendable {
 
     private static func hardStopsField(_ signal: AnnoyanceSignal) -> Bool {
         switch signal {
-        case .wrongInsertion, .duplicateText, .focusStealing:
+        case .wrongInsertion, .duplicateText, .focusStealing, .acceptedThenDeleted:
             true
         default:
             false

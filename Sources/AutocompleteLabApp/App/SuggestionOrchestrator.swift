@@ -228,7 +228,8 @@ final class SuggestionOrchestrator {
         _ suggestion: CompletionSuggestion,
         suggestionID: String,
         mode: CompletionRequestMode,
-        nowMilliseconds: Int
+        nowMilliseconds: Int,
+        latencyMilliseconds: Int = 0
     ) -> Bool {
         guard var state = streamingPresentationStates[suggestionID] else {
             return false
@@ -237,7 +238,8 @@ final class SuggestionOrchestrator {
             suggestion,
             mode: mode,
             state: &state,
-            nowMilliseconds: nowMilliseconds
+            nowMilliseconds: nowMilliseconds,
+            latencyMilliseconds: latencyMilliseconds
         ) else {
             return false
         }
