@@ -109,13 +109,16 @@ private struct MagicWritingScenario {
     static var hundredCaseCorpus: [MagicWritingScenario] {
         Array(apps.flatMap { app in
             intents.enumerated().map { index, intent in
-                MagicWritingScenario(
+                let textBeforeCursor = intent.mode == .phraseContinuation
+                    ? "\(intent.before) "
+                    : intent.before
+                return MagicWritingScenario(
                     id: "\(app.id)-\(index + 1)",
                     appName: app.name,
                     bundleIdentifier: app.bundleIdentifier,
-                    visibleText: "New chat Search Plugins\nUntitled 13\n\(intent.surface)\n\(intent.anchor)\nDraft\n\(intent.before)",
+                    visibleText: "New chat Search Plugins\nUntitled 13\n\(intent.surface)\n\(intent.anchor)\nDraft\n\(textBeforeCursor)",
                     anchorText: intent.anchor,
-                    textBeforeCursor: intent.before,
+                    textBeforeCursor: textBeforeCursor,
                     mode: intent.mode,
                     expectedFastSuffix: intent.expectedFastSuffix
                 )
@@ -139,7 +142,7 @@ private struct MagicWritingScenario {
         ("Feedback", "This feels too conservative right now", "Can we make it", .phraseContinuation, nil),
         ("Reply", "Maya: Do you want me to move the review?", "Yes please move", .phraseContinuation, nil),
         ("Launch plan", "Risk: autocomplete answers instead of continuing", "The guardrail should", .phraseContinuation, nil),
-        ("Todo list", "- [ ] Verify OCR in Obsidian", "- [ ] Then", .phraseContinuation, nil),
+        ("Todo list", "- [ ] Verify OCR in Obsidian", "- [ ] Then verify OCR", .phraseContinuation, nil),
         ("Scratchpad", "The visible page mentions Gemma and Qwen", "I think Qwen", .phraseContinuation, nil),
         ("Outline", "Section: why the app feels magical", "The magic is", .phraseContinuation, nil),
         ("Comment", "Please make this paragraph shorter and clearer", "I can tighten", .phraseContinuation, nil),

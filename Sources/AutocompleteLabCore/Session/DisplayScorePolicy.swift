@@ -89,6 +89,7 @@ public enum DisplayScoreSuppressionReason: String, Equatable, Sendable {
     case highRepetition = "high-repetition"
     case highInstability = "high-instability"
     case tooSlowToDisplay = "too-slow-to-display"
+    case lowConfidence = "low-confidence"
     case lowAcceptedAndKeptProbability = "low-accepted-and-kept-probability"
     case belowThreshold = "below-threshold"
 }
@@ -194,8 +195,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
 
     public init(
         wordCompletionThreshold: Double = 0.60,
-        phraseContinuationThreshold: Double = 1.00,
-        sentenceContinuationThreshold: Double = 1.20,
+        phraseContinuationThreshold: Double = 1.10,
+        sentenceContinuationThreshold: Double = 1.25,
         highRiskThreshold: Double = 0.85,
         highRepetitionThreshold: Double = 0.85,
         highInstabilityThreshold: Double = 0.85,
@@ -296,7 +297,7 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         case .wordCompletion:
             0.20
         case .phraseContinuation:
-            0.12
+            0.30
         case .sentenceContinuation:
             0.18
         }
@@ -311,21 +312,21 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             case .wordCompletion:
                 0.28
             case .phraseContinuation, .sentenceContinuation:
-                0.24
+                0.34
             }
         case .casualChat:
             switch mode {
             case .wordCompletion:
                 0.22
             case .phraseContinuation, .sentenceContinuation:
-                0.20
+                0.30
             }
         case .docsProse, .email, .notes:
             switch mode {
             case .wordCompletion:
                 0.20
             case .phraseContinuation:
-                0.16
+                0.32
             case .sentenceContinuation:
                 0.22
             }
@@ -334,14 +335,14 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             case .wordCompletion:
                 0.22
             case .phraseContinuation, .sentenceContinuation:
-                0.18
+                0.32
             }
         case .bullets:
             switch mode {
             case .wordCompletion:
                 0.20
             case .phraseContinuation, .sentenceContinuation:
-                0.14
+                0.28
             }
         case .forms, .search:
             0.30

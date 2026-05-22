@@ -138,7 +138,7 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         case .wordCompletion:
             return 0.20
         case .phraseContinuation:
-            return 0.12
+            return 0.30
         case .sentenceContinuation:
             return 0.18
         }
@@ -151,7 +151,7 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         case CompletionRequestMode.sentenceContinuation.rawValue:
             return 0.28
         default:
-            return 0.34
+            return 0.24
         }
     }
 

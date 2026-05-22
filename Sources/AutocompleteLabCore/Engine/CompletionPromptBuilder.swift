@@ -90,9 +90,10 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
             : "Phrase mode: continue only the current local thought. If visible context implies what the user is replying to or writing about, use it."
         let base = """
         Inline autocomplete.
-        Return 1 to 4 candidate suffixes, one per line, best first.
+        Return 1 or 2 candidate suffixes, one per line, best first.
         Return only the suffix after the Before cursor text.
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
+        Return exactly \(Self.noSuggestionToken) when the continuation is not obvious from the local text.
         Only exception: return exactly \(Self.noSuggestionToken) when unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Never suggest pressing Tab, Option-Tab, Backtick, or accepting all visible text.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
@@ -104,7 +105,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer the next word or short phrase the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
-        Prefer 3 to 5 useful words for phrase suggestions; use fewer words when fewer are enough.
+        Prefer 2 to 4 high-confidence words for phrase suggestions; use fewer words when fewer are enough.
         Return \(Self.noSuggestionToken) instead of a full-sentence continuation, weak guess, new topic, or action instruction.
         If the user is writing about Tab, acceptance behavior, or shortcuts, continue the safety rule itself; do not suggest accepting terms or permissions.
         When the continuation is a common phrase, put that boring obvious phrase first.

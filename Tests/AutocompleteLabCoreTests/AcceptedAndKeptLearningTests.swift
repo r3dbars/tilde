@@ -14,7 +14,7 @@ struct AcceptedAndKeptLearningTests {
 
         #expect(wordSignal.sampleCount == 0)
         #expect(wordSignal.probability == 0.42)
-        #expect(phraseSignal.probability == 0.34)
+        #expect(phraseSignal.probability == 0.24)
         #expect(sentenceSignal.probability == 0.28)
         #expect(wordSignal.userAffinityAdjustment == 0)
     }
@@ -36,18 +36,17 @@ struct AcceptedAndKeptLearningTests {
         #expect(positive.userAffinityAdjustment > 0)
         #expect(positive.utilityAdjustment > 0)
 
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
+        for _ in 0..<8 {
+            _ = store.record(.rejected, key: learningKey, now: now)
+        }
         let negative = store.signal(for: learningKey, now: now)
 
-        #expect(negative.sampleCount == 6)
-        #expect(negative.rejectedCount == 4)
+        #expect(negative.sampleCount == 10)
+        #expect(negative.rejectedCount == 8)
         #expect(negative.probability < negative.priorProbability)
         #expect(negative.userAffinityAdjustment < 0)
         #expect(negative.utilityAdjustment < 0)
-        #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "6")
+        #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "10")
         #expect(negative.traceMetadata["acceptedAndKeptUtilityAdjustment"] != nil)
     }
 
