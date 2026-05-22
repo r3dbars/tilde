@@ -25,6 +25,22 @@ struct SuggestionReplacementVisibilityPolicyTests {
         #expect(policy.action(for: decision, hasVisibleSuggestion: true) == .keepCurrentVisible)
     }
 
+    @Test("Hides invalidated current suggestion when a replacement is suppressed")
+    func hidesInvalidatedCurrentSuggestionWhenReplacementIsSuppressed() {
+        let decision = SuggestionReplacementDecision(
+            shouldPresent: false,
+            reason: .freshVisibleSuggestion,
+            currentAgeMilliseconds: 240,
+            scoreMargin: 0.10
+        )
+
+        #expect(policy.action(
+            for: decision,
+            hasVisibleSuggestion: true,
+            currentSuggestionInvalidatedByUserTyping: true
+        ) == .hide)
+    }
+
     @Test("Hides when there is no current suggestion to preserve")
     func hidesWhenNoCurrentSuggestionExists() {
         let decision = SuggestionReplacementDecision(

@@ -657,7 +657,12 @@ unrecovered_insertion_failures = [
     if not is_recovered_insertion_failure(index, event)
 ]
 
-if unrecovered_insertion_failures and (require_app or require_undo_recoverability):
+explicit_trace_slice = (
+    "AUTOCOMPLETE_LAB_TRACE_PATH" in os.environ
+    or "AUTOCOMPLETE_LAB_TRACE_START_LINE" in os.environ
+    or "AUTOCOMPLETE_LAB_TRACE_END_LINE" in os.environ
+)
+if unrecovered_insertion_failures and (require_app or require_undo_recoverability or explicit_trace_slice):
     examples = []
     for event in unrecovered_insertion_failures[:5]:
         app = event.get("appBundleIdentifier") or "unknown"
