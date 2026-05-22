@@ -583,6 +583,7 @@ struct AutocompleteTraceAnalyzerTests {
                 metadata: [
                     "fieldKind": "multilineCompose",
                     "effectiveRenderMode": "inlineAdjacent",
+                    "insertionMode": "axSelectedText",
                     "model": "qwen35-4b"
                 ]
             ),

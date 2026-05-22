@@ -106,6 +106,39 @@ struct AcceptedAndKeptLearningTests {
         #expect(stale.probability > stale.priorProbability)
     }
 
+    @Test("Low kept fields add restraint that decays away")
+    func lowKeptFieldsAddRestraintThatDecaysAway() {
+        var store = AcceptedAndKeptLearningStore(
+            priorWeight: 4,
+            halfLifeSeconds: 10
+        )
+        let learningKey = key(mode: .phraseContinuation)
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        for offset in 0..<4 {
+            _ = store.record(.rejected, key: learningKey, now: now.addingTimeInterval(Double(offset)))
+        }
+
+        let lowKept = store.signal(for: learningKey, now: now.addingTimeInterval(4))
+        let recovered = store.signal(for: learningKey, now: now.addingTimeInterval(600))
+        let freshContext = store.signal(
+            for: key(
+                appBundleIdentifier: "com.apple.Notes",
+                mode: .phraseContinuation
+            ),
+            now: now.addingTimeInterval(4)
+        )
+
+        #expect(lowKept.sampleCount == 4)
+        #expect(lowKept.keptCount == 0)
+        #expect(lowKept.learningRestraint > 0.65)
+        #expect(lowKept.traceMetadata["acceptedAndKeptLearningRestraint"] != nil)
+        #expect(recovered.learningRestraint < 0.10)
+        #expect(recovered.probability > lowKept.probability)
+        #expect(freshContext.sampleCount == 0)
+        #expect(freshContext.learningRestraint == 0)
+    }
+
     private func key(
         appBundleIdentifier: String = "com.apple.TextEdit",
         fieldKind: AXFieldKind = .multilineCompose,

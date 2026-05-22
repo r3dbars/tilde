@@ -479,6 +479,7 @@ final class SuggestionOrchestrator {
                 triggerReason: triggerReason,
                 latencyMilliseconds: latencyMilliseconds
             ),
+            learningRestraint: acceptedAndKeptSignal.learningRestraint,
             acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
             acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
             acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment

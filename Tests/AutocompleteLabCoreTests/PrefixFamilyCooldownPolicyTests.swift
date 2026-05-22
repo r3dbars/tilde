@@ -187,6 +187,56 @@ struct PrefixFamilyCooldownPolicyTests {
         #expect(policy.decision(for: input, now: now.addingTimeInterval(60.1)) == .allowed)
     }
 
+    @Test("Repeated accepted then deleted makes that prefix less eager after cooldown")
+    func repeatedAcceptedThenDeletedMakesThatPrefixLessEagerAfterCooldown() {
+        var policy = PrefixFamilyCooldownPolicy(
+            acceptedThenDeletedCooldownMilliseconds: 0,
+            repeatedAcceptedThenDeletedCooldownMilliseconds: 0,
+            acceptedThenDeletedEagernessThreshold: 1,
+            acceptedThenDeletedEagernessHalfLifeSeconds: 5
+        )
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "I think this works")
+
+        _ = policy.record(.acceptedThenDeleted, input: input, now: now)
+        _ = policy.record(.acceptedThenDeleted, input: input, now: now.addingTimeInterval(1))
+
+        let adjustment = policy.eagernessAdjustment(for: input, now: now.addingTimeInterval(2))
+
+        #expect(adjustment.isActive)
+        #expect(adjustment.acceptedThenDeletedScore > 1)
+        #expect(adjustment.thresholdAdjustment > 0.30)
+        #expect(adjustment.metadata["prefixEagernessApplied"] == "true")
+        #expect(adjustment.metadata["prefixEagernessAcceptedThenDeletedScore"] != "0.00")
+        #expect(adjustment.metadata["prefixEagernessRepeatedAcceptedThenDeletedThreshold"] == "1.00")
+    }
+
+    @Test("Accepted then deleted eagerness is scoped and decays")
+    func acceptedThenDeletedEagernessIsScopedAndDecays() {
+        var policy = PrefixFamilyCooldownPolicy(
+            acceptedThenDeletedCooldownMilliseconds: 0,
+            repeatedAcceptedThenDeletedCooldownMilliseconds: 0,
+            acceptedThenDeletedEagernessThreshold: 1,
+            acceptedThenDeletedEagernessHalfLifeSeconds: 5
+        )
+        let now = Date(timeIntervalSince1970: 1_000)
+        let blocked = input(textBeforeCursor: "I think this works")
+
+        _ = policy.record(.acceptedThenDeleted, input: blocked, now: now)
+        _ = policy.record(.acceptedThenDeleted, input: blocked, now: now.addingTimeInterval(1))
+
+        #expect(policy.eagernessAdjustment(for: blocked, now: now.addingTimeInterval(2)).isActive)
+        #expect(!policy.eagernessAdjustment(
+            for: input(field: "field-two", textBeforeCursor: "I think this works"),
+            now: now.addingTimeInterval(2)
+        ).isActive)
+        #expect(!policy.eagernessAdjustment(
+            for: input(textBeforeCursor: "I think this fails"),
+            now: now.addingTimeInterval(2)
+        ).isActive)
+        #expect(!policy.eagernessAdjustment(for: blocked, now: now.addingTimeInterval(30)).isActive)
+    }
+
     @Test("Cooldowns are scoped by app field mode and prefix family")
     func scopedByAppFieldModeAndPrefixFamily() {
         var policy = PrefixFamilyCooldownPolicy()
