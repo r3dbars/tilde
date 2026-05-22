@@ -10,7 +10,7 @@ usage() {
   cat <<'EOF'
 Usage: script/manual_proof_queue.sh [--print|--dry-run|--run]
 
-Prints or runs the remaining manual-gated beta proof queue.
+Prints or runs the remaining manual-gated proof queue.
 
 --print    Show the exact commands and safety rules. This is the default.
 --dry-run  Show each command that --run would invoke.
@@ -69,13 +69,15 @@ declare -a QUEUE=(
 
 print_header() {
   cat <<'EOF'
-Manual beta proof queue
+Manual proof queue
 
 Hard rules:
 - Use only disposable notes, disposable vault files, and harmless prompt text.
 - Do not press Enter in Codex, Claude desktop, or Claude Code.
 - Do not use private notes, real vault content, customer text, messages, or real work.
 - Leave prompt-app full accept disabled until separate full-accept no-submit proof exists.
+- Only Notes and Obsidian rows in this queue can feed beta-safe writing scope.
+  Codex, Claude desktop, and Claude Code rows are proof-only.
 
 Before inviting testers, this queue must be followed by:
 

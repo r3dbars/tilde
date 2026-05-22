@@ -27,7 +27,7 @@ Research-backed caret-locking work now lives in
   - Notes: title/body/list fields try verified AX insertion first, fall back to key events, and still fail closed unless post-insert verification proves the text moved.
   - Obsidian: keep CodeMirror behavior stable across AX element churn; do not suppress the whole field after one flaky key-event verification miss.
   - Mail: safe diagnostics pass shows compose body as AXWebArea with empty direct value, no selected range, and no selected-text insertion; profile is diagnostics-only until a safe adapter is verified.
-  - Chrome: local textarea, contenteditable, editor-like, Monaco-like, and ProseMirror-like fixture paths have distinct smoke proof labels.
+  - Chrome: only local textarea/contenteditable fixtures count as beta-safe; editor-like, Monaco-like, ProseMirror-like, chat, public, and production browser paths stay proof-only or blocked.
   - Atlas: keep diagnostics-only until browser-field privacy and no-submit proof exist.
   - [x] Capture the current app stance in `docs/product/compatibility-matrix.md`.
 
@@ -96,7 +96,7 @@ Research-backed caret-locking work now lives in
   - [x] TextEdit one-word accept and full accept.
   - [x] Notes one-word accept and full accept.
   - [x] Obsidian one-word accept and full accept.
-  - [x] Chrome text field and local editor fixture one-word and full accept.
+  - [x] Chrome local textarea/contenteditable one-word and full accept.
   - [ ] Codex one-word no-submit accept; full accept stays disabled until separately proven.
   - [ ] Claude Code terminal-host adapter plus one-word no-submit accept; Terminal has historical proof, iTerm2/Ghostty need host-labeled rows, and direct `com.anthropic.claude-code` bundle proof is diagnostics-only.
   - [x] Claude desktop one-word no-submit accept; full accept stays disabled until separately proven.

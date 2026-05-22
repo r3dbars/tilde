@@ -71,6 +71,22 @@ struct AnnoyanceSuppressorTests {
         #expect(suppressor.quietMode(for: context, now: start).traceReason == "quiet-mode-field")
     }
 
+    @Test("Accepted then deleted hard-stops the current field")
+    func acceptedThenDeletedHardStopsCurrentField() {
+        let start = Date(timeIntervalSince1970: 0)
+        var suppressor = AnnoyanceSuppressor(fieldQuietThreshold: 10)
+
+        let update = suppressor.record(.acceptedThenDeleted, context: context, now: start)
+
+        #expect(update.startedQuietModes.contains { mode in
+            if case let .field(_, reason, _) = mode {
+                return reason == .acceptedThenDeleted
+            }
+            return false
+        })
+        #expect(suppressor.quietMode(for: context, now: start).traceReason == "quiet-mode-field")
+    }
+
     @Test("Accepted and kept reduces annoyance")
     func acceptedAndKeptReducesAnnoyance() {
         let start = Date(timeIntervalSince1970: 0)

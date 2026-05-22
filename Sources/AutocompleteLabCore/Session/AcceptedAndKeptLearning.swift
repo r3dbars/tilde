@@ -27,22 +27,26 @@ public struct AcceptedAndKeptLearningKey: Codable, Equatable, Hashable, Sendable
 public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
     public let probability: Double
     public let sampleCount: Int
+    public let effectiveSampleCount: Double
     public let keptCount: Int
     public let rejectedCount: Int
     public let priorProbability: Double
     public let userAffinityAdjustment: Double
     public let utilityAdjustment: Double
+    public let learningRestraint: Double
     public let decayFactor: Double
 
     public var traceMetadata: [String: String] {
         [
             "acceptedAndKeptProbability": Self.format(probability),
             "acceptedAndKeptSamples": String(sampleCount),
+            "acceptedAndKeptEffectiveSamples": Self.format(effectiveSampleCount),
             "acceptedAndKeptKept": String(keptCount),
             "acceptedAndKeptRejected": String(rejectedCount),
             "acceptedAndKeptPrior": Self.format(priorProbability),
             "acceptedAndKeptAffinityAdjustment": Self.format(userAffinityAdjustment),
             "acceptedAndKeptUtilityAdjustment": Self.format(utilityAdjustment),
+            "acceptedAndKeptLearningRestraint": Self.format(learningRestraint),
             "acceptedAndKeptDecayFactor": Self.format(decayFactor)
         ]
     }
@@ -109,6 +113,7 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         let decayFactor = self.decayFactor(for: bucket, now: now)
         let keptWeight = Double(bucket.keptCount) * decayFactor
         let rejectedWeight = Double(bucket.rejectedCount) * decayFactor
+        let effectiveSampleCount = keptWeight + rejectedWeight
         let probability = (keptWeight + prior * priorWeight)
             / max(1, keptWeight + rejectedWeight + priorWeight)
         let adjustmentScale = min(1, Double(samples) / 6)
@@ -120,15 +125,23 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
             (probability - prior) * 0.35 * adjustmentScale,
             to: -0.10...0.12
         )
+        let learningRestraint = Self.learningRestraint(
+            priorProbability: prior,
+            probability: probability,
+            keptWeight: keptWeight,
+            rejectedWeight: rejectedWeight
+        )
 
         return AcceptedAndKeptLearningSignal(
             probability: probability,
             sampleCount: samples,
+            effectiveSampleCount: effectiveSampleCount,
             keptCount: bucket.keptCount,
             rejectedCount: bucket.rejectedCount,
             priorProbability: prior,
             userAffinityAdjustment: adjustment,
             utilityAdjustment: utilityAdjustment,
+            learningRestraint: learningRestraint,
             decayFactor: decayFactor
         )
     }
@@ -138,7 +151,7 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         case .wordCompletion:
             return 0.20
         case .phraseContinuation:
-            return 0.12
+            return 0.30
         case .sentenceContinuation:
             return 0.18
         }
@@ -151,7 +164,7 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         case CompletionRequestMode.sentenceContinuation.rawValue:
             return 0.28
         default:
-            return 0.34
+            return 0.24
         }
     }
 
@@ -186,6 +199,34 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
     private mutating func nextSequence() -> UInt64 {
         let currentMax = buckets.values.map(\.lastUpdatedSequence).max() ?? 0
         return currentMax + 1
+    }
+
+    private static func learningRestraint(
+        priorProbability: Double,
+        probability: Double,
+        keptWeight: Double,
+        rejectedWeight: Double
+    ) -> Double {
+        let effectiveSampleCount = keptWeight + rejectedWeight
+        guard effectiveSampleCount >= 0.5 else {
+            return 0
+        }
+
+        let evidenceScale = min(1, effectiveSampleCount / 4)
+        let keptRate = keptWeight / max(0.0001, effectiveSampleCount)
+        let rejectionRate = rejectedWeight / max(0.0001, effectiveSampleCount)
+        let lowProbabilityPressure = max(0, (priorProbability - probability) / max(0.01, priorProbability))
+        let lowKeptRatePressure = max(0, (0.25 - keptRate) / 0.25) * 0.85
+        let rejectionDominancePressure = max(0, rejectionRate - 0.5) * 1.2
+        let zeroKeptPressure = keptWeight < 0.5 && effectiveSampleCount >= 3 ? 1.0 : 0.0
+        let pressure = max(
+            zeroKeptPressure,
+            lowProbabilityPressure,
+            lowKeptRatePressure,
+            rejectionDominancePressure
+        )
+
+        return bounded(pressure * evidenceScale * 0.75, to: 0...0.75)
     }
 
     private static func bounded(_ value: Double, to range: ClosedRange<Double>) -> Double {

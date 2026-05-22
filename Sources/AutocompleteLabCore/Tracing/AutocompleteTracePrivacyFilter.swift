@@ -215,6 +215,7 @@ public enum AutocompleteTracePrivacyFilter {
         "invalid-input",
         "late-suggestion-hidden",
         "low-accepted-and-kept-probability",
+        "low-confidence",
         "low-confidence-placement",
         "low-contrast",
         "low-score-margin",

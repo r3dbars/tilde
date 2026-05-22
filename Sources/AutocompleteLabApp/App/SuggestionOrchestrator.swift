@@ -265,7 +265,8 @@ final class SuggestionOrchestrator {
         _ suggestion: CompletionSuggestion,
         suggestionID: String,
         mode: CompletionRequestMode,
-        nowMilliseconds: Int
+        nowMilliseconds: Int,
+        latencyMilliseconds: Int = 0
     ) -> Bool {
         guard var state = streamingPresentationStates[suggestionID] else {
             return false
@@ -274,7 +275,8 @@ final class SuggestionOrchestrator {
             suggestion,
             mode: mode,
             state: &state,
-            nowMilliseconds: nowMilliseconds
+            nowMilliseconds: nowMilliseconds,
+            latencyMilliseconds: latencyMilliseconds
         ) else {
             return false
         }
@@ -516,6 +518,7 @@ final class SuggestionOrchestrator {
                 triggerReason: triggerReason,
                 latencyMilliseconds: latencyMilliseconds
             ),
+            learningRestraint: acceptedAndKeptSignal.learningRestraint,
             acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
             acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
             acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment
@@ -574,6 +577,8 @@ final class SuggestionOrchestrator {
             && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
             && confidenceDecision.reasons.contains("too-slow-to-display")
+        let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
+            || (request.mode == .phraseContinuation && confidenceDecision.bucket != .high)
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,
@@ -587,6 +592,29 @@ final class SuggestionOrchestrator {
             )
             let suppression = DisplayScoreSuppression(
                 reason: .tooSlowToDisplay,
+                trace: trace
+            )
+            return SuggestionDisplayScoreDecision(
+                decision: .suppress(suppression),
+                metadata: suppression.metadata
+                    .merging(prefixEagernessAdjustment.metadata) { current, _ in current }
+                    .merging(confidenceMetadata) { current, _ in current }
+            )
+        }
+
+        if shouldSuppressLowConfidence {
+            let trace = DisplayScoreTrace(
+                score: score,
+                mode: request.mode,
+                behaviorProfileID: request.behaviorProfile.id,
+                threshold: adjustedPolicy.threshold(for: request.mode),
+                acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
+                    for: request.mode,
+                    behaviorProfileID: request.behaviorProfile.id
+                )
+            )
+            let suppression = DisplayScoreSuppression(
+                reason: .lowConfidence,
                 trace: trace
             )
             return SuggestionDisplayScoreDecision(

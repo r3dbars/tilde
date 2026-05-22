@@ -191,21 +191,11 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesDiscord(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
         }
-        if matchesPublicTextFieldProofPage(searchableText) {
-            return .allowed
-        }
         if matchesLocalProofFixture(searchableText) {
             return .allowed
         }
 
         return .blocked(BrowserHostedSurfaceBlock(surface: .unproven))
-    }
-
-    private func matchesPublicTextFieldProofPage(_ searchableText: String) -> Bool {
-        searchableText.contains("editpad - online notepad")
-            || searchableText.contains("online notepad & wordpad")
-            || searchableText.contains("mediumeditor")
-            || searchableText.contains("medium editor")
     }
 
     private func matchesLocalProofFixture(_ searchableText: String) -> Bool {
@@ -218,9 +208,18 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         let hasReadyLocalFixtureToken = searchableText.contains("ready=1")
             && searchableText.contains("local")
             && searchableText.contains("fixture")
+        let isBoringWritingFixture = searchableText.contains("textarea")
+            || searchableText.contains("contenteditable")
+        let isNonBetaFixture = searchableText.contains("chat")
+            || searchableText.contains("editor-like")
+            || searchableText.contains("monaco")
+            || searchableText.contains("prosemirror")
+            || searchableText.contains("codemirror")
 
         return matchesProofFixtureName
             && searchableText.contains("smoke")
+            && isBoringWritingFixture
+            && !isNonBetaFixture
             && (hasLocalOriginToken || hasReadyLocalFixtureToken)
     }
 

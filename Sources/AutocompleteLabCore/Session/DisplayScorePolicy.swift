@@ -11,6 +11,7 @@ public struct DisplayScore: Equatable, Sendable {
     public let risk: Double
     public let repetition: Double
     public let instability: Double
+    public let learningRestraint: Double
     public let acceptedAndKeptProbability: Double?
     public let acceptedAndKeptSampleCount: Int
     public let acceptedAndKeptUtilityAdjustment: Double
@@ -23,6 +24,7 @@ public struct DisplayScore: Equatable, Sendable {
         risk: Double,
         repetition: Double,
         instability: Double,
+        learningRestraint: Double = 0,
         acceptedAndKeptProbability: Double? = nil,
         acceptedAndKeptSampleCount: Int = 0,
         acceptedAndKeptUtilityAdjustment: Double = 0
@@ -34,6 +36,7 @@ public struct DisplayScore: Equatable, Sendable {
         self.risk = Self.component(risk)
         self.repetition = Self.component(repetition)
         self.instability = Self.component(instability)
+        self.learningRestraint = Self.component(learningRestraint)
         self.acceptedAndKeptProbability = acceptedAndKeptProbability.map(Self.component)
         self.acceptedAndKeptSampleCount = max(0, acceptedAndKeptSampleCount)
         self.acceptedAndKeptUtilityAdjustment = Self.bounded(
@@ -43,7 +46,14 @@ public struct DisplayScore: Equatable, Sendable {
     }
 
     public var rawScore: Double {
-        utility + styleFit + contextFit + userAffinity - risk - repetition - instability
+        utility
+            + styleFit
+            + contextFit
+            + userAffinity
+            - risk
+            - repetition
+            - instability
+            - learningRestraint
     }
 
     public var finalScore: Double {
@@ -59,6 +69,7 @@ public struct DisplayScore: Equatable, Sendable {
             "displayScoreRisk": Self.format(risk),
             "displayScoreRepetition": Self.format(repetition),
             "displayScoreInstability": Self.format(instability),
+            "displayScoreLearningRestraint": Self.format(learningRestraint),
             "displayScoreRaw": Self.format(rawScore),
             "displayScoreFinal": Self.format(finalScore)
         ]
@@ -89,6 +100,7 @@ public enum DisplayScoreSuppressionReason: String, Equatable, Sendable {
     case highRepetition = "high-repetition"
     case highInstability = "high-instability"
     case tooSlowToDisplay = "too-slow-to-display"
+    case lowConfidence = "low-confidence"
     case lowAcceptedAndKeptProbability = "low-accepted-and-kept-probability"
     case belowThreshold = "below-threshold"
 }
@@ -194,8 +206,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
 
     public init(
         wordCompletionThreshold: Double = 0.60,
-        phraseContinuationThreshold: Double = 1.00,
-        sentenceContinuationThreshold: Double = 1.20,
+        phraseContinuationThreshold: Double = 1.10,
+        sentenceContinuationThreshold: Double = 1.25,
         highRiskThreshold: Double = 0.85,
         highRepetitionThreshold: Double = 0.85,
         highInstabilityThreshold: Double = 0.85,
@@ -296,7 +308,7 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         case .wordCompletion:
             0.20
         case .phraseContinuation:
-            0.12
+            0.30
         case .sentenceContinuation:
             0.18
         }
@@ -311,21 +323,21 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             case .wordCompletion:
                 0.28
             case .phraseContinuation, .sentenceContinuation:
-                0.24
+                0.34
             }
         case .casualChat:
             switch mode {
             case .wordCompletion:
                 0.22
             case .phraseContinuation, .sentenceContinuation:
-                0.20
+                0.30
             }
         case .docsProse, .email, .notes:
             switch mode {
             case .wordCompletion:
                 0.20
             case .phraseContinuation:
-                0.16
+                0.32
             case .sentenceContinuation:
                 0.22
             }
@@ -334,14 +346,14 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             case .wordCompletion:
                 0.22
             case .phraseContinuation, .sentenceContinuation:
-                0.18
+                0.32
             }
         case .bullets:
             switch mode {
             case .wordCompletion:
                 0.20
             case .phraseContinuation, .sentenceContinuation:
-                0.14
+                0.28
             }
         case .forms, .search:
             0.30

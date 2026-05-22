@@ -92,7 +92,7 @@ public struct HostCompatibilityPolicy: Equatable, Sendable {
 }
 
 public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
-    public static let currentPolicyVersion = "2026-05-08.1"
+    public static let currentPolicyVersion = "2026-05-22.1"
 
     public let policyVersion: String
     public let policies: [String: HostCompatibilityPolicy]
@@ -203,24 +203,23 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-textarea.png"),
-                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-contenteditable.png"),
-                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-chat-like.png")
+                HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/chrome-contenteditable.png")
             ],
-            notes: "Local fixtures and public text fields are proven; Google Docs, Notion, browser ChatGPT, Slack, Discord, official CodeMirror, and default Monaco remain blocked until exact proof exists."
+            notes: "Only local textarea and local contenteditable fixtures are beta-safe. Public pages, production browser apps, browser ChatGPT, Slack, Discord, Google Docs, Notion, official CodeMirror, and default Monaco remain blocked until exact proof exists."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
             hostVersion: .exact(shortVersion: "26.506.21252", build: "2575", source: "/Applications/Codex.app"),
             safetyMode: .wordOnly,
-            runtimeState: .userToggleAllowed,
-            proofState: .complete,
+            runtimeState: .proofModeOnly,
+            proofState: .partial,
             killSwitch: .proofModeRequired,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/codex-inline.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "Codex/default")
             ],
-            notes: "Dogfood prompt support has same-slice screenshot, one-word accept, and no-submit proof. Full accept stays disabled until separate no-submit proof exists."
+            notes: "Proof-only prompt support has same-slice screenshot, one-word accept, and no-submit proof. It is not beta-safe normal writing support, and full accept stays disabled until separate no-submit proof exists."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claude-code",
@@ -228,7 +227,7 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "2.1.128", build: "2.1.128", source: "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app"),
             safetyMode: .disabled,
             runtimeState: .proofModeOnly,
-            proofState: .complete,
+            proofState: .partial,
             killSwitch: .proofModeRequired,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/claude-code-terminal.png"),
@@ -241,13 +240,13 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             displayName: "Claude",
             hostVersion: .exact(shortVersion: "1.6608.0", build: "1.6608.0", source: "/Applications/Claude.app"),
             safetyMode: .wordOnly,
-            runtimeState: .userToggleAllowed,
+            runtimeState: .proofModeOnly,
             proofState: .partial,
             killSwitch: .proofModeRequired,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/claude-desktop.png")
             ],
-            notes: "One prompt layout has no-submit proof; full accept and layout variants remain blocked."
+            notes: "Proof-only prompt support has one no-submit layout. Normal beta use, full accept, and layout variants remain blocked until current exact proof exists."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.Safari",

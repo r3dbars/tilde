@@ -16,8 +16,13 @@ screenshot-backed.
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
 ```
+
+Only TextEdit and Chrome local textarea/contenteditable are safe unattended
+proof lanes. Broader Chrome, prompt, chat, and terminal-host lanes are
+proof-only or blocked.
 
 ## Manual-Gated Proof
 

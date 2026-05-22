@@ -55,7 +55,9 @@ public struct PrefixFamilyCooldown: Equatable, Sendable {
 
 public struct PrefixFamilyEagernessAdjustment: Equatable, Sendable {
     public let typedOverScore: Double
+    public let acceptedThenDeletedScore: Double
     public let repeatedTypedOverThreshold: Double
+    public let repeatedAcceptedThenDeletedThreshold: Double
     public let thresholdAdjustment: Double
     public let prefixTokenCount: Int
     public let prefixFamilyFingerprintVersion: String?
@@ -68,7 +70,9 @@ public struct PrefixFamilyEagernessAdjustment: Equatable, Sendable {
     public var metadata: [String: String] {
         var metadata = [
             "prefixEagernessTypedOverScore": Self.format(typedOverScore),
+            "prefixEagernessAcceptedThenDeletedScore": Self.format(acceptedThenDeletedScore),
             "prefixEagernessRepeatedTypedOverThreshold": Self.format(repeatedTypedOverThreshold),
+            "prefixEagernessRepeatedAcceptedThenDeletedThreshold": Self.format(repeatedAcceptedThenDeletedThreshold),
             "prefixEagernessThresholdAdjustment": Self.format(thresholdAdjustment),
             "prefixEagernessApplied": String(isActive),
             "prefixFamilyTokenCount": String(prefixTokenCount)
@@ -107,22 +111,27 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     public let prefixFamilyTokenLimit: Int
     public let typedOverEagernessThreshold: Double
     public let typedOverEagernessHalfLifeSeconds: TimeInterval
+    public let acceptedThenDeletedEagernessThreshold: Double
+    public let acceptedThenDeletedEagernessHalfLifeSeconds: TimeInterval
     public let traceFingerprintSecret: Data
 
     private var cooldowns: [PrefixFamilyCooldownKey: PrefixFamilyCooldown] = [:]
     private var typedOverEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
+    private var acceptedThenDeletedEagernessBuckets: [PrefixFamilyCooldownKey: PrefixFamilyEagernessBucket] = [:]
 
     public init(
-        typedOverCooldownMilliseconds: Int = 750,
-        repeatedTypedOverCooldownMilliseconds: Int = 5_000,
+        typedOverCooldownMilliseconds: Int = 2_500,
+        repeatedTypedOverCooldownMilliseconds: Int = 15_000,
         escapeCooldownMilliseconds: Int = 15_000,
         repeatedEscapeCooldownMilliseconds: Int = 60_000,
         deletionCooldownMilliseconds: Int = 250,
-        acceptedThenDeletedCooldownMilliseconds: Int = 60_000,
-        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 120_000,
+        acceptedThenDeletedCooldownMilliseconds: Int = 180_000,
+        repeatedAcceptedThenDeletedCooldownMilliseconds: Int = 600_000,
         prefixFamilyTokenLimit: Int = 3,
         typedOverEagernessThreshold: Double = 1.5,
         typedOverEagernessHalfLifeSeconds: TimeInterval = 20 * 60,
+        acceptedThenDeletedEagernessThreshold: Double = 1.5,
+        acceptedThenDeletedEagernessHalfLifeSeconds: TimeInterval = 30 * 60,
         traceFingerprintSecret: Data = Data()
     ) {
         self.typedOverCooldownMilliseconds = max(0, typedOverCooldownMilliseconds)
@@ -141,6 +150,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         self.prefixFamilyTokenLimit = max(1, prefixFamilyTokenLimit)
         self.typedOverEagernessThreshold = max(1, typedOverEagernessThreshold)
         self.typedOverEagernessHalfLifeSeconds = max(1, typedOverEagernessHalfLifeSeconds)
+        self.acceptedThenDeletedEagernessThreshold = max(1, acceptedThenDeletedEagernessThreshold)
+        self.acceptedThenDeletedEagernessHalfLifeSeconds = max(1, acceptedThenDeletedEagernessHalfLifeSeconds)
         self.traceFingerprintSecret = traceFingerprintSecret
     }
 
@@ -152,6 +163,8 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         let key = key(for: input)
         if reason == .typedOver {
             recordTypedOverEagerness(for: key, now: now)
+        } else if reason == .acceptedThenDeleted {
+            recordAcceptedThenDeletedEagerness(for: key, now: now)
         }
 
         let isEscalated = shouldEscalate(reason, existing: cooldowns[key], now: now)
@@ -194,17 +207,28 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
     ) -> PrefixFamilyEagernessAdjustment {
         expireEagernessBuckets(now: now)
         let key = key(for: input)
-        let score = typedOverEagernessBuckets[key]?.score(
+        let typedOverScore = typedOverEagernessBuckets[key]?.score(
             at: now,
             halfLifeSeconds: typedOverEagernessHalfLifeSeconds
         ) ?? 0
+        let acceptedThenDeletedScore = acceptedThenDeletedEagernessBuckets[key]?.score(
+            at: now,
+            halfLifeSeconds: acceptedThenDeletedEagernessHalfLifeSeconds
+        ) ?? 0
+        let typedOverAdjustment = thresholdAdjustment(
+            for: input.requestMode,
+            typedOverScore: typedOverScore
+        )
+        let acceptedThenDeletedAdjustment = acceptedThenDeletedThresholdAdjustment(
+            for: input.requestMode,
+            acceptedThenDeletedScore: acceptedThenDeletedScore
+        )
         return PrefixFamilyEagernessAdjustment(
-            typedOverScore: score,
+            typedOverScore: typedOverScore,
+            acceptedThenDeletedScore: acceptedThenDeletedScore,
             repeatedTypedOverThreshold: typedOverEagernessThreshold,
-            thresholdAdjustment: thresholdAdjustment(
-                for: input.requestMode,
-                typedOverScore: score
-            ),
+            repeatedAcceptedThenDeletedThreshold: acceptedThenDeletedEagernessThreshold,
+            thresholdAdjustment: max(typedOverAdjustment, acceptedThenDeletedAdjustment),
             prefixTokenCount: key.prefixTokenCount,
             prefixFamilyFingerprintVersion: key.prefixFamilyFingerprintVersion,
             prefixFamilyHMACToken: key.prefixFamilyHMACToken
@@ -275,9 +299,26 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
         )
     }
 
+    private mutating func recordAcceptedThenDeletedEagerness(
+        for key: PrefixFamilyCooldownKey,
+        now: Date
+    ) {
+        let decayedScore = acceptedThenDeletedEagernessBuckets[key]?.score(
+            at: now,
+            halfLifeSeconds: acceptedThenDeletedEagernessHalfLifeSeconds
+        ) ?? 0
+        acceptedThenDeletedEagernessBuckets[key] = PrefixFamilyEagernessBucket(
+            score: decayedScore + 1,
+            updatedAt: now
+        )
+    }
+
     private mutating func expireEagernessBuckets(now: Date) {
         typedOverEagernessBuckets = typedOverEagernessBuckets.filter { _, bucket in
             bucket.score(at: now, halfLifeSeconds: typedOverEagernessHalfLifeSeconds) >= 0.05
+        }
+        acceptedThenDeletedEagernessBuckets = acceptedThenDeletedEagernessBuckets.filter { _, bucket in
+            bucket.score(at: now, halfLifeSeconds: acceptedThenDeletedEagernessHalfLifeSeconds) >= 0.05
         }
     }
 
@@ -301,6 +342,29 @@ public struct PrefixFamilyCooldownPolicy: Equatable, Sendable {
 
         let excess = max(0, typedOverScore - typedOverEagernessThreshold)
         let pressure = min(1, 0.60 + (excess / typedOverEagernessThreshold * 0.40))
+        return maxAdjustment * pressure
+    }
+
+    private func acceptedThenDeletedThresholdAdjustment(
+        for mode: CompletionRequestMode?,
+        acceptedThenDeletedScore: Double
+    ) -> Double {
+        guard acceptedThenDeletedScore + 0.0001 >= acceptedThenDeletedEagernessThreshold else {
+            return 0
+        }
+
+        let maxAdjustment: Double
+        switch mode {
+        case .wordCompletion:
+            maxAdjustment = 0.30
+        case .sentenceContinuation:
+            maxAdjustment = 0.55
+        case .phraseContinuation, .none:
+            maxAdjustment = 0.45
+        }
+
+        let excess = max(0, acceptedThenDeletedScore - acceptedThenDeletedEagernessThreshold)
+        let pressure = min(1, 0.70 + (excess / acceptedThenDeletedEagernessThreshold * 0.30))
         return maxAdjustment * pressure
     }
 

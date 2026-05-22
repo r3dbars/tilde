@@ -93,9 +93,10 @@ struct AutocompleteFlowTests {
         let cooldown = cooldownPolicy.record(.typedOver, input: input, now: now)
 
         #expect(cooldown?.reason == .typedOver)
-        #expect(cooldown?.durationMilliseconds == 750)
+        #expect(cooldown?.durationMilliseconds == 2_500)
         #expect(cooldownPolicy.decision(for: input, now: now.addingTimeInterval(0.5)).canRequest == false)
-        #expect(cooldownPolicy.decision(for: input, now: now.addingTimeInterval(1)).canRequest == true)
+        #expect(cooldownPolicy.decision(for: input, now: now.addingTimeInterval(2.4)).canRequest == false)
+        #expect(cooldownPolicy.decision(for: input, now: now.addingTimeInterval(2.6)).canRequest == true)
 
         let differentField = PrefixFamilyCooldownInput(
             appBundleIdentifier: "com.apple.TextEdit",
