@@ -46,6 +46,10 @@ allow_reference() {
 	      [[ "$line" == *"licenseURL"* || "$line" == *"https://huggingface.co/"* ]]
 	      return
       ;;
+	    Sources/AutocompleteLabCore/Runtime/RuntimeCancellationCoordinator.swift)
+	      [[ "$line" == *"func snapshot() -> Int"* ]]
+	      return
+      ;;
   esac
 
   return 1

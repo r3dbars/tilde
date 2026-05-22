@@ -71,17 +71,32 @@ public struct VisiblePageContext: Equatable, Sendable {
     }
 
     public static func sanitizedText(_ text: String) -> String {
-        let lines = text
-            .replacingOccurrences(of: "\u{00a0}", with: " ")
+        var isInsideCodeFence = false
+        let lines = promptSafeText(text)
             .components(separatedBy: .newlines)
-            .map { line in
-                Self.scrubOCRChromeFragments(in: line)
+            .compactMap { line -> String? in
+                if Self.isMarkdownFenceLine(line) {
+                    isInsideCodeFence.toggle()
+                    return nil
+                }
+
+                guard !isInsideCodeFence,
+                      !Self.looksLikePromptControlLine(line) else {
+                    return nil
+                }
+
+                let cleanedLine = Self.scrubOCRChromeFragments(in: line)
                     .split(whereSeparator: { $0.isWhitespace })
                     .joined(separator: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                guard Self.isUsefulLine(cleanedLine),
+                      !Self.looksLikeOCRChromeLine(cleanedLine) else {
+                    return nil
+                }
+
+                return cleanedLine
             }
-            .filter(Self.isUsefulLine)
-            .filter { !Self.looksLikeOCRChromeLine($0) }
 
         var seen = Set<String>()
         var uniqueLines: [String] = []
@@ -96,6 +111,30 @@ public struct VisiblePageContext: Equatable, Sendable {
         }
 
         return truncatedForPrompt(uniqueLines.joined(separator: "\n"))
+    }
+
+    private static func promptSafeText(_ text: String) -> String {
+        let withoutANSIEscapes = text
+            .replacingOccurrences(of: "\u{00a0}", with: " ")
+            .replacingOccurrences(
+                of: ansiEscapePattern,
+                with: " ",
+                options: .regularExpression
+            )
+
+        let scalars = withoutANSIEscapes.unicodeScalars.map { scalar in
+            if scalar == "\n" || scalar == "\t" {
+                return scalar
+            }
+
+            guard CharacterSet.controlCharacters.contains(scalar) else {
+                return scalar
+            }
+
+            return replacementScalar
+        }
+
+        return String(String.UnicodeScalarView(scalars))
     }
 
     private static func isUsefulLine(_ line: String) -> Bool {
@@ -124,6 +163,27 @@ public struct VisiblePageContext: Equatable, Sendable {
         }
 
         return scrubbed
+    }
+
+    private static func isMarkdownFenceLine(_ line: String) -> Bool {
+        line.range(
+            of: #"^\s*(?:`{3,}|~{3,})"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private static func looksLikePromptControlLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return false
+        }
+
+        return promptControlLinePatterns.contains { pattern in
+            trimmed.range(
+                of: pattern,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil
+        }
     }
 
     private static func looksLikeOCRChromeLine(_ line: String) -> Bool {
@@ -232,5 +292,17 @@ public struct VisiblePageContext: Equatable, Sendable {
         #"\bSettings\s+Show\s+more\b"#,
         #"\bHelvetica\s+\d*\s*Regular(?:\s+\d+(?:\.\d+)?){0,2}\b"#,
         #"\bEp\s+[A-Za-z][A-Za-z0-9_-]{2,}\b"#
+    ]
+
+    private static let ansiEscapePattern = "\u{001B}\\[[0-?]*[ -/]*[@-~]"
+    private static let replacementScalar = UnicodeScalar(" ")
+
+    private static let promptControlLinePatterns: [String] = [
+        #"^(?:system|assistant|developer|tool)\s*:"#,
+        #"^(?:before cursor|after cursor|visible page context|next words|suffix)\s*:"#,
+        #"^(?:inline autocomplete|inline word completion)\b"#,
+        #"^(?:return only|return exactly|return the exact|return the same)\b"#,
+        #"^(?:press tab|press enter|press return|submit the prompt|click send)\b"#,
+        #"^\$\s+\S+"#
     ]
 }
