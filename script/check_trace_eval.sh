@@ -657,7 +657,7 @@ unrecovered_insertion_failures = [
     if not is_recovered_insertion_failure(index, event)
 ]
 
-if unrecovered_insertion_failures:
+if unrecovered_insertion_failures and (require_app or require_undo_recoverability):
     examples = []
     for event in unrecovered_insertion_failures[:5]:
         app = event.get("appBundleIdentifier") or "unknown"
