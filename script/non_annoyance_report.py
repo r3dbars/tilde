@@ -3,7 +3,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 TEXT_KEYS = {
@@ -29,6 +29,12 @@ def parse_args():
     parser.add_argument("trace", nargs="?", default=default_trace)
     parser.add_argument("--start-line", type=int, default=1)
     parser.add_argument("--end-line", type=int)
+    parser.add_argument(
+        "--window",
+        choices=("latest-24h", "all"),
+        default=os.environ.get("AUTOCOMPLETE_LAB_NON_ANNOYANCE_WINDOW", "latest-24h"),
+        help="Time window to gate after line slicing. Use 'all' for historical audits.",
+    )
     parser.add_argument("--no-gate", action="store_true")
     parser.add_argument("--max-shown-per-minute", type=float, default=2.0)
     parser.add_argument("--max-dismissals-per-shown", type=float, default=0.25)
@@ -55,6 +61,14 @@ def load_events(path, start_line, end_line):
                 continue
             events.append(redacted_event(json.loads(line)))
     return sorted(events, key=event_time)
+
+
+def windowed_events(events, window):
+    if window == "all" or not events:
+        return events
+    latest = event_time(events[-1])
+    cutoff = latest - timedelta(hours=24)
+    return [event for event in events if event_time(event) >= cutoff]
 
 
 def redacted_event(event):
@@ -182,24 +196,40 @@ def immediate_resurfacing(events):
         if event_type(event) == "suggestionPresented":
             presented_at = event_time(event)
             if any(
-                same_surface(rejection, event)
-                and 0 < (presented_at - event_time(rejection)).total_seconds() <= 2
+                same_surface(rejection["event"], event)
+                and not rejection["covered"]
+                and 0 < (presented_at - event_time(rejection["event"])).total_seconds() <= 2
                 for rejection in rejections
             ):
                 count += 1
             rejections = [
                 rejection
                 for rejection in rejections
-                if (presented_at - event_time(rejection)).total_seconds() <= 2
+                if (presented_at - event_time(rejection["event"])).total_seconds() <= 2
             ]
+        elif event_type(event) == "suggestionSuppressed" and is_immediate_resurfacing_suppression(event):
+            suppressed_at = event_time(event)
+            for rejection in rejections:
+                delay = (suppressed_at - event_time(rejection["event"])).total_seconds()
+                if same_surface(rejection["event"], event) and 0 <= delay <= 2:
+                    rejection["covered"] = True
         elif is_dismissal(event) or event_type(event) == "suggestionTypedOver":
-            rejections.append(event)
+            rejections.append({"event": event, "covered": False})
         elif is_accepted_then_deleted(event):
             key = acceptance_key(event)
             if key in accepted_deleted_keys and key not in used_accepted_deleted_keys:
-                rejections.append(event)
+                rejections.append({"event": event, "covered": False})
                 used_accepted_deleted_keys.add(key)
     return count
+
+
+def is_immediate_resurfacing_suppression(event):
+    metadata = event.get("metadata") or {}
+    cooldown_reason = metadata.get("prefixCooldownReason") or event.get("reason", "")
+    return (
+        cooldown_reason in {"typedOver", "escapeDismissal", "acceptedThenDeleted"}
+        or event.get("triggerReason") == "annoyance-signal"
+    )
 
 
 def severe_suppression_coverage(events, severe_events):
@@ -308,9 +338,10 @@ def failures(report, args):
     return problems
 
 
-def print_report(report):
+def print_report(report, window, event_count, total_event_count):
     print("Non-annoyance report")
     print(f"Gate: {'pass' if not report['failures'] else 'fail'}")
+    print(f"Window: {window} ({event_count}/{total_event_count} events)")
     print(f"Active writing minutes: {report['active_minutes']:.2f}")
     print(f"Shown/min: {report['shown_per_minute']:.2f} ({report['shown']} shown)")
     print(
@@ -341,9 +372,10 @@ def print_report(report):
 
 def main():
     args = parse_args()
-    events = load_events(args.trace, args.start_line, args.end_line)
+    all_events = load_events(args.trace, args.start_line, args.end_line)
+    events = windowed_events(all_events, args.window)
     report = compute_report(events, args)
-    print_report(report)
+    print_report(report, args.window, len(events), len(all_events))
     if report["failures"] and not args.no_gate:
         return 1
     return 0

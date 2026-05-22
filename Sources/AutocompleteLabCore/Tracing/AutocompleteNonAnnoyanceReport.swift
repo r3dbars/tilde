@@ -240,30 +240,56 @@ public struct AutocompleteNonAnnoyanceReporter: Equatable, Sendable {
     }
 
     private func immediateResurfacingCount(in events: [AutocompleteTraceEvent]) -> Int {
-        var rejections: [AutocompleteTraceEvent] = []
+        struct RecentRejection {
+            let event: AutocompleteTraceEvent
+            var coveredBySuppression: Bool
+        }
+
+        var rejections: [RecentRejection] = []
         var count = 0
 
         for event in events {
             if event.type == .suggestionPresented {
                 let presentedAt = timestamp(for: event)
                 if rejections.contains(where: {
-                    sameSurface($0, event)
-                        && presentedAt.timeIntervalSince(timestamp(for: $0)) > 0
-                        && presentedAt.timeIntervalSince(timestamp(for: $0)) <= 2
+                    !$0.coveredBySuppression
+                        && sameSurface($0.event, event)
+                        && presentedAt.timeIntervalSince(timestamp(for: $0.event)) > 0
+                        && presentedAt.timeIntervalSince(timestamp(for: $0.event)) <= 2
                 }) {
                     count += 1
                 }
                 rejections.removeAll {
-                    presentedAt.timeIntervalSince(timestamp(for: $0)) > 2
+                    presentedAt.timeIntervalSince(timestamp(for: $0.event)) > 2
+                }
+                continue
+            }
+
+            if event.type == .suggestionSuppressed,
+               isImmediateResurfacingSuppression(event) {
+                let suppressedAt = timestamp(for: event)
+                for index in rejections.indices where sameSurface(rejections[index].event, event) {
+                    let delay = suppressedAt.timeIntervalSince(timestamp(for: rejections[index].event))
+                    if delay >= 0 && delay <= 2 {
+                        rejections[index].coveredBySuppression = true
+                    }
                 }
                 continue
             }
 
             if isDismissal(event) || event.type == .suggestionTypedOver || isAcceptedThenDeleted(event) {
-                rejections.append(event)
+                rejections.append(RecentRejection(event: event, coveredBySuppression: false))
             }
         }
         return count
+    }
+
+    private func isImmediateResurfacingSuppression(_ event: AutocompleteTraceEvent) -> Bool {
+        let cooldownReason = event.metadata["prefixCooldownReason"] ?? event.reason
+        return cooldownReason == PrefixFamilyCooldownReason.typedOver.rawValue
+            || cooldownReason == PrefixFamilyCooldownReason.escapeDismissal.rawValue
+            || cooldownReason == PrefixFamilyCooldownReason.acceptedThenDeleted.rawValue
+            || event.triggerReason == "annoyance-signal"
     }
 
     private func severeSuppressionCoverage(

@@ -49,6 +49,32 @@ struct AutocompleteNonAnnoyanceReportTests {
         #expect(report.severeSignalsSuppressed == 0)
     }
 
+    @Test("Cooldown suppression covers typed-over fast word resurfacing")
+    func cooldownSuppressionCoversTypedOverFastWordResurfacing() {
+        let events = [
+            event(.suggestionPresented, at: 0, suggestionID: "s1"),
+            event(.suggestionTypedOver, at: 1, suggestionID: "s1", reason: "typed-against-visible-suggestion"),
+            event(
+                .suggestionSuppressed,
+                at: 1.1,
+                suggestionID: "s2",
+                reason: PrefixFamilyCooldownReason.typedOver.rawValue,
+                metadata: ["prefixCooldownReason": PrefixFamilyCooldownReason.typedOver.rawValue]
+            ),
+            event(.suggestionPresented, at: 2, suggestionID: "s3"),
+            event(.suggestionPresented, at: 70, suggestionID: "s4"),
+            event(.suggestionPresented, at: 120, suggestionID: "s5"),
+            event(.suggestionPresented, at: 180, suggestionID: "s6"),
+            event(.suggestionPresented, at: 240, suggestionID: "s7")
+        ]
+
+        let report = AutocompleteNonAnnoyanceReporter().report(for: events)
+
+        #expect(report.immediateResurfacing == 0)
+        #expect(report.typedOverWithinOneSecond == 1)
+        #expect(report.gatePassed)
+    }
+
     @Test("Accepted then deleted counts as covered when it starts prefix cooldown")
     func acceptedThenDeletedCooldownCoversSevereSignal() {
         let events = [
