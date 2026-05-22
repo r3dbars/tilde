@@ -238,9 +238,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var acceptedAndKeptLearning = AcceptedAndKeptLearningStore()
     private var acceptedTextStyleMemory = AcceptedTextStyleMemoryStore()
-    private var activeAppProofBundleIdentifiers: Set<String> = []
-    private var environmentProofModeScopePolicy = ProofModeScopePolicy()
-    private var appProofExpirationTasks: [String: Task<Void, Never>] = [:]
+    private lazy var appProofModeCoordinator = AppProofModeCoordinator(runtimeProofOptions: runtimeProofOptions)
+    private var activeAppProofBundleIdentifiers: Set<String> {
+        appProofModeCoordinator.activeBundleIdentifiers
+    }
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
     private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
@@ -1266,7 +1267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for app: RunningApplicationInfo,
         profile: CompatibilityProfile
     ) -> Bool {
-        guard environmentProofModeScopePolicy.allows(
+        guard appProofModeCoordinator.allows(
             appBundleIdentifier: app.bundleIdentifier,
             suggestionBundleIdentifier: profile.bundleIdentifier
         ) else {
@@ -10539,44 +10540,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func beginAppProofMode(for bundleIdentifier: String) {
-        activeAppProofBundleIdentifiers.insert(bundleIdentifier)
-        appProofExpirationTasks[bundleIdentifier]?.cancel()
-        appProofExpirationTasks[bundleIdentifier] = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 10 * 60 * 1_000_000_000)
-            guard !Task.isCancelled else {
-                return
-            }
-
-            await MainActor.run {
-                self?.endAppProofMode(for: bundleIdentifier, reason: "expired")
-            }
-        }
-        var metadata = [
-            "app": bundleIdentifier
-        ]
-        if let proofScenario = runtimeProofOptions.proofScenario {
-            metadata["scenario"] = proofScenario
-        }
-        DiagnosticsLog.shared.record(
-            "app-proof-mode-started",
-            metadata: metadata
-        )
+        appProofModeCoordinator.begin(for: bundleIdentifier)
     }
 
     private func endAppProofMode(for bundleIdentifier: String, reason: String) {
-        appProofExpirationTasks[bundleIdentifier]?.cancel()
-        appProofExpirationTasks.removeValue(forKey: bundleIdentifier)
-        guard activeAppProofBundleIdentifiers.remove(bundleIdentifier) != nil else {
-            return
-        }
-
-        DiagnosticsLog.shared.record(
-            "app-proof-mode-ended",
-            metadata: [
-                "app": bundleIdentifier,
-                "reason": reason
-            ]
-        )
+        appProofModeCoordinator.end(for: bundleIdentifier, reason: reason)
     }
 
     private func enableAllDisabledApps() {
@@ -11031,30 +10999,7 @@ private extension AppDelegate {
     }
 
     func loadProofModeOverrides() {
-        let environment = ProcessInfo.processInfo.environment
-        let environmentProofBundleIdentifiers = Set(
-            DisabledAppSelection.parseBundleIdentifierList(environment[Self.proofModeBundleIDsEnvironmentKey])
-        )
-        let proofBundleIdentifiers = Set(
-            DisabledAppSelection.parseBundleIdentifierList(environment[Self.temporarilyEnabledBundleIDsEnvironmentKey])
-                + Array(environmentProofBundleIdentifiers)
-        )
-        environmentProofModeScopePolicy = ProofModeScopePolicy(
-            scopedBundleIdentifiers: environmentProofBundleIdentifiers
-        )
-        guard !proofBundleIdentifiers.isEmpty else {
-            return
-        }
-
-        for bundleIdentifier in proofBundleIdentifiers.sorted() {
-            beginAppProofMode(for: bundleIdentifier)
-        }
-        DiagnosticsLog.shared.record(
-            "app-proof-mode-env",
-            metadata: [
-                "apps": proofBundleIdentifiers.sorted().joined(separator: ",")
-            ]
-        )
+        appProofModeCoordinator.loadEnvironmentOverrides()
     }
 
     func persistDisabledApps() {
