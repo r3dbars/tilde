@@ -306,6 +306,7 @@ public enum AutocompleteTracePrivacyFilter {
         "stale-focus",
         "stale-geometry-screen-layout-changed",
         "stale-request",
+        "stale-text",
         "subpixel-noise",
         "suggestion-presented",
         "suppressed-autorepeat",

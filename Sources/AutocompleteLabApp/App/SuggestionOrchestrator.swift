@@ -192,6 +192,43 @@ final class SuggestionOrchestrator {
             && allows(ticket, fieldIdentity: fieldIdentity, currentFieldIdentity: currentFieldIdentity)
     }
 
+    func presentationSuppressionReason(
+        requestTicket: SuggestionRequestTicket?,
+        request: CompletionRequest,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        invalidatedByUserTyping: Bool
+    ) -> SuggestionPresentationSuppressionReason? {
+        if let requestTicket,
+           !allows(requestTicket) {
+            return .staleRequest
+        }
+
+        guard currentFieldIdentity == fieldIdentity else {
+            return .staleField
+        }
+
+        if invalidatedByUserTyping {
+            return .staleAfterKeydown
+        }
+
+        guard let currentSnapshot else {
+            return nil
+        }
+
+        guard currentSnapshot.fieldIdentity == fieldIdentity else {
+            return .staleField
+        }
+
+        guard currentSnapshot.textBeforeCursor == request.textBeforeCursor,
+              currentSnapshot.textAfterCursor == request.textAfterCursor else {
+            return .staleText
+        }
+
+        return nil
+    }
+
     func invalidate() {
         currentRequestStorage = nil
         requestGate.invalidate()
@@ -794,6 +831,13 @@ struct SuggestionOrchestration: Sendable {
 struct SuggestionDisplayScoreDecision: Sendable {
     let decision: DisplayScoreDecision
     let metadata: [String: String]
+}
+
+enum SuggestionPresentationSuppressionReason: String, Sendable {
+    case staleRequest = "stale-request"
+    case staleField = "stale-field"
+    case staleText = "stale-text"
+    case staleAfterKeydown = "stale-after-keydown"
 }
 
 struct PlacementSuppressionResolution {

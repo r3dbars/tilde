@@ -5960,6 +5960,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshBeforePresenting: Bool = true
     ) {
         let originalContext = context
+        let invalidatedByVisibleUserTyping = currentSuggestionInvalidatedByUserKeyDown
+            && currentSuggestionID == suggestionID
+        if let suppressionReason = suggestionOrchestrator.presentationSuppressionReason(
+            requestTicket: requestTicket,
+            request: request,
+            fieldIdentity: fieldIdentity,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: lastTextSnapshot,
+            invalidatedByUserTyping: invalidatedByVisibleUserTyping
+        ) {
+            let reason = suppressionReason.rawValue
+            let metadata = traceGeometryMetadata(context: originalContext, renderMode: renderMode)
+                .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
+                .merging(candidateSelectionMetadata) { current, _ in current }
+                .merging([
+                    "presentationFreshness": "stale",
+                    "presentationFreshnessReason": reason
+                ]) { current, _ in current }
+            setSuggestionDecision("Blocked: \(reason)")
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: triggerReason,
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                displayedText: suggestion.visibleText,
+                latencyMilliseconds: latencyMilliseconds,
+                reason: reason,
+                metadata: metadata
+            )
+            recordSuggestionEvent(
+                "suggestion-blocked",
+                context: originalContext,
+                profile: profile,
+                metadata: [
+                    "reason": reason
+                ]
+                .merging(metadata) { current, _ in current }
+            )
+            hideSuggestion(reason: reason)
+            return
+        }
+
         let refreshedContext = refreshBeforePresenting
             ? refreshedPresentationContext(
                 for: request,
@@ -6175,7 +6221,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let replacementMetadata = replacementDecision.metadata
         let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
             for: replacementDecision,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
         )
         guard replacementVisibilityAction == .presentProposed else {
             let reason = replacementDecision.reason?.rawValue ?? "replacement-gate"
