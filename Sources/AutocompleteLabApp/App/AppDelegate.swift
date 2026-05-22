@@ -5751,7 +5751,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 partialSuggestion,
                                 suggestionID: suggestionID,
                                 mode: request.mode,
-                                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000)
+                                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000),
+                                latencyMilliseconds: latencyMilliseconds
                             ) else {
                                 return
                             }
