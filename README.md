@@ -7,8 +7,10 @@ SteadyType is a small Mac app for quiet writing suggestions near your cursor.
 It watches the active text field, shows a short suggestion, and only inserts text when you accept it. The question for this beta is simple: does this make writing feel easier, or does it get in the way?
 
 Current proof truth: the private beta is still blocked until the live proof
-gates are green. The strict manual smoke gate currently reports 35 stale or
-pending target app passes, so app support should stay narrow and proof-gated.
+gates are green. `./script/manual_smoke_status.sh --strict` currently reports
+35 stale or pending target-app rows, and `./script/check_proof_manifest.sh
+--require-all` still has 6 partial surfaces. Recorded proof exists, but broad
+support is not ready to claim.
 
 ## What It Does
 
@@ -22,16 +24,28 @@ pending target app passes, so app support should stay narrow and proof-gated.
 
 ## Current Beta Scope
 
-The first target apps are:
+Write-test only in these proof-gated lanes:
 
 - TextEdit
-- Apple Notes
-- Obsidian
-- Chrome included local practice pages and local fixtures only
+- Apple Notes title, body, and checklist surfaces
+- Obsidian disposable proof lanes, when current proof is green
+- Chrome local/public text fields and included local fixtures
 
-These are beta targets, not a broad compatibility promise. Prompt and chat apps
-stay heavily guarded. Codex and Claude-style fields are proof-gated because
-accepting text must never submit a prompt by surprise.
+These are beta targets, not a broad compatibility promise. Chrome is not broad
+browser support: Google Docs, Notion, browser ChatGPT, Slack, Discord,
+production Monaco, and production CodeMirror stay blocked or partial until each
+has its own disposable proof.
+
+Prompt apps stay tighter:
+
+- Codex is a word-only dogfood lane. Default one-word no-submit proof exists,
+  but current-head refresh, more prompt layouts, and full-accept no-submit
+  proof are still gaps.
+- Claude desktop is word-only until more prompt layouts pass and full accept
+  has separate no-submit proof.
+- Claude Code is proof-only through an explicit terminal-host lane. The direct
+  `com.anthropic.claude-code` bundle is diagnostics-only because real typing
+  happens in terminal hosts.
 
 ## Privacy
 

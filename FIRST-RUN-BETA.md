@@ -47,21 +47,25 @@ field kind, timing, counters, failure labels, and text lengths.
 
 ## Test App Scope
 
-Write-test only in the currently enabled proof lanes for these apps:
+Write-test only in the currently enabled proof lanes for these surfaces:
 
 - TextEdit
-- Notes
-- Obsidian
-- Chrome included local practice pages
+- Notes title, body, and checklist
+- Obsidian disposable proof lanes
+- Chrome local/public text fields and included local practice pages
 
 Treat them as beta targets, not system-wide support. If the current proof gate
 marks a lane stale or pending, use it only for proof refresh.
 
 Do not write-test these as normal beta apps. Use them only as proof targets:
 
-- Codex
-- Claude
-- Claude Code terminal-host proof
+- Codex word-only dogfood proof
+- Claude desktop word-only proof
+- Claude Code terminal-host proof only
+
+Codex and Claude desktop keep full accept off until separate no-submit proof
+exists. Claude Code direct bundle support is diagnostics-only; proof runs must
+use the explicit terminal-host lane and disposable marker text.
 
 These stay off until proof says otherwise:
 

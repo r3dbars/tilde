@@ -10908,8 +10908,8 @@ private extension AppDelegate {
         Use Pause in TextEdit to stop suggestions only in TextEdit.
 
         Typed text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, and subject lines stay on this Mac by default.
-        Write-test only in TextEdit, Notes, Obsidian, and the included Chrome local practice pages.
-        Mail, Atlas, Slack, Discord, Notion, search, login, payment, address, URL, secure, and private fields stay off until proof says otherwise.
+        Write-test only in TextEdit, Notes title/body/checklist, Obsidian disposable proof lanes, and Chrome local/public text fields or included fixtures when current proof is green.
+        Codex is word-only dogfood proof. Claude desktop is word-only proof. Claude Code is terminal-host proof only. Mail, Atlas, Slack, Discord, Notion, search, login, payment, address, URL, secure, and private fields stay off until proof says otherwise.
 
         Return to SteadyType Settings to delete traces or export only the redacted Privacy Bundle.
 

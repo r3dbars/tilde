@@ -214,13 +214,13 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "26.506.21252", build: "2575", source: "/Applications/Codex.app"),
             safetyMode: .wordOnly,
             runtimeState: .userToggleAllowed,
-            proofState: .complete,
+            proofState: .partial,
             killSwitch: .proofModeRequired,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/codex-inline.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "Codex/default")
             ],
-            notes: "Dogfood prompt support has same-slice screenshot, one-word accept, and no-submit proof. Full accept stays disabled until separate no-submit proof exists."
+            notes: "Dogfood prompt support has recorded same-slice screenshot, one-word accept, and no-submit proof. Current-head refresh, more prompt layouts, and full-accept no-submit proof are still pending."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claude-code",
@@ -228,13 +228,13 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "2.1.128", build: "2.1.128", source: "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app"),
             safetyMode: .disabled,
             runtimeState: .proofModeOnly,
-            proofState: .complete,
+            proofState: .partial,
             killSwitch: .proofModeRequired,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/claude-code-terminal.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "Claude Code/default")
             ],
-            notes: "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only."
+            notes: "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only. Host-labeled iTerm2 and Ghostty proof rows are still pending."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claudefordesktop",

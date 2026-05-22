@@ -36,9 +36,9 @@ body:
         - Obsidian
         - Chrome textarea
         - Chrome contenteditable
-        - Codex
-        - Claude Code
-        - Claude desktop
+        - Codex word-only proof
+        - Claude Code terminal-host proof only
+        - Claude desktop word-only proof
         - Other
     validations:
       required: true

@@ -8,7 +8,7 @@ The first-run surface and TextEdit practice file must make this clear in plain
 language:
 
 - Suggestions appear as a small floating suggestion next to the cursor in
-  supported writing apps.
+  enabled proof-gated writing lanes.
 - Suggestions do not enter the document until accepted.
 - `Tab` accepts one word.
 - `Esc` dismisses the suggestion without changing text.
@@ -16,8 +16,11 @@ language:
 - `Pause Current App` stops suggestions only in the frontmost app.
 - Typed text, prompts, model output, accepted text, screenshots, document
   names, URLs, recipients, and subject lines stay on this Mac by default.
-- The write-test apps are TextEdit, Notes, Obsidian, and the included Chrome
-  local practice pages.
+- The write-test lanes are TextEdit, Notes title/body/checklist, Obsidian
+  disposable proof lanes, and Chrome local/public text fields or included
+  fixtures when current proof is green.
+- Codex is word-only dogfood proof. Claude desktop is word-only proof. Claude
+  Code is terminal-host proof only, not normal beta writing coverage.
 - Mail, Atlas, Slack, Discord, Notion, search, login, payment, address, URL,
   secure, and private fields stay off until proof says otherwise.
 

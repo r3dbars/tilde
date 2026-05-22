@@ -72,8 +72,9 @@ What this proves:
 Notes, Obsidian, Codex, Claude Code, and Claude desktop checks are
 manual-gated. Do not use real notes, vault content, terminal commands, or live
 prompts for proof. Use disposable smoke text only, and never press Enter in an
-agent prompt pass. Codex, Claude Code, and Claude desktop require one-word
-no-submit proof before graduation.
+agent prompt pass. Codex and Claude desktop stay word-only until separate
+full-accept no-submit proof exists. Claude Code is terminal-host proof only;
+the direct Claude Code bundle stays diagnostics-only.
 Prompt-app full accept stays disabled until separate full-accept no-submit proof
 exists.
 Claude Code host-specific proof commands record separate Terminal, iTerm2,

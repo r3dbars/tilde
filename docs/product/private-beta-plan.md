@@ -79,14 +79,15 @@ Do not ask testers to run shell or Python commands.
 Target coverage across the beta:
 
 - TextEdit.
-- Notes.
-- Chrome local textareas.
-- Obsidian or another CodeMirror editor.
-- One Electron writing app, such as Codex dogfood if available.
+- Notes title, body, and checklist lanes.
+- Chrome local/public text fields and included fixtures.
+- Obsidian disposable proof lanes when current proof is green.
+- Codex word-only dogfood only if the proof gate is current.
 - Mail compose as diagnostics-only until insertion is proven safe.
 
-Do not count Mail as supported writing coverage. It stays blocked for insertion
-until the compatibility gates say otherwise.
+Do not count Mail, Claude Code, broad browser apps, or production editors as
+supported writing coverage. Claude Code is terminal-host proof only. Mail stays
+blocked for insertion until the compatibility gates say otherwise.
 
 ## Day Zero
 
