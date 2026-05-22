@@ -26,8 +26,8 @@ struct AppProofCommandRunnerTests {
         #expect(plan.commandText.contains("script/real_app_smoke.sh textedit --skip-build"))
     }
 
-    @Test("Chrome proof plan runs the local textarea fixture without rebuilding")
-    func chromeProofPlanRunsLocalTextareaFixtureWithoutRebuilding() throws {
+    @Test("Chrome proof plan runs the local textarea and contenteditable fixtures without rebuilding")
+    func chromeProofPlanRunsLocalTextareaAndContenteditableFixturesWithoutRebuilding() throws {
         let sourceRootURL = URL(fileURLWithPath: "/tmp/autocomplete-lab", isDirectory: true)
         let logDirectoryURL = URL(fileURLWithPath: "/tmp/autocomplete-lab-logs", isDirectory: true)
         let plan = try #require(
@@ -43,11 +43,8 @@ struct AppProofCommandRunnerTests {
         #expect(plan.executableURL.path == "/usr/bin/env")
         #expect(plan.arguments == [
             "bash",
-            "script/real_app_smoke.sh",
-            "chrome",
-            "--fixture",
-            "textarea",
-            "--skip-build"
+            "-lc",
+            "script/real_app_smoke.sh chrome --fixture textarea --skip-build && script/real_app_smoke.sh chrome --fixture contenteditable --skip-build"
         ])
         #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_SCREENSHOT_TRACE"] == "1")
         #expect(plan.environmentOverrides["AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD"] == "1")
@@ -55,6 +52,11 @@ struct AppProofCommandRunnerTests {
         #expect(
             plan.commandText.contains(
                 "script/real_app_smoke.sh chrome --fixture textarea --skip-build"
+            )
+        )
+        #expect(
+            plan.commandText.contains(
+                "script/real_app_smoke.sh chrome --fixture contenteditable --skip-build"
             )
         )
     }
