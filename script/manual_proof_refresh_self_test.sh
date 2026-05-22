@@ -264,17 +264,41 @@ fi
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
   script/manual_proof_refresh.sh --print >"$OUTPUT"
 for expected in \
+  "Default scope: beta-safe rows only. Use --all for proof-only or blocked lanes." \
+  "Beta-safe target status:" \
   "# textedit - TextEdit" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit" \
   "script/manual_proof_refresh.sh --verify-target textedit" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate" \
+  "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea" \
+  "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable"; do
+  if ! grep -F "$expected" "$OUTPUT" >/dev/null; then
+    echo "manual proof refresh print output missed: $expected" >&2
+    exit 1
+  fi
+done
+
+for unexpected in \
+  "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public" \
+  "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate" \
+  "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"; do
+  if grep -F "$unexpected" "$OUTPUT" >/dev/null; then
+    echo "manual proof refresh default print included proof-only target: $unexpected" >&2
+    exit 1
+  fi
+done
+
+AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
+  script/manual_proof_refresh.sh --print --all >"$OUTPUT"
+for expected in \
+  "All proof target status:" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"; do
   if ! grep -F "$expected" "$OUTPUT" >/dev/null; then
-    echo "manual proof refresh print output missed: $expected" >&2
+    echo "manual proof refresh --all print output missed: $expected" >&2
     exit 1
   fi
 done

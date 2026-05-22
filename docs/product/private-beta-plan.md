@@ -80,13 +80,14 @@ Target coverage across the beta:
 
 - TextEdit.
 - Notes.
-- Chrome local textareas.
-- Obsidian or another CodeMirror editor.
-- One Electron writing app, such as Codex dogfood if available.
+- Chrome local textarea/contenteditable fixtures.
+- Obsidian.
 - Mail compose as diagnostics-only until insertion is proven safe.
 
-Do not count Mail as supported writing coverage. It stays blocked for insertion
-until the compatibility gates say otherwise.
+Do not count Mail, Codex, Claude, chat apps, terminal hosts, public browser
+pages, or production browser apps as supported writing coverage. They stay
+proof-only, diagnostics-only, or blocked until the compatibility gates say
+otherwise.
 
 ## Day Zero
 

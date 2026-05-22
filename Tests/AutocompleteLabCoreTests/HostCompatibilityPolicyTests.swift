@@ -77,6 +77,26 @@ struct HostCompatibilityPolicyTests {
         }
     }
 
+    @Test("Only boring writing hosts are normal beta toggles")
+    func onlyBoringWritingHostsAreNormalBetaToggles() throws {
+        let catalog = HostCompatibilityPolicyCatalog.mvp
+        let betaSafeBundles = Set([
+            "com.apple.TextEdit",
+            "com.apple.Notes",
+            "md.obsidian",
+            "com.google.Chrome"
+        ])
+
+        let userToggleBundles = Set(catalog.policies.values
+            .filter { $0.runtimeState == .userToggleAllowed }
+            .map(\.bundleIdentifier))
+
+        #expect(userToggleBundles == betaSafeBundles)
+        #expect(try #require(catalog.policy(for: "com.openai.codex")).runtimeState == .proofModeOnly)
+        #expect(try #require(catalog.policy(for: "com.anthropic.claudefordesktop")).runtimeState == .proofModeOnly)
+        #expect(try #require(catalog.policy(for: "com.anthropic.claude-code")).runtimeState == .proofModeOnly)
+    }
+
     @Test("Runtime state keeps disabled and proof-only hosts closed by default")
     func runtimeStateKeepsDisabledAndProofOnlyHostsClosedByDefault() {
         #expect(HostPolicyRuntimeState.userToggleAllowed.allowsSuggestions(

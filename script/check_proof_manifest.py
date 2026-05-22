@@ -115,8 +115,22 @@ EXPECTED_GRADUATION_DECISIONS = {
             "screenshot-backed current-head evidence",
         },
     },
+    "Chrome production text fields": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture production-text-fields",
+        "requiredProof": {
+            "local fixture proof is not enough",
+            "disposable production-page proof",
+            "correct placement",
+            "safe Tab",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        },
+    },
     "Claude desktop layouts": {
-        "decision": "word-only",
+        "decision": "proof-only",
         "proofState": "partial",
         "smokeCommand": "script/real_app_smoke.sh claude-empty --manual-gate",
         "requiredProof": {
@@ -130,8 +144,8 @@ EXPECTED_GRADUATION_DECISIONS = {
         },
     },
     "Codex layouts": {
-        "decision": "word-only",
-        "proofState": "complete",
+        "decision": "proof-only",
+        "proofState": "partial",
         "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
         "requiredProof": {
             "more prompt layouts before raising beyond word-only",
@@ -139,7 +153,7 @@ EXPECTED_GRADUATION_DECISIONS = {
         },
     },
     "Obsidian long notes": {
-        "decision": "word-only",
+        "decision": "supported",
         "proofState": "complete",
         "smokeCommand": "script/real_app_smoke.sh obsidian-long-note --manual-gate",
         "requiredProof": {

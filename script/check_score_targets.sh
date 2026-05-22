@@ -108,10 +108,10 @@ print_blocker_summary() {
     echo "- Live prompt proof: $LIVE_PROMPT_PROOF_ISSUES issue(s). Finish remaining prompt-app layout and full-accept proof without counting stale trace history."
   fi
   if ((DEFAULT_CHROME_EDITOR_ISSUES > 0)); then
-    echo "- Chrome editor production proof: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Local real Monaco/ProseMirror caret-quality proof exists; add production variants before target scores can reach 100."
+    echo "- Chrome editor production proof: $DEFAULT_CHROME_EDITOR_ISSUES issue(s). Keep editor and production-browser lanes proof-only or blocked until exact current proof exists."
   fi
   if ((VARIANT_PROOF_ISSUES > 0)); then
-    echo "- Real-app variant proof: $VARIANT_PROOF_ISSUES issue(s). Add missing Notes, Obsidian, Chrome, Claude desktop, and prompt layout variants."
+    echo "- Real-app variant proof: $VARIANT_PROOF_ISSUES issue(s). Refresh beta-safe Notes, Obsidian, and Chrome local textarea/contenteditable rows before any broader proof-only lane."
   fi
   if ((TYPING_RESTRAINT_ISSUES > 0)); then
     echo "- Typing restraint and noise: $TYPING_RESTRAINT_ISSUES issue(s). Keep normal typing untouched and separate key-path failures from AX warning noise."

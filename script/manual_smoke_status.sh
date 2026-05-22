@@ -32,8 +32,9 @@ docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
 It separates insertion proof from screenshot-backed visual placement proof so
 real-app visual gaps stay visible after insertion passes.
 Notes title, body, and checklist are separate proof targets.
-Obsidian default, theme, pane, long-note, font-zoom, markdown, multiline, and
-run-on lanes are separate proof targets.
+Obsidian default, theme, pane, and long-note lanes are separate beta proof
+targets.
+Chrome beta proof is limited to local textarea and contenteditable fixtures.
 Focused graduation decisions are printed separately so blocked or
 diagnostics-only high-value surfaces do not masquerade as supported proof.
 
@@ -53,33 +54,8 @@ declare -a APPS=(
   "Obsidian theme|Obsidian|md.obsidian|full|obsidian-theme|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
   "Obsidian panes|Obsidian|md.obsidian|full|obsidian-pane|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
   "Obsidian long note|Obsidian|md.obsidian|full|obsidian-long-note|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"
-  "Obsidian font zoom|Obsidian|md.obsidian|full|obsidian-font-zoom|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-font-zoom --manual-gate"
-  "Obsidian Markdown bold|Obsidian|md.obsidian|full|obsidian-markdown-bold|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-bold --manual-gate"
-  "Obsidian Markdown list|Obsidian|md.obsidian|full|obsidian-markdown-list|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate"
-  "Obsidian multiline|Obsidian|md.obsidian|full|obsidian-multiline|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate"
-  "Obsidian run-on sentence|Obsidian|md.obsidian|full|obsidian-run-on|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate"
   "Chrome textarea|Chrome|com.google.Chrome|full|textarea|script/manual_smoke_session.sh chrome --visual"
   "Chrome contenteditable|Chrome|com.google.Chrome|full|contenteditable|AUTOCOMPLETE_LAB_CHROME_FIXTURE=contenteditable script/manual_smoke_session.sh chrome --visual"
-  "Chrome production textarea|Chrome|com.google.Chrome|full|textarea-public|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public"
-  "Chrome production contenteditable|Chrome|com.google.Chrome|full|contenteditable-public|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public"
-  "Chrome editor-like|Chrome|com.google.Chrome|full|editor-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=editor-like script/manual_smoke_session.sh chrome --visual"
-  "Chrome Monaco-like|Chrome|com.google.Chrome|full|monaco-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=monaco-like script/manual_smoke_session.sh chrome --visual"
-  "Chrome ProseMirror-like|Chrome|com.google.Chrome|full|prosemirror-like|AUTOCOMPLETE_LAB_CHROME_FIXTURE=prosemirror-like script/manual_smoke_session.sh chrome --visual"
-  "Chrome real Monaco|Chrome|com.google.Chrome|full|monaco-real|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real"
-  "Chrome real ProseMirror|Chrome|com.google.Chrome|full|prosemirror-real|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real"
-  "Chrome real Monaco default AX|Chrome|com.google.Chrome|full|monaco-real-default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default"
-  "Chrome real ProseMirror default AX|Chrome|com.google.Chrome|full|prosemirror-real-default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real --chrome-accessibility default"
-  "Chrome chat-like no-submit|Chrome|com.google.Chrome|full|chat-like|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
-  "Codex|Codex|com.openai.codex|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
-  "Claude Code|Claude Code|com.anthropic.claude-code|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
-  "Claude desktop|Claude|com.anthropic.claudefordesktop|one-word|default|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
-  "Claude desktop empty composer|Claude|com.anthropic.claudefordesktop|one-word|claude-empty|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-empty --manual-gate"
-  "Claude desktop long prompt|Claude|com.anthropic.claudefordesktop|one-word|claude-long|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-long --manual-gate"
-  "Claude desktop wrapped prompt|Claude|com.anthropic.claudefordesktop|one-word|claude-wrapped|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-wrapped --manual-gate"
-  "Claude desktop narrow window|Claude|com.anthropic.claudefordesktop|one-word|claude-narrow|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-narrow --manual-gate"
-  "Claude desktop context layout|Claude|com.anthropic.claudefordesktop|one-word|claude-context|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-context --manual-gate"
-  "Claude desktop light appearance|Claude|com.anthropic.claudefordesktop|one-word|claude-light|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-light --manual-gate"
-  "Claude desktop dark appearance|Claude|com.anthropic.claudefordesktop|one-word|claude-dark|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"
 )
 
 trim() {
@@ -208,6 +184,11 @@ proof_source_paths_for_bundle() {
   fi
 
   local paths="Package.swift Package.resolved Sources :!Sources/AutocompleteLabCore/Experiments"
+  paths+=" :!Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift"
+  paths+=" :!Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
+  paths+=" :!Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift"
+  paths+=" :!Sources/AutocompleteLabCore/Configuration/PromptEditorFingerprintPolicy.swift"
+  paths+=" :!Sources/AutocompleteLabApp/UI/SettingsWindowController.swift"
   if [[ "$bundle_id" != "com.anthropic.claude-code" ]]; then
     paths+=" :!Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift"
   fi
@@ -400,10 +381,11 @@ print_focused_graduation_decisions() {
   echo "- Discord browser/desktop: blocked - no disposable real-service server/channel no-send screenshot and insertion proof yet; local fixtures do not count."
   echo "- Mail compose: diagnostics-only - compose text is sensitive and insertion is unproven."
   echo "- Browser ChatGPT: blocked - no disposable real-service one-word no-submit screenshot and insertion proof yet; the browser-chat harness does not count."
-  echo "- Claude desktop layouts: word-only - default proof exists; layout variants remain pending."
-  echo "- Codex layouts: word-only - default proof exists; more prompt layouts remain pending."
-  echo "- Obsidian long notes: word-only - current-head long-note proof passed; broader vault variance remains yellow."
-  echo "- Real Monaco and CodeMirror editors: blocked - official/default editor proof is not complete."
+  echo "- Chrome production text fields: blocked - public or production browser text fields do not count as beta-safe local fixtures."
+  echo "- Claude desktop layouts: proof-only - default one-word proof exists; normal beta use and layout variants remain blocked."
+  echo "- Codex layouts: proof-only - default one-word proof exists; normal beta use and more prompt layouts remain blocked."
+  echo "- Obsidian long notes: supported target - beta-safe when strict current proof passes; broader vault variance remains yellow."
+  echo "- Real Monaco and CodeMirror editors: blocked - official/default editor proof is not beta-safe local textarea/contenteditable proof."
   echo "- Prompt-app full accept: blocked - no prompt app may count full accept without exact separate no-submit screenshot and insertion proof."
 }
 
