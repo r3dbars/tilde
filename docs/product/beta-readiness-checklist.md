@@ -32,9 +32,10 @@ Use this before inviting private beta testers.
 
 - [ ] TextEdit passes at least the caveated gate.
 - [ ] Notes has verified insertion before writing use.
-- [ ] Chrome proof is limited to local textareas.
-- [ ] Obsidian or CodeMirror suppresses detached whole-editor suggestions.
-- [ ] One Electron writing app has its own trace slice before beta use.
+- [ ] Chrome proof is limited to local textarea/contenteditable fixtures.
+- [ ] Obsidian default, theme, pane, and long-note proof is current.
+- [ ] Codex, Claude, chat apps, Mail, terminal hosts, public browser pages, and
+  production browser apps stay proof-only, diagnostics-only, or blocked.
 - [ ] Mail is diagnostics-only.
 - [ ] Atlas is diagnostics-only.
 - [ ] Any blocked app stays off.
@@ -98,8 +99,8 @@ Invite testers only when every applicable box is checked.
   proof, current manual app proof refresh, release package proof, and
   notarized install proof.
 - `./script/manual_smoke_status.sh --strict` still requires current-head proof
-  refresh for 35 target app rows. Do not treat stale screenshot-backed rows as
-  beta-current.
+  refresh for the 10 beta-safe target rows. Do not treat stale
+  screenshot-backed rows as beta-current.
 - `./script/check_onboarding_walkthrough_proof.py` is expected to block until
   the guided TextEdit walkthrough table has a current clean-user pass row.
 - `./script/private_beta_packet.sh --check` must be rerun after any app-code or

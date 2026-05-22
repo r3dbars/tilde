@@ -14,7 +14,7 @@ struct AcceptedAndKeptLearningTests {
 
         #expect(wordSignal.sampleCount == 0)
         #expect(wordSignal.probability == 0.42)
-        #expect(phraseSignal.probability == 0.34)
+        #expect(phraseSignal.probability == 0.24)
         #expect(sentenceSignal.probability == 0.28)
         #expect(wordSignal.userAffinityAdjustment == 0)
     }
@@ -36,18 +36,17 @@ struct AcceptedAndKeptLearningTests {
         #expect(positive.userAffinityAdjustment > 0)
         #expect(positive.utilityAdjustment > 0)
 
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
-        _ = store.record(.rejected, key: learningKey, now: now)
+        for _ in 0..<8 {
+            _ = store.record(.rejected, key: learningKey, now: now)
+        }
         let negative = store.signal(for: learningKey, now: now)
 
-        #expect(negative.sampleCount == 6)
-        #expect(negative.rejectedCount == 4)
+        #expect(negative.sampleCount == 10)
+        #expect(negative.rejectedCount == 8)
         #expect(negative.probability < negative.priorProbability)
         #expect(negative.userAffinityAdjustment < 0)
         #expect(negative.utilityAdjustment < 0)
-        #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "6")
+        #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "10")
         #expect(negative.traceMetadata["acceptedAndKeptUtilityAdjustment"] != nil)
     }
 
@@ -105,6 +104,39 @@ struct AcceptedAndKeptLearningTests {
         #expect(stale.decayFactor == 0.5)
         #expect(stale.probability < fresh.probability)
         #expect(stale.probability > stale.priorProbability)
+    }
+
+    @Test("Low kept fields add restraint that decays away")
+    func lowKeptFieldsAddRestraintThatDecaysAway() {
+        var store = AcceptedAndKeptLearningStore(
+            priorWeight: 4,
+            halfLifeSeconds: 10
+        )
+        let learningKey = key(mode: .phraseContinuation)
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        for offset in 0..<4 {
+            _ = store.record(.rejected, key: learningKey, now: now.addingTimeInterval(Double(offset)))
+        }
+
+        let lowKept = store.signal(for: learningKey, now: now.addingTimeInterval(4))
+        let recovered = store.signal(for: learningKey, now: now.addingTimeInterval(600))
+        let freshContext = store.signal(
+            for: key(
+                appBundleIdentifier: "com.apple.Notes",
+                mode: .phraseContinuation
+            ),
+            now: now.addingTimeInterval(4)
+        )
+
+        #expect(lowKept.sampleCount == 4)
+        #expect(lowKept.keptCount == 0)
+        #expect(lowKept.learningRestraint > 0.65)
+        #expect(lowKept.traceMetadata["acceptedAndKeptLearningRestraint"] != nil)
+        #expect(recovered.learningRestraint < 0.10)
+        #expect(recovered.probability > lowKept.probability)
+        #expect(freshContext.sampleCount == 0)
+        #expect(freshContext.learningRestraint == 0)
     }
 
     private func key(

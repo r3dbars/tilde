@@ -27,6 +27,7 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
     public let minimumStreamingSentenceWords: Int
     public let minimumStreamingPhraseCharacterDelta: Int
     public let minimumStreamingIntervalMilliseconds: Int
+    public let maximumStreamingPartialLatencyMilliseconds: Int
     public let maximumStreamingPartialPresentations: Int
     public let maximumStreamingSentencePartialPresentations: Int
 
@@ -35,6 +36,7 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         minimumStreamingSentenceWords: Int = 3,
         minimumStreamingPhraseCharacterDelta: Int = 6,
         minimumStreamingIntervalMilliseconds: Int = 50,
+        maximumStreamingPartialLatencyMilliseconds: Int = 750,
         maximumStreamingPartialPresentations: Int = 2,
         maximumStreamingSentencePartialPresentations: Int = 1
     ) {
@@ -42,6 +44,7 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         self.minimumStreamingSentenceWords = max(1, minimumStreamingSentenceWords)
         self.minimumStreamingPhraseCharacterDelta = max(1, minimumStreamingPhraseCharacterDelta)
         self.minimumStreamingIntervalMilliseconds = max(0, minimumStreamingIntervalMilliseconds)
+        self.maximumStreamingPartialLatencyMilliseconds = max(1, maximumStreamingPartialLatencyMilliseconds)
         self.maximumStreamingPartialPresentations = max(1, maximumStreamingPartialPresentations)
         self.maximumStreamingSentencePartialPresentations = max(1, maximumStreamingSentencePartialPresentations)
     }
@@ -90,8 +93,14 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         _ suggestion: CompletionSuggestion,
         mode: CompletionRequestMode,
         state: inout StreamingPresentationState,
-        nowMilliseconds: Int
+        nowMilliseconds: Int,
+        latencyMilliseconds: Int = 0
     ) -> Bool {
+        guard state.presentedCount > 0
+            || latencyMilliseconds <= maximumStreamingPartialLatencyMilliseconds else {
+            return false
+        }
+
         guard shouldPresent(
             suggestion,
             mode: mode,

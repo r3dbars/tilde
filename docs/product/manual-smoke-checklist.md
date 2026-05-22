@@ -19,12 +19,15 @@ It only counts manual smoke rows that include the current app binary, current
 archive, current commit, or a commit whose app/runtime source still matches the
 current checkout.
 
-For the full remaining manual beta proof sequence, run:
+For the remaining beta-safe proof sequence, run:
 
 ```bash
 script/manual_proof_refresh.sh --print
 script/manual_proof_queue.sh --print
 ```
+
+`manual_proof_queue.sh` also lists proof-only prompt lanes. Those rows do not
+graduate Codex, Claude, chat apps, or terminal hosts into beta-safe support.
 
 Use `script/manual_proof_refresh.sh --run --target textedit` for one focused
 refresh at a time. It prints the exact recorder command, runs it, then refuses
@@ -66,7 +69,7 @@ one row only when the diagnostics slice shows that exact anchor source.
 | Anchor source | Smoke path | Required signal | Current blocker |
 | --- | --- | --- | --- |
 | `caret` | TextEdit smoke | `placementAnchorSource=caret`, `placementConfidenceBand=high`, and verified insertion | None for native proof; still needs more native app variants. |
-| `synthetic-caret` | Chrome fixtures, Obsidian, Codex, and prompt-app passes | `placementAnchorSource=synthetic-caret`, medium or better confidence, and verified insertion | Real editor/prompt apps still need current screenshot-backed proof. |
+| `synthetic-caret` | Chrome local textarea/contenteditable fixtures, Obsidian, and proof-only prompt passes | `placementAnchorSource=synthetic-caret`, medium or better confidence, and verified insertion | Production browser apps and prompt apps are not beta-safe without exact current proof. |
 | `line` | TextEdit wrapped-line smoke after line metadata lands | `placementAnchorSource=line` with line rect inside field/window | Blocked until `AXInsertionPointLineNumber` or equivalent line bounds are captured. |
 | `field` | App-specific diagnostic pass where caret is missing but field bounds are valid | `placementAnchorSource=field`, usable fallback quality, and no detached whole-editor drift | Only valid for profiles that explicitly allow field anchors. |
 | `window` | Explicit diagnostics-only invocation | `placementAnchorSource=window` and no automatic Tab capture | Not a normal typing surface; keep as diagnostics only. |
@@ -132,11 +135,15 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-g
 Recorder:
 
 ```bash
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
 ```
 
-- Use a local fixture page: textarea, contenteditable, editor-like,
-  Monaco-like, or ProseMirror-like.
+- Only the local textarea and contenteditable fixtures count as beta-safe
+  Chrome proof.
+- Editor-like, Monaco, CodeMirror, ProseMirror, chat-like, public pages, and
+  production browser apps are proof-only or blocked until exact current proof
+  exists.
 - Type `Smoke proof feels inst`.
 - Confirm the profile is Chrome, render mode is `inlineAdjacent` when synthetic
   caret placement is available and `floatingMirror` only as fallback. Insertion

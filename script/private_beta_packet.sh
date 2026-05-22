@@ -666,8 +666,8 @@ Send testers the DMG, not the ZIP. The DMG is the notarized artifact and the
 packet checker revalidates the current DMG with stapler and spctl instead of
 trusting old proof files.
 
-Start with TextEdit. Then try Notes. Then try Obsidian. Chrome textarea is a
-sanity check, not the main product loop.
+Start with TextEdit. Then try Notes. Then try Obsidian. Chrome local
+textarea/contenteditable fixtures are sanity checks, not the main product loop.
 
 Read before inviting testers:
 

@@ -71,6 +71,10 @@ struct SettingsCurrentAppState: Equatable {
             return false
         }
 
+        if isProofModeOnly {
+            return renderModeOverride != nil
+        }
+
         return profile.renderMode != .disabled
     }
 
@@ -101,6 +105,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Current app: no app selected"
         }
 
+        if isProofModeOnly {
+            return "Current app: \(displayName) is proof-only and checks are \(isEnabled ? "on" : "paused")"
+        }
+
         guard supportStatus.canToggleSuggestions else {
             return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName)"
         }
@@ -111,6 +119,14 @@ struct SettingsCurrentAppState: Equatable {
     var detailText: String {
         guard bundleIdentifier != nil else {
             return "Open a writing app to see whether suggestions are supported."
+        }
+
+        if isProofModeOnly {
+            if isEnabled {
+                return "\(supportStatus.userFacingReason) Suggestions only run during an explicit proof check."
+            }
+
+            return "\(supportStatus.userFacingReason) Proof checks are paused in this app. Resume this app before running an explicit check."
         }
 
         guard supportStatus.canToggleSuggestions else {
@@ -179,7 +195,11 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var toggleTitle: String {
-        canToggle ? "Suggestions in this app" : "Suggestions unavailable in this app"
+        if isProofModeOnly {
+            return "Proof checks in this app"
+        }
+
+        return canToggle ? "Suggestions in this app" : "Suggestions unavailable in this app"
     }
 
     var menuToggleTitle: String {
@@ -189,6 +209,10 @@ struct SettingsCurrentAppState: Equatable {
 
         guard canToggle else {
             return "Suggestions unavailable in \(displayName)"
+        }
+
+        if isProofModeOnly {
+            return isEnabled ? "Pause checks in \(displayName)" : "Resume checks in \(displayName)"
         }
 
         return isEnabled ? "Pause in \(displayName)" : "Resume in \(displayName)"
@@ -205,6 +229,10 @@ struct SettingsCurrentAppState: Equatable {
 
         if bundleIdentifier == "com.google.Chrome", isEnabled {
             return "Check Chrome"
+        }
+
+        if isProofModeOnly, !isEnabled {
+            return "Resume Checks First"
         }
 
         return isEnabled ? "Check This App" : "Enable Suggestions First"
@@ -230,6 +258,10 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         guard isEnabled else {
+            if isProofModeOnly {
+                return "Check: resume proof checks for this app first."
+            }
+
             return "Check: turn on suggestions for this app first."
         }
 
@@ -253,7 +285,7 @@ struct SettingsCurrentAppState: Equatable {
             return nil
         }
 
-        if bundleIdentifier == "com.apple.Notes" {
+        if command.contains("\n") {
             return "Manual checks: \(command.replacingOccurrences(of: "\n", with: "; "))"
         }
 
@@ -277,7 +309,10 @@ struct SettingsCurrentAppState: Equatable {
         case "com.apple.TextEdit":
             return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
         case "com.google.Chrome":
-            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all"
+            return """
+            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
+            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
+            """
         case "md.obsidian":
             return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
         case "com.apple.Notes":
@@ -301,6 +336,19 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         return "Paused apps: \(disabledAppCount)"
+    }
+
+    private var isProofModeOnly: Bool {
+        guard let bundleIdentifier,
+              let policy = HostCompatibilityPolicyCatalog.mvp.policy(for: bundleIdentifier),
+              policy.runtimeState == .proofModeOnly,
+              case let .supported(profile) = supportStatus,
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
+            return false
+        }
+
+        return true
     }
 
     private static func renderModeName(_ mode: SuggestionRenderMode) -> String {

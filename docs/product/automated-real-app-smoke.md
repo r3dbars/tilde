@@ -6,14 +6,8 @@ Run the safe automated passes with screenshot tracing:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome
+AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture editor-like
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-like
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-like
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real
-AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like
 ```
 
 Automated smoke launches temporarily enable only the target bundle ID for that
@@ -21,10 +15,11 @@ proof pass. This keeps fresh installs default-off while still letting the
 disposable TextEdit and Chrome checks run unattended.
 
 The Settings app-proof button can run the safe unattended lanes for TextEdit
-and Chrome. Chrome runs the full local fixture set with `--fixture all` and
-`--skip-build`; prompt apps and private-content apps stay manual-gated.
+and Chrome. Chrome proof is limited to local textarea/contenteditable fixtures;
+prompt apps, private-content apps, production browser apps, chat surfaces, and
+browser editor surfaces stay manual-gated, proof-only, or blocked.
 
-Run all local Chrome browser/editor fixtures with one build:
+Run broader Chrome proof-only fixtures only when explicitly refreshing evidence:
 
 ```bash
 AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture all
@@ -63,11 +58,10 @@ What this proves:
 - insertion is verified in diagnostics and traces
 - strict screenshot trace evidence can be required with `--visual` through the
   manual recorder or by setting `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1`
-- Chrome works in plain textareas, contenteditable fields, editor-like nested
-  contenteditables, Monaco-like editors, ProseMirror-like editors, pinned
-  upstream Monaco/ProseMirror fixtures, and a chat-style composer fixture that
-  fails if Tab/full-accept submits the form. Local Chrome fixtures run in an
-  isolated temp-profile Chrome with renderer accessibility forced by default.
+- Chrome beta support means only local textarea and contenteditable fixtures.
+  Editor-like nested contenteditables, Monaco-like editors, ProseMirror-like
+  editors, pinned upstream Monaco/ProseMirror fixtures, public pages,
+  production browser apps, and chat-style composers are proof-only or blocked.
 
 Notes, Obsidian, Codex, Claude Code, and Claude desktop checks are
 manual-gated. Do not use real notes, vault content, terminal commands, or live
@@ -84,9 +78,10 @@ For Notes, `notes-title`, `notes-body`, `notes-checklist`, and the matching
 a picker and does not count. Undo lanes require `accepted-insertion-undone` in
 the bounded diagnostics slice.
 
-The default Chrome fixtures are local and dependency-free. They run in an
-isolated temp-profile Chrome process with `--force-renderer-accessibility` so
-the unattended proof lane is not blocked by normal Chrome's current AX exposure.
+The beta-safe Chrome fixtures are local and dependency-free textarea and
+contenteditable pages. They run in an isolated temp-profile Chrome process with
+`--force-renderer-accessibility` so the unattended proof lane is not blocked by
+normal Chrome's current AX exposure.
 The Monaco-like and
 ProseMirror-like fixtures copy the DOM shape and focus behavior those editors
 usually expose, but they do not load the real upstream libraries. The
@@ -95,9 +90,9 @@ temporary folder during the run and never commit `node_modules`. They are the
 right proof lane for real editor engines. The script kills only the captured
 isolated Chrome process during cleanup. That proves Autocomplete Lab works when
 Chrome exposes real editor AX, but it is still weaker than default-Chrome
-production-site proof. The Settings Chrome proof runner now calls
-`--fixture all --include-default-real-editor-proof`, so the same one-click proof
-also reruns real Monaco and real ProseMirror under normal Chrome AX exposure.
+production-site proof. The Settings Chrome proof runner only refreshes local
+textarea proof automatically; contenteditable proof is listed separately in the
+Settings command text. Real editor and production-site proof must be explicit.
 The `--chrome-accessibility default` lane records distinct `*-default` proof
 rows when normal Chrome exposes enough editor AX for strict screenshot-backed
 acceptance and proof-gated inline synthetic-caret placement. The remaining

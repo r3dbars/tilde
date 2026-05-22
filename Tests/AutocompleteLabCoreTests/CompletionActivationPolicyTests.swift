@@ -480,6 +480,13 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
+        ) == .block(.tooLittleContext))
+        #expect(eager.decision(
+            textBeforeCursor: "I think this through ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
         #expect(eager.decision(
             textBeforeCursor: "I feel ",
@@ -487,9 +494,16 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .allow(.phraseContinuation))
+        ) == .block(.tooLittleContext))
         #expect(veryProactive.decision(
             textBeforeCursor: "Um ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.tooLittleContext))
+        #expect(veryProactive.decision(
+            textBeforeCursor: "I feel ready ",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false,
@@ -508,7 +522,7 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .allow(.phraseContinuation))
+        ) == .block(.terminalSentenceBoundary))
         #expect(quiet.decision(
             textBeforeCursor: "di",
             textAfterCursor: "",

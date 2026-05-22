@@ -22,7 +22,8 @@ Usage: script/manual_proof_refresh.sh [--print|--dry-run|--run] [--target SLUG|-
 
 Prints exact stale/pending proof refresh commands, runs selected recorder
 commands, and verifies that the latest proof row matches the current app,
-archive, commit, or source-compatible commit fingerprint.
+archive, commit, or source-compatible commit fingerprint. By default it prints
+only beta-safe target rows. Use --all for proof-only or blocked refresh lanes.
 
 Examples:
   script/manual_proof_refresh.sh --print
@@ -63,6 +64,19 @@ declare -a TARGETS=(
   "claude-context|Claude desktop context layout|Claude|com.anthropic.claudefordesktop|claude-context|one-word|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-context --manual-gate"
   "claude-light|Claude desktop light appearance|Claude|com.anthropic.claudefordesktop|claude-light|one-word|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-light --manual-gate"
   "claude-dark|Claude desktop dark appearance|Claude|com.anthropic.claudefordesktop|claude-dark|one-word|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"
+)
+
+declare -a BETA_SAFE_TARGETS=(
+  "textedit"
+  "notes-title"
+  "notes-body"
+  "notes-checklist"
+  "obsidian"
+  "obsidian-theme"
+  "obsidian-pane"
+  "obsidian-long-note"
+  "chrome-textarea"
+  "chrome-contenteditable"
 )
 
 while (($#)); do
@@ -200,7 +214,16 @@ selected_entries() {
   fi
 
   if ((${#SELECTED_TARGETS[@]} == 0)); then
-    printf '%s\n' "${TARGETS[@]}"
+    local beta_slug
+    for entry in "${TARGETS[@]}"; do
+      slug="${entry%%|*}"
+      for beta_slug in "${BETA_SAFE_TARGETS[@]}"; do
+        if [[ "$slug" == "$beta_slug" ]]; then
+          printf '%s\n' "$entry"
+          break
+        fi
+      done
+    done
     return
   fi
 
@@ -393,6 +416,8 @@ verify_entry() {
 print_plan() {
   echo "Manual proof refresh"
   echo
+  echo "Default scope: beta-safe rows only. Use --all for proof-only or blocked lanes."
+  echo
   print_current_proofs
   echo
   echo "Strict status command:"
@@ -405,7 +430,13 @@ print_plan() {
   pending_count=0
   needed_count=0
 
-  echo "Target status:"
+  if (( RUN_ALL == 1 )); then
+    echo "All proof target status:"
+  elif ((${#SELECTED_TARGETS[@]} == 0)); then
+    echo "Beta-safe target status:"
+  else
+    echo "Selected target status:"
+  fi
   while IFS= read -r entry; do
     [[ -n "$entry" ]] || continue
     parse_entry "$entry"

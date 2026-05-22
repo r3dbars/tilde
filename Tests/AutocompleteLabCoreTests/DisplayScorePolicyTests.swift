@@ -23,7 +23,7 @@ struct DisplayScorePolicyTests {
         #expect(decision.shouldDisplay)
         #expect(decision.metadata["displayScoreDecision"] == "display")
         #expect(decision.metadata["displayScoreMode"] == "phraseContinuation")
-        #expect(decision.metadata["displayScoreThreshold"] == "1.00")
+        #expect(decision.metadata["displayScoreThreshold"] == "1.10")
         #expect(decision.metadata["displayScoreUtility"] == "0.70")
         #expect(decision.metadata["displayScoreStyleFit"] == "0.40")
         #expect(decision.metadata["displayScoreContextFit"] == "0.35")
@@ -31,6 +31,7 @@ struct DisplayScorePolicyTests {
         #expect(decision.metadata["displayScoreRisk"] == "0.10")
         #expect(decision.metadata["displayScoreRepetition"] == "0.05")
         #expect(decision.metadata["displayScoreInstability"] == "0.05")
+        #expect(decision.metadata["displayScoreLearningRestraint"] == "0.00")
         #expect(decision.metadata["displayScoreFinal"] == "1.50")
     }
 
@@ -112,16 +113,16 @@ struct DisplayScorePolicyTests {
 
         #expect(abs(score.finalScore - 0.80) < 0.0001)
         #expect(policy.threshold(for: .wordCompletion) == 0.60)
-        #expect(policy.threshold(for: .phraseContinuation) == 1.00)
-        #expect(policy.threshold(for: .sentenceContinuation) == 1.20)
+        #expect(policy.threshold(for: .phraseContinuation) == 1.10)
+        #expect(policy.threshold(for: .sentenceContinuation) == 1.25)
         #expect(wordDecision.shouldDisplay)
         #expect(wordDecision.metadata["displayScoreThreshold"] == "0.60")
         #expect(!phraseDecision.shouldDisplay)
         #expect(phraseDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
-        #expect(phraseDecision.metadata["displayScoreThreshold"] == "1.00")
+        #expect(phraseDecision.metadata["displayScoreThreshold"] == "1.10")
         #expect(!sentenceDecision.shouldDisplay)
         #expect(sentenceDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
-        #expect(sentenceDecision.metadata["displayScoreThreshold"] == "1.20")
+        #expect(sentenceDecision.metadata["displayScoreThreshold"] == "1.25")
     }
 
     @Test("threshold adjustment makes display policy less eager without weakening safety gates")
@@ -145,8 +146,8 @@ struct DisplayScorePolicyTests {
         #expect(!adjustedDecision.shouldDisplay)
         #expect(adjustedDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
         #expect(abs(adjusted.threshold(for: .wordCompletion) - 0.90) < 0.0001)
-        #expect(adjusted.threshold(for: .phraseContinuation) == 1.30)
-        #expect(adjusted.threshold(for: .sentenceContinuation) == 1.50)
+        #expect(abs(adjusted.threshold(for: .phraseContinuation) - 1.40) < 0.0001)
+        #expect(adjusted.threshold(for: .sentenceContinuation) == 1.55)
         #expect(adjusted.highRiskThreshold == policy.highRiskThreshold)
         #expect(adjusted.highRepetitionThreshold == policy.highRepetitionThreshold)
         #expect(adjusted.highInstabilityThreshold == policy.highInstabilityThreshold)
@@ -194,8 +195,47 @@ struct DisplayScorePolicyTests {
         #expect(learnedDecision.metadata["displayScoreSuppressionReason"] == "low-accepted-and-kept-probability")
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptProbability"] == "0.01")
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptSamples"] == "4")
-        #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.12")
+        #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.30")
         #expect(learnedDecision.metadata["displayScoreAcceptedAndKeptUtilityAdjustment"] == "-0.04")
+    }
+
+    @Test("low kept restraint can suppress before the hard probability gate")
+    func lowKeptRestraintCanSuppressBeforeHardProbabilityGate() {
+        let policy = DisplayScorePolicy(minimumAcceptedAndKeptSamples: 6)
+        let freshScore = DisplayScore(
+            utility: 0.70,
+            styleFit: 0.40,
+            contextFit: 0.35,
+            userAffinity: 0.25,
+            risk: 0.10,
+            repetition: 0.05,
+            instability: 0.05,
+            acceptedAndKeptProbability: 0.34,
+            acceptedAndKeptSampleCount: 0,
+            acceptedAndKeptUtilityAdjustment: 0
+        )
+        let lowKeptScore = DisplayScore(
+            utility: 0.70,
+            styleFit: 0.40,
+            contextFit: 0.35,
+            userAffinity: 0.25,
+            risk: 0.10,
+            repetition: 0.05,
+            instability: 0.05,
+            learningRestraint: 0.75,
+            acceptedAndKeptProbability: 0.17,
+            acceptedAndKeptSampleCount: 4,
+            acceptedAndKeptUtilityAdjustment: -0.04
+        )
+
+        let freshDecision = policy.decision(for: freshScore, mode: .phraseContinuation)
+        let lowKeptDecision = policy.decision(for: lowKeptScore, mode: .phraseContinuation)
+
+        #expect(freshDecision.shouldDisplay)
+        #expect(!lowKeptDecision.shouldDisplay)
+        #expect(lowKeptDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
+        #expect(lowKeptDecision.metadata["displayScoreLearningRestraint"] == "0.75")
+        #expect(lowKeptDecision.metadata["displayScoreAcceptedAndKeptSamples"] == "4")
     }
 
     @Test("profile-aware kept probability stays stricter in AI chat after evidence")
@@ -209,7 +249,7 @@ struct DisplayScorePolicyTests {
             risk: 0.05,
             repetition: 0.05,
             instability: 0.05,
-            acceptedAndKeptProbability: 0.14,
+            acceptedAndKeptProbability: 0.31,
             acceptedAndKeptSampleCount: 6,
             acceptedAndKeptUtilityAdjustment: 0
         )
@@ -221,7 +261,7 @@ struct DisplayScorePolicyTests {
             risk: 0.05,
             repetition: 0.05,
             instability: 0.05,
-            acceptedAndKeptProbability: 0.14,
+            acceptedAndKeptProbability: 0.31,
             acceptedAndKeptSampleCount: 5,
             acceptedAndKeptUtilityAdjustment: 0
         )
@@ -242,12 +282,12 @@ struct DisplayScorePolicyTests {
         )
 
         #expect(genericDecision.shouldDisplay)
-        #expect(genericDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.12")
+        #expect(genericDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.30")
         #expect(earlyAIChatDecision.shouldDisplay)
-        #expect(earlyAIChatDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.24")
+        #expect(earlyAIChatDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.34")
         #expect(!learnedAIChatDecision.shouldDisplay)
         #expect(learnedAIChatDecision.metadata["displayScoreBehaviorProfile"] == "ai_chat")
-        #expect(learnedAIChatDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.24")
+        #expect(learnedAIChatDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.34")
         #expect(learnedAIChatDecision.metadata["displayScoreSuppressionReason"] == "low-accepted-and-kept-probability")
     }
 

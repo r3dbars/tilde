@@ -123,6 +123,42 @@ struct SuggestionPresentationGateTests {
         ))
     }
 
+    @Test("late streaming partials are suppressed before they become visible")
+    func lateStreamingPartialsAreSuppressedBeforeTheyBecomeVisible() {
+        let gate = SuggestionPresentationGate(
+            minimumStreamingIntervalMilliseconds: 0,
+            maximumStreamingPartialLatencyMilliseconds: 750
+        )
+        var state = StreamingPresentationState()
+
+        #expect(!gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 100,
+            latencyMilliseconds: 751
+        ))
+        #expect(state.presentedCount == 0)
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 110,
+            latencyMilliseconds: 750
+        ))
+        #expect(state.presentedCount == 1)
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 120,
+            latencyMilliseconds: 900
+        ))
+        #expect(state.presentedCount == 2)
+    }
+
     @Test("sentence streaming allows one partial while phrase streaming allows two")
     func sentenceStreamingAllowsOnePartialWhilePhraseStreamingAllowsTwo() {
         let gate = SuggestionPresentationGate(

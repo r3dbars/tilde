@@ -8,8 +8,9 @@ intuitive, fast, quiet, and almost native to macOS.
 This file is historical and aspirational. It preserves the Apple-native polish
 loop, but it is not the current beta-readiness scorecard. Use
 `docs/product/steadytype-product-scorecard.md` for current product truth. As of
-2026-05-20, strict manual smoke still reports 35 stale or pending target app
-passes, and the proof manifest still has 6 partial surfaces.
+2026-05-22, strict manual smoke tracks only the 10 boring beta-safe target
+rows. Prompt apps, terminal hosts, chat surfaces, Mail, and production browser
+apps remain proof-only or blocked.
 
 The product bar is not "AI appears everywhere." The bar is:
 
@@ -52,11 +53,12 @@ color instead of fixed gray, and missing/invalid model assets can be installed
 or repaired from Settings with progress, cancellation, and runtime warmup.
 First-run setup now explains Accessibility in one short paragraph and points
 first success at TextEdit, not private notes.
-Chrome-hosted Google Docs, Notion, Slack, and Discord now have an explicit
-unsupported surface policy so the yellow Chrome profile does not silently
-extend to unproved production editors or chat boxes. Post-accept insertion
-verification now also fails closed when the frontmost app, focused text context,
-or focused field no longer matches the accepted suggestion baseline.
+Chrome-hosted Google Docs, Notion, Slack, Discord, public pages, and production
+browser apps now have an explicit unsupported surface policy so the yellow
+Chrome profile does not silently extend to unproved production editors or chat
+boxes. Post-accept insertion verification now also fails closed when the
+frontmost app, focused text context, or focused field no longer matches the
+accepted suggestion baseline.
 
 The largest miss is still visual placement proof in real apps. Ghost text can
 still be unproven or under-polished in Codex, terminal-hosted Claude Code,
@@ -223,13 +225,13 @@ cheap, even if the model output is good.
 | TextEdit | 92 | 100 | Light/dark screenshots, long-line wrap, two accepts. |
 | Chrome textarea | 88 | 100 | Live screenshot, wrap, Tab, full accept. |
 | Chrome contenteditable | 86 | 100 | Live screenshot, rich text, Tab, full accept. |
-| Chrome editor-like | 84 | 100 | Real CodeMirror or Obsidian proof. |
-| Chrome Monaco-like | 93 | 100 | `monaco-real` now has forced-renderer-accessibility proof with screenshot, Tab, and full accept. Default-Chrome proof is pending because normal Chrome exposed only browser chrome in the latest rerun. Still needs production editor variants. |
-| Chrome ProseMirror-like | 94 | 100 | `prosemirror-real` now has forced-renderer-accessibility proof with screenshot, Tab, and full accept. Default-Chrome proof is pending because normal Chrome exposed only browser chrome in the latest rerun. Still needs production editor variants. |
-| Chrome chat-like | 80 | 100 | Local screenshot-backed no-submit accept proof exists; real chat apps still need proof. |
-| Codex | 92 | 100 | Prompt screenshot plus one-word no-submit proof now exist in the same strict slice. Full accept remains disabled until separate no-submit proof exists. |
-| Claude Code | 92 | 100 | Proof-only terminal-host adapter has historical strict screenshot-backed one-word no-submit proof in Terminal and current insertion-only no-submit proof on `ca41cdc33e5e`; strict screenshot refresh, more terminal hosts, and prompt layouts still need coverage. |
-| Claude desktop | 90 | 100 | Same-baseline screenshot-backed one-word no-submit proof exists; more prompt layouts still need coverage. |
+| Chrome editor-like | 84 | 100 | Proof-only. Does not count as beta-safe Chrome support. |
+| Chrome Monaco-like | 93 | 100 | Proof-only. Default-Chrome and production editor proof remain blocked until exact current proof exists. |
+| Chrome ProseMirror-like | 94 | 100 | Proof-only. Default-Chrome and production editor proof remain blocked until exact current proof exists. |
+| Chrome chat-like | 80 | 100 | Proof-only local no-submit guardrail; real chat apps stay blocked. |
+| Codex | 92 | 100 | Proof-only prompt lane. Full accept and normal beta use remain disabled until exact current proof exists. |
+| Claude Code | 92 | 100 | Proof-only terminal-host lane. Normal terminal hosts remain blocked. |
+| Claude desktop | 90 | 100 | Proof-only prompt lane. Normal beta use remains blocked. |
 | Notes title | 90 | 100 | More title lengths and variants. |
 | Notes body | 90 | 100 | More body lengths and variants. |
 | Notes checklist | 90 | 100 | Dedicated checklist proof exists; checked items, long rows, and undo variants still need proof. |
@@ -512,9 +514,9 @@ Native target: every claim has proof.
 
 ### Pass 3: Make App Stances Honest
 
-- [ ] Green apps: TextEdit, Chrome textarea, Chrome contenteditable.
-- [ ] Yellow apps: Codex, Claude desktop, Obsidian, Notes.
-- [ ] Red/disabled apps: Mail compose, Atlas, terminals unless explicitly scoped.
+- [ ] Green apps: TextEdit, Notes, Obsidian, Chrome local textarea/contenteditable fixtures.
+- [ ] Proof-only apps: Codex, Claude desktop, Claude Code terminal-host lanes.
+- [ ] Red/disabled apps: Mail compose, Atlas, chat apps, terminals, public pages, and production browser apps unless exact current proof exists.
 - [x] Add per-app support mode to settings.
 - [x] Add "why disabled" text.
 

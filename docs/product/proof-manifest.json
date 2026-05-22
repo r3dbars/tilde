@@ -8,7 +8,7 @@
     "runtimeProofVersion": "runtime-v2"
   },
   "hostPolicy": {
-    "policyVersion": "2026-05-08.1",
+    "policyVersion": "2026-05-22.1",
     "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
     "entries": [
       {
@@ -155,13 +155,9 @@
           {
             "kind": "screenshot",
             "reference": "docs/product/visual-placement-screenshots/chrome-contenteditable.png"
-          },
-          {
-            "kind": "screenshot",
-            "reference": "docs/product/visual-placement-screenshots/chrome-chat-like.png"
           }
         ],
-        "notes": "Local fixtures and public text-field lanes are proven on recorded app fingerprints; Google Docs, Notion, browser ChatGPT, Slack, Discord, current CodeMirror, and default/official Monaco remain blocked until exact proof exists."
+        "notes": "Only local textarea and local contenteditable fixtures are beta-safe. Public pages, production browser apps, browser ChatGPT, Slack, Discord, Google Docs, Notion, official CodeMirror, and default Monaco remain blocked until exact proof exists."
       },
       {
         "bundle": "com.openai.codex",
@@ -171,8 +167,8 @@
         "hostBuild": "2575",
         "versionSource": "/Applications/Codex.app",
         "safetyMode": "wordOnly",
-        "runtimeState": "userToggleAllowed",
-        "proofState": "complete",
+        "runtimeState": "proofModeOnly",
+        "proofState": "partial",
         "killSwitch": "proofModeRequired",
         "proofArtifacts": [
           {
@@ -184,7 +180,7 @@
             "reference": "Codex/default"
           }
         ],
-        "notes": "Dogfood prompt support is word-only; the current app fingerprint has same-slice strict visual proof, one-word Tab accept, insertion verification, no prompt submit, and private draft restoration."
+        "notes": "Proof-only prompt support has same-slice screenshot, one-word accept, and no-submit proof. It is not beta-safe normal writing support, and full accept stays disabled until separate no-submit proof exists."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -207,7 +203,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only. The current Terminal-host row proves one-word no-submit insertion on commit ca41cdc33e5e without claiming screenshot evidence; strict screenshot refresh and host-labeled iTerm2/Ghostty rows remain pending."
+        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated, proof-mode-only, and one-word only. Normal terminal hosts remain blocked unless a current host-labeled proof is running."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -217,7 +213,7 @@
         "hostBuild": "1.6608.0",
         "versionSource": "/Applications/Claude.app",
         "safetyMode": "wordOnly",
-        "runtimeState": "userToggleAllowed",
+        "runtimeState": "proofModeOnly",
         "proofState": "partial",
         "killSwitch": "proofModeRequired",
         "proofArtifacts": [
@@ -226,7 +222,7 @@
             "reference": "docs/product/visual-placement-screenshots/claude-desktop.png"
           }
         ],
-        "notes": "One prompt layout has no-submit proof; full accept and layout variants remain blocked."
+        "notes": "Proof-only prompt support has one no-submit layout. Normal beta use, full accept, and layout variants remain blocked until current exact proof exists."
       },
       {
         "bundle": "com.apple.Safari",
@@ -511,8 +507,34 @@
       "notes": "The local browser-chat harness is not real-service ChatGPT proof; keep Browser ChatGPT blocked until disposable real-service no-submit proof exists."
     },
     {
+      "surface": "Chrome production text fields",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture production-text-fields",
+      "requiredProof": [
+        "local fixture proof is not enough",
+        "disposable production-page proof",
+        "correct placement",
+        "safe Tab",
+        "verified insertion",
+        "undo/recovery",
+        "screenshot-backed current-head evidence"
+      ],
+      "scoreCap": {
+        "localFixtureProofCounts": false,
+        "requiresDisposableProductionPage": true,
+        "requiresScreenshot": true,
+        "requiresVerifiedInsertion": true
+      },
+      "notes": "Public or production browser text fields stay blocked until disposable production-page proof exists. Local textarea and contenteditable fixtures do not graduate this row."
+    },
+    {
       "surface": "Claude desktop layouts",
-      "decision": "word-only",
+      "decision": "proof-only",
       "profileBundles": [
         "com.anthropic.claudefordesktop"
       ],
@@ -528,26 +550,26 @@
         "light appearance",
         "dark appearance"
       ],
-      "notes": "Default Claude desktop one-word no-submit proof exists; full accept stays disabled."
+      "notes": "Default Claude desktop one-word no-submit proof exists for proof mode only; normal beta use and full accept stay blocked."
     },
     {
       "surface": "Codex layouts",
-      "decision": "word-only",
+      "decision": "proof-only",
       "profileBundles": [
         "com.openai.codex"
       ],
       "policySource": "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift",
-      "proofState": "complete",
+      "proofState": "partial",
       "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
       "requiredProof": [
         "more prompt layouts before raising beyond word-only",
         "separate full-accept no-submit proof before enabling full accept"
       ],
-      "notes": "Default Codex proof has one-word Tab accept, insertion verification, no submit, and draft restoration."
+      "notes": "Default Codex proof has one-word Tab accept, insertion verification, no submit, and draft restoration for proof mode only; normal beta use remains blocked."
     },
     {
       "surface": "Obsidian long notes",
-      "decision": "word-only",
+      "decision": "supported",
       "profileBundles": [
         "md.obsidian"
       ],
@@ -560,7 +582,7 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Fresh current-head long-note proof at 2026-05-13T02:53:49Z recorded the CodeMirror viewport repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior. General Obsidian support remains yellow for broader vault variance."
+      "notes": "Recorded long-note proof at 2026-05-13T02:53:49Z captured the CodeMirror viewport repair, strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior. Strict manual smoke still decides whether that proof is current for the active checkout. General Obsidian support remains yellow for broader vault variance."
     },
     {
       "surface": "Real Monaco and CodeMirror editors",
@@ -581,7 +603,7 @@
         "undo/recovery",
         "screenshot-backed current-head evidence"
       ],
-      "notes": "Forced local editor fixtures do not unblock production Monaco or CodeMirror editors; keep them blocked until official/default editor proof exists."
+      "notes": "Forced local editor fixtures do not unblock production Monaco or CodeMirror editors; keep them blocked until official/default editor proof exists. They are not beta-safe local textarea/contenteditable fixtures."
     }
   ],
   "surfaces": [
@@ -601,7 +623,7 @@
       "gaps": []
     },
     {
-      "surface": "Chrome text fields",
+      "surface": "Chrome local textarea/contenteditable fixtures",
       "status": "complete",
       "screenshots": [
         "docs/product/visual-placement-screenshots/chrome-textarea.png",
@@ -609,18 +631,18 @@
       ],
       "requiredManualSmokes": [
         {
-          "id": "textarea-public",
+          "id": "local-textarea",
           "app": "Chrome",
           "bundle": "com.google.Chrome",
-          "proof": "textarea-public",
+          "proof": "textarea",
           "minVerifiedAccepts": 2,
           "requiresVisualStrictComplete": true
         },
         {
-          "id": "contenteditable-public",
+          "id": "local-contenteditable",
           "app": "Chrome",
           "bundle": "com.google.Chrome",
-          "proof": "contenteditable-public",
+          "proof": "contenteditable",
           "minVerifiedAccepts": 2,
           "requiresVisualStrictComplete": true
         }
@@ -628,224 +650,35 @@
       "gaps": [],
       "requirements": [
         {
-          "id": "production-chrome-textarea",
+          "id": "local-chrome-textarea",
           "status": "complete",
-          "summary": "Bounded screenshot-backed smoke proof covers the public EditPad textarea lane beyond local fixtures.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public",
+          "summary": "Bounded screenshot-backed smoke proof covers the local Chrome textarea fixture only.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea",
           "safePath": [
-            "textarea-public: https://www.editpad.org/"
+            "local textarea fixture only"
           ],
           "manualSmoke": {
             "app": "Chrome",
             "bundle": "com.google.Chrome",
-            "proof": "textarea-public",
+            "proof": "textarea",
             "minVerifiedAccepts": 2,
             "requiresVisualStrictComplete": true
           }
         },
         {
-          "id": "production-chrome-contenteditable",
+          "id": "local-chrome-contenteditable",
           "status": "complete",
-          "summary": "Bounded screenshot-backed smoke proof covers the public MediumEditor-style contenteditable lane after allowing the same AX editor target to collapse to a single editing line.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable-public",
+          "summary": "Bounded screenshot-backed smoke proof covers the local Chrome contenteditable fixture only.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable",
           "safePath": [
-            "contenteditable-public: https://yabwe.github.io/medium-editor/"
+            "local contenteditable fixture only"
           ],
           "manualSmoke": {
             "app": "Chrome",
             "bundle": "com.google.Chrome",
-            "proof": "contenteditable-public",
+            "proof": "contenteditable",
             "minVerifiedAccepts": 2,
             "requiresVisualStrictComplete": true
-          }
-        }
-      ]
-    },
-    {
-      "surface": "Browser editor fixtures",
-      "status": "partial",
-      "screenshots": [
-        "docs/product/visual-placement-screenshots/chrome-editor-like.png",
-        "docs/product/visual-placement-screenshots/chrome-monaco-like.png",
-        "docs/product/visual-placement-screenshots/chrome-prosemirror-like.png",
-        "docs/product/visual-placement-screenshots/chrome-monaco-real.png",
-        "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
-      ],
-      "gaps": [
-        "Real Monaco and ProseMirror proof pass under isolated Chrome with renderer accessibility forced. Normal Chrome default AX proof is current for ProseMirror only; Monaco default AX exposes too little verified text context. The official ProseMirror and CodeMirror pages have strict screenshot-backed isolated-CDP proof. Monaco production-site display reaches floatingMirror after cramped inline placement, but verified accept remains open."
-      ],
-      "requirements": [
-        {
-          "id": "production-chrome-monaco",
-          "status": "pending",
-          "summary": "Add bounded screenshot-backed proof with verified insertion against a production Monaco editor surface; the isolated-CDP official lane can focus/setup the Monaco page and display via floatingMirror, but the AX-readable setup still verifies insertion as unchanged while the natural setup exposes too little text context.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-official"
-        },
-        {
-          "id": "production-chrome-prosemirror",
-          "status": "complete",
-          "summary": "Bounded strict screenshot-backed proof now covers the official ProseMirror basic example through an isolated temporary Chrome profile plus DevTools setup.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-official",
-          "manualSmoke": {
-            "app": "Chrome",
-            "bundle": "com.google.Chrome",
-            "proof": "prosemirror-official",
-            "minVerifiedAccepts": 2,
-            "requiresVisualStrictComplete": true
-          }
-        },
-        {
-          "id": "production-chrome-codemirror",
-          "status": "complete",
-          "summary": "Bounded strict screenshot-backed proof covers the official CodeMirror try page through an isolated temporary Chrome profile plus DevTools setup.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture codemirror-official",
-          "safePath": [
-            "codemirror-official: https://codemirror.net/try/"
-          ],
-          "manualSmoke": {
-            "app": "Chrome",
-            "bundle": "com.google.Chrome",
-            "proof": "codemirror-official",
-            "minVerifiedAccepts": 2,
-            "requiresVisualStrictComplete": true
-          }
-        }
-      ]
-    },
-    {
-      "surface": "Chrome real Monaco",
-      "status": "partial",
-      "manualSmoke": {
-        "app": "Chrome",
-        "bundle": "com.google.Chrome",
-        "proof": "monaco-real",
-        "minVerifiedAccepts": 2,
-        "requiresVisualStrictComplete": true
-      },
-      "screenshots": [
-        "docs/product/visual-placement-screenshots/chrome-monaco-real.png"
-      ],
-      "gaps": [
-        "Normal Chrome default AX Monaco remains pending because setup text could not be verified against the focused Monaco editor."
-      ],
-      "requirements": [
-        {
-          "id": "default-chrome-monaco-ax",
-          "status": "pending",
-          "summary": "Normal Chrome default AX Monaco proof is not claimed. Current reruns expose a one-character AX text area and setup verification stays unchanged after AX value replacement, targeted text events, selected-text fallback, foreground text events, and guarded paste.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture monaco-real --chrome-accessibility default"
-        }
-      ]
-    },
-    {
-      "surface": "Chrome real ProseMirror",
-      "status": "complete",
-      "manualSmoke": {
-        "app": "Chrome",
-        "bundle": "com.google.Chrome",
-        "proof": "prosemirror-real",
-        "minVerifiedAccepts": 2,
-        "requiresVisualStrictComplete": true
-      },
-      "screenshots": [
-        "docs/product/visual-placement-screenshots/chrome-prosemirror-real.png"
-      ],
-      "gaps": [],
-      "requirements": [
-        {
-          "id": "default-chrome-prosemirror-ax",
-          "status": "complete",
-          "summary": "Normal Chrome default AX ProseMirror proof is current on the latest app fingerprint and remains separate from the isolated forced-renderer proof lane.",
-          "manualSmoke": {
-            "app": "Chrome",
-            "bundle": "com.google.Chrome",
-            "proof": "prosemirror-real-default",
-            "minVerifiedAccepts": 2,
-            "requiresVisualStrictComplete": true
-          }
-        }
-      ]
-    },
-    {
-      "surface": "Chrome chat-like composer",
-      "status": "partial",
-      "manualSmoke": {
-        "app": "Chrome",
-        "bundle": "com.google.Chrome",
-        "proof": "chat-like",
-        "minVerifiedAccepts": 2,
-        "requiresVisualStrictComplete": true
-      },
-      "screenshots": [
-        "docs/product/visual-placement-screenshots/chrome-chat-like.png"
-      ],
-      "gaps": [
-        "Local no-submit fixture is proven and the bounded HTTP browser-chat harness covers disposable browser-composer counters, but exact real-service proof for ChatGPT, Slack, and Discord is still missing."
-      ],
-      "requirements": [
-        {
-          "id": "production-chrome-chat-no-submit",
-          "status": "pending",
-          "summary": "Keep browser ChatGPT, Slack, and Discord blocked until each real service has exact disposable no-submit screenshot and insertion proof. The browser-chat harness is disposable fixture proof only, and the existing local chat-like fixture still includes full-accept-without-proof events.",
-          "scoreCap": {
-            "localFixtureProofCounts": false,
-            "browserChatHarnessCounts": false,
-            "requiresDisposableRealService": true,
-            "requiresScreenshot": true,
-            "requiresVerifiedInsertion": true,
-            "requiresNoSubmitOrPublish": true,
-            "allowsFullAccept": false
-          }
-        }
-      ]
-    },
-    {
-      "surface": "Codex",
-      "status": "partial",
-      "manualSmoke": {
-        "app": "Codex",
-        "bundle": "com.openai.codex",
-        "proof": "default",
-        "minVerifiedAccepts": 1,
-        "maxVerifiedAccepts": 1,
-        "requiresVisualStrictComplete": true
-      },
-      "screenshots": [
-        "docs/product/visual-placement-screenshots/codex-inline.png"
-      ],
-      "gaps": [
-        "Default one-word no-submit proof exists, but broader Codex prompt layouts and full-accept no-submit proof remain gated."
-      ],
-      "requirements": [
-        {
-          "id": "codex-one-word-no-submit",
-          "status": "complete",
-          "summary": "Default one-word Tab accept proof has bounded strict screenshot evidence and prompt no-submit confirmation.",
-          "manualSmoke": {
-            "app": "Codex",
-            "bundle": "com.openai.codex",
-            "proof": "default",
-            "minVerifiedAccepts": 1,
-            "maxVerifiedAccepts": 1,
-            "requiresVisualStrictComplete": true
-          },
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
-        },
-        {
-          "id": "codex-layout-variants",
-          "status": "pending",
-          "summary": "Refresh current-head Codex proof across more prompt layouts before raising this above A-."
-        },
-        {
-          "id": "codex-full-accept-no-submit",
-          "status": "pending",
-          "summary": "Keep full accept disabled until a dedicated Codex no-submit full-accept lane exists.",
-          "scoreCap": {
-            "localFixtureProofCounts": false,
-            "requiresPromptAppFullAcceptProof": true,
-            "requiresScreenshot": true,
-            "requiresVerifiedInsertion": true,
-            "requiresNoSubmitOrPublish": true
           }
         }
       ]
@@ -1092,146 +925,6 @@
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate"
         }
       ]
-    },
-    {
-      "surface": "Claude Code",
-      "status": "partial",
-      "manualSmoke": {
-        "app": "Claude Code",
-        "bundle": "com.anthropic.claude-code",
-        "proof": "default",
-        "minVerifiedAccepts": 1,
-        "maxVerifiedAccepts": 1,
-        "requiresVisualStrictComplete": false
-      },
-      "screenshots": [
-        "docs/product/visual-placement-screenshots/claude-code-terminal.png"
-      ],
-      "gaps": [
-        "Terminal-host proof is stricter and host-labelable. The current Terminal lane has strict screenshot-backed no-submit insertion proof on commit f7d0b5a8352c. iTerm2 and Ghostty are installed on this Mac and need their own host-labeled trace slices. Warp, kitty, Alacritty, and WezTerm are supported by policy but unavailable here or still pending proof."
-      ],
-      "requirements": [
-        {
-          "id": "claude-code-terminal-host-no-submit",
-          "status": "complete",
-          "summary": "Current Terminal-host one-word Tab accept proof passed without submitting shell input or an agent prompt.",
-          "manualSmoke": {
-            "app": "Claude Code",
-            "bundle": "com.anthropic.claude-code",
-            "proof": "default",
-            "minVerifiedAccepts": 1,
-            "maxVerifiedAccepts": 1,
-            "requiresVisualStrictComplete": false
-          },
-          "smokeCommand": "script/real_app_smoke.sh claude-code --manual-gate"
-        },
-        {
-          "id": "claude-code-terminal-strict-screenshot-refresh",
-          "status": "complete",
-          "summary": "Terminal-host one-word Tab proof now includes strict screenshot evidence and prompt no-submit confirmation.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate",
-          "manualSmoke": {
-            "app": "Claude Code",
-            "bundle": "com.anthropic.claude-code",
-            "proof": "default",
-            "minVerifiedAccepts": 1,
-            "maxVerifiedAccepts": 1,
-            "requiresVisualStrictComplete": true
-          }
-        },
-        {
-          "id": "claude-code-iterm2-host-no-submit",
-          "status": "pending",
-          "summary": "Record host-labeled one-word no-submit proof in iTerm2.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate"
-        },
-        {
-          "id": "claude-code-ghostty-host-no-submit",
-          "status": "pending",
-          "summary": "Record host-labeled one-word no-submit proof in Ghostty.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate"
-        },
-        {
-          "id": "claude-code-warp-host-no-submit",
-          "status": "blocked",
-          "blockerType": "unavailable-host",
-          "summary": "Warp proof is blocked on this Mac because Warp is not installed."
-        }
-      ]
-    },
-    {
-      "surface": "Claude desktop",
-      "status": "partial",
-      "manualSmoke": {
-        "app": "Claude",
-        "bundle": "com.anthropic.claudefordesktop",
-        "proof": "default",
-        "minVerifiedAccepts": 1,
-        "maxVerifiedAccepts": 1,
-        "requiresVisualStrictComplete": true
-      },
-      "screenshots": [
-        "docs/product/visual-placement-screenshots/claude-desktop.png"
-      ],
-      "gaps": [
-        "Claude desktop one-word support now has explicit layout proof lanes, but those rows are not all complete yet. Full accept remains blocked until a separate safe no-submit lane exists."
-      ],
-      "requirements": [
-        {
-          "id": "claude-desktop-empty-composer",
-          "status": "pending",
-          "summary": "Prove one-word no-submit support from an empty Claude desktop composer.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-empty --manual-gate"
-        },
-        {
-          "id": "claude-desktop-long-prompt",
-          "status": "pending",
-          "summary": "Prove one-word no-submit support with a long disposable Claude desktop prompt.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-long --manual-gate"
-        },
-        {
-          "id": "claude-desktop-wrapped-prompt",
-          "status": "pending",
-          "summary": "Prove one-word no-submit support with a wrapped Claude desktop prompt.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-wrapped --manual-gate"
-        },
-        {
-          "id": "claude-desktop-narrow-window",
-          "status": "pending",
-          "summary": "Prove one-word no-submit support in a narrow Claude desktop window.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-narrow --manual-gate"
-        },
-        {
-          "id": "claude-desktop-context-layout",
-          "status": "pending",
-          "summary": "Prove one-word no-submit support with a safe Claude desktop project/context or side-panel layout if available.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-context --manual-gate"
-        },
-        {
-          "id": "claude-desktop-light-appearance",
-          "status": "pending",
-          "summary": "Prove one-word no-submit support in Claude desktop light appearance if practical.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-light --manual-gate"
-        },
-        {
-          "id": "claude-desktop-dark-appearance",
-          "status": "pending",
-          "summary": "Prove one-word no-submit support in Claude desktop dark appearance if practical.",
-          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"
-        },
-        {
-          "id": "claude-desktop-full-accept-no-submit",
-          "status": "blocked",
-          "summary": "No safe full-accept proof command exists yet; keep full accept disabled until a dedicated no-submit lane can prove it without enabling unsafe prompt behavior.",
-          "scoreCap": {
-            "localFixtureProofCounts": false,
-            "requiresPromptAppFullAcceptProof": true,
-            "requiresScreenshot": true,
-            "requiresVerifiedInsertion": true,
-            "requiresNoSubmitOrPublish": true
-          }
-        }
-      ]
     }
   ],
   "profileCoverage": [
@@ -1275,19 +968,19 @@
       "bundle": "com.google.Chrome",
       "displayName": "Chrome",
       "supportLevel": "yellow",
-      "surface": "Chrome text fields/editor/chat-like surfaces",
+      "surface": "Chrome local textarea/contenteditable fixtures",
       "status": "partial",
       "owner": "browser editor adapter lane",
-      "safetyNote": "Local textarea/contenteditable/editor/chat fixtures, the bounded browser-chat harness, and forced-Chrome real-editor lanes are proven, but default-Chrome AX and production-site variance remain open. Hosted Google Docs, Notion, ChatGPT, Slack, and Discord are blocked by surface policy until exact real proof exists."
+      "safetyNote": "Only local textarea and contenteditable fixtures count as beta-safe. Public pages, production browser apps, chat, hosted docs, Monaco, CodeMirror, and ProseMirror remain blocked until exact proof exists."
     },
     {
       "bundle": "com.openai.codex",
       "displayName": "Codex",
       "supportLevel": "yellow",
       "surface": "Codex",
-      "status": "complete",
+      "status": "partial",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Current strict proof shows one-word Tab accept, insertion verification, no prompt submit, and private draft restoration. Full accept remains disabled until separate no-submit proof exists."
+      "safetyNote": "Codex is proof-mode-only for one-word no-submit checks; it is not beta-safe normal writing support and full accept remains blocked."
     },
     {
       "bundle": "com.anthropic.claude-code",
@@ -1305,7 +998,7 @@
       "surface": "Claude desktop",
       "status": "partial",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Same-baseline no-submit proof exists for one composer layout; bounded layout commands now track empty, long, wrapped, narrow, context, light, and dark variants. Full accept remains disabled until a separate safe no-submit proof lane exists."
+      "safetyNote": "Claude desktop is proof-mode-only for one composer layout; normal beta use, layout variants, and full accept remain blocked."
     },
     {
       "bundle": "com.apple.Safari",

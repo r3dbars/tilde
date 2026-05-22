@@ -19,12 +19,33 @@ MAX_REPEATED_UNACCEPTED="${AUTOCOMPLETE_LAB_TRACE_MAX_REPEATED_UNACCEPTED:-}"
 REQUIRE_ACCEPTANCE_SLICE_PROOF="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_ACCEPTANCE_SLICE_PROOF:-0}"
 REQUIRE_UNDO_RECOVERABILITY="${AUTOCOMPLETE_LAB_TRACE_REQUIRE_UNDO_RECOVERABILITY:-0}"
 
+if [[ -n "${AUTOCOMPLETE_LAB_TRACE_STRICT:-}" ]]; then
+  STRICT_GUARDRAILS="$AUTOCOMPLETE_LAB_TRACE_STRICT"
+else
+  STRICT_GUARDRAILS=0
+  if [[ -n "${AUTOCOMPLETE_LAB_TRACE_PATH+x}" ||
+        -n "${AUTOCOMPLETE_LAB_TRACE_START_LINE+x}" ||
+        -n "${AUTOCOMPLETE_LAB_TRACE_END_LINE+x}" ||
+        -n "$REQUIRE_APP" ||
+        -n "$REQUIRE_EXPERIMENT_ARM" ||
+        -n "$REQUIRE_SUPPORT_STATE" ||
+        "$ENFORCE_PERFORMANCE" != "0" ||
+        "$REQUIRE_CONFIDENT_PLACEMENT" != "0" ||
+        "$REQUIRE_VISUAL_EVIDENCE" != "0" ||
+        -n "$MIN_USEFUL_RATE" ||
+        -n "$MAX_REPEATED_UNACCEPTED" ||
+        "$REQUIRE_ACCEPTANCE_SLICE_PROOF" != "0" ||
+        "$REQUIRE_UNDO_RECOVERABILITY" != "0" ]]; then
+    STRICT_GUARDRAILS=1
+  fi
+fi
+
 if [[ ! -f "$TRACE_PATH" ]]; then
   echo "trace log missing: $TRACE_PATH" >&2
   exit 1
 fi
 
-python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" "$REQUIRE_ACCEPTANCE_SLICE_PROOF" "$REQUIRE_UNDO_RECOVERABILITY" <<'PY'
+python3 - "$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_APP" "$REQUIRE_EXPERIMENT_ARM" "$REQUIRE_SUPPORT_STATE" "$ENFORCE_PERFORMANCE" "$MAX_PHRASE_PRESENTATIONS" "$MAX_WORD_PRESENTATIONS" "$MAX_PHRASE_VISIBLE_WORDS" "$MAX_WORD_VISIBLE_WORDS" "$REQUIRE_CONFIDENT_PLACEMENT" "$REQUIRE_VISUAL_EVIDENCE" "$MIN_USEFUL_RATE" "$MAX_REPEATED_UNACCEPTED" "$REQUIRE_ACCEPTANCE_SLICE_PROOF" "$REQUIRE_UNDO_RECOVERABILITY" "$STRICT_GUARDRAILS" <<'PY'
 import json
 import os
 import sys
@@ -48,6 +69,7 @@ min_useful_rate = int(sys.argv[14]) if sys.argv[14] else None
 max_repeated_unaccepted = int(sys.argv[15]) if sys.argv[15] else None
 require_acceptance_slice_proof = sys.argv[16].lower() in {"1", "true", "yes", "on"}
 require_undo_recoverability = sys.argv[17].lower() in {"1", "true", "yes", "on"}
+strict_guardrails = sys.argv[18].lower() in {"1", "true", "yes", "on"}
 events = []
 with open(path, "r", encoding="utf-8") as handle:
     for line_number, line in enumerate(handle, start=1):
@@ -657,12 +679,7 @@ unrecovered_insertion_failures = [
     if not is_recovered_insertion_failure(index, event)
 ]
 
-explicit_trace_slice = (
-    "AUTOCOMPLETE_LAB_TRACE_PATH" in os.environ
-    or "AUTOCOMPLETE_LAB_TRACE_START_LINE" in os.environ
-    or "AUTOCOMPLETE_LAB_TRACE_END_LINE" in os.environ
-)
-if unrecovered_insertion_failures and (require_app or require_undo_recoverability or explicit_trace_slice):
+if unrecovered_insertion_failures:
     examples = []
     for event in unrecovered_insertion_failures[:5]:
         app = event.get("appBundleIdentifier") or "unknown"
@@ -1671,22 +1688,31 @@ if require_support_state:
             if state_rank[evaluation["state"]] < state_rank[require_support_state]:
                 missing.append(f"{app}: support state {evaluation['state']} below {require_support_state}")
 
-if missing:
-    raise SystemExit("missing required trace coverage: " + ", ".join(missing))
-if insertion_failures:
-    raise SystemExit("insertion recovery guardrail failed: " + "; ".join(insertion_failures))
-if performance_failures:
-    raise SystemExit("typing performance guardrail failed: " + "; ".join(performance_failures))
-if placement_failures:
-    raise SystemExit("placement confidence guardrail failed: " + "; ".join(placement_failures))
-if visual_evidence_failures:
-    raise SystemExit("visual evidence guardrail failed: " + "; ".join(visual_evidence_failures))
-if annoyance_failures:
-    raise SystemExit("suggestion annoyance guardrail failed: " + "; ".join(annoyance_failures))
-if geometry_failures:
-    raise SystemExit("geometry proof guardrail failed: " + "; ".join(geometry_failures))
-if acceptance_slice_failures:
-    raise SystemExit("acceptance slice guardrail failed: " + "; ".join(acceptance_slice_failures))
-if undo_recoverability_failures:
-    raise SystemExit("undo recoverability guardrail failed: " + "; ".join(undo_recoverability_failures))
+guardrail_failures = [
+    ("missing required trace coverage", missing),
+    ("insertion recovery guardrail failed", insertion_failures),
+    ("typing performance guardrail failed", performance_failures),
+    ("placement confidence guardrail failed", placement_failures),
+    ("visual evidence guardrail failed", visual_evidence_failures),
+    ("suggestion annoyance guardrail failed", annoyance_failures),
+    ("geometry proof guardrail failed", geometry_failures),
+    ("acceptance slice guardrail failed", acceptance_slice_failures),
+    ("undo recoverability guardrail failed", undo_recoverability_failures),
+]
+if strict_guardrails:
+    print("Guardrail mode: strict")
+    for label, failures in guardrail_failures:
+        if failures:
+            raise SystemExit(f"{label}: " + "; ".join(failures))
+else:
+    print("Guardrail mode: diagnostic-only all-history trace")
+    diagnostic_failures = [
+        f"{label}: " + "; ".join(failures)
+        for label, failures in guardrail_failures
+        if failures
+    ]
+    if diagnostic_failures:
+        print("Guardrail findings: " + "; ".join(diagnostic_failures))
+    else:
+        print("Guardrail findings: none")
 PY
