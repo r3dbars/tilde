@@ -5958,7 +5958,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionInvalidatedByUserKeyDown
-            && (currentSuggestionID == suggestionID || suggestionSession.hasVisibleSuggestion)
+            && currentSuggestionID == suggestionID
         if let suppressionReason = suggestionOrchestrator.presentationSuppressionReason(
             requestTicket: requestTicket,
             request: request,
@@ -6218,7 +6218,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let replacementMetadata = replacementDecision.metadata
         let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
             for: replacementDecision,
-            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
         )
         guard replacementVisibilityAction == .presentProposed else {
             let reason = replacementDecision.reason?.rawValue ?? "replacement-gate"

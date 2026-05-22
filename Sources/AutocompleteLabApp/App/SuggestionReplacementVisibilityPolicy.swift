@@ -9,10 +9,15 @@ enum SuggestionReplacementVisibilityAction: Equatable {
 struct SuggestionReplacementVisibilityPolicy: Equatable {
     func action(
         for decision: SuggestionReplacementDecision,
-        hasVisibleSuggestion: Bool
+        hasVisibleSuggestion: Bool,
+        currentSuggestionInvalidatedByUserTyping: Bool = false
     ) -> SuggestionReplacementVisibilityAction {
         if decision.shouldPresent {
             return .presentProposed
+        }
+
+        if currentSuggestionInvalidatedByUserTyping {
+            return .hide
         }
 
         return hasVisibleSuggestion ? .keepCurrentVisible : .hide
