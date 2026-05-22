@@ -147,6 +147,16 @@ struct SuggestionPresentationGateTests {
             nowMilliseconds: 110,
             latencyMilliseconds: 750
         ))
+        #expect(state.presentedCount == 1)
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this better", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 120,
+            latencyMilliseconds: 900
+        ))
+        #expect(state.presentedCount == 2)
     }
 
     @Test("sentence streaming allows one partial while phrase streaming allows two")

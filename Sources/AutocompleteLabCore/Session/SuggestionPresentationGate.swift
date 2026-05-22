@@ -96,7 +96,8 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         nowMilliseconds: Int,
         latencyMilliseconds: Int = 0
     ) -> Bool {
-        guard latencyMilliseconds <= maximumStreamingPartialLatencyMilliseconds else {
+        guard state.presentedCount > 0
+            || latencyMilliseconds <= maximumStreamingPartialLatencyMilliseconds else {
             return false
         }
 
