@@ -23,7 +23,10 @@ public struct SuggestionAcceptancePreview: Equatable, Sendable {
         self.acceptedText = acceptedText
         self.visibleTextBeforeAccept = visibleTextBeforeAccept
         self.remainingVisibleTextAfterAccept = remainingVisibleTextAfterAccept
-        acceptanceMatchesVisiblePrefix = visibleTextBeforeAccept.hasPrefix(acceptedText)
+        acceptanceMatchesVisiblePrefix = Self.acceptedTextMatchesVisiblePrefix(
+            acceptedText,
+            visibleText: visibleTextBeforeAccept
+        )
         acceptanceMatchesFullVisible = visibleTextBeforeAccept == acceptedText
     }
 
@@ -36,6 +39,28 @@ public struct SuggestionAcceptancePreview: Equatable, Sendable {
             "acceptanceMatchesVisiblePrefix": String(acceptanceMatchesVisiblePrefix),
             "acceptanceMatchesFullVisible": String(acceptanceMatchesFullVisible)
         ]
+    }
+
+    private static func acceptedTextMatchesVisiblePrefix(
+        _ acceptedText: String,
+        visibleText: String
+    ) -> Bool {
+        visibleText.hasPrefix(acceptedText)
+            || syntheticTrailingSpaceBase(in: acceptedText).map { visibleText == $0 } == true
+    }
+
+    private static func syntheticTrailingSpaceBase(in acceptedText: String) -> String? {
+        guard acceptedText.last == " " else {
+            return nil
+        }
+
+        let base = acceptedText.dropLast()
+        guard !base.isEmpty,
+              base.contains(where: { !$0.isWhitespace }) else {
+            return nil
+        }
+
+        return String(base)
     }
 }
 
@@ -67,7 +92,7 @@ public struct SuggestionSession: Equatable, Sendable {
             return nil
         }
 
-        let acceptedText = suggestion.acceptedPrefix(wordLimit: 1)
+        let acceptedText = CompletionSuggestion.nextWordAcceptanceText(in: suggestion.text)
         guard !acceptedText.isEmpty else {
             return nil
         }
@@ -106,11 +131,12 @@ public struct SuggestionSession: Equatable, Sendable {
     ) {
         guard let suggestion = visibleSuggestion,
               !acceptedText.isEmpty,
-              suggestion.text.hasPrefix(acceptedText) else {
+              let remainingText = remainingText(
+                  afterAccepting: acceptedText,
+                  from: suggestion.text
+              ) else {
             return
         }
-
-        let remainingText = suggestion.text.dropFirst(acceptedText.count)
 
         if remainingText.isEmpty || !keepsResidual {
             visibleSuggestion = nil
@@ -204,11 +230,10 @@ public struct SuggestionSession: Equatable, Sendable {
         afterAccepting acceptedText: String,
         from suggestion: CompletionSuggestion
     ) -> String {
-        guard suggestion.text.hasPrefix(acceptedText) else {
+        guard let remainingText = remainingText(afterAccepting: acceptedText, from: suggestion.text) else {
             return suggestion.visibleText
         }
 
-        let remainingText = suggestion.text.dropFirst(acceptedText.count)
         guard !remainingText.isEmpty else {
             return ""
         }
@@ -217,5 +242,35 @@ public struct SuggestionSession: Equatable, Sendable {
             text: String(remainingText),
             maxVisibleWords: suggestion.maxVisibleWords
         ).visibleText
+    }
+
+    private func remainingText(
+        afterAccepting acceptedText: String,
+        from suggestionText: String
+    ) -> Substring? {
+        if suggestionText.hasPrefix(acceptedText) {
+            return suggestionText.dropFirst(acceptedText.count)
+        }
+
+        guard let baseAcceptedText = Self.syntheticTrailingSpaceBase(in: acceptedText),
+              suggestionText == baseAcceptedText else {
+            return nil
+        }
+
+        return suggestionText.dropFirst(baseAcceptedText.count)
+    }
+
+    private static func syntheticTrailingSpaceBase(in acceptedText: String) -> String? {
+        guard acceptedText.last == " " else {
+            return nil
+        }
+
+        let base = acceptedText.dropLast()
+        guard !base.isEmpty,
+              base.contains(where: { !$0.isWhitespace }) else {
+            return nil
+        }
+
+        return String(base)
     }
 }

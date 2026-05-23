@@ -34,7 +34,7 @@ struct SuggestionAcceptanceProofPolicyTests {
     func nextWordAcceptProvesVisiblePrefix() throws {
         let decision = policy.decision(
             action: .acceptNextWord,
-            acceptedText: " keep",
+            acceptedText: " keep ",
             visibleText: " keep it small"
         )
 
@@ -45,6 +45,20 @@ struct SuggestionAcceptanceProofPolicyTests {
         #expect(proof.traceMetadata["acceptedVisibleScope"] == "nextWordPrefix")
         #expect(proof.traceMetadata["acceptedTextMatchesVisible"] == "false")
         #expect(proof.traceMetadata["acceptedTextIsVisiblePrefix"] == "true")
+    }
+
+    @Test("Next word accept allows a synthetic trailing space after the final visible word")
+    func nextWordAcceptAllowsSyntheticTrailingSpaceAfterFinalVisibleWord() throws {
+        let decision = policy.decision(
+            action: .acceptNextWord,
+            acceptedText: " keep ",
+            visibleText: " keep"
+        )
+
+        let proof = try #require(allowedProof(from: decision))
+        #expect(proof.scope == .nextWordPrefix)
+        #expect(!proof.acceptedTextMatchesVisible)
+        #expect(proof.acceptedTextIsVisiblePrefix)
     }
 
     @Test("Next word accept blocks non-prefix text")
@@ -109,7 +123,7 @@ struct AcceptanceSafetyPolicyTests {
     func noSubmitProfilesAllowOneVisibleWord() {
         let decision = policy.decision(
             action: .acceptNextWord,
-            acceptedText: " keep",
+            acceptedText: " keep ",
             visibleText: " keep it small",
             profile: noSubmitProfile()
         )

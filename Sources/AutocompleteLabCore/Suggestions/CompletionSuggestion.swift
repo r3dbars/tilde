@@ -78,6 +78,25 @@ public struct CompletionSuggestion: Equatable, Sendable {
         return accepted
     }
 
+    public static func nextWordAcceptanceText(in text: String) -> String {
+        let accepted = acceptedPrefix(in: text, wordLimit: 1)
+        guard accepted.contains(where: { !$0.isWhitespace }) else {
+            return ""
+        }
+
+        if accepted.last?.isWhitespace == true {
+            return accepted
+        }
+
+        let boundary = text.index(text.startIndex, offsetBy: accepted.count)
+        if boundary < text.endIndex,
+           text[boundary].isWhitespace {
+            return accepted + " "
+        }
+
+        return accepted + " "
+    }
+
     private static func characterCappedText(_ text: String, characterLimit: Int) -> String {
         guard text.count > characterLimit else {
             return text

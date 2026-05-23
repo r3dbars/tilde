@@ -174,8 +174,8 @@ struct PromptEditorFingerprintPolicyTests {
         #expect(decision.reason == "codex-proof-marker")
     }
 
-    @Test("Blocks Codex proof marker override without proof mode or cursor safety")
-    func blocksCodexProofMarkerOverrideWithoutProofModeOrCursorSafety() {
+    @Test("Codex proof marker override still needs prompt-safe geometry without proof mode")
+    func codexProofMarkerOverrideStillNeedsPromptSafeGeometryWithoutProofMode() {
         let withoutProofMode = policy.decision(
             bundleIdentifier: "com.openai.codex",
             role: "AXTextArea",
@@ -211,15 +211,15 @@ struct PromptEditorFingerprintPolicyTests {
         )
 
         #expect(!withoutProofMode.canSuggest)
-        #expect(withoutProofMode.reason == "codex-proof-marker-required")
+        #expect(withoutProofMode.reason == "generic-prompt-not-composer")
         #expect(!withSelection.canSuggest)
-        #expect(withSelection.reason == "codex-proof-marker-required")
+        #expect(withSelection.reason == "generic-prompt-not-composer")
         #expect(!withTextAfterCursor.canSuggest)
-        #expect(withTextAfterCursor.reason == "codex-proof-marker-required")
+        #expect(withTextAfterCursor.reason == "generic-prompt-not-composer")
     }
 
-    @Test("Blocks Codex prompt geometry without proof marker")
-    func blocksCodexPromptGeometryWithoutProofMarker() {
+    @Test("Allows Codex prompt geometry without proof marker")
+    func allowsCodexPromptGeometryWithoutProofMarker() {
         let promptFingerprint = policy.decision(
             bundleIdentifier: "com.openai.codex",
             role: "AXTextArea",
@@ -239,10 +239,10 @@ struct PromptEditorFingerprintPolicyTests {
             textBeforeCursor: "ordinary prompt"
         )
 
-        #expect(!promptFingerprint.canSuggest)
-        #expect(promptFingerprint.reason == "codex-proof-marker-required")
-        #expect(!promptGeometry.canSuggest)
-        #expect(promptGeometry.reason == "codex-proof-marker-required")
+        #expect(promptFingerprint.canSuggest)
+        #expect(promptFingerprint.reason == "prompt-fingerprint")
+        #expect(promptGeometry.canSuggest)
+        #expect(promptGeometry.reason == "prompt-geometry")
     }
 
     @Test("Blocks generic prompt fingerprints without geometry")
