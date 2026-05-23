@@ -25,6 +25,15 @@ about. You can also inspect:
 ~/Library/Logs/SteadyType
 ```
 
+## Remove Personal Capture
+
+Personal Capture is off by default and only for local dogfood. If you enabled
+it, delete it from Settings or remove:
+
+```text
+~/Library/Application Support/SteadyType/Personal Capture
+```
+
 ## Remove Model Files
 
 Delete the app-owned model cache if you want to reclaim disk space:

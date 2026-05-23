@@ -98,6 +98,7 @@ Walk each tester through this in 15 minutes or less:
   app.
 - Privacy promise: default traces are redacted and local; raw text and
   screenshots are debug-only opt-ins.
+- Personal Capture is not a tester task, beta default, or customer behavior.
 - Pause controls: menu bar `Pause in <App Name>`, `Silence This Field`,
   Diagnostics `Export Privacy Bundle`, and Diagnostics `Delete Local Logs`.
 - Smoke check: use `Start TextEdit Practice`, type disposable text, accept one

@@ -400,9 +400,37 @@ struct SettingsPrivacyState: Equatable {
     let screenshotTracingEnabled: Bool
     let screenshotTracingExpiresAt: Date?
     let visiblePageContextEnabled: Bool
+    let personalCaptureEnabled: Bool
     let screenCaptureAccessGranted: Bool
     let diagnosticsPath: String
     let tracePath: String
+    let personalCapturePath: String
+
+    init(
+        tracingPaused: Bool,
+        rawContentTracingEnabled: Bool,
+        rawContentTracingExpiresAt: Date?,
+        screenshotTracingEnabled: Bool,
+        screenshotTracingExpiresAt: Date?,
+        visiblePageContextEnabled: Bool,
+        personalCaptureEnabled: Bool = false,
+        screenCaptureAccessGranted: Bool,
+        diagnosticsPath: String,
+        tracePath: String,
+        personalCapturePath: String = ""
+    ) {
+        self.tracingPaused = tracingPaused
+        self.rawContentTracingEnabled = rawContentTracingEnabled
+        self.rawContentTracingExpiresAt = rawContentTracingExpiresAt
+        self.screenshotTracingEnabled = screenshotTracingEnabled
+        self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
+        self.visiblePageContextEnabled = visiblePageContextEnabled
+        self.personalCaptureEnabled = personalCaptureEnabled
+        self.screenCaptureAccessGranted = screenCaptureAccessGranted
+        self.diagnosticsPath = diagnosticsPath
+        self.tracePath = tracePath
+        self.personalCapturePath = personalCapturePath
+    }
 
     var statusText: String {
         "Privacy: stays on this Mac"
@@ -429,6 +457,14 @@ struct SettingsPrivacyState: Equatable {
         }
 
         return "Screen context: \(visiblePageContextEnabled ? "on" : "off"). OCR is local and only helps suggestions."
+    }
+
+    var personalCaptureStatusText: String {
+        "Personal Capture: \(personalCaptureEnabled ? "on" : "off")"
+    }
+
+    var personalCaptureDetailText: String {
+        "Justin dogfood only. Saves daily Markdown on this Mac and stays separate from privacy bundles."
     }
 
     var sharingStatusText: String {
@@ -464,7 +500,11 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var pathText: String {
-        "Diagnostics log: \(diagnosticsPath) | Check data: \(tracePath)"
+        guard !personalCapturePath.isEmpty else {
+            return "Diagnostics log: \(diagnosticsPath) | Check data: \(tracePath)"
+        }
+
+        return "Diagnostics log: \(diagnosticsPath) | Check data: \(tracePath) | Personal Capture: \(personalCapturePath)"
     }
 }
 
@@ -807,6 +847,8 @@ final class SettingsWindowController: NSObject {
     private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
     private let rawContentStatusLabel = NSTextField(labelWithString: "")
     private let visiblePageContextStatusLabel = NSTextField(labelWithString: "")
+    private let personalCaptureStatusLabel = NSTextField(labelWithString: "")
+    private let personalCaptureDetailLabel = NSTextField(labelWithString: "")
     private let privacySharingStatusLabel = NSTextField(labelWithString: "")
     private let learningStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
@@ -834,6 +876,13 @@ final class SettingsWindowController: NSObject {
         target: nil,
         action: nil
     )
+    private let togglePersonalCaptureButton = NSButton(
+        checkboxWithTitle: "Personal Capture",
+        target: nil,
+        action: nil
+    )
+    private let revealPersonalCaptureButton = NSButton(title: "Reveal Capture Folder", target: nil, action: nil)
+    private let deletePersonalCaptureButton = NSButton(title: "Delete Personal Capture", target: nil, action: nil)
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let clearLearningDataButton = NSButton(title: "Clear Learned Suggestions", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
@@ -867,6 +916,9 @@ final class SettingsWindowController: NSObject {
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
     private let toggleVisiblePageContext: () -> Void
+    private let togglePersonalCapture: () -> Void
+    private let revealPersonalCaptureFolder: () -> Void
+    private let deletePersonalCapture: () -> Void
     private let deleteLocalLogs: () -> Void
     private let clearLearningData: () -> Void
     private let exportPrivacyBundle: () -> Void
@@ -897,6 +949,9 @@ final class SettingsWindowController: NSObject {
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
         toggleVisiblePageContext: @escaping () -> Void,
+        togglePersonalCapture: @escaping () -> Void = {},
+        revealPersonalCaptureFolder: @escaping () -> Void = {},
+        deletePersonalCapture: @escaping () -> Void = {},
         deleteLocalLogs: @escaping () -> Void,
         clearLearningData: @escaping () -> Void,
         exportPrivacyBundle: @escaping () -> Void = {},
@@ -922,6 +977,9 @@ final class SettingsWindowController: NSObject {
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
         self.toggleVisiblePageContext = toggleVisiblePageContext
+        self.togglePersonalCapture = togglePersonalCapture
+        self.revealPersonalCaptureFolder = revealPersonalCaptureFolder
+        self.deletePersonalCapture = deletePersonalCapture
         self.deleteLocalLogs = deleteLocalLogs
         self.clearLearningData = clearLearningData
         self.exportPrivacyBundle = exportPrivacyBundle
@@ -1120,6 +1178,8 @@ final class SettingsWindowController: NSObject {
         diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
         rawContentStatusLabel.stringValue = privacy.contentStatusText
         visiblePageContextStatusLabel.stringValue = privacy.visiblePageContextStatusText
+        personalCaptureStatusLabel.stringValue = privacy.personalCaptureStatusText
+        personalCaptureDetailLabel.stringValue = privacy.personalCaptureDetailText
         privacySharingStatusLabel.stringValue = privacy.sharingStatusText
         learningStatusLabel.stringValue = privacy.learningStatusText
         let screenRecordingText = privacy.screenRecordingPermissionText
@@ -1134,6 +1194,7 @@ final class SettingsWindowController: NSObject {
         toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
         toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
         toggleVisiblePageContextButton.state = privacy.visiblePageContextEnabled ? .on : .off
+        togglePersonalCaptureButton.state = privacy.personalCaptureEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
         shortcutConflictLabel.stringValue = keyboardShortcuts.conflictText
         shortcutConflictDetailLabel.stringValue = keyboardShortcuts.conflictDetailText
@@ -1240,6 +1301,8 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(diagnosticsStatusLabel)
         configureSecondaryLabel(rawContentStatusLabel)
         configureSecondaryLabel(visiblePageContextStatusLabel)
+        configureSecondaryLabel(personalCaptureStatusLabel)
+        configureSecondaryLabel(personalCaptureDetailLabel)
         configureSecondaryLabel(privacySharingStatusLabel)
         configureSecondaryLabel(learningStatusLabel)
         configureSecondaryLabel(screenRecordingPermissionLabel)
@@ -1329,6 +1392,15 @@ final class SettingsWindowController: NSObject {
         toggleVisiblePageContextButton.target = self
         toggleVisiblePageContextButton.action = #selector(toggleVisiblePageContextControl)
         toggleVisiblePageContextButton.toolTip = "Uses local OCR around the active editor as extra suggestion context."
+        togglePersonalCaptureButton.target = self
+        togglePersonalCaptureButton.action = #selector(togglePersonalCaptureControl)
+        togglePersonalCaptureButton.toolTip = "Justin dogfood only. Saves daily Markdown locally."
+        revealPersonalCaptureButton.target = self
+        revealPersonalCaptureButton.action = #selector(revealPersonalCaptureControl)
+        revealPersonalCaptureButton.bezelStyle = .rounded
+        deletePersonalCaptureButton.target = self
+        deletePersonalCaptureButton.action = #selector(deletePersonalCaptureControl)
+        deletePersonalCaptureButton.bezelStyle = .rounded
         deleteLocalLogsButton.target = self
         deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
         deleteLocalLogsButton.bezelStyle = .rounded
@@ -1435,12 +1507,16 @@ final class SettingsWindowController: NSObject {
                     diagnosticsStatusLabel,
                     rawContentStatusLabel,
                     visiblePageContextStatusLabel,
+                    personalCaptureStatusLabel,
+                    personalCaptureDetailLabel,
                     privacySharingStatusLabel,
                     screenRecordingPermissionLabel,
                     toggleTracingButton,
                     toggleRawTraceButton,
                     toggleScreenshotTraceButton,
                     toggleVisiblePageContextButton,
+                    togglePersonalCaptureButton,
+                    makeButtonRow([revealPersonalCaptureButton, deletePersonalCaptureButton]),
                     learningStatusLabel,
                     privacyPathLabel,
                     feedbackLabel,
@@ -1710,6 +1786,21 @@ final class SettingsWindowController: NSObject {
     @objc
     private func toggleVisiblePageContextControl() {
         toggleVisiblePageContext()
+    }
+
+    @objc
+    private func togglePersonalCaptureControl() {
+        togglePersonalCapture()
+    }
+
+    @objc
+    private func revealPersonalCaptureControl() {
+        revealPersonalCaptureFolder()
+    }
+
+    @objc
+    private func deletePersonalCaptureControl() {
+        deletePersonalCapture()
     }
 
     @objc
