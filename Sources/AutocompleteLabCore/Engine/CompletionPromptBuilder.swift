@@ -11,7 +11,7 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "screen-aware-continuation-v7"
+    public static let promptStyleIdentifier = "screen-aware-continuation-v8"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -86,7 +86,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
         let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
         let modeGuidance = request.mode == .sentenceContinuation
-            ? "Sentence mode: start only the next sentence's first few words. If visible context makes the next sentence obvious, make the best short guess."
+            ? "Sentence mode: continue naturally up to the visible word limit. If the limit is high and the next sentence is obvious, a longer sentence chunk is allowed."
             : "Phrase mode: continue only the current local thought. If visible context implies what the user is replying to or writing about, use it."
         let base = """
         Inline autocomplete.
@@ -105,8 +105,8 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer the next word or short phrase the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
-        Prefer 2 to 4 high-confidence words for phrase suggestions; use fewer words when fewer are enough.
-        Return \(Self.noSuggestionToken) instead of a full-sentence continuation, weak guess, new topic, or action instruction.
+        Prefer enough high-confidence words to match the visible word limit; use fewer words when fewer are enough.
+        Return \(Self.noSuggestionToken) instead of a weak guess, new topic, or action instruction.
         If the user is writing about Tab, acceptance behavior, or shortcuts, continue the safety rule itself; do not suggest accepting terms or permissions.
         When the continuation is a common phrase, put that boring obvious phrase first.
         If the best continuation would answer the user, issue an instruction to the app, or start a new topic, return \(Self.noSuggestionToken).

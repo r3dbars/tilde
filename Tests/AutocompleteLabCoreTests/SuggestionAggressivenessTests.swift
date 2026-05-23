@@ -104,7 +104,7 @@ struct SuggestionAggressivenessTests {
         #expect(proactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.10)
         #expect(veryProactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.00)
         #expect(max.displayScorePolicy.threshold(for: .phraseContinuation) == 0.90)
-        #expect(max.maxVisibleWords == 8)
+        #expect(max.maxVisibleWords == 20)
 
         let veryProactiveTrigger = veryProactive.triggerPolicy(supportPace: .eager)
         #expect(veryProactiveTrigger.wordCompletionDelayMilliseconds == 40)
@@ -122,7 +122,7 @@ struct SuggestionAggressivenessTests {
         #expect(maxTrigger.pauseDelayMilliseconds == 80)
         #expect(maxTrigger.minimumWordCompletionCharacters == 2)
         #expect(max.traceMetadata["suggestionAggressivenessLevel"] == "5")
-        #expect(max.traceMetadata["suggestionMaxVisibleWords"] == "8")
+        #expect(max.traceMetadata["suggestionMaxVisibleWords"] == "20")
     }
 
     @Test("extra tuning knobs independently control timing confidence and learning")
@@ -137,7 +137,7 @@ struct SuggestionAggressivenessTests {
             learningRestraintLevel: 0
         )
 
-        #expect(loose.maxVisibleWords == 8)
+        #expect(loose.maxVisibleWords == 20)
         #expect(abs(loose.displayScorePolicy.threshold(for: .phraseContinuation) - 0.90) < 0.0001)
         #expect(loose.displayScorePolicy.acceptedAndKeptProbabilityMultiplier == 0)
         #expect(loose.displayScorePolicy.learningRestraintScoreScale == 0)

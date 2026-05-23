@@ -977,6 +977,20 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Suggestion preserves twenty-word request through app orchestration")
+    func suggestionPreservesTwentyWordRequestThroughAppOrchestration() async throws {
+        let orchestrator = SuggestionOrchestrator(engine: FixedCompletionEngine(
+            text: " one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty extra"
+        ))
+        let request = CompletionRequest(textBeforeCursor: "Can we", maxVisibleWords: 20)
+
+        let suggestion = try await orchestrator.suggestion(for: request) { _ in }
+
+        #expect(suggestion?.visibleWordCount == 20)
+        #expect(suggestion?.visibleText.hasSuffix("nineteen twenty") == true)
+    }
+
+    @MainActor
     @Test("Updating the engine changes future suggestions")
     func updateEngineChangesFutureSuggestions() async throws {
         let orchestrator = SuggestionOrchestrator(engine: FixedCompletionEngine(text: " old path"))

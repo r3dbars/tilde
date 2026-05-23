@@ -677,7 +677,7 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var maxWordsDetailText: String {
-        "Caps visible phrase suggestions at \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words")."
+        "Allows suggestions up to \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words"). Higher can show longer sentence chunks."
     }
 
     var aggressivenessSliderValue: Double {
@@ -1514,7 +1514,7 @@ final class SettingsWindowController: NSObject {
             maximumValue: CompletionModelPolicy.maximumVisibleWords,
             action: #selector(changeMaxWordsSlider)
         )
-        maxWordsSlider.toolTip = "Adjusts the maximum number of visible predicted words."
+        maxWordsSlider.toolTip = "Sets the longest suggestion the app is allowed to show."
         configureSlider(
             wordStartSlider,
             minimumValue: SuggestionTuning.minimumWordStartCharacters,

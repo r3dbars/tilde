@@ -29,9 +29,9 @@ public enum ModelRuntimeOwnership: String, Equatable, Sendable {
 
 public struct CompletionModelPolicy: Equatable, Sendable {
     public static let minimumVisibleWords = 1
-    public static let maximumVisibleWords = 8
+    public static let maximumVisibleWords = 20
     public static let minimumGeneratedTokens = 3
-    public static let maximumGeneratedTokens = 16
+    public static let maximumGeneratedTokens = 48
 
     public let model: LocalModelID
     public let runtimeOwnership: ModelRuntimeOwnership
@@ -87,6 +87,15 @@ public struct CompletionModelPolicy: Equatable, Sendable {
 
     public static func clampedGeneratedTokens(_ value: Int) -> Int {
         min(maximumGeneratedTokens, max(minimumGeneratedTokens, value))
+    }
+
+    public static func generatedTokenBudget(forVisibleWords visibleWords: Int) -> Int {
+        let visibleWords = clampedVisibleWords(visibleWords)
+        guard visibleWords > mvp.maxVisibleWords else {
+            return clampedGeneratedTokens(visibleWords + 6)
+        }
+
+        return clampedGeneratedTokens((visibleWords * 2) + 4)
     }
 }
 
@@ -153,7 +162,7 @@ public struct CompletionLengthConfiguration: Equatable, Sendable {
     }
 
     private static func defaultGeneratedTokens(forVisibleWords visibleWords: Int) -> Int {
-        CompletionModelPolicy.clampedGeneratedTokens(visibleWords + 6)
+        CompletionModelPolicy.generatedTokenBudget(forVisibleWords: visibleWords)
     }
 }
 
