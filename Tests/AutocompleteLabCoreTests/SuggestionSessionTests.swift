@@ -12,15 +12,15 @@ struct SuggestionSessionTests {
         #expect(suggestion.text == " we should ship")
     }
 
-    @Test("Visible text is capped under forty two characters")
-    func visibleTextIsCappedUnderFortyTwoCharacters() {
+    @Test("Visible text expands when the word count is higher")
+    func visibleTextExpandsWhenWordCountIsHigher() {
         let suggestion = CompletionSuggestion(
             text: " this is a very useful continuation that should not run long",
             maxVisibleWords: 12
         )
 
-        #expect(suggestion.visibleText.count <= CompletionSuggestion.defaultMaxVisibleCharacters)
-        #expect(suggestion.visibleText == " this is a very useful continuation that")
+        #expect(suggestion.maxVisibleCharacters == 120)
+        #expect(suggestion.visibleText == " this is a very useful continuation that should not run long")
     }
 
     @Test("Visible text stays single line")
@@ -63,6 +63,24 @@ struct SuggestionSessionTests {
 
         #expect(session.acceptNextWord() == " we ")
         #expect(session.visibleSuggestion?.visibleText == "should ship")
+    }
+
+    @Test("Repeated Tab accepts a long suggestion one word at a time")
+    func repeatedTabAcceptsLongSuggestionOneWordAtATime() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(
+                text: " one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty extra",
+                maxVisibleWords: 20
+            )
+        )
+
+        #expect(session.visibleSuggestion?.visibleWordCount == 20)
+        #expect(session.acceptNextWord() == " one ")
+        #expect(session.visibleSuggestion?.visibleText.hasPrefix("two three four") == true)
+        #expect(session.visibleSuggestion?.visibleWordCount == 19)
+        #expect(session.acceptNextWord() == "two ")
+        #expect(session.visibleSuggestion?.visibleText.hasPrefix("three four five") == true)
+        #expect(session.visibleSuggestion?.visibleWordCount == 18)
     }
 
     @Test("Tab can require recompute after one accepted word")

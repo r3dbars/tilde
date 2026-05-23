@@ -140,7 +140,7 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             )
         }
 
-        let clampedMaxWords = max(1, min(4, maxVisibleWords))
+        let clampedMaxWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         let suggestion = CompletionSuggestion(
             text: " \(prior.continuation)",
             maxVisibleWords: clampedMaxWords

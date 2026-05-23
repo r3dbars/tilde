@@ -20,6 +20,24 @@ struct LocalCompletionEngineTests {
         #expect(configuration?.reasoningEnabled == false)
     }
 
+    @Test("Runtime config allows the extended word slider")
+    func runtimeConfigAllowsExtendedWordSlider() {
+        let policy = CompletionModelPolicy(
+            model: .qwen35FourB,
+            runtimeOwnership: .appOwnedEmbedded,
+            minimumMemoryGB: 16,
+            maxGeneratedTokens: 48,
+            maxVisibleWords: 20,
+            debounceMilliseconds: 15,
+            targetLatencyMilliseconds: 50,
+            reasoningEnabled: false
+        )
+        let configuration = LocalCompletionRuntimeConfiguration(policy: policy)
+
+        #expect(configuration.maxVisibleWords == 20)
+        #expect(configuration.maxGeneratedTokens == 48)
+    }
+
     @Test("Passes request mode to runtime runner")
     func passesRequestModeToRuntimeRunner() async throws {
         let runner = FakeLocalRunner(result: .success("tion"))

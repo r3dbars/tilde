@@ -12,9 +12,9 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Inline autocomplete"))
         #expect(prompt.system.contains("Return only the suffix after the Before cursor text"))
         #expect(prompt.system.contains("boring connective tissue"))
-        #expect(prompt.system.contains("Prefer 2 to 4 high-confidence words"))
+        #expect(prompt.system.contains("Prefer enough high-confidence words"))
         #expect(prompt.system.contains("not obvious from the local text"))
-        #expect(prompt.system.contains("full-sentence continuation"))
+        #expect(prompt.system.contains("weak guess, new topic"))
         #expect(prompt.system.contains("Never suggest pressing Tab, Option-Tab, Backtick"))
         #expect(prompt.system.contains("do not suggest accepting terms or permissions"))
         #expect(prompt.system.contains("Ordinary drafting with should or need"))
@@ -322,13 +322,16 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Suffix:"))
     }
 
-    @Test("Prompt clamps oversized visible word requests")
-    func promptClampsOversizedVisibleWordRequests() {
+    @Test("Prompt allows extended visible word requests")
+    func promptAllowsExtendedVisibleWordRequests() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 20)
-        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "I think we should",
+            maxVisibleWords: 20
+        ))
 
-        #expect(builder.maxVisibleWords == 8)
-        #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(builder.maxVisibleWords == 20)
+        #expect(prompt.system.contains("next 20 words or fewer"))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
     }
 
@@ -475,8 +478,8 @@ struct CompletionPromptBuilderTests {
             mode: .sentenceContinuation
         ))
 
-        #expect(prompt.system.contains("Sentence mode: start only the next sentence's first few words"))
-        #expect(prompt.system.contains("make the best short guess"))
+        #expect(prompt.system.contains("Sentence mode: continue naturally up to the visible word limit"))
+        #expect(prompt.system.contains("longer sentence chunk is allowed"))
         #expect(prompt.system.contains("Start the next sentence naturally"))
         #expect(!prompt.system.contains("Phrase mode: continue only the current local thought"))
     }
@@ -490,7 +493,7 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
-        #expect(prompt.system.contains("Behavior profile: ai_chat, max 5 visible words / 9 generated tokens"))
+        #expect(prompt.system.contains("Behavior profile: ai_chat, max 20 visible words / 48 generated tokens"))
         #expect(prompt.system.contains("Never suggest sending, submitting"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
     }

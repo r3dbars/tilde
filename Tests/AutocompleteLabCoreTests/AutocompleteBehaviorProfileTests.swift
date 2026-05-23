@@ -23,8 +23,8 @@ struct AutocompleteBehaviorProfileTests {
         let profile = AutocompleteBehaviorProfile.profile(.email)
         let guidance = profile.promptGuidance.joined(separator: " ")
 
-        #expect(profile.maxVisibleWords == 8)
-        #expect(profile.maxGeneratedTokens == 16)
+        #expect(profile.maxVisibleWords == 20)
+        #expect(profile.maxGeneratedTokens == 48)
         #expect(guidance.contains("Do not invent commitments"))
         #expect(guidance.contains("names"))
         #expect(guidance.contains("deadlines"))
@@ -61,8 +61,8 @@ struct AutocompleteBehaviorProfileTests {
         let profile = AutocompleteBehaviorProfile.profile(.aiChat)
         let guidance = profile.promptGuidance.joined(separator: " ")
 
-        #expect(profile.maxVisibleWords == 5)
-        #expect(profile.maxGeneratedTokens == 9)
+        #expect(profile.maxVisibleWords == 20)
+        #expect(profile.maxGeneratedTokens == 48)
         #expect(!profile.suppressionDefaults.allowsFullAccept)
         #expect(!profile.suppressionDefaults.allowsSubmitLikeCompletions)
         #expect(guidance.contains("tiny unless the user explicitly raises the visible word limit"))
@@ -159,8 +159,8 @@ struct AutocompleteBehaviorProfileTests {
 
         #expect(metadata == [
             "behaviorProfile": "email",
-            "behaviorProfileMaxVisibleWords": "8",
-            "behaviorProfileMaxGeneratedTokens": "16",
+            "behaviorProfileMaxVisibleWords": "20",
+            "behaviorProfileMaxGeneratedTokens": "48",
             "behaviorProfileSuppressedByDefault": "false",
             "behaviorProfileSuppressesFreshParagraphStart": "true",
             "behaviorProfileSuppressesBlankLine": "true",

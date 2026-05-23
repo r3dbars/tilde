@@ -12,7 +12,7 @@ public enum CompletionRequestMode: String, Codable, Equatable, Sendable {
         case .phraseContinuation:
             return CompletionModelPolicy.maximumGeneratedTokens
         case .sentenceContinuation:
-            return 10
+            return CompletionModelPolicy.maximumGeneratedTokens
         }
     }
 

@@ -8,8 +8,8 @@ public struct LocalCompletionRuntimeConfiguration: Equatable, Sendable {
 
     public init(policy: CompletionModelPolicy = .mvp) {
         self.model = policy.model
-        self.maxGeneratedTokens = min(max(8, policy.maxGeneratedTokens), 16)
-        self.maxVisibleWords = min(max(2, policy.maxVisibleWords), 8)
+        self.maxGeneratedTokens = CompletionModelPolicy.clampedGeneratedTokens(policy.maxGeneratedTokens)
+        self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(policy.maxVisibleWords)
         self.reasoningEnabled = policy.reasoningEnabled
     }
 }

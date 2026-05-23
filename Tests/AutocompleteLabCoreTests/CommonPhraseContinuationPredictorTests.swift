@@ -71,4 +71,23 @@ struct CommonPhraseContinuationPredictorTests {
 
         #expect(selection.suggestion?.visibleText == " without sounding")
     }
+
+    @Test("Allows longer fallback phrases when the word slider is high")
+    func allowsLongerFallbackPhrasesWhenWordSliderIsHigh() {
+        let predictor = CommonPhraseContinuationPredictor(priors: [
+            CommonPhraseContinuationPrior(
+                contextSuffix: "this should",
+                continuation: "show five six seven eight nine words",
+                score: 1
+            )
+        ])
+        let selection = predictor.selection(
+            for: "this should",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 7
+        )
+
+        #expect(selection.suggestion?.visibleText == " show five six seven eight nine words")
+        #expect(selection.suggestion?.visibleWordCount == 7)
+    }
 }

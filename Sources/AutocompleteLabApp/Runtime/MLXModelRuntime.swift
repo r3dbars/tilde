@@ -564,10 +564,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func maxGeneratedTokens(for request: CompletionRequest) -> Int {
         min(
-            max(lengthConfiguration.maxGeneratedTokens, request.maxVisibleWords + 6),
+            max(
+                lengthConfiguration.maxGeneratedTokens,
+                CompletionModelPolicy.generatedTokenBudget(forVisibleWords: request.maxVisibleWords)
+            ),
             request.behaviorProfile.maxGeneratedTokens,
             request.mode.generatedTokenCeiling,
-            CompletionModelPolicy.clampedGeneratedTokens(request.maxVisibleWords + 6)
+            CompletionModelPolicy.generatedTokenBudget(forVisibleWords: request.maxVisibleWords)
         )
     }
 

@@ -38,6 +38,27 @@ struct CompletionCandidateRankerTests {
         #expect(longSelection.suppressionReason == .lowTopScore)
     }
 
+    @Test("Phrase mode allows longer candidates when the word slider is high")
+    func phraseModeAllowsLongerCandidatesWhenWordSliderIsHigh() {
+        let ranker = CompletionCandidateRanker()
+        let suggestions = [
+            CompletionSuggestion(text: " feel quiet and useful today", maxVisibleWords: 20),
+            CompletionSuggestion(
+                text: " feel quiet and useful without getting in the way while the user keeps writing naturally",
+                maxVisibleWords: 20
+            )
+        ]
+
+        let ranked = ranker.ranked(suggestions, mode: .phraseContinuation)
+        let longSelection = ranker.selection(
+            [suggestions[1]],
+            mode: .phraseContinuation
+        )
+
+        #expect(ranked.first?.suggestion.visibleWordCount == 15)
+        #expect(longSelection.suggestion?.visibleWordCount == 15)
+    }
+
     @Test("Sentence mode prefers sentence-length continuations over questions")
     func sentenceModePrefersSentenceLengthContinuationsOverQuestions() {
         let ranker = CompletionCandidateRanker()
