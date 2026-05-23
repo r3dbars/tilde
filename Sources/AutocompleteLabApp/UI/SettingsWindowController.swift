@@ -176,9 +176,9 @@ struct SettingsCurrentAppState: Equatable {
 
         switch (profile.supportsOneWordAcceptance, profile.supportsFullAcceptance) {
         case (true, true):
-            return "Keys: Tab accepts one word. The whole-suggestion shortcut works here."
+            return "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion shortcut works here."
         case (true, false):
-            return "Keys: Tab accepts one word. Whole-suggestion accept is off for safety."
+            return "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion accept is off for safety."
         case (false, true):
             return "Keys: whole-suggestion accept only"
         case (false, false):
@@ -385,7 +385,7 @@ struct SettingsFirstRunTrustState: Equatable {
     }
 
     var detailText: String {
-        "Suggestions appear near the cursor. Tab accepts one word. Esc dismisses. Pause Suggestions stops suggestions everywhere; Pause in Current App stops only that app."
+        "Suggestions appear near the cursor. Tab accepts one word + space. Tab again accepts the next word. Esc dismisses. Pause Suggestions stops suggestions everywhere; Pause in Current App stops only that app."
     }
 
     var appsText: String {
@@ -502,7 +502,7 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var statusText: String {
-        "Shortcuts: Tab accepts one word | \(acceptAllShortcut.displayName) accepts whole suggestion"
+        "Shortcuts: Tab accepts one word + space | \(acceptAllShortcut.displayName) accepts whole suggestion"
     }
 
     var cycleButtonTitle: String {

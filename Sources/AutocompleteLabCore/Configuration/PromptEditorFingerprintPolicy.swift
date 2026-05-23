@@ -40,20 +40,17 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "non-prompt-role")
         }
 
-        if bundleIdentifier == "com.openai.codex" {
-            if proofModeEnabled,
-               role == "AXTextArea",
-               selectedTextLength == 0,
-               textAfterCursor.isEmpty,
-               !codexProofMarker.isEmpty,
-               textBeforeCursor.contains(codexProofMarker) {
-                return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-proof-marker")
-            }
-
-            return PromptEditorFingerprintDecision(canSuggest: false, reason: "codex-proof-marker-required")
+        if bundleIdentifier == "com.openai.codex",
+           proofModeEnabled,
+           role == "AXTextArea",
+           selectedTextLength == 0,
+           textAfterCursor.isEmpty,
+           !codexProofMarker.isEmpty,
+           textBeforeCursor.contains(codexProofMarker) {
+            return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-proof-marker")
         }
 
-        guard proofModeEnabled else {
+        guard bundleIdentifier == "com.openai.codex" || proofModeEnabled else {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "prompt-proof-mode-required")
         }
 

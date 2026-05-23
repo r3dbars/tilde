@@ -3324,7 +3324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedAt: acceptedAt,
                 acceptMode: action.diagnosticName
             )
-            suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
+            suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             armObsidianPostAcceptanceSuppressionIfNeeded()
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
@@ -3345,8 +3345,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestionID: currentSuggestionID ?? "",
                 reason: action.diagnosticName
             )
-            setSuggestionDecision("Accepted: next word; waiting for recompute")
-            hideSuggestion(reason: "accepted-next-word-recompute")
+            refreshAfterNextWordAcceptance(
+                residualReason: "Accepted: next word; showing remainder",
+                emptyReason: "accepted-next-word"
+            )
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
@@ -7504,7 +7506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptedAt: acceptedAt,
             acceptMode: action.diagnosticName
         )
-        suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
+        suggestionSession.commitNextWordAcceptance(acceptedText)
         recordAcceptedText(acceptedText)
         advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
         lastTextSnapshot = FocusedTextSnapshot(
@@ -7531,10 +7533,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionID: currentSuggestionID ?? "",
             reason: "obsidian-tab-passthrough-repaired"
         )
-        setSuggestionDecision("Accepted: repaired Obsidian Tab passthrough")
-        hideSuggestion(
-            reason: "accepted-obsidian-tab-passthrough-repaired",
-            metadata: [
+        refreshAfterNextWordAcceptance(
+            residualReason: "Accepted: repaired Obsidian Tab; showing remainder",
+            emptyReason: "accepted-obsidian-tab-passthrough-repaired",
+            emptyMetadata: [
                 "repair": "obsidian-tab-passthrough",
                 "fieldBeforeChars": String(context.textBeforeCursor.count)
             ]
@@ -8719,6 +8721,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: lastTextSnapshot.textBeforeCursor + acceptedText,
             textAfterCursor: lastTextSnapshot.textAfterCursor
         )
+    }
+
+    private func refreshAfterNextWordAcceptance(
+        residualReason: String,
+        emptyReason: String,
+        emptyMetadata: [String: String] = [:]
+    ) {
+        guard suggestionSession.hasVisibleSuggestion else {
+            setSuggestionDecision("Accepted: next word")
+            hideSuggestion(reason: emptyReason, metadata: emptyMetadata)
+            return
+        }
+
+        setSuggestionDecision(residualReason)
+        if let currentProfile {
+            _ = refreshVisibleSuggestion(
+                placement: nil,
+                fallbackRenderMode: currentProfile.fallbackRenderMode
+            )
+        } else {
+            updateKeyboardEventTapSnapshot()
+        }
     }
 
     private func armObsidianPostAcceptanceSuppressionIfNeeded() {
@@ -10997,7 +11021,8 @@ private extension AppDelegate {
         Suggestions appear as a small floating suggestion next to the cursor.
         They do not enter the document until you accept them.
 
-        Press Tab once to accept one word.
+        Press Tab once to accept one word plus a space.
+        Press Tab again to accept the next suggested word.
         Press Esc to dismiss a suggestion without changing text.
         Use Pause Suggestions to stop suggestions everywhere.
         Use Pause in TextEdit to stop suggestions only in TextEdit.
