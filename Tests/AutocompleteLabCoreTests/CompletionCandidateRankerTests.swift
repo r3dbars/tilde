@@ -59,6 +59,18 @@ struct CompletionCandidateRankerTests {
         #expect(longSelection.suggestion?.visibleWordCount == 15)
     }
 
+    @Test("Phrase mode does not treat four words as enough when the word slider is high")
+    func phraseModeDoesNotTreatFourWordsAsEnoughWhenWordSliderIsHigh() {
+        let ranker = CompletionCandidateRanker()
+        let selection = ranker.selection(
+            [CompletionSuggestion(text: " permission feel clear today", maxVisibleWords: 20)],
+            mode: .phraseContinuation
+        )
+
+        #expect(selection.suggestion == nil)
+        #expect(selection.suppressionReason == .lowTopScore)
+    }
+
     @Test("Sentence mode prefers sentence-length continuations over questions")
     func sentenceModePrefersSentenceLengthContinuationsOverQuestions() {
         let ranker = CompletionCandidateRanker()

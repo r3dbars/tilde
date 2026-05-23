@@ -66,7 +66,10 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
 
         let visibleText = normalizedVisibleText(suggestion.visibleText)
         let visibleWords = words(in: visibleText)
-        guard visibleWords.count >= minimumStreamingWords(for: mode) else {
+        guard visibleWords.count >= minimumStreamingWords(
+            for: mode,
+            maxVisibleWords: suggestion.maxVisibleWords
+        ) else {
             return false
         }
 
@@ -136,13 +139,26 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         text.split(whereSeparator: { $0.isWhitespace })
     }
 
-    private func minimumStreamingWords(for mode: CompletionRequestMode) -> Int {
+    private func minimumStreamingWords(
+        for mode: CompletionRequestMode,
+        maxVisibleWords: Int
+    ) -> Int {
+        let baseMinimum: Int
         switch mode {
         case .sentenceContinuation:
-            minimumStreamingSentenceWords
+            baseMinimum = minimumStreamingSentenceWords
         case .phraseContinuation, .wordCompletion:
-            minimumStreamingPhraseWords
+            baseMinimum = minimumStreamingPhraseWords
         }
+
+        guard mode.isContinuation else {
+            return baseMinimum
+        }
+
+        return max(
+            baseMinimum,
+            CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: maxVisibleWords)
+        )
     }
 
     private func maximumStreamingPartialPresentations(for mode: CompletionRequestMode) -> Int {
