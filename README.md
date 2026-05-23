@@ -39,11 +39,19 @@ SteadyType is local-first. Typed text, prompts, model output, accepted text, scr
 
 Diagnostics are local and redacted unless a tester explicitly opts into a short-lived raw or screenshot trace for debugging.
 
+## Personal Capture
+
+Personal Capture is a local, opt-in Justin dogfood loop. It writes daily
+Markdown on this Mac so the app can learn from real writing and accepted-kept
+suggestions. It is not telemetry, not a beta requirement, and not enabled for
+customers or testers by default.
+
 Useful docs:
 
 - [Beta privacy](PRIVACY-BETA.md)
 - [Known limitations](KNOWN-LIMITATIONS.md)
 - [Diagnostic export](DIAGNOSTIC-EXPORT.md)
+- [Personal Capture](docs/product/personal-capture.md)
 - [Uninstall and delete data](UNINSTALL-DELETE-DATA.md)
 
 ## Runtime

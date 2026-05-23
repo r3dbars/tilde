@@ -12,6 +12,7 @@ Use this in the first 10 minutes of a private beta session.
 - Pause Suggestions stops suggestions everywhere.
 - Pause Current App stops suggestions only in the frontmost app.
 - Typed text and model output stay on this Mac by default.
+- Personal Capture is not part of private beta onboarding.
 
 ## Start In TextEdit
 

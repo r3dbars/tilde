@@ -47,6 +47,24 @@ The app also keeps local compatibility learning here:
 
 That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the first self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
 
+## Personal Capture Dogfood Loop
+
+Personal Capture is not default tracing. It is a local, opt-in Justin dogfood
+mode that writes daily Markdown to:
+
+```text
+~/Library/Application Support/SteadyType/Personal Capture
+```
+
+The journal records new writing fragments, verified accepted suggestions, and
+accepted-kept survival signals. It exists to tune whether SteadyType starts to
+sound like the person using it.
+
+It stays separate from redacted diagnostics and Privacy Bundles. The capture
+policy still blocks secure, login, password, OTP, payment, URL/search,
+API-key-like, password-manager, private prompt/search, unproven browser, and
+other sensitive fields before Markdown is written.
+
 Compatibility learning is not a support claim by itself. Treat it as a code
 candidate only when all of these are true:
 
