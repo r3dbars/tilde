@@ -421,6 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var preservesResidualSuggestionAfterNextWordAccept = false
     private var obsidianPostAcceptanceSuppression: ObsidianPostAcceptanceSuppression?
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
@@ -3160,6 +3161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
             currentSuggestionInvalidatedByUserKeyDown = true
+            preservesResidualSuggestionAfterNextWordAccept = false
             clearPendingAcceptedInsertionUndo(reason: "typing")
         }
 
@@ -8651,16 +8653,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile
         )
+        let allowsAcceptedNextWordGeometryChurn = preservesResidualSuggestionAfterNextWordAccept
+            && suggestionSession.hasVisibleSuggestion
         let invalidation = suggestionGeometryChangePolicy.invalidationDecision(
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
             hasPendingSuggestionRequest: suggestionOrchestrator.currentRequest != nil,
             previousSnapshot: lastVisibleSuggestionGeometrySnapshot,
             currentSnapshot: currentGeometrySnapshot,
-            allowsCaretRectChange: allowsStableChromeEditorGeometryChurn,
-            allowsTextLineRectChange: allowsStableChromeEditorGeometryChurn
+            allowsCaretRectChange: allowsStableChromeEditorGeometryChurn || allowsAcceptedNextWordGeometryChurn,
+            allowsTextLineRectChange: allowsStableChromeEditorGeometryChurn || allowsAcceptedNextWordGeometryChurn
         )
         if invalidation.shouldInvalidate {
             let reason = invalidation.reason?.rawValue ?? "unknown"
+            preservesResidualSuggestionAfterNextWordAccept = false
             invalidatePendingSuggestionRequest()
             hideSuggestion(
                 reason: "stale-geometry-\(reason)",
@@ -8679,6 +8684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) else {
             return
         }
+        preservesResidualSuggestionAfterNextWordAccept = false
         lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
             context: context,
             fieldIdentity: currentFieldIdentity,
@@ -8729,11 +8735,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         emptyMetadata: [String: String] = [:]
     ) {
         guard suggestionSession.hasVisibleSuggestion else {
+            preservesResidualSuggestionAfterNextWordAccept = false
             setSuggestionDecision("Accepted: next word")
             hideSuggestion(reason: emptyReason, metadata: emptyMetadata)
             return
         }
 
+        preservesResidualSuggestionAfterNextWordAccept = true
         setSuggestionDecision(residualReason)
         if let currentProfile {
             _ = refreshVisibleSuggestion(
@@ -9076,6 +9084,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionPresentedAt = nil
         currentSuggestionDisplayScoreFinal = nil
         currentSuggestionInvalidatedByUserKeyDown = false
+        preservesResidualSuggestionAfterNextWordAccept = false
         suggestionOrchestrator.clearStreamingPresentations()
         lastCaretRect = nil
         lastTextLineRect = nil
