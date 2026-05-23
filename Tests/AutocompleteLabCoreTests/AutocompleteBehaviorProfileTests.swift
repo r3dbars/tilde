@@ -23,8 +23,8 @@ struct AutocompleteBehaviorProfileTests {
         let profile = AutocompleteBehaviorProfile.profile(.email)
         let guidance = profile.promptGuidance.joined(separator: " ")
 
-        #expect(profile.maxVisibleWords == 5)
-        #expect(profile.maxGeneratedTokens == 11)
+        #expect(profile.maxVisibleWords == 8)
+        #expect(profile.maxGeneratedTokens == 16)
         #expect(guidance.contains("Do not invent commitments"))
         #expect(guidance.contains("names"))
         #expect(guidance.contains("deadlines"))
@@ -159,8 +159,8 @@ struct AutocompleteBehaviorProfileTests {
 
         #expect(metadata == [
             "behaviorProfile": "email",
-            "behaviorProfileMaxVisibleWords": "5",
-            "behaviorProfileMaxGeneratedTokens": "11",
+            "behaviorProfileMaxVisibleWords": "8",
+            "behaviorProfileMaxGeneratedTokens": "16",
             "behaviorProfileSuppressedByDefault": "false",
             "behaviorProfileSuppressesFreshParagraphStart": "true",
             "behaviorProfileSuppressesBlankLine": "true",

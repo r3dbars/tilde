@@ -60,7 +60,7 @@ struct ModelPolicyTests {
     @Test("Request modes cap generated tokens by autocomplete role")
     func requestModesCapGeneratedTokensByAutocompleteRole() {
         #expect(CompletionRequestMode.wordCompletion.generatedTokenCeiling == 3)
-        #expect(CompletionRequestMode.phraseContinuation.generatedTokenCeiling == 11)
+        #expect(CompletionRequestMode.phraseContinuation.generatedTokenCeiling == 16)
         #expect(CompletionRequestMode.sentenceContinuation.generatedTokenCeiling == 10)
     }
 

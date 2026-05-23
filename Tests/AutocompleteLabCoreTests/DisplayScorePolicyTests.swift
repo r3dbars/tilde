@@ -33,6 +33,8 @@ struct DisplayScorePolicyTests {
         #expect(decision.metadata["displayScoreInstability"] == "0.05")
         #expect(decision.metadata["displayScoreLearningRestraint"] == "0.00")
         #expect(decision.metadata["displayScoreFinal"] == "1.50")
+        #expect(decision.metadata["displayScoreEffectiveFinal"] == "1.50")
+        #expect(decision.metadata["displayScoreLearningRestraintScale"] == "1.00")
     }
 
     @Test("suppresses high risk even when the final score is high")
@@ -235,7 +237,64 @@ struct DisplayScorePolicyTests {
         #expect(!lowKeptDecision.shouldDisplay)
         #expect(lowKeptDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
         #expect(lowKeptDecision.metadata["displayScoreLearningRestraint"] == "0.75")
+        #expect(lowKeptDecision.metadata["displayScoreEffectiveFinal"] == "0.75")
         #expect(lowKeptDecision.metadata["displayScoreAcceptedAndKeptSamples"] == "4")
+    }
+
+    @Test("learning restraint can be loosened or tightened by tuning")
+    func learningRestraintCanBeLoosenedOrTightenedByTuning() {
+        let loosePolicy = DisplayScorePolicy().withLearningRestraint(
+            acceptedAndKeptProbabilityMultiplier: 0,
+            learningRestraintScoreScale: 0,
+            minimumAcceptedAndKeptSamples: Int.max / 4
+        )
+        let looseScore = DisplayScore(
+            utility: 0.70,
+            styleFit: 0.40,
+            contextFit: 0.35,
+            userAffinity: 0.25,
+            risk: 0.10,
+            repetition: 0.05,
+            instability: 0.05,
+            learningRestraint: 0.75,
+            acceptedAndKeptProbability: 0.01,
+            acceptedAndKeptSampleCount: 100
+        )
+
+        let looseDecision = loosePolicy.decision(for: looseScore, mode: .phraseContinuation)
+
+        #expect(looseDecision.shouldDisplay)
+        #expect(looseDecision.metadata["displayScoreFinal"] == "0.75")
+        #expect(looseDecision.metadata["displayScoreEffectiveFinal"] == "1.50")
+        #expect(looseDecision.metadata["displayScoreLearningRestraintScale"] == "0.00")
+        #expect(looseDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.00")
+
+        let strictPolicy = DisplayScorePolicy().withLearningRestraint(
+            acceptedAndKeptProbabilityMultiplier: 1.25,
+            learningRestraintScoreScale: 1.25,
+            minimumAcceptedAndKeptSamples: 3
+        )
+        let strictScore = DisplayScore(
+            utility: 0.90,
+            styleFit: 0.50,
+            contextFit: 0.30,
+            userAffinity: 0.25,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05,
+            learningRestraint: 0.60,
+            acceptedAndKeptProbability: 0.50,
+            acceptedAndKeptSampleCount: 3
+        )
+
+        let strictDecision = strictPolicy.decision(for: strictScore, mode: .phraseContinuation)
+
+        #expect(!strictDecision.shouldDisplay)
+        #expect(strictDecision.metadata["displayScoreFinal"] == "1.20")
+        #expect(strictDecision.metadata["displayScoreEffectiveFinal"] == "1.05")
+        #expect(strictDecision.metadata["displayScoreLearningRestraintScale"] == "1.25")
+        #expect(strictDecision.metadata["displayScoreAcceptedAndKeptThreshold"] == "0.38")
+        #expect(strictDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
     }
 
     @Test("profile-aware kept probability stays stricter in AI chat after evidence")

@@ -110,6 +110,8 @@ public struct DisplayScoreTrace: Equatable, Sendable {
     public let mode: CompletionRequestMode
     public let behaviorProfileID: AutocompleteBehaviorProfileID?
     public let threshold: Double
+    public let effectiveFinalScore: Double
+    public let learningRestraintScoreScale: Double
     public let acceptedAndKeptProbabilityThreshold: Double
 
     public init(
@@ -117,12 +119,19 @@ public struct DisplayScoreTrace: Equatable, Sendable {
         mode: CompletionRequestMode,
         behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
         threshold: Double,
+        effectiveFinalScore: Double? = nil,
+        learningRestraintScoreScale: Double = 1,
         acceptedAndKeptProbabilityThreshold: Double
     ) {
         self.score = score
         self.mode = mode
         self.behaviorProfileID = behaviorProfileID
         self.threshold = threshold
+        self.effectiveFinalScore = DisplayScore.bounded(
+            effectiveFinalScore ?? score.finalScore,
+            to: DisplayScore.scoreBounds
+        )
+        self.learningRestraintScoreScale = max(0, learningRestraintScoreScale)
         self.acceptedAndKeptProbabilityThreshold = acceptedAndKeptProbabilityThreshold
     }
 
@@ -133,6 +142,8 @@ public struct DisplayScoreTrace: Equatable, Sendable {
             metadata["displayScoreBehaviorProfile"] = behaviorProfileID.rawValue
         }
         metadata["displayScoreThreshold"] = DisplayScore.format(threshold)
+        metadata["displayScoreEffectiveFinal"] = DisplayScore.format(effectiveFinalScore)
+        metadata["displayScoreLearningRestraintScale"] = DisplayScore.format(learningRestraintScoreScale)
         if score.acceptedAndKeptProbability != nil {
             metadata["displayScoreAcceptedAndKeptThreshold"] =
                 DisplayScore.format(acceptedAndKeptProbabilityThreshold)
@@ -203,6 +214,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
     public let highRepetitionThreshold: Double
     public let highInstabilityThreshold: Double
     public let minimumAcceptedAndKeptSamples: Int
+    public let acceptedAndKeptProbabilityMultiplier: Double
+    public let learningRestraintScoreScale: Double
 
     public init(
         wordCompletionThreshold: Double = 0.60,
@@ -211,7 +224,9 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         highRiskThreshold: Double = 0.85,
         highRepetitionThreshold: Double = 0.85,
         highInstabilityThreshold: Double = 0.85,
-        minimumAcceptedAndKeptSamples: Int = 6
+        minimumAcceptedAndKeptSamples: Int = 6,
+        acceptedAndKeptProbabilityMultiplier: Double = 1,
+        learningRestraintScoreScale: Double = 1
     ) {
         self.wordCompletionThreshold = DisplayScore.bounded(
             wordCompletionThreshold,
@@ -229,6 +244,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         self.highRepetitionThreshold = DisplayScore.bounded(highRepetitionThreshold, to: DisplayScore.componentBounds)
         self.highInstabilityThreshold = DisplayScore.bounded(highInstabilityThreshold, to: DisplayScore.componentBounds)
         self.minimumAcceptedAndKeptSamples = max(1, minimumAcceptedAndKeptSamples)
+        self.acceptedAndKeptProbabilityMultiplier = max(0, acceptedAndKeptProbabilityMultiplier)
+        self.learningRestraintScoreScale = max(0, learningRestraintScoreScale)
     }
 
     public func threshold(for mode: CompletionRequestMode) -> Double {
@@ -243,19 +260,38 @@ public struct DisplayScorePolicy: Equatable, Sendable {
     }
 
     public func adjustingThresholds(by adjustment: Double) -> DisplayScorePolicy {
-        let safeAdjustment = max(0, adjustment)
-        guard safeAdjustment > 0 else {
+        guard adjustment != 0 else {
             return self
         }
 
         return DisplayScorePolicy(
-            wordCompletionThreshold: wordCompletionThreshold + safeAdjustment,
-            phraseContinuationThreshold: phraseContinuationThreshold + safeAdjustment,
-            sentenceContinuationThreshold: sentenceContinuationThreshold + safeAdjustment,
+            wordCompletionThreshold: wordCompletionThreshold + adjustment,
+            phraseContinuationThreshold: phraseContinuationThreshold + adjustment,
+            sentenceContinuationThreshold: sentenceContinuationThreshold + adjustment,
             highRiskThreshold: highRiskThreshold,
             highRepetitionThreshold: highRepetitionThreshold,
             highInstabilityThreshold: highInstabilityThreshold,
-            minimumAcceptedAndKeptSamples: minimumAcceptedAndKeptSamples
+            minimumAcceptedAndKeptSamples: minimumAcceptedAndKeptSamples,
+            acceptedAndKeptProbabilityMultiplier: acceptedAndKeptProbabilityMultiplier,
+            learningRestraintScoreScale: learningRestraintScoreScale
+        )
+    }
+
+    public func withLearningRestraint(
+        acceptedAndKeptProbabilityMultiplier: Double,
+        learningRestraintScoreScale: Double,
+        minimumAcceptedAndKeptSamples: Int
+    ) -> DisplayScorePolicy {
+        DisplayScorePolicy(
+            wordCompletionThreshold: wordCompletionThreshold,
+            phraseContinuationThreshold: phraseContinuationThreshold,
+            sentenceContinuationThreshold: sentenceContinuationThreshold,
+            highRiskThreshold: highRiskThreshold,
+            highRepetitionThreshold: highRepetitionThreshold,
+            highInstabilityThreshold: highInstabilityThreshold,
+            minimumAcceptedAndKeptSamples: minimumAcceptedAndKeptSamples,
+            acceptedAndKeptProbabilityMultiplier: acceptedAndKeptProbabilityMultiplier,
+            learningRestraintScoreScale: learningRestraintScoreScale
         )
     }
 
@@ -264,11 +300,14 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         mode: CompletionRequestMode,
         behaviorProfileID: AutocompleteBehaviorProfileID? = nil
     ) -> DisplayScoreDecision {
+        let effectiveFinalScore = effectiveFinalScore(for: score)
         let trace = DisplayScoreTrace(
             score: score,
             mode: mode,
             behaviorProfileID: behaviorProfileID,
             threshold: threshold(for: mode),
+            effectiveFinalScore: effectiveFinalScore,
+            learningRestraintScoreScale: learningRestraintScoreScale,
             acceptedAndKeptProbabilityThreshold: acceptedAndKeptProbabilityThreshold(
                 for: mode,
                 behaviorProfileID: behaviorProfileID
@@ -293,7 +332,7 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             return .suppress(DisplayScoreSuppression(reason: .lowAcceptedAndKeptProbability, trace: trace))
         }
 
-        guard score.finalScore >= trace.threshold else {
+        guard effectiveFinalScore >= trace.threshold else {
             return .suppress(DisplayScoreSuppression(reason: .belowThreshold, trace: trace))
         }
 
@@ -313,52 +352,60 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             0.18
         }
 
-        guard let behaviorProfileID else {
-            return baseThreshold
-        }
-
-        let profileFloor: Double = switch behaviorProfileID {
-        case .aiChat:
-            switch mode {
-            case .wordCompletion:
-                0.28
-            case .phraseContinuation, .sentenceContinuation:
-                0.34
-            }
-        case .casualChat:
-            switch mode {
-            case .wordCompletion:
-                0.22
-            case .phraseContinuation, .sentenceContinuation:
+        let profileFloor: Double
+        if let behaviorProfileID {
+            profileFloor = switch behaviorProfileID {
+            case .aiChat:
+                switch mode {
+                case .wordCompletion:
+                    0.28
+                case .phraseContinuation, .sentenceContinuation:
+                    0.34
+                }
+            case .casualChat:
+                switch mode {
+                case .wordCompletion:
+                    0.22
+                case .phraseContinuation, .sentenceContinuation:
+                    0.30
+                }
+            case .docsProse, .email, .notes:
+                switch mode {
+                case .wordCompletion:
+                    0.20
+                case .phraseContinuation:
+                    0.32
+                case .sentenceContinuation:
+                    0.22
+                }
+            case .coding:
+                switch mode {
+                case .wordCompletion:
+                    0.22
+                case .phraseContinuation, .sentenceContinuation:
+                    0.32
+                }
+            case .bullets:
+                switch mode {
+                case .wordCompletion:
+                    0.20
+                case .phraseContinuation, .sentenceContinuation:
+                    0.28
+                }
+            case .forms, .search:
                 0.30
             }
-        case .docsProse, .email, .notes:
-            switch mode {
-            case .wordCompletion:
-                0.20
-            case .phraseContinuation:
-                0.32
-            case .sentenceContinuation:
-                0.22
-            }
-        case .coding:
-            switch mode {
-            case .wordCompletion:
-                0.22
-            case .phraseContinuation, .sentenceContinuation:
-                0.32
-            }
-        case .bullets:
-            switch mode {
-            case .wordCompletion:
-                0.20
-            case .phraseContinuation, .sentenceContinuation:
-                0.28
-            }
-        case .forms, .search:
-            0.30
+        } else {
+            profileFloor = baseThreshold
         }
 
-        return max(baseThreshold, profileFloor)
+        return max(baseThreshold, profileFloor) * acceptedAndKeptProbabilityMultiplier
+    }
+
+    public func effectiveFinalScore(for score: DisplayScore) -> Double {
+        DisplayScore.bounded(
+            score.finalScore + score.learningRestraint * (1 - learningRestraintScoreScale),
+            to: DisplayScore.scoreBounds
+        )
     }
 }
