@@ -585,6 +585,8 @@ final class SuggestionOrchestrator {
                 mode: request.mode,
                 behaviorProfileID: request.behaviorProfile.id,
                 threshold: adjustedPolicy.threshold(for: request.mode),
+                effectiveFinalScore: adjustedPolicy.effectiveFinalScore(for: score),
+                learningRestraintScoreScale: adjustedPolicy.learningRestraintScoreScale,
                 acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
                     for: request.mode,
                     behaviorProfileID: request.behaviorProfile.id
@@ -608,6 +610,8 @@ final class SuggestionOrchestrator {
                 mode: request.mode,
                 behaviorProfileID: request.behaviorProfile.id,
                 threshold: adjustedPolicy.threshold(for: request.mode),
+                effectiveFinalScore: adjustedPolicy.effectiveFinalScore(for: score),
+                learningRestraintScoreScale: adjustedPolicy.learningRestraintScoreScale,
                 acceptedAndKeptProbabilityThreshold: adjustedPolicy.acceptedAndKeptProbabilityThreshold(
                     for: request.mode,
                     behaviorProfileID: request.behaviorProfile.id

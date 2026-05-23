@@ -665,7 +665,7 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var statusText: String {
-        "Aggressiveness: \(tuning.aggressivenessLevel)/\(SuggestionTuning.maximumAggressivenessLevel) - \(tuning.displayName)"
+        "Suggestions: \(tuning.aggressivenessLevel)/\(SuggestionTuning.maximumAggressivenessLevel) - \(tuning.displayName)"
     }
 
     var detailText: String {
@@ -686,6 +686,109 @@ struct SettingsSuggestionAggressivenessState: Equatable {
 
     var maxWordsSliderValue: Double {
         Double(tuning.maxVisibleWords)
+    }
+
+    var wordStartText: String {
+        "Word help starts after: \(tuning.wordStartCharacters) \(tuning.wordStartCharacters == 1 ? "letter" : "letters")"
+    }
+
+    var wordStartDetailText: String {
+        "Lower means word suggestions show sooner."
+    }
+
+    var phraseStartText: String {
+        "Phrase help starts after: \(tuning.phraseStartWords) \(tuning.phraseStartWords == 1 ? "word" : "words")"
+    }
+
+    var phraseStartDetailText: String {
+        "Lower means phrase suggestions need less context."
+    }
+
+    var responseSpeedText: String {
+        "Wait after typing: \(responseSpeedName)"
+    }
+
+    var responseSpeedDetailText: String {
+        "Higher feels faster. Lower waits for a clearer pause."
+    }
+
+    var confidenceText: String {
+        "Guess strength: \(confidenceName)"
+    }
+
+    var confidenceDetailText: String {
+        "Loose shows more guesses. Strict hides more."
+    }
+
+    var learningRestraintText: String {
+        "Learned caution: \(learningRestraintName)"
+    }
+
+    var learningRestraintDetailText: String {
+        "Lower lets ignored old suggestions matter less."
+    }
+
+    var wordStartSliderValue: Double {
+        Double(tuning.wordStartCharacters)
+    }
+
+    var phraseStartSliderValue: Double {
+        Double(tuning.phraseStartWords)
+    }
+
+    var responseSpeedSliderValue: Double {
+        Double(tuning.responseSpeedLevel)
+    }
+
+    var confidenceSliderValue: Double {
+        Double(tuning.confidenceLevel)
+    }
+
+    var learningRestraintSliderValue: Double {
+        Double(tuning.learningRestraintLevel)
+    }
+
+    private var responseSpeedName: String {
+        switch tuning.responseSpeedLevel {
+        case 1:
+            "Slow"
+        case 2:
+            "Calm"
+        case 4:
+            "Fast"
+        case 5:
+            "Instant"
+        default:
+            "Normal"
+        }
+    }
+
+    private var confidenceName: String {
+        switch tuning.confidenceLevel {
+        case 1:
+            "Strict"
+        case 2:
+            "Careful"
+        case 4:
+            "Loose"
+        case 5:
+            "Very Loose"
+        default:
+            "Normal"
+        }
+    }
+
+    private var learningRestraintName: String {
+        switch tuning.learningRestraintLevel {
+        case 0:
+            "Off"
+        case 1:
+            "Low"
+        case 3:
+            "High"
+        default:
+            "Normal"
+        }
     }
 }
 
@@ -849,6 +952,21 @@ final class SettingsWindowController: NSObject {
     private let maxWordsLabel = NSTextField(labelWithString: "")
     private let maxWordsDetailLabel = NSTextField(labelWithString: "")
     private let maxWordsSlider = NSSlider()
+    private let wordStartLabel = NSTextField(labelWithString: "")
+    private let wordStartDetailLabel = NSTextField(labelWithString: "")
+    private let wordStartSlider = NSSlider()
+    private let phraseStartLabel = NSTextField(labelWithString: "")
+    private let phraseStartDetailLabel = NSTextField(labelWithString: "")
+    private let phraseStartSlider = NSSlider()
+    private let responseSpeedLabel = NSTextField(labelWithString: "")
+    private let responseSpeedDetailLabel = NSTextField(labelWithString: "")
+    private let responseSpeedSlider = NSSlider()
+    private let confidenceLabel = NSTextField(labelWithString: "")
+    private let confidenceDetailLabel = NSTextField(labelWithString: "")
+    private let confidenceSlider = NSSlider()
+    private let learningRestraintLabel = NSTextField(labelWithString: "")
+    private let learningRestraintDetailLabel = NSTextField(labelWithString: "")
+    private let learningRestraintSlider = NSSlider()
     private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
@@ -874,6 +992,11 @@ final class SettingsWindowController: NSObject {
     private let setAcceptAllShortcut: (AcceptAllShortcut) -> Void
     private let setSuggestionAggressivenessLevel: (Int) -> Void
     private let setSuggestionMaxVisibleWords: (Int) -> Void
+    private let setSuggestionWordStartCharacters: (Int) -> Void
+    private let setSuggestionPhraseStartWords: (Int) -> Void
+    private let setSuggestionResponseSpeedLevel: (Int) -> Void
+    private let setSuggestionConfidenceLevel: (Int) -> Void
+    private let setSuggestionLearningRestraintLevel: (Int) -> Void
     private let layoutStyle = SettingsLayoutStyle.nativeUtility
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentPracticePrimaryAction: SettingsPracticePrimaryAction = .none
@@ -903,7 +1026,12 @@ final class SettingsWindowController: NSObject {
         cycleAcceptAllShortcut: @escaping () -> Void,
         setAcceptAllShortcut: @escaping (AcceptAllShortcut) -> Void,
         setSuggestionAggressivenessLevel: @escaping (Int) -> Void,
-        setSuggestionMaxVisibleWords: @escaping (Int) -> Void
+        setSuggestionMaxVisibleWords: @escaping (Int) -> Void,
+        setSuggestionWordStartCharacters: @escaping (Int) -> Void = { _ in },
+        setSuggestionPhraseStartWords: @escaping (Int) -> Void = { _ in },
+        setSuggestionResponseSpeedLevel: @escaping (Int) -> Void = { _ in },
+        setSuggestionConfidenceLevel: @escaping (Int) -> Void = { _ in },
+        setSuggestionLearningRestraintLevel: @escaping (Int) -> Void = { _ in }
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -929,6 +1057,11 @@ final class SettingsWindowController: NSObject {
         self.setAcceptAllShortcut = setAcceptAllShortcut
         self.setSuggestionAggressivenessLevel = setSuggestionAggressivenessLevel
         self.setSuggestionMaxVisibleWords = setSuggestionMaxVisibleWords
+        self.setSuggestionWordStartCharacters = setSuggestionWordStartCharacters
+        self.setSuggestionPhraseStartWords = setSuggestionPhraseStartWords
+        self.setSuggestionResponseSpeedLevel = setSuggestionResponseSpeedLevel
+        self.setSuggestionConfidenceLevel = setSuggestionConfidenceLevel
+        self.setSuggestionLearningRestraintLevel = setSuggestionLearningRestraintLevel
 
         let contentView = NSVisualEffectView(
             frame: NSRect(origin: .zero, size: SettingsLayoutStyle.nativeUtility.preferredContentSize)
@@ -1147,6 +1280,21 @@ final class SettingsWindowController: NSObject {
         maxWordsLabel.stringValue = suggestionAggressiveness.maxWordsText
         maxWordsDetailLabel.stringValue = suggestionAggressiveness.maxWordsDetailText
         maxWordsSlider.doubleValue = suggestionAggressiveness.maxWordsSliderValue
+        wordStartLabel.stringValue = suggestionAggressiveness.wordStartText
+        wordStartDetailLabel.stringValue = suggestionAggressiveness.wordStartDetailText
+        wordStartSlider.doubleValue = suggestionAggressiveness.wordStartSliderValue
+        phraseStartLabel.stringValue = suggestionAggressiveness.phraseStartText
+        phraseStartDetailLabel.stringValue = suggestionAggressiveness.phraseStartDetailText
+        phraseStartSlider.doubleValue = suggestionAggressiveness.phraseStartSliderValue
+        responseSpeedLabel.stringValue = suggestionAggressiveness.responseSpeedText
+        responseSpeedDetailLabel.stringValue = suggestionAggressiveness.responseSpeedDetailText
+        responseSpeedSlider.doubleValue = suggestionAggressiveness.responseSpeedSliderValue
+        confidenceLabel.stringValue = suggestionAggressiveness.confidenceText
+        confidenceDetailLabel.stringValue = suggestionAggressiveness.confidenceDetailText
+        confidenceSlider.doubleValue = suggestionAggressiveness.confidenceSliderValue
+        learningRestraintLabel.stringValue = suggestionAggressiveness.learningRestraintText
+        learningRestraintDetailLabel.stringValue = suggestionAggressiveness.learningRestraintDetailText
+        learningRestraintSlider.doubleValue = suggestionAggressiveness.learningRestraintSliderValue
         firstRunLabel.stringValue = SettingsOnboardingState(
             isTrusted: isTrusted,
             suggestionsPaused: suggestionsPaused,
@@ -1260,6 +1408,16 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(aggressivenessDetailLabel)
         maxWordsLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(maxWordsDetailLabel)
+        wordStartLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(wordStartDetailLabel)
+        phraseStartLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(phraseStartDetailLabel)
+        responseSpeedLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(responseSpeedDetailLabel)
+        confidenceLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(confidenceDetailLabel)
+        learningRestraintLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(learningRestraintDetailLabel)
 
         let requestButton = NSButton(title: "Allow Accessibility", target: self, action: #selector(requestAccessibility))
         requestButton.bezelStyle = .rounded
@@ -1357,6 +1515,41 @@ final class SettingsWindowController: NSObject {
             action: #selector(changeMaxWordsSlider)
         )
         maxWordsSlider.toolTip = "Adjusts the maximum number of visible predicted words."
+        configureSlider(
+            wordStartSlider,
+            minimumValue: SuggestionTuning.minimumWordStartCharacters,
+            maximumValue: SuggestionTuning.maximumWordStartCharacters,
+            action: #selector(changeWordStartSlider)
+        )
+        wordStartSlider.toolTip = "Sets how many typed letters are needed before word-completion suggestions."
+        configureSlider(
+            phraseStartSlider,
+            minimumValue: SuggestionTuning.minimumPhraseStartWords,
+            maximumValue: SuggestionTuning.maximumPhraseStartWords,
+            action: #selector(changePhraseStartSlider)
+        )
+        phraseStartSlider.toolTip = "Sets how many words are needed before phrase suggestions."
+        configureSlider(
+            responseSpeedSlider,
+            minimumValue: SuggestionTuning.minimumResponseSpeedLevel,
+            maximumValue: SuggestionTuning.maximumResponseSpeedLevel,
+            action: #selector(changeResponseSpeedSlider)
+        )
+        responseSpeedSlider.toolTip = "Sets how long SteadyType waits after typing before asking for suggestions."
+        configureSlider(
+            confidenceSlider,
+            minimumValue: SuggestionTuning.minimumConfidenceLevel,
+            maximumValue: SuggestionTuning.maximumConfidenceLevel,
+            action: #selector(changeConfidenceSlider)
+        )
+        confidenceSlider.toolTip = "Sets how strong a guess must be before it appears."
+        configureSlider(
+            learningRestraintSlider,
+            minimumValue: SuggestionTuning.minimumLearningRestraintLevel,
+            maximumValue: SuggestionTuning.maximumLearningRestraintLevel,
+            action: #selector(changeLearningRestraintSlider)
+        )
+        learningRestraintSlider.toolTip = "Sets how much ignored/deleted history can hide future suggestions."
 
         [
             title,
@@ -1466,7 +1659,22 @@ final class SettingsWindowController: NSObject {
                     aggressivenessSlider,
                     maxWordsLabel,
                     maxWordsDetailLabel,
-                    maxWordsSlider
+                    maxWordsSlider,
+                    wordStartLabel,
+                    wordStartDetailLabel,
+                    wordStartSlider,
+                    phraseStartLabel,
+                    phraseStartDetailLabel,
+                    phraseStartSlider,
+                    responseSpeedLabel,
+                    responseSpeedDetailLabel,
+                    responseSpeedSlider,
+                    confidenceLabel,
+                    confidenceDetailLabel,
+                    confidenceSlider,
+                    learningRestraintLabel,
+                    learningRestraintDetailLabel,
+                    learningRestraintSlider
                 ]
             )
         ].forEach {
@@ -1750,5 +1958,30 @@ final class SettingsWindowController: NSObject {
     @objc
     private func changeMaxWordsSlider() {
         setSuggestionMaxVisibleWords(maxWordsSlider.integerValue)
+    }
+
+    @objc
+    private func changeWordStartSlider() {
+        setSuggestionWordStartCharacters(wordStartSlider.integerValue)
+    }
+
+    @objc
+    private func changePhraseStartSlider() {
+        setSuggestionPhraseStartWords(phraseStartSlider.integerValue)
+    }
+
+    @objc
+    private func changeResponseSpeedSlider() {
+        setSuggestionResponseSpeedLevel(responseSpeedSlider.integerValue)
+    }
+
+    @objc
+    private func changeConfidenceSlider() {
+        setSuggestionConfidenceLevel(confidenceSlider.integerValue)
+    }
+
+    @objc
+    private func changeLearningRestraintSlider() {
+        setSuggestionLearningRestraintLevel(learningRestraintSlider.integerValue)
     }
 }

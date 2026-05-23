@@ -345,6 +345,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         setSuggestionMaxVisibleWords: { [weak self] words in
             self?.setSuggestionMaxVisibleWords(words)
+        },
+        setSuggestionWordStartCharacters: { [weak self] characters in
+            self?.setSuggestionWordStartCharacters(characters)
+        },
+        setSuggestionPhraseStartWords: { [weak self] words in
+            self?.setSuggestionPhraseStartWords(words)
+        },
+        setSuggestionResponseSpeedLevel: { [weak self] level in
+            self?.setSuggestionResponseSpeedLevel(level)
+        },
+        setSuggestionConfidenceLevel: { [weak self] level in
+            self?.setSuggestionConfidenceLevel(level)
+        },
+        setSuggestionLearningRestraintLevel: { [weak self] level in
+            self?.setSuggestionLearningRestraintLevel(level)
         }
     )
 
@@ -10113,10 +10128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile
     ) -> Int {
         effectiveSuggestionPace(for: profile).maxVisibleWords(
-            defaultMaxVisibleWords: min(
-                completionLengthConfiguration.maxVisibleWords,
-                suggestionTuning.maxVisibleWords
-            ),
+            defaultMaxVisibleWords: suggestionTuning.maxVisibleWords,
             requestMode: requestMode
         )
     }
@@ -10166,35 +10178,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setSuggestionAggressivenessLevel(_ level: Int) {
-        let next = SuggestionTuning(
-            aggressivenessLevel: level,
-            maxVisibleWords: suggestionTuning.maxVisibleWords
+        setSuggestionTuning(
+            updatedSuggestionTuning(aggressivenessLevel: level),
+            reason: "aggressiveness-changed"
         )
-        guard next != suggestionTuning else {
-            refreshRuntimeChrome()
-            return
-        }
-
-        suggestionTuning = next
-        persistSuggestionTuning()
-        applySuggestionTuningChange(reason: "aggressiveness-changed")
-        DiagnosticsLog.shared.record(
-            "suggestion-tuning-control",
-            metadata: [
-                "surface": "settings",
-                "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
-                "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
-                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords)
-            ]
-        )
-        refreshRuntimeChrome()
     }
 
     private func setSuggestionMaxVisibleWords(_ words: Int) {
-        let next = SuggestionTuning(
-            aggressivenessLevel: suggestionTuning.aggressivenessLevel,
-            maxVisibleWords: words
+        setSuggestionTuning(
+            updatedSuggestionTuning(maxVisibleWords: words),
+            reason: "max-visible-words-changed"
         )
+    }
+
+    private func setSuggestionWordStartCharacters(_ characters: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(wordStartCharacters: characters),
+            reason: "word-start-characters-changed"
+        )
+    }
+
+    private func setSuggestionPhraseStartWords(_ words: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(phraseStartWords: words),
+            reason: "phrase-start-words-changed"
+        )
+    }
+
+    private func setSuggestionResponseSpeedLevel(_ level: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(responseSpeedLevel: level),
+            reason: "response-speed-changed"
+        )
+    }
+
+    private func setSuggestionConfidenceLevel(_ level: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(confidenceLevel: level),
+            reason: "confidence-changed"
+        )
+    }
+
+    private func setSuggestionLearningRestraintLevel(_ level: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(learningRestraintLevel: level),
+            reason: "learning-restraint-changed"
+        )
+    }
+
+    private func updatedSuggestionTuning(
+        aggressivenessLevel: Int? = nil,
+        maxVisibleWords: Int? = nil,
+        wordStartCharacters: Int? = nil,
+        phraseStartWords: Int? = nil,
+        responseSpeedLevel: Int? = nil,
+        confidenceLevel: Int? = nil,
+        learningRestraintLevel: Int? = nil
+    ) -> SuggestionTuning {
+        SuggestionTuning(
+            aggressivenessLevel: aggressivenessLevel ?? suggestionTuning.aggressivenessLevel,
+            maxVisibleWords: maxVisibleWords ?? suggestionTuning.maxVisibleWords,
+            wordStartCharacters: wordStartCharacters ?? suggestionTuning.wordStartCharacters,
+            phraseStartWords: phraseStartWords ?? suggestionTuning.phraseStartWords,
+            responseSpeedLevel: responseSpeedLevel ?? suggestionTuning.responseSpeedLevel,
+            confidenceLevel: confidenceLevel ?? suggestionTuning.confidenceLevel,
+            learningRestraintLevel: learningRestraintLevel ?? suggestionTuning.learningRestraintLevel
+        )
+    }
+
+    private func setSuggestionTuning(_ next: SuggestionTuning, reason: String) {
         guard next != suggestionTuning else {
             refreshRuntimeChrome()
             return
@@ -10202,14 +10254,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         suggestionTuning = next
         persistSuggestionTuning()
-        applySuggestionTuningChange(reason: "max-visible-words-changed")
+        applySuggestionTuningChange(reason: reason)
         DiagnosticsLog.shared.record(
             "suggestion-tuning-control",
             metadata: [
                 "surface": "settings",
                 "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
                 "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
-                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords)
+                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords),
+                "suggestionWordStartCharacters": String(suggestionTuning.wordStartCharacters),
+                "suggestionPhraseStartWords": String(suggestionTuning.phraseStartWords),
+                "suggestionResponseSpeedLevel": String(suggestionTuning.responseSpeedLevel),
+                "suggestionConfidenceLevel": String(suggestionTuning.confidenceLevel),
+                "suggestionLearningRestraintLevel": String(suggestionTuning.learningRestraintLevel),
+                "reason": reason
             ]
         )
         refreshRuntimeChrome()
@@ -10859,12 +10917,32 @@ private extension AppDelegate {
         "SuggestionMaxVisibleWords"
     }
 
+    static var suggestionWordStartCharactersDefaultsKey: String {
+        "SuggestionWordStartCharacters"
+    }
+
+    static var suggestionPhraseStartWordsDefaultsKey: String {
+        "SuggestionPhraseStartWords"
+    }
+
+    static var suggestionResponseSpeedLevelDefaultsKey: String {
+        "SuggestionResponseSpeedLevel"
+    }
+
+    static var suggestionConfidenceLevelDefaultsKey: String {
+        "SuggestionConfidenceLevel"
+    }
+
+    static var suggestionLearningRestraintLevelDefaultsKey: String {
+        "SuggestionLearningRestraintLevel"
+    }
+
     static var suggestionTuningDefaultsVersionDefaultsKey: String {
         "SuggestionTuningDefaultsVersion"
     }
 
     static var currentSuggestionTuningDefaultsVersion: Int {
-        2
+        3
     }
 
     static var previousDefaultSuggestionAggressivenessLevel: Int {
@@ -11101,12 +11179,33 @@ private extension AppDelegate {
         if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
             maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
         } else {
-            maxVisibleWords = CompletionModelPolicy.mvp.maxVisibleWords
+            maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
         }
+
+        let wordStartCharacters = defaults.object(forKey: Self.suggestionWordStartCharactersDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionWordStartCharactersDefaultsKey)
+            : SuggestionTuning.defaultWordStartCharacters
+        let phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionPhraseStartWordsDefaultsKey)
+            : SuggestionTuning.defaultPhraseStartWords
+        let responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionResponseSpeedLevelDefaultsKey)
+            : SuggestionTuning.defaultResponseSpeedLevel
+        let confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionConfidenceLevelDefaultsKey)
+            : SuggestionTuning.defaultConfidenceLevel
+        let learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionLearningRestraintLevelDefaultsKey)
+            : SuggestionTuning.defaultLearningRestraintLevel
 
         suggestionTuning = SuggestionTuning(
             aggressivenessLevel: level,
-            maxVisibleWords: maxVisibleWords
+            maxVisibleWords: maxVisibleWords,
+            wordStartCharacters: wordStartCharacters,
+            phraseStartWords: phraseStartWords,
+            responseSpeedLevel: responseSpeedLevel,
+            confidenceLevel: confidenceLevel,
+            learningRestraintLevel: learningRestraintLevel
         )
         persistSuggestionTuning()
         defaults.set(
@@ -11128,6 +11227,26 @@ private extension AppDelegate {
         defaults.set(
             suggestionTuning.maxVisibleWords,
             forKey: Self.suggestionMaxVisibleWordsDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.wordStartCharacters,
+            forKey: Self.suggestionWordStartCharactersDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.phraseStartWords,
+            forKey: Self.suggestionPhraseStartWordsDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.responseSpeedLevel,
+            forKey: Self.suggestionResponseSpeedLevelDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.confidenceLevel,
+            forKey: Self.suggestionConfidenceLevelDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.learningRestraintLevel,
+            forKey: Self.suggestionLearningRestraintLevelDefaultsKey
         )
     }
 

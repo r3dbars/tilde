@@ -557,7 +557,6 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func effectiveMaxVisibleWords(for request: CompletionRequest) -> Int {
         min(
-            lengthConfiguration.maxVisibleWords,
             request.maxVisibleWords,
             request.behaviorProfile.maxVisibleWords
         )
@@ -565,7 +564,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func maxGeneratedTokens(for request: CompletionRequest) -> Int {
         min(
-            lengthConfiguration.maxGeneratedTokens,
+            max(lengthConfiguration.maxGeneratedTokens, request.maxVisibleWords + 6),
             request.behaviorProfile.maxGeneratedTokens,
             request.mode.generatedTokenCeiling,
             CompletionModelPolicy.clampedGeneratedTokens(request.maxVisibleWords + 6)
