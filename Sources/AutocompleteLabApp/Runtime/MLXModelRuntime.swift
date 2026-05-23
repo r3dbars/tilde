@@ -370,11 +370,159 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         try cancellationCoordinator.check(epoch: cancellationEpoch)
 
         let startedAt = Date()
-        let prompt = promptBuilder.prompt(for: request)
+        var prompt = promptBuilder.prompt(for: request)
         let promptBuiltAt = Date()
-        let promptCacheLookup = cachedStaticPrompt(systemPrompt: prompt.system)
         let requestCleaner = cleaner(for: request)
         let requestMaxGeneratedTokens = maxGeneratedTokens(for: request)
+        var generation = try await generateRawCompletion(
+            container: container,
+            prompt: prompt,
+            request: request,
+            requestCleaner: requestCleaner,
+            requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+            cancellationEpoch: cancellationEpoch,
+            onPartialSuggestion: onPartialSuggestion
+        )
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
+
+        var rawOutput = generation.rawOutput
+        var cleanedCandidates = requestCleaner.cleanCandidates(
+            generation.rawOutput,
+            after: request.textBeforeCursor,
+            mode: request.mode,
+            limit: 3
+        )
+        var candidateSelection = candidateRanker.selection(
+            cleanedCandidates,
+            mode: request.mode,
+            textBeforeCursor: request.textBeforeCursor,
+            behaviorProfileID: request.behaviorProfile.id
+        )
+        var retryAttempted = false
+        var retryUsed = false
+
+        if let retryPrompt = Self.retryPromptForShortHighWordCandidate(
+            request: request,
+            cleanedCandidates: cleanedCandidates,
+            candidateSelection: candidateSelection,
+            effectiveMaxVisibleWords: effectiveMaxVisibleWords(for: request)
+        ) {
+            retryAttempted = true
+            DiagnosticsLog.shared.record(
+                "mlx-completion-retry-scheduled",
+                metadata: [
+                    "app": request.appBundleIdentifier ?? "unknown",
+                    "mode": request.mode.rawValue,
+                    "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
+                    "candidateTopScore": Self.formattedCandidateScore(candidateSelection.rankedCandidates.first?.score),
+                    "candidateWords": String(candidateSelection.rankedCandidates.first?.suggestion.visibleWordCount ?? 0)
+                ]
+            )
+
+            let retryGeneration = try await generateRawCompletion(
+                container: container,
+                prompt: retryPrompt,
+                request: request,
+                requestCleaner: requestCleaner,
+                requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+                cancellationEpoch: cancellationEpoch,
+                onPartialSuggestion: onPartialSuggestion
+            )
+            try cancellationCoordinator.check(epoch: cancellationEpoch)
+
+            let retryCandidates = requestCleaner.cleanCandidates(
+                retryGeneration.rawOutput,
+                after: request.textBeforeCursor,
+                mode: request.mode,
+                limit: 3
+            )
+            let retrySelection = candidateRanker.selection(
+                retryCandidates,
+                mode: request.mode,
+                textBeforeCursor: request.textBeforeCursor,
+                behaviorProfileID: request.behaviorProfile.id
+            )
+
+            if retrySelection.suggestion != nil ||
+                (retrySelection.rankedCandidates.first?.score ?? 0) > (candidateSelection.rankedCandidates.first?.score ?? 0) {
+                retryUsed = true
+                prompt = retryPrompt
+                generation = retryGeneration
+                rawOutput = retryGeneration.rawOutput
+                cleanedCandidates = retryCandidates
+                candidateSelection = retrySelection
+            }
+        }
+
+        let cleanedSuggestion = candidateSelection.suggestion
+        let candidateTopScore = candidateSelection.rankedCandidates.first?.score
+        let cleanedAt = Date()
+        let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
+        var timingMetadata: [String: String] = [:]
+        timingMetadata["app"] = request.appBundleIdentifier ?? "unknown"
+        timingMetadata["mode"] = request.mode.rawValue
+        timingMetadata["fieldKind"] = request.fieldKind.rawValue
+        timingMetadata["behaviorProfile"] = request.behaviorProfile.id.rawValue
+        timingMetadata["promptMilliseconds"] = String(Self.milliseconds(from: startedAt, to: promptBuiltAt))
+        timingMetadata["sessionMilliseconds"] = String(generation.sessionMilliseconds)
+        timingMetadata["firstChunkMilliseconds"] = generation.firstChunkMilliseconds.map(String.init) ?? "none"
+        timingMetadata["generationMilliseconds"] = String(generation.generationMilliseconds)
+        timingMetadata["cleanupMilliseconds"] = String(Self.milliseconds(from: generation.generatedAt, to: cleanedAt))
+        timingMetadata["totalMilliseconds"] = String(totalMilliseconds)
+        timingMetadata["maxTokens"] = String(requestMaxGeneratedTokens)
+        timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords(for: request))
+        timingMetadata["rawChars"] = String(rawOutput.count)
+        timingMetadata["cleanedCandidateCount"] = String(cleanedCandidates.count)
+        timingMetadata["candidateTopScore"] = Self.formattedCandidateScore(candidateTopScore)
+        timingMetadata["candidateScoreMargin"] = Self.formattedCandidateScore(candidateSelection.scoreMargin)
+        timingMetadata["candidateSuppressionReason"] = candidateSelection.suppressionReason?.rawValue ?? "none"
+        timingMetadata["cleanedChars"] = String(cleanedSuggestion?.visibleText.count ?? 0)
+        timingMetadata["retryAttempted"] = String(retryAttempted)
+        timingMetadata["retryUsed"] = String(retryUsed)
+        timingMetadata.merge(generation.promptCacheTraceMetadata) { current, _ in current }
+
+        DiagnosticsLog.shared.record(
+            "mlx-completion-timing",
+            metadata: timingMetadata
+        )
+        RawAutocompleteTraceLog.shared.recordModelResult(
+            request: request,
+            prompt: prompt,
+            rawOutput: rawOutput,
+            cleanedSuggestion: cleanedSuggestion,
+            cleanedCandidateCount: cleanedCandidates.count,
+            candidateTopScore: candidateTopScore,
+            candidateScoreMargin: candidateSelection.scoreMargin,
+            candidateSuppressionReason: candidateSelection.suppressionReason?.rawValue,
+            suggestionID: request.suggestionID,
+            latencyMilliseconds: totalMilliseconds,
+            firstTokenLatencyMilliseconds: generation.firstChunkMilliseconds
+        )
+
+        try cancellationCoordinator.check(epoch: cancellationEpoch)
+        return cleanedSuggestion
+    }
+
+    private struct RawCompletionGeneration {
+        let rawOutput: String
+        let firstChunkMilliseconds: Int?
+        let sessionMilliseconds: Int
+        let generationMilliseconds: Int
+        let generatedAt: Date
+        let promptCacheTraceMetadata: [String: String]
+    }
+
+    private func generateRawCompletion(
+        container: ModelContainer,
+        prompt: CompletionPrompt,
+        request: CompletionRequest,
+        requestCleaner: CompletionOutputCleaner,
+        requestMaxGeneratedTokens: Int,
+        cancellationEpoch: Int,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
+    ) async throws -> RawCompletionGeneration {
+        let sessionStartedAt = Date()
+        let promptCacheLookup = cachedStaticPrompt(systemPrompt: prompt.system)
         let session = ChatSession(
             container,
             instructions: promptCacheLookup.systemPrompt,
@@ -430,66 +578,16 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             )
             throw CancellationError()
         }
+
         let generatedAt = Date()
-        try cancellationCoordinator.check(epoch: cancellationEpoch)
-
-        let cleanedCandidates = requestCleaner.cleanCandidates(
-            rawOutput,
-            after: request.textBeforeCursor,
-            mode: request.mode,
-            limit: 3
-        )
-        let candidateSelection = candidateRanker.selection(
-            cleanedCandidates,
-            mode: request.mode,
-            textBeforeCursor: request.textBeforeCursor,
-            behaviorProfileID: request.behaviorProfile.id
-        )
-        let cleanedSuggestion = candidateSelection.suggestion
-        let candidateTopScore = candidateSelection.rankedCandidates.first?.score
-        let cleanedAt = Date()
-        let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
-        var timingMetadata: [String: String] = [:]
-        timingMetadata["app"] = request.appBundleIdentifier ?? "unknown"
-        timingMetadata["mode"] = request.mode.rawValue
-        timingMetadata["fieldKind"] = request.fieldKind.rawValue
-        timingMetadata["behaviorProfile"] = request.behaviorProfile.id.rawValue
-        timingMetadata["promptMilliseconds"] = String(Self.milliseconds(from: startedAt, to: promptBuiltAt))
-        timingMetadata["sessionMilliseconds"] = String(Self.milliseconds(from: promptBuiltAt, to: sessionBuiltAt))
-        timingMetadata["firstChunkMilliseconds"] = firstChunkMilliseconds.map(String.init) ?? "none"
-        timingMetadata["generationMilliseconds"] = String(Self.milliseconds(from: sessionBuiltAt, to: generatedAt))
-        timingMetadata["cleanupMilliseconds"] = String(Self.milliseconds(from: generatedAt, to: cleanedAt))
-        timingMetadata["totalMilliseconds"] = String(totalMilliseconds)
-        timingMetadata["maxTokens"] = String(requestMaxGeneratedTokens)
-        timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords(for: request))
-        timingMetadata["rawChars"] = String(rawOutput.count)
-        timingMetadata["cleanedCandidateCount"] = String(cleanedCandidates.count)
-        timingMetadata["candidateTopScore"] = Self.formattedCandidateScore(candidateTopScore)
-        timingMetadata["candidateScoreMargin"] = Self.formattedCandidateScore(candidateSelection.scoreMargin)
-        timingMetadata["candidateSuppressionReason"] = candidateSelection.suppressionReason?.rawValue ?? "none"
-        timingMetadata["cleanedChars"] = String(cleanedSuggestion?.visibleText.count ?? 0)
-        timingMetadata.merge(promptCacheLookup.traceMetadata) { current, _ in current }
-
-        DiagnosticsLog.shared.record(
-            "mlx-completion-timing",
-            metadata: timingMetadata
-        )
-        RawAutocompleteTraceLog.shared.recordModelResult(
-            request: request,
-            prompt: prompt,
+        return RawCompletionGeneration(
             rawOutput: rawOutput,
-            cleanedSuggestion: cleanedSuggestion,
-            cleanedCandidateCount: cleanedCandidates.count,
-            candidateTopScore: candidateTopScore,
-            candidateScoreMargin: candidateSelection.scoreMargin,
-            candidateSuppressionReason: candidateSelection.suppressionReason?.rawValue,
-            suggestionID: request.suggestionID,
-            latencyMilliseconds: totalMilliseconds,
-            firstTokenLatencyMilliseconds: firstChunkMilliseconds
+            firstChunkMilliseconds: firstChunkMilliseconds,
+            sessionMilliseconds: Self.milliseconds(from: sessionStartedAt, to: sessionBuiltAt),
+            generationMilliseconds: Self.milliseconds(from: sessionBuiltAt, to: generatedAt),
+            generatedAt: generatedAt,
+            promptCacheTraceMetadata: promptCacheLookup.traceMetadata
         )
-
-        try cancellationCoordinator.check(epoch: cancellationEpoch)
-        return cleanedSuggestion
     }
 
     private func shouldStopEarly(
@@ -497,17 +595,90 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         rawOutput: String,
         request: CompletionRequest
     ) -> Bool {
+        Self.shouldStopEarly(
+            suggestion,
+            rawOutput: rawOutput,
+            mode: request.mode,
+            effectiveMaxVisibleWords: effectiveMaxVisibleWords(for: request)
+        )
+    }
+
+    static func retryPromptForShortHighWordCandidate(
+        request: CompletionRequest,
+        cleanedCandidates: [CompletionSuggestion],
+        candidateSelection: CompletionCandidateSelection,
+        effectiveMaxVisibleWords: Int
+    ) -> CompletionPrompt? {
+        guard request.mode.isContinuation,
+              effectiveMaxVisibleWords >= 12,
+              candidateSelection.suggestion == nil,
+              candidateSelection.suppressionReason == .lowTopScore
+        else {
+            return nil
+        }
+
+        let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(
+            forVisibleWords: effectiveMaxVisibleWords
+        )
+        let shortCandidate = candidateSelection.rankedCandidates.first?.suggestion
+            ?? cleanedCandidates.first
+        guard let shortCandidate,
+              shortCandidate.visibleWordCount < preferredMinimum
+        else {
+            return nil
+        }
+
+        let shortPrefix = shortCandidate.visibleText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !shortPrefix.isEmpty else {
+            return nil
+        }
+
+        let context = String(request.textBeforeCursor.suffix(360))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let system = """
+        Inline autocomplete retry.
+        The previous answer was too short: "\(shortPrefix)".
+        Return only one suffix after the Before cursor text.
+        The suffix must be \(preferredMinimum)-\(effectiveMaxVisibleWords) words for normal drafting.
+        Start with the previous short answer only if it still fits, then keep going.
+        Example Before cursor: The onboarding note should make the setup feel clear and
+        Example suffix: easy to finish without making the user think about permissions twice before they can keep writing
+        Do not include labels, quotes, explanations, multiple choices, or the Before cursor text.
+        Return \(CompletionPromptBuilder.noSuggestionToken) only when unsafe or impossible.
+        """
+        let user = """
+        Before cursor:
+        \(context)
+
+        Next \(preferredMinimum)-\(effectiveMaxVisibleWords) words, or \(CompletionPromptBuilder.noSuggestionToken):
+        """
+        return CompletionPrompt(system: system, user: user)
+    }
+
+    static func shouldStopEarly(
+        _ suggestion: CompletionSuggestion?,
+        rawOutput: String,
+        mode: CompletionRequestMode,
+        effectiveMaxVisibleWords: Int
+    ) -> Bool {
         guard let suggestion else {
             return false
         }
 
-        if request.mode == .wordCompletion {
+        if mode == .wordCompletion {
             return true
         }
 
-        return suggestion.visibleWordCount >= CompletionModelPolicy.minimumVisibleWords
-            && (suggestion.visibleWordCount >= effectiveMaxVisibleWords(for: request)
-                || rawOutput.contains(where: { [".", "!", "?", "\n"].contains($0) }))
+        let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(
+            forVisibleWords: effectiveMaxVisibleWords
+        )
+        guard suggestion.visibleWordCount >= preferredMinimum else {
+            return false
+        }
+
+        return suggestion.visibleWordCount >= effectiveMaxVisibleWords
+            || rawOutput.contains(where: { [".", "!", "?", "\n"].contains($0) })
     }
 
     private static func milliseconds(from start: Date, to end: Date) -> Int {

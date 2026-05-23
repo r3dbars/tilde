@@ -97,6 +97,22 @@ public struct CompletionModelPolicy: Equatable, Sendable {
 
         return clampedGeneratedTokens((visibleWords * 2) + 4)
     }
+
+    public static func preferredMinimumVisibleWords(forVisibleWords visibleWords: Int) -> Int {
+        let visibleWords = clampedVisibleWords(visibleWords)
+        switch visibleWords {
+        case 16...:
+            return 12
+        case 12...:
+            return 8
+        case 9...:
+            return 5
+        case 6...:
+            return 3
+        default:
+            return minimumVisibleWords
+        }
+    }
 }
 
 public struct CompletionLengthConfiguration: Equatable, Sendable {

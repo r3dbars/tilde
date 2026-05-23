@@ -677,7 +677,12 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var maxWordsDetailText: String {
-        "Allows suggestions up to \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words"). Higher can show longer sentence chunks."
+        if tuning.maxVisibleWords >= 12 {
+            let minimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: tuning.maxVisibleWords)
+            return "Aims for \(minimum)-\(tuning.maxVisibleWords) words when the sentence has enough context."
+        }
+
+        return "Allows suggestions up to \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words")."
     }
 
     var aggressivenessSliderValue: Double {

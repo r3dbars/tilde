@@ -238,17 +238,18 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
 
     private func phraseLengthScore(_ wordCount: Int, maxVisibleWords: Int) -> Double {
         if maxVisibleWords >= 12 {
+            let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: maxVisibleWords)
             switch wordCount {
-            case 8...maxVisibleWords:
+            case preferredMinimum...maxVisibleWords:
                 return 0.38
-            case 5...7:
-                return 0.34
+            case 5...:
+                return wordCount < preferredMinimum ? 0.20 : 0.08
             case 3...4:
-                return 0.24
+                return 0.05
             case 2:
-                return 0.14
+                return -0.04
             default:
-                return 0.08
+                return -0.10
             }
         }
 
@@ -281,17 +282,18 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
 
     private func sentenceLengthScore(_ wordCount: Int, maxVisibleWords: Int) -> Double {
         if maxVisibleWords >= 12 {
+            let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: maxVisibleWords)
             switch wordCount {
-            case 8...maxVisibleWords:
+            case preferredMinimum...maxVisibleWords:
                 return 0.38
-            case 5...7:
-                return 0.32
+            case 5...:
+                return wordCount < preferredMinimum ? 0.18 : 0.08
             case 3...4:
-                return 0.22
+                return 0.05
             case 2:
-                return 0.14
+                return -0.04
             default:
-                return 0.08
+                return -0.10
             }
         }
 
