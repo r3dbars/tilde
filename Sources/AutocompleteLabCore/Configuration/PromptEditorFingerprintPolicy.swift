@@ -54,6 +54,14 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
             return PromptEditorFingerprintDecision(canSuggest: false, reason: "prompt-proof-mode-required")
         }
 
+        if bundleIdentifier == "com.openai.codex",
+           role == "AXTextArea",
+           selectedTextLength == 0,
+           textAfterCursor.isEmpty,
+           elementRect != nil {
+            return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-text-area")
+        }
+
         let searchable = fingerprintText.lowercased()
         if Self.strongPromptTerms.contains(where: { searchable.contains($0) }) {
             guard !Self.promptTextInputRoles.contains(role ?? "") else {
