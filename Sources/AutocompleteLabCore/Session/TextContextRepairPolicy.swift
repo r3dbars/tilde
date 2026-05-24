@@ -10,6 +10,7 @@ public enum TextContextRepairReason: String, Equatable, Sendable {
     case obsidianCodeMirrorTextAfterGrowth = "obsidian-codemirror-text-after-growth"
     case obsidianCodeMirrorEndOfDocumentGrowth = "obsidian-codemirror-end-of-document-growth"
     case obsidianCodeMirrorEndOfDocumentTypingDrift = "obsidian-codemirror-end-of-document-typing-drift"
+    case obsidianCodeMirrorViewportEndOfDocumentGrowth = "obsidian-codemirror-viewport-end-of-document-growth"
     case obsidianCodeMirrorViewportEndOfDocument = "obsidian-codemirror-viewport-end-of-document"
     case obsidianCodeMirrorViewportTailLine = "obsidian-codemirror-viewport-tail-line"
     case obsidianCodeMirrorShortDocumentStructureTail = "obsidian-codemirror-short-document-structure-tail"
@@ -408,6 +409,13 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         ) {
             return typingDriftRepair
         }
+        if let viewportGrowthRepair = obsidianCodeMirrorViewportEndOfDocumentGrowthRepair(
+            input: input,
+            previousTextBeforeCursor: previousTextBeforeCursor,
+            currentText: currentText
+        ) {
+            return viewportGrowthRepair
+        }
 
         guard currentText.hasPrefix(previousTextBeforeCursor),
               currentText.count > previousTextBeforeCursor.count,
@@ -424,6 +432,42 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             textBeforeCursor: currentText,
             textAfterCursor: "",
             reason: .obsidianCodeMirrorEndOfDocumentGrowth
+        )
+    }
+
+    private func obsidianCodeMirrorViewportEndOfDocumentGrowthRepair(
+        input: TextContextRepairInput,
+        previousTextBeforeCursor: String,
+        currentText: String
+    ) -> TextContextRepairResult? {
+        guard input.textBeforeCursor.count >= 300,
+              input.textBeforeCursor.count < previousTextBeforeCursor.count,
+              input.textAfterCursor.count <= 160,
+              !previousTextBeforeCursor.hasSuffix(currentText) else {
+            return nil
+        }
+
+        let minimumOverlap = min(500, max(120, input.textBeforeCursor.count / 2))
+        guard let overlap = suffixPrefixOverlap(
+            previousTextBeforeCursor,
+            currentText,
+            minimumLength: minimumOverlap
+        ) else {
+            return nil
+        }
+
+        let appendedText = String(currentText.dropFirst(overlap))
+        guard !appendedText.isEmpty,
+              appendedText.count <= 160,
+              appendedText.contains(where: \.isLetter),
+              isPlausibleActiveTypingLine(currentLine(in: currentText)) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: currentText,
+            textAfterCursor: "",
+            reason: .obsidianCodeMirrorViewportEndOfDocumentGrowth
         )
     }
 

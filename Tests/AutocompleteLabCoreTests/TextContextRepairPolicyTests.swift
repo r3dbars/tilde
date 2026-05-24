@@ -846,6 +846,31 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorEndOfDocumentGrowth)
     }
 
+    @Test("Repairs Obsidian bounded viewport growth after an end-of-document accept")
+    func repairsObsidianBoundedViewportGrowthAfterEndOfDocumentAccept() {
+        let policy = TextContextRepairPolicy()
+        let previous = (1...90)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n") + "\nAutocomplete Lab Obsidian proof\nSmoke proof feels instant"
+        let currentViewport = String(previous.suffix(997)) + " and stays"
+        let staleAfter = String(currentViewport.suffix(30))
+        let staleBefore = String(currentViewport.dropLast(staleAfter.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == currentViewport)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorViewportEndOfDocumentGrowth)
+    }
+
     @Test("Repairs Obsidian CodeMirror viewport cursor drift at the document end")
     func repairsObsidianCodeMirrorViewportEndOfDocumentDrift() {
         let policy = TextContextRepairPolicy()
@@ -892,6 +917,28 @@ struct TextContextRepairPolicyTests {
             textBeforeCursor: textBefore,
             textAfterCursor: textAfter,
             selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Does not repair Obsidian bounded viewport without document-end growth")
+    func doesNotRepairObsidianBoundedViewportWithoutDocumentEndGrowth() {
+        let policy = TextContextRepairPolicy()
+        let previous = String(repeating: "Autocomplete Lab Obsidian scroll filler ", count: 36)
+            + "Smoke proof feels instant"
+        let currentViewport = String(previous.suffix(997))
+        let staleAfter = String(currentViewport.suffix(30))
+        let staleBefore = String(currentViewport.dropLast(staleAfter.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
         ))
 
         #expect(!result.wasRepaired)
