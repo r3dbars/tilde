@@ -10714,7 +10714,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start stable_context trigger_word trigger_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
   max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
@@ -10723,13 +10723,14 @@ run_textedit_model_latency() {
   while IFS= read -r fragment; do
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
-    stable_context="${fragment% *} "
-    trigger_text="${fragment##* }"
-    if [[ -z "$trigger_text" || "$stable_context" == "$fragment " ]]; then
+    trigger_word="${fragment##* }"
+    stable_context="${fragment:0:${#fragment}-1}"
+    trigger_text="${fragment:${#fragment}-1}"
+    if [[ -z "$trigger_word" || "$stable_context" == "$fragment" || -z "$trigger_text" ]]; then
       echo "TextEdit model latency sample $sample_index does not contain a stable context plus trigger word." >&2
       exit 1
     fi
-    if ((${#trigger_text} < 2)); then
+    if ((${#trigger_word} < 2)); then
       echo "TextEdit model latency sample $sample_index trigger word must contain at least two characters." >&2
       exit 1
     fi
