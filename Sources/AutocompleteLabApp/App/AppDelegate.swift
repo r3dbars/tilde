@@ -266,6 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
     private let obsidianTrustedEndOfDocumentSnapshotPolicy = ObsidianTrustedEndOfDocumentSnapshotPolicy()
+    private let proofActivationModePolicy = ProofActivationModePolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
@@ -2098,7 +2099,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let activationDecision = activationPolicy(for: profile).decision(
+        let rawActivationDecision = activationPolicy(for: profile).decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
@@ -2106,6 +2107,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
             fieldKind: fieldClassification.kind,
             allowsUnknownFieldKind: profile.allowsUnknownFieldKind
+        )
+        let activationDecision = proofAdjustedActivationDecision(
+            rawActivationDecision,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            fieldKind: fieldClassification.kind
         )
         rememberFieldControlTarget(
             app: frontmostApp,
@@ -11140,6 +11148,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
         suggestionTuning.activationPolicy(supportPace: effectiveSuggestionPace(for: profile))
+    }
+
+    private func proofAdjustedActivationDecision(
+        _ decision: CompletionActivationDecision,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        fieldKind: AXFieldKind
+    ) -> CompletionActivationDecision {
+        guard runtimeProofOptions.disablesPhraseContinuation(
+            appBundleIdentifier: profile.bundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        ) else {
+            return decision
+        }
+
+        let wordFallbackDecision = CompletionActivationPolicy(
+            minimumContextCharacters: 1,
+            minimumContextWords: 1,
+            minimumPhraseContinuationWords: suggestionTuning.phraseStartWords,
+            minimumWordCompletionCharacters: suggestionTuning.wordStartCharacters,
+            maximumWordCompletionCharacters: 18,
+            allowsTerminalSentenceBoundary: false,
+            allowsUnfinishedWordPhraseContinuation: false,
+            prefersPhraseContinuationForWordFragments: false
+        ).decision(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            isSecure: context.isSecure,
+            selectedTextLength: context.selectedTextLength,
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            fieldKind: fieldKind,
+            allowsUnknownFieldKind: profile.allowsUnknownFieldKind
+        )
+
+        return proofActivationModePolicy.adjustedDecision(
+            original: decision,
+            wordFallback: wordFallbackDecision,
+            disablesPhraseContinuation: true,
+            disablesWordCompletion: runtimeProofOptions.disablesWordCompletion(
+                appBundleIdentifier: profile.bundleIdentifier,
+                activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+            )
+        )
     }
 
     private func triggerPolicy(for profile: CompatibilityProfile) -> SuggestionTriggerPolicy {
