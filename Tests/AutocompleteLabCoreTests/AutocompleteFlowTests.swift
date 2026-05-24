@@ -14,12 +14,12 @@ struct AutocompleteFlowTests {
         var session = SuggestionSession(visibleSuggestion: suggestion)
 
         let nextWord = session.nextWordAcceptance()
-        #expect(nextWord == " we")
+        #expect(nextWord == " we ")
         #expect(session.visibleSuggestion?.visibleText == " we should ship this")
         session.commitNextWordAcceptance(nextWord ?? "")
 
         let remaining = session.allVisibleAcceptance()
-        #expect(remaining == " should ship this")
+        #expect(remaining == "should ship this")
         session.commitAllVisibleAcceptance(remaining ?? "")
         #expect(!session.hasVisibleSuggestion)
     }

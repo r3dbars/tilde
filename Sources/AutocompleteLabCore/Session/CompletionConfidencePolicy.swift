@@ -70,7 +70,12 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
 
         if mode == .phraseContinuation {
             let wordCount = suggestion.visibleWordCount
-            if wordCount > 5 {
+            if suggestion.maxVisibleWords >= 12 {
+                if wordCount > suggestion.maxVisibleWords {
+                    score -= 45
+                    reasons.append("too-many-visible-words")
+                }
+            } else if wordCount > 5 {
                 score -= 45
                 reasons.append("too-many-visible-words")
             } else if wordCount > 4 {

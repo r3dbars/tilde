@@ -77,7 +77,10 @@ struct SettingsWindowControllerStateTests {
                 == "Verified suggestions near the cursor and native text insertion. Suggestions are on for this app."
         )
         #expect(allowed.modeText == "Mode: next to the cursor, floating backup fallback")
-        #expect(allowed.acceptanceText == "Keys: Tab accepts one word. The whole-suggestion shortcut works here.")
+        #expect(
+            allowed.acceptanceText
+                == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion shortcut works here."
+        )
         #expect(allowed.fallbackText == "Fallback: not needed; cursor placement is available.")
         #expect(allowed.proofText == "Check: use disposable text, press Tab once, then the whole-suggestion shortcut.")
         #expect(allowed.proofCommandText == "Check command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit")
@@ -128,7 +131,10 @@ struct SettingsWindowControllerStateTests {
                 == "Rich text can drift; display can use a floating backup, and insertion fails closed. Suggestions are paused in this app. Resume only where you want suggestions."
         )
         #expect(blocked.modeText == "Mode: next to the cursor, floating backup fallback")
-        #expect(blocked.acceptanceText == "Keys: Tab accepts one word. The whole-suggestion shortcut works here.")
+        #expect(
+            blocked.acceptanceText
+                == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion shortcut works here."
+        )
         #expect(blocked.fallbackText == "Fallback: off while this app is paused.")
         #expect(blocked.proofText == "Check: turn on suggestions for this app first.")
         #expect(blocked.proofCommandText == nil)
@@ -276,13 +282,16 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(codex.statusText == "Current app: Codex is proof-only and checks are on")
+        #expect(codex.statusText == "Current app: Codex is yellow and on")
         #expect(
             codex.detailText
-                == "Codex prompt support is proof-only: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Suggestions only run during an explicit proof check."
+                == "Codex prompt support is on for this installed app: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Suggestions are on for this app."
         )
         #expect(codex.modeText == "Mode: next to the cursor, floating backup fallback")
-        #expect(codex.acceptanceText == "Keys: Tab accepts one word. Whole-suggestion accept is off for safety.")
+        #expect(
+            codex.acceptanceText
+                == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion accept is off for safety."
+        )
         #expect(codex.proofText == "Check: use the guided prompt-app check, press Tab once, and do not press Enter.")
         #expect(
             codex.proofCommandText
@@ -293,9 +302,9 @@ struct SettingsWindowControllerStateTests {
                 == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
         )
         #expect(codex.canCopyProofCommand)
-        #expect(codex.toggleTitle == "Proof checks in this app")
-        #expect(codex.menuToggleTitle == "Pause checks in Codex")
-        #expect(!codex.canOverrideMode)
+        #expect(codex.toggleTitle == "Suggestions in this app")
+        #expect(codex.menuToggleTitle == "Pause in Codex")
+        #expect(codex.canOverrideMode)
         #expect(codex.canToggle)
 
         let forcedCodex = SettingsCurrentAppState(
@@ -318,16 +327,16 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(disabledCodex.statusText == "Current app: Codex is proof-only and checks are paused")
+        #expect(disabledCodex.statusText == "Current app: Codex is yellow and off")
         #expect(
             disabledCodex.detailText
-                == "Codex prompt support is proof-only: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Proof checks are paused in this app. Resume this app before running an explicit check."
+                == "Codex prompt support is on for this installed app: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Suggestions are paused in this app. Resume only where you want suggestions."
         )
-        #expect(disabledCodex.proofText == "Check: resume proof checks for this app first.")
-        #expect(disabledCodex.proofButtonTitle == "Resume Checks First")
+        #expect(disabledCodex.proofText == "Check: turn on suggestions for this app first.")
+        #expect(disabledCodex.proofButtonTitle == "Enable Suggestions First")
         #expect(disabledCodex.proofCommandText == nil)
         #expect(disabledCodex.proofCommandClipboardText == nil)
-        #expect(disabledCodex.menuToggleTitle == "Resume checks in Codex")
+        #expect(disabledCodex.menuToggleTitle == "Resume in Codex")
         #expect(disabledCodex.canToggle)
     }
 
@@ -777,7 +786,7 @@ struct SettingsWindowControllerStateTests {
     func keyboardShortcutCopySupportsDirectAcceptAllEditing() {
         let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
 
-        #expect(backtick.statusText == "Shortcuts: Tab accepts one word | Backtick accepts whole suggestion")
+        #expect(backtick.statusText == "Shortcuts: Tab accepts one word + space | Backtick accepts whole suggestion")
         #expect(backtick.conflictText == "Conflict check: choose an app")
         #expect(backtick.perAppProfileText == "Per-app profile: choose an app to check whole-suggestion accept.")
         #expect(backtick.acceptAllPickerLabel == "Whole suggestion:")
@@ -785,7 +794,7 @@ struct SettingsWindowControllerStateTests {
 
         let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
 
-        #expect(optionTab.statusText == "Shortcuts: Tab accepts one word | Option-Tab accepts whole suggestion")
+        #expect(optionTab.statusText == "Shortcuts: Tab accepts one word + space | Option-Tab accepts whole suggestion")
         #expect(optionTab.conflictDetailText == "Open a writing app to check the shortcut against that app profile.")
         #expect(optionTab.acceptAllPickerLabel == "Whole suggestion:")
         #expect(optionTab.cycleButtonTitle == "Use Backtick")
@@ -863,21 +872,37 @@ struct SettingsWindowControllerStateTests {
     @Test("Suggestion tuning copy supports sliders")
     func suggestionTuningCopySupportsSliders() {
         let quiet = SettingsSuggestionAggressivenessState(aggressiveness: .quiet)
-        let normal = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 2, maxVisibleWords: 4))
-        let max = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 8))
+        let normal = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 2, maxVisibleWords: 12))
+        let max = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 20))
 
-        #expect(quiet.statusText == "Aggressiveness: 1/5 - Quiet")
-        #expect(quiet.detailText == "Waits longer and needs stronger scores before showing.")
-        #expect(quiet.maxWordsText == "Words shown: 5")
-        #expect(normal.statusText == "Aggressiveness: 2/5 - Normal")
-        #expect(normal.detailText == "Shows a little sooner with balanced filtering.")
-        #expect(normal.maxWordsText == "Words shown: 4")
-        #expect(normal.maxWordsDetailText == "Caps visible phrase suggestions at 4 words.")
-        #expect(max.statusText == "Aggressiveness: 5/5 - Max")
-        #expect(max.detailText == "Shows as soon as the safety checks allow.")
-        #expect(max.maxWordsText == "Words shown: 8")
+        #expect(quiet.statusText == "Suggestions: 1/5 - Quiet")
+        #expect(quiet.detailText == "Fewer suggestions. Waits longer.")
+        #expect(quiet.maxWordsText == "Words shown: 8")
+        #expect(normal.statusText == "Suggestions: 2/5 - Normal")
+        #expect(normal.detailText == "Balanced suggestions.")
+        #expect(normal.maxWordsText == "Words shown: 12")
+        #expect(normal.maxWordsDetailText == "Aims for 8-12 words when the sentence has enough context.")
+        #expect(max.statusText == "Suggestions: 5/5 - Max")
+        #expect(max.detailText == "Most active. Shows whenever checks allow.")
+        #expect(max.maxWordsText == "Words shown: 20")
+        #expect(max.maxWordsDetailText == "Aims for 12-20 words when the sentence has enough context.")
+        #expect(max.wordStartText == "Word help starts after: 2 letters")
+        #expect(max.wordStartDetailText == "Lower means word suggestions show sooner.")
+        #expect(max.phraseStartText == "Phrase help starts after: 3 words")
+        #expect(max.phraseStartDetailText == "Lower means phrase suggestions need less context.")
+        #expect(max.responseSpeedText == "Wait after typing: Normal")
+        #expect(max.responseSpeedDetailText == "Higher feels faster. Lower waits for a clearer pause.")
+        #expect(max.confidenceText == "Guess strength: Normal")
+        #expect(max.confidenceDetailText == "Loose shows more guesses. Strict hides more.")
+        #expect(max.learningRestraintText == "Learned caution: Normal")
+        #expect(max.learningRestraintDetailText == "Lower lets ignored old suggestions matter less.")
         #expect(max.aggressivenessSliderValue == 5)
-        #expect(max.maxWordsSliderValue == 8)
+        #expect(max.maxWordsSliderValue == 20)
+        #expect(max.wordStartSliderValue == 2)
+        #expect(max.phraseStartSliderValue == 3)
+        #expect(max.responseSpeedSliderValue == 3)
+        #expect(max.confidenceSliderValue == 3)
+        #expect(max.learningRestraintSliderValue == 2)
     }
 
     @MainActor

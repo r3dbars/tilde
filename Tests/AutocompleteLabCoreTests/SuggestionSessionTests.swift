@@ -12,15 +12,15 @@ struct SuggestionSessionTests {
         #expect(suggestion.text == " we should ship")
     }
 
-    @Test("Visible text is capped under forty two characters")
-    func visibleTextIsCappedUnderFortyTwoCharacters() {
+    @Test("Visible text expands when the word count is higher")
+    func visibleTextExpandsWhenWordCountIsHigher() {
         let suggestion = CompletionSuggestion(
             text: " this is a very useful continuation that should not run long",
             maxVisibleWords: 12
         )
 
-        #expect(suggestion.visibleText.count <= CompletionSuggestion.defaultMaxVisibleCharacters)
-        #expect(suggestion.visibleText == " this is a very useful continuation that")
+        #expect(suggestion.maxVisibleCharacters == 120)
+        #expect(suggestion.visibleText == " this is a very useful continuation that should not run long")
     }
 
     @Test("Visible text stays single line")
@@ -49,20 +49,38 @@ struct SuggestionSessionTests {
             visibleSuggestion: CompletionSuggestion(text: " we should ship this today", maxVisibleWords: 3)
         )
 
-        #expect(session.acceptNextWord() == " we")
-        #expect(session.acceptNextWord() == " should")
-        #expect(session.acceptNextWord() == " ship")
+        #expect(session.acceptNextWord() == " we ")
+        #expect(session.acceptNextWord() == "should ")
+        #expect(session.acceptNextWord() == "ship ")
         #expect(session.acceptNextWord() == nil)
     }
 
-    @Test("Tab accepts one word and keeps the rest visible")
+    @Test("Tab accepts one word plus a space and keeps the rest visible")
     func tabAcceptsOneWord() {
         var session = SuggestionSession(
             visibleSuggestion: CompletionSuggestion(text: " we should ship", maxVisibleWords: 8)
         )
 
-        #expect(session.acceptNextWord() == " we")
-        #expect(session.visibleSuggestion?.visibleText == " should ship")
+        #expect(session.acceptNextWord() == " we ")
+        #expect(session.visibleSuggestion?.visibleText == "should ship")
+    }
+
+    @Test("Repeated Tab accepts a long suggestion one word at a time")
+    func repeatedTabAcceptsLongSuggestionOneWordAtATime() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(
+                text: " one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty extra",
+                maxVisibleWords: 20
+            )
+        )
+
+        #expect(session.visibleSuggestion?.visibleWordCount == 20)
+        #expect(session.acceptNextWord() == " one ")
+        #expect(session.visibleSuggestion?.visibleText.hasPrefix("two three four") == true)
+        #expect(session.visibleSuggestion?.visibleWordCount == 19)
+        #expect(session.acceptNextWord() == "two ")
+        #expect(session.visibleSuggestion?.visibleText.hasPrefix("three four five") == true)
+        #expect(session.visibleSuggestion?.visibleWordCount == 18)
     }
 
     @Test("Tab can require recompute after one accepted word")
@@ -71,7 +89,17 @@ struct SuggestionSessionTests {
             visibleSuggestion: CompletionSuggestion(text: " we should ship", maxVisibleWords: 8)
         )
 
-        #expect(session.acceptNextWord(keepsResidual: false) == " we")
+        #expect(session.acceptNextWord(keepsResidual: false) == " we ")
+        #expect(!session.hasVisibleSuggestion)
+    }
+
+    @Test("Tab adds a natural trailing space after the last visible word")
+    func tabAddsNaturalTrailingSpaceAfterLastVisibleWord() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "ready", maxVisibleWords: 8)
+        )
+
+        #expect(session.acceptNextWord() == "ready ")
         #expect(!session.hasVisibleSuggestion)
     }
 
@@ -129,12 +157,12 @@ struct SuggestionSessionTests {
             visibleSuggestion: CompletionSuggestion(text: " we should ship", maxVisibleWords: 8)
         )
 
-        #expect(session.nextWordAcceptance() == " we")
+        #expect(session.nextWordAcceptance() == " we ")
         #expect(session.visibleSuggestion?.visibleText == " we should ship")
 
-        session.commitNextWordAcceptance(" we")
+        session.commitNextWordAcceptance(" we ")
 
-        #expect(session.visibleSuggestion?.visibleText == " should ship")
+        #expect(session.visibleSuggestion?.visibleText == "should ship")
     }
 
     @Test("Next word preview records the visible acceptance slice")
@@ -146,9 +174,9 @@ struct SuggestionSessionTests {
         let preview = try #require(session.nextWordAcceptancePreview())
 
         #expect(preview.mode == .nextWord)
-        #expect(preview.acceptedText == " we")
+        #expect(preview.acceptedText == " we ")
         #expect(preview.visibleTextBeforeAccept == " we should ship")
-        #expect(preview.remainingVisibleTextAfterAccept == " should ship")
+        #expect(preview.remainingVisibleTextAfterAccept == "should ship")
         #expect(preview.acceptanceMatchesVisiblePrefix)
         #expect(!preview.acceptanceMatchesFullVisible)
         #expect(preview.traceMetadata["acceptanceSource"] == "visiblePrefix")
@@ -167,7 +195,7 @@ struct SuggestionSessionTests {
 
         let preview = session.nextWordAcceptance()
 
-        #expect(preview == " make")
+        #expect(preview == " make ")
         #expect(session.visibleSuggestion?.visibleText == " make this feel instant")
     }
 

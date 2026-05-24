@@ -40,7 +40,7 @@ struct ModelPolicyTests {
         )
 
         #expect(tiny.maxVisibleWords == 1)
-        #expect(huge.maxVisibleWords == 8)
+        #expect(huge.maxVisibleWords == 20)
     }
 
     @Test("Model policy accepts autocomplete-sized visible output")
@@ -60,8 +60,8 @@ struct ModelPolicyTests {
     @Test("Request modes cap generated tokens by autocomplete role")
     func requestModesCapGeneratedTokensByAutocompleteRole() {
         #expect(CompletionRequestMode.wordCompletion.generatedTokenCeiling == 3)
-        #expect(CompletionRequestMode.phraseContinuation.generatedTokenCeiling == 11)
-        #expect(CompletionRequestMode.sentenceContinuation.generatedTokenCeiling == 10)
+        #expect(CompletionRequestMode.phraseContinuation.generatedTokenCeiling == 48)
+        #expect(CompletionRequestMode.sentenceContinuation.generatedTokenCeiling == 48)
     }
 
     @Test("Completion length configuration reads environment overrides")
@@ -81,9 +81,25 @@ struct ModelPolicyTests {
         #expect(short.maxVisibleWords == 3)
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
-        #expect(long.maxVisibleWords == 8)
-        #expect(long.maxGeneratedTokens == 16)
-        #expect(long.displaySummary == "8 words / 16 tokens")
+        #expect(long.maxVisibleWords == 20)
+        #expect(long.maxGeneratedTokens == 48)
+        #expect(long.displaySummary == "20 words / 48 tokens")
+    }
+
+    @Test("Generated token budget grows for longer visible suggestions")
+    func generatedTokenBudgetGrowsForLongerVisibleSuggestions() {
+        #expect(CompletionModelPolicy.generatedTokenBudget(forVisibleWords: 3) == 9)
+        #expect(CompletionModelPolicy.generatedTokenBudget(forVisibleWords: 5) == 11)
+        #expect(CompletionModelPolicy.generatedTokenBudget(forVisibleWords: 12) == 28)
+        #expect(CompletionModelPolicy.generatedTokenBudget(forVisibleWords: 20) == 44)
+    }
+
+    @Test("Preferred minimum grows when the word slider is high")
+    func preferredMinimumGrowsWhenWordSliderIsHigh() {
+        #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 5) == 1)
+        #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 8) == 3)
+        #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 12) == 8)
+        #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 20) == 12)
     }
 
     @Test("Experiment arms set default completion lengths")

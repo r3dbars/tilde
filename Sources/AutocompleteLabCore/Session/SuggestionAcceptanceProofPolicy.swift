@@ -95,7 +95,11 @@ public struct AcceptanceSafetyPolicy: Equatable, Sendable {
         guard let visibleText,
               !visibleText.isEmpty,
               !acceptedText.isEmpty,
-              visibleText.hasPrefix(acceptedText) else {
+              acceptedTextMatchesVisibleText(
+                  acceptedText,
+                  visibleText: visibleText,
+                  action: action
+              ) else {
             return .blocked(.acceptedTextNotVisible)
         }
 
@@ -133,6 +137,22 @@ public struct AcceptanceSafetyPolicy: Equatable, Sendable {
             .split(whereSeparator: \.isWhitespace)
             .count
     }
+
+    private func acceptedTextMatchesVisibleText(
+        _ acceptedText: String,
+        visibleText: String,
+        action: KeyboardAction
+    ) -> Bool {
+        if visibleText.hasPrefix(acceptedText) {
+            return true
+        }
+
+        guard action == .acceptNextWord else {
+            return false
+        }
+
+        return CompletionSuggestion.nextWordAcceptanceText(in: visibleText) == acceptedText
+    }
 }
 
 public struct SuggestionAcceptanceProofPolicy: Equatable, Sendable {
@@ -150,15 +170,18 @@ public struct SuggestionAcceptanceProofPolicy: Equatable, Sendable {
         switch action {
         case .acceptNextWord:
             let expectedText = CompletionSuggestion.acceptedPrefix(in: visibleText, wordLimit: 1)
-            guard acceptedText == expectedText,
-                  visibleText.hasPrefix(acceptedText) else {
+            let expectedTextWithTrailingSpace = CompletionSuggestion.nextWordAcceptanceText(in: visibleText)
+            let acceptedTextIsVisiblePrefix = visibleText.hasPrefix(acceptedText)
+                || acceptedText == expectedTextWithTrailingSpace
+            guard (acceptedText == expectedText || acceptedText == expectedTextWithTrailingSpace),
+                  acceptedTextIsVisiblePrefix else {
                 return .blocked(.nextWordMismatch)
             }
 
             return .allowed(SuggestionAcceptanceProof(
                 scope: .nextWordPrefix,
                 acceptedTextMatchesVisible: acceptedText == visibleText,
-                acceptedTextIsVisiblePrefix: true,
+                acceptedTextIsVisiblePrefix: acceptedTextIsVisiblePrefix,
                 acceptedCharacterCount: acceptedText.count,
                 visibleCharacterCount: visibleText.count
             ))

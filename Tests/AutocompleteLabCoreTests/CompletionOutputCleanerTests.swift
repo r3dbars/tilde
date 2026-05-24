@@ -11,6 +11,17 @@ struct CompletionOutputCleanerTests {
         #expect(suggestion?.visibleText == " keep moving today")
     }
 
+    @Test("Allows twenty visible words when the slider requests them")
+    func allowsTwentyVisibleWordsWhenSliderRequestsThem() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 20)
+        let suggestion = cleaner.clean(
+            "keep this sentence going with enough concrete words that the slider can show twenty useful words at once today now"
+        )
+
+        #expect(suggestion?.visibleWordCount == 20)
+        #expect(suggestion?.visibleText.hasSuffix("today now") == true)
+    }
+
     @Test("Removes thinking tags")
     func removesThinkingTags() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 4)

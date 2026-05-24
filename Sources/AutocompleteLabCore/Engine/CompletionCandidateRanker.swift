@@ -166,11 +166,11 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             score += visibleText.count <= 12 ? 0.35 : 0.15
             score -= visibleText.contains(where: { !$0.isLetter }) ? 0.45 : 0
         case .phraseContinuation:
-            score += phraseLengthScore(wordCount)
-            score -= visibleText.hasSuffix("?") ? 0.55 : 0
-            score -= longPhraseAnnoyancePenalty(wordCount)
+            score += phraseLengthScore(wordCount, maxVisibleWords: suggestion.maxVisibleWords)
+            score -= visibleText.hasSuffix("?") ? 0.65 : 0
+            score -= longPhraseAnnoyancePenalty(wordCount, maxVisibleWords: suggestion.maxVisibleWords)
         case .sentenceContinuation:
-            score += sentenceLengthScore(wordCount)
+            score += sentenceLengthScore(wordCount, maxVisibleWords: suggestion.maxVisibleWords)
             score -= visibleText.hasSuffix("?") ? 0.35 : 0
             score -= sentencePlanningDriftPenalty(visibleText)
         }
@@ -191,7 +191,7 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             )
         }
 
-        if visibleText.count <= CompletionSuggestion.defaultMaxVisibleCharacters {
+        if visibleText.count <= suggestion.maxVisibleCharacters {
             score += 0.10
         }
 
@@ -236,7 +236,23 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
     }
 
-    private func phraseLengthScore(_ wordCount: Int) -> Double {
+    private func phraseLengthScore(_ wordCount: Int, maxVisibleWords: Int) -> Double {
+        if maxVisibleWords >= 12 {
+            let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: maxVisibleWords)
+            switch wordCount {
+            case preferredMinimum...maxVisibleWords:
+                return 0.38
+            case 5...:
+                return wordCount < preferredMinimum ? 0.20 : 0.08
+            case 3...4:
+                return 0.05
+            case 2:
+                return -0.04
+            default:
+                return -0.10
+            }
+        }
+
         switch wordCount {
         case 3...5:
             return 0.35
@@ -247,7 +263,11 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
     }
 
-    private func longPhraseAnnoyancePenalty(_ wordCount: Int) -> Double {
+    private func longPhraseAnnoyancePenalty(_ wordCount: Int, maxVisibleWords: Int) -> Double {
+        if maxVisibleWords >= 12 {
+            return wordCount <= maxVisibleWords ? 0 : 0.12
+        }
+
         switch wordCount {
         case 0...5:
             return 0
@@ -260,7 +280,23 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
     }
 
-    private func sentenceLengthScore(_ wordCount: Int) -> Double {
+    private func sentenceLengthScore(_ wordCount: Int, maxVisibleWords: Int) -> Double {
+        if maxVisibleWords >= 12 {
+            let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: maxVisibleWords)
+            switch wordCount {
+            case preferredMinimum...maxVisibleWords:
+                return 0.38
+            case 5...:
+                return wordCount < preferredMinimum ? 0.18 : 0.08
+            case 3...4:
+                return 0.05
+            case 2:
+                return -0.04
+            default:
+                return -0.10
+            }
+        }
+
         switch wordCount {
         case 4...6:
             return 0.35

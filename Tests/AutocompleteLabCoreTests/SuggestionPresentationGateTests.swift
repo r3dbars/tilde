@@ -20,6 +20,26 @@ struct SuggestionPresentationGateTests {
         ))
     }
 
+    @Test("high word slider waits for a high-word streaming partial")
+    func highWordSliderWaitsForHighWordStreamingPartial() {
+        let gate = SuggestionPresentationGate()
+
+        #expect(!gate.shouldPresent(
+            CompletionSuggestion(text: " permission feel clear today", maxVisibleWords: 20),
+            mode: .phraseContinuation,
+            phase: .streamingPartial
+        ))
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(
+                text: " permission feel clear today while keeping the setup simple enough to finish without breaking focus",
+                maxVisibleWords: 20
+            ),
+            mode: .phraseContinuation,
+            phase: .streamingPartial
+        ))
+    }
+
     @Test("final phrase suggestions can still be short")
     func finalPhraseSuggestionsCanStillBeShort() {
         let gate = SuggestionPresentationGate()
