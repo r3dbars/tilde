@@ -5876,6 +5876,15 @@ textedit_smoke_allows_ax_proof_typing() {
   [[ "${AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION:-0}" =~ ^(1|true|yes|on)$ ]]
 }
 
+insert_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+  local current_text
+
+  current_text="$(textedit_document_text "$window_title")"
+  set_textedit_document_text "$window_title" "${current_text}${fragment}"
+}
+
 type_textedit_smoke_fragment() {
   local window_title="$1"
   local fragment="$2"
