@@ -50,6 +50,90 @@ struct CodexProofFocusedTargetPolicyTests {
         ))
     }
 
+    @Test("Allows exact proof text when Codex AX identity churns but target geometry matches")
+    func allowsExactProofTextWhenAXIdentityChurnsWithMatchingTargetGeometry() throws {
+        let profile = try codexProfile()
+        let app = codexApp()
+        let fieldIdentity = identity()
+        let churnedFieldIdentity = identity(elementIdentifier: 99)
+        let snapshot = proofSnapshot(fieldIdentity: fieldIdentity)
+        let context = focusedContext(textBeforeCursor: snapshot.textBeforeCursor)
+
+        #expect(policy.matches(
+            app: app,
+            profile: profile,
+            suggestionBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            requestMode: .wordCompletion,
+            expectedFieldIdentity: fieldIdentity,
+            snapshot: snapshot,
+            focusedContext: context,
+            focusedFieldIdentity: churnedFieldIdentity,
+            proofModeEnabled: true,
+            shownTargetFingerprint: targetFingerprint(for: context)
+        ))
+    }
+
+    @Test("Allows exact proof text when Codex fills missing AX metadata before accept")
+    func allowsExactProofTextWhenMissingAXMetadataBecomesAvailable() throws {
+        let profile = try codexProfile()
+        let app = codexApp()
+        let fieldIdentity = identity()
+        let churnedFieldIdentity = identity(elementIdentifier: 99)
+        let snapshot = proofSnapshot(fieldIdentity: fieldIdentity)
+        let context = focusedContext(textBeforeCursor: snapshot.textBeforeCursor)
+        let sparseShownTarget = FocusedTargetFingerprint(
+            role: context.role,
+            subrole: context.subrole,
+            elementFingerprint: FocusedElementFingerprint(),
+            windowIdentifier: nil,
+            elementRect: context.elementRect,
+            windowRect: nil,
+            caretRect: context.caretRect,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+
+        #expect(policy.matches(
+            app: app,
+            profile: profile,
+            suggestionBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            requestMode: .wordCompletion,
+            expectedFieldIdentity: fieldIdentity,
+            snapshot: snapshot,
+            focusedContext: context,
+            focusedFieldIdentity: churnedFieldIdentity,
+            proofModeEnabled: true,
+            shownTargetFingerprint: sparseShownTarget
+        ))
+    }
+
+    @Test("Blocks Codex AX identity churn when the proof target geometry moved")
+    func blocksAXIdentityChurnWhenTargetGeometryMoved() throws {
+        let profile = try codexProfile()
+        let app = codexApp()
+        let fieldIdentity = identity()
+        let churnedFieldIdentity = identity(elementIdentifier: 99)
+        let snapshot = proofSnapshot(fieldIdentity: fieldIdentity)
+        let shownContext = focusedContext(textBeforeCursor: snapshot.textBeforeCursor)
+        let movedContext = focusedContext(
+            textBeforeCursor: snapshot.textBeforeCursor,
+            elementRect: CGRect(x: 36, y: 10, width: 700, height: 80)
+        )
+
+        #expect(!policy.matches(
+            app: app,
+            profile: profile,
+            suggestionBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            requestMode: .wordCompletion,
+            expectedFieldIdentity: fieldIdentity,
+            snapshot: snapshot,
+            focusedContext: movedContext,
+            focusedFieldIdentity: churnedFieldIdentity,
+            proofModeEnabled: true,
+            shownTargetFingerprint: targetFingerprint(for: shownContext)
+        ))
+    }
+
     @Test("Blocks proof insertion outside active proof mode")
     func blocksOutsideProofMode() throws {
         let profile = try codexProfile()
@@ -122,7 +206,10 @@ struct CodexProofFocusedTargetPolicyTests {
         )
     }
 
-    private func focusedContext(textBeforeCursor: String) -> FocusedTextContext {
+    private func focusedContext(
+        textBeforeCursor: String,
+        elementRect: CGRect? = CGRect(x: 10, y: 10, width: 700, height: 80)
+    ) -> FocusedTextContext {
         FocusedTextContext(
             elementIdentifier: 7,
             role: "AXTextArea",
@@ -137,7 +224,7 @@ struct CodexProofFocusedTargetPolicyTests {
             textAfterCursor: "",
             selectedTextLength: 0,
             caretRect: CGRect(x: 20, y: 20, width: 1, height: 20),
-            elementRect: CGRect(x: 10, y: 10, width: 700, height: 80),
+            elementRect: elementRect,
             windowRect: CGRect(x: 0, y: 0, width: 900, height: 700),
             windowIdentifier: 1,
             textLineRect: nil,
@@ -151,6 +238,20 @@ struct CodexProofFocusedTargetPolicyTests {
                 canReadAttributedText: false,
                 canSetSelectedText: true
             )
+        )
+    }
+
+    private func targetFingerprint(for context: FocusedTextContext) -> FocusedTargetFingerprint {
+        FocusedTargetFingerprint(
+            role: context.role,
+            subrole: context.subrole,
+            elementFingerprint: context.fingerprint,
+            windowIdentifier: context.windowIdentifier,
+            elementRect: context.elementRect,
+            windowRect: context.windowRect,
+            caretRect: context.caretRect,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
         )
     }
 }

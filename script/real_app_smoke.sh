@@ -7133,7 +7133,8 @@ assert_chrome_ready_for_input() {
 }
 
 codex_proof_text() {
-  local proof_text="${AUTOCOMPLETE_LAB_CODEX_PROOF_TEXT:-AUTOCOMPLETE_LAB_CODEX_PROOF Can we make this dicta}"
+  local proof_nonce="${AUTOCOMPLETE_LAB_CODEX_PROOF_NONCE:-$(date +%s)}"
+  local proof_text="${AUTOCOMPLETE_LAB_CODEX_PROOF_TEXT:-AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce Can we make this dicta}"
   if [[ "$proof_text" != *"AUTOCOMPLETE_LAB_CODEX_PROOF"* ]]; then
     echo "Codex proof text must include AUTOCOMPLETE_LAB_CODEX_PROOF." >&2
     exit 2
@@ -7215,6 +7216,24 @@ func focusedElement(in appElement: AXUIElement) -> AXUIElement? {
     return (focusedValue as! AXUIElement)
 }
 
+func axElementContains(_ element: AXUIElement, targetIdentifier: Int, depth: Int = 0) -> Bool {
+    guard depth <= 12 else {
+        return false
+    }
+
+    if Int(CFHash(element)) == targetIdentifier {
+        return true
+    }
+
+    for child in children(of: element) {
+        if axElementContains(child, targetIdentifier: targetIdentifier, depth: depth + 1) {
+            return true
+        }
+    }
+
+    return false
+}
+
 func rangeDescription(_ element: AXUIElement) -> String {
     guard let rangeValue = copyAttribute(element, kAXSelectedTextRangeAttribute) else {
         return "missing"
@@ -7245,6 +7264,10 @@ func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) ->
         return false
     }
 
+    guard CFGetTypeID(rangeValue) == AXValueGetTypeID() else {
+        return false
+    }
+
     var range = CFRange()
     guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
         return false
@@ -7257,10 +7280,18 @@ struct Candidate {
     let value: String
     let frame: CGRect
     let focused: Bool
+    let hasMarker: Bool
+    let looksDisposable: Bool
+    let focusedDraftCanBeRestored: Bool
     let score: Double
 }
 
-func collectTextAreas(in element: AXUIElement, depth: Int = 0, candidates: inout [Candidate]) {
+func collectTextAreas(
+    in element: AXUIElement,
+    focusedRoot: AXUIElement?,
+    depth: Int = 0,
+    candidates: inout [Candidate]
+) {
     guard depth <= 32 else {
         return
     }
@@ -7272,11 +7303,16 @@ func collectTextAreas(in element: AXUIElement, depth: Int = 0, candidates: inout
        frame.height >= 20,
        frame.height <= 260 {
         let value = stringAttribute(element, kAXValueAttribute)
+        let hasMarker = value.contains(marker)
         let looksDisposable = value.isEmpty
-            || value.contains(marker)
+            || hasMarker
             || value.localizedCaseInsensitiveContains("Ask Codex anything")
+            || value.localizedCaseInsensitiveContains("Ask for follow-up changes")
             || value.localizedCaseInsensitiveContains("Describe a task or ask a question")
         let focused = boolAttribute(element, kAXFocusedAttribute)
+            || focusedRoot.map { root in
+                axElementContains(root, targetIdentifier: Int(CFHash(element)))
+            } ?? false
         let focusedDraftCanBeRestored = focused
             && !value.isEmpty
             && !value.contains(marker)
@@ -7288,10 +7324,11 @@ func collectTextAreas(in element: AXUIElement, depth: Int = 0, candidates: inout
             if focusedDraftCanBeRestored {
                 score += 650
             }
-            if value.contains(marker) {
+            if hasMarker {
                 score += 800
             }
             if value.localizedCaseInsensitiveContains("Ask Codex anything")
+                || value.localizedCaseInsensitiveContains("Ask for follow-up changes")
                 || value.localizedCaseInsensitiveContains("Describe a task or ask a question") {
                 score += 500
             }
@@ -7300,13 +7337,21 @@ func collectTextAreas(in element: AXUIElement, depth: Int = 0, candidates: inout
                 value: value,
                 frame: frame,
                 focused: focused,
+                hasMarker: hasMarker,
+                looksDisposable: looksDisposable,
+                focusedDraftCanBeRestored: focusedDraftCanBeRestored,
                 score: score
             ))
         }
     }
 
     for child in children(of: element) {
-        collectTextAreas(in: child, depth: depth + 1, candidates: &candidates)
+        collectTextAreas(
+            in: child,
+            focusedRoot: focusedRoot,
+            depth: depth + 1,
+            candidates: &candidates
+        )
     }
 }
 
@@ -7324,9 +7369,21 @@ let appElement = AXUIElementCreateApplication(app.processIdentifier)
 AXUIElementSetMessagingTimeout(appElement, 0.75)
 
 var candidates: [Candidate] = []
-collectTextAreas(in: appElement, candidates: &candidates)
+collectTextAreas(in: appElement, focusedRoot: focusedElement(in: appElement), candidates: &candidates)
 
 guard let candidate = candidates.sorted(by: { lhs, rhs in
+    if lhs.hasMarker != rhs.hasMarker {
+        return lhs.hasMarker
+    }
+    if lhs.looksDisposable != rhs.looksDisposable {
+        return lhs.looksDisposable
+    }
+    if lhs.focusedDraftCanBeRestored != rhs.focusedDraftCanBeRestored {
+        return lhs.focusedDraftCanBeRestored
+    }
+    if lhs.focused != rhs.focused {
+        return lhs.focused
+    }
     if lhs.score == rhs.score {
         return lhs.frame.minY < rhs.frame.minY
     }
@@ -7336,7 +7393,11 @@ guard let candidate = candidates.sorted(by: { lhs, rhs in
     exit(1)
 }
 
-let shouldRestoreDraft = !candidate.value.isEmpty && !candidate.value.contains(marker)
+let shouldRestoreDraft = !candidate.value.isEmpty
+    && !candidate.value.contains(marker)
+    && !candidate.value.localizedCaseInsensitiveContains("Ask Codex anything")
+    && !candidate.value.localizedCaseInsensitiveContains("Ask for follow-up changes")
+    && !candidate.value.localizedCaseInsensitiveContains("Describe a task or ask a question")
 if shouldRestoreDraft {
     do {
         try candidate.value.write(toFile: backupPath, atomically: true, encoding: .utf8)
@@ -7583,6 +7644,10 @@ func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) ->
         return false
     }
 
+    guard CFGetTypeID(rangeValue) == AXValueGetTypeID() else {
+        return false
+    }
+
     var range = CFRange()
     guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
         return false
@@ -7603,6 +7668,26 @@ func collectMarkedTextAreas(in element: AXUIElement, depth: Int = 0, results: in
     for child in children(of: element) {
         collectMarkedTextAreas(in: child, depth: depth + 1, results: &results)
     }
+}
+
+func focusedMarkedTextArea(in element: AXUIElement, cursorOffset: Int, depth: Int = 0) -> Bool {
+    guard depth <= 12 else {
+        return false
+    }
+
+    if stringAttribute(element, kAXRoleAttribute) == kAXTextAreaRole as String,
+       stringAttribute(element, kAXValueAttribute).contains(marker),
+       selectedRangeMatches(element, location: cursorOffset, length: 0) {
+        return true
+    }
+
+    for child in children(of: element) {
+        if focusedMarkedTextArea(in: child, cursorOffset: cursorOffset, depth: depth + 1) {
+            return true
+        }
+    }
+
+    return false
 }
 
 func focusedElement(in appElement: AXUIElement) -> AXUIElement? {
@@ -7648,13 +7733,114 @@ for _ in 0..<4 {
 }
 
 guard let focused = focusedElement(in: appElement),
-      stringAttribute(focused, kAXValueAttribute).contains(marker),
-      selectedRangeMatches(focused, location: cursorOffset, length: 0) else {
+      focusedMarkedTextArea(
+          in: focused,
+          cursorOffset: cursorOffset
+      ) else {
     fputs("Could not keep Codex proof prompt focused at the end before Tab.\n", stderr)
     exit(1)
 }
 
 print("Focused Codex proof composer before Tab: chars=\(text.count)")
+SWIFT
+}
+
+assert_codex_proof_prompt_ready() {
+  local proof_text="$1"
+
+  swift - "$proof_text" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2 else {
+    fputs("missing Codex proof text\n", stderr)
+    exit(2)
+}
+
+let proofText = CommandLine.arguments[1]
+let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+let cursorOffset = proofText.utf16.count
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String {
+    copyAttribute(element, attribute) as? String ?? ""
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) -> Bool {
+    guard let rangeValue = copyAttribute(element, kAXSelectedTextRangeAttribute) else {
+        return false
+    }
+
+    guard CFGetTypeID(rangeValue) == AXValueGetTypeID() else {
+        return false
+    }
+
+    var range = CFRange()
+    guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+        return false
+    }
+    return range.location == location && range.length == length
+}
+
+func matchingFocusedTextArea(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth <= 12 else {
+        return nil
+    }
+
+    if stringAttribute(element, kAXRoleAttribute) == kAXTextAreaRole as String {
+        let value = stringAttribute(element, kAXValueAttribute)
+        if value == proofText,
+           value.contains(marker),
+           selectedRangeMatches(element, location: cursorOffset, length: 0) {
+            return element
+        }
+    }
+
+    for child in children(of: element) {
+        if let match = matchingFocusedTextArea(in: child, depth: depth + 1) {
+            return match
+        }
+    }
+
+    return nil
+}
+
+guard let app = NSRunningApplication.runningApplications(
+    withBundleIdentifier: "com.openai.codex"
+).first else {
+    fputs("Codex is not running.\n", stderr)
+    exit(1)
+}
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+AXUIElementSetMessagingTimeout(appElement, 0.75)
+
+guard let focusedValue = copyAttribute(appElement, kAXFocusedUIElementAttribute),
+      CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+    fputs("Codex proof prompt is not focused before Tab.\n", stderr)
+    exit(1)
+}
+
+let focusedElement = focusedValue as! AXUIElement
+guard matchingFocusedTextArea(in: focusedElement) != nil else {
+    fputs("Codex proof prompt is not the focused exact marker text before Tab.\n", stderr)
+    exit(1)
+}
+
+print("Verified Codex proof composer before Tab: chars=\(proofText.count)")
 SWIFT
 }
 
@@ -8855,11 +9041,11 @@ run_codex() {
   if [[ -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
     CODEX_DRAFT_BACKUP_ACTIVE=1
   fi
+  focus_codex_proof_prompt
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
-  seed_codex_proof_prompt "$proof_text"
   assert_frontmost_app "Codex" "Codex proof"
-  focus_codex_proof_prompt
+  assert_codex_proof_prompt_ready "$proof_text"
   sleep 0.2
   press_key_code 48
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \

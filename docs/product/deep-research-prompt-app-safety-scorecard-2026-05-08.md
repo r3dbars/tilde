@@ -73,12 +73,14 @@ commands, shell text, approval text, or prompt answers.
 
 The proof story is still not enough for 100, but it is now mechanically
 enforceable. `script/check_prompt_app_proof.sh` reads JSONL trace slices,
-reports the five prompt-app safety counters, and exits nonzero when any counter
+reports the six prompt-app safety counters, and exits nonzero when any counter
 is nonzero or when no prompt-app proof events are present. It is wired into the
 score loop, strict score target gates, beta readiness, and smoke self-tests.
-Codex and Claude desktop now have same-slice one-word no-submit proof. Strict
-manual proof remains stale or missing for some other real target apps, so this
-does not claim beta-ready prompt-app support.
+Codex and Claude desktop now have same-slice one-word no-submit proof. The
+Codex row was refreshed on 2026-05-24 with strict screenshot-backed evidence
+and a bounded prompt-proof slice at trace lines 18824-18828. Strict manual proof
+remains stale or missing for some other real target apps, so this does not
+claim beta-ready prompt-app support.
 
 ## Score
 
@@ -125,8 +127,9 @@ prompt-app proof is still missing for other required hosts.
 - Why this score: Full accept is disabled for prompt apps, Tab is one-word
   only where allowed, and missing-profile insertion now fails closed. Existing
   acceptance guards recheck app, field, focused text, selection, and stale
-  context. Codex now has a same-slice Tab one-word no-submit proof; broader
-  real prompt-app key collision proof is still incomplete.
+  context. Codex now has a refreshed same-slice Tab one-word no-submit proof
+  on the current branch; broader real prompt-app key collision proof is still
+  incomplete.
 - Evidence found in repo:
   - `Sources/AutocompleteLabApp/App/AppDelegate.swift`
   - `Sources/AutocompleteLabCore/Session/SuggestionAcceptanceGuard.swift`
@@ -191,8 +194,12 @@ prompt-app proof is still missing for other required hosts.
 - Current score: 11/15
 - Why this score: Unit coverage is strong, proof scripts are strict, and the
   new prompt-app proof gate has pass/fail fixtures for the exact hard metrics.
-  Codex now has fresh same-slice proof for this implementation branch, while
-  the required target apps still do not all have fresh proof.
+  Codex now has fresh same-slice proof for this implementation branch:
+  `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex
+  --manual-gate` passed at 2026-05-24T11:28:11Z, and
+  `./script/check_prompt_app_proof.sh --start-line 18824 --end-line 18828
+  --bundle com.openai.codex` passed with all six prompt-app safety counters at
+  zero. The required target apps still do not all have fresh proof.
 - Evidence found in repo:
   - `swift test` passed 742 tests.
   - `script/check_test_coverage_manifest.sh` passed.
