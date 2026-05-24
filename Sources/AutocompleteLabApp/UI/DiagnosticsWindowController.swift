@@ -213,6 +213,7 @@ final class DiagnosticsWindowController {
         modelDirectoryPath: String,
         recentEvents: [String],
         traceSummary: AutocompleteTraceSummary,
+        personalCaptureScorecard: SuggestionEpisodeScorecard?,
         recentTraceEvents: [AutocompleteTraceEvent],
         tracePath: String,
         tracingPaused: Bool,
@@ -273,6 +274,9 @@ final class DiagnosticsWindowController {
         sections.append(SuggestionLearningDiagnostics(
             summary: traceSummary,
             recentEvents: recentTraceEvents
+        ).text)
+        sections.append(PersonalCaptureLoopDiagnostics(
+            scorecard: personalCaptureScorecard
         ).text)
         sections.append(PromptContextDiagnostics(
             recentEvents: recentTraceEvents
@@ -613,6 +617,37 @@ struct DiagnosticsOverviewState: Equatable {
 
     private static func percent(_ value: Double) -> String {
         String(format: "%.0f%%", value * 100)
+    }
+}
+
+struct PersonalCaptureLoopDiagnostics: Equatable {
+    let scorecard: SuggestionEpisodeScorecard?
+
+    var text: String {
+        guard let scorecard else {
+            return "Personal Capture loop: off"
+        }
+
+        let latency = scorecard.averageLatencyMilliseconds.map { "\($0)ms" } ?? "n/a"
+        let rows = scorecard.modelPromptRows.isEmpty
+            ? "  none yet"
+            : scorecard.modelPromptRows.prefix(5).map { "  \($0)" }.joined(separator: "\n")
+
+        return """
+        Personal Capture loop:
+          score: \(scorecard.score)/100
+          episodes: \(scorecard.total)
+          accepted: \(scorecard.accepted)
+          kept: \(scorecard.kept)
+          ignored: \(scorecard.ignored)
+          dismissed: \(scorecard.dismissed)
+          typed past: \(scorecard.typedPast)
+          deleted fast: \(scorecard.deletedFast)
+          eval cases: \(scorecard.evalCaseCount)
+          average latency: \(latency)
+        Model / prompt:
+        \(rows)
+        """
     }
 }
 

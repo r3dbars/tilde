@@ -36,7 +36,7 @@ def kept_event(event):
     metadata = event.get("metadata") or {}
     if metadata.get("strongAcceptedAndKept") == "true" or metadata.get("finalAcceptedAndKept") == "true":
         return True
-    if metadata.get("checkpoint") not in {"10s", "30s", "fieldBlur", "fieldSend"}:
+    if metadata.get("checkpoint") not in {"10s", "30s", "1m", "5m", "fieldBlur", "fieldSend"}:
         return False
     return metadata.get("survivalClass") in {"exactKept", "lightlyEditedKept", "partiallyKept"}
 

@@ -46,6 +46,7 @@ struct DiagnosticsNativeAppearanceSnapshotTests {
                 p95LatencyMilliseconds: 76,
                 topMisses: []
             ),
+            personalCaptureScorecard: nil,
             recentTraceEvents: [],
             tracePath: "/Users/example/Library/Logs/SteadyType/events.jsonl",
             tracingPaused: false,

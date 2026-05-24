@@ -47,6 +47,35 @@ The app also keeps local compatibility learning here:
 
 That file can hold per-app visual offsets, render-mode overrides, screenshot-tracing state, observation counts, and confidence. This is the first self-healing layer: small learned adjustments can apply at runtime, while bigger repeated misses become adapter patches.
 
+## Personal Capture Dogfood Loop
+
+Personal Capture is not default tracing. It is a local, opt-in Justin dogfood
+mode that writes daily Markdown to:
+
+```text
+~/Library/Application Support/SteadyType/Personal Capture
+```
+
+The journal records new writing fragments, verified accepted suggestions, and
+accepted-kept survival signals. It exists to tune whether SteadyType starts to
+sound like the person using it.
+
+Suggestion Episodes are the structured version of this loop. Each safe,
+presented suggestion can get a local JSONL episode with app, field, reply
+context, user text, suggested text, accepted text, action, model/prompt version,
+placement, screenshot-captured flag, and latency. Later checkpoints append
+whether the accepted text survived at 2s, 10s, 30s, 1m, 5m, blur, or send.
+
+The episode store also writes `Episodes/YYYY-MM-DD-dashboard.md`, a local
+scorecard for accepted/kept/deleted-fast signals, eval-case count, latency, and
+model/prompt rows. The in-app Diagnostics window shows the same summary when
+Personal Capture is on.
+
+It stays separate from redacted diagnostics and Privacy Bundles. The capture
+policy still blocks secure, login, password, OTP, payment, URL/search,
+API-key-like, password-manager, private prompt/search, unproven browser, and
+other sensitive fields before Markdown is written.
+
 Compatibility learning is not a support claim by itself. Treat it as a code
 candidate only when all of these are true:
 
@@ -118,7 +147,7 @@ text, accepted text, remaining visible text, and screenshot paths are removed
 from the default trace. They are written only to `raw-traces.jsonl` when raw
 local debug tracing is explicitly enabled.
 
-The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, and field blur. Durable checkpoint events store survival class, token recall, edit distance, accepted length, timing metadata, and redacted fingerprints. They should not need the current field text on disk.
+The headline product metric is accepted-and-kept, not raw accept rate. Accepted text is compared at 2s, 10s, 30s, 1m, 5m, field blur, and send. Durable checkpoint events store survival class, token recall, edit distance, accepted length, timing metadata, and redacted fingerprints. They should not need the current field text on disk.
 
 Acceptance events also carry log-safe proof that inserted text came from the
 visible suggestion slice: accepted character count, pre-accept visible character
