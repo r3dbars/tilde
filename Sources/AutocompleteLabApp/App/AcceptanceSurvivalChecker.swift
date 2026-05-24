@@ -60,8 +60,8 @@ actor AcceptanceSurvivalChecker {
                 && measurement.survivalClass == AcceptanceSurvivalClass.rejectedAfterAccept,
             shouldRecordAcceptedAndKept: measurement.isStrongAcceptedAndKept
                 || measurement.isFinalAcceptedAndKept,
-            shouldFinish: checkpoint.isFinalMetricCheckpoint,
-            finishReason: checkpoint.isFinalMetricCheckpoint
+            shouldFinish: checkpoint.isTerminalMetricCheckpoint,
+            finishReason: checkpoint.isTerminalMetricCheckpoint
                 ? finishReason(for: checkpoint)
                 : nil
         )
@@ -127,6 +127,10 @@ actor AcceptanceSurvivalChecker {
             "field-send-finalized"
         case .thirtySeconds:
             "thirty-second-finalized"
+        case .oneMinute:
+            "one-minute-finalized"
+        case .fiveMinutes:
+            "five-minute-finalized"
         case .twoSeconds, .tenSeconds:
             "checkpoint-finalized"
         }

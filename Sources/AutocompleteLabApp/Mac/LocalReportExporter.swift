@@ -170,8 +170,9 @@ struct LocalReportExporter {
         | Typed text near cursor | No, length only | No raw default retention | Raw local debug only | No |
         | Prompt text | No, length only | No raw default retention | Raw local debug only | No |
         | Model output or visible suggestion | No, length only | No raw default retention | Raw local debug only | No |
-        | Accepted text | No, length/fingerprint only | RAM checks at 2s/10s/30s, then cleared | Raw local debug only | No |
+        | Accepted text | No, length/fingerprint only | RAM checks at 2s/10s/30s/1m/5m, then cleared | Raw local debug only | No |
         | Screenshot path or image | No | No default retention | Screenshot proof only | No |
+        | Personal Capture journal and episodes | No | Until user deletes Personal Capture | Local Personal Capture opt-in only | No |
         | App bundle identifier | Yes | Until traces are deleted | Default redacted diagnostics | Yes, only if user shares export |
         | Field kind and request mode | Yes | Until traces are deleted | Default redacted diagnostics | Yes, only if user shares export |
         | Timing, counts, scores, and reasons | Yes | Until traces are deleted | Default redacted diagnostics | Yes, only if user shares export |

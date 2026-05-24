@@ -54,6 +54,56 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(lines.allSatisfy { $0.count <= 160 })
     }
 
+    @Test("Personal Capture loop diagnostics expose score without raw text")
+    func personalCaptureLoopDiagnosticsExposeScoreWithoutRawText() {
+        var record = SuggestionEpisodeRecord(
+            id: "episode-1",
+            createdAt: "2026-05-24T12:00:00Z",
+            appDisplayName: "TextEdit",
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: "field",
+            fieldKind: "plain",
+            fieldKindReason: "safe",
+            requestMode: "wordCompletion",
+            userTypedContext: "private before text",
+            suggestedText: "private suggestion",
+            acceptedText: "private accepted text",
+            model: SuggestionEpisodeModelContext(
+                modelName: "local-test",
+                runtime: "mlx",
+                asset: "asset",
+                promptVersion: "prompt-v1",
+                experimentArm: "arm-a",
+                triggerReason: "typing",
+                candidateSource: "model",
+                latencyMilliseconds: 120
+            ),
+            placement: SuggestionEpisodePlacementContext(renderMode: "inlineAdjacent")
+        )
+        record.appendAction(.accepted, timestamp: "2026-05-24T12:00:01Z")
+        record.appendSurvivalCheckpoint(SuggestionEpisodeSurvivalCheckpoint(
+            checkpoint: "30s",
+            survivalClass: AcceptanceSurvivalClass.exactKept.rawValue,
+            timestamp: "2026-05-24T12:00:30Z"
+        ))
+
+        let diagnostics = PersonalCaptureLoopDiagnostics(
+            scorecard: SuggestionEpisodeScorecard(records: [record])
+        )
+
+        #expect(diagnostics.text.contains("Personal Capture loop:"))
+        #expect(diagnostics.text.contains("score:"))
+        #expect(diagnostics.text.contains("episodes: 1"))
+        #expect(diagnostics.text.contains("accepted: 1"))
+        #expect(diagnostics.text.contains("kept: 1"))
+        #expect(diagnostics.text.contains("eval cases: 1"))
+        #expect(diagnostics.text.contains("average latency: 120ms"))
+        #expect(diagnostics.text.contains("local-test / prompt-v1"))
+        #expect(!diagnostics.text.contains("private before text"))
+        #expect(!diagnostics.text.contains("private suggestion"))
+        #expect(!diagnostics.text.contains("private accepted text"))
+    }
+
     @Test("Placement diagnostics expose confidence without suggestion text")
     func placementDiagnosticsExposeConfidenceWithoutSuggestionText() {
         let diagnostics = PlacementDiagnostics(

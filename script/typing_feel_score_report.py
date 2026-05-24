@@ -197,7 +197,7 @@ def kept_event(event: dict[str, Any]) -> bool:
     metadata = event.get("metadata") or {}
     if truthy(metadata.get("strongAcceptedAndKept")) or truthy(metadata.get("finalAcceptedAndKept")):
         return True
-    if metadata.get("checkpoint") not in {"10s", "30s", "fieldBlur", "fieldSend"}:
+    if metadata.get("checkpoint") not in {"10s", "30s", "1m", "5m", "fieldBlur", "fieldSend"}:
         return False
     return metadata.get("survivalClass") in {
         "exactKept",

@@ -34,7 +34,8 @@ without sharing what the tester typed.
 - document names,
 - URLs,
 - recipients,
-- subject lines.
+- subject lines,
+- Personal Capture Markdown files.
 
 ## How To Export
 
@@ -44,6 +45,9 @@ For beta feedback, use the structured issue form from `Submit Feedback...`.
 Attach only the redacted Privacy Bundle when diagnostics are needed; the form
 does not need raw traces or screenshots by default and does not attach
 diagnostics automatically.
+
+Personal Capture is separate from diagnostics. Do not attach it to beta support
+unless the developer explicitly chooses that local dogfood artifact.
 
 For command-line checks, run:
 

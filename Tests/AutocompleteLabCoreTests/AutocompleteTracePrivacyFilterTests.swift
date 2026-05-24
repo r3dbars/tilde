@@ -90,4 +90,14 @@ struct AutocompleteTracePrivacyFilterTests {
         #expect(redacted["visibleChars"] == "12")
         #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: true) == metadata)
     }
+
+    @Test("Keeps new retention finalization reasons readable")
+    func keepsNewRetentionFinalizationReasonsReadable() {
+        let metadata = [
+            "finishReason": "one-minute-finalized",
+            "terminalReason": "five-minute-finalized"
+        ]
+
+        #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: false) == metadata)
+    }
 }

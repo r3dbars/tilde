@@ -47,11 +47,21 @@ you choose to.
 Raw text traces and placement screenshots are debug opt-ins. Use them only for
 an explicit local debug session, and turn them off afterward.
 
+## Personal Capture Carve-Out
+
+Personal Capture is a Justin-only dogfood mode. It is off by default, writes
+daily Markdown only to this Mac, and is not part of private beta or customer
+behavior.
+
+Support should not ask testers for Personal Capture files. Redacted Privacy
+Bundles remain the normal sharing path.
+
 ## Pause, Quit, Disable, And Delete
 
 - Pause suggestions from the menu bar.
 - Pause the current app from the menu bar.
 - Quiet the current field from Settings.
+- Turn off or delete Personal Capture from Settings if it was enabled for local dogfood.
 - Export or delete local traces from Diagnostics.
 - Quit from the menu bar when you do not want the app watching typing.
 
