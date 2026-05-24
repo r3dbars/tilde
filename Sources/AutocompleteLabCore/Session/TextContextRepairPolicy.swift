@@ -3,6 +3,7 @@ import Foundation
 public enum TextContextRepairReason: String, Equatable, Sendable {
     case notesTextAfterCursorTyping = "notes-text-after-cursor-typing"
     case notesTextAfterCursorStable = "notes-text-after-cursor-stable"
+    case textEditNativeInlineCompletionTail = "textedit-native-inline-completion-tail"
     case obsidianCodeMirrorTrailingCharacter = "obsidian-codemirror-trailing-character"
     case obsidianCodeMirrorTrailingScaffolding = "obsidian-codemirror-trailing-scaffolding"
     case obsidianCodeMirrorHiddenSpacerLine = "obsidian-codemirror-hidden-spacer-line"
@@ -88,6 +89,9 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
         if let chromeRepair = chromeCodeMirrorTrailingCharacterRepair(input) {
             return chromeRepair
         }
+        if let textEditRepair = textEditNativeInlineCompletionTailRepair(input) {
+            return textEditRepair
+        }
         if let obsidianRepair = obsidianCodeMirrorTrailingCharacterRepair(input) {
             return obsidianRepair
         }
@@ -172,6 +176,36 @@ public struct TextContextRepairPolicy: Equatable, Sendable {
             textBeforeCursor: repairedTextBeforeCursor,
             textAfterCursor: repairedTextAfterCursor,
             reason: .chromeCodeMirrorTrailingCharacter
+        )
+    }
+
+    private func textEditNativeInlineCompletionTailRepair(_ input: TextContextRepairInput) -> TextContextRepairResult? {
+        guard input.bundleIdentifier == "com.apple.TextEdit",
+              input.role == "AXTextArea",
+              input.selectedTextLength == 0,
+              let previousTextBeforeCursor = input.previousTextBeforeCursor,
+              let previousTextAfterCursor = input.previousTextAfterCursor,
+              previousTextBeforeCursor == input.textBeforeCursor,
+              previousTextAfterCursor.isEmpty,
+              !input.textAfterCursor.isEmpty,
+              input.textAfterCursor.count <= 16,
+              !input.textAfterCursor.contains(where: \.isNewline),
+              isPlausibleActiveTypingLine(currentLine(in: input.textBeforeCursor)) else {
+            return nil
+        }
+
+        let trimmedTail = input.textAfterCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTail.isEmpty,
+              trimmedTail.count <= 16,
+              trimmedTail.contains(where: \.isLetter),
+              trimmedTail.allSatisfy({ $0.isLetter || $0.isPunctuation }) else {
+            return nil
+        }
+
+        return TextContextRepairResult(
+            textBeforeCursor: input.textBeforeCursor,
+            textAfterCursor: "",
+            reason: .textEditNativeInlineCompletionTail
         )
     }
 
