@@ -292,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
     private let obsidianTabPassthroughRepairPolicy = ObsidianTabPassthroughRepairPolicy()
+    private let obsidianFullAcceptCaretRepairPolicy = ObsidianFullAcceptCaretRepairPolicy()
     private let suggestionInterruptionPolicy = SuggestionInterruptionPolicy()
     private let workspaceFocusChangePolicy = WorkspaceFocusChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
@@ -7777,6 +7778,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
+        repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
+
         let result = insertionEngine.insert(
             acceptedText,
             profile: profile,
@@ -7804,6 +7807,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return result.succeeded
+    }
+
+    private func repairObsidianFullAcceptCaretIfNeeded(
+        profile: CompatibilityProfile,
+        action: KeyboardAction?
+    ) {
+        guard obsidianFullAcceptCaretRepairPolicy.shouldRepair(
+            bundleIdentifier: profile.bundleIdentifier,
+            action: action,
+            snapshot: lastTextSnapshot,
+            currentFieldIdentity: currentFieldIdentity
+        ),
+              let lastTextSnapshot,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == "md.obsidian",
+              frontmostApp.processIdentifier == lastTextSnapshot.fieldIdentity.processIdentifier else {
+            return
+        }
+
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        let expectedText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let textArea = Self.axTextAreaDescendantContainingText(
+            in: appElement,
+            containing: lastTextSnapshot.textBeforeCursor,
+            elementIdentifier: lastTextSnapshot.fieldIdentity.elementIdentifier,
+            maxDepth: 32
+        ) ?? Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: expectedText,
+            containing: lastTextSnapshot.textBeforeCursor,
+            maxDepth: 32
+        )
+
+        guard let textArea else {
+            DiagnosticsLog.shared.record(
+                "obsidian-full-accept-caret-repair",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "success": "false",
+                    "reason": "text-area-not-found",
+                    "beforeChars": String(lastTextSnapshot.textBeforeCursor.count)
+                ]
+            )
+            return
+        }
+
+        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+        var cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+            textArea,
+            location: cursorUTF16Offset
+        )
+        var usedCommandRightFallback = false
+        if !cursorMatches {
+            Self.postCommandRightKey()
+            usedCommandRightFallback = true
+            Thread.sleep(forTimeInterval: 0.05)
+            Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+            Thread.sleep(forTimeInterval: 0.05)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+        }
+        DiagnosticsLog.shared.record(
+            "obsidian-full-accept-caret-repair",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "success": String(cursorMatches),
+                "commandRightFallback": String(usedCommandRightFallback),
+                "beforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "cursorUTF16Offset": String(cursorUTF16Offset)
+            ]
+        )
     }
 
     private func shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
