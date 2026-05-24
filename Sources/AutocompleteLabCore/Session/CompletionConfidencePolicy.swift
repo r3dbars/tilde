@@ -75,6 +75,14 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
                     score -= 45
                     reasons.append("too-many-visible-words")
                 }
+            } else if suggestion.maxVisibleWords >= 8 {
+                if wordCount > suggestion.maxVisibleWords {
+                    score -= 45
+                    reasons.append("too-many-visible-words")
+                } else if supportLevel == .yellow && wordCount > 4 {
+                    score -= 35
+                    reasons.append("long-visible-suggestion")
+                }
             } else if wordCount > 5 {
                 score -= 45
                 reasons.append("too-many-visible-words")
@@ -86,10 +94,10 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
             let contextWords = textBeforeCursor
                 .split(whereSeparator: { $0.isWhitespace })
                 .count
-            if contextWords < 4 {
+            if contextWords < 2 {
                 score -= 55
                 reasons.append("thin-context")
-            } else if contextWords < 6 {
+            } else if contextWords < 4 {
                 score -= 20
                 reasons.append("thin-context")
             }

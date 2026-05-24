@@ -19,8 +19,8 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.last?.suggestion.visibleText == " are you sure?")
     }
 
-    @Test("Phrase mode treats five words as useful but downranks longer continuations")
-    func phraseModeTreatsFiveWordsAsUsefulButDownranksLongerContinuations() {
+    @Test("Phrase mode treats five words as useful while allowing daily-driver length")
+    func phraseModeTreatsFiveWordsAsUsefulWhileAllowingDailyDriverLength() {
         let ranker = CompletionCandidateRanker()
         let suggestions = [
             CompletionSuggestion(text: " feel quiet and useful today", maxVisibleWords: 8),
@@ -34,8 +34,8 @@ struct CompletionCandidateRankerTests {
         )
 
         #expect(ranked.first?.suggestion.visibleText == " feel quiet and useful today")
-        #expect(longSelection.suggestion == nil)
-        #expect(longSelection.suppressionReason == .lowTopScore)
+        #expect(longSelection.suggestion?.visibleWordCount == 8)
+        #expect(longSelection.suppressionReason == nil)
     }
 
     @Test("Phrase mode allows longer candidates when the word slider is high")

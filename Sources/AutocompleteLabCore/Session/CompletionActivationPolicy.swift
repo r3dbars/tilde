@@ -96,6 +96,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
     public let maximumWordCompletionCharacters: Int
     public let allowsTerminalSentenceBoundary: Bool
     public let allowsUnfinishedWordPhraseContinuation: Bool
+    public let prefersPhraseContinuationForWordFragments: Bool
 
     public init(
         minimumContextCharacters: Int = 3,
@@ -104,7 +105,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         minimumWordCompletionCharacters: Int = 3,
         maximumWordCompletionCharacters: Int = 4,
         allowsTerminalSentenceBoundary: Bool = false,
-        allowsUnfinishedWordPhraseContinuation: Bool = false
+        allowsUnfinishedWordPhraseContinuation: Bool = false,
+        prefersPhraseContinuationForWordFragments: Bool = false
     ) {
         self.minimumContextCharacters = max(1, minimumContextCharacters)
         self.minimumContextWords = max(1, minimumContextWords)
@@ -113,6 +115,7 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         self.maximumWordCompletionCharacters = max(self.minimumWordCompletionCharacters, maximumWordCompletionCharacters)
         self.allowsTerminalSentenceBoundary = allowsTerminalSentenceBoundary
         self.allowsUnfinishedWordPhraseContinuation = allowsUnfinishedWordPhraseContinuation
+        self.prefersPhraseContinuationForWordFragments = prefersPhraseContinuationForWordFragments
     }
 
     public init(pace: SuggestionPace) {
@@ -223,17 +226,26 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.middleOfLine)
         }
 
-        if isWordCompletionEligible(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
-            return .allow(.wordCompletion)
-        }
-
         if endsInsideWord(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            if prefersPhraseContinuationForWordFragments,
+               contextWordCount >= minimumPhraseContinuationWords {
+                return .allow(.phraseContinuation)
+            }
+
+            if isWordCompletionEligible(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+                return .allow(.wordCompletion)
+            }
+
             if allowsUnfinishedWordPhraseContinuation,
                contextWordCount >= minimumPhraseContinuationWords {
                 return .allow(.phraseContinuation)
             }
 
             return .block(.unfinishedWord)
+        }
+
+        if isWordCompletionEligible(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            return .allow(.wordCompletion)
         }
 
         guard contextWordCount >= minimumPhraseContinuationWords else {

@@ -478,7 +478,7 @@ struct SuggestionOrchestratorTests {
             isRepeatedMiss: false
         )
 
-        #expect(abs(score.utility - 0.70) < 0.001)
+        #expect(abs(score.utility - 0.74) < 0.001)
         #expect(abs(score.styleFit - 0.48) < 0.001)
         #expect(abs(score.contextFit - 0.50) < 0.001)
         #expect(abs(score.userAffinity - 0.15) < 0.001)

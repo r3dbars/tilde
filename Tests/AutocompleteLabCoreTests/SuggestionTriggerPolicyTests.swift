@@ -179,7 +179,7 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "This feels ready",
             currentTextBeforeCursor: "This feels ready ",
             requestMode: .phraseContinuation
-        ) == .request(delayMilliseconds: 100))
+        ) == .request(delayMilliseconds: 80))
     }
 
     @Test("Very proactive tuning stays quiet after sentence boundaries")
