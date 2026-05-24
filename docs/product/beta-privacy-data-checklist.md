@@ -12,10 +12,11 @@ This is the reviewer map for what the beta can collect or store.
 | User prompt | No, length only | No raw default retention | Raw local debug tracing only | No |
 | Model output | No, length only | No raw default retention | Raw local debug tracing only | No |
 | Visible suggestion | No, length only | No raw default retention | Raw local debug tracing only | No |
-| Accepted text | No, length/fingerprint only | RAM checks at 2s/10s/30s, then cleared | Raw local debug tracing only | No |
+| Accepted text | No, length/fingerprint only | RAM checks at 2s/10s/30s/1m/5m, then cleared | Raw local debug tracing only | No |
 | Remaining visible suggestion | No, length only | No raw default retention | Raw local debug tracing only | No |
 | Screenshot image | No | No default retention | Screenshot proof only | No |
 | Screenshot path | No | No default retention | Screenshot proof only | No |
+| Personal Capture journal and episodes | No | Until user deletes Personal Capture | Local Personal Capture opt-in only | No |
 | URL | No, length only if seen in metadata | No raw default retention | Raw local debug tracing only | No |
 | Document title or filename | No, length only if seen in metadata | No raw default retention | Raw local debug tracing only | No |
 | Recipient | No, length only if seen in metadata | No raw default retention | Raw local debug tracing only | No |
@@ -37,6 +38,10 @@ Mac only when the tester chooses to share it.
 
 Raw text traces and screenshots are local debug opt-ins. They should be used
 only for a named debug session and deleted afterward.
+
+Personal Capture is a separate local dogfood opt-in. It can store raw writing,
+accepted text, suggestion episodes, visible reply context, and local scorecards
+on this Mac only. It is not included in the redacted privacy bundle.
 
 ## Checks
 

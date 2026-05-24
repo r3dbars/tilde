@@ -1501,7 +1501,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             .filter {
                 $0.type == .acceptedTextEdited
                     && $0.isAcceptedAndKeptSignal
-                    && ["30s", "fieldBlur", "fieldSend"].contains($0.metadata["checkpoint"] ?? "")
+                    && ["30s", "1m", "5m", "fieldBlur", "fieldSend"].contains($0.metadata["checkpoint"] ?? "")
             }
             .map(\.acceptanceIdentifier))
             .count

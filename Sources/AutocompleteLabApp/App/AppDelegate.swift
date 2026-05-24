@@ -193,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let personalCapturePolicy = PersonalCapturePolicy()
     private let personalCaptureJournal = PersonalCaptureJournalWriter.shared
+    private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
@@ -4597,6 +4598,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "currentAfterChars": String(context.textAfterCursor.count)
                     ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
                 )
+                recordPersonalCaptureSuggestionEpisodeInsertionFailed(
+                    baseline: baseline,
+                    outcome: String(describing: result),
+                    reason: "insert-verification-failed"
+                )
                 recordAnnoyanceSignal(
                     .wrongInsertion,
                     context: annoyanceContext(
@@ -4620,7 +4626,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         reason: "insert-verification-failed"
                     )
                 }
-                hideSuggestion()
+                hideSuggestion(reason: "insert-verification-failed")
                 return
             }
 
@@ -4642,6 +4648,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 requestMode: baseline.requestMode?.rawValue ?? "",
                 acceptedText: acceptedText,
                 outcome: "verified",
+                metadata: [
+                    "acceptanceID": baseline.acceptanceID,
+                    "acceptMode": baseline.acceptMode,
+                    "fieldKind": baseline.fieldKind.rawValue,
+                    "fieldKindReason": baseline.fieldKindReason,
+                    "behaviorProfile": baseline.behaviorProfileID.rawValue
+                ]
+            )
+            recordPersonalCaptureSuggestionEpisodeAction(
+                suggestionID: baseline.suggestionID ?? "",
+                appBundleIdentifier: baseline.profile.bundleIdentifier,
+                outcome: .accepted,
+                reason: "insertion-verified",
+                acceptedText: acceptedText,
                 metadata: [
                     "acceptanceID": baseline.acceptanceID,
                     "acceptMode": baseline.acceptMode,
@@ -4715,6 +4735,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "retryCount": String(baseline.retryCount)
             ].merging(insertionFailureRecoverabilityMetadata(baseline: baseline)) { current, _ in current }
         )
+        recordPersonalCaptureSuggestionEpisodeInsertionFailed(
+            baseline: baseline,
+            outcome: outcome,
+            reason: "insert-verification-failed"
+        )
         recordAnnoyanceSignal(
             .wrongInsertion,
             context: annoyanceContext(
@@ -4734,7 +4759,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if baseline.profile.suppressesAfterInsertionFailure {
             suppressCurrentField(reason: reason)
         }
-        hideSuggestion()
+        hideSuggestion(
+            reason: "insert-verification-failed",
+            metadata: ["insertionFailureReason": reason]
+        )
     }
 
     private func focusedInsertionVerificationContext(
@@ -5149,7 +5177,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let checkpoints: [(AcceptanceSurvivalCheckpoint, Duration)] = [
                 (.twoSeconds, .seconds(2)),
                 (.tenSeconds, .seconds(8)),
-                (.thirtySeconds, .seconds(20))
+                (.thirtySeconds, .seconds(20)),
+                (.oneMinute, .seconds(30)),
+                (.fiveMinutes, .seconds(240))
             ]
 
             for (checkpoint, delay) in checkpoints {
@@ -5175,7 +5205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let currentTextWindow = currentTextWindow(for: tracker) else {
-            if checkpoint.isFinalMetricCheckpoint {
+            if checkpoint.isTerminalMetricCheckpoint {
                 acceptanceSurvivalTasks[acceptanceID] = nil
                 _ = await acceptanceSurvivalChecker.finishTracking(acceptanceID: acceptanceID)
             }
@@ -5296,6 +5326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: metadata
         )
         recordPersonalCaptureAcceptanceSurvival(result)
+        recordPersonalCaptureSuggestionEpisodeSurvival(result, metadata: metadata)
 
         if result.shouldRecordAcceptedAndKept {
             recordAnnoyanceSignal(
@@ -5356,7 +5387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let outcome: AcceptedAndKeptLearningOutcome
         if result.shouldRecordAcceptedThenDeleted {
             outcome = .rejected
-        } else if result.measurement.checkpoint.isFinalMetricCheckpoint,
+        } else if result.measurement.checkpoint.isTerminalMetricCheckpoint,
                   !result.measurement.deletedWithinTwoSeconds {
             outcome = result.measurement.isFinalAcceptedAndKept ? .kept : .rejected
         } else {
@@ -5449,6 +5480,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reason: reason.rawValue,
             metadata: metadata
         )
+        recordPersonalCaptureSuggestionEpisodeInsertionFailed(
+            baseline: baseline,
+            outcome: reason.rawValue,
+            reason: "insert-verification-failed"
+        )
         recordAnnoyanceSignal(
             .wrongInsertion,
             context: annoyanceContext(
@@ -5469,7 +5505,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 reason: reason.rawValue
             )
         }
-        hideSuggestion(reason: reason.rawValue)
+        hideSuggestion(
+            reason: "insert-verification-failed",
+            metadata: ["insertionFailureReason": reason.rawValue]
+        )
     }
 
     private func insertionVerificationPreflightMetadata(
@@ -6590,6 +6629,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             screenshotPath: screenshotCapture.path,
             metadata: presentationTracePayload.rawTraceMetadata
         )
+        recordPersonalCaptureSuggestionEpisodePresented(
+            suggestionID: suggestionID,
+            request: request,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: displayFieldClassification,
+            suggestion: suggestion,
+            latencyMilliseconds: latencyMilliseconds,
+            triggerReason: triggerReason,
+            placement: deliveredPlacement,
+            panelRect: panelRect,
+            screenshotPath: screenshotCapture.path,
+            metadata: presentationTracePayload.rawTraceMetadata
+        )
         recordSuggestionEvent(
             "suggestion-presented",
             context: context,
@@ -6971,6 +7025,182 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKindReason: fieldClassification.reason,
             source: source
         )
+    }
+
+    private func recordPersonalCaptureSuggestionEpisodePresented(
+        suggestionID: String,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        fieldClassification: AXFieldClassification,
+        suggestion: CompletionSuggestion,
+        latencyMilliseconds: Int,
+        triggerReason: String,
+        placement: PlacementHealthPresentation,
+        panelRect: CGRect,
+        screenshotPath: String,
+        metadata: [String: String]
+    ) {
+        guard appSettings.personalCaptureEnabled,
+              !suggestionID.isEmpty else {
+            return
+        }
+
+        let decision = personalCapturePolicy.decision(for: PersonalCaptureInput(
+            bundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+            role: context.role,
+            subrole: context.subrole,
+            fingerprint: context.fingerprint,
+            isSecure: context.isSecure,
+            fieldClassification: fieldClassification
+        ))
+        guard decision.canCapture else {
+            DiagnosticsLog.shared.record(
+                "personal-capture-episode-blocked",
+                metadata: decision.metadata.merging([
+                    "app": request.appBundleIdentifier ?? profile.bundleIdentifier,
+                    "source": "suggestion-presented"
+                ]) { current, _ in current }
+            )
+            return
+        }
+
+        let runtimeMetadata = modelRuntimeBundle.diagnosticsMetadata
+        let candidateSource = metadata["candidateSelectionSource"] ?? triggerReason
+        let replyContext = request.visiblePageContext.flatMap(SuggestionEpisodeReplyContext.init(visiblePageContext:))
+        let record = SuggestionEpisodeRecord(
+            id: suggestionID,
+            createdAt: PersonalCaptureEpisodeStore.timestampString(from: Date()),
+            appDisplayName: profile.displayName,
+            appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity.traceDescription,
+            fieldKind: fieldClassification.kind.rawValue,
+            fieldKindReason: fieldClassification.reason,
+            requestMode: request.mode.rawValue,
+            userTypedContext: request.textBeforeCursor,
+            textAfterCursor: request.textAfterCursor,
+            replyContext: replyContext,
+            suggestedText: suggestion.visibleText,
+            model: SuggestionEpisodeModelContext(
+                modelName: runtimeMetadata["model"] ?? CompletionModelPolicy.mvp.model.rawValue,
+                runtime: runtimeMetadata["activeCandidate"] ?? "unknown",
+                asset: runtimeMetadata["asset"] ?? "unknown",
+                promptVersion: runtimeMetadata["promptStyle"] ?? CompletionPromptBuilder.promptStyleIdentifier,
+                experimentArm: runtimeMetadata["experimentArm"] ?? "",
+                triggerReason: triggerReason,
+                candidateSource: candidateSource,
+                latencyMilliseconds: latencyMilliseconds,
+                firstTokenLatencyMilliseconds: Int(metadata["firstTokenLatencyMilliseconds"] ?? "")
+            ),
+            placement: SuggestionEpisodePlacementContext(
+                renderMode: placement.renderMode.rawValue,
+                anchorRect: compactRectDescription(placement.anchorRect),
+                textLineRect: placement.textLineRect.map(compactRectDescription) ?? "none",
+                panelRect: compactRectDescription(panelRect),
+                confidenceBand: metadata["placementConfidenceBand"] ?? "",
+                screenshotCaptured: !screenshotPath.isEmpty
+            ),
+            metadata: [
+                "candidateSource": candidateSource,
+                "triggerReason": triggerReason,
+                "visibleChars": String(suggestion.visibleText.count),
+                "visibleWords": String(suggestion.visibleWordCount)
+            ]
+            .merging(metadata) { current, _ in current }
+        )
+
+        personalCaptureEpisodes.recordPresented(record)
+    }
+
+    private func recordPersonalCaptureSuggestionEpisodeAction(
+        suggestionID: String,
+        appBundleIdentifier: String,
+        outcome: SuggestionEpisodeOutcome,
+        reason: String,
+        acceptedText: String = "",
+        metadata: [String: String] = [:]
+    ) {
+        guard appSettings.personalCaptureEnabled,
+              !suggestionID.isEmpty else {
+            return
+        }
+
+        personalCaptureEpisodes.recordAction(
+            suggestionID: suggestionID,
+            appBundleIdentifier: appBundleIdentifier,
+            outcome: outcome,
+            reason: reason,
+            acceptedText: acceptedText,
+            metadata: metadata
+        )
+    }
+
+    private func recordPersonalCaptureSuggestionEpisodeInsertionFailed(
+        baseline: InsertionVerificationBaseline,
+        outcome: String,
+        reason: String
+    ) {
+        recordPersonalCaptureSuggestionEpisodeAction(
+            suggestionID: baseline.suggestionID ?? "",
+            appBundleIdentifier: baseline.profile.bundleIdentifier,
+            outcome: .insertionFailed,
+            reason: reason,
+            metadata: [
+                "acceptanceID": baseline.acceptanceID,
+                "acceptMode": baseline.acceptMode,
+                "fieldKind": baseline.fieldKind.rawValue,
+                "fieldKindReason": baseline.fieldKindReason,
+                "behaviorProfile": baseline.behaviorProfileID.rawValue,
+                "insertionResult": outcome
+            ]
+        )
+    }
+
+    private func recordPersonalCaptureSuggestionEpisodeSurvival(
+        _ result: AcceptanceSurvivalCheckResult,
+        metadata: [String: String]
+    ) {
+        guard appSettings.personalCaptureEnabled,
+              !result.tracker.suggestionID.isEmpty else {
+            return
+        }
+
+        personalCaptureEpisodes.recordSurvival(
+            suggestionID: result.tracker.suggestionID,
+            appBundleIdentifier: result.tracker.appBundleIdentifier,
+            acceptedText: result.tracker.acceptedText,
+            checkpoint: result.measurement.checkpoint.rawValue,
+            survivalClass: result.measurement.survivalClass.rawValue,
+            tokenRecall: result.measurement.tokenRecall,
+            normalizedEditDistance: result.measurement.normalizedEditDistance,
+            metadata: metadata
+        )
+    }
+
+    private func personalCaptureEpisodeOutcome(
+        hiddenOutcome outcome: String,
+        reason: String
+    ) -> SuggestionEpisodeOutcome {
+        if reason == "escape" {
+            return .dismissed
+        }
+        if outcome == "accepted" {
+            return .unknown
+        }
+        if outcome == "typed-over" || reason == "typed-over" {
+            return .typedPast
+        }
+        if outcome == "typed-through" {
+            return .typedPast
+        }
+        if reason.contains("failed") || reason.contains("unsafe") {
+            return .insertionFailed
+        }
+        if outcome == "ignored" {
+            return .ignored
+        }
+        return .unknown
     }
 
     private func recordPersonalCaptureAcceptedSuggestion(
@@ -9151,6 +9381,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reason: "typed-against-visible-suggestion",
             metadata: metadata
         )
+        recordPersonalCaptureSuggestionEpisodeAction(
+            suggestionID: suggestionID,
+            appBundleIdentifier: profile.bundleIdentifier,
+            outcome: .typedPast,
+            reason: "typed-against-visible-suggestion",
+            metadata: metadata
+        )
         recordAnnoyanceSignal(
             .typedOver,
             context: annoyanceContext(
@@ -9310,6 +9547,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 reason: reason,
                 metadata: metadata
             )
+            let episodeOutcome = personalCaptureEpisodeOutcome(hiddenOutcome: outcome, reason: reason)
+            if episodeOutcome != .unknown {
+                recordPersonalCaptureSuggestionEpisodeAction(
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: appBundleIdentifier,
+                    outcome: episodeOutcome,
+                    reason: reason,
+                    metadata: metadata
+                )
+            }
             setSuggestionDecision("Hidden: \(reason)")
         }
 
@@ -10244,6 +10491,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelDirectoryPath: modelDirectoryPath,
             recentEvents: DiagnosticsLog.shared.recentLines(limit: 24),
             traceSummary: RawAutocompleteTraceLog.shared.summary(),
+            personalCaptureScorecard: appSettings.personalCaptureEnabled
+                ? personalCaptureEpisodes.currentScorecard()
+                : nil,
             recentTraceEvents: RawAutocompleteTraceLog.shared.recentEvents(limit: 48),
             tracePath: RawAutocompleteTraceLog.shared.path,
             tracingPaused: RawAutocompleteTraceLog.shared.isPaused,
@@ -10382,6 +10632,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appSettings.personalCaptureEnabled = false
         personalCaptureLastSnapshot = nil
         personalCaptureJournal.deleteAll()
+        personalCaptureEpisodes.deleteAll()
         DiagnosticsLog.shared.record(
             "personal-capture-deleted",
             metadata: ["surface": "settings"]
