@@ -76,10 +76,10 @@ Validation from the cycle so far:
 - `swift test --jobs 1` passed with 1337 tests.
 - `./script/check_quality_eval.sh` passed.
 - `./script/check_trace_eval_self_test.sh` passed.
-- Obsidian default smoke passed with two verified insertions and strict visual
-  trace evidence before this source commit.
+- Obsidian default smoke passed on commit `51addaf9092a` with two verified
+  insertions and strict visual trace evidence.
 - `./script/manual_smoke_status.sh --strict` reports Obsidian default current
-  before this source commit, with TextEdit, Notes, Obsidian variants, and Chrome
+  on commit `51addaf9092a`, with TextEdit, Notes, Obsidian variants, and Chrome
   fixture rows still stale.
 
 ## Scorecard
@@ -87,7 +87,7 @@ Validation from the cycle so far:
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
-| Placement reliability | Obsidian default has fresh strict visual proof before this source commit; other lanes remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian proof after commit, then theme/pane/long-note |
+| Placement reliability | Obsidian default has fresh strict visual proof on `51addaf9092a`; other lanes remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian theme/pane/long-note, then TextEdit/Notes |
 | Typing speed | Subsecond repaired phrase results can display; live latency proof is still narrow | Feels ready during fast typing | Fresh latency proof across Obsidian and TextEdit |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
