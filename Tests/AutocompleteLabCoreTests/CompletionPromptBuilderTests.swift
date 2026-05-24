@@ -9,12 +9,14 @@ struct CompletionPromptBuilderTests {
         let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(prompt.system.contains("Length setting: short"))
+        #expect(prompt.system.contains("Return 1 or 2 candidate suffixes"))
         #expect(prompt.system.contains("Inline autocomplete"))
         #expect(prompt.system.contains("Return only the suffix after the Before cursor text"))
         #expect(prompt.system.contains("boring connective tissue"))
-        #expect(prompt.system.contains("Prefer 2 to 4 high-confidence words"))
+        #expect(prompt.system.contains("Prefer enough high-confidence words"))
         #expect(prompt.system.contains("not obvious from the local text"))
-        #expect(prompt.system.contains("full-sentence continuation"))
+        #expect(prompt.system.contains("weak guess, new topic"))
         #expect(prompt.system.contains("Never suggest pressing Tab, Option-Tab, Backtick"))
         #expect(prompt.system.contains("do not suggest accepting terms or permissions"))
         #expect(prompt.system.contains("Ordinary drafting with should or need"))
@@ -322,14 +324,47 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Suffix:"))
     }
 
-    @Test("Prompt clamps oversized visible word requests")
-    func promptClampsOversizedVisibleWordRequests() {
+    @Test("Prompt allows extended visible word requests")
+    func promptAllowsExtendedVisibleWordRequests() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 20)
-        let prompt = builder.prompt(for: CompletionRequest(textBeforeCursor: "I think we should"))
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "I think we should",
+            maxVisibleWords: 20
+        ))
 
-        #expect(builder.maxVisibleWords == 8)
-        #expect(prompt.system.contains("next 5 words or fewer"))
+        #expect(builder.maxVisibleWords == 20)
+        #expect(prompt.system.contains("next 20 words or fewer"))
+        #expect(prompt.system.contains("Return exactly one longer candidate suffix"))
+        #expect(prompt.system.contains("The candidate must be 12-20 words"))
+        #expect(prompt.system.contains("Do not stop at a 2-4 word phrase"))
+        #expect(prompt.system.contains("return <NO_SUGGESTION> instead of a short fallback"))
+        #expect(prompt.system.contains("Long natural examples"))
+        #expect(prompt.system.contains("easy to finish without making the user think about permissions twice"))
+        #expect(!prompt.system.contains(#""The onboarding screen should make" -> "permission feel clear""#))
         #expect(prompt.system.contains("Behavior profile: docs_prose"))
+        #expect(prompt.user.hasSuffix("Next 12-20 words, or <NO_SUGGESTION>:"))
+    }
+
+    @Test("High word slider overrides short kept style for length")
+    func highWordSliderOverridesShortKeptStyleForLength() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 20)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "The onboarding note should make the setup feel clear and",
+            acceptedTextStyleSketch: AcceptedTextStyleSketch(
+                sampleCount: 22,
+                averageWordCount: 1.23,
+                terminalPunctuationRate: 0,
+                lowercaseStartRate: 1,
+                questionEndingRate: 0,
+                shortSuffixRate: 0.91
+            ),
+            maxVisibleWords: 20
+        ))
+
+        #expect(prompt.system.contains("Recent kept style sketch: avg 1.23 words"))
+        #expect(prompt.system.contains("Length setting overrides recent short-kept history"))
+        #expect(prompt.system.contains("not to shrink the suggestion below the high word-count target"))
+        #expect(prompt.user.hasSuffix("Next 12-20 words, or <NO_SUGGESTION>:"))
     }
 
     @Test("Prompt trims long context from the left")
@@ -475,8 +510,8 @@ struct CompletionPromptBuilderTests {
             mode: .sentenceContinuation
         ))
 
-        #expect(prompt.system.contains("Sentence mode: start only the next sentence's first few words"))
-        #expect(prompt.system.contains("make the best short guess"))
+        #expect(prompt.system.contains("Sentence mode: continue naturally up to the visible word limit"))
+        #expect(prompt.system.contains("longer sentence chunk is allowed"))
         #expect(prompt.system.contains("Start the next sentence naturally"))
         #expect(!prompt.system.contains("Phrase mode: continue only the current local thought"))
     }
@@ -490,7 +525,7 @@ struct CompletionPromptBuilderTests {
         ))
 
         #expect(prompt.system.contains("next 5 words or fewer"))
-        #expect(prompt.system.contains("Behavior profile: ai_chat, max 5 visible words / 9 generated tokens"))
+        #expect(prompt.system.contains("Behavior profile: ai_chat, max 20 visible words / 48 generated tokens"))
         #expect(prompt.system.contains("Never suggest sending, submitting"))
         #expect(prompt.system.contains("Never suggest pressing Enter/Return"))
     }
@@ -536,7 +571,7 @@ struct CompletionPromptBuilderTests {
 private extension String {
     var contextBetweenCursorHeaderAndPromptSuffix: String? {
         guard let headerRange = range(of: "Before cursor:\n"),
-              let suffixRange = range(of: "\n\nNext words:") ?? range(of: "\n\nSuffix:") else {
+              let suffixRange = range(of: "\n\nNext ") ?? range(of: "\n\nSuffix:") else {
             return nil
         }
 

@@ -11,7 +11,7 @@ public struct CompletionPrompt: Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "screen-aware-continuation-v7"
+    public static let promptStyleIdentifier = "screen-aware-continuation-v9"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -37,10 +37,14 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
     public func prompt(for request: CompletionRequest) -> CompletionPrompt {
         let context = promptContext(from: request.textBeforeCursor, mode: request.mode)
         let behaviorProfile = behaviorProfile(for: request)
+        let effectiveMaxVisibleWords = effectiveMaxVisibleWords(
+            for: request,
+            behaviorProfile: behaviorProfile
+        )
         let userPrompt = userPrompt(
             context: context,
             visiblePageContext: request.visiblePageContext,
-            suffix: request.mode == .wordCompletion ? "Suffix:" : "Next words:"
+            suffix: suffixLabel(for: request.mode, visibleWords: effectiveMaxVisibleWords)
         )
 
         if request.mode == .wordCompletion {
@@ -78,46 +82,50 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         for request: CompletionRequest,
         behaviorProfile: AutocompleteBehaviorProfile
     ) -> String {
-        let effectiveMaxVisibleWords = min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
+        let effectiveMaxVisibleWords = effectiveMaxVisibleWords(
+            for: request,
+            behaviorProfile: behaviorProfile
+        )
+        let candidateCountGuidance = candidateCountGuidance(forVisibleWords: effectiveMaxVisibleWords)
         let sentenceGuidance = sentenceGuidance(for: request)
+        let lengthGuidance = lengthGuidance(forVisibleWords: effectiveMaxVisibleWords)
+        let styleLengthGuidance = styleLengthGuidance(forVisibleWords: effectiveMaxVisibleWords)
         let styleGuidance = request.acceptedTextStyleSketch?.promptGuidance ?? ""
         let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
         let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
         let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
+        let exampleGuidance = exampleGuidance(forVisibleWords: effectiveMaxVisibleWords)
         let modeGuidance = request.mode == .sentenceContinuation
-            ? "Sentence mode: start only the next sentence's first few words. If visible context makes the next sentence obvious, make the best short guess."
+            ? "Sentence mode: continue naturally up to the visible word limit. If the limit is high and the next sentence is obvious, a longer sentence chunk is allowed."
             : "Phrase mode: continue only the current local thought. If visible context implies what the user is replying to or writing about, use it."
         let base = """
         Inline autocomplete.
-        Return 1 or 2 candidate suffixes, one per line, best first.
+        \(candidateCountGuidance)
         Return only the suffix after the Before cursor text.
         Each candidate must be only the next \(effectiveMaxVisibleWords) words or fewer.
+        \(lengthGuidance)
         Return exactly \(Self.noSuggestionToken) when the continuation is not obvious from the local text.
         Only exception: return exactly \(Self.noSuggestionToken) when unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Never suggest pressing Tab, Option-Tab, Backtick, or accepting all visible text.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(styleGuidance)
+        \(styleLengthGuidance)
         \(titleShapeGuidance)
         \(partialWordGuidance)
         \(lineStructureGuidance)
         \(visiblePageGuidance)
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
-        Prefer the next word or short phrase the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
-        Prefer 2 to 4 high-confidence words for phrase suggestions; use fewer words when fewer are enough.
-        Return \(Self.noSuggestionToken) instead of a full-sentence continuation, weak guess, new topic, or action instruction.
+        Prefer the next word or short phrase at low settings; at high settings, prefer the next words the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
+        Prefer enough high-confidence words to match the visible word limit; use fewer words when fewer are enough.
+        Return \(Self.noSuggestionToken) instead of a weak guess, new topic, or action instruction.
         If the user is writing about Tab, acceptance behavior, or shortcuts, continue the safety rule itself; do not suggest accepting terms or permissions.
         When the continuation is a common phrase, put that boring obvious phrase first.
         If the best continuation would answer the user, issue an instruction to the app, or start a new topic, return \(Self.noSuggestionToken).
         Ordinary drafting with should or need is allowed when it is not telling the app to act; continue it with concrete next words.
         Avoid generic filler like "comes to life", "key features and benefits", "comprehensive plan", or "acknowledge the user's point".
-        Shape examples: "The draft feels calmer when it" -> "stays short and specific"; "The review should focus on" -> "real user risk"; "A good reply here would be" -> "short, kind, and specific".
-        Correction examples: "Correct this spelling: recieve ->" -> "receive"; "adress ->" -> "address"; "seperate ->" -> "separate"; "calender ->" -> "calendar"; "occured ->" -> "occurred". Return only the corrected word.
-        Natural examples: "Before we ship, we should" -> "run one small check"; "The meeting notes need a" -> "clear next step"; "The onboarding screen should make" -> "permission feel clear"; "The local test should fail only when" -> "proof is missing"; "The draft says simple simple, so the next words should" -> "move forward".
-        List examples: "Project notes / Keep the app small / Make the copy" -> "short and clear"; "Decision log / Hold the risky path until" -> "proof exists". Return \(Self.noSuggestionToken) only for empty bullets or empty numbered list items.
-        More examples: "quiet mode should stay quiet mode should stay" -> "calm in the background"; "Hold the risky path until" -> "proof exists"; "the next step is to" -> "write a small repro"; "autocomplete should" -> "stay silent".
-        More examples: "This bug is easiest to test with" -> "small fixture case"; "After the demo, capture the" -> "open questions quickly"; "tested the button, tested the button, and now need" -> "one fresh check"; "should not echo" -> "new detail"; "next words should" -> "move forward"; "starts repeating the model starts repeating, prefer" -> "noisy output blocked"; "product update should mention" -> "one clear change"; "press Tab and confirm" -> "next word only".
+        \(exampleGuidance)
         When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
         Do not repeat the Before cursor text.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
@@ -153,6 +161,28 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         request.behaviorProfile
     }
 
+    private func effectiveMaxVisibleWords(
+        for request: CompletionRequest,
+        behaviorProfile: AutocompleteBehaviorProfile
+    ) -> Int {
+        min(maxVisibleWords, request.maxVisibleWords, behaviorProfile.maxVisibleWords)
+    }
+
+    private func suffixLabel(for mode: CompletionRequestMode, visibleWords: Int) -> String {
+        guard mode != .wordCompletion else {
+            return "Suffix:"
+        }
+
+        let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(
+            forVisibleWords: visibleWords
+        )
+        guard visibleWords >= 12 else {
+            return "Next words:"
+        }
+
+        return "Next \(preferredMinimum)-\(visibleWords) words, or \(Self.noSuggestionToken):"
+    }
+
     private func userPrompt(
         context: String,
         visiblePageContext: VisiblePageContext?,
@@ -184,6 +214,66 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         case .wordCompletion:
             return ""
         }
+    }
+
+    private func lengthGuidance(forVisibleWords visibleWords: Int) -> String {
+        let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: visibleWords)
+        switch visibleWords {
+        case 16...:
+            return """
+            Length setting: high. The candidate must be 12-\(visibleWords) words when the current sentence can keep going naturally.
+            Do not stop at a 2-4 word phrase just because it is grammatical; continue the same sentence into a useful longer chunk.
+            If you cannot produce at least 12 strong next words, return \(Self.noSuggestionToken) instead of a short fallback.
+            """
+        case 12...:
+            return """
+            Length setting: high. The candidate must be \(preferredMinimum)-\(visibleWords) words when the current sentence can keep going naturally.
+            Do not stop at a 2-4 word phrase just because it is grammatical.
+            If you cannot produce at least \(preferredMinimum) strong next words, return \(Self.noSuggestionToken) instead of a short fallback.
+            """
+        case 9...:
+            return "Length setting: medium-long. Prefer \(preferredMinimum)-\(visibleWords) words when the next words are clear."
+        case 6...:
+            return "Length setting: medium. Prefer at least \(preferredMinimum) words when the next words are clear."
+        default:
+            return "Length setting: short. A short phrase is fine."
+        }
+    }
+
+    private func candidateCountGuidance(forVisibleWords visibleWords: Int) -> String {
+        guard visibleWords >= 12 else {
+            return "Return 1 or 2 candidate suffixes, one per line, best first."
+        }
+
+        return "Return exactly one longer candidate suffix. Do not return multiple lines or a short alternate candidate."
+    }
+
+    private func exampleGuidance(forVisibleWords visibleWords: Int) -> String {
+        guard visibleWords >= 12 else {
+            return """
+            Shape examples: "The draft feels calmer when it" -> "stays short and specific"; "The review should focus on" -> "real user risk"; "A good reply here would be" -> "short, kind, and specific".
+            Correction examples: "Correct this spelling: recieve ->" -> "receive"; "adress ->" -> "address"; "seperate ->" -> "separate"; "calender ->" -> "calendar"; "occured ->" -> "occurred". Return only the corrected word.
+            Natural examples: "Before we ship, we should" -> "run one small check"; "The meeting notes need a" -> "clear next step"; "The onboarding screen should make" -> "permission feel clear"; "The local test should fail only when" -> "proof is missing"; "The draft says simple simple, so the next words should" -> "move forward".
+            List examples: "Project notes / Keep the app small / Make the copy" -> "short and clear"; "Decision log / Hold the risky path until" -> "proof exists". Return \(Self.noSuggestionToken) only for empty bullets or empty numbered list items.
+            More examples: "quiet mode should stay quiet mode should stay" -> "calm in the background"; "Hold the risky path until" -> "proof exists"; "the next step is to" -> "write a small repro"; "autocomplete should" -> "stay silent".
+            More examples: "This bug is easiest to test with" -> "small fixture case"; "After the demo, capture the" -> "open questions quickly"; "tested the button, tested the button, and now need" -> "one fresh check"; "should not echo" -> "new detail"; "next words should" -> "move forward"; "starts repeating the model starts repeating, prefer" -> "noisy output blocked"; "product update should mention" -> "one clear change"; "press Tab and confirm" -> "next word only".
+            """
+        }
+
+        return """
+        Long natural examples: "Before we ship, we should" -> "run one small check against the live app before changing anything else"; "The meeting notes need a" -> "clear next step that someone can finish without reading the whole thread again"; "The onboarding note should make the setup feel clear and" -> "easy to finish without making the user think about permissions twice before they can keep writing"; "The local test should fail only when" -> "proof is missing from the exact app path we are trying to trust"; "The draft says simple simple, so the next words should" -> "keep moving in plain language without adding a new topic or pitch".
+        More long examples: "The draft feels calmer when it" -> "stays short and specific while still giving the reader enough context to decide what happens next"; "The review should focus on" -> "real user risk in the exact flow people are trying to use today"; "After the demo, capture the" -> "open questions quickly so the next pass starts from what people actually noticed"; "Product update should mention" -> "one clear change and the proof that it works in the real app"; "Press Tab and confirm" -> "the next word stays visible so the second accept still feels natural".
+        Correction exception: "Correct this spelling: recieve ->" -> "receive"; "adress ->" -> "address"; "seperate ->" -> "separate"; "calender ->" -> "calendar"; "occured ->" -> "occurred". Return one corrected word only for explicit spelling correction prompts.
+        Do not copy the example topics. For ordinary drafting at this high setting, do not return a 1-4 word answer.
+        """
+    }
+
+    private func styleLengthGuidance(forVisibleWords visibleWords: Int) -> String {
+        guard visibleWords >= 12 else {
+            return ""
+        }
+
+        return "Length setting overrides recent short-kept history. Use the style sketch for tone and casing, not to shrink the suggestion below the high word-count target."
     }
 
     private func promptContext(from textBeforeCursor: String, mode: CompletionRequestMode) -> String {

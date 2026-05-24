@@ -10,10 +10,13 @@ public struct CompletionSuggestion: Equatable, Sendable {
     public init(
         text: String,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
-        maxVisibleCharacters: Int = Self.defaultMaxVisibleCharacters
+        maxVisibleCharacters: Int? = nil
     ) {
         self.maxVisibleWords = max(1, maxVisibleWords)
-        self.maxVisibleCharacters = max(1, maxVisibleCharacters)
+        self.maxVisibleCharacters = max(
+            1,
+            maxVisibleCharacters ?? Self.defaultMaxVisibleCharacters(forVisibleWords: self.maxVisibleWords)
+        )
         self.text = Self.cappedText(
             text,
             wordLimit: self.maxVisibleWords,
@@ -76,6 +79,29 @@ public struct CompletionSuggestion: Equatable, Sendable {
         }
 
         return accepted
+    }
+
+    public static func nextWordAcceptanceText(in text: String) -> String {
+        let accepted = acceptedPrefix(in: text, wordLimit: 1)
+        guard accepted.contains(where: { !$0.isWhitespace }) else {
+            return ""
+        }
+
+        if accepted.last?.isWhitespace == true {
+            return accepted
+        }
+
+        let boundary = text.index(text.startIndex, offsetBy: accepted.count)
+        if boundary < text.endIndex,
+           text[boundary].isWhitespace {
+            return accepted + " "
+        }
+
+        return accepted + " "
+    }
+
+    public static func defaultMaxVisibleCharacters(forVisibleWords visibleWords: Int) -> Int {
+        max(defaultMaxVisibleCharacters, max(1, visibleWords) * 10)
     }
 
     private static func characterCappedText(_ text: String, characterLimit: Int) -> String {

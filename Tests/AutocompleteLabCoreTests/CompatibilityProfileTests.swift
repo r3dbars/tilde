@@ -330,8 +330,8 @@ struct CompatibilityProfileTests {
         #expect(claude.requiresNoSubmitAcceptanceProof == true)
         #expect(claude.canPresentSuggestions == true)
 
-        #expect(codex.supportReason.contains("proof-only"))
-        #expect(codex.notes.contains("one-word no-submit proof"))
+        #expect(codex.supportReason.contains("on for this installed app"))
+        #expect(codex.notes.contains("one-word no-submit safety"))
         #expect(codex.supportsFullAcceptance == false)
         #expect(codex.allowsDetachedSuggestions == false)
         #expect(codex.allowsSyntheticCaretPlacement == false)

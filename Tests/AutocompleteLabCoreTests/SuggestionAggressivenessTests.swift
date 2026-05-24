@@ -8,6 +8,12 @@ struct SuggestionAggressivenessTests {
         let tuning = SuggestionTuning()
 
         #expect(tuning.aggressivenessLevel == 3)
+        #expect(tuning.maxVisibleWords == 8)
+        #expect(tuning.wordStartCharacters == 2)
+        #expect(tuning.phraseStartWords == 3)
+        #expect(tuning.responseSpeedLevel == 3)
+        #expect(tuning.confidenceLevel == 3)
+        #expect(tuning.learningRestraintLevel == 2)
         #expect(tuning.displayName == "Proactive")
         #expect(tuning.pace == .eager)
 
@@ -98,12 +104,14 @@ struct SuggestionAggressivenessTests {
         #expect(proactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.10)
         #expect(veryProactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.00)
         #expect(max.displayScorePolicy.threshold(for: .phraseContinuation) == 0.90)
-        #expect(max.maxVisibleWords == 8)
+        #expect(max.maxVisibleWords == 20)
 
         let veryProactiveTrigger = veryProactive.triggerPolicy(supportPace: .eager)
-        #expect(veryProactiveTrigger.wordCompletionDelayMilliseconds == 20)
+        #expect(veryProactiveTrigger.wordCompletionDelayMilliseconds == 40)
         #expect(veryProactiveTrigger.wordBoundaryDelayMilliseconds == 100)
         #expect(veryProactiveTrigger.sentenceBoundaryDelayMilliseconds == 240)
+        #expect(veryProactiveTrigger.minimumWordCompletionCharacters == 2)
+        #expect(veryProactiveTrigger.minimumPhraseContinuationWords == 3)
         #expect(!veryProactiveTrigger.allowsPlainLineStartPhraseContinuation)
         #expect(!veryProactiveTrigger.allowsSentenceBoundaryRequest)
 
@@ -112,14 +120,53 @@ struct SuggestionAggressivenessTests {
         #expect(maxTrigger.softPunctuationDelayMilliseconds == 120)
         #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 200)
         #expect(maxTrigger.pauseDelayMilliseconds == 80)
-        #expect(maxTrigger.minimumWordCompletionCharacters == 1)
+        #expect(maxTrigger.minimumWordCompletionCharacters == 2)
         #expect(max.traceMetadata["suggestionAggressivenessLevel"] == "5")
-        #expect(max.traceMetadata["suggestionMaxVisibleWords"] == "8")
+        #expect(max.traceMetadata["suggestionMaxVisibleWords"] == "20")
+    }
+
+    @Test("extra tuning knobs independently control timing confidence and learning")
+    func extraTuningKnobsIndependentlyControlTimingConfidenceAndLearning() {
+        let loose = SuggestionTuning(
+            aggressivenessLevel: 3,
+            maxVisibleWords: 99,
+            wordStartCharacters: 1,
+            phraseStartWords: 2,
+            responseSpeedLevel: 5,
+            confidenceLevel: 5,
+            learningRestraintLevel: 0
+        )
+
+        #expect(loose.maxVisibleWords == 20)
+        #expect(abs(loose.displayScorePolicy.threshold(for: .phraseContinuation) - 0.90) < 0.0001)
+        #expect(loose.displayScorePolicy.acceptedAndKeptProbabilityMultiplier == 0)
+        #expect(loose.displayScorePolicy.learningRestraintScoreScale == 0)
+
+        let looseTrigger = loose.triggerPolicy(supportPace: .eager)
+        #expect(looseTrigger.wordCompletionDelayMilliseconds == 20)
+        #expect(looseTrigger.wordBoundaryDelayMilliseconds == 80)
+        #expect(looseTrigger.minimumWordCompletionCharacters == 1)
+        #expect(looseTrigger.minimumPhraseContinuationWords == 2)
+
+        let strict = SuggestionTuning(
+            aggressivenessLevel: 3,
+            responseSpeedLevel: 1,
+            confidenceLevel: 1,
+            learningRestraintLevel: 3
+        )
+        #expect(abs(strict.displayScorePolicy.threshold(for: .phraseContinuation) - 1.30) < 0.0001)
+        #expect(strict.displayScorePolicy.minimumAcceptedAndKeptSamples == 3)
+        #expect(strict.displayScorePolicy.learningRestraintScoreScale == 1.25)
+        #expect(strict.triggerPolicy(supportPace: .eager).wordBoundaryDelayMilliseconds == 220)
     }
 
     @Test("max activation starts from the first strong screen-aware hint")
     func maxActivationStartsFromFirstHint() {
-        let activation = SuggestionTuning(aggressivenessLevel: 5)
+        let activation = SuggestionTuning(
+            aggressivenessLevel: 5,
+            wordStartCharacters: 1,
+            phraseStartWords: 3
+        )
             .activationPolicy(supportPace: .eager)
 
         #expect(activation.decision(

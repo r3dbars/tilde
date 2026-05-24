@@ -33,6 +33,19 @@ struct AppModelRuntimeFactoryTests {
         #expect(defaults.string(forKey: AppModelRuntimeFactory.experimentArmDefaultsKey) == "length_1_word")
     }
 
+    @Test("Accepts explicit twenty-word length override")
+    func acceptsExplicitTwentyWordLengthOverride() {
+        let defaults = temporaryDefaults()
+
+        let bundle = AppModelRuntimeFactory.makeRuntime(
+            environment: ["AUTOCOMPLETE_LAB_VISIBLE_WORDS": "20"],
+            defaults: defaults
+        )
+
+        #expect(bundle.lengthConfiguration.maxVisibleWords == 20)
+        #expect(bundle.lengthConfiguration.maxGeneratedTokens == 44)
+    }
+
     @Test("Uses SteadyType model root override and unavailable runtime for missing model")
     func usesModelRootOverrideAndUnavailableRuntimeForMissingModel() async {
         let defaults = temporaryDefaults()

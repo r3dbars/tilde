@@ -520,7 +520,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Codex",
             appFamily: .customCanvas,
             supportLevel: .yellow,
-            supportReason: "Codex prompt support is proof-only: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on.",
+            supportReason: "Codex prompt support is on for this installed app: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -535,7 +535,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
-            notes: "Proof-only target is enabled only for Codex one-word no-submit proof. Full accept, detached suggestions, generic key-event insertion, and clipboard fallback stay off."
+            notes: "Enabled for this local Codex build with one-word no-submit proof and one-word no-submit safety. Full accept, detached suggestions, generic key-event insertion, and clipboard fallback stay off."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",

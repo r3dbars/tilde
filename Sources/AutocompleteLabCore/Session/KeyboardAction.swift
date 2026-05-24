@@ -167,7 +167,7 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
             return KeyboardShortcutConflictEvaluation(
                 level: .none,
                 statusText: "Conflict check: whole-suggestion accept is off",
-                detailText: "Tab still accepts the next word when suggestions are visible.",
+                detailText: "Tab still accepts the next word plus a space when suggestions are visible.",
                 perAppProfileText: "Per-app profile: whole-suggestion accept is disabled."
             )
         }
@@ -203,7 +203,7 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
             return KeyboardShortcutConflictEvaluation(
                 level: .blocked,
                 statusText: "Conflict check: whole-suggestion accept is off in \(context.appDisplayName)",
-                detailText: "Tab accepts one word, but whole-suggestion accept stays off for this app.",
+                detailText: "Tab accepts one word plus a space, but whole-suggestion accept stays off for this app.",
                 perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab one-word accept only."
             )
         }

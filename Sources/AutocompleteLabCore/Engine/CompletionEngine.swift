@@ -10,9 +10,9 @@ public enum CompletionRequestMode: String, Codable, Equatable, Sendable {
         case .wordCompletion:
             return 3
         case .phraseContinuation:
-            return CompletionModelPolicy.mvp.maxGeneratedTokens
+            return CompletionModelPolicy.maximumGeneratedTokens
         case .sentenceContinuation:
-            return 10
+            return CompletionModelPolicy.maximumGeneratedTokens
         }
     }
 

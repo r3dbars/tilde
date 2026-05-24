@@ -35,7 +35,6 @@ struct HostCompatibilityPolicyTests {
         let catalog = HostCompatibilityPolicyCatalog.mvp
 
         for bundleIdentifier in [
-            "com.openai.codex",
             "com.anthropic.claude-code",
             "com.anthropic.claudefordesktop",
             "com.openai.atlas"
@@ -44,6 +43,15 @@ struct HostCompatibilityPolicyTests {
             #expect(policy.hostVersion.isExact)
             #expect(policy.killSwitch == .proofModeRequired || policy.killSwitch == .hardDisabled)
         }
+
+        let codex = try #require(catalog.policy(for: "com.openai.codex"))
+        #expect(codex.hostVersion == .exact(
+            shortVersion: "26.519.22136",
+            build: "3003",
+            source: "/Applications/Codex.app"
+        ))
+        #expect(codex.runtimeState == .userToggleAllowed)
+        #expect(codex.killSwitch == .perHostDisable)
 
         for bundleIdentifier in [
             "com.openai.chat",
@@ -60,8 +68,8 @@ struct HostCompatibilityPolicyTests {
         }
     }
 
-    @Test("Word-only prompt policies stay one-word and proof-gated")
-    func wordOnlyPromptPoliciesStayOneWordAndProofGated() throws {
+    @Test("Word-only prompt policies stay one-word and full accept disabled")
+    func wordOnlyPromptPoliciesStayOneWordAndFullAcceptDisabled() throws {
         let profiles = CompatibilityProfileStore.mvp.profiles
         let catalog = HostCompatibilityPolicyCatalog.mvp
         let wordOnlyPolicies = catalog.policies.values.filter { $0.safetyMode == .wordOnly }
@@ -72,19 +80,24 @@ struct HostCompatibilityPolicyTests {
             #expect(profile.supportsOneWordAcceptance)
             #expect(!profile.supportsFullAcceptance)
             #expect(profile.requiresNoSubmitAcceptanceProof)
-            #expect(policy.killSwitch == .proofModeRequired)
+            if policy.bundleIdentifier == "com.openai.codex" {
+                #expect(policy.killSwitch == .perHostDisable)
+            } else {
+                #expect(policy.killSwitch == .proofModeRequired)
+            }
             #expect(!policy.proofArtifacts.isEmpty)
         }
     }
 
-    @Test("Only boring writing hosts are normal beta toggles")
-    func onlyBoringWritingHostsAreNormalBetaToggles() throws {
+    @Test("Normal beta toggles include proven Codex dogfood")
+    func normalBetaTogglesIncludeProvenCodexDogfood() throws {
         let catalog = HostCompatibilityPolicyCatalog.mvp
         let betaSafeBundles = Set([
             "com.apple.TextEdit",
             "com.apple.Notes",
             "md.obsidian",
-            "com.google.Chrome"
+            "com.google.Chrome",
+            "com.openai.codex"
         ])
 
         let userToggleBundles = Set(catalog.policies.values
@@ -92,7 +105,7 @@ struct HostCompatibilityPolicyTests {
             .map(\.bundleIdentifier))
 
         #expect(userToggleBundles == betaSafeBundles)
-        #expect(try #require(catalog.policy(for: "com.openai.codex")).runtimeState == .proofModeOnly)
+        #expect(try #require(catalog.policy(for: "com.openai.codex")).runtimeState == .userToggleAllowed)
         #expect(try #require(catalog.policy(for: "com.anthropic.claudefordesktop")).runtimeState == .proofModeOnly)
         #expect(try #require(catalog.policy(for: "com.anthropic.claude-code")).runtimeState == .proofModeOnly)
     }

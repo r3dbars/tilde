@@ -63,6 +63,24 @@ struct CompletionConfidencePolicyTests {
         #expect(decision.reasons.contains("long-visible-suggestion"))
     }
 
+    @Test("Allows long phrase continuations when the slider is high")
+    func allowsLongPhraseContinuationsWhenSliderIsHigh() {
+        let decision = policy.decision(
+            suggestion: CompletionSuggestion(
+                text: " easy to finish without making the user think about permissions twice before they can keep writing",
+                maxVisibleWords: 20
+            ),
+            mode: .phraseContinuation,
+            textBeforeCursor: "The onboarding note should make the setup feel clear and",
+            latencyMilliseconds: 650,
+            supportLevel: .green
+        )
+
+        #expect(decision.canDisplay)
+        #expect(!decision.reasons.contains("too-many-visible-words"))
+        #expect(!decision.reasons.contains("long-visible-suggestion"))
+    }
+
     @Test("Blocks low-confidence generic assistant text")
     func blocksGenericAssistantText() {
         let decision = policy.decision(

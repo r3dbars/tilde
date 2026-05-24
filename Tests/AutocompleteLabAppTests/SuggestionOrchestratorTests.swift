@@ -85,7 +85,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["fieldKindReason"] == "test-compose")
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
         #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
-        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "5")
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
         #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
         #expect(orchestration.requestMetadata["visiblePageContextCaptureScope"] == "visible_screen")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
@@ -974,6 +974,20 @@ struct SuggestionOrchestratorTests {
 
         #expect(partials.visibleTexts == [" make"])
         #expect(suggestion?.visibleText == " make this feel")
+    }
+
+    @MainActor
+    @Test("Suggestion preserves twenty-word request through app orchestration")
+    func suggestionPreservesTwentyWordRequestThroughAppOrchestration() async throws {
+        let orchestrator = SuggestionOrchestrator(engine: FixedCompletionEngine(
+            text: " one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty extra"
+        ))
+        let request = CompletionRequest(textBeforeCursor: "Can we", maxVisibleWords: 20)
+
+        let suggestion = try await orchestrator.suggestion(for: request) { _ in }
+
+        #expect(suggestion?.visibleWordCount == 20)
+        #expect(suggestion?.visibleText.hasSuffix("nineteen twenty") == true)
     }
 
     @MainActor

@@ -174,8 +174,44 @@ struct PromptEditorFingerprintPolicyTests {
         #expect(decision.reason == "codex-proof-marker")
     }
 
-    @Test("Blocks Codex proof marker override without proof mode or cursor safety")
-    func blocksCodexProofMarkerOverrideWithoutProofModeOrCursorSafety() {
+    @Test("Allows Codex text areas when Codex omits window bounds")
+    func allowsCodexTextAreasWhenCodexOmitsWindowBounds() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "",
+            elementRect: CGRect(x: 88, y: 96, width: 668, height: 149),
+            windowRect: nil,
+            proofModeEnabled: false,
+            textBeforeCursor: "hey how are things going intell",
+            textAfterCursor: "",
+            selectedTextLength: 0
+        )
+
+        #expect(decision.canSuggest)
+        #expect(decision.reason == "codex-text-area")
+    }
+
+    @Test("Blocks Codex text areas with selected text")
+    func blocksCodexTextAreasWithSelectedText() {
+        let decision = policy.decision(
+            bundleIdentifier: "com.openai.codex",
+            role: "AXTextArea",
+            fingerprintText: "",
+            elementRect: CGRect(x: 88, y: 96, width: 668, height: 149),
+            windowRect: nil,
+            proofModeEnabled: false,
+            textBeforeCursor: "replace this",
+            textAfterCursor: "",
+            selectedTextLength: 1
+        )
+
+        #expect(!decision.canSuggest)
+        #expect(decision.reason == "missing-prompt-bounds")
+    }
+
+    @Test("Allows Codex text areas without proof mode but blocks unsafe cursor state")
+    func allowsCodexTextAreasWithoutProofModeButBlocksUnsafeCursorState() {
         let withoutProofMode = policy.decision(
             bundleIdentifier: "com.openai.codex",
             role: "AXTextArea",
@@ -210,16 +246,16 @@ struct PromptEditorFingerprintPolicyTests {
             selectedTextLength: 0
         )
 
-        #expect(!withoutProofMode.canSuggest)
-        #expect(withoutProofMode.reason == "codex-proof-marker-required")
+        #expect(withoutProofMode.canSuggest)
+        #expect(withoutProofMode.reason == "codex-text-area")
         #expect(!withSelection.canSuggest)
-        #expect(withSelection.reason == "codex-proof-marker-required")
+        #expect(withSelection.reason == "generic-prompt-not-composer")
         #expect(!withTextAfterCursor.canSuggest)
-        #expect(withTextAfterCursor.reason == "codex-proof-marker-required")
+        #expect(withTextAfterCursor.reason == "generic-prompt-not-composer")
     }
 
-    @Test("Blocks Codex prompt geometry without proof marker")
-    func blocksCodexPromptGeometryWithoutProofMarker() {
+    @Test("Allows Codex prompt geometry without proof marker")
+    func allowsCodexPromptGeometryWithoutProofMarker() {
         let promptFingerprint = policy.decision(
             bundleIdentifier: "com.openai.codex",
             role: "AXTextArea",
@@ -239,10 +275,10 @@ struct PromptEditorFingerprintPolicyTests {
             textBeforeCursor: "ordinary prompt"
         )
 
-        #expect(!promptFingerprint.canSuggest)
-        #expect(promptFingerprint.reason == "codex-proof-marker-required")
-        #expect(!promptGeometry.canSuggest)
-        #expect(promptGeometry.reason == "codex-proof-marker-required")
+        #expect(promptFingerprint.canSuggest)
+        #expect(promptFingerprint.reason == "codex-text-area")
+        #expect(promptGeometry.canSuggest)
+        #expect(promptGeometry.reason == "codex-text-area")
     }
 
     @Test("Blocks generic prompt fingerprints without geometry")

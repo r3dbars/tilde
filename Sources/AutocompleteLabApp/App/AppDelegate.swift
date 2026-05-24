@@ -423,6 +423,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         setSuggestionMaxVisibleWords: { [weak self] words in
             self?.setSuggestionMaxVisibleWords(words)
+        },
+        setSuggestionWordStartCharacters: { [weak self] characters in
+            self?.setSuggestionWordStartCharacters(characters)
+        },
+        setSuggestionPhraseStartWords: { [weak self] words in
+            self?.setSuggestionPhraseStartWords(words)
+        },
+        setSuggestionResponseSpeedLevel: { [weak self] level in
+            self?.setSuggestionResponseSpeedLevel(level)
+        },
+        setSuggestionConfidenceLevel: { [weak self] level in
+            self?.setSuggestionConfidenceLevel(level)
+        },
+        setSuggestionLearningRestraintLevel: { [weak self] level in
+            self?.setSuggestionLearningRestraintLevel(level)
         }
     )
 
@@ -485,6 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var preservesResidualSuggestionAfterNextWordAccept = false
     private var obsidianPostAcceptanceSuppression: ObsidianPostAcceptanceSuppression?
     private var recentWordMemory = ScopedRecentWordMemory()
     private var suppressKeyUntil: [AutocompleteKey: Date] = [:]
@@ -3375,6 +3391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
             currentSuggestionInvalidatedByUserKeyDown = true
+            preservesResidualSuggestionAfterNextWordAccept = false
             clearPendingAcceptedInsertionUndo(reason: "typing")
         }
 
@@ -3539,7 +3556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 acceptedAt: acceptedAt,
                 acceptMode: action.diagnosticName
             )
-            suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
+            suggestionSession.commitNextWordAcceptance(acceptedText)
             recordAcceptedText(acceptedText)
             armObsidianPostAcceptanceSuppressionIfNeeded()
             advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
@@ -3560,8 +3577,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 suggestionID: currentSuggestionID ?? "",
                 reason: action.diagnosticName
             )
-            setSuggestionDecision("Accepted: next word; waiting for recompute")
-            hideSuggestion(reason: "accepted-next-word-recompute")
+            refreshAfterNextWordAcceptance(
+                residualReason: "Accepted: next word; showing remainder",
+                emptyReason: "accepted-next-word"
+            )
             scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
@@ -8146,7 +8165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptedAt: acceptedAt,
             acceptMode: action.diagnosticName
         )
-        suggestionSession.commitNextWordAcceptance(acceptedText, keepsResidual: false)
+        suggestionSession.commitNextWordAcceptance(acceptedText)
         recordAcceptedText(acceptedText)
         advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
         lastTextSnapshot = FocusedTextSnapshot(
@@ -8173,10 +8192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suggestionID: currentSuggestionID ?? "",
             reason: "obsidian-tab-passthrough-repaired"
         )
-        setSuggestionDecision("Accepted: repaired Obsidian Tab passthrough")
-        hideSuggestion(
-            reason: "accepted-obsidian-tab-passthrough-repaired",
-            metadata: [
+        refreshAfterNextWordAcceptance(
+            residualReason: "Accepted: repaired Obsidian Tab; showing remainder",
+            emptyReason: "accepted-obsidian-tab-passthrough-repaired",
+            emptyMetadata: [
                 "repair": "obsidian-tab-passthrough",
                 "fieldBeforeChars": String(context.textBeforeCursor.count)
             ]
@@ -9324,16 +9343,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile
         )
+        let allowsAcceptedNextWordGeometryChurn = preservesResidualSuggestionAfterNextWordAccept
+            && suggestionSession.hasVisibleSuggestion
         let invalidation = suggestionGeometryChangePolicy.invalidationDecision(
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
             hasPendingSuggestionRequest: suggestionOrchestrator.currentRequest != nil,
             previousSnapshot: lastVisibleSuggestionGeometrySnapshot,
             currentSnapshot: currentGeometrySnapshot,
-            allowsCaretRectChange: allowsStableChromeEditorGeometryChurn,
-            allowsTextLineRectChange: allowsStableChromeEditorGeometryChurn
+            allowsCaretRectChange: allowsStableChromeEditorGeometryChurn || allowsAcceptedNextWordGeometryChurn,
+            allowsTextLineRectChange: allowsStableChromeEditorGeometryChurn || allowsAcceptedNextWordGeometryChurn
         )
         if invalidation.shouldInvalidate {
             let reason = invalidation.reason?.rawValue ?? "unknown"
+            preservesResidualSuggestionAfterNextWordAccept = false
             invalidatePendingSuggestionRequest()
             hideSuggestion(
                 reason: "stale-geometry-\(reason)",
@@ -9352,6 +9374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) else {
             return
         }
+        preservesResidualSuggestionAfterNextWordAccept = false
         lastVisibleSuggestionGeometrySnapshot = visibleGeometrySnapshot(
             context: context,
             fieldIdentity: currentFieldIdentity,
@@ -9394,6 +9417,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: lastTextSnapshot.textBeforeCursor + acceptedText,
             textAfterCursor: lastTextSnapshot.textAfterCursor
         )
+    }
+
+    private func refreshAfterNextWordAcceptance(
+        residualReason: String,
+        emptyReason: String,
+        emptyMetadata: [String: String] = [:]
+    ) {
+        guard suggestionSession.hasVisibleSuggestion else {
+            preservesResidualSuggestionAfterNextWordAccept = false
+            setSuggestionDecision("Accepted: next word")
+            hideSuggestion(reason: emptyReason, metadata: emptyMetadata)
+            return
+        }
+
+        preservesResidualSuggestionAfterNextWordAccept = true
+        setSuggestionDecision(residualReason)
+        if let currentProfile {
+            _ = refreshVisibleSuggestion(
+                placement: nil,
+                fallbackRenderMode: currentProfile.fallbackRenderMode
+            )
+        } else {
+            updateKeyboardEventTapSnapshot()
+        }
     }
 
     private func armObsidianPostAcceptanceSuppressionIfNeeded() {
@@ -9744,6 +9791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionPresentedAt = nil
         currentSuggestionDisplayScoreFinal = nil
         currentSuggestionInvalidatedByUserKeyDown = false
+        preservesResidualSuggestionAfterNextWordAccept = false
         suggestionOrchestrator.clearStreamingPresentations()
         lastCaretRect = nil
         lastTextLineRect = nil
@@ -10868,10 +10916,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile
     ) -> Int {
         effectiveSuggestionPace(for: profile).maxVisibleWords(
-            defaultMaxVisibleWords: min(
-                completionLengthConfiguration.maxVisibleWords,
-                suggestionTuning.maxVisibleWords
-            ),
+            defaultMaxVisibleWords: suggestionTuning.maxVisibleWords,
             requestMode: requestMode
         )
     }
@@ -10921,35 +10966,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setSuggestionAggressivenessLevel(_ level: Int) {
-        let next = SuggestionTuning(
-            aggressivenessLevel: level,
-            maxVisibleWords: suggestionTuning.maxVisibleWords
+        setSuggestionTuning(
+            updatedSuggestionTuning(aggressivenessLevel: level),
+            reason: "aggressiveness-changed"
         )
-        guard next != suggestionTuning else {
-            refreshRuntimeChrome()
-            return
-        }
-
-        suggestionTuning = next
-        persistSuggestionTuning()
-        applySuggestionTuningChange(reason: "aggressiveness-changed")
-        DiagnosticsLog.shared.record(
-            "suggestion-tuning-control",
-            metadata: [
-                "surface": "settings",
-                "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
-                "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
-                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords)
-            ]
-        )
-        refreshRuntimeChrome()
     }
 
     private func setSuggestionMaxVisibleWords(_ words: Int) {
-        let next = SuggestionTuning(
-            aggressivenessLevel: suggestionTuning.aggressivenessLevel,
-            maxVisibleWords: words
+        setSuggestionTuning(
+            updatedSuggestionTuning(maxVisibleWords: words),
+            reason: "max-visible-words-changed"
         )
+    }
+
+    private func setSuggestionWordStartCharacters(_ characters: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(wordStartCharacters: characters),
+            reason: "word-start-characters-changed"
+        )
+    }
+
+    private func setSuggestionPhraseStartWords(_ words: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(phraseStartWords: words),
+            reason: "phrase-start-words-changed"
+        )
+    }
+
+    private func setSuggestionResponseSpeedLevel(_ level: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(responseSpeedLevel: level),
+            reason: "response-speed-changed"
+        )
+    }
+
+    private func setSuggestionConfidenceLevel(_ level: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(confidenceLevel: level),
+            reason: "confidence-changed"
+        )
+    }
+
+    private func setSuggestionLearningRestraintLevel(_ level: Int) {
+        setSuggestionTuning(
+            updatedSuggestionTuning(learningRestraintLevel: level),
+            reason: "learning-restraint-changed"
+        )
+    }
+
+    private func updatedSuggestionTuning(
+        aggressivenessLevel: Int? = nil,
+        maxVisibleWords: Int? = nil,
+        wordStartCharacters: Int? = nil,
+        phraseStartWords: Int? = nil,
+        responseSpeedLevel: Int? = nil,
+        confidenceLevel: Int? = nil,
+        learningRestraintLevel: Int? = nil
+    ) -> SuggestionTuning {
+        SuggestionTuning(
+            aggressivenessLevel: aggressivenessLevel ?? suggestionTuning.aggressivenessLevel,
+            maxVisibleWords: maxVisibleWords ?? suggestionTuning.maxVisibleWords,
+            wordStartCharacters: wordStartCharacters ?? suggestionTuning.wordStartCharacters,
+            phraseStartWords: phraseStartWords ?? suggestionTuning.phraseStartWords,
+            responseSpeedLevel: responseSpeedLevel ?? suggestionTuning.responseSpeedLevel,
+            confidenceLevel: confidenceLevel ?? suggestionTuning.confidenceLevel,
+            learningRestraintLevel: learningRestraintLevel ?? suggestionTuning.learningRestraintLevel
+        )
+    }
+
+    private func setSuggestionTuning(_ next: SuggestionTuning, reason: String) {
         guard next != suggestionTuning else {
             refreshRuntimeChrome()
             return
@@ -10957,14 +11042,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         suggestionTuning = next
         persistSuggestionTuning()
-        applySuggestionTuningChange(reason: "max-visible-words-changed")
+        applySuggestionTuningChange(reason: reason)
         DiagnosticsLog.shared.record(
             "suggestion-tuning-control",
             metadata: [
                 "surface": "settings",
                 "suggestionAggressivenessLevel": String(suggestionTuning.aggressivenessLevel),
                 "suggestionAggressiveness": suggestionTuning.legacyAggressiveness.rawValue,
-                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords)
+                "suggestionMaxVisibleWords": String(suggestionTuning.maxVisibleWords),
+                "suggestionWordStartCharacters": String(suggestionTuning.wordStartCharacters),
+                "suggestionPhraseStartWords": String(suggestionTuning.phraseStartWords),
+                "suggestionResponseSpeedLevel": String(suggestionTuning.responseSpeedLevel),
+                "suggestionConfidenceLevel": String(suggestionTuning.confidenceLevel),
+                "suggestionLearningRestraintLevel": String(suggestionTuning.learningRestraintLevel),
+                "reason": reason
             ]
         )
         refreshRuntimeChrome()
@@ -11614,12 +11705,32 @@ private extension AppDelegate {
         "SuggestionMaxVisibleWords"
     }
 
+    static var suggestionWordStartCharactersDefaultsKey: String {
+        "SuggestionWordStartCharacters"
+    }
+
+    static var suggestionPhraseStartWordsDefaultsKey: String {
+        "SuggestionPhraseStartWords"
+    }
+
+    static var suggestionResponseSpeedLevelDefaultsKey: String {
+        "SuggestionResponseSpeedLevel"
+    }
+
+    static var suggestionConfidenceLevelDefaultsKey: String {
+        "SuggestionConfidenceLevel"
+    }
+
+    static var suggestionLearningRestraintLevelDefaultsKey: String {
+        "SuggestionLearningRestraintLevel"
+    }
+
     static var suggestionTuningDefaultsVersionDefaultsKey: String {
         "SuggestionTuningDefaultsVersion"
     }
 
     static var currentSuggestionTuningDefaultsVersion: Int {
-        2
+        3
     }
 
     static var previousDefaultSuggestionAggressivenessLevel: Int {
@@ -11674,7 +11785,8 @@ private extension AppDelegate {
         Suggestions appear as a small floating suggestion next to the cursor.
         They do not enter the document until you accept them.
 
-        Press Tab once to accept one word.
+        Press Tab once to accept one word plus a space.
+        Press Tab again to accept the next suggested word.
         Press Esc to dismiss a suggestion without changing text.
         Use Pause Suggestions to stop suggestions everywhere.
         Use Pause in TextEdit to stop suggestions only in TextEdit.
@@ -11856,12 +11968,33 @@ private extension AppDelegate {
         if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
             maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
         } else {
-            maxVisibleWords = CompletionModelPolicy.mvp.maxVisibleWords
+            maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
         }
+
+        let wordStartCharacters = defaults.object(forKey: Self.suggestionWordStartCharactersDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionWordStartCharactersDefaultsKey)
+            : SuggestionTuning.defaultWordStartCharacters
+        let phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionPhraseStartWordsDefaultsKey)
+            : SuggestionTuning.defaultPhraseStartWords
+        let responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionResponseSpeedLevelDefaultsKey)
+            : SuggestionTuning.defaultResponseSpeedLevel
+        let confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionConfidenceLevelDefaultsKey)
+            : SuggestionTuning.defaultConfidenceLevel
+        let learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
+            ? defaults.integer(forKey: Self.suggestionLearningRestraintLevelDefaultsKey)
+            : SuggestionTuning.defaultLearningRestraintLevel
 
         suggestionTuning = SuggestionTuning(
             aggressivenessLevel: level,
-            maxVisibleWords: maxVisibleWords
+            maxVisibleWords: maxVisibleWords,
+            wordStartCharacters: wordStartCharacters,
+            phraseStartWords: phraseStartWords,
+            responseSpeedLevel: responseSpeedLevel,
+            confidenceLevel: confidenceLevel,
+            learningRestraintLevel: learningRestraintLevel
         )
         persistSuggestionTuning()
         defaults.set(
@@ -11883,6 +12016,26 @@ private extension AppDelegate {
         defaults.set(
             suggestionTuning.maxVisibleWords,
             forKey: Self.suggestionMaxVisibleWordsDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.wordStartCharacters,
+            forKey: Self.suggestionWordStartCharactersDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.phraseStartWords,
+            forKey: Self.suggestionPhraseStartWordsDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.responseSpeedLevel,
+            forKey: Self.suggestionResponseSpeedLevelDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.confidenceLevel,
+            forKey: Self.suggestionConfidenceLevelDefaultsKey
+        )
+        defaults.set(
+            suggestionTuning.learningRestraintLevel,
+            forKey: Self.suggestionLearningRestraintLevelDefaultsKey
         )
     }
 

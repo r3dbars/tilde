@@ -92,7 +92,7 @@ public struct HostCompatibilityPolicy: Equatable, Sendable {
 }
 
 public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
-    public static let currentPolicyVersion = "2026-05-22.1"
+    public static let currentPolicyVersion = "2026-05-23.1"
 
     public let policyVersion: String
     public let policies: [String: HostCompatibilityPolicy]
@@ -210,16 +210,16 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
         HostCompatibilityPolicy(
             bundleIdentifier: "com.openai.codex",
             displayName: "Codex",
-            hostVersion: .exact(shortVersion: "26.506.21252", build: "2575", source: "/Applications/Codex.app"),
+            hostVersion: .exact(shortVersion: "26.519.22136", build: "3003", source: "/Applications/Codex.app"),
             safetyMode: .wordOnly,
-            runtimeState: .proofModeOnly,
+            runtimeState: .userToggleAllowed,
             proofState: .partial,
-            killSwitch: .proofModeRequired,
+            killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/codex-inline.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "Codex/default")
             ],
-            notes: "Proof-only prompt support has same-slice screenshot, one-word accept, and no-submit proof. It is not beta-safe normal writing support, and full accept stays disabled until separate no-submit proof exists."
+            notes: "Enabled for this local Codex build with one-word accept only. Full accept, detached suggestions, and generic key-event insertion stay off."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claude-code",
