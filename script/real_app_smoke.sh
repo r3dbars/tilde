@@ -9360,6 +9360,11 @@ wait_for_obsidian_smoke_target_current_value_end() {
         AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_CURRENT_VALUE_END=1 \
         swift script/obsidian_ax_editor.swift assert 2>/dev/null
     )"; then
+      sleep 0.1
+      AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="$expected_suffix" \
+        AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX_REQUIRES_EDITOR=1 \
+        AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_CURRENT_VALUE_END=1 \
+        swift script/obsidian_ax_editor.swift assert >/dev/null 2>&1 || true
       printf '%s\n' "$output"
       return 0
     fi
