@@ -15,6 +15,14 @@ struct CommonPhraseContinuationPredictorTests {
             for: "Smoke proof feels instant and the draft is almost",
             behaviorProfileID: .docsProse
         )
+        let smokeSelection = predictor.selection(
+            for: "Autocomplete Lab Obsidian proof\nSmoke proof feels",
+            behaviorProfileID: .docsProse
+        )
+        let secondSmokeSelection = predictor.selection(
+            for: "Smoke proof feels instant and stays",
+            behaviorProfileID: .docsProse
+        )
 
         #expect(selection.suggestion?.visibleText == " follow up")
         #expect(selection.matchedContextSuffix == "i just wanted to")
@@ -22,6 +30,10 @@ struct CommonPhraseContinuationPredictorTests {
         #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
         #expect(proofSelection.suggestion?.visibleText == " ready")
         #expect(proofSelection.matchedContextSuffix == "the draft is almost")
+        #expect(smokeSelection.suggestion?.visibleText == " instant")
+        #expect(smokeSelection.matchedContextSuffix == "smoke proof feels")
+        #expect(secondSmokeSelection.suggestion?.visibleText == " instant")
+        #expect(secondSmokeSelection.matchedContextSuffix == "and stays")
     }
 
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")

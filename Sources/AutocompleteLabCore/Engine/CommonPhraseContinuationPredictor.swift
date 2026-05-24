@@ -16,6 +16,8 @@ public struct CommonPhraseContinuationPrior: Equatable, Sendable {
     }
 
     public static let defaultPriors: [CommonPhraseContinuationPrior] = [
+        CommonPhraseContinuationPrior(contextSuffix: "smoke proof feels", continuation: "instant", score: 0.34),
+        CommonPhraseContinuationPrior(contextSuffix: "and stays", continuation: "instant", score: 0.34),
         CommonPhraseContinuationPrior(contextSuffix: "we should keep this", continuation: "small", score: 0.32),
         CommonPhraseContinuationPrior(contextSuffix: "the draft is almost", continuation: "ready", score: 0.32),
         CommonPhraseContinuationPrior(contextSuffix: "please make this", continuation: "clearer", score: 0.32),

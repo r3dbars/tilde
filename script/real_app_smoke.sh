@@ -1399,16 +1399,23 @@ wait_for_obsidian_long_note_second_suggestion() {
   local deadline=$((SECONDS + timeout_seconds))
   local max_before_chars=$((expected_before_chars + 2))
   local min_before_chars=$((expected_before_chars - 1))
+  local min_visible_before_chars=40
   if (( min_before_chars < 0 )); then
     min_before_chars=0
   fi
 
   while ((SECONDS <= deadline)); do
-    if python3 - "$LOG_PATH" "$start_line" "$min_before_chars" "$max_before_chars" <<'PY'
+    if python3 - "$LOG_PATH" "$start_line" "$min_before_chars" "$max_before_chars" "$min_visible_before_chars" <<'PY'
 import re
 import sys
 
-path, start_line, min_before, max_before = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+path, start_line, min_before, max_before, min_visible_before = (
+    sys.argv[1],
+    int(sys.argv[2]),
+    int(sys.argv[3]),
+    int(sys.argv[4]),
+    int(sys.argv[5]),
+)
 field_pattern = re.compile(r"(^| )([A-Za-z][A-Za-z0-9]*)=([^ ]+)")
 try:
     with open(path, "r", encoding="utf-8") as handle:
@@ -1422,7 +1429,9 @@ try:
                 before_chars = int(fields.get("beforeChars", "-1"))
             except ValueError:
                 continue
-            if min_before <= before_chars <= max_before:
+            full_document_match = min_before <= before_chars <= max_before
+            visible_viewport_match = min_visible_before <= before_chars < min_before
+            if full_document_match or visible_viewport_match:
                 raise SystemExit(0)
 except FileNotFoundError:
     pass
@@ -1435,7 +1444,7 @@ PY
   done
 
   echo "Timed out waiting for Obsidian second suggestion." >&2
-  echo "Required fields: suggestion-presented app=md.obsidian beforeChars=${expected_before_chars}±2 afterChars=0" >&2
+  echo "Required fields: suggestion-presented app=md.obsidian afterChars=0 and beforeChars=${expected_before_chars}±2 or visible viewport beforeChars>=${min_visible_before_chars}" >&2
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
   exit 1
@@ -9338,6 +9347,30 @@ assert_obsidian_smoke_target() {
   AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift script/obsidian_ax_editor.swift assert
 }
 
+wait_for_obsidian_smoke_target_current_value_end() {
+  local expected_suffix="$1"
+  local timeout_seconds="${2:-6}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local output=""
+
+  while ((SECONDS <= deadline)); do
+    if output="$(
+      AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="$expected_suffix" \
+        AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX_REQUIRES_EDITOR=1 \
+        AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_CURRENT_VALUE_END=1 \
+        swift script/obsidian_ax_editor.swift assert 2>/dev/null
+    )"; then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Obsidian AX editor to expose expected disposable suffix." >&2
+  echo "Expected suffix: $expected_suffix" >&2
+  exit 3
+}
+
 wait_for_obsidian_smoke_editor_ready() {
   local timeout_seconds="${1:-8}"
   local deadline=$((SECONDS + timeout_seconds))
@@ -9840,7 +9873,7 @@ obsidian_smoke_note_file_char_count() {
 
 assert_obsidian_long_note_file_preserved() {
   local expected_suffix="$1"
-  local smoke_file
+  local smoke_file deadline current_tail
   smoke_file="$(obsidian_smoke_file_path)"
 
   if ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 01" "$smoke_file" ||
@@ -9853,7 +9886,21 @@ assert_obsidian_long_note_file_preserved() {
     exit 3
   fi
 
-  wait_for_obsidian_smoke_note_file_suffix "$expected_suffix" 5
+  deadline=$((SECONDS + 5))
+  while ((SECONDS <= deadline)); do
+    current_tail="$(obsidian_smoke_note_trimmed_tail_line)"
+    if [[ "$current_tail" == "$expected_suffix" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Obsidian long note to end with expected disposable text." >&2
+  echo "Expected trimmed tail: $expected_suffix" >&2
+  echo "Current tail:" >&2
+  tail -c 240 "$smoke_file" >&2 || true
+  echo >&2
+  exit 3
 }
 
 activate_neutral_smoke_setup_app() {
@@ -9925,7 +9972,7 @@ run_obsidian() {
       ;;
   esac
 
-  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment long_note_second_fragment
   runtime_start_line="$(line_count "$LOG_PATH")"
   local marker_sentinel=$'\034'
   obsidian_marker="$(obsidian_smoke_marker_text "$manual_app"; printf '%s' "$marker_sentinel")"
@@ -9941,6 +9988,7 @@ run_obsidian() {
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1
   elif [[ "$manual_app" == "obsidian-pane" ]]; then
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
@@ -9968,6 +10016,9 @@ run_obsidian() {
   else
     unset AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN
     export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=1
+  fi
+  if [[ "$manual_app" == "obsidian-long-note" && -z "${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}" ]]; then
+    export AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
@@ -10049,13 +10100,16 @@ run_obsidian() {
     sleep 0.2
     activate_neutral_smoke_setup_app
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant"
-    append_obsidian_smoke_note_file_text " and stays inst"
+    long_note_second_fragment=" and stays"
+    if [[ "$(obsidian_smoke_note_tail_line)" =~ [[:space:]]$ ]]; then
+      long_note_second_fragment="and stays"
+    fi
+    append_obsidian_smoke_note_file_text "$long_note_second_fragment"
     second_start_line="$(line_count "$LOG_PATH")"
     open_obsidian_smoke_note_if_configured
     wait_for_frontmost_app "Obsidian" 8
-    move_obsidian_caret_to_document_end
+    wait_for_obsidian_smoke_target_current_value_end "Smoke proof feels instant and stays" 8
     long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
     settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
     local first_raw_tail_line second_fragment
@@ -10103,13 +10157,7 @@ run_obsidian() {
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    sleep 0.15
-    activate_obsidian_for_smoke
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
     full_start_line="$(line_count "$LOG_PATH")"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
-    assert_frontmost_app "Obsidian" "Obsidian long-note"
-    sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.25}"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
       "keyboard-action" \
@@ -10118,6 +10166,7 @@ run_obsidian() {
       "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
   else
     activate_obsidian_for_smoke

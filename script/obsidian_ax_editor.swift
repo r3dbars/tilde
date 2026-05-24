@@ -8,6 +8,8 @@ let marker = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "SteadyTyp
 let expectedSuffix = environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
 let resetText = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? marker
 let insertionText = environment["AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"] ?? ""
+let requireExpectedSuffixInEditor = environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX_REQUIRES_EDITOR"] == "1"
+let focusCurrentValueEnd = environment["AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_CURRENT_VALUE_END"] == "1"
 let defaultProofFile = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent("Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md")
 let proofFile = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_FILE"].map(URL.init(fileURLWithPath:)) ?? defaultProofFile
@@ -245,14 +247,19 @@ case "assert":
     if !expectedSuffix.isEmpty {
         let trimmedCurrentText = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedFileText = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedCurrentText.hasSuffix(expectedSuffix)
-            || trimmedFileText.hasSuffix(expectedSuffix) else {
+        let currentTextHasSuffix = trimmedCurrentText.hasSuffix(expectedSuffix)
+        let fileTextHasSuffix = trimmedFileText.hasSuffix(expectedSuffix)
+        guard currentTextHasSuffix
+            || (!requireExpectedSuffixInEditor && fileTextHasSuffix) else {
             fputs("Refusing Obsidian proof because the focused smoke note does not end with the expected disposable text.\n", stderr)
             exit(3)
         }
     }
 
-    guard focusAtEnd(editor, text: focusSelectionTextForDocumentEnd(currentText: currentText, fileText: fileText)) else {
+    let focusText = focusCurrentValueEnd
+        ? currentText
+        : focusSelectionTextForDocumentEnd(currentText: currentText, fileText: fileText)
+    guard focusAtEnd(editor, text: focusText) else {
         fputs("Could not place the Obsidian caret at the disposable editor end.\n", stderr)
         exit(3)
     }
