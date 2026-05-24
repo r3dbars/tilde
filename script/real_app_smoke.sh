@@ -4561,11 +4561,15 @@ focus_chrome_smoke_editor() {
   if [[ -n "$chrome_pid" ]] && [[ -n "$CHROME_REMOTE_DEBUGGING_PORT" ]] && chrome_fixture_is_official_rich_editor_demo "$fixture"; then
     focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
     chrome_focus_official_demo_editor_with_devtools "$fixture"
+    sleep 0.15
+    chrome_focus_official_demo_editor_with_devtools "$fixture"
     return 0
   fi
 
   if [[ -n "$chrome_pid" ]]; then
     focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
+    chrome_focus_smoke_editor_with_devtools "$fixture" >/dev/null 2>&1 || true
+    sleep 0.15
     chrome_focus_smoke_editor_with_devtools "$fixture" >/dev/null 2>&1 || true
     return 0
   fi
