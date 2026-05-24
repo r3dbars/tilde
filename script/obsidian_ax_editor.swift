@@ -185,6 +185,35 @@ func focusTextForDocumentEnd(currentText: String, fileText: String = proofFileTe
     return fileText
 }
 
+func focusSelectionTextForDocumentEnd(currentText: String, fileText: String = proofFileText()) -> String {
+    guard fileText.localizedCaseInsensitiveContains(marker) else {
+        return currentText
+    }
+
+    if !expectedSuffix.isEmpty {
+        let trimmedFileText = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedFileText.hasSuffix(expectedSuffix) else {
+            return currentText
+        }
+    }
+
+    if let range = currentText.range(of: fileText) {
+        return String(currentText[..<range.upperBound])
+    }
+
+    let trimmedFileText = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmedFileText.isEmpty,
+       let range = currentText.range(of: trimmedFileText) {
+        return String(currentText[..<range.upperBound])
+    }
+
+    if normalizedWhitespace(currentText).hasSuffix(normalizedWhitespace(fileText)) {
+        return currentText
+    }
+
+    return focusTextForDocumentEnd(currentText: currentText, fileText: fileText)
+}
+
 guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
     fputs("Obsidian is not running. Open a disposable smoke note first.\n", stderr)
     exit(3)
@@ -223,14 +252,14 @@ case "assert":
         }
     }
 
-    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText, fileText: fileText)) else {
+    guard focusAtEnd(editor, text: focusSelectionTextForDocumentEnd(currentText: currentText, fileText: fileText)) else {
         fputs("Could not place the Obsidian caret at the disposable editor end.\n", stderr)
         exit(3)
     }
     print("Obsidian smoke target confirmed")
 
 case "focus":
-    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText)) else {
+    guard focusAtEnd(editor, text: focusSelectionTextForDocumentEnd(currentText: currentText)) else {
         exit(3)
     }
 
@@ -261,7 +290,13 @@ case "insert":
         exit(3)
     }
 
-    _ = focusAtEnd(editor, text: replacementText)
+    _ = focusAtEnd(
+        editor,
+        text: focusSelectionTextForDocumentEnd(
+            currentText: textValue(of: editor),
+            fileText: replacementText
+        )
+    )
 
 default:
     fputs("Unknown Obsidian AX editor action: \(action)\n", stderr)

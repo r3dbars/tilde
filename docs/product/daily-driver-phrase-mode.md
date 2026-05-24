@@ -53,8 +53,8 @@ Validation from the cycle:
   proof for the current UI targets. That is the next blocker, not a product
   claim.
 
-Cycle 2 makes Obsidian default proof more repeatable and makes phrase mode less
-fragile when the first model pass is bad:
+Cycle 2 makes Obsidian default/theme/pane proof more repeatable and makes
+phrase mode less fragile when the first model pass is bad:
 
 - daily-driver phrase retry now repairs too-short, weak, and missing phrase
   candidates for 8-word mode,
@@ -67,19 +67,23 @@ fragile when the first model pass is bad:
 - Obsidian proof setup now seeds the note before launching SteadyType, preserves
   marker spacing, avoids pre-accept AX reads that move the CodeMirror caret, and
   verifies the accepted text after each keypress,
+- split-pane CodeMirror AX reads now repair hidden document-spacer coordinate
+  drift before treating short visual-line tails as real after-cursor text,
+- the pane proof harness explicitly moves the visual caret to the line end after
+  AX setup so key-event insertion happens in the intended pane,
 - strict trace evaluation now treats repeated rows for the same suggestion ID as
   one visual proof group so streaming/final rows share the same screenshot
   evidence.
 
 Validation from the cycle so far:
 
-- `swift test --jobs 1` passed with 1337 tests.
+- `swift test --jobs 1` passed with 1339 tests.
 - `./script/check_quality_eval.sh` passed.
 - `./script/check_trace_eval_self_test.sh` passed.
-- Obsidian default smoke passed on commit `51addaf9092a` with two verified
-  insertions and strict visual trace evidence.
-- `./script/manual_smoke_status.sh --strict` reports Obsidian default current
-  on commit `51addaf9092a`, with TextEdit, Notes, Obsidian variants, and Chrome
+- Obsidian default, theme, and pane smokes passed with two verified insertions
+  and strict visual trace evidence.
+- `./script/manual_smoke_status.sh --strict` reports Obsidian default/theme/pane
+  current for the app build, with TextEdit, Notes, Obsidian long note, and Chrome
   fixture rows still stale.
 
 ## Scorecard
@@ -87,7 +91,7 @@ Validation from the cycle so far:
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
-| Placement reliability | Obsidian default has fresh strict visual proof on `51addaf9092a`; other lanes remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian theme/pane/long-note, then TextEdit/Notes |
+| Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
 | Typing speed | Subsecond repaired phrase results can display; live latency proof is still narrow | Feels ready during fast typing | Fresh latency proof across Obsidian and TextEdit |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
