@@ -28,7 +28,8 @@ struct CodexProofFocusedTargetPolicy {
         focusedContext: FocusedTextContext,
         focusedFieldIdentity: FocusedFieldIdentity,
         proofModeEnabled: Bool,
-        expectedFocusedText: String? = nil
+        expectedFocusedText: String? = nil,
+        shownTargetFingerprint: FocusedTargetFingerprint? = nil
     ) -> Bool {
         guard suggestionBundleIdentifier == Self.bundleIdentifier,
               requestMode == .wordCompletion,
@@ -41,7 +42,6 @@ struct CodexProofFocusedTargetPolicy {
               app.bundleIdentifier == Self.bundleIdentifier,
               app.processIdentifier == expectedFieldIdentity.processIdentifier,
               snapshot.fieldIdentity == expectedFieldIdentity,
-              focusedFieldIdentity == expectedFieldIdentity,
               snapshot.textBeforeCursor.contains(Self.marker),
               snapshot.textAfterCursor.isEmpty,
               focusedContext.role == "AXTextArea",
@@ -59,7 +59,72 @@ struct CodexProofFocusedTargetPolicy {
             return false
         }
 
-        return focusedText == targetText
+        guard focusedText == targetText else {
+            return false
+        }
+
+        if focusedFieldIdentity == expectedFieldIdentity {
+            return true
+        }
+
+        guard focusedFieldIdentity.bundleIdentifier == expectedFieldIdentity.bundleIdentifier,
+              focusedFieldIdentity.processIdentifier == expectedFieldIdentity.processIdentifier,
+              let shownTargetFingerprint else {
+            return false
+        }
+
+        let focusedTargetFingerprint = FocusedTargetFingerprint(
+            role: focusedContext.role,
+            subrole: focusedContext.subrole,
+            elementFingerprint: focusedContext.fingerprint,
+            windowIdentifier: focusedContext.windowIdentifier,
+            elementRect: focusedContext.elementRect,
+            windowRect: focusedContext.windowRect,
+            caretRect: focusedContext.caretRect,
+            textBeforeCursor: focusedContext.textBeforeCursor,
+            textAfterCursor: focusedContext.textAfterCursor
+        )
+        return codexProofTargetGeometryMatches(
+            shown: shownTargetFingerprint,
+            focusedTargetFingerprint
+        )
+    }
+
+    private func codexProofTargetGeometryMatches(
+        shown: FocusedTargetFingerprint,
+        _ focused: FocusedTargetFingerprint,
+        maxGeometryDelta: Int = 4
+    ) -> Bool {
+        let expected = shown.postInsertionScope
+        let actual = focused.postInsertionScope
+
+        guard expected.role == actual.role,
+              expected.subrole == actual.subrole else {
+            return false
+        }
+
+        if let expectedWindowIdentifier = expected.windowIdentifier,
+           let actualWindowIdentifier = actual.windowIdentifier,
+           expectedWindowIdentifier != actualWindowIdentifier {
+            return false
+        }
+
+        if let expectedWindowBounds = expected.windowBounds,
+           let actualWindowBounds = actual.windowBounds,
+           expectedWindowBounds != actualWindowBounds {
+            return false
+        }
+
+        guard let expectedBounds = expected.elementBounds,
+              let actualBounds = actual.elementBounds else {
+            return expected.elementBounds == actual.elementBounds
+        }
+
+        return abs(expectedBounds.x - actualBounds.x) <= maxGeometryDelta
+            && abs(expectedBounds.y - actualBounds.y) <= maxGeometryDelta
+            && abs(expectedBounds.width - actualBounds.width) <= maxGeometryDelta
+            && expectedBounds.height > 0
+            && actualBounds.height > 0
     }
 }
 
@@ -3901,7 +3966,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestMode: CompletionRequestMode?,
         expectedFieldIdentity: FocusedFieldIdentity?,
         snapshot: FocusedTextSnapshot?,
-        expectedFocusedText: String? = nil
+        expectedFocusedText: String? = nil,
+        shownTargetFingerprint: FocusedTargetFingerprint? = nil
     ) -> (context: FocusedTextContext, fieldIdentity: FocusedFieldIdentity)? {
         let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
         guard let expectedFieldIdentity,
@@ -3931,6 +3997,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile
         )
+        let focusedTargetFingerprint = targetFingerprint(context: context)
         guard codexProofFocusedTargetPolicy.matches(
             app: frontmostApp,
             profile: profile,
@@ -3941,8 +4008,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             focusedContext: context,
             focusedFieldIdentity: focusedFieldIdentity,
             proofModeEnabled: activeAppProofBundleIdentifiers.contains(bundleIdentifier),
-            expectedFocusedText: expectedFocusedText
+            expectedFocusedText: expectedFocusedText,
+            shownTargetFingerprint: shownTargetFingerprint
         ) else {
+            var metadata: [String: String] = [
+                "app": bundleIdentifier,
+                "expectedIdentity": expectedFieldIdentity.traceDescription,
+                "focusedIdentity": focusedFieldIdentity.traceDescription,
+                "identityMatches": String(focusedFieldIdentity == expectedFieldIdentity),
+                "hasShownTargetFingerprint": String(shownTargetFingerprint != nil),
+                "shownElementBounds": traceRoundedRect(shownTargetFingerprint?.elementBounds),
+                "focusedElementBounds": traceRoundedRect(focusedTargetFingerprint.elementBounds),
+                "shownWindowBounds": traceRoundedRect(shownTargetFingerprint?.windowBounds),
+                "focusedWindowBounds": traceRoundedRect(focusedTargetFingerprint.windowBounds),
+                "focusedRole": context.role ?? "",
+                "focusedBeforeChars": String(context.textBeforeCursor.count),
+                "focusedAfterChars": String(context.textAfterCursor.count),
+                "focusedHasMarker": String(context.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)),
+                "focusedTextMatchesExpected": expectedFocusedText.map {
+                    String(context.textBeforeCursor + context.textAfterCursor == $0)
+                } ?? "not-required"
+            ]
+            if let shownTargetFingerprint {
+                metadata["shownTargetMatchesFocused"] = String(
+                    shownTargetFingerprint.matchesPostInsertionScopeAllowingElementHeightChange(
+                        focusedTargetFingerprint
+                    )
+                )
+                metadata["sameElementFingerprint"] = String(
+                    shownTargetFingerprint.elementFingerprint == focusedTargetFingerprint.elementFingerprint
+                )
+                metadata["sameWindowIdentifier"] = String(
+                    shownTargetFingerprint.windowIdentifier == focusedTargetFingerprint.windowIdentifier
+                )
+                metadata["sameWindowBounds"] = String(
+                    shownTargetFingerprint.windowBounds == focusedTargetFingerprint.windowBounds
+                )
+            } else {
+                metadata["shownTargetMatchesFocused"] = "missing"
+                metadata["sameElementFingerprint"] = "missing"
+                metadata["sameWindowIdentifier"] = "missing"
+                metadata["sameWindowBounds"] = "missing"
+            }
+            DiagnosticsLog.shared.record(
+                "codex-proof-focused-target-policy-miss",
+                metadata: metadata
+            )
             return nil
         }
 
@@ -3975,6 +4086,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   profile: profile
               ),
               frontmostApp.processIdentifier == currentSuggestionFieldIdentity.processIdentifier else {
+            recordCodexProofSnapshotFastPathMiss(stage: "snapshot", reason: "precondition-failed")
             return false
         }
 
@@ -3986,8 +4098,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: currentSuggestionRequestMode,
             expectedFieldIdentity: currentSuggestionFieldIdentity,
             snapshot: lastTextSnapshot,
-            expectedFocusedText: expectedText
+            expectedFocusedText: expectedText,
+            shownTargetFingerprint: currentSuggestionAcceptanceSnapshot?.targetFingerprint
         ) else {
+            recordCodexProofSnapshotFastPathMiss(stage: "snapshot", reason: "focused-target-mismatch")
             return false
         }
 
@@ -3998,10 +4112,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             containing: marker,
             elementIdentifier: target.context.elementIdentifier
         ) != nil else {
+            recordCodexProofSnapshotFastPathMiss(stage: "snapshot", reason: "focused-text-area-not-found")
             return false
         }
 
         return true
+    }
+
+    private func recordCodexProofSnapshotFastPathMiss(stage: String, reason: String) {
+        DiagnosticsLog.shared.record(
+            "codex-proof-snapshot-fast-path-miss",
+            metadata: [
+                "app": "com.openai.codex",
+                "stage": stage,
+                "reason": reason,
+                "fieldIdentity": currentSuggestionFieldIdentity?.traceDescription ?? "",
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "",
+                "proofModeEnabled": String(
+                    activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier)
+                )
+            ]
+        )
     }
 
     private func obsidianSnapshotMatchesCurrentSuggestion() -> Bool {
@@ -5139,7 +5270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: baseline.requestMode,
             expectedFieldIdentity: baseline.fieldIdentity,
             snapshot: snapshot,
-            expectedFocusedText: expectedText
+            expectedFocusedText: expectedText,
+            shownTargetFingerprint: baseline.targetFingerprint
         ) else {
             return nil
         }
@@ -7368,6 +7500,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func traceRoundedRect(_ rect: RoundedFocusedRect?) -> String {
+        guard let rect else {
+            return "nil"
+        }
+        return "x=\(rect.x),y=\(rect.y),w=\(rect.width),h=\(rect.height)"
+    }
+
     private func insertionRetrySkippedModes(
         result: InsertionVerificationResult,
         profile: CompatibilityProfile,
@@ -8311,7 +8450,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: currentSuggestionRequestMode,
             expectedFieldIdentity: currentSuggestionFieldIdentity,
             snapshot: lastTextSnapshot,
-            expectedFocusedText: previousText
+            expectedFocusedText: previousText,
+            shownTargetFingerprint: currentSuggestionAcceptanceSnapshot?.targetFingerprint
         ) else {
             DiagnosticsLog.shared.record(
                 "codex-proof-insert",
@@ -8641,15 +8781,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let focusedElement = focusedValue as! AXUIElement
-        guard Int(CFHash(focusedElement)) == elementIdentifier,
-              axRole(focusedElement) == "AXTextArea",
-              let value = axStringAttribute(focusedElement, kAXValueAttribute),
-              value == expectedValue,
-              value.contains(marker) else {
-            return nil
-        }
-
-        return focusedElement
+        return axTextAreaDescendant(
+            in: focusedElement,
+            matchingValue: expectedValue,
+            containing: marker,
+            elementIdentifier: elementIdentifier,
+            maxDepth: 12
+        )
     }
 
     nonisolated private static func axFocusedTextArea(
@@ -8695,6 +8833,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 in: child,
                 matchingValue: expectedValue,
                 containing: marker,
+                maxDepth: maxDepth - 1
+            ) {
+                return match
+            }
+        }
+
+        return nil
+    }
+
+    nonisolated private static func axTextAreaDescendant(
+        in element: AXUIElement,
+        matchingValue expectedValue: String,
+        containing marker: String,
+        elementIdentifier: Int,
+        maxDepth: Int
+    ) -> AXUIElement? {
+        guard maxDepth >= 0 else {
+            return nil
+        }
+
+        if axRole(element) == "AXTextArea",
+           Int(CFHash(element)) == elementIdentifier,
+           let value = axStringAttribute(element, kAXValueAttribute),
+           value == expectedValue,
+           value.contains(marker) {
+            return element
+        }
+
+        for child in axChildren(element) {
+            if let match = axTextAreaDescendant(
+                in: child,
+                matchingValue: expectedValue,
+                containing: marker,
+                elementIdentifier: elementIdentifier,
                 maxDepth: maxDepth - 1
             ) {
                 return match
