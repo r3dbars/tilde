@@ -11730,7 +11730,7 @@ private extension AppDelegate {
     }
 
     static var currentSuggestionTuningDefaultsVersion: Int {
-        3
+        4
     }
 
     static var previousDefaultSuggestionAggressivenessLevel: Int {
@@ -11964,6 +11964,13 @@ private extension AppDelegate {
             level = SuggestionTuning.defaultAggressivenessLevel
         }
 
+        let storedTuningVersion = defaults.object(forKey: Self.suggestionTuningDefaultsVersionDefaultsKey) as? Int
+        let shouldMigrateDailyDriverDefaults = (storedTuningVersion ?? 0) < Self.currentSuggestionTuningDefaultsVersion
+        if shouldMigrateDailyDriverDefaults,
+           level == 3 {
+            level = SuggestionTuning.defaultAggressivenessLevel
+        }
+
         let maxVisibleWords: Int
         if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
             maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
@@ -11974,18 +11981,33 @@ private extension AppDelegate {
         let wordStartCharacters = defaults.object(forKey: Self.suggestionWordStartCharactersDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionWordStartCharactersDefaultsKey)
             : SuggestionTuning.defaultWordStartCharacters
-        let phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
+        var phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionPhraseStartWordsDefaultsKey)
             : SuggestionTuning.defaultPhraseStartWords
-        let responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
+        var responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionResponseSpeedLevelDefaultsKey)
             : SuggestionTuning.defaultResponseSpeedLevel
-        let confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
+        var confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionConfidenceLevelDefaultsKey)
             : SuggestionTuning.defaultConfidenceLevel
-        let learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
+        var learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionLearningRestraintLevelDefaultsKey)
             : SuggestionTuning.defaultLearningRestraintLevel
+
+        if shouldMigrateDailyDriverDefaults {
+            if phraseStartWords == 3 {
+                phraseStartWords = SuggestionTuning.defaultPhraseStartWords
+            }
+            if responseSpeedLevel == 3 {
+                responseSpeedLevel = SuggestionTuning.defaultResponseSpeedLevel
+            }
+            if confidenceLevel == 3 {
+                confidenceLevel = SuggestionTuning.defaultConfidenceLevel
+            }
+            if learningRestraintLevel == 2 {
+                learningRestraintLevel = SuggestionTuning.defaultLearningRestraintLevel
+            }
+        }
 
         suggestionTuning = SuggestionTuning(
             aggressivenessLevel: level,

@@ -97,23 +97,23 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
 public struct SuggestionTuning: Equatable, Sendable {
     public static let minimumAggressivenessLevel = 1
     public static let maximumAggressivenessLevel = 5
-    public static let defaultAggressivenessLevel = 3
+    public static let defaultAggressivenessLevel = 4
     public static let defaultMaxVisibleWords = 8
     public static let minimumWordStartCharacters = 1
     public static let maximumWordStartCharacters = 5
     public static let defaultWordStartCharacters = 2
     public static let minimumPhraseStartWords = 1
     public static let maximumPhraseStartWords = 6
-    public static let defaultPhraseStartWords = 3
+    public static let defaultPhraseStartWords = 2
     public static let minimumResponseSpeedLevel = 1
     public static let maximumResponseSpeedLevel = 5
-    public static let defaultResponseSpeedLevel = 3
+    public static let defaultResponseSpeedLevel = 5
     public static let minimumConfidenceLevel = 1
     public static let maximumConfidenceLevel = 5
-    public static let defaultConfidenceLevel = 3
+    public static let defaultConfidenceLevel = 4
     public static let minimumLearningRestraintLevel = 0
     public static let maximumLearningRestraintLevel = 3
-    public static let defaultLearningRestraintLevel = 2
+    public static let defaultLearningRestraintLevel = 1
     public static let predictiveFallbackWritingApps: Set<String> = [
         "com.apple.TextEdit",
         "com.apple.Notes",
@@ -279,7 +279,8 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 18,
                 allowsTerminalSentenceBoundary: false,
-                allowsUnfinishedWordPhraseContinuation: false
+                allowsUnfinishedWordPhraseContinuation: true,
+                prefersPhraseContinuationForWordFragments: true
             )
         }
 
@@ -291,7 +292,8 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 16,
                 allowsTerminalSentenceBoundary: false,
-                allowsUnfinishedWordPhraseContinuation: false
+                allowsUnfinishedWordPhraseContinuation: true,
+                prefersPhraseContinuationForWordFragments: true
             )
         }
 

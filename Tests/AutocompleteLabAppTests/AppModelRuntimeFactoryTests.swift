@@ -13,8 +13,8 @@ struct AppModelRuntimeFactoryTests {
         let bundle = AppModelRuntimeFactory.makeRuntime(environment: [:], defaults: defaults)
 
         #expect(bundle.experimentArm == .length3Word)
-        #expect(bundle.lengthConfiguration.maxVisibleWords == 5)
-        #expect(bundle.lengthConfiguration.maxGeneratedTokens == 11)
+        #expect(bundle.lengthConfiguration.maxVisibleWords == 8)
+        #expect(bundle.lengthConfiguration.maxGeneratedTokens == 20)
         #expect(defaults.string(forKey: AppModelRuntimeFactory.experimentArmDefaultsKey) == "length_3_word")
     }
 

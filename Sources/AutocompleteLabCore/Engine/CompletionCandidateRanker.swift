@@ -253,6 +253,17 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
             }
         }
 
+        if maxVisibleWords >= 8 {
+            switch wordCount {
+            case 3...maxVisibleWords:
+                return 0.38
+            case 2:
+                return 0.24
+            default:
+                return 0.08
+            }
+        }
+
         switch wordCount {
         case 3...5:
             return 0.35
@@ -266,6 +277,10 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
     private func longPhraseAnnoyancePenalty(_ wordCount: Int, maxVisibleWords: Int) -> Double {
         if maxVisibleWords >= 12 {
             return wordCount <= maxVisibleWords ? 0 : 0.12
+        }
+
+        if maxVisibleWords >= 8 {
+            return wordCount <= maxVisibleWords ? 0 : 0.20
         }
 
         switch wordCount {

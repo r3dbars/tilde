@@ -7,14 +7,14 @@ struct SuggestionAggressivenessTests {
     func defaultTuningStartsProactiveEnoughForFirstRun() {
         let tuning = SuggestionTuning()
 
-        #expect(tuning.aggressivenessLevel == 3)
+        #expect(tuning.aggressivenessLevel == 4)
         #expect(tuning.maxVisibleWords == 8)
         #expect(tuning.wordStartCharacters == 2)
-        #expect(tuning.phraseStartWords == 3)
-        #expect(tuning.responseSpeedLevel == 3)
-        #expect(tuning.confidenceLevel == 3)
-        #expect(tuning.learningRestraintLevel == 2)
-        #expect(tuning.displayName == "Proactive")
+        #expect(tuning.phraseStartWords == 2)
+        #expect(tuning.responseSpeedLevel == 5)
+        #expect(tuning.confidenceLevel == 4)
+        #expect(tuning.learningRestraintLevel == 1)
+        #expect(tuning.displayName == "Very Proactive")
         #expect(tuning.pace == .eager)
 
         let activation = tuning.activationPolicy(supportPace: tuning.pace)
@@ -24,7 +24,14 @@ struct SuggestionAggressivenessTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .block(.tooLittleContext))
+        ) == .allow(.phraseContinuation))
+        #expect(activation.decision(
+            textBeforeCursor: "I feel rea",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
         #expect(activation.decision(
             textBeforeCursor: "I feel ready now ",
             textAfterCursor: "",
@@ -38,12 +45,12 @@ struct SuggestionAggressivenessTests {
             previousTextBeforeCursor: "I feel",
             currentTextBeforeCursor: "I feel ",
             requestMode: .phraseContinuation
-        ) == .skip)
+        ) == .request(delayMilliseconds: 80))
         #expect(trigger.decision(
             previousTextBeforeCursor: "I feel ready now",
             currentTextBeforeCursor: "I feel ready now ",
             requestMode: .phraseContinuation
-        ) == .request(delayMilliseconds: 140))
+        ) == .request(delayMilliseconds: 80))
     }
 
     @Test("normal starts suggestions sooner without using the most eager thresholds")
@@ -101,24 +108,24 @@ struct SuggestionAggressivenessTests {
         let veryProactive = SuggestionTuning(aggressivenessLevel: 4, maxVisibleWords: 8)
         let max = SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 99)
 
-        #expect(proactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.10)
-        #expect(veryProactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.00)
-        #expect(max.displayScorePolicy.threshold(for: .phraseContinuation) == 0.90)
+        #expect(proactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.00)
+        #expect(veryProactive.displayScorePolicy.threshold(for: .phraseContinuation) == 0.90)
+        #expect(max.displayScorePolicy.threshold(for: .phraseContinuation) == 0.80)
         #expect(max.maxVisibleWords == 20)
 
         let veryProactiveTrigger = veryProactive.triggerPolicy(supportPace: .eager)
-        #expect(veryProactiveTrigger.wordCompletionDelayMilliseconds == 40)
-        #expect(veryProactiveTrigger.wordBoundaryDelayMilliseconds == 100)
-        #expect(veryProactiveTrigger.sentenceBoundaryDelayMilliseconds == 240)
+        #expect(veryProactiveTrigger.wordCompletionDelayMilliseconds == 20)
+        #expect(veryProactiveTrigger.wordBoundaryDelayMilliseconds == 80)
+        #expect(veryProactiveTrigger.sentenceBoundaryDelayMilliseconds == 180)
         #expect(veryProactiveTrigger.minimumWordCompletionCharacters == 2)
-        #expect(veryProactiveTrigger.minimumPhraseContinuationWords == 3)
+        #expect(veryProactiveTrigger.minimumPhraseContinuationWords == 2)
         #expect(!veryProactiveTrigger.allowsPlainLineStartPhraseContinuation)
         #expect(!veryProactiveTrigger.allowsSentenceBoundaryRequest)
 
         let maxTrigger = max.triggerPolicy(supportPace: .eager)
         #expect(maxTrigger.wordBoundaryDelayMilliseconds == 80)
         #expect(maxTrigger.softPunctuationDelayMilliseconds == 120)
-        #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 200)
+        #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 180)
         #expect(maxTrigger.pauseDelayMilliseconds == 80)
         #expect(maxTrigger.minimumWordCompletionCharacters == 2)
         #expect(max.traceMetadata["suggestionAggressivenessLevel"] == "5")

@@ -578,7 +578,6 @@ final class SuggestionOrchestrator {
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
             && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            || (request.mode == .phraseContinuation && confidenceDecision.bucket != .high)
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,
@@ -658,23 +657,23 @@ final class SuggestionOrchestrator {
             }
         case .sentenceContinuation:
             switch visibleWordCount {
-            case 3...5:
+            case 3...8:
                 base = 0.64
-            case 2, 6:
+            case 2:
                 base = 0.52
             default:
                 base = 0.38
             }
         case .phraseContinuation:
             switch visibleWordCount {
-            case 2...4:
-                base = 0.70
-            case 5...7:
+            case 3...8:
+                base = 0.74
+            case 2:
                 base = 0.58
             case 1:
-                base = 0.48
-            default:
                 base = 0.40
+            default:
+                base = 0.34
             }
         }
 

@@ -13,8 +13,14 @@ struct SuggestionPresentationGateTests {
             phase: .streamingPartial
         ))
 
-        #expect(gate.shouldPresent(
+        #expect(!gate.shouldPresent(
             CompletionSuggestion(text: " ready to"),
+            mode: .phraseContinuation,
+            phase: .streamingPartial
+        ))
+
+        #expect(gate.shouldPresent(
+            CompletionSuggestion(text: " ready to go"),
             mode: .phraseContinuation,
             phase: .streamingPartial
         ))
@@ -114,29 +120,36 @@ struct SuggestionPresentationGateTests {
         )
         var state = StreamingPresentationState()
 
-        #expect(gate.shouldPresentStreamingPartial(
+        #expect(!gate.shouldPresentStreamingPartial(
             CompletionSuggestion(text: " make this"),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 90
+        ))
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this work"),
             mode: .phraseContinuation,
             state: &state,
             nowMilliseconds: 100
         ))
 
         #expect(!gate.shouldPresentStreamingPartial(
-            CompletionSuggestion(text: " make this work"),
+            CompletionSuggestion(text: " make this work now"),
             mode: .phraseContinuation,
             state: &state,
             nowMilliseconds: 130
         ))
 
         #expect(gate.shouldPresentStreamingPartial(
-            CompletionSuggestion(text: " make this work now"),
+            CompletionSuggestion(text: " make this work much better"),
             mode: .phraseContinuation,
             state: &state,
             nowMilliseconds: 160
         ))
 
         #expect(!gate.shouldPresentStreamingPartial(
-            CompletionSuggestion(text: " make this work now please"),
+            CompletionSuggestion(text: " make this work much better today"),
             mode: .phraseContinuation,
             state: &state,
             nowMilliseconds: 230
