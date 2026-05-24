@@ -16,17 +16,28 @@ Files are named by day:
 
 ```text
 YYYY-MM-DD.md
+Episodes/YYYY-MM-DD.episodes.jsonl
+Episodes/YYYY-MM-DD-dashboard.md
 ```
 
 ## What It Records
 
 - new writing fragments observed in safe focused text fields,
 - verified accepted suggestions,
-- accepted-kept survival signals such as 10s, 30s, and field blur,
-- app bundle ID, field identity, field kind, accept mode, and suggestion IDs.
+- accepted-kept survival signals at 2s, 10s, 30s, 1m, 5m, field blur, and send,
+- suggestion episode actions: shown, accepted, ignored, dismissed, typed past,
+  deleted fast, and kept,
+- model, prompt version, candidate source, placement, latency, app bundle ID,
+  field identity, field kind, accept mode, and suggestion IDs,
+- optional local reply context from visible page OCR when that dogfood capture is
+  enabled and safe.
 
 The first observed field snapshot is only a boundary marker. The journal starts
 recording raw writing after SteadyType has a previous safe snapshot to compare.
+
+The episode dashboard is a local Markdown scorecard. It shows episode counts,
+accept/kept/delete signals, eval-case count, latency, and model/prompt rows
+without needing to open the raw JSONL.
 
 ## Hard Blocks
 
@@ -48,7 +59,7 @@ main safety mechanism.
 ## Controls
 
 Settings owns the switch. Turning it off stops new writes. `Delete Personal
-Capture` turns it off and removes the folder.
+Capture` turns it off and removes the journal, episode JSONL, and dashboards.
 
 Redacted Privacy Bundles do not include Personal Capture Markdown. Support
 should not ask testers for these files.

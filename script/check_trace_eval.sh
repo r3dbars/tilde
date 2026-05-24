@@ -125,7 +125,7 @@ def kept_event(event):
     metadata = event.get("metadata") or {}
     if metadata.get("strongAcceptedAndKept") == "true" or metadata.get("finalAcceptedAndKept") == "true":
         return True
-    if metadata.get("checkpoint") not in {"10s", "30s", "fieldBlur", "fieldSend"}:
+    if metadata.get("checkpoint") not in {"10s", "30s", "1m", "5m", "fieldBlur", "fieldSend"}:
         return False
     return metadata.get("survivalClass") in {"exactKept", "lightlyEditedKept", "partiallyKept"}
 
@@ -1272,7 +1272,7 @@ kept_at_10_ids = {
 kept_at_30_or_blur_ids = {
     event.get("metadata", {}).get("acceptanceID") or event.get("suggestionID")
     for event in accepted_text_edited
-    if kept_event(event) and (event.get("metadata") or {}).get("checkpoint") in {"30s", "fieldBlur", "fieldSend"}
+    if kept_event(event) and (event.get("metadata") or {}).get("checkpoint") in {"30s", "1m", "5m", "fieldBlur", "fieldSend"}
 }
 
 print(f"Trace: {path}")
@@ -1380,7 +1380,7 @@ print(f"  model returned: {len(model_returned_ids)}")
 print(f"  shown: {len(presented_by_id)}")
 print(f"  accepted: {len(accepted_ids.intersection(presented_ids))}")
 print(f"  kept at 10s: {len(kept_at_10_ids)}")
-print(f"  kept at 30s/blur: {len(kept_at_30_or_blur_ids)}")
+print(f"  kept at 30s+/blur: {len(kept_at_30_or_blur_ids)}")
 print("Annoyance funnel:")
 print(f"  shown: {len(presented_by_id)}")
 print(f"  ignored: {sum(1 for event in events if event.get('type') == 'suggestionHidden' and event.get('outcome') == 'ignored')}")

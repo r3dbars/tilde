@@ -483,7 +483,11 @@ public struct AutocompleteTraceReplay: Sendable {
         }
 
         return event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.thirtySeconds.rawValue
+            || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.oneMinute.rawValue
+            || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.fiveMinutes.rawValue
             || event.metadata["finishReason"] == "thirty-second-finalized"
+            || event.metadata["finishReason"] == "one-minute-finalized"
+            || event.metadata["finishReason"] == "five-minute-finalized"
             || event.metadata["finishReason"] == "field-blur-finalized"
             || event.metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.fieldSend.rawValue
     }

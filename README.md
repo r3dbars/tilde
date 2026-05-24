@@ -46,6 +46,10 @@ Markdown on this Mac so the app can learn from real writing and accepted-kept
 suggestions. It is not telemetry, not a beta requirement, and not enabled for
 customers or testers by default.
 
+When enabled, it also writes local Suggestion Episode JSONL and a daily
+scorecard. Those files connect what was typed, what SteadyType suggested, what
+the user did, model/prompt version, placement, latency, and kept checkpoints.
+
 Useful docs:
 
 - [Beta privacy](PRIVACY-BETA.md)

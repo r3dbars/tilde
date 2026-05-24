@@ -27,8 +27,8 @@ struct AcceptanceSurvivalCheckerTests {
         #expect(updated.deletedWithinTwoSeconds)
     }
 
-    @Test("Final kept checkpoint records accepted and kept then finishes")
-    func finalKeptCheckpointRecordsAcceptedAndKeptThenFinishes() async throws {
+    @Test("Thirty-second kept checkpoint records accepted and kept without finishing")
+    func thirtySecondKeptCheckpointRecordsAcceptedAndKeptWithoutFinishing() async throws {
         let checker = AcceptanceSurvivalChecker()
         let tracker = makeTracker(
             acceptedText: " accepted text",
@@ -42,11 +42,33 @@ struct AcceptanceSurvivalCheckerTests {
             currentTextWindow: "Draft accepted text",
             now: tracker.acceptedAt.addingTimeInterval(30)
         ))
+
+        #expect(result.shouldRecordAcceptedAndKept)
+        #expect(!result.shouldFinish)
+        #expect(result.finishReason == nil)
+        #expect(await checker.tracker(acceptanceID: tracker.acceptanceID) != nil)
+    }
+
+    @Test("Five-minute kept checkpoint records accepted and kept then finishes")
+    func fiveMinuteKeptCheckpointRecordsAcceptedAndKeptThenFinishes() async throws {
+        let checker = AcceptanceSurvivalChecker()
+        let tracker = makeTracker(
+            acceptedText: " accepted text",
+            textBeforeCursor: "Draft"
+        )
+        await checker.beginTracking(tracker)
+
+        let result = try #require(await checker.measure(
+            acceptanceID: tracker.acceptanceID,
+            checkpoint: .fiveMinutes,
+            currentTextWindow: "Draft accepted text",
+            now: tracker.acceptedAt.addingTimeInterval(300)
+        ))
         let removed = await checker.finishTracking(acceptanceID: tracker.acceptanceID)
 
         #expect(result.shouldRecordAcceptedAndKept)
         #expect(result.shouldFinish)
-        #expect(result.finishReason == "thirty-second-finalized")
+        #expect(result.finishReason == "five-minute-finalized")
         #expect(removed?.acceptanceID == tracker.acceptanceID)
     }
 
@@ -70,15 +92,26 @@ struct AcceptanceSurvivalCheckerTests {
         #expect(deleted.measurement.survivalClass == .rejectedAfterAccept)
         #expect(deleted.measurement.deletedWithinTwoSeconds)
 
-        let final = try #require(await checker.measure(
+        let thirtySecond = try #require(await checker.measure(
             acceptanceID: tracker.acceptanceID,
             checkpoint: .thirtySeconds,
             currentTextWindow: "Start again.",
             now: Date(timeIntervalSince1970: 1_031)
         ))
 
+        #expect(!thirtySecond.shouldFinish)
+        #expect(thirtySecond.finishReason == nil)
+        #expect(thirtySecond.measurement.deletedWithinTwoSeconds)
+
+        let final = try #require(await checker.measure(
+            acceptanceID: tracker.acceptanceID,
+            checkpoint: .fiveMinutes,
+            currentTextWindow: "Start again.",
+            now: Date(timeIntervalSince1970: 1_301)
+        ))
+
         #expect(final.shouldFinish)
-        #expect(final.finishReason == "thirty-second-finalized")
+        #expect(final.finishReason == "five-minute-finalized")
         #expect(final.measurement.deletedWithinTwoSeconds)
         #expect(await checker.finishTracking(acceptanceID: tracker.acceptanceID) != nil)
         #expect(await checker.tracker(acceptanceID: tracker.acceptanceID) == nil)

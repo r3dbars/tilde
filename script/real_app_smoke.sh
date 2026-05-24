@@ -10369,11 +10369,11 @@ APPLESCRIPT
       "accepted-insertion-undone" \
       "app=com.apple.TextEdit"
   else
-    wait_for_log_fields "$full_start_line" "TextEdit accepted-and-kept survival" 45 \
-      "annoyance-signal" \
-      "app=com.apple.TextEdit" \
-      "reason=thirty-second-finalized" \
-      "signal=acceptedAndKept"
+	    wait_for_log_fields "$full_start_line" "TextEdit accepted-and-kept survival" 45 \
+	      "annoyance-signal" \
+	      "app=com.apple.TextEdit" \
+	      "reason=30s" \
+	      "signal=acceptedAndKept"
   fi
 
   sleep 1
