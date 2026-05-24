@@ -53,6 +53,10 @@ struct KeyboardEventTapKeyCodeTests {
         ))
         #expect(!shouldTreatOtherKeyAsTypingPassthrough(
             physicalKey: .tab,
+            modifiers: [.option, .function]
+        ))
+        #expect(!shouldTreatOtherKeyAsTypingPassthrough(
+            physicalKey: .tab,
             modifiers: [.option, .shift]
         ))
         #expect(!shouldTreatOtherKeyAsTypingPassthrough(

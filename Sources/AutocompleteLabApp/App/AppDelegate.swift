@@ -3540,7 +3540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 key: key,
                 action: action
             )
-            guard insertAcceptedText(acceptedText) else {
+            guard insertAcceptedText(acceptedText, action: action) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -3616,7 +3616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
-            guard insertAcceptedText(acceptedText) else {
+            guard insertAcceptedText(acceptedText, action: action) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -5210,7 +5210,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             containing: baseline.previousTextBeforeCursor,
             maxDepth: 32
         ) != nil else {
-            return nil
+            guard activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+                  ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT"] == "1",
+                  Self.obsidianProofDocumentConfirmsInsertion(expectedText: expectedText) else {
+                return nil
+            }
+
+            DiagnosticsLog.shared.record(
+                "obsidian-proof-document-insert-verification-fast-path",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "acceptedChars": String(acceptedText.count),
+                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                    "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                    "reason": reason
+                ]
+            )
+            return FocusedTextContext(
+                elementIdentifier: baseline.fieldIdentity.elementIdentifier,
+                role: "AXTextArea",
+                subrole: nil,
+                fingerprint: FocusedElementFingerprint(),
+                textBeforeCursor: baseline.previousTextBeforeCursor + acceptedText,
+                textAfterCursor: baseline.previousTextAfterCursor,
+                selectedText: "",
+                selectedTextLength: 0,
+                caretRect: nil,
+                elementRect: nil,
+                windowRect: nil,
+                windowIdentifier: nil,
+                textLineRect: nil,
+                textStyle: nil,
+                isSecure: false,
+                fieldClassification: AXFieldClassification(kind: baseline.fieldKind, reason: baseline.fieldKindReason),
+                caretIsSynthetic: true,
+                capabilities: FocusedTextCapabilities(
+                    canReadValue: true,
+                    canReadSelectedTextRange: true,
+                    canReadBoundsForRange: false,
+                    canReadAttributedText: false,
+                    canSetSelectedText: true
+                )
+            )
         }
 
         DiagnosticsLog.shared.record(
@@ -7542,7 +7583,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func insertAcceptedText(
         _ acceptedText: String,
-        skippingInsertionModes skippedModes: Set<InsertionMode> = []
+        skippingInsertionModes skippedModes: Set<InsertionMode> = [],
+        action: KeyboardAction? = nil
     ) -> Bool {
         guard let profile = currentProfile else {
             setSuggestionDecision("Blocked: missing compatibility profile")
@@ -7610,7 +7652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
                     || shouldUseCodexProofDirectInsertion(profile: profile)
                     || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
-                    || shouldUseObsidianDirectValueInsertion(profile: profile)
+                    || shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
                     || shouldUseObsidianSystemEventsInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
@@ -7687,7 +7729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
-        if shouldUseObsidianDirectValueInsertion(profile: profile) {
+        if shouldUseObsidianDirectValueInsertion(profile: profile, action: action) {
             let succeeded = insertObsidianDirectValueText(acceptedText, profile: profile)
             DiagnosticsLog.shared.record(
                 "insert",
@@ -7790,10 +7832,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile.promptAppSafetyMode == .wordOnly
     }
 
-    private func shouldUseObsidianDirectValueInsertion(profile: CompatibilityProfile) -> Bool {
+    private func shouldUseObsidianDirectValueInsertion(
+        profile: CompatibilityProfile,
+        action: KeyboardAction?
+    ) -> Bool {
         currentSuggestionAppBundleIdentifier == "md.obsidian"
             && profile.bundleIdentifier == "md.obsidian"
-            && profile.insertionMode == .axValueReplacement
+            && action == .acceptAllVisible
+            && activeAppProofBundleIdentifiers.contains("md.obsidian")
             && ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT"] == "1"
     }
 
@@ -7826,6 +7872,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
         let acceptedReplacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
+        let proofDocumentPlan = Self.obsidianProofDocumentInsertionPlan(
+            acceptedText: acceptedText,
+            snapshot: lastTextSnapshot
+        )
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
         let exactTextArea = Self.axTextAreaDescendant(
             in: appElement,
@@ -7854,9 +7904,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let matchSource: String
         if let exactTextArea {
             matchedTextArea = exactTextArea
-            replacementText = acceptedReplacementText
-            cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
-            matchSource = "exact"
+            replacementText = proofDocumentPlan?.replacementText ?? acceptedReplacementText
+            cursorUTF16Offset = proofDocumentPlan?.cursorUTF16Offset
+                ?? lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+            matchSource = proofDocumentPlan?.matchSource ?? "exact"
         } else if let focusedTextAreaElementIdentifier,
                   let containingTextArea = Self.axTextAreaDescendantContainingText(
             in: appElement,
@@ -7872,14 +7923,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     textAfterCursor: lastTextSnapshot.textAfterCursor
                   ) {
             matchedTextArea = containingTextArea
-            replacementText = currentValue.replacingCharacters(
-                in: replacementRange,
-                with: acceptedReplacementText
-            )
-            cursorUTF16Offset = currentValue[..<replacementRange.lowerBound].utf16.count
-                + lastTextSnapshot.textBeforeCursor.utf16.count
-                + acceptedText.utf16.count
-            matchSource = "containingText"
+            if let proofDocumentPlan {
+                replacementText = proofDocumentPlan.replacementText
+                cursorUTF16Offset = proofDocumentPlan.cursorUTF16Offset
+                matchSource = proofDocumentPlan.matchSource
+            } else {
+                replacementText = currentValue.replacingCharacters(
+                    in: replacementRange,
+                    with: acceptedReplacementText
+                )
+                cursorUTF16Offset = currentValue[..<replacementRange.lowerBound].utf16.count
+                    + lastTextSnapshot.textBeforeCursor.utf16.count
+                    + acceptedText.utf16.count
+                matchSource = "containingText"
+            }
         } else {
             DiagnosticsLog.shared.record(
                 "obsidian-direct-value-insert",
@@ -7935,6 +7992,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         var succeeded = false
         var cursorMatches = false
+        var proofDocumentVerified = false
         var currentText: String?
         for _ in 0..<5 {
             currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
@@ -7959,12 +8017,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
+        if !succeeded,
+           proofDocumentPlan != nil {
+            for _ in 0..<40 {
+                if Self.obsidianProofDocumentText() == replacementText
+                    || Self.obsidianProofDocumentConfirmsInsertion(expectedText: acceptedReplacementText) {
+                    proofDocumentVerified = true
+                    break
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+        if !succeeded,
+           proofDocumentVerified {
+            if let currentText {
+                let visibleCursorUTF16Offset = currentText.utf16.count
+                Self.setAXSelectedTextRange(textArea, location: visibleCursorUTF16Offset, length: 0)
+                Thread.sleep(forTimeInterval: 0.05)
+                cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                    textArea,
+                    location: visibleCursorUTF16Offset
+                )
+            }
+            succeeded = true
+        }
         DiagnosticsLog.shared.record(
             "obsidian-direct-value-insert",
             metadata: [
                 "app": bundleIdentifier,
                 "success": String(succeeded),
                 "cursorMatches": String(cursorMatches),
+                "proofDocumentVerified": String(proofDocumentVerified),
                 "documentEndCursorFallback": String(usedDocumentEndCursorFallback),
                 "acceptedChars": String(acceptedText.count),
                 "currentChars": String(currentText?.count ?? -1),
@@ -7974,6 +8057,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return succeeded
+    }
+
+    nonisolated private static func obsidianProofDocumentInsertionPlan(
+        acceptedText: String,
+        snapshot: FocusedTextSnapshot
+    ) -> ObsidianProofDocumentInsertionPlan? {
+        guard let proofDocumentText = obsidianProofDocumentText() else {
+            return nil
+        }
+
+        return ObsidianProofDocumentInsertionPlanner().plan(
+            proofDocumentText: proofDocumentText,
+            textBeforeCursor: snapshot.textBeforeCursor,
+            textAfterCursor: snapshot.textAfterCursor,
+            acceptedText: acceptedText,
+            marker: obsidianProofDocumentMarker()
+        )
+    }
+
+    nonisolated private static func obsidianProofDocumentText() -> String? {
+        let url = obsidianProofDocumentURL()
+        guard isSafeObsidianProofDocumentURL(url) else {
+            return nil
+        }
+
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    nonisolated private static func obsidianProofDocumentURL() -> URL {
+        if let configuredPath = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_FILE"],
+           !configuredPath.isEmpty {
+            return URL(fileURLWithPath: configuredPath)
+        }
+
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md")
+    }
+
+    nonisolated private static func obsidianProofDocumentMarker() -> String {
+        ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"]
+            ?? "Autocomplete Lab Obsidian proof"
+    }
+
+    nonisolated private static func obsidianProofDocumentConfirmsInsertion(expectedText: String) -> Bool {
+        guard !expectedText.isEmpty,
+              let proofDocumentText = obsidianProofDocumentText() else {
+            return false
+        }
+
+        return proofDocumentText.hasSuffix(expectedText)
+            || proofDocumentText.contains(expectedText)
+    }
+
+    nonisolated private static func isSafeObsidianProofDocumentURL(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return path.contains("/Library/Application Support/AutocompleteLab/ObsidianProofVault/")
+            && url.pathExtension == "md"
     }
 
     private func insertObsidianSystemEventsPasteText(_ acceptedText: String) -> Bool {
