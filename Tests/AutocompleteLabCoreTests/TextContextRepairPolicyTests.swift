@@ -554,6 +554,45 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorHiddenSpacerLine)
     }
 
+    @Test("Repairs Obsidian split-pane document coordinate drift at visual line end")
+    func repairsObsidianCodeMirrorDocumentCoordinateDrift() {
+        let policy = TextContextRepairPolicy()
+        let hiddenPrefix = "\u{200B}\n\u{200B}\n\n"
+        let previousBefore = hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm "
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and ",
+            textAfterCursor: "stays",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previousBefore,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and stays")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorDocumentCoordinateDrift)
+    }
+
+    @Test("Repairs Obsidian split-pane coordinate drift from hidden document spacers")
+    func repairsObsidianCodeMirrorDocumentCoordinateDriftFromHiddenPrefix() {
+        let policy = TextContextRepairPolicy()
+        let hiddenPrefix = "\u{200B}\n\u{200B}\n\n"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and ",
+            textAfterCursor: "stays",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and stays")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorDocumentCoordinateDrift)
+    }
+
     @Test("Repairs Obsidian CodeMirror stale previous line before the active typed line")
     func repairsObsidianCodeMirrorStalePreviousLine() {
         let policy = TextContextRepairPolicy()

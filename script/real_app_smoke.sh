@@ -10090,7 +10090,10 @@ run_obsidian() {
     fi
     second_start_line="$(line_count "$LOG_PATH")"
     AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$second_fragment"
-    if [[ "$manual_app" == "obsidian" || "$manual_app" == "obsidian-theme" ]]; then
+    if [[ "$manual_app" == "obsidian-pane" ]]; then
+      set_obsidian_caret_to_value_end
+      move_obsidian_caret_to_line_end
+    elif [[ "$manual_app" == "obsidian" || "$manual_app" == "obsidian-theme" ]]; then
       move_obsidian_caret_to_line_end
     fi
   fi
