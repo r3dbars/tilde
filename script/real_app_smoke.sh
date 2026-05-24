@@ -10714,7 +10714,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start stable_context trigger_word trigger_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start context_prefix stable_context trigger_word trigger_text expected_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
   max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
@@ -10724,14 +10724,16 @@ run_textedit_model_latency() {
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
     trigger_word="${fragment##* }"
-    stable_context="${fragment:0:${#fragment}-1}"
-    trigger_text="${fragment:${#fragment}-1}"
+    context_prefix="${fragment%"$trigger_word"}"
+    stable_context="$context_prefix"
+    trigger_text="${trigger_word:0:1}"
+    expected_text="${stable_context}${trigger_text}"
     if [[ -z "$trigger_word" || "$stable_context" == "$fragment" || -z "$trigger_text" ]]; then
       echo "TextEdit model latency sample $sample_index does not contain a stable context plus trigger word." >&2
       exit 1
     fi
-    if ((${#trigger_word} < 2)); then
-      echo "TextEdit model latency sample $sample_index trigger word must contain at least two characters." >&2
+    if ((${#trigger_word} < 1)); then
+      echo "TextEdit model latency sample $sample_index trigger word must contain at least one character." >&2
       exit 1
     fi
     attempt_had_model=0
@@ -10772,8 +10774,8 @@ run_textedit_model_latency() {
       AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
       AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.03}" \
         type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
-      wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt" 5
-      trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"
+      wait_for_textedit_document_prefix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt" 5
+      trim_textedit_native_completion_suffix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"
       if wait_for_log_fields_optional "$sample_start" 20 \
         "mlx-completion-timing" \
         "app=com.apple.TextEdit"; then
