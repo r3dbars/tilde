@@ -265,6 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
+    private let obsidianTrustedEndOfDocumentSnapshotPolicy = ObsidianTrustedEndOfDocumentSnapshotPolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
@@ -467,6 +468,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
+    private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot?
     private var personalCaptureLastSnapshot: FocusedTextSnapshot?
     private var lastFocusedTextChangeAt: Date?
     private var lastRequestedTextBeforeCursor: String?
@@ -1890,11 +1892,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let repairPreviousSnapshot = obsidianTrustedEndOfDocumentSnapshotPolicy.repairPreviousSnapshot(
+            fieldIdentity: rawFieldIdentity,
+            previousSnapshot: previousSnapshot,
+            trustedSnapshot: lastTrustedObsidianEndOfDocumentSnapshot
+        )
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
             profile: profile,
-            previousSnapshot: previousSnapshot
+            previousSnapshot: repairPreviousSnapshot
         )
         let fieldIdentity = fieldIdentity(
             app: frontmostApp,
@@ -1918,6 +1925,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+        rememberTrustedObsidianEndOfDocumentSnapshotIfNeeded(snapshot)
         recordPersonalCaptureSnapshot(
             context: context,
             app: frontmostApp,
@@ -3234,6 +3242,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "hasElementRect": String(context.elementRect != nil)
             ]
         )
+    }
+
+    private func rememberTrustedObsidianEndOfDocumentSnapshotIfNeeded(_ snapshot: FocusedTextSnapshot) {
+        guard obsidianTrustedEndOfDocumentSnapshotPolicy.shouldRemember(snapshot: snapshot) else {
+            return
+        }
+
+        lastTrustedObsidianEndOfDocumentSnapshot = snapshot
     }
 
     @discardableResult
