@@ -104,6 +104,63 @@ struct TextContextRepairPolicyTests {
         #expect(!result.wasRepaired)
     }
 
+    @Test("Repairs TextEdit native inline completion tails after end-of-document proof")
+    func repairsTextEditNativeInlineCompletionTail() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "antly",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Smoke proof feels inst",
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == "Smoke proof feels inst")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .textEditNativeInlineCompletionTail)
+    }
+
+    @Test("Does not repair TextEdit middle text without previous end-of-document proof")
+    func doesNotRepairTextEditMiddleTextWithoutEndProof() {
+        let policy = TextContextRepairPolicy()
+
+        let middleText = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels ",
+            textAfterCursor: "instant",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Smoke proof feels ",
+            previousTextAfterCursor: "instant"
+        ))
+        #expect(!middleText.wasRepaired)
+
+        let selectedText = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "antly",
+            selectedTextLength: 1,
+            previousTextBeforeCursor: "Smoke proof feels inst",
+            previousTextAfterCursor: ""
+        ))
+        #expect(!selectedText.wasRepaired)
+
+        let changedBefore = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "antly",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Smoke proof feels in",
+            previousTextAfterCursor: ""
+        ))
+        #expect(!changedBefore.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror trailing character cursor drift")
     func repairsObsidianCodeMirrorTrailingCharacter() {
         let policy = TextContextRepairPolicy()
