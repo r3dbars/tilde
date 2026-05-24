@@ -7,7 +7,7 @@ struct SuggestionTriggerPolicyTests {
     func firstSnapshotRequestsSuggestion() {
         let policy = SuggestionTriggerPolicy()
 
-        #expect(policy.decision(previousTextBeforeCursor: nil, currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 180))
+        #expect(policy.decision(previousTextBeforeCursor: nil, currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 260))
     }
 
     @Test("Unchanged snapshots do not request again")
@@ -34,7 +34,7 @@ struct SuggestionTriggerPolicyTests {
             pauseDelayMilliseconds: 180
         )
 
-        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we ") == .request(delayMilliseconds: 80))
+        #expect(policy.decision(previousTextBeforeCursor: "Can we", currentTextBeforeCursor: "Can we ") == .request(delayMilliseconds: 260))
     }
 
     @Test("Punctuation boundaries use separate researched delays")
@@ -49,27 +49,27 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "Can we",
             currentTextBeforeCursor: "Can we,"
-        ) == .request(delayMilliseconds: 220))
+        ) == .request(delayMilliseconds: 260))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "Can we",
             currentTextBeforeCursor: "Can we;"
-        ) == .request(delayMilliseconds: 220))
+        ) == .request(delayMilliseconds: 260))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "Can we",
             currentTextBeforeCursor: "Can we:"
-        ) == .request(delayMilliseconds: 240))
+        ) == .request(delayMilliseconds: 260))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "Can we",
             currentTextBeforeCursor: "Can we)"
-        ) == .request(delayMilliseconds: 180))
+        ) == .request(delayMilliseconds: 260))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "Can we",
             currentTextBeforeCursor: "Can we "
-        ) == .request(delayMilliseconds: 160))
+        ) == .request(delayMilliseconds: 260))
     }
 
     @Test("Profile punctuation waits at fragile boundaries")
@@ -81,14 +81,14 @@ struct SuggestionTriggerPolicyTests {
             currentTextBeforeCursor: "Hi Justin,",
             lineStartBehavior: .email,
             behaviorProfileID: .email
-        ) == .request(delayMilliseconds: 360))
+        ) == .request(delayMilliseconds: 380, lane: .longPauseThought))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "- Follow up",
             currentTextBeforeCursor: "- Follow up:",
             lineStartBehavior: .listItem,
             behaviorProfileID: .bullets
-        ) == .request(delayMilliseconds: 360))
+        ) == .request(delayMilliseconds: 380, lane: .longPauseThought))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "let value = makeCall(arg",
@@ -101,8 +101,8 @@ struct SuggestionTriggerPolicyTests {
     func withinWordTypingUsesResearchedWordDelay() {
         let policy = SuggestionTriggerPolicy(charactersBeforePauseRequest: 4)
 
-        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 120))
-        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 120))
+        #expect(policy.decision(previousTextBeforeCursor: "I thi", currentTextBeforeCursor: "I thin") == .request(delayMilliseconds: 120, lane: .instantWord))
+        #expect(policy.decision(previousTextBeforeCursor: "I ", currentTextBeforeCursor: "I think") == .request(delayMilliseconds: 120, lane: .instantWord))
     }
 
     @Test("Eager app-style delays are clamped to responsive ranges")
@@ -117,9 +117,9 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.wordCompletionDelayMilliseconds == 20)
         #expect(policy.wordBoundaryDelayMilliseconds == 20)
         #expect(policy.pauseDelayMilliseconds == 20)
-        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 20))
-        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 20))
-        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 20))
+        #expect(policy.decision(previousTextBeforeCursor: "I think", currentTextBeforeCursor: "I think ") == .request(delayMilliseconds: 260))
+        #expect(policy.decision(previousTextBeforeCursor: "I think this wor", currentTextBeforeCursor: "I think this work") == .request(delayMilliseconds: 20, lane: .instantWord))
+        #expect(policy.decision(previousTextBeforeCursor: "I think ", currentTextBeforeCursor: "I think x") == .request(delayMilliseconds: 260))
     }
 
     @Test("Word fragments need three alphabetic characters")
@@ -127,7 +127,7 @@ struct SuggestionTriggerPolicyTests {
         let policy = SuggestionTriggerPolicy(wordCompletionDelayMilliseconds: 50)
 
         #expect(policy.decision(previousTextBeforeCursor: "I need d", currentTextBeforeCursor: "I need di") == .skip)
-        #expect(policy.decision(previousTextBeforeCursor: "I need di", currentTextBeforeCursor: "I need dic") == .request(delayMilliseconds: 50))
+        #expect(policy.decision(previousTextBeforeCursor: "I need di", currentTextBeforeCursor: "I need dic") == .request(delayMilliseconds: 50, lane: .instantWord))
     }
 
     @Test("Word fragments after a space use researched word delay")
@@ -137,7 +137,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I need ",
             currentTextBeforeCursor: "I need dic"
-        ) == .request(delayMilliseconds: 50))
+        ) == .request(delayMilliseconds: 50, lane: .instantWord))
     }
 
     @Test("Proactive pace predicts short line-start word fragments")
@@ -147,7 +147,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "U",
             currentTextBeforeCursor: "Um"
-        ) == .request(delayMilliseconds: 40))
+        ) == .request(delayMilliseconds: 40, lane: .instantWord))
     }
 
     @Test("Proactive pace asks for phrase help after a short word-boundary pause")
@@ -163,7 +163,7 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "I feel ready now",
             currentTextBeforeCursor: "I feel ready now ",
             requestMode: .phraseContinuation
-        ) == .request(delayMilliseconds: 140))
+        ) == .request(delayMilliseconds: 260))
     }
 
     @Test("Very proactive tuning still waits for phrase context")
@@ -179,7 +179,7 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "This feels ready",
             currentTextBeforeCursor: "This feels ready ",
             requestMode: .phraseContinuation
-        ) == .request(delayMilliseconds: 100))
+        ) == .request(delayMilliseconds: 240))
     }
 
     @Test("Very proactive tuning stays quiet after sentence boundaries")
@@ -228,7 +228,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\nNew pla",
             currentTextBeforeCursor: "I think this works.\nNew plan"
-        ) == .request(delayMilliseconds: 120))
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\n- ",
@@ -238,7 +238,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\n- New pla",
             currentTextBeforeCursor: "I think this works.\n- New plan"
-        ) == .request(delayMilliseconds: 120))
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\n- [ ] ",
@@ -248,7 +248,7 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\n- [ ] Follow upd",
             currentTextBeforeCursor: "I think this works.\n- [ ] Follow upda"
-        ) == .request(delayMilliseconds: 120))
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
     }
 
     @Test("Plain line starts stay quiet for single word fragments")
@@ -274,7 +274,7 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "I think this works.\n- Pr",
             currentTextBeforeCursor: "I think this works.\n- Pri",
             lineStartBehavior: .listItem
-        ) == .request(delayMilliseconds: 120))
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\n- ",
@@ -297,7 +297,7 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "Hi Justin,\nTh",
             currentTextBeforeCursor: "Hi Justin,\nTha",
             lineStartBehavior: .email
-        ) == .request(delayMilliseconds: 120))
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "Hi Justin,\nThanks",
@@ -320,13 +320,13 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "The intro is enough.\n\nNew plan nee",
             currentTextBeforeCursor: "The intro is enough.\n\nNew plan need",
             behaviorProfileID: .docsProse
-        ) == .request(delayMilliseconds: 120))
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
 
         #expect(policy.decision(
             previousTextBeforeCursor: "The intro is enough.\n\nNew pla",
             currentTextBeforeCursor: "The intro is enough.\n\nNew plan",
             behaviorProfileID: .notes
-        ) == .request(delayMilliseconds: 120))
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
     }
 
     @Test("Line start behavior follows profile and list shape")
@@ -358,6 +358,6 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I think ",
             currentTextBeforeCursor: "I think this whole pasted sentence should not fire instantly"
-        ) == .request(delayMilliseconds: 300))
+        ) == .request(delayMilliseconds: 380, lane: .longPauseThought))
     }
 }

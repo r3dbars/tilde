@@ -2,7 +2,17 @@ import Foundation
 
 public enum SuggestionTriggerDecision: Equatable, Sendable {
     case skip
-    case request(delayMilliseconds: Int)
+    case request(delayMilliseconds: Int, lane: SuggestionTimingLane = .pausePhrase)
+}
+
+public enum SuggestionTimingLane: String, Codable, Equatable, Sendable {
+    case instantWord
+    case pausePhrase
+    case longPauseThought
+
+    public var traceMetadata: [String: String] {
+        ["suggestionTimingLane": rawValue]
+    }
 }
 
 public enum SuggestionLineStartBehavior: Equatable, Sendable {
@@ -35,6 +45,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let closingPunctuationDelayMilliseconds: Int
     public let sentenceBoundaryDelayMilliseconds: Int
     public let pauseDelayMilliseconds: Int
+    public let minimumPhrasePauseDelayMilliseconds: Int
     public let largeTextChangeCharacterThreshold: Int
     public let largeTextChangeDelayMilliseconds: Int
     public let minimumWordCompletionCharacters: Int
@@ -52,6 +63,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         closingPunctuationDelayMilliseconds: Int = 180,
         sentenceBoundaryDelayMilliseconds: Int = 360,
         pauseDelayMilliseconds: Int = 180,
+        minimumPhrasePauseDelayMilliseconds: Int = 260,
         largeTextChangeCharacterThreshold: Int = 24,
         largeTextChangeDelayMilliseconds: Int = 250,
         minimumWordCompletionCharacters: Int = 3,
@@ -68,6 +80,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         self.closingPunctuationDelayMilliseconds = closingPunctuationDelayMilliseconds.clamped(to: 40...240)
         self.sentenceBoundaryDelayMilliseconds = sentenceBoundaryDelayMilliseconds.clamped(to: 60...450)
         self.pauseDelayMilliseconds = pauseDelayMilliseconds.clamped(to: 20...240)
+        self.minimumPhrasePauseDelayMilliseconds = minimumPhrasePauseDelayMilliseconds.clamped(to: 180...600)
         self.largeTextChangeCharacterThreshold = max(1, largeTextChangeCharacterThreshold)
         self.largeTextChangeDelayMilliseconds = max(self.pauseDelayMilliseconds, largeTextChangeDelayMilliseconds)
         self.minimumWordCompletionCharacters = max(1, minimumWordCompletionCharacters)
@@ -89,6 +102,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
                 closingPunctuationDelayMilliseconds: 220,
                 sentenceBoundaryDelayMilliseconds: 450,
                 pauseDelayMilliseconds: 240,
+                minimumPhrasePauseDelayMilliseconds: 360,
                 largeTextChangeDelayMilliseconds: 320,
                 minimumPhraseContinuationWords: 6
             )
@@ -102,6 +116,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
                 closingPunctuationDelayMilliseconds: 140,
                 sentenceBoundaryDelayMilliseconds: 260,
                 pauseDelayMilliseconds: 160,
+                minimumPhrasePauseDelayMilliseconds: 280,
                 minimumPhraseContinuationWords: 4
             )
         case .eager:
@@ -114,6 +129,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
                 closingPunctuationDelayMilliseconds: 160,
                 sentenceBoundaryDelayMilliseconds: 200,
                 pauseDelayMilliseconds: 140,
+                minimumPhrasePauseDelayMilliseconds: 260,
                 minimumWordCompletionCharacters: 2,
                 minimumPhraseContinuationWords: 4,
                 allowsPlainLineStartWordCompletion: true,
@@ -165,7 +181,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         guard let previousTextBeforeCursor else {
-            return .request(delayMilliseconds: pauseDelayMilliseconds)
+            return requestDecision(delayMilliseconds: pauseDelayMilliseconds, requestMode: requestMode)
         }
 
         guard previousTextBeforeCursor != currentTextBeforeCursor else {
@@ -178,12 +194,20 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
         let changedCount = currentTextBeforeCursor.count - previousTextBeforeCursor.count
         if changedCount >= largeTextChangeCharacterThreshold {
-            return .request(delayMilliseconds: largeTextChangeDelayMilliseconds)
+            return requestDecision(
+                delayMilliseconds: largeTextChangeDelayMilliseconds,
+                requestMode: requestMode,
+                laneOverride: .longPauseThought
+            )
         }
 
         if currentTextBeforeCursor.last?.isSentenceBoundary == true {
             if allowsSentenceBoundaryRequest {
-                return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+                return requestDecision(
+                    delayMilliseconds: sentenceBoundaryDelayMilliseconds,
+                    requestMode: requestMode,
+                    laneOverride: .longPauseThought
+                )
             }
 
             return .skip
@@ -192,21 +216,22 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         if let punctuationDecision = punctuationBoundaryDecision(
             for: currentTextBeforeCursor,
             lineStartBehavior: lineStartBehavior,
-            behaviorProfileID: behaviorProfileID
+            behaviorProfileID: behaviorProfileID,
+            requestMode: requestMode
         ) {
             return punctuationDecision
         }
 
         if currentTextBeforeCursor.last?.isNaturalBoundary == true {
-            return .request(delayMilliseconds: wordBoundaryDelayMilliseconds)
+            return requestDecision(delayMilliseconds: wordBoundaryDelayMilliseconds, requestMode: requestMode)
         }
 
         if shouldRequestWordCompletion(previousTextBeforeCursor: previousTextBeforeCursor, currentTextBeforeCursor: currentTextBeforeCursor) {
-            return .request(delayMilliseconds: wordCompletionDelayMilliseconds)
+            return .request(delayMilliseconds: wordCompletionDelayMilliseconds, lane: .instantWord)
         }
 
         if changedCount >= charactersBeforePauseRequest {
-            return .request(delayMilliseconds: pauseDelayMilliseconds)
+            return requestDecision(delayMilliseconds: pauseDelayMilliseconds, requestMode: requestMode)
         }
 
         return .skip
@@ -233,7 +258,8 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     private func punctuationBoundaryDecision(
         for text: String,
         lineStartBehavior: SuggestionLineStartBehavior,
-        behaviorProfileID: AutocompleteBehaviorProfileID?
+        behaviorProfileID: AutocompleteBehaviorProfileID?,
+        requestMode: CompletionRequestMode?
     ) -> SuggestionTriggerDecision? {
         guard let character = text.last else {
             return nil
@@ -246,24 +272,60 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         if lineStartBehavior == .email,
            character == ",",
            isLikelyEmailGreetingLine(text) {
-            return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+            return requestDecision(
+                delayMilliseconds: sentenceBoundaryDelayMilliseconds,
+                requestMode: requestMode,
+                laneOverride: .longPauseThought
+            )
         }
 
         if lineStartBehavior == .listItem,
            character == ":",
            isLikelyShortListLabel(text) {
-            return .request(delayMilliseconds: sentenceBoundaryDelayMilliseconds)
+            return requestDecision(
+                delayMilliseconds: sentenceBoundaryDelayMilliseconds,
+                requestMode: requestMode,
+                laneOverride: .longPauseThought
+            )
         }
 
         switch character {
         case ",", ";":
-            return .request(delayMilliseconds: softPunctuationDelayMilliseconds)
+            return requestDecision(delayMilliseconds: softPunctuationDelayMilliseconds, requestMode: requestMode)
         case ":":
-            return .request(delayMilliseconds: structuralPunctuationDelayMilliseconds)
+            return requestDecision(delayMilliseconds: structuralPunctuationDelayMilliseconds, requestMode: requestMode)
         case ")", "]", "}":
-            return .request(delayMilliseconds: closingPunctuationDelayMilliseconds)
+            return requestDecision(delayMilliseconds: closingPunctuationDelayMilliseconds, requestMode: requestMode)
         default:
             return nil
+        }
+    }
+
+    private func requestDecision(
+        delayMilliseconds: Int,
+        requestMode: CompletionRequestMode?,
+        laneOverride: SuggestionTimingLane? = nil
+    ) -> SuggestionTriggerDecision {
+        let lane = laneOverride ?? timingLane(for: requestMode)
+        let delay = switch lane {
+        case .instantWord:
+            delayMilliseconds
+        case .pausePhrase:
+            max(delayMilliseconds, minimumPhrasePauseDelayMilliseconds)
+        case .longPauseThought:
+            max(delayMilliseconds, minimumPhrasePauseDelayMilliseconds + 120)
+        }
+        return .request(delayMilliseconds: delay, lane: lane)
+    }
+
+    private func timingLane(for requestMode: CompletionRequestMode?) -> SuggestionTimingLane {
+        switch requestMode {
+        case .some(.wordCompletion):
+            .instantWord
+        case .some(.sentenceContinuation):
+            .longPauseThought
+        case .some(.phraseContinuation), .none:
+            .pausePhrase
         }
     }
 
