@@ -574,7 +574,10 @@ final class SuggestionOrchestrator {
             "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
         ]
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
-            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
+            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
+                for: request,
+                suggestion: suggestion
+            )
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
             && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
@@ -782,6 +785,22 @@ final class SuggestionOrchestrator {
             score += 0.15
         }
         return displayComponent(score)
+    }
+
+    private static func maximumFinalModelDisplayLatencyMilliseconds(
+        for request: CompletionRequest,
+        suggestion: CompletionSuggestion
+    ) -> Int {
+        guard request.mode == .phraseContinuation,
+              suggestion.maxVisibleWords >= 8,
+              suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
+                forVisibleWords: suggestion.maxVisibleWords
+              )
+        else {
+            return maximumFinalModelDisplayLatencyMilliseconds
+        }
+
+        return 1_000
     }
 
     nonisolated private static func displayComponent(_ value: Double) -> Double {

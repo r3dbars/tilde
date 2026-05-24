@@ -9798,6 +9798,19 @@ append_obsidian_smoke_note_file_text() {
   printf '%s' "$fragment" >>"$smoke_file"
 }
 
+obsidian_smoke_note_trimmed_tail_line() {
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+  tail -n 1 "$smoke_file" 2>/dev/null |
+    sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+obsidian_smoke_note_tail_line() {
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+  tail -n 1 "$smoke_file" 2>/dev/null
+}
+
 wait_for_obsidian_smoke_note_file_suffix() {
   local expected_suffix="$1"
   local timeout_seconds="${2:-5}"
@@ -9914,7 +9927,14 @@ run_obsidian() {
 
   local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment
   runtime_start_line="$(line_count "$LOG_PATH")"
-  obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
+  local marker_sentinel=$'\034'
+  obsidian_marker="$(obsidian_smoke_marker_text "$manual_app"; printf '%s' "$marker_sentinel")"
+  obsidian_marker="${obsidian_marker%"$marker_sentinel"}"
+  case "$manual_app" in
+    obsidian|obsidian-theme|obsidian-pane)
+      obsidian_marker+=" "
+      ;;
+  esac
   first_fragment="Smoke proof feels"
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     first_fragment=""
@@ -9953,13 +9973,14 @@ run_obsidian() {
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
 
   prepare_temporary_app_enablement
-  build_if_needed
-  if [[ "$SKIP_BUILD" != "1" ]]; then
-    wait_for_log_line_number "$runtime_start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
-    runtime_start_line="$MATCHED_LOG_LINE"
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    build_if_needed
+    wait_for_accessibility_ready "$runtime_start_line" "Obsidian Accessibility readiness" 20 "$SKIP_BUILD"
+    wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
+  else
+    build_bundle_if_needed
+    stop_current_steadytype_app_bundle
   fi
-  wait_for_accessibility_ready "$runtime_start_line" "Obsidian Accessibility readiness" 20 "$SKIP_BUILD"
-  wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
 
   full_accept_key="$(accept_all_shortcut)"
 
@@ -10005,9 +10026,13 @@ run_obsidian() {
   else
     type_obsidian_raw_smoke_text "$first_fragment"
   fi
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    launch_steadytype_after_chrome_setup "obsidian" "$start_line"
+    wait_for_log_line_number "$start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
+    start_line="$MATCHED_LOG_LINE"
+  fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   activate_obsidian_for_smoke
-  assert_obsidian_smoke_target
   press_key_code 48
   wait_for_log_fields "$start_line" "Obsidian Tab acceptance" 12 \
     "keyboard-action" \
@@ -10018,6 +10043,7 @@ run_obsidian() {
   wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
   wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
 
+  local first_expected_suffix
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     press_key_code 53
     sleep 0.2
@@ -10032,7 +10058,23 @@ run_obsidian() {
     assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
     settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
-    assert_obsidian_smoke_target "Smoke proof feels instant"
+    local first_raw_tail_line second_fragment
+    first_expected_suffix="$(obsidian_smoke_note_trimmed_tail_line)"
+    case "$first_expected_suffix" in
+      "Smoke proof feels "*)
+        ;;
+      *)
+        echo "Obsidian first accept did not preserve the disposable proof prefix." >&2
+        echo "Current tail: $first_expected_suffix" >&2
+        exit 3
+        ;;
+    esac
+    assert_obsidian_smoke_target "$first_expected_suffix"
+    first_raw_tail_line="$(obsidian_smoke_note_tail_line)"
+    second_fragment=" and stays"
+    if [[ "$first_raw_tail_line" =~ [[:space:]]$ ]]; then
+      second_fragment="and stays"
+    fi
     if [[ "$manual_app" == "obsidian-pane" ]]; then
       move_obsidian_caret_to_line_end
     elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
@@ -10047,7 +10089,10 @@ run_obsidian() {
       sleep 0.15
     fi
     second_start_line="$(line_count "$LOG_PATH")"
-    type_obsidian_raw_smoke_text " and stays"
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$second_fragment"
+    if [[ "$manual_app" == "obsidian" || "$manual_app" == "obsidian-theme" ]]; then
+      move_obsidian_caret_to_line_end
+    fi
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12
@@ -10073,7 +10118,6 @@ run_obsidian() {
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
   else
     activate_obsidian_for_smoke
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \

@@ -53,15 +53,44 @@ Validation from the cycle:
   proof for the current UI targets. That is the next blocker, not a product
   claim.
 
+Cycle 2 makes Obsidian default proof more repeatable and makes phrase mode less
+fragile when the first model pass is bad:
+
+- daily-driver phrase retry now repairs too-short, weak, and missing phrase
+  candidates for 8-word mode,
+- retry prompts explicitly tell the runtime not to restart or repeat the text
+  before the cursor,
+- phrase ranking penalizes current-line restarts like repeating `Smoke proof`,
+  while still allowing typo-fragment recovery from earlier lines,
+- yellow-profile daily-driver phrases can display inside a subsecond repair
+  budget instead of being hidden as too slow,
+- Obsidian proof setup now seeds the note before launching SteadyType, preserves
+  marker spacing, avoids pre-accept AX reads that move the CodeMirror caret, and
+  verifies the accepted text after each keypress,
+- strict trace evaluation now treats repeated rows for the same suggestion ID as
+  one visual proof group so streaming/final rows share the same screenshot
+  evidence.
+
+Validation from the cycle so far:
+
+- `swift test --jobs 1` passed with 1337 tests.
+- `./script/check_quality_eval.sh` passed.
+- `./script/check_trace_eval_self_test.sh` passed.
+- Obsidian default smoke passed with two verified insertions and strict visual
+  trace evidence before this source commit.
+- `./script/manual_smoke_status.sh --strict` reports Obsidian default current
+  before this source commit, with TextEdit, Notes, Obsidian variants, and Chrome
+  fixture rows still stale.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
-| Suggestion magic | Better defaults, still unproven live | 3-8 words often feel like the user's next thought | Run local quality eval and dogfood writing session |
-| Placement reliability | Existing proof gates are still the truth | Correct or honest fallback in Obsidian first | Fresh Obsidian visual/manual smoke proof |
-| Typing speed | Defaults request sooner, full tests pass, live latency still stale | Feels ready during fast typing | Fresh latency proof with phrase mode |
+| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
+| Placement reliability | Obsidian default has fresh strict visual proof before this source commit; other lanes remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian proof after commit, then theme/pane/long-note |
+| Typing speed | Subsecond repaired phrase results can display; live latency proof is still narrow | Feels ready during fast typing | Fresh latency proof across Obsidian and TextEdit |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
-| Daily-driver feel | User gut baseline: about 60% there | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
+| Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 
 ## Long-Running Loop
 

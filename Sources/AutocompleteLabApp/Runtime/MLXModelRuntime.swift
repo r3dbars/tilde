@@ -610,9 +610,10 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         effectiveMaxVisibleWords: Int
     ) -> CompletionPrompt? {
         guard request.mode.isContinuation,
-              effectiveMaxVisibleWords >= 12,
+              effectiveMaxVisibleWords >= 6,
               candidateSelection.suggestion == nil,
               candidateSelection.suppressionReason == .lowTopScore
+                || candidateSelection.suppressionReason == .noCandidates
         else {
             return nil
         }
@@ -622,26 +623,31 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
         let shortCandidate = candidateSelection.rankedCandidates.first?.suggestion
             ?? cleanedCandidates.first
-        guard let shortCandidate,
-              shortCandidate.visibleWordCount < preferredMinimum
-        else {
-            return nil
-        }
-
-        let shortPrefix = shortCandidate.visibleText
+        let shortPrefix = shortCandidate?.visibleText
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !shortPrefix.isEmpty else {
+        if candidateSelection.suppressionReason == .lowTopScore,
+           shortPrefix?.isEmpty != false {
             return nil
         }
 
         let context = String(request.textBeforeCursor.suffix(360))
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let repairReason = (shortCandidate?.visibleWordCount ?? 0) < preferredMinimum
+            ? "too short"
+            : "not useful enough for inline autocomplete"
+        let previousAnswerLine = shortPrefix.map {
+            "The previous answer was \(repairReason): \"\($0)\"."
+        } ?? "The previous answer did not produce a usable suffix."
+        let previousAnswerInstruction = shortPrefix == nil
+            ? "Choose a fresh continuation that fits the Before cursor text."
+            : "Start with the previous short answer only if it still fits, then keep going."
         let system = """
         Inline autocomplete retry.
-        The previous answer was too short: "\(shortPrefix)".
+        \(previousAnswerLine)
         Return only one suffix after the Before cursor text.
         The suffix must be \(preferredMinimum)-\(effectiveMaxVisibleWords) words for normal drafting.
-        Start with the previous short answer only if it still fits, then keep going.
+        \(previousAnswerInstruction)
+        Do not restart or repeat the Before cursor text.
         Example Before cursor: The onboarding note should make the setup feel clear and
         Example suffix: easy to finish without making the user think about permissions twice before they can keep writing
         Do not include labels, quotes, explanations, multiple choices, or the Before cursor text.

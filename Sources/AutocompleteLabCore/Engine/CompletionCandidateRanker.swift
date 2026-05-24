@@ -182,6 +182,7 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
                 behaviorProfileID: behaviorProfileID
             )
             score += localContextAlignmentScore(visibleText, textBeforeCursor: textBeforeCursor)
+            score -= recentContextRestartPenalty(visibleText, textBeforeCursor: textBeforeCursor)
             score -= unsupportedCommitmentPenalty(visibleText, textBeforeCursor: textBeforeCursor)
             score -= genericFillerPenalty(visibleText)
             score -= behaviorProfilePenalty(
@@ -351,6 +352,37 @@ public struct CompletionCandidateRanker: Equatable, Sendable {
         }
 
         return localWords.isDisjoint(with: candidateWords) ? 0 : 0.06
+    }
+
+    private func recentContextRestartPenalty(_ text: String, textBeforeCursor: String?) -> Double {
+        guard let textBeforeCursor else {
+            return 0
+        }
+
+        let candidateWords = contentWords(in: text)
+        let currentLineWords = contentWords(in: currentLine(in: textBeforeCursor))
+        let contextWords = Array(currentLineWords.suffix(10))
+        guard let firstCandidateWord = candidateWords.first,
+              contextWords.contains(firstCandidateWord) else {
+            return 0
+        }
+
+        if candidateWords.count >= 2 {
+            let candidateStart = Array(candidateWords.prefix(2))
+            for index in contextWords.indices.dropLast() where Array(contextWords[index...(index + 1)]) == candidateStart {
+                return 0.45
+            }
+        }
+
+        return 0.35
+    }
+
+    private func currentLine(in text: String) -> String {
+        guard let lastNewline = text.lastIndex(where: \.isNewline) else {
+            return text
+        }
+
+        return String(text[text.index(after: lastNewline)...])
     }
 
     private func unsupportedCommitmentPenalty(_ text: String, textBeforeCursor: String?) -> Double {

@@ -63,7 +63,11 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
             reasons.append("slow-over-500ms")
         }
 
-        if latencyMilliseconds > maximumDisplayLatencyMilliseconds {
+        let displayLatencyBudget = displayLatencyBudgetMilliseconds(
+            suggestion: suggestion,
+            mode: mode
+        )
+        if latencyMilliseconds > displayLatencyBudget {
             score -= 100
             reasons.append("too-slow-to-display")
         }
@@ -79,9 +83,6 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
                 if wordCount > suggestion.maxVisibleWords {
                     score -= 45
                     reasons.append("too-many-visible-words")
-                } else if supportLevel == .yellow && wordCount > 4 {
-                    score -= 35
-                    reasons.append("long-visible-suggestion")
                 }
             } else if wordCount > 5 {
                 score -= 45
@@ -118,6 +119,22 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
         }
 
         return CompletionConfidenceDecision(bucket: bucket, score: score, reasons: reasons)
+    }
+
+    private func displayLatencyBudgetMilliseconds(
+        suggestion: CompletionSuggestion,
+        mode: CompletionRequestMode
+    ) -> Int {
+        guard mode == .phraseContinuation,
+              suggestion.maxVisibleWords >= 8,
+              suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
+                forVisibleWords: suggestion.maxVisibleWords
+              )
+        else {
+            return maximumDisplayLatencyMilliseconds
+        }
+
+        return max(maximumDisplayLatencyMilliseconds, 1_000)
     }
 
     private func looksGenericOrAssistantLike(_ text: String) -> Bool {

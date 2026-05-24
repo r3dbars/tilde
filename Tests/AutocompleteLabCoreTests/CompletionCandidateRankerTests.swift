@@ -166,6 +166,44 @@ struct CompletionCandidateRankerTests {
         #expect(ranked.first?.suggestion.visibleText == " a clean migration step")
     }
 
+    @Test("Phrase mode suppresses recent context restarts")
+    func phraseModeSuppressesRecentContextRestarts() {
+        let ranker = CompletionCandidateRanker()
+        let context = "Autocomplete Lab Obsidian proof\nSmoke proof feels"
+        let repeated = CompletionSuggestion(text: " smoke proof feels noisy", maxVisibleWords: 8)
+        let useful = CompletionSuggestion(text: " instant and useful today", maxVisibleWords: 8)
+
+        let ranked = ranker.ranked(
+            [repeated, useful],
+            mode: .phraseContinuation,
+            textBeforeCursor: context,
+            behaviorProfileID: .docsProse
+        )
+        let repeatedSelection = ranker.selection(
+            [repeated],
+            mode: .phraseContinuation,
+            textBeforeCursor: context,
+            behaviorProfileID: .docsProse
+        )
+
+        #expect(ranked.first?.suggestion.visibleText == useful.visibleText)
+        #expect(repeatedSelection.suggestion == nil)
+        #expect(repeatedSelection.suppressionReason == .lowTopScore)
+    }
+
+    @Test("Phrase mode keeps typo fragment suggestions from earlier lines")
+    func phraseModeKeepsTypoFragmentSuggestionsFromEarlierLines() {
+        let ranker = CompletionCandidateRanker()
+        let selection = ranker.selection(
+            [CompletionSuggestion(text: " Hey that sounds", maxVisibleWords: 8)],
+            mode: .phraseContinuation,
+            textBeforeCursor: "Hey\nHry"
+        )
+
+        #expect(selection.suggestion?.visibleText == " Hey that sounds")
+        #expect(selection.suppressionReason == nil)
+    }
+
     @Test("Common phrase prior allows anchored one-word predictions")
     func commonPhrasePriorAllowsAnchoredOneWordPredictions() {
         let ranker = CompletionCandidateRanker()

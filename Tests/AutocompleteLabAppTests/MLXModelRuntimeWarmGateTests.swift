@@ -121,6 +121,103 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(prompt.user.hasSuffix("Next 12-20 words, or <NO_SUGGESTION>:"))
     }
 
+    @Test("Daily driver retry prompt repairs too-short phrase candidates")
+    func dailyDriverRetryPromptRepairsTooShortPhraseCandidates() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "Smoke proof feels ",
+            maxVisibleWords: 8,
+            mode: .phraseContinuation
+        )
+        let shortCandidate = CompletionSuggestion(
+            text: " instant",
+            maxVisibleWords: 8
+        )
+        let selection = CompletionCandidateRanker().selection(
+            [shortCandidate],
+            mode: .phraseContinuation,
+            textBeforeCursor: request.textBeforeCursor,
+            behaviorProfileID: request.behaviorProfile.id
+        )
+
+        #expect(selection.suppressionReason == CompletionCandidateSuppressionReason.lowTopScore)
+
+        let prompt = try #require(MLXModelRuntime.retryPromptForShortHighWordCandidate(
+            request: request,
+            cleanedCandidates: [shortCandidate],
+            candidateSelection: selection,
+            effectiveMaxVisibleWords: 8
+        ))
+
+        #expect(prompt.system.contains("previous answer was too short"))
+        #expect(prompt.system.contains("3-8 words"))
+        #expect(prompt.system.contains("instant"))
+        #expect(prompt.user.contains("Smoke proof feels"))
+        #expect(prompt.user.hasSuffix("Next 3-8 words, or <NO_SUGGESTION>:"))
+    }
+
+    @Test("Daily driver retry prompt repairs weak phrase candidates")
+    func dailyDriverRetryPromptRepairsWeakPhraseCandidates() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels ",
+            maxVisibleWords: 8,
+            mode: .phraseContinuation
+        )
+        let weakCandidate = CompletionSuggestion(
+            text: " smoke proof feels noisy",
+            maxVisibleWords: 8
+        )
+        let selection = CompletionCandidateRanker().selection(
+            [weakCandidate],
+            mode: .phraseContinuation,
+            textBeforeCursor: request.textBeforeCursor,
+            behaviorProfileID: request.behaviorProfile.id
+        )
+
+        #expect(selection.suppressionReason == CompletionCandidateSuppressionReason.lowTopScore)
+        #expect(weakCandidate.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 8))
+
+        let prompt = try #require(MLXModelRuntime.retryPromptForShortHighWordCandidate(
+            request: request,
+            cleanedCandidates: [weakCandidate],
+            candidateSelection: selection,
+            effectiveMaxVisibleWords: 8
+        ))
+
+        #expect(prompt.system.contains("not useful enough for inline autocomplete"))
+        #expect(prompt.system.contains("Do not restart or repeat the Before cursor text."))
+        #expect(prompt.system.contains("smoke proof feels noisy"))
+        #expect(prompt.user.hasSuffix("Next 3-8 words, or <NO_SUGGESTION>:"))
+    }
+
+    @Test("Daily driver retry prompt repairs missing phrase candidates")
+    func dailyDriverRetryPromptRepairsMissingPhraseCandidates() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "Autocomplete Lab Obsidian proof\nSmoke proof feels ",
+            maxVisibleWords: 8,
+            mode: .phraseContinuation
+        )
+        let selection = CompletionCandidateRanker().selection(
+            [],
+            mode: .phraseContinuation,
+            textBeforeCursor: request.textBeforeCursor,
+            behaviorProfileID: request.behaviorProfile.id
+        )
+
+        #expect(selection.suppressionReason == CompletionCandidateSuppressionReason.noCandidates)
+
+        let prompt = try #require(MLXModelRuntime.retryPromptForShortHighWordCandidate(
+            request: request,
+            cleanedCandidates: [],
+            candidateSelection: selection,
+            effectiveMaxVisibleWords: 8
+        ))
+
+        #expect(prompt.system.contains("did not produce a usable suffix"))
+        #expect(prompt.system.contains("Choose a fresh continuation"))
+        #expect(prompt.system.contains("3-8 words"))
+        #expect(prompt.user.contains("Smoke proof feels"))
+    }
+
     @Test("High word retry prompt stays off when the first pass is good")
     func highWordRetryPromptStaysOffWhenFirstPassIsGood() {
         let request = CompletionRequest(

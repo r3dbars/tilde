@@ -163,8 +163,7 @@ func focusAtEnd(_ editor: AXUIElement, text: String) -> Bool {
 }
 
 func focusTextForDocumentEnd(currentText: String, fileText: String = proofFileText()) -> String {
-    guard fileText.localizedCaseInsensitiveContains(marker),
-          fileText.utf16.count > currentText.utf16.count else {
+    guard fileText.localizedCaseInsensitiveContains(marker) else {
         return currentText
     }
 
@@ -173,6 +172,14 @@ func focusTextForDocumentEnd(currentText: String, fileText: String = proofFileTe
         guard trimmedFileText.hasSuffix(expectedSuffix) else {
             return currentText
         }
+    }
+
+    if proofFile.path.contains("AutocompleteLab/ObsidianProofVault/") {
+        return fileText
+    }
+
+    guard fileText.utf16.count > currentText.utf16.count else {
+        return currentText
     }
 
     return fileText
