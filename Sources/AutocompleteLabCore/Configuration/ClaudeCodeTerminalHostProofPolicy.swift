@@ -157,8 +157,10 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             rawTextAfterCursor: context.rawTextAfterCursor
         )
         let focusedTextHasProofMarker = containsProofMarker(focusedLine)
+        let titleHasProofMarker = titleHasScopedProofMarker(context.windowTitle)
 
         if !focusedTextHasProofMarker,
+           !titleHasProofMarker,
            looksLikeMarkedMultilineBuffer(
                textBeforeCursor: context.rawTextBeforeCursor,
                textAfterCursor: context.rawTextAfterCursor
@@ -244,6 +246,54 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         return sanitizedProofInputLine(beforeLine)
     }
 
+    public static func proofInputText(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> String? {
+        guard evaluate(context) == .eligible else {
+            return nil
+        }
+
+        if let beforeCursorInput = proofInputTextBeforeCursorOnly(
+            textBeforeCursor: context.rawTextBeforeCursor
+        ) {
+            return beforeCursorInput
+        }
+
+        let focusedLine = effectiveFocusedInputLine(
+            focusedText: context.focusedText,
+            rawTextBeforeCursor: context.rawTextBeforeCursor,
+            rawTextAfterCursor: context.rawTextAfterCursor
+        )
+        if let focusedInputText = sanitizedProofInputLine(focusedLine) {
+            return focusedInputText
+        }
+
+        return proofInputText(
+            textBeforeCursor: context.rawTextBeforeCursor,
+            textAfterCursor: context.rawTextAfterCursor
+        )
+    }
+
+    private static func proofInputTextBeforeCursorOnly(
+        textBeforeCursor: String
+    ) -> String? {
+        let beforeLine = lineFragments(textBeforeCursor).last ?? ""
+        if containsProofMarker(beforeLine),
+           let inputText = sanitizedProofInputLine(beforeLine) {
+            return inputText
+        }
+
+        if let wrappedLine = wrappedMarkedPromptInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: ""
+        ),
+           let inputText = sanitizedProofInputLine(wrappedLine) {
+            return inputText
+        }
+
+        return sanitizedProofInputLine(beforeLine)
+    }
+
     public static func sanitizedProofInputLine(_ line: String) -> String? {
         var text = line.trimmingCharacters(in: .newlines)
         text = text.trimmingLeadingWhitespace()
@@ -255,6 +305,9 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         text = removingProofMarkers(from: text)
             .trimmingLeadingWhitespace()
+        while text.contains("  ") {
+            text = text.replacingOccurrences(of: "  ", with: " ")
+        }
 
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty,
@@ -446,6 +499,11 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             || trimmed.hasPrefix("Try '")
     }
 
+    private static func titleHasScopedProofMarker(_ title: String) -> Bool {
+        title.localizedCaseInsensitiveContains("Claude Code")
+            && containsProofMarker(title)
+    }
+
     private static func effectiveFocusedInputLine(
         focusedText: String,
         rawTextBeforeCursor: String,
@@ -494,6 +552,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let lowered = line.lowercased()
         return lowered == "? for shortcuts"
             || lowered.hasSuffix(" for shortcuts")
+            || lowered.contains("shortcuts")
             || lowered.contains("shift+tab")
     }
 
@@ -509,7 +568,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let textBeforeMarker = String(textBeforeCursor[..<markerRange.lowerBound])
         let promptPrefix = lineFragments(textBeforeMarker).last ?? ""
         let trimmedPromptPrefix = promptPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedPromptPrefix.isEmpty || trimmedPromptPrefix == "❯" else {
+        guard promptPrefixAllowsProofMarker(trimmedPromptPrefix) else {
             return nil
         }
 
@@ -540,6 +599,56 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             || isAllowedTrailingClaudePromptHint(firstFragment)
     }
 
+    private static func promptPrefixAllowsProofMarker(_ prefix: String) -> Bool {
+        let trimmed = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == "❯" {
+            return true
+        }
+
+        if trimmed.hasPrefix("❯") {
+            let remainder = trimmed.dropFirst()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return !remainder.isEmpty
+                && !looksLikeShellCommandInput(String(remainder))
+                && !looksLikeTerminalShellCommandLine(String(remainder))
+                && !looksLikeActiveAgentOutput(String(remainder))
+        }
+
+        if trimmed.hasPrefix("$")
+            || trimmed.hasPrefix("%")
+            || trimmed.hasPrefix("#")
+            || trimmed.hasPrefix("➜") {
+            return false
+        }
+
+        if looksLikeActiveAgentOutput(trimmed)
+            || looksLikeShellCommandInput(trimmed)
+            || looksLikeTerminalShellCommandLine(trimmed) {
+            return false
+        }
+
+        return true
+    }
+
+    private static func looksLikeTerminalShellCommandLine(_ line: String) -> Bool {
+        let lowered = line.lowercased()
+        for prompt in [" % ", " $ ", " # "] {
+            guard let range = lowered.range(of: prompt) else {
+                continue
+            }
+
+            let commandText = String(lowered[range.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if commandText.contains(";")
+                || commandText.contains("printf")
+                || looksLikeShellCommandInput(commandText) {
+                return true
+            }
+        }
+
+        return false
+    }
+
     private static func isSafeWrappedPromptFragment(_ fragment: String) -> Bool {
         if looksLikeActiveAgentOutput(fragment) {
             return false
@@ -565,7 +674,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         return true
     }
 
-    private static func containsProofMarker(_ text: String) -> Bool {
+    public static func containsProofMarker(_ text: String) -> Bool {
         proofMarkers.contains { marker in
             text.localizedCaseInsensitiveContains(marker)
         }

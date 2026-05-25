@@ -338,6 +338,175 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ) == .eligible)
     }
 
+    @Test("Terminal-host proof reconstructs wrapped prompt rows with late compact marker")
+    func terminalHostProofReconstructsWrappedPromptRowsWithLateCompactMarker() {
+        let textBeforeCursor = """
+        Claude Code
+        ❯ Can we make this STEADYTYPECLAUDECODEPROOF
+        dicta
+        """
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: " \n  shortcuts"
+        )
+
+        #expect(focusedLine == "❯ Can we make this STEADYTYPECLAUDECODEPROOF dicta ")
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: " \n  shortcuts"
+        ) == "Can we make this dicta ")
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(
+            ClaudeCodeTerminalHostProofContext(
+                hostBundleIdentifier: "com.apple.Terminal",
+                windowTitle: "Claude Code",
+                focusedText: focusedLine,
+                rawTextBeforeCursor: textBeforeCursor,
+                rawTextAfterCursor: " \n  shortcuts",
+                proofModeEnabled: true
+            )
+        ) == .eligible)
+    }
+
+    @Test("Terminal-host proof rejects shell launcher markers as stale scrollback")
+    func terminalHostProofRejectsShellLauncherMarkersAsStaleScrollback() {
+        let textBeforeCursor = """
+        redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+        Claude Code
+        pred
+        """
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: " \n  shortcuts"
+        )
+
+        #expect(focusedLine == "pred ")
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(
+            ClaudeCodeTerminalHostProofContext(
+                hostBundleIdentifier: "com.apple.Terminal",
+                windowTitle: "Claude Code",
+                focusedText: focusedLine,
+                rawTextBeforeCursor: textBeforeCursor,
+                rawTextAfterCursor: " \n  shortcuts",
+                proofModeEnabled: true
+            )
+        ) == .blocked(.multilineCommandDetected))
+    }
+
+    @Test("Terminal-host proof accepts scoped title marker with safe current prompt")
+    func terminalHostProofAcceptsScopedTitleMarkerWithSafeCurrentPrompt() {
+        let textBeforeCursor = """
+        redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+        Claude Code
+        Can we make this dicta
+        """
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: " \n  shortcuts"
+        )
+
+        #expect(focusedLine == "Can we make this dicta ")
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(
+            ClaudeCodeTerminalHostProofContext(
+                hostBundleIdentifier: "com.apple.Terminal",
+                windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+                focusedText: focusedLine,
+                rawTextBeforeCursor: textBeforeCursor,
+                rawTextAfterCursor: " \n  shortcuts",
+                proofModeEnabled: true
+            )
+        ) == .eligible)
+    }
+
+    @Test("Terminal-host proof input can rely on scoped title marker only")
+    func terminalHostProofInputCanRelyOnScopedTitleMarkerOnly() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Can we make this red",
+            rawTextBeforeCursor: "Can we make this red",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Can we make this red")
+    }
+
+    @Test("Terminal-host proof input uses vetted prompt line when Claude chrome trails cursor")
+    func terminalHostProofInputUsesVettedPromptLineWhenClaudeChromeTrailsCursor() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Can we make this dicta",
+            rawTextBeforeCursor: """
+            redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+            Claude Code
+            Can we make this dicta
+            """,
+            rawTextAfterCursor: """
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Can we make this dicta")
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            textBeforeCursor: context.rawTextBeforeCursor,
+            textAfterCursor: context.rawTextAfterCursor
+        ) == nil)
+    }
+
+    @Test("Terminal-host proof input prefers before-cursor text over full AX line")
+    func terminalHostProofInputPrefersBeforeCursorTextOverFullAXLine() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Can we make this dicta",
+            rawTextBeforeCursor: """
+            redbars@Mac % printf 'STEADYTYPECLAUDECODEPROOF'; claude
+            Claude Code
+            Can we make this STEADYTYPECLAUDECODEPROOF d
+            """,
+            rawTextAfterCursor: """
+            icta
+            ? for shortcuts
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Can we make this d")
+    }
+
+    @Test("Terminal-host proof input does not bypass command-shaped prompt lines")
+    func terminalHostProofInputDoesNotBypassCommandShapedPromptLines() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "git status",
+            rawTextBeforeCursor: "git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+    }
+
+    @Test("Terminal-host proof keeps title-marker shell commands blocked")
+    func terminalHostProofKeepsTitleMarkerShellCommandsBlocked() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "git status",
+            rawTextBeforeCursor: "git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+    }
+
     @Test("Terminal-host proof keeps wrapped prompt blocked when text remains after cursor")
     func terminalHostProofKeepsWrappedPromptBlockedWhenTextRemainsAfterCursor() {
         let textBeforeCursor = """

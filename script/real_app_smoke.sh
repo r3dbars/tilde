@@ -7465,21 +7465,19 @@ claude_code_model_latency_proof_texts() {
     return
   fi
 
-  local marker
-  marker="$(claude_code_proof_marker)"
   cat <<EOF
-Can we make this $marker dicta
-The fastest terminal prompt should $marker predic
-Turn this rough terminal note into a concise $marker summar
-Help me finish this implementation $marker pla
-The next terminal response should feel immediate and $marker respons
-We need a safer terminal autocomplete $marker validat
-Complete this common phrase The quick brown $marker f
-Complete this common phrase Once upon a $marker t
-Complete this common phrase Thank you for your $marker h
-Complete this common phrase Let me know what you $marker t
-Complete this common phrase I hope this $marker m
-Complete this common phrase The next step is to $marker v
+Can we make this redac
+Make this setting configu
+Keep overlay visi
+Keep writing qui
+Make transition transi
+Autocomplete should valida
+Next response feels immed
+Useful suggestion stays conci
+Editor placement remains accura
+Typed phrase becomes predicta
+Model answer stays helpfu
+Completion remains respons
 EOF
 }
 
@@ -7594,7 +7592,7 @@ open_claude_code_terminal_proof() {
   printf -v quoted_claude '%q' "$claude_bin"
   shell_command="cd $quoted_dir; printf $quoted_title; exec $quoted_claude"
 
-  open -a Terminal "$proof_dir"
+  open -na Terminal "$proof_dir"
   wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_COMMAND="$shell_command" osascript <<'APPLESCRIPT'
 set shellCommand to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_COMMAND"
@@ -7628,7 +7626,9 @@ wait_for_claude_code_terminal_prompt() {
 
 assert_claude_code_terminal_prompt_ready() {
   local proof_text="$1"
-  claude_code_terminal_ax_helper assert --text "$proof_text"
+  claude_code_terminal_ax_helper wait \
+    --text "$proof_text" \
+    --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS:-4}"
 }
 
 assert_claude_code_terminal_prompt_retains_marker() {
@@ -9267,7 +9267,7 @@ describe_plan() {
         host_status="not installed; honest proof gap"
       fi
       if [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]]; then
-        echo "Plan: manual-gated terminal-host Claude Code model latency proof. The script opens a disposable Terminal Claude Code prompt, types marked disposable proof contexts plus trigger characters, and requires model-backed visible word completions in one launch."
+        echo "Plan: manual-gated terminal-host Claude Code model latency proof. The script opens a title-marked disposable Terminal Claude Code prompt, types disposable proof contexts plus trigger characters, and requires model-backed visible word completions in one launch."
         echo "Safety: Claude Code model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
         echo "Safety: Claude Code model latency proof tags the runtime launch with scenario claude-code-model-latency so generic terminal samples cannot satisfy the strict selector."
         echo "Safety: pass --manual-gate to continue. The helper never presses Tab, Enter, or full accept; it runs the prompt no-submit gate on the same trace slice."
@@ -9886,21 +9886,26 @@ run_claude_code_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_start stable_context context_prefix trigger_word trigger_text expected_text
+  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_seed_start sample_start stable_context context_prefix trigger_word trigger_text expected_text trigger_char_count
+  if [[ "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" != *"$marker"* ]]; then
+    echo "Claude Code model latency proof title must include $marker." >&2
+    exit 2
+  fi
+  trigger_char_count="${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TRIGGER_CHARS:-3}"
+  if ! [[ "$trigger_char_count" =~ ^[1-9][0-9]*$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TRIGGER_CHARS must be a positive integer." >&2
+    exit 2
+  fi
   while IFS= read -r proof_text; do
     [[ -z "$proof_text" ]] && continue
     sample_index=$((sample_index + 1))
-    if [[ "$proof_text" != *"$marker"* ]]; then
-      echo "Claude Code model latency sample $sample_index must include $marker." >&2
-      exit 2
-    fi
     if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
       echo "Claude Code model latency sample $sample_index must be a single line." >&2
       exit 2
     fi
     trigger_word="${proof_text##* }"
     context_prefix="${proof_text%"$trigger_word"}"
-    trigger_text="${trigger_word:0:1}"
+    trigger_text="${trigger_word:0:trigger_char_count}"
     stable_context="$context_prefix"
     expected_text="${stable_context}${trigger_text}"
     if [[ -z "$trigger_word" || "$stable_context" == "$proof_text" || -z "$trigger_text" ]]; then
@@ -9912,6 +9917,7 @@ run_claude_code_model_latency() {
     assert_frontmost_app "Terminal" "Claude Code model latency seed $sample_index"
     clear_claude_code_terminal_prompt_line
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_CLEAR_SETTLE_SECONDS:-0.7}"
+    sample_seed_start="$(line_count "$LOG_PATH")"
     type_claude_code_terminal_raw_smoke_text "$stable_context"
     claude_code_terminal_ax_helper wait \
       --text "$stable_context" \
@@ -9927,7 +9933,7 @@ run_claude_code_model_latency() {
       "candidateSelectionSource=app-model-result"; then
       assert_claude_code_terminal_prompt_retains_marker
       visible_sample_count=$((visible_sample_count + 1))
-    elif wait_for_log_fields_optional "$sample_start" "1" \
+    elif wait_for_log_fields_optional "$sample_seed_start" "1" \
       "suggestion-blocked" \
       "app=com.anthropic.claude-code" \
       "reason=empty-suggestion"; then
