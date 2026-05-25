@@ -6879,7 +6879,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             placement: deliveredPlacement
         )
         suggestionSession.present(suggestion)
-        setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
+        setSuggestionDecision(
+            SuggestionStatusText.shown(
+                mode: request.mode,
+                triggerReason: triggerReason,
+                latencyMilliseconds: latencyMilliseconds,
+                metadata: candidateSelectionMetadata
+            )
+        )
         currentSuggestionID = suggestionID
         currentSuggestionAppBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
         currentSuggestionFieldIdentity = fieldIdentity
