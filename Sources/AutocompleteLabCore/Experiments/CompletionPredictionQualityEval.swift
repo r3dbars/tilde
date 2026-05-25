@@ -648,12 +648,12 @@ public enum CompletionPredictionQualityEvaluator {
         PositiveTemplate(textBeforeCursor: "I think we should", expectedVisibleText: "make sure", distractors: ["move quickly", "add more"]),
         PositiveTemplate(textBeforeCursor: "When this works we can", expectedVisibleText: "keep moving", distractors: ["circle back", "start over"]),
         PositiveTemplate(textBeforeCursor: "The app should", expectedVisibleText: "stay quiet", distractors: ["feel magical", "do everything"]),
-        PositiveTemplate(textBeforeCursor: "Can you please", expectedVisibleText: "take a look", distractors: ["make a plan", "send it now"]),
-        PositiveTemplate(textBeforeCursor: "We should probably", expectedVisibleText: "keep it simple", distractors: ["make it bigger", "start a roadmap"]),
-        PositiveTemplate(textBeforeCursor: "I want to", expectedVisibleText: "move this forward", distractors: ["rewrite the whole", "open the settings"]),
+        PositiveTemplate(textBeforeCursor: "I want this to", expectedVisibleText: "finish the sentence naturally", distractors: ["open the settings", "submit the prompt"]),
+        PositiveTemplate(textBeforeCursor: "The biggest problem is", expectedVisibleText: "suggestions feel too timid", distractors: ["shipping everything now", "opening another app"]),
+        PositiveTemplate(textBeforeCursor: "What kills trust most is", expectedVisibleText: "wrong fields showing up", distractors: ["adding more buttons", "writing a roadmap"]),
         PositiveTemplate(textBeforeCursor: "The review should focus on", expectedVisibleText: "real user risk", distractors: ["shipping everything", "writing a roadmap"]),
         PositiveTemplate(textBeforeCursor: "The most important thing is to", expectedVisibleText: "keep the scope small", distractors: ["make everything automatic", "send the prompt now"]),
-        PositiveTemplate(textBeforeCursor: "I am trying to", expectedVisibleText: "figure out how to", distractors: ["maximize the workflow", "submit this immediately"]),
+        PositiveTemplate(textBeforeCursor: "It should almost always", expectedVisibleText: "show up while writing", distractors: ["open a new window", "write an explanation"]),
         PositiveTemplate(textBeforeCursor: "This sentence should continue", expectedVisibleText: "without sounding too formal", distractors: ["with a new section", "by answering the prompt"]),
         PositiveTemplate(textBeforeCursor: "The draft feels calmer when it", expectedVisibleText: "stays short and specific", distractors: ["adds a pitch deck", "answers the prompt"])
     ]
