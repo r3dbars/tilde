@@ -578,8 +578,8 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.wordCompletion))
     }
 
-    @Test("Proactive phrase mode still completes partial words first")
-    func proactivePhraseModeCompletesPartialWordsFirst() {
+    @Test("Proactive phrase mode prefers sentence help over partial word completion")
+    func proactivePhraseModePrefersSentenceHelpOverPartialWordCompletion() {
         let veryProactive = SuggestionTuning(
             aggressivenessLevel: 4,
             phraseStartWords: 3
@@ -592,7 +592,7 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .allow(.wordCompletion))
+        ) == .allow(.phraseContinuation))
         #expect(veryProactive.decision(
             textBeforeCursor: "Smoke proof feels instant ",
             textAfterCursor: "",
@@ -600,6 +600,19 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
+
+        let needsMorePhraseContext = SuggestionTuning(
+            aggressivenessLevel: 4,
+            phraseStartWords: 5
+        )
+            .activationPolicy(supportPace: .eager)
+        #expect(needsMorePhraseContext.decision(
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
     }
 
     @Test("App support level allows proactive pace in green and yellow apps")

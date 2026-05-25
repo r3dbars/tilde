@@ -266,6 +266,34 @@ struct SuggestionTriggerPolicyTests {
         ) == .skip)
     }
 
+    @Test("Plain line start phrase opt-in is limited to boundary context")
+    func plainLineStartPhraseOptInIsLimitedToBoundaryContext() {
+        let policy = SuggestionTriggerPolicy(
+            wordBoundaryDelayMilliseconds: 80,
+            minimumPhraseContinuationWords: 1,
+            allowsPlainLineStartPhraseContinuation: true
+        )
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nPlan",
+            currentTextBeforeCursor: "I think this works.\nPlan ",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 80))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nPla",
+            currentTextBeforeCursor: "I think this works.\nPlan",
+            requestMode: .phraseContinuation
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- Plan",
+            currentTextBeforeCursor: "I think this works.\n- Plan ",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .skip)
+    }
+
     @Test("List line starts allow constrained word completion only")
     func listLineStartsAllowConstrainedWordCompletionOnly() {
         let policy = SuggestionTriggerPolicy()

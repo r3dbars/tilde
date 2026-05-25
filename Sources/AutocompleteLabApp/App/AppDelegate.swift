@@ -11995,10 +11995,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         !profile.promptAppSafetyMode.isPromptSurface
     }
 
+    private func usesDailyDriverLineStartPhraseContinuation(for profile: CompatibilityProfile) -> Bool {
+        profile.bundleIdentifier == "md.obsidian"
+            && suggestionTuning.aggressivenessLevel >= 4
+            && !profile.promptAppSafetyMode.isPromptSurface
+    }
+
+    private func minimumPhraseContinuationWords(for profile: CompatibilityProfile) -> Int {
+        usesDailyDriverLineStartPhraseContinuation(for: profile)
+            ? 1
+            : suggestionTuning.phraseStartWords
+    }
+
     private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
         suggestionTuning.activationPolicy(
             supportPace: effectiveSuggestionPace(for: profile),
-            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile)
+            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile),
+            minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile)
         )
     }
 
@@ -12049,7 +12062,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func triggerPolicy(for profile: CompatibilityProfile) -> SuggestionTriggerPolicy {
         suggestionTuning.triggerPolicy(
             supportPace: effectiveSuggestionPace(for: profile),
-            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile)
+            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile),
+            minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile),
+            allowsPlainLineStartPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile)
         )
     }
 
