@@ -33,12 +33,16 @@ require_contains "$TMP_DIR/help.txt" "This script cannot grant macOS Accessibili
 script/packaged_latency_proof.sh --dry-run >"$TMP_DIR/dry-run.txt"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1"
 require_contains "$TMP_DIR/dry-run.txt" "--skip-build"
-require_contains "$TMP_DIR/dry-run.txt" "launchctl setenv AUTOCOMPLETE_LAB_PROOF_SCENARIO claude-model-latency"
-require_contains "$TMP_DIR/dry-run.txt" "com.anthropic.claudefordesktop"
+require_contains "$TMP_DIR/dry-run.txt" "launchctl setenv AUTOCOMPLETE_LAB_PROOF_SCENARIO textedit-model-latency"
+require_contains "$TMP_DIR/dry-run.txt" "com.apple.TextEdit"
 require_contains "$TMP_DIR/dry-run.txt" "select_latency_window.py"
 require_contains "$TMP_DIR/dry-run.txt" "--expected-executable-sha256"
 require_contains "$TMP_DIR/dry-run.txt" "--app-binary"
 require_contains "$TMP_DIR/dry-run.txt" "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+
+script/packaged_latency_proof.sh claude-model-latency --dry-run >"$TMP_DIR/claude-dry-run.txt"
+require_contains "$TMP_DIR/claude-dry-run.txt" "launchctl setenv AUTOCOMPLETE_LAB_PROOF_SCENARIO claude-model-latency"
+require_contains "$TMP_DIR/claude-dry-run.txt" "com.anthropic.claudefordesktop"
 
 SCRIPT_TEXT="$TMP_DIR/script.txt"
 cat script/packaged_latency_proof.sh >"$SCRIPT_TEXT"
