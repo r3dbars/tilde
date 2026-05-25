@@ -1486,7 +1486,9 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
   exit 1
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyDown.flags = []' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyUp.flags = []' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through CGEvent session events" >&2
   exit 1
 fi
