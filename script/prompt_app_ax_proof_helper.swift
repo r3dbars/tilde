@@ -149,6 +149,113 @@ func setSelectedRange(_ element: AXUIElement, location: Int, length: Int) {
     AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
 }
 
+enum KeyEventDestination {
+    case pid
+    case eventTap
+}
+
+func postCommandShortcut(
+    virtualKey: CGKeyCode,
+    to pid: pid_t,
+    destination: KeyEventDestination
+) -> Bool {
+    guard let source = CGEventSource(stateID: .hidSystemState),
+          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: false) else {
+        return false
+    }
+
+    keyDown.flags = .maskCommand
+    keyUp.flags = .maskCommand
+
+    switch destination {
+    case .pid:
+        keyDown.postToPid(pid)
+        keyUp.postToPid(pid)
+    case .eventTap:
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+    return true
+}
+
+func restorePasteboardItems(_ items: [NSPasteboardItem]) {
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    if !items.isEmpty {
+        pasteboard.writeObjects(items)
+    }
+}
+
+func clonePasteboardItems(_ items: [NSPasteboardItem]) -> [NSPasteboardItem] {
+    items.map { item in
+        let clone = NSPasteboardItem()
+        for type in item.types {
+            if let data = item.data(forType: type) {
+                clone.setData(data, forType: type)
+            } else if let string = item.string(forType: type) {
+                clone.setString(string, forType: type)
+            }
+        }
+        return clone
+    }
+}
+
+func waitForExactValue(_ element: AXUIElement, text: String, timeout: TimeInterval) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+        if stringAttribute(element, kAXValueAttribute) == text {
+            return true
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+    } while Date() < deadline
+    return stringAttribute(element, kAXValueAttribute) == text
+}
+
+func selectCurrentText(_ element: AXUIElement, pid: pid_t, destination: KeyEventDestination? = nil) {
+    AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    setSelectedRange(element, location: 0, length: stringAttribute(element, kAXValueAttribute).utf16.count)
+    if let destination {
+        _ = postCommandShortcut(virtualKey: 0, to: pid, destination: destination)
+        Thread.sleep(forTimeInterval: 0.08)
+    }
+}
+
+func seedWithSelectedTextFallback(_ element: AXUIElement, text: String, pid: pid_t) -> Bool {
+    selectCurrentText(element, pid: pid)
+    let result = AXUIElementSetAttributeValue(
+        element,
+        kAXSelectedTextAttribute as CFString,
+        text as CFTypeRef
+    )
+    return result == .success && waitForExactValue(element, text: text, timeout: 1.0)
+}
+
+func seedWithPasteFallback(_ element: AXUIElement, text: String, pid: pid_t) -> Bool {
+    let pasteboard = NSPasteboard.general
+    let originalItems = clonePasteboardItems(pasteboard.pasteboardItems ?? [])
+    defer {
+        restorePasteboardItems(originalItems)
+    }
+
+    pasteboard.clearContents()
+    guard pasteboard.setString(text, forType: .string) else {
+        return false
+    }
+
+    for destination in [KeyEventDestination.pid, .eventTap] {
+        selectCurrentText(element, pid: pid, destination: destination)
+        guard postCommandShortcut(virtualKey: 9, to: pid, destination: destination) else {
+            continue
+        }
+        if waitForExactValue(element, text: text, timeout: 1.2) {
+            return true
+        }
+    }
+
+    return false
+}
+
 func selectedRangeMatches(_ element: AXUIElement, location: Int, length: Int) -> Bool {
     guard let rangeValue = copyAttribute(element, kAXSelectedTextRangeAttribute),
           CFGetTypeID(rangeValue) == AXValueGetTypeID() else {
@@ -389,6 +496,51 @@ func bestCandidate(in appElement: AXUIElement, options: Options) -> Candidate? {
     }.first
 }
 
+func pressPromptCreationButton(in element: AXUIElement, options: Options, depth: Int = 0) -> Bool {
+    guard depth <= 32 else {
+        return false
+    }
+
+    if options.bundleIdentifier == "com.anthropic.claudefordesktop",
+       stringAttribute(element, kAXRoleAttribute) == "AXButton" {
+        let buttonFields = [
+            stringAttribute(element, kAXTitleAttribute),
+            stringAttribute(element, kAXDescriptionAttribute),
+            stringAttribute(element, kAXHelpAttribute)
+        ].map(normalized)
+        let acceptedLabels = ["new chat"]
+        if acceptedLabels.contains(where: { label in
+            buttonFields.contains { field in field == label }
+        }) {
+            AXUIElementPerformAction(element, kAXPressAction as CFString)
+            print("Pressed \(options.displayName) \(buttonFields.first { !$0.isEmpty } ?? "new prompt") button before composer discovery.")
+            return true
+        }
+    }
+
+    for child in children(of: element) {
+        if pressPromptCreationButton(in: child, options: options, depth: depth + 1) {
+            return true
+        }
+    }
+
+    return false
+}
+
+func discoverBestCandidate(in element: AXUIElement, options: Options) -> Candidate? {
+    let discoveryDeadline = Date().addingTimeInterval(options.discoveryTimeoutSeconds)
+    var discoveredCandidate: Candidate?
+    repeat {
+        discoveredCandidate = bestCandidate(in: element, options: options)
+        if discoveredCandidate != nil || Date() >= discoveryDeadline {
+            break
+        }
+        Thread.sleep(forTimeInterval: 0.25)
+    } while true
+
+    return discoveredCandidate
+}
+
 func collectMarkedInputs(
     in element: AXUIElement,
     marker: String,
@@ -457,15 +609,12 @@ func seed(options: Options) {
 
     let app = runningApp(for: options, activate: true)
     let element = appElement(for: app)
-    let discoveryDeadline = Date().addingTimeInterval(options.discoveryTimeoutSeconds)
-    var discoveredCandidate: Candidate?
-    repeat {
-        discoveredCandidate = bestCandidate(in: element, options: options)
-        if discoveredCandidate != nil || Date() >= discoveryDeadline {
-            break
-        }
-        Thread.sleep(forTimeInterval: 0.25)
-    } while true
+    var discoveredCandidate = discoverBestCandidate(in: element, options: options)
+    if discoveredCandidate == nil,
+       pressPromptCreationButton(in: element, options: options) {
+        Thread.sleep(forTimeInterval: 0.8)
+        discoveredCandidate = discoverBestCandidate(in: element, options: options)
+    }
 
     guard let candidate = discoveredCandidate else {
         fail("Could not find a safe \(options.displayName) composer. Clear the prompt, open a new chat, or keep focus in the draft prompt so it can be backed up and restored.")
@@ -494,8 +643,13 @@ func seed(options: Options) {
         kAXValueAttribute as CFString,
         options.text as CFTypeRef
     )
-    guard result == .success else {
-        fail("Could not seed the \(options.displayName) proof composer through Accessibility (AX result \(result.rawValue)).")
+    var usedFallback = false
+    if result != .success || stringAttribute(candidate.element, kAXValueAttribute) != options.text {
+        usedFallback = true
+        if !seedWithSelectedTextFallback(candidate.element, text: options.text, pid: app.processIdentifier),
+           !seedWithPasteFallback(candidate.element, text: options.text, pid: app.processIdentifier) {
+            fail("Could not seed the \(options.displayName) proof composer through Accessibility or guarded paste fallback (AX result \(result.rawValue)).")
+        }
     }
 
     let cursorOffset = options.text.utf16.count
@@ -529,6 +683,9 @@ func seed(options: Options) {
     }
 
     print("Seeded \(options.displayName) proof composer: chars=\(options.text.count) rect=x=\(Int(candidate.frame.minX)),y=\(Int(candidate.frame.minY)),w=\(Int(candidate.frame.width)),h=\(Int(candidate.frame.height))")
+    if usedFallback {
+        print("Seeded \(options.displayName) proof composer with guarded selected-text/paste fallback.")
+    }
     if shouldRestoreDraft {
         print("Backed up existing \(options.displayName) draft for restoration after proof.")
     }
