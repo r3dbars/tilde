@@ -162,13 +162,21 @@ The latest hardening pass made that failure harder to misread:
 The fresh live run now gets through the five required model-backed Claude Code
 Terminal samples, passes the no-submit proof, and passes the latency beta gate.
 
+TextEdit latency proof is fresh again too. The run starting at diagnostics line
+`341123` passed with model-backed visible word-completion suggestions for 5
+samples: first-visible `n=5 avg=244ms p95=255ms`, first-token `n=5 avg=218ms
+p95=231ms`, total generation `n=10 avg=242ms p95=286ms`, event-tap raw
+`n=5 avg=40us p99=93us`, AX read summaries `windows=12 samples=720
+p99Max=22ms max=24ms`, and zero late shown suggestions, event-tap failures, AX
+slow markers, or AX skips.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
-| Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue, and Claude Code Terminal now produces 5 model-backed visible samples with no-submit proof plus a green latency beta gate | Feels ready during fast typing | Refresh Obsidian/TextEdit latency proof, then run a real writing-session quality pass |
+| Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit latency is fresh green; Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then Notes |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit now have fresh green model-backed latency proof | Feels ready during fast typing | Refresh Obsidian/Notes proof, then run a real writing-session quality pass |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 
