@@ -161,7 +161,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
             promptAppSafetyMode: .wordOnly,
-            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not shell or agent output. It prefers verified AX selected-text insertion, then verified Unicode key-event insertion, then verified clipboard paste through the terminal host's own Paste menu, so one-word completion text can be accepted without submitting the prompt."
+            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not shell or agent output. It prefers verified AX selected-text insertion, then verified Unicode key-event insertion, then verified hardware key-event insertion for typeable accepted text, so one-word completion text can be accepted without submitting the prompt."
         )
     }
 
