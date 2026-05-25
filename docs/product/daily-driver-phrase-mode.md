@@ -240,9 +240,12 @@ accepts, and prompt content violations. The same sample gate now prints source
 mix counts for shown / accepted / accepted-kept
 suggestions, including instant phrase fallback, model-backed, word fallback, and
 unknown sources, so a dogfood report can show whether the fast path actually
-helped. This does not create the subjective proof by itself, but it prevents a
-tiny, annoying, or never-reached-for trace from being counted as a daily-driver
-pass.
+helped. The same report now summarizes no-show reasons and triggers for
+`suggestionSuppressed` events, so a dogfood pass can explain whether SteadyType
+stayed quiet because the model returned nothing useful, instant fallback missed,
+typing was stale, placement blocked, or another blocker fired. This does not
+create the subjective proof by itself, but it prevents a tiny, annoying,
+invisible, or never-reached-for trace from being counted as a daily-driver pass.
 After the human fills the Manual Trust Row, `review --report` gates the completed
 report too: the automated gate must pass, the row must be filled, the user must
 say they reached for it, suggestion quality must be scored 4 or 5, and they
@@ -296,7 +299,7 @@ profiles while still staying off in prompt, search, form, and code profiles.
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and live status text expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, trust-killer gate, prompt/sensitive safety snapshot, and completed manual-review gate with suggestion quality 4-5; the status line now explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, and completed manual-review gate with suggestion quality 4-5; the status line also explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 

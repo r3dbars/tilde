@@ -522,6 +522,17 @@ presented_source_by_key = {
     if event.get("type") == "suggestionPresented"
 }
 presented_source_counts = Counter(presented_source_by_key.values())
+suppressed_events = [
+    event for _, event in matched if event.get("type") == "suggestionSuppressed"
+]
+suppressed_reason_counts = Counter(
+    str(event.get("reason") or metadata(event).get("reason") or "unknown").strip() or "unknown"
+    for event in suppressed_events
+)
+suppressed_trigger_counts = Counter(
+    str(event.get("triggerReason") or metadata(event).get("triggerReason") or "unknown").strip() or "unknown"
+    for event in suppressed_events
+)
 if accepted_keys:
     accepted_kept = len(kept_keys.intersection(accepted_keys))
     accepted_kept = max(
@@ -657,6 +668,18 @@ print(f"Instant phrase fallback shown: {instant_phrase_shown}")
 print(f"Model-backed shown: {model_backed_shown}")
 print(f"Word fallback shown: {word_fallback_shown}")
 print(f"Unknown source shown: {unknown_source_shown}")
+print("No-show summary: suggestionSuppressed events by reason")
+if suppressed_reason_counts:
+    for reason, count in suppressed_reason_counts.most_common(8):
+        print(f"- {reason}: {count}")
+else:
+    print("- none: 0")
+print("No-show triggers: suggestionSuppressed events by trigger")
+if suppressed_trigger_counts:
+    for trigger, count in suppressed_trigger_counts.most_common(8):
+        print(f"- {trigger}: {count}")
+else:
+    print("- none: 0")
 if failures:
     print("Result: fail")
     print("Failures:")
