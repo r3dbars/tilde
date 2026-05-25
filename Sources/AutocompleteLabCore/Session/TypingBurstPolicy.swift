@@ -39,6 +39,14 @@ public enum TypingBurstDecision: Equatable, Sendable {
         shouldSuppressSuggestions
     }
 
+    public func shouldSuppress(requestMode: CompletionRequestMode?) -> Bool {
+        guard let requestMode else {
+            return false
+        }
+
+        return requestMode.isContinuation && shouldSuppressPhraseContinuation
+    }
+
     public var traceMetadata: [String: String] {
         switch self {
         case .idle:
