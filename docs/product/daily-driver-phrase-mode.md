@@ -91,8 +91,11 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
 - Claude Code Terminal model-latency proof now scopes its AX readiness check to
   the marker-titled disposable Terminal window instead of mixing marker text
   from one Terminal window with prompt text from another,
-- the initial Claude Code prompt wait now requires prompt chrome such as
-  `for shortcuts` or `>` instead of generic `Claude Code` title text,
+- the initial Claude Code prompt wait now requires Claude-specific prompt chrome
+  such as `for shortcuts` or `Try "fix lint errors"` instead of generic
+  `Claude Code` title text or a zsh prompt glyph,
+- typed Claude Code sample checks now require the proof marker plus sample text
+  directly, without requiring placeholder hints after real text has been typed,
 - the disposable sample loop now tracks early empty model outputs from the whole
   sample iteration so the proof can report empty candidates instead of only
   timing out on the later visible-suggestion wait,
@@ -111,14 +114,14 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
   `wordCompletionFallbackUsed` / `wordCompletionFallbackSource` in proof
   metadata.
 
-Fresh live proof is still not green: the current Terminal-hosted Claude Code
-model-latency run now proves the helper can see the current-line marker plus
-seed text in the frontmost Terminal process. The typed marker line is still
-classified as a zsh/unproven surface and blocked, which is the right fail-closed
-behavior, and a later stale Claude prompt can still reach the model and clean to
-zero candidates. The next live pass needs to fix the Terminal launch/wait step
-so the sample is typed into an actual Claude Code prompt, not zsh or stale
-scrollback. That remains a proof blocker, not a support claim.
+Fresh live proof is still not green: after the stricter Claude-specific prompt
+check, the Terminal-hosted Claude Code model-latency run now fails earlier
+instead of accepting a zsh prompt glyph as readiness. Earlier in this cycle, the
+helper proved it can see the current-line marker plus seed text in the frontmost
+Terminal process, and that zsh/unproven surfaces are blocked fail-closed. The
+next live pass needs to fix the Terminal launch/wait step so the sample is typed
+into an actual Claude Code prompt, not zsh or stale scrollback. That remains a
+proof blocker, not a support claim.
 
 ## Scorecard
 

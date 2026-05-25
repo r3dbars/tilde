@@ -1454,6 +1454,14 @@ if ! grep -F 'Claude Code model latency sample $sample_index must include $marke
   echo "real app smoke self-test expected Claude Code model latency samples to carry the current-line proof marker" >&2
   exit 1
 fi
+if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint "❯"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to require Claude-specific chrome, not a generic prompt glyph" >&2
+  exit 1
+fi
+if awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /assert_claude_code_terminal_prompt_retains_marker\(\)/ { in_assert = 0 } in_assert && /claude_code_terminal_ax_helper wait/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected typed Claude Code prompt text checks not to require placeholder hints" >&2
+  exit 1
+fi
 if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "type_claude_code_terminal_raw_smoke_text" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "check_prompt_app_proof.sh" script/real_app_smoke.sh >/dev/null ||
