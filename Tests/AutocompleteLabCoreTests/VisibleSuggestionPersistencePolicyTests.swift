@@ -18,6 +18,7 @@ struct VisibleSuggestionPersistencePolicyTests {
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I am writing a useful note",
             currentSuggestionAgeMilliseconds: 350,
             isInvalidatedByUserTyping: false,
             textBeforeCursor: "",
@@ -40,6 +41,7 @@ struct VisibleSuggestionPersistencePolicyTests {
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I am writing a useful note",
             currentSuggestionAgeMilliseconds: 1_201,
             isInvalidatedByUserTyping: false,
             textBeforeCursor: "",
@@ -51,6 +53,7 @@ struct VisibleSuggestionPersistencePolicyTests {
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I am writing a useful note",
             currentSuggestionAgeMilliseconds: 350,
             isInvalidatedByUserTyping: true,
             textBeforeCursor: "",
@@ -62,10 +65,47 @@ struct VisibleSuggestionPersistencePolicyTests {
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: "com.apple.Notes",
             currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "I am writing a useful note",
             currentSuggestionAgeMilliseconds: 350,
             isInvalidatedByUserTyping: false,
             textBeforeCursor: "",
             textAfterCursor: ""
+        ))
+    }
+
+    @Test("preserves a fresh suggestion through a transient same-text middle split")
+    func preservesFreshSuggestionThroughTransientSameTextMiddleSplit() {
+        let policy = VisibleSuggestionPersistencePolicy()
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: "com.google.Chrome",
+            processIdentifier: 42,
+            elementIdentifier: 99
+        )
+
+        #expect(policy.shouldPreserveAfterActivationBlock(
+            blockReason: .middleOfLine,
+            appBundleIdentifier: "com.google.Chrome",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.google.Chrome",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "Smoke proof feels instant and stays inst",
+            currentSuggestionAgeMilliseconds: 350,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "Smoke pro",
+            textAfterCursor: "of feels instant and stays inst"
+        ))
+
+        #expect(!policy.shouldPreserveAfterActivationBlock(
+            blockReason: .middleOfLine,
+            appBundleIdentifier: "com.google.Chrome",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.google.Chrome",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "Smoke proof feels instant and stays inst",
+            currentSuggestionAgeMilliseconds: 350,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "Different pro",
+            textAfterCursor: "of text"
         ))
     }
 }

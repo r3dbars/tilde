@@ -546,6 +546,30 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.wordCompletion))
     }
 
+    @Test("Proactive phrase mode still completes partial words first")
+    func proactivePhraseModeCompletesPartialWordsFirst() {
+        let veryProactive = SuggestionTuning(
+            aggressivenessLevel: 4,
+            phraseStartWords: 3
+        )
+            .activationPolicy(supportPace: .eager)
+
+        #expect(veryProactive.decision(
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
+        #expect(veryProactive.decision(
+            textBeforeCursor: "Smoke proof feels instant ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("App support level allows proactive pace in green and yellow apps")
     func appSupportLevelAllowsProactivePaceInGreenAndYellowApps() throws {
         let store = CompatibilityProfileStore.mvp
