@@ -241,11 +241,17 @@ password, OTP, payment, login, search, address, government ID, medical, command
 line, API key, password manager, private prompt, private search, and blocked
 browser-hosted surface categories with redacted metadata only.
 
+The instant phrase fallback is broader now too. It can produce zero-latency
+3-5 word daily-driver phrases for common writing contexts like Obsidian note
+capture, fast-typing trust, less-timid suggestion wording, short useful phrase
+requests, meeting notes, launch checks, and action items while still staying
+off in prompt, search, form, and code profiles.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
-| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45 and now covers writing-surface, fast-typing, suffix, and suppression rows | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
+| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more 3-5 word daily-driver writing contexts | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; local quality audit also covers 9 unsafe/sensitive suppressions | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
