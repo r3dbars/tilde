@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 from dataclasses import dataclass
 import math
@@ -383,6 +384,13 @@ def read_or_run_output(fixture_path: Path | None, command: list[str]) -> str:
 
 
 def strict_latency_selector_command() -> list[str]:
+    proof_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_APP", "com.google.Chrome")
+    proof_scenario = os.environ.get(
+        "AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_SCENARIO",
+        "chrome-textarea-model-latency",
+    )
+    trace_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_TRACE_APP", proof_app)
+    request_mode = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_REQUEST_MODE", "wordCompletion")
     return [
         "./script/select_latency_window.py",
         "--diagnostics-log",
@@ -396,13 +404,13 @@ def strict_latency_selector_command() -> list[str]:
         "--min-model-samples",
         "5",
         "--required-proof-app",
-        "com.apple.TextEdit",
+        proof_app,
         "--required-proof-scenario",
-        "textedit-model-latency",
+        proof_scenario,
         "--required-trace-app",
-        "com.apple.TextEdit",
+        trace_app,
         "--required-request-mode",
-        "wordCompletion",
+        request_mode,
         "--require-model-backed-visible",
         "--forbid-fast-word-visible",
     ]

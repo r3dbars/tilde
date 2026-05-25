@@ -168,8 +168,8 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 source = source.replace(
-    "30 target app passes are stale or pending",
-    "29 target app passes are stale or pending",
+    "`./script/check_proof_manifest.sh --require-all`: passed",
+    "`manual_smoke_status.sh --strict`: failed with 29 stale or pending rows. `./script/check_proof_manifest.sh --require-all`: passed",
     1,
 )
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
@@ -197,7 +197,11 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("6 manifest issues", "7 manifest issues", 1)
+source = source.replace(
+    "`./script/check_proof_manifest.sh --require-all`: passed",
+    "`check_proof_manifest.sh --require-all`: failed with 7 manifest issues",
+    1,
+)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -232,7 +236,15 @@ if ! grep -F "Latency: score must be between 0 and 100" "$TMP_DIR/bad-score.txt"
 fi
 
 STALE_ROUND_UP="$TMP_DIR/stale-round-up.md"
-sed 's#| Placement | 70/100 |#| Placement | 90/100 |#' "$SCORECARD" >"$STALE_ROUND_UP"
+python3 - "$SCORECARD" "$STALE_ROUND_UP" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("| Placement | 82/100 |", "| Placement | 90/100 |", 1)
+source = source.replace("The beta-safe writing lanes are current", "The beta-safe writing lanes are stale", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
 
 if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_ROUND_UP" >"$TMP_DIR/stale.txt" 2>&1; then
   echo "scorecard self-test expected stale rounded-up proof to fail" >&2
@@ -246,7 +258,15 @@ if ! grep -F "Placement: contains 'stale', so score must stay <= 75/100" "$TMP_D
 fi
 
 PENDING_ROUND_UP="$TMP_DIR/pending-round-up.md"
-sed 's#| Tab safety | 74/100 |#| Tab safety | 90/100 |#' "$SCORECARD" >"$PENDING_ROUND_UP"
+python3 - "$SCORECARD" "$PENDING_ROUND_UP" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("| Tab safety | 80/100 |", "| Tab safety | 90/100 |", 1)
+source = source.replace("Normal writing Tab acceptance is current", "Normal writing Tab acceptance is pending", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
 
 if python3 script/check_steadytype_scorecard.py --scorecard "$PENDING_ROUND_UP" >"$TMP_DIR/pending.txt" 2>&1; then
   echo "scorecard self-test expected pending rounded-up proof to fail" >&2
