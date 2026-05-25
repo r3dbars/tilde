@@ -22,4 +22,24 @@ struct SuggestionReplacementVisibilityPolicy: Equatable {
 
         return hasVisibleSuggestion ? .keepCurrentVisible : .hide
     }
+
+    func action(
+        forDisplaySuppressionReason reason: DisplayScoreSuppressionReason?,
+        hasVisibleSuggestion: Bool,
+        currentSuggestionInvalidatedByUserTyping: Bool = false,
+        sameFieldAsCurrentSuggestion: Bool = true,
+        currentSuggestionAgeMilliseconds: Int?,
+        maximumPreservedAgeMilliseconds: Int
+    ) -> SuggestionReplacementVisibilityAction {
+        guard reason == .tooSlowToDisplay,
+              hasVisibleSuggestion,
+              !currentSuggestionInvalidatedByUserTyping,
+              sameFieldAsCurrentSuggestion,
+              let currentSuggestionAgeMilliseconds,
+              currentSuggestionAgeMilliseconds <= max(0, maximumPreservedAgeMilliseconds) else {
+            return .hide
+        }
+
+        return .keepCurrentVisible
+    }
 }

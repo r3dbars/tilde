@@ -2,13 +2,16 @@ import Foundation
 
 public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
     public let maximumTransientEmptyContextAgeMilliseconds: Int
+    public let maximumSameTextMiddleSplitAgeMilliseconds: Int
     public let maximumObsidianDocumentStartTeleportAgeMilliseconds: Int
 
     public init(
         maximumTransientEmptyContextAgeMilliseconds: Int = 1_200,
+        maximumSameTextMiddleSplitAgeMilliseconds: Int = 5_000,
         maximumObsidianDocumentStartTeleportAgeMilliseconds: Int = 2_500
     ) {
         self.maximumTransientEmptyContextAgeMilliseconds = maximumTransientEmptyContextAgeMilliseconds
+        self.maximumSameTextMiddleSplitAgeMilliseconds = maximumSameTextMiddleSplitAgeMilliseconds
         self.maximumObsidianDocumentStartTeleportAgeMilliseconds = maximumObsidianDocumentStartTeleportAgeMilliseconds
     }
 
@@ -54,11 +57,15 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         case .markdownCodeContext:
             return shouldPreserveObsidianTeleport
         case .middleOfLine:
-            guard currentSuggestionAgeMilliseconds <= maximumTransientEmptyContextAgeMilliseconds else {
+            guard currentSuggestionAgeMilliseconds <= maximumSameTextMiddleSplitAgeMilliseconds else {
                 return false
             }
 
-            return currentSuggestionTextBeforeCursor.map { textBeforeCursor + textAfterCursor == $0 } == true
+            return isSameTextMiddleSplit(
+                currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
+                textBeforeCursor: textBeforeCursor,
+                textAfterCursor: textAfterCursor
+            )
         default:
             return false
         }
@@ -83,8 +90,20 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         guard !isInvalidatedByUserTyping,
               currentSuggestionBundleIdentifier == appBundleIdentifier,
               currentSuggestionFieldIdentity == fieldIdentity,
-              let currentSuggestionAgeMilliseconds,
-              currentSuggestionAgeMilliseconds <= maximumObsidianDocumentStartTeleportAgeMilliseconds else {
+              let currentSuggestionAgeMilliseconds else {
+            return false
+        }
+
+        if currentSuggestionAgeMilliseconds <= maximumSameTextMiddleSplitAgeMilliseconds,
+           isSameTextMiddleSplit(
+            currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
+           ) {
+            return true
+        }
+
+        guard currentSuggestionAgeMilliseconds <= maximumObsidianDocumentStartTeleportAgeMilliseconds else {
             return false
         }
 
@@ -111,5 +130,15 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         }
 
         return textAfterCursor.hasPrefix(currentSuggestionTextBeforeCursor)
+    }
+
+    private func isSameTextMiddleSplit(
+        currentSuggestionTextBeforeCursor: String?,
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> Bool {
+        !textBeforeCursor.isEmpty
+            && !textAfterCursor.isEmpty
+            && currentSuggestionTextBeforeCursor.map { textBeforeCursor + textAfterCursor == $0 } == true
     }
 }

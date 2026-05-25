@@ -531,6 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
     private let maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds = 750
+    private let maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds = 5_000
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var lastFocusedTextPollAttemptAt: Date?
     private var suggestionsPaused = false
@@ -6943,8 +6944,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let displayScoreTrace = displayScoreDecision.trace
         guard displayScoreDecision.shouldDisplay else {
             let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
+            let displaySuppressionReason = DisplayScoreSuppressionReason(rawValue: reason)
             let shouldKeepStreamedSuggestion: Bool
-            if reason == DisplayScoreSuppressionReason.tooSlowToDisplay.rawValue,
+            if displaySuppressionReason == .tooSlowToDisplay,
                let requestTicket {
                 shouldKeepStreamedSuggestion = suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
                     suggestionID: suggestionID,
@@ -6957,9 +6959,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 shouldKeepStreamedSuggestion = false
             }
-            let lateSuggestionMetadata = shouldKeepStreamedSuggestion
-                ? ["keptVisibleStreamingSuggestion": "true"]
-                : [:]
+            let visibleSuggestionAction = suggestionReplacementVisibilityPolicy.action(
+                forDisplaySuppressionReason: displaySuppressionReason,
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+                sameFieldAsCurrentSuggestion: currentSuggestionAppBundleIdentifier == (request.appBundleIdentifier ?? profile.bundleIdentifier)
+                    && currentSuggestionFieldIdentity == fieldIdentity,
+                currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+                maximumPreservedAgeMilliseconds: maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds
+            )
+            let shouldKeepCurrentVisibleSuggestion = shouldKeepStreamedSuggestion
+                || visibleSuggestionAction == .keepCurrentVisible
+            var lateSuggestionMetadata: [String: String] = [:]
+            if shouldKeepStreamedSuggestion {
+                lateSuggestionMetadata["keptVisibleStreamingSuggestion"] = "true"
+            }
+            if visibleSuggestionAction == .keepCurrentVisible {
+                lateSuggestionMetadata["keptVisibleSuggestionAfterLateSuppression"] = "true"
+                lateSuggestionMetadata["lateSuppressionPreservedAgeMilliseconds"] =
+                    currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
+            }
             setSuggestionDecision("Blocked: display score \(reason)")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -6993,11 +7012,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(placement.metadata) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
-                .merging(lateSuggestionMetadata) { current, _ in current }
+                    .merging(lateSuggestionMetadata) { current, _ in current }
             )
-            if shouldKeepStreamedSuggestion {
-                setSuggestionDecision("Shown: kept streamed suggestion")
+            if shouldKeepCurrentVisibleSuggestion {
+                setSuggestionDecision(
+                    shouldKeepStreamedSuggestion
+                        ? "Shown: kept streamed suggestion"
+                        : "Shown: kept visible suggestion after late \(reason)"
+                )
+                showFieldStatusIndicator(.shown, context: context)
                 repositionVisibleSuggestion(context: context, profile: profile)
+                updateKeyboardEventTapSnapshot()
                 return
             }
             hideSuggestion(reason: reason)
@@ -10456,7 +10481,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     context: context,
                     profile: profile,
                     metadata: [
-                        "reason": "obsidian-document-start-geometry-teleport",
+                        "reason": geometryPreservationReason(
+                            context: context,
+                            profile: profile
+                        ),
                         "geometryInvalidationReason": reason,
                         "fieldIdentity": geometryFieldIdentity.traceDescription
                     ]
@@ -10544,6 +10572,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+    }
+
+    private func geometryPreservationReason(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> String {
+        if profile.bundleIdentifier == "md.obsidian" {
+            return "obsidian-document-start-geometry-teleport"
+        }
+
+        if currentSuggestionTextBeforeCursor.map({ context.textBeforeCursor + context.textAfterCursor == $0 }) == true {
+            return "transient-same-text-geometry-split"
+        }
+
+        return "transient-geometry-change"
     }
 
     private func recordAcceptedText(_ acceptedText: String) {
