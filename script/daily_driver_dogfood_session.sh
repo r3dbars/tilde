@@ -30,7 +30,7 @@ TYPING_FEEL_LATE_MS="${AUTOCOMPLETE_LAB_DAILY_DRIVER_LATE_MS:-750}"
 
 usage() {
   cat <<'EOF'
-Usage: script/daily_driver_dogfood_session.sh <start|finish|status|print> [options]
+Usage: script/daily_driver_dogfood_session.sh <start|finish|review|status|print> [options]
 
 Start a redacted daily-driver dogfood trace slice, then finish it into a local
 Markdown report. The report uses trace metadata only; do not paste raw writing
@@ -41,7 +41,7 @@ Options:
   --label LABEL     Human label stored in the local mark/report.
   --trace PATH      Trace JSONL path. Defaults to ~/Library/Logs/SteadyType/traces.jsonl.
   --mark-file PATH  Local mark state path.
-  --report PATH     Finish report path. Defaults under dist/daily-driver-dogfood/.
+  --report PATH     Finish/review report path. Finish defaults under dist/daily-driver-dogfood/.
   --start-line N    Finish from an explicit saved line instead of mark file.
   --end-line N      Finish at an explicit line instead of current trace end.
   --min-shown N     Minimum shown suggestions for a real session. Default: 5.
@@ -65,6 +65,8 @@ Examples:
   ./script/daily_driver_dogfood_session.sh start --app md.obsidian --label obsidian-note
   # write normally for 10-20 minutes, accept/dismiss naturally
   ./script/daily_driver_dogfood_session.sh finish --app md.obsidian
+  # fill the Manual Trust Row, then gate the completed report
+  ./script/daily_driver_dogfood_session.sh review --report dist/daily-driver-dogfood/...
 EOF
 }
 
@@ -661,6 +663,14 @@ finish_session() {
     echo "| --- | ---: | --- | --- | --- | --- | --- |"
     echo "| ${APP_FILTER:-mixed} |  |  |  |  |  |  |"
     echo
+    echo "## Completed Report Review"
+    echo
+    echo "After filling the Manual Trust Row, run:"
+    echo
+    echo '```bash'
+    printf './script/daily_driver_dogfood_session.sh review --report %q\n' "$report_path"
+    echo '```'
+    echo
     echo "## Reach Test"
     echo
     echo "The session should show that useful suggestions were reached for and kept, not only that the app stayed technically quiet."
@@ -701,8 +711,155 @@ finish_session() {
 
   echo "Daily-driver dogfood report: $report_path"
   echo "Gate: $gate_status"
+  echo "After filling the Manual Trust Row, review with:"
+  echo "  ./script/daily_driver_dogfood_session.sh review --report \"$report_path\""
   if [[ "$gate_status" != "pass" && "$NO_GATE" != "1" ]]; then
     exit 1
+  fi
+}
+
+review_report() {
+  if [[ -z "$REPORT_PATH" ]]; then
+    echo "review requires --report PATH" >&2
+    exit 2
+  fi
+  if [[ ! -f "$REPORT_PATH" ]]; then
+    echo "dogfood report missing: $REPORT_PATH" >&2
+    exit 1
+  fi
+
+  local review_output review_status
+  review_output="$(mktemp)"
+  trap 'rm -f "$review_output"' RETURN
+
+  set +e
+  python3 - "$REPORT_PATH" <<'PY' >"$review_output" 2>&1
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+lines = text.splitlines()
+
+
+def clean_cell(value):
+    value = value.strip()
+    if value.startswith("`") and value.endswith("`"):
+        value = value[1:-1].strip()
+    return value
+
+
+def truthy_verdict(value):
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+    if not normalized:
+        return False
+    negative_markers = {
+        "no",
+        "nope",
+        "false",
+        "off",
+        "not yet",
+        "not really",
+        "did not",
+        "didnt",
+        "would not",
+        "wouldnt",
+    }
+    if normalized in negative_markers:
+        return False
+    return normalized.startswith("yes") or normalized in {
+        "y",
+        "true",
+        "reached",
+        "useful",
+        "keep",
+        "keep it on",
+        "would keep",
+    }
+
+
+def manual_row():
+    header_index = None
+    for index, line in enumerate(lines):
+        if "| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |" in line:
+            header_index = index
+            break
+    if header_index is None:
+        return None
+    for row in lines[header_index + 1:]:
+        if not row.startswith("|"):
+            break
+        cells = [clean_cell(cell) for cell in row.strip().strip("|").split("|")]
+        if cells and all(set(cell.replace(" ", "")) <= {"-",
+                                                        ":"} for cell in cells):
+            continue
+        if len(cells) >= 7:
+            return cells[:7]
+    return None
+
+
+failures = []
+if "This report is redacted." not in text:
+    failures.append("missing redacted report marker")
+if re.search(r"Gate:\s*`fail`", text):
+    failures.append("automated dogfood gate failed")
+if not re.search(r"Gate:\s*`pass`", text):
+    failures.append("automated dogfood gate pass marker missing")
+if re.search(r"displayedText|acceptedText|rawOutput", text):
+    failures.append("report contains raw trace text keys")
+
+row = manual_row()
+if row is None:
+    failures.append("manual trust row missing")
+    row = ["", "", "", "", "", "", ""]
+
+app, minutes, reached, magic, annoying, placement, keep = row
+automated_gate_pass = re.search(r"Gate:\s*`pass`", text) is not None
+if not app:
+    failures.append("manual app cell is blank")
+try:
+    parsed_minutes = float(minutes)
+except ValueError:
+    parsed_minutes = 0.0
+if parsed_minutes <= 0:
+    failures.append("manual minutes must be greater than 0")
+if not truthy_verdict(reached):
+    failures.append("manual reach verdict must be yes/useful")
+if not magic:
+    failures.append("manual magic moment is blank")
+if not annoying:
+    failures.append("manual annoying moment is blank; use none if there was none")
+if not placement:
+    failures.append("manual placement trust is blank")
+if not truthy_verdict(keep):
+    failures.append("manual keep-it-on-tomorrow verdict must be yes")
+
+print("Daily-driver manual review gate")
+print("Privacy: redacted manual labels only")
+print(f"Report: {path}")
+print(f"Automated gate: {'pass' if automated_gate_pass else 'missing'}")
+print(f"App: {app or 'blank'}")
+print(f"Minutes: {minutes or 'blank'}")
+print(f"Did reach for it: {reached or 'blank'}")
+print(f"Magic moment: {'filled' if magic else 'blank'}")
+print(f"Annoying moment: {'filled' if annoying else 'blank'}")
+print(f"Placement trust: {'filled' if placement else 'blank'}")
+print(f"Keep it on tomorrow: {keep or 'blank'}")
+if failures:
+    print("Result: fail")
+    print("Failures:")
+    for failure in failures:
+        print(f"- {failure}")
+    raise SystemExit(1)
+print("Result: pass")
+PY
+  review_status=$?
+  set -e
+
+  cat "$review_output"
+  if ((review_status != 0 && NO_GATE != 1)); then
+    exit "$review_status"
   fi
 }
 
@@ -712,6 +869,9 @@ case "$MODE" in
     ;;
   finish)
     finish_session
+    ;;
+  review)
+    review_report
     ;;
   status)
     print_status

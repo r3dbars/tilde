@@ -332,6 +332,8 @@ redacted Markdown report:
 ./script/daily_driver_dogfood_session.sh start --app md.obsidian --label obsidian-note
 # write normally for 10-20 minutes; accept, dismiss, and type through naturally
 ./script/daily_driver_dogfood_session.sh finish --app md.obsidian
+# fill the Manual Trust Row in the report
+./script/daily_driver_dogfood_session.sh review --report dist/daily-driver-dogfood/...
 ```
 
 The report goes under `dist/daily-driver-dogfood/` by default. It includes the
@@ -345,6 +347,9 @@ without raw text. Use `--min-kept-per-shown-percent` only when a specific
 dogfood lane needs a stricter reach bar. Use `--allow-low-sample` only for
 harness/debug slices, not daily-driver proof. Do not paste raw writing, prompts,
 screenshots, document names, URLs, recipients, or subjects into that manual row.
+After filling the Manual Trust Row, `review --report` verifies that the automated
+gate passed, the manual labels are filled, the user reached for it, and they
+would keep it on tomorrow.
 
 For a frozen replay slice, capture both bounds:
 

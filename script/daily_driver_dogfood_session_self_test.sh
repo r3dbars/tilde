@@ -12,6 +12,8 @@ LOW_REPORT_PATH="$TMP_DIR/low-report.md"
 LOW_OVERRIDE_REPORT_PATH="$TMP_DIR/low-override-report.md"
 HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
 REACH_REPORT_PATH="$TMP_DIR/reach-report.md"
+REVIEW_PASS_REPORT_PATH="$TMP_DIR/review-pass-report.md"
+REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":200}
@@ -65,6 +67,8 @@ for expected in \
   "Non-Annoyance Gate" \
   "Trace Eval" \
   "Manual Trust Row" \
+  "Completed Report Review" \
+  "daily_driver_dogfood_session.sh review --report" \
   "Fresh lines: \`2-12\`"
 do
   if ! grep -q "$expected" "$REPORT_PATH"; then
@@ -77,6 +81,102 @@ if grep -q "displayedText\\|acceptedText\\|rawOutput" "$REPORT_PATH"; then
   echo "dogfood self-test report leaked raw trace text keys" >&2
   exit 1
 fi
+
+cat >"$REVIEW_PASS_REPORT_PATH" <<'MD'
+# Daily Driver Dogfood Session
+
+This report is redacted. It should contain trace metadata and manual labels only.
+
+## Summary
+
+- Gate: `pass`.
+
+## Manual Trust Row
+
+| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | predicted useful next words | none | aligned | yes |
+MD
+
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REVIEW_PASS_REPORT_PATH" \
+  >"$TMP_DIR/review-pass.out"
+
+for expected in \
+  "Daily-driver manual review gate" \
+  "Automated gate: pass" \
+  "Did reach for it: yes" \
+  "Keep it on tomorrow: yes" \
+  "Result: pass"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-pass.out"; then
+    echo "dogfood self-test review pass output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REPORT_PATH" \
+  >"$TMP_DIR/review-blank.out" 2>&1
+review_blank_status=$?
+set -e
+
+if [[ "$review_blank_status" -eq 0 ]]; then
+  echo "dogfood self-test expected blank manual review to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Result: fail" \
+  "manual minutes must be greater than 0" \
+  "manual reach verdict must be yes/useful" \
+  "manual keep-it-on-tomorrow verdict must be yes"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-blank.out"; then
+    echo "dogfood self-test blank review output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+cat >"$REVIEW_FAIL_REPORT_PATH" <<'MD'
+# Daily Driver Dogfood Session
+
+This report is redacted. It should contain trace metadata and manual labels only.
+
+## Summary
+
+- Gate: `fail`.
+
+## Manual Trust Row
+
+| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | predicted useful next words | none | aligned | yes |
+MD
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REVIEW_FAIL_REPORT_PATH" \
+  >"$TMP_DIR/review-fail.out" 2>&1
+review_fail_status=$?
+set -e
+
+if [[ "$review_fail_status" -eq 0 ]]; then
+  echo "dogfood self-test expected failed automated gate review to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Result: fail" \
+  "automated dogfood gate failed" \
+  "automated dogfood gate pass marker missing"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-fail.out"; then
+    echo "dogfood self-test failed-gate review output missing: $expected" >&2
+    exit 1
+  fi
+done
 
 set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
