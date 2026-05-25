@@ -1334,6 +1334,15 @@ make_tmp_dir() {
   printf '%s\n' "$tmp_dir"
 }
 
+make_claude_code_terminal_proof_dir() {
+  local base_dir tmp_dir
+  base_dir="${TMPDIR:-/tmp}"
+  base_dir="${base_dir%/}"
+  tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
+  SMOKE_TMP_DIRS+=("$tmp_dir")
+  printf '%s\n' "$tmp_dir"
+}
+
 line_count() {
   local path="$1"
   if [[ -f "$path" ]]; then
@@ -7770,13 +7779,72 @@ cleanup_claude_code_terminal_proof() {
 
   if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
     kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    local proof_pid
+    for proof_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if kill -0 "$proof_pid" >/dev/null 2>&1; then
+        kill -KILL "$proof_pid" >/dev/null 2>&1 || true
+      fi
+    done
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
   elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
     pkill -x Terminal >/dev/null 2>&1 || true
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
   fi
   CLAUDE_CODE_TERMINAL_PROOF_TITLE=""
   CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
+}
+
+cleanup_stale_claude_code_terminal_proofs() {
+  local marker stale_pids stale_pid
+  marker="$(claude_code_proof_marker)"
+  stale_pids="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}" osascript <<'APPLESCRIPT' || true
+set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
+set proofDirectoryMarker to "steadytype-claude-code-proof"
+set stalePids to ""
+tell application "System Events"
+  repeat with terminalProcess in application processes
+    try
+      if bundle identifier of terminalProcess is "com.apple.Terminal" then
+        set hasProofWindow to false
+        repeat with terminalWindow in windows of terminalProcess
+          try
+            set windowName to name of terminalWindow as text
+            if windowName contains markerText or windowName contains proofDirectoryMarker then
+              set hasProofWindow to true
+            else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
+              set hasProofWindow to true
+            end if
+          end try
+        end repeat
+        if hasProofWindow then
+          set stalePids to stalePids & ((unix id of terminalProcess) as text) & linefeed
+        end if
+      end if
+    end try
+  end repeat
+end tell
+return stalePids
+APPLESCRIPT
+)"
+  while IFS= read -r stale_pid; do
+    [[ -z "$stale_pid" ]] && continue
+    kill "$stale_pid" >/dev/null 2>&1 || true
+  done <<<"$stale_pids"
+  if [[ -n "$stale_pids" ]]; then
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    while IFS= read -r stale_pid; do
+      [[ -z "$stale_pid" ]] && continue
+      if kill -0 "$stale_pid" >/dev/null 2>&1; then
+        kill -KILL "$stale_pid" >/dev/null 2>&1 || true
+      fi
+    done <<<"$stale_pids"
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  fi
 }
 
 wait_for_claude_code_terminal_prompt() {
@@ -7827,13 +7895,23 @@ APPLESCRIPT
 }
 
 clear_claude_code_terminal_prompt_line() {
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
 tell application "System Events"
   set frontApp to first application process whose frontmost is true
   if bundle identifier of frontApp is not hostBundle then
     error "Claude Code terminal host is not frontmost for proof line clearing."
   end if
+  key code 53
+  delay clearDelay
+  keystroke "u" using control down
+  delay clearDelay
+  keystroke "k" using command down
+  delay clearDelay
+  keystroke "l" using control down
+  delay clearDelay
   keystroke "u" using control down
 end tell
 APPLESCRIPT
@@ -9436,7 +9514,7 @@ describe_plan() {
         host_status="not installed; honest proof gap"
       fi
       if [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]]; then
-        echo "Plan: manual-gated terminal-host Claude Code model latency proof. The script opens a title-marked disposable Terminal Claude Code prompt, types disposable proof contexts plus trigger characters, and requires model-backed visible word completions in one launch."
+        echo "Plan: manual-gated terminal-host Claude Code model latency proof. The script opens a fresh title-marked disposable Terminal Claude Code prompt per sample, types disposable proof contexts plus trigger characters, and requires model-backed visible word completions."
         echo "Safety: Claude Code model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
         echo "Safety: Claude Code model latency proof tags the runtime launch with scenario claude-code-model-latency so generic terminal samples cannot satisfy the strict selector."
         echo "Safety: pass --manual-gate to continue. The helper never presses Tab, Enter, or full accept; it runs the prompt no-submit gate on the same trace slice."
@@ -10038,7 +10116,7 @@ run_claude_code_model_latency() {
   local runtime_start_line start_line trace_start_line proof_runtime_guard_line marker proof_dir
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
-  proof_dir="$(make_tmp_dir)"
+  proof_dir="$(make_claude_code_terminal_proof_dir)"
   CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
 
   prepare_temporary_app_enablement
@@ -10048,6 +10126,7 @@ run_claude_code_model_latency() {
   wait_for_runtime_ready "$runtime_start_line" "Claude Code model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
   proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
 
+  cleanup_stale_claude_code_terminal_proofs
   open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
   wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
   wait_for_claude_code_terminal_prompt
@@ -10055,7 +10134,7 @@ run_claude_code_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_iteration_start sample_seed_start sample_start stable_context context_prefix trigger_word trigger_text expected_text trigger_char_count
+  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_iteration_start sample_seed_start sample_start stable_context context_prefix trigger_word trigger_text expected_text expected_user_text expected_before_chars trigger_char_count suggestion_wait_seconds fresh_prompt_per_sample prompt_is_fresh
   if [[ "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" != *"$marker"* ]]; then
     echo "Claude Code model latency proof title must include $marker." >&2
     exit 2
@@ -10065,9 +10144,33 @@ run_claude_code_model_latency() {
     echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TRIGGER_CHARS must be a positive integer." >&2
     exit 2
   fi
+  suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SUGGESTION_WAIT_SECONDS:-20}"
+  if ! [[ "$suggestion_wait_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SUGGESTION_WAIT_SECONDS must be a positive integer." >&2
+    exit 2
+  fi
+  fresh_prompt_per_sample="${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_FRESH_PROMPT_PER_SAMPLE:-1}"
+  case "$fresh_prompt_per_sample" in
+    1|true|yes|on) fresh_prompt_per_sample=1 ;;
+    0|false|no|off) fresh_prompt_per_sample=0 ;;
+    *)
+      echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_FRESH_PROMPT_PER_SAMPLE must be a boolean." >&2
+      exit 2
+      ;;
+  esac
+  prompt_is_fresh=1
   while IFS= read -r proof_text; do
     [[ -z "$proof_text" ]] && continue
     sample_index=$((sample_index + 1))
+    if [[ "$fresh_prompt_per_sample" == "1" && "$prompt_is_fresh" != "1" ]]; then
+      cleanup_claude_code_terminal_proof
+      proof_dir="$(make_claude_code_terminal_proof_dir)"
+      CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+      open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
+      wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+      wait_for_claude_code_terminal_prompt
+      prompt_is_fresh=1
+    fi
     if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
       echo "Claude Code model latency sample $sample_index must be a single line." >&2
       exit 2
@@ -10081,6 +10184,11 @@ run_claude_code_model_latency() {
     trigger_text="${trigger_word:0:trigger_char_count}"
     stable_context="$context_prefix"
     expected_text="${stable_context}${trigger_text}"
+    expected_user_text="${expected_text/"$marker"/}"
+    while [[ "$expected_user_text" == " "* || "$expected_user_text" == $'\t'* ]]; do
+      expected_user_text="${expected_user_text#?}"
+    done
+    expected_before_chars="${#expected_user_text}"
     if [[ -z "$trigger_word" || "$stable_context" == "$proof_text" || -z "$trigger_text" ]]; then
       echo "Claude Code model latency sample $sample_index does not contain a stable context plus trigger word." >&2
       exit 1
@@ -10089,8 +10197,12 @@ run_claude_code_model_latency() {
     assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "Claude Code model latency sample $sample_index"
     assert_frontmost_app "Terminal" "Claude Code model latency seed $sample_index"
     sample_iteration_start="$(line_count "$LOG_PATH")"
-    clear_claude_code_terminal_prompt_line
-    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_CLEAR_SETTLE_SECONDS:-0.7}"
+    if [[ "$prompt_is_fresh" == "1" ]]; then
+      prompt_is_fresh=0
+    else
+      clear_claude_code_terminal_prompt_line
+      sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_CLEAR_SETTLE_SECONDS:-0.7}"
+    fi
     sample_seed_start="$(line_count "$LOG_PATH")"
     type_claude_code_terminal_raw_smoke_text "$stable_context"
     assert_claude_code_terminal_prompt_ready "$stable_context"
@@ -10098,9 +10210,11 @@ run_claude_code_model_latency() {
     sample_start="$(line_count "$LOG_PATH")"
     type_claude_code_terminal_raw_smoke_text "$trigger_text"
     assert_claude_code_terminal_prompt_ready "$expected_text"
-    if wait_for_log_fields_optional "$sample_iteration_start" "8" \
+    if wait_for_log_fields_optional "$sample_iteration_start" "$suggestion_wait_seconds" \
       "suggestion-presented" \
       "app=com.anthropic.claude-code" \
+      "beforeChars=$expected_before_chars" \
+      "partialWordCharacters=${#trigger_text}" \
       "requestMode=wordCompletion" \
       "candidateSelectionSource=app-model-result"; then
       echo "Claude Code model latency sample $sample_index produced a model-backed visible suggestion during the typed sample window." >&2
@@ -10109,6 +10223,7 @@ run_claude_code_model_latency() {
     elif wait_for_log_fields_optional "$sample_iteration_start" "1" \
       "suggestion-blocked" \
       "app=com.anthropic.claude-code" \
+      "beforeChars=$expected_before_chars" \
       "reason=empty-suggestion"; then
       empty_sample_count=$((empty_sample_count + 1))
       echo "Claude Code model latency sample $sample_index produced an empty word candidate; trying the next disposable context." >&2
@@ -10117,6 +10232,8 @@ run_claude_code_model_latency() {
       wait_for_log_fields "$sample_start" "Claude Code model latency suggestion $sample_index" 1 \
         "suggestion-presented" \
         "app=com.anthropic.claude-code" \
+        "beforeChars=$expected_before_chars" \
+        "partialWordCharacters=${#trigger_text}" \
         "requestMode=wordCompletion" \
         "candidateSelectionSource=app-model-result"
     fi
