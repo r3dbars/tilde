@@ -24,6 +24,8 @@ MIN_ACCEPTED="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_ACCEPTED:-1}"
 MIN_KEPT="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_KEPT:-1}"
 MIN_KEPT_PER_SHOWN_PERCENT="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_KEPT_PER_SHOWN_PERCENT:-15}"
 MIN_ACTIVE_MINUTES="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_ACTIVE_MINUTES:-5}"
+MIN_PHRASE_SHOWN="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_PHRASE_SHOWN:-1}"
+MIN_PHRASE_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_PHRASE_VISIBLE_WORDS:-3}"
 MIN_TYPING_FEEL_SCORE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_TYPING_FEEL_SCORE:-85}"
 TYPING_FEEL_TARGET_SHOWN_PER_MINUTE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_TARGET_SHOWN_PER_MINUTE:-3}"
 TYPING_FEEL_LATE_MS="${AUTOCOMPLETE_LAB_DAILY_DRIVER_LATE_MS:-750}"
@@ -51,6 +53,10 @@ Options:
                     Minimum accepted-and-kept / shown reach rate. Default: 15.
   --min-active-minutes N
                     Minimum active trace span. Default: 5.
+  --min-phrase-shown N
+                    Minimum phrase/sentence suggestions shown. Default: 1.
+  --min-phrase-visible-words N
+                    Minimum visible words for phrase/sentence suggestions. Default: 3.
   --min-typing-feel-score N
                     Minimum redacted typing-feel score. Default: 85.
   --target-shown-per-minute N
@@ -155,6 +161,20 @@ while [[ $# -gt 0 ]]; do
       ;;
     --min-active-minutes=*)
       MIN_ACTIVE_MINUTES="${1#--min-active-minutes=}"
+      ;;
+    --min-phrase-shown)
+      shift
+      MIN_PHRASE_SHOWN="${1:-}"
+      ;;
+    --min-phrase-shown=*)
+      MIN_PHRASE_SHOWN="${1#--min-phrase-shown=}"
+      ;;
+    --min-phrase-visible-words)
+      shift
+      MIN_PHRASE_VISIBLE_WORDS="${1:-}"
+      ;;
+    --min-phrase-visible-words=*)
+      MIN_PHRASE_VISIBLE_WORDS="${1#--min-phrase-visible-words=}"
       ;;
     --min-typing-feel-score)
       shift
@@ -302,6 +322,8 @@ run_session_sample_gate() {
   local min_kept="$7"
   local min_kept_per_shown_percent="$8"
   local min_active_minutes="$9"
+  local min_phrase_shown="${10}"
+  local min_phrase_visible_words="${11}"
 
   python3 - \
     "$trace_path" \
@@ -312,7 +334,9 @@ run_session_sample_gate() {
     "$min_accepted" \
     "$min_kept" \
     "$min_kept_per_shown_percent" \
-    "$min_active_minutes" <<'PY'
+    "$min_active_minutes" \
+    "$min_phrase_shown" \
+    "$min_phrase_visible_words" <<'PY'
 import json
 import sys
 from collections import Counter
@@ -349,6 +373,8 @@ min_accepted = parse_int("min accepted", sys.argv[6])
 min_kept = parse_int("min accepted-kept", sys.argv[7])
 min_kept_per_shown_percent = parse_float("min accepted-kept shown percent", sys.argv[8])
 min_active_minutes = parse_float("min active minutes", sys.argv[9])
+min_phrase_shown = parse_int("min phrase shown", sys.argv[10])
+min_phrase_visible_words = parse_int("min phrase visible words", sys.argv[11])
 
 
 def parse_timestamp(value):
@@ -385,6 +411,25 @@ def selection_source(event):
     )
     source = str(source).strip()
     return source or "unknown"
+
+
+def request_mode(event):
+    return str(event.get("requestMode") or metadata(event).get("requestMode") or "")
+
+
+def visible_word_count(event):
+    event_metadata = metadata(event)
+    for key in ("visibleWordCount", "cleanedWordCount", "visibleWords"):
+        raw = event_metadata.get(key) or event.get(key)
+        if raw is None:
+            continue
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value >= 0:
+            return value
+    return None
 
 
 def acceptance_key(line_number, event):
@@ -520,6 +565,23 @@ word_fallback_shown = sum(
     if source in word_fallback_sources
 )
 unknown_source_shown = presented_source_counts.get("unknown", 0)
+phrase_presented = [
+    event
+    for _, event in matched
+    if event.get("type") == "suggestionPresented"
+    and request_mode(event) in {"phrase", "phraseContinuation", "sentenceContinuation"}
+    and selection_source(event) not in word_fallback_sources
+]
+phrase_visible_word_counts = [
+    word_count
+    for event in phrase_presented
+    for word_count in [visible_word_count(event)]
+    if word_count is not None
+]
+phrase_missing_word_count = len(phrase_presented) - len(phrase_visible_word_counts)
+phrase_too_short = sum(
+    1 for word_count in phrase_visible_word_counts if word_count < min_phrase_visible_words
+)
 
 dates = [
     parsed
@@ -541,6 +603,15 @@ if active_minutes < min_active_minutes:
     )
 if len(presented_keys) < min_shown:
     failures.append(f"shown suggestions below minimum ({len(presented_keys)}/{min_shown})")
+if len(phrase_presented) < min_phrase_shown:
+    failures.append(f"phrase suggestions below minimum ({len(phrase_presented)}/{min_phrase_shown})")
+if phrase_missing_word_count > 0:
+    failures.append(f"phrase suggestions missing visible word count ({phrase_missing_word_count})")
+if phrase_too_short > 0:
+    failures.append(
+        "phrase suggestions below visible word minimum "
+        f"({phrase_too_short} below {min_phrase_visible_words} words)"
+    )
 if len(accepted_keys) < min_accepted:
     failures.append(f"accepted suggestions below minimum ({len(accepted_keys)}/{min_accepted})")
 if accepted_kept < min_kept:
@@ -560,6 +631,10 @@ print(f"Rows scanned: {scanned_rows}")
 print(f"Rows matched: {len(matched)}")
 print(f"Active minutes: {active_minutes:.2f} (minimum {min_active_minutes:g})")
 print(f"Shown suggestions: {len(presented_keys)} (minimum {min_shown})")
+print(f"Phrase suggestions: {len(phrase_presented)} (minimum {min_phrase_shown})")
+print(f"Phrase visible word minimum: {min_phrase_visible_words}")
+print(f"Phrase suggestions missing word count: {phrase_missing_word_count}")
+print(f"Phrase suggestions below word minimum: {phrase_too_short}")
 print(f"Accepted suggestions: {len(accepted_keys)} (minimum {min_accepted})")
 print(f"Accepted-kept suggestions: {accepted_kept} (minimum {min_kept})")
 print(
@@ -611,6 +686,7 @@ finish_session() {
     MIN_KEPT=0
     MIN_KEPT_PER_SHOWN_PERCENT=0
     MIN_ACTIVE_MINUTES=0
+    MIN_PHRASE_SHOWN=0
     MIN_TYPING_FEEL_SCORE=0
   fi
 
@@ -655,6 +731,8 @@ finish_session() {
     "$MIN_KEPT" \
     "$MIN_KEPT_PER_SHOWN_PERCENT" \
     "$MIN_ACTIVE_MINUTES" \
+    "$MIN_PHRASE_SHOWN" \
+    "$MIN_PHRASE_VISIBLE_WORDS" \
     >"$sample_gate_output" 2>&1
   sample_gate_status=$?
 
@@ -732,7 +810,8 @@ finish_session() {
     echo "- Typing feel status: \`$typing_feel_status\`."
     echo "- Non-annoyance status: \`$non_annoyance_status\`."
     echo "- Trace eval status: \`$trace_eval_status\`."
-    echo "- Sample minimums: shown \`$MIN_SHOWN\`, accepted \`$MIN_ACCEPTED\`, accepted-kept \`$MIN_KEPT\`, active minutes \`$MIN_ACTIVE_MINUTES\`."
+    echo "- Sample minimums: shown \`$MIN_SHOWN\`, phrase shown \`$MIN_PHRASE_SHOWN\`, accepted \`$MIN_ACCEPTED\`, accepted-kept \`$MIN_KEPT\`, active minutes \`$MIN_ACTIVE_MINUTES\`."
+    echo "- Phrase visible word minimum: \`$MIN_PHRASE_VISIBLE_WORDS\`."
     echo "- Typing feel minimum score: \`$MIN_TYPING_FEEL_SCORE\`."
     echo "- Typing feel cadence target: \`$TYPING_FEEL_TARGET_SHOWN_PER_MINUTE\` shown/min."
     echo "- Typing feel late threshold: \`$TYPING_FEEL_LATE_MS\` ms."
