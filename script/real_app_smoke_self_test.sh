@@ -1429,6 +1429,47 @@ if ! grep -F "Claude Code proof label: claude-code-terminal" "$TMP_DIR/claude-co
   exit 1
 fi
 
+script/real_app_smoke.sh claude-code-model-latency --dry-run >"$TMP_DIR/claude-code-model-latency.txt"
+if ! grep -F "terminal-host Claude Code model latency proof" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code model latency proof lane" >&2
+  exit 1
+fi
+if ! grep -F "scenario claude-code-model-latency" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not label the Claude Code model latency proof scenario" >&2
+  exit 1
+fi
+if ! grep -F "never presses Tab, Enter, or full accept" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not state the Claude Code model latency no-submit key guard" >&2
+  exit 1
+fi
+if ! grep -F "model-backed visible suggestions without submitting" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not state the Claude Code model latency proof target" >&2
+  exit 1
+fi
+if ! grep -F "Claude Code host: Terminal (com.apple.Terminal)" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to pin Terminal" >&2
+  exit 1
+fi
+if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "type_claude_code_terminal_raw_smoke_text" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "check_prompt_app_proof.sh" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "claude-code-model-latency" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency helper, typing, prompt proof, and scenario wiring" >&2
+  exit 1
+fi
+if grep -F "press_key_code 48" script/real_app_smoke.sh | grep -F "claude_code" >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency not to press Tab" >&2
+  exit 1
+fi
+if script/real_app_smoke.sh claude-code-model-latency --skip-build --dry-run >/dev/null 2>"$TMP_DIR/claude-code-model-latency-skip-build.txt"; then
+  echo "real app smoke self-test expected Claude Code model latency to reject --skip-build" >&2
+  exit 1
+fi
+if ! grep -F "claude-code-model-latency cannot be combined with --skip-build" "$TMP_DIR/claude-code-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code model latency skip-build failure" >&2
+  exit 1
+fi
+
 script/real_app_smoke.sh claude-code-iterm2 --dry-run >"$TMP_DIR/claude-code-iterm2.txt"
 if ! grep -F "Claude Code host: iTerm2 (com.googlecode.iterm2)" "$TMP_DIR/claude-code-iterm2.txt" >/dev/null; then
   echo "real app smoke self-test did not parse the Claude Code iTerm2 alias" >&2

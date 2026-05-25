@@ -17,7 +17,7 @@ FRESH_LATENCY_LOCK_HELD=0
 
 usage() {
   cat <<'EOF'
-Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency|chrome-contenteditable-model-latency|codex-model-latency|claude-model-latency]
+Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency|chrome-contenteditable-model-latency|codex-model-latency|claude-model-latency|claude-code-model-latency]
 
 Runs a fresh bounded latency proof: current-app smoke launches, rebuild-skipped
 reruns only where proof mode can safely reuse the app, then
@@ -71,10 +71,10 @@ if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || ((RUNS < 1)); then
 fi
 
 case "$TARGET_APP" in
-  textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency|chrome-contenteditable-model-latency|codex-model-latency|claude-model-latency)
+  textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency|chrome-contenteditable-model-latency|codex-model-latency|claude-model-latency|claude-code-model-latency)
     ;;
   *)
-    echo "--target must be textedit, textedit-model-latency, textedit-default-model-latency, chrome-textarea-model-latency, chrome-contenteditable-model-latency, codex-model-latency, or claude-model-latency" >&2
+    echo "--target must be textedit, textedit-model-latency, textedit-default-model-latency, chrome-textarea-model-latency, chrome-contenteditable-model-latency, codex-model-latency, claude-model-latency, or claude-code-model-latency" >&2
     exit 2
     ;;
 esac
@@ -95,6 +95,11 @@ if [[ "$TARGET_APP" == "codex-model-latency" && "$RUNS" != "1" ]]; then
 fi
 
 if [[ "$TARGET_APP" == "claude-model-latency" && "$RUNS" != "1" ]]; then
+  echo "$TARGET_APP collects the proof sample set in one launch; forcing --runs 1."
+  RUNS=1
+fi
+
+if [[ "$TARGET_APP" == "claude-code-model-latency" && "$RUNS" != "1" ]]; then
   echo "$TARGET_APP collects the proof sample set in one launch; forcing --runs 1."
   RUNS=1
 fi
@@ -133,7 +138,7 @@ run_smoke() {
     chrome-textarea-model-latency|chrome-contenteditable-model-latency)
       args=("$TARGET_APP")
       ;;
-    codex-model-latency|claude-model-latency)
+    codex-model-latency|claude-model-latency|claude-code-model-latency)
       args=("$TARGET_APP" --manual-gate)
       ;;
   esac
@@ -153,13 +158,18 @@ run_smoke() {
     exit 1
   fi
 
+  if [[ "$TARGET_APP" == "claude-code-model-latency" && "$index" != "1" ]]; then
+    echo "$TARGET_APP cannot use --skip-build reruns because proof mode must relaunch cleanly." >&2
+    exit 1
+  fi
+
   if ((index > 1)) && [[ "$TARGET_APP" == "textedit" ]]; then
     args+=(--skip-build)
     AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD=1 "$REAL_APP_SMOKE_SCRIPT" "${args[@]}"
     return
   fi
 
-  if [[ "$TARGET_APP" == "codex-model-latency" || "$TARGET_APP" == "claude-model-latency" ]]; then
+  if [[ "$TARGET_APP" == "codex-model-latency" || "$TARGET_APP" == "claude-model-latency" || "$TARGET_APP" == "claude-code-model-latency" ]]; then
     AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 "$REAL_APP_SMOKE_SCRIPT" "${args[@]}"
     return
   fi
