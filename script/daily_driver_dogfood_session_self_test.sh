@@ -21,6 +21,8 @@ REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
 REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
 REVIEW_LOW_QUALITY_REPORT_PATH="$TMP_DIR/review-low-quality-report.md"
 PREVIEW_MARK_PATH="$TMP_DIR/preview-session.env"
+TRUST_PREVIEW_TRACE_PATH="$TMP_DIR/trust-preview-traces.jsonl"
+TRUST_PREVIEW_MARK_PATH="$TMP_DIR/trust-preview-session.env"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":200}
@@ -60,6 +62,7 @@ for expected in \
   "Saved mark: none" \
   "Session state: start-needed" \
   "Sample gate preview: start-needed" \
+  "Trust-killer preview: start-needed" \
   "Next command: ./script/daily_driver_dogfood_session.sh start --app com.apple.TextEdit" \
   "Review command after report: ./script/daily_driver_dogfood_session.sh review --report <report-path>"
 do
@@ -87,6 +90,7 @@ for expected in \
   "New trace rows: 0" \
   "Session state: marked-no-new-rows" \
   "Sample gate preview: waiting-for-new-rows" \
+  "Trust-killer preview: waiting-for-new-rows" \
   "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
 do
   if ! grep -q "$expected" "$TMP_DIR/status-marked.out"; then
@@ -121,6 +125,10 @@ for expected in \
   "Accepted-kept shown rate: 20% (minimum 15%, 1/5)" \
   "Source mix: shown / accepted / accepted-kept shown" \
   "No-show summary: suggestionSuppressed events by reason" \
+  "Trust-killer preview: pass" \
+  "Daily-driver trust-killer gate" \
+  "Trust-killer counts:" \
+  "Insertion Failures: 0" \
   "Result: pass" \
   "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
 do
@@ -132,6 +140,48 @@ done
 
 if grep -q "displayedText\\|acceptedText\\|rawOutput" "$TMP_DIR/status-preview.out"; then
   echo "dogfood self-test status preview leaked raw trace text keys" >&2
+  exit 1
+fi
+
+cp "$TRACE_PATH" "$TRUST_PREVIEW_TRACE_PATH"
+cat >>"$TRUST_PREVIEW_TRACE_PATH" <<'JSONL'
+{"timestamp":"2026-05-25T00:06:20Z","sessionID":"s","suggestionID":"bad-insert","type":"insertionFailed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"verification-failed","metadata":{"fieldKind":"plain"}}
+JSONL
+{
+  printf "START_LINE=%q\n" "1"
+  printf "STARTED_AT=%q\n" "2026-05-25T00:00:00Z"
+  printf "LABEL=%q\n" "trust-preview"
+  printf "APP_FILTER=%q\n" "com.apple.TextEdit"
+  printf "TRACE_PATH_AT_START=%q\n" "$TRUST_PREVIEW_TRACE_PATH"
+} >"$TRUST_PREVIEW_MARK_PATH"
+
+if ! "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
+  --trace "$TRUST_PREVIEW_TRACE_PATH" \
+  --mark-file "$TRUST_PREVIEW_MARK_PATH" \
+  --app com.apple.TextEdit \
+  >"$TMP_DIR/status-trust-preview.out"; then
+  echo "dogfood self-test expected trust-killer status preview to pass as a preflight" >&2
+  exit 1
+fi
+
+for expected in \
+  "Sample gate preview: pass" \
+  "Trust-killer preview: fail" \
+  "Daily-driver trust-killer gate" \
+  "Trust-killer counts:" \
+  "Insertion Failures: 1" \
+  "Result: fail" \
+  "insertion failures (1)" \
+  "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
+do
+  if ! grep -q "$expected" "$TMP_DIR/status-trust-preview.out"; then
+    echo "dogfood self-test trust-killer status preview missing: $expected" >&2
+    exit 1
+  fi
+done
+
+if grep -q "displayedText\\|acceptedText\\|rawOutput" "$TMP_DIR/status-trust-preview.out"; then
+  echo "dogfood self-test trust-killer status preview leaked raw trace text keys" >&2
   exit 1
 fi
 
