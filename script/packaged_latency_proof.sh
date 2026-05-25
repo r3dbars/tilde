@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-TARGET="claude-model-latency"
+TARGET="textedit-model-latency"
 APP_BUNDLE="${AUTOCOMPLETE_LAB_PACKAGED_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
 DRY_RUN=0
 RUN_SMOKE=1
@@ -13,7 +13,7 @@ RELAUNCH="${AUTOCOMPLETE_LAB_PACKAGED_LATENCY_RELAUNCH:-1}"
 
 usage() {
   cat <<'EOF'
-Usage: script/packaged_latency_proof.sh [claude-model-latency] [--dry-run] [--skip-smoke] [--app-bundle <path>] [--open-accessibility-settings]
+Usage: script/packaged_latency_proof.sh [textedit-model-latency|claude-model-latency] [--dry-run] [--skip-smoke] [--app-bundle <path>] [--open-accessibility-settings]
 
 Launch the notarized packaged SteadyType app with the proof-mode environment
 needed for a strict model-latency run, then run the guarded skip-build smoke
@@ -27,7 +27,7 @@ EOF
 
 while (($#)); do
   case "$1" in
-    claude-model-latency)
+    textedit-model-latency|claude-model-latency)
       TARGET="$1"
       shift
       ;;
@@ -63,10 +63,14 @@ while (($#)); do
   esac
 done
 
-if [[ "$TARGET" != "claude-model-latency" ]]; then
-  echo "unsupported packaged latency target: $TARGET" >&2
-  exit 2
-fi
+case "$TARGET" in
+  textedit-model-latency|claude-model-latency)
+    ;;
+  *)
+    echo "unsupported packaged latency target: $TARGET" >&2
+    exit 2
+    ;;
+esac
 
 canonical_bundle_path() {
   local path="$1"
@@ -89,7 +93,14 @@ APP_BUNDLE="$(canonical_bundle_path "$APP_BUNDLE")"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_LOG:-${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}}"
-PROOF_BUNDLE="com.anthropic.claudefordesktop"
+case "$TARGET" in
+  textedit-model-latency)
+    PROOF_BUNDLE="com.apple.TextEdit"
+    ;;
+  claude-model-latency)
+    PROOF_BUNDLE="com.anthropic.claudefordesktop"
+    ;;
+esac
 SETTINGS_URL="x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
 if [[ "$DRY_RUN" != "1" && ! -x "$APP_BINARY" ]]; then
