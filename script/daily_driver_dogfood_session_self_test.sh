@@ -63,6 +63,7 @@ for expected in \
   "Session state: start-needed" \
   "Sample gate preview: start-needed" \
   "Trust-killer preview: start-needed" \
+  "Typing feel preview: start-needed" \
   "Next command: ./script/daily_driver_dogfood_session.sh start --app com.apple.TextEdit" \
   "Review command after report: ./script/daily_driver_dogfood_session.sh review --report <report-path>"
 do
@@ -91,6 +92,7 @@ for expected in \
   "Session state: marked-no-new-rows" \
   "Sample gate preview: waiting-for-new-rows" \
   "Trust-killer preview: waiting-for-new-rows" \
+  "Typing feel preview: waiting-for-new-rows" \
   "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
 do
   if ! grep -q "$expected" "$TMP_DIR/status-marked.out"; then
@@ -129,6 +131,10 @@ for expected in \
   "Daily-driver trust-killer gate" \
   "Trust-killer counts:" \
   "Insertion Failures: 0" \
+  "Typing feel preview: pass" \
+  "Typing feel score report" \
+  "Typing feel score:" \
+  "Main drags:" \
   "Result: pass" \
   "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
 do
@@ -170,6 +176,10 @@ for expected in \
   "Daily-driver trust-killer gate" \
   "Trust-killer counts:" \
   "Insertion Failures: 1" \
+  "Typing feel preview: fail" \
+  "Typing feel score report" \
+  "Insertion failures: 1" \
+  "Main drags: 1 insertion failure(s)" \
   "Result: fail" \
   "insertion failures (1)" \
   "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"

@@ -261,9 +261,13 @@ accepted-kept reach, source mix, and no-show reasons before finishing the
 report. It now previews the redacted trust-killer gate too, so insertion
 failures, wrong-context suppressions, caret geometry failures, sensitive-field
 presentations, prompt submit risks, and other daily-driver trust breaks are
-visible before `finish`. That makes the remaining manual proof less likely to
-fail because of a stale mark, rotated trace, forgotten finish command,
-too-small sample, or already-bad trust signal.
+visible before `finish`. The same status preflight now previews the redacted
+typing-feel score as well, making slow suggestions, typed-over suggestions,
+accepted-then-deleted text, immediate resurfacing, insertion failures, and caret
+failures visible while the session is still happening. That makes the remaining
+manual proof less likely to fail because of a stale mark, rotated trace,
+forgotten finish command, too-small sample, already-bad trust signal, or a
+session that feels heavy before it ever reaches the report.
 
 Wrong-field safety now has both prompt-app and sensitive-field gates in the
 default smoke path. Prompt no-submit self-tests cover accidental submit, send
@@ -319,9 +323,9 @@ code surfaces remain blocked.
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-6 word daily-driver contexts, including punctuation, list-shaped writing, complaint language, finish-my-thought sentence shapes, and reusable writing-intent endings; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and live status text expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and status preflight expose instant phrase vs model-backed source mix plus live redacted typing-feel score | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and a preflight status command that previews both sample-gate progress and trust-killer counts while naming the next dogfood action; the status line also explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and a preflight status command that previews sample-gate progress, trust-killer counts, and typing-feel score while naming the next dogfood action; the status line also explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 
