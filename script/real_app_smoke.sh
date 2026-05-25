@@ -19,6 +19,7 @@ CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}
 CHROME_ACCESSIBILITY_MODE_WAS_SET=0
 CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
 CHROME_MODEL_LATENCY=0
+CODEX_MODEL_LATENCY=0
 CHROME_REMOTE_DEBUGGING_PORT=""
 NATIVE_UNDO_PROOF="${AUTOCOMPLETE_LAB_NATIVE_UNDO_PROOF:-0}"
 CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
@@ -61,7 +62,7 @@ SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|codex-model-latency|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -116,6 +117,9 @@ Monaco and ProseMirror in default Chrome AX mode after the forced lane.
 Use chrome-textarea-model-latency or chrome-contenteditable-model-latency to
 relaunch SteadyType with fast completions and phrase continuations disabled,
 then prove the local model path in a disposable Chrome fixture.
+Use codex-model-latency with --manual-gate to seed disposable Codex prompt text,
+keep Enter untouched, and prove prompt no-submit local model timing in one
+bounded launch.
 
 Claude Code is proof-only through supported terminal hosts. Use --host or the
 claude-code-<host> aliases to record host-specific proof labels without enabling
@@ -260,6 +264,10 @@ case "$APP" in
     CHROME_FIXTURE="contenteditable"
     CHROME_FIXTURE_WAS_SET=1
     CHROME_MODEL_LATENCY=1
+    ;;
+  codex-model-latency)
+    APP="codex"
+    CODEX_MODEL_LATENCY=1
     ;;
   notes-title)
     APP="notes"
@@ -477,6 +485,12 @@ fi
 
 if [[ "$APP" == "chrome" && "$CHROME_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]]; then
   echo "$REQUESTED_APP cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "codex" && "$CODEX_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]]; then
+  echo "codex-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
@@ -2346,6 +2360,54 @@ prepare_chrome_model_latency_runtime_options() {
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so Chrome model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_codex_model_latency_runtime_options() {
+  local scenario="codex-model-latency"
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Codex model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
+  echo "Codex model latency proof scenario: $scenario"
+  echo "Codex model latency proof suppresses annoyance learning for synthetic prompt refresh samples."
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so Codex model-latency proof mode only applies if the app was launched with this environment." >&2
   fi
 }
 
@@ -7238,6 +7300,44 @@ codex_proof_text() {
   printf '%s\n' "$proof_text"
 }
 
+codex_model_latency_proof_texts() {
+  if [[ -n "${AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS"
+    return
+  fi
+
+  local proof_nonce="${AUTOCOMPLETE_LAB_CODEX_PROOF_NONCE:-$(date +%s)}"
+  cat <<EOF
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-one Can we make this dicta
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-two The fastest useful prompt should predic
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-three Turn this rough thought into a concise summar
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-four Help me finish this implementation pla
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-five The next response should feel immediate and respons
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-six We need a safer prompt autocomplete validat
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-seven Complete this common phrase The quick brown f
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-eight Complete this common phrase Once upon a t
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-nine Complete this common phrase Thank you for your h
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-ten Complete this common phrase Let me know what you t
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-eleven Complete this common phrase I hope this m
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-twelve Complete this common phrase The next step is to v
+EOF
+}
+
+type_codex_raw_smoke_text() {
+  local text="$1"
+
+  AUTOCOMPLETE_LAB_CODEX_RAW_TEXT="$text" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_CODEX_RAW_TEXT"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.openai.codex" then
+    error "Codex is not frontmost for prompt proof typing."
+  end if
+  keystroke rawText
+end tell
+APPLESCRIPT
+}
+
 seed_codex_proof_prompt() {
   local proof_text="$1"
   local backup_path="${2:-}"
@@ -8780,9 +8880,17 @@ describe_plan() {
       print_obsidian_variant_commands
       ;;
     codex)
-      echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
-      echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
-      echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
+      if [[ "$CODEX_MODEL_LATENCY" == "1" ]]; then
+        echo "Plan: manual-gated Codex prompt model latency proof. The script seeds several stable disposable AUTOCOMPLETE_LAB_CODEX_PROOF prompt contexts, types the trigger character through live key events, and requires model-backed visible word completions in one launch."
+        echo "Safety: Codex model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
+        echo "Safety: Codex model latency proof tags the runtime launch with scenario codex-model-latency so generic prompt samples cannot satisfy the strict selector."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; it runs the prompt no-submit gate on the same trace slice."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
+      else
+        echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
+      fi
       ;;
     claude-code)
       local host_bundle host_name host_status proof_label
@@ -9159,6 +9267,107 @@ run_codex() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh codex --check --visual
+}
+
+run_codex_model_latency() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  local runtime_start_line start_line trace_start_line backup_dir proof_runtime_guard_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  backup_dir="$(make_tmp_dir)"
+  CODEX_DRAFT_BACKUP_PATH="$backup_dir/codex-draft-backup.txt"
+  : >"$CODEX_DRAFT_BACKUP_PATH"
+  chmod 600 "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+
+  prepare_temporary_app_enablement
+  prepare_codex_model_latency_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Codex model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Codex model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_start stable_context context_prefix trigger_word trigger_text expected_text
+  while IFS= read -r proof_text; do
+    [[ -z "$proof_text" ]] && continue
+    sample_index=$((sample_index + 1))
+    if [[ "$proof_text" != *"AUTOCOMPLETE_LAB_CODEX_PROOF"* ]]; then
+      echo "Codex model latency sample $sample_index must include AUTOCOMPLETE_LAB_CODEX_PROOF." >&2
+      exit 2
+    fi
+    if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+      echo "Codex model latency sample $sample_index must be a single line." >&2
+      exit 2
+    fi
+    trigger_word="${proof_text##* }"
+    context_prefix="${proof_text%"$trigger_word"}"
+    trigger_text="${trigger_word:0:1}"
+    stable_context="$context_prefix"
+    expected_text="${stable_context}${trigger_text}"
+    if [[ -z "$trigger_word" || "$stable_context" == "$proof_text" || -z "$trigger_text" ]]; then
+      echo "Codex model latency sample $sample_index does not contain a stable context plus trigger word." >&2
+      exit 1
+    fi
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "Codex model latency sample $sample_index"
+    seed_codex_proof_prompt "$stable_context" "$CODEX_DRAFT_BACKUP_PATH"
+    if [[ -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+      CODEX_DRAFT_BACKUP_ACTIVE=1
+    fi
+    focus_codex_proof_prompt
+    assert_frontmost_app "Codex" "Codex model latency seed $sample_index"
+    assert_codex_proof_prompt_ready "$stable_context"
+    sleep "${AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.35}"
+    sample_start="$(line_count "$LOG_PATH")"
+    type_codex_raw_smoke_text "$trigger_text"
+    assert_codex_proof_prompt_ready "$expected_text"
+    if wait_for_log_fields_optional "$sample_start" "8" \
+      "suggestion-presented" \
+      "app=com.openai.codex" \
+      "requestMode=wordCompletion" \
+      "candidateSelectionSource=app-model-result"; then
+      assert_codex_prompt_retains_marker
+      visible_sample_count=$((visible_sample_count + 1))
+    elif wait_for_log_fields_optional "$sample_start" "1" \
+      "suggestion-blocked" \
+      "app=com.openai.codex" \
+      "reason=empty-suggestion"; then
+      empty_sample_count=$((empty_sample_count + 1))
+      echo "Codex model latency sample $sample_index produced an empty word candidate; trying the next disposable context." >&2
+      assert_codex_prompt_retains_marker
+    else
+      wait_for_log_fields "$sample_start" "Codex model latency suggestion $sample_index" 1 \
+        "suggestion-presented" \
+        "app=com.openai.codex" \
+        "requestMode=wordCompletion" \
+        "candidateSelectionSource=app-model-result"
+    fi
+    if ((visible_sample_count >= 5)); then
+      break
+    fi
+    sleep 0.35
+  done < <(codex_model_latency_proof_texts)
+
+  if ((visible_sample_count < 5)); then
+    echo "Codex model latency proof expected at least 5 visible model-backed word-completion samples, got $visible_sample_count visible and $empty_sample_count empty from $sample_index attempted contexts." >&2
+    exit 1
+  fi
+
+  sleep 1
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_START_LINE="$((trace_start_line + 1))" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_EXTRA_BUNDLES="com.openai.codex" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="codex-model-latency" \
+    ./script/check_prompt_app_proof.sh
+
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/latency_benchmark_report.py --beta-gate
 }
 
 run_manual_gated() {
@@ -11343,7 +11552,11 @@ case "$APP" in
     run_chrome
     ;;
   codex)
-    run_codex
+    if [[ "$CODEX_MODEL_LATENCY" == "1" ]]; then
+      run_codex_model_latency
+    else
+      run_codex
+    fi
     ;;
   notes)
     run_notes

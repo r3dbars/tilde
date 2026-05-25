@@ -17,7 +17,11 @@ cat >"$SMOKE_STUB" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 run_number="$(( $(wc -l <"$AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG" | tr -d ' ') + 1 ))"
-printf '%s\n' "$*" >>"$AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG"
+smoke_env_prefix=""
+if [[ "${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:-}" == "1" ]]; then
+  smoke_env_prefix="AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 "
+fi
+printf '%s%s\n' "$smoke_env_prefix" "$*" >>"$AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG"
 base_timestamp="2026-05-12T12:00:0${run_number}Z"
 if [[ "${1:-}" == "textedit-default-model-latency" ]]; then
   cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
@@ -46,6 +50,18 @@ LOG
     cat >>"$AUTOCOMPLETE_LAB_TRACE_PATH" <<LOG
 {"timestamp":"$base_timestamp","sessionID":"fresh-chrome","suggestionID":"fresh-chrome-${run_number}-${sample}","type":"modelResult","appBundleIdentifier":"com.google.Chrome","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"docs_prose","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
 {"timestamp":"$base_timestamp","sessionID":"fresh-chrome","suggestionID":"fresh-chrome-${run_number}-${sample}","type":"suggestionPresented","appBundleIdentifier":"com.google.Chrome","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"docs_prose","candidateSelectionSource":"app-model-result"}}
+LOG
+  done
+  exit 0
+fi
+if [[ "${1:-}" == "codex-model-latency" ]]; then
+  cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
+$base_timestamp app-proof-mode-started app=com.openai.codex scenario=codex-model-latency
+LOG
+  for sample in 1 2 3 4 5; do
+    cat >>"$AUTOCOMPLETE_LAB_TRACE_PATH" <<LOG
+{"timestamp":"$base_timestamp","sessionID":"fresh-codex","suggestionID":"fresh-codex-${run_number}-${sample}","type":"modelResult","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"ai_chat","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"$base_timestamp","sessionID":"fresh-codex","suggestionID":"fresh-codex-${run_number}-${sample}","type":"suggestionPresented","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"ai_chat","candidateSelectionSource":"app-model-result","promptSafetyMode":"wordOnly"}}
 LOG
   done
   exit 0
@@ -236,6 +252,49 @@ fi
 
 if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
   echo "fresh latency proof self-test expected no skip-build rerun for chrome contenteditable model-latency target" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+: >"$SMOKE_LOG"
+: >"$DIAGNOSTICS_LOG"
+: >"$TRACE_LOG"
+CODEX_MODEL_OUTPUT="$(
+  AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-codex-model.lock" \
+    ./script/fresh_latency_proof.sh --target codex-model-latency --runs 3
+)"
+
+if ! grep -F "codex-model-latency collects the proof sample set in one launch; forcing --runs 1." <<<"$CODEX_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected codex-model-latency to force one run" >&2
+  echo "$CODEX_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency beta gate passed." <<<"$CODEX_MODEL_OUTPUT" >/dev/null ||
+   ! grep -F "First visible / keystroke-to-visible: n=5" <<<"$CODEX_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected codex model-latency target to pass with one bounded launch" >&2
+  echo "$CODEX_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if [[ "$(wc -l <"$SMOKE_LOG" | tr -d ' ')" != "1" ]]; then
+  echo "fresh latency proof self-test expected one codex model-latency smoke run" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if [[ "$(sed -n '1p' "$SMOKE_LOG")" != "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 codex-model-latency --manual-gate" ]]; then
+  echo "fresh latency proof self-test expected codex model-latency smoke with manual gate and screenshot trace" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
+  echo "fresh latency proof self-test expected no skip-build rerun for codex model-latency target" >&2
   cat "$SMOKE_LOG" >&2
   exit 1
 fi
