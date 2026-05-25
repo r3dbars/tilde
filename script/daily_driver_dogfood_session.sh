@@ -553,7 +553,8 @@ finish_session() {
   fi
 
   local end_line fresh_start report_path trace_eval_output non_annoyance_output sample_gate_output typing_feel_output
-  local trace_eval_status non_annoyance_status sample_gate_status typing_feel_status gate_status timestamp
+  local prompt_safety_output sensitive_safety_output
+  local trace_eval_status non_annoyance_status sample_gate_status typing_feel_status prompt_safety_status sensitive_safety_status safety_snapshot_status gate_status timestamp
   end_line="${END_LINE_OVERRIDE:-$(current_trace_line)}"
   require_integer "end line" "$end_line"
   if ((end_line <= START_LINE)); then
@@ -569,9 +570,19 @@ finish_session() {
   non_annoyance_output="$(mktemp)"
   sample_gate_output="$(mktemp)"
   typing_feel_output="$(mktemp)"
-  trap 'rm -f "$trace_eval_output" "$non_annoyance_output" "$sample_gate_output" "$typing_feel_output"' RETURN
+  prompt_safety_output="$(mktemp)"
+  sensitive_safety_output="$(mktemp)"
+  trap 'rm -f "$trace_eval_output" "$non_annoyance_output" "$sample_gate_output" "$typing_feel_output" "$prompt_safety_output" "$sensitive_safety_output"' RETURN
 
   set +e
+  "$ROOT_DIR/script/check_prompt_app_proof_self_test.sh" \
+    >"$prompt_safety_output" 2>&1
+  prompt_safety_status=$?
+
+  "$ROOT_DIR/script/check_sensitive_field_proof_self_test.sh" \
+    >"$sensitive_safety_output" 2>&1
+  sensitive_safety_status=$?
+
   run_session_sample_gate \
     "$TRACE_PATH" \
     "$fresh_start" \
@@ -626,8 +637,13 @@ finish_session() {
   trace_eval_status=$?
   set -e
 
+  safety_snapshot_status="0"
+  if ((prompt_safety_status != 0 || sensitive_safety_status != 0)); then
+    safety_snapshot_status="1"
+  fi
+
   gate_status="pass"
-  if ((sample_gate_status != 0 || typing_feel_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0)); then
+  if ((sample_gate_status != 0 || typing_feel_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0 || safety_snapshot_status != 0)); then
     gate_status="fail"
   fi
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -646,6 +662,9 @@ finish_session() {
     echo "- Trace: \`$TRACE_PATH\`."
     echo "- Fresh lines: \`$fresh_start-$end_line\`."
     echo "- Gate: \`$gate_status\`."
+    echo "- Safety snapshot status: \`$safety_snapshot_status\`."
+    echo "- Prompt no-submit safety status: \`$prompt_safety_status\`."
+    echo "- Sensitive field safety status: \`$sensitive_safety_status\`."
     echo "- Sample gate status: \`$sample_gate_status\`."
     echo "- Reach minimum: accepted-kept / shown \`$MIN_KEPT_PER_SHOWN_PERCENT%\`."
     echo "- Typing feel status: \`$typing_feel_status\`."
@@ -669,6 +688,18 @@ finish_session() {
     echo
     echo '```bash'
     printf './script/daily_driver_dogfood_session.sh review --report %q\n' "$report_path"
+    echo '```'
+    echo
+    echo "## Daily Driver Safety Snapshot"
+    echo
+    echo "These gates are redacted harness checks for wrong-field trust. They do not use raw writing from this session."
+    echo
+    echo '```text'
+    echo "Prompt no-submit safety status: $prompt_safety_status"
+    cat "$prompt_safety_output"
+    echo
+    echo "Sensitive field safety status: $sensitive_safety_status"
+    cat "$sensitive_safety_output"
     echo '```'
     echo
     echo "## Reach Test"
@@ -806,6 +837,14 @@ if re.search(r"Gate:\s*`fail`", text):
     failures.append("automated dogfood gate failed")
 if not re.search(r"Gate:\s*`pass`", text):
     failures.append("automated dogfood gate pass marker missing")
+if re.search(r"Safety snapshot status:\s*`[1-9][0-9]*`", text):
+    failures.append("daily-driver safety snapshot failed")
+if not re.search(r"Safety snapshot status:\s*`0`", text):
+    failures.append("daily-driver safety snapshot pass marker missing")
+if not re.search(r"Prompt no-submit safety status:\s*`?0`?", text):
+    failures.append("prompt no-submit safety pass marker missing")
+if not re.search(r"Sensitive field safety status:\s*`?0`?", text):
+    failures.append("sensitive field safety pass marker missing")
 if re.search(r"displayedText|acceptedText|rawOutput", text):
     failures.append("report contains raw trace text keys")
 
@@ -839,6 +878,7 @@ print("Daily-driver manual review gate")
 print("Privacy: redacted manual labels only")
 print(f"Report: {path}")
 print(f"Automated gate: {'pass' if automated_gate_pass else 'missing'}")
+print("Safety snapshot: pass" if re.search(r"Safety snapshot status:\s*`0`", text) else "Safety snapshot: missing")
 print(f"App: {app or 'blank'}")
 print(f"Minutes: {minutes or 'blank'}")
 print(f"Did reach for it: {reached or 'blank'}")

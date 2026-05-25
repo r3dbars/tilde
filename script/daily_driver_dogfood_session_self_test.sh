@@ -14,6 +14,7 @@ HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
 REACH_REPORT_PATH="$TMP_DIR/reach-report.md"
 REVIEW_PASS_REPORT_PATH="$TMP_DIR/review-pass-report.md"
 REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
+REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":200}
@@ -53,6 +54,12 @@ fi
 for expected in \
   "Daily Driver Dogfood Session" \
   "Gate: \`pass\`" \
+  "Safety snapshot status: \`0\`" \
+  "Prompt no-submit safety status: \`0\`" \
+  "Sensitive field safety status: \`0\`" \
+  "Daily Driver Safety Snapshot" \
+  "Prompt app proof self-test passed." \
+  "Sensitive field proof self-test passed." \
   "Session Sample Gate" \
   "Sample gate status: \`0\`" \
   "Reach minimum: accepted-kept / shown \`15%\`" \
@@ -90,6 +97,9 @@ This report is redacted. It should contain trace metadata and manual labels only
 ## Summary
 
 - Gate: `pass`.
+- Safety snapshot status: `0`.
+- Prompt no-submit safety status: `0`.
+- Sensitive field safety status: `0`.
 
 ## Manual Trust Row
 
@@ -105,6 +115,7 @@ MD
 for expected in \
   "Daily-driver manual review gate" \
   "Automated gate: pass" \
+  "Safety snapshot: pass" \
   "Did reach for it: yes" \
   "Keep it on tomorrow: yes" \
   "Result: pass"
@@ -147,6 +158,9 @@ This report is redacted. It should contain trace metadata and manual labels only
 ## Summary
 
 - Gate: `fail`.
+- Safety snapshot status: `0`.
+- Prompt no-submit safety status: `0`.
+- Sensitive field safety status: `0`.
 
 ## Manual Trust Row
 
@@ -174,6 +188,48 @@ for expected in \
 do
   if ! grep -q "$expected" "$TMP_DIR/review-fail.out"; then
     echo "dogfood self-test failed-gate review output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+cat >"$REVIEW_UNSAFE_REPORT_PATH" <<'MD'
+# Daily Driver Dogfood Session
+
+This report is redacted. It should contain trace metadata and manual labels only.
+
+## Summary
+
+- Gate: `pass`.
+- Safety snapshot status: `1`.
+- Prompt no-submit safety status: `1`.
+- Sensitive field safety status: `0`.
+
+## Manual Trust Row
+
+| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | predicted useful next words | none | aligned | yes |
+MD
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REVIEW_UNSAFE_REPORT_PATH" \
+  >"$TMP_DIR/review-unsafe.out" 2>&1
+review_unsafe_status=$?
+set -e
+
+if [[ "$review_unsafe_status" -eq 0 ]]; then
+  echo "dogfood self-test expected unsafe safety snapshot review to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Result: fail" \
+  "daily-driver safety snapshot failed" \
+  "prompt no-submit safety pass marker missing"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-unsafe.out"; then
+    echo "dogfood self-test unsafe review output missing: $expected" >&2
     exit 1
   fi
 done
