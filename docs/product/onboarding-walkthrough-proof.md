@@ -6,11 +6,19 @@ The gate is manual on purpose. Do not turn a placeholder into `pass` unless a cl
 
 ## Before The Run
 
-- Build or verify the current app.
+- Build or verify the current app:
+
+```bash
+./script/build_and_run.sh --verify
+```
+
 - Use a clean macOS user account.
 - Keep all typed text disposable.
 - Do not paste raw typed text, private document names, prompts, URLs, or clipboard contents into docs.
 - Record line numbers, counters, hashes, or command output instead of raw content.
+- Keep these evidence locations handy:
+  - `~/Library/Logs/SteadyType/diagnostics.log`
+  - `~/Library/Logs/SteadyType/traces.jsonl`
 
 ## Passing Evidence
 
@@ -38,10 +46,19 @@ Run this to print a row with the current commit token:
 
 The row still needs real observed values. Update the time, clean macOS user, and evidence line numbers from the actual run.
 
+## Recording Flow
+
+1. Run `./script/build_and_run.sh --verify`.
+2. Open Settings and complete Practice in TextEdit.
+3. Confirm Accessibility, local model ready, TextEdit opened, `Tab`, `Esc`, Pause, and Delete Local Logs.
+4. Add one real row to the checklist using line ranges or counters, not raw typed text.
+5. Run `./script/check_onboarding_walkthrough_proof.py`.
+
 ## Useful Commands
 
 ```bash
 date -u +"%Y-%m-%dT%H:%M:%SZ"
 git rev-parse --short=12 HEAD
+./script/check_onboarding_walkthrough_proof.py --print-template
 ./script/check_onboarding_walkthrough_proof.py
 ```

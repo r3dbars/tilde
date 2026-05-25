@@ -12,6 +12,8 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_PROOF = ROOT_DIR / "docs/product/onboarding-permission-qa-checklist.md"
+DIAGNOSTICS_LOG = "~/Library/Logs/SteadyType/diagnostics.log"
+TRACE_LOG = "~/Library/Logs/SteadyType/traces.jsonl"
 
 REQUIRED_COLUMNS = [
     "time utc",
@@ -328,9 +330,22 @@ def recording_template() -> str:
             "Only add a pass row after a real clean-user walkthrough. Do not copy this as proof from memory.",
             "",
             "Before the run:",
-            "- Build or verify the current app.",
+            "- Build or verify the current app with `./script/build_and_run.sh --verify`.",
             "- Use a clean macOS tester account.",
             "- Keep typed text disposable and do not paste raw user text into docs.",
+            "- Keep evidence to command output, line ranges, counters, hashes, and manual gate notes.",
+            "",
+            "Copyable proof commands:",
+            "```bash",
+            "./script/build_and_run.sh --verify",
+            "./script/check_onboarding_walkthrough_proof.py --print-template",
+            "# After the real walkthrough row is recorded:",
+            "./script/check_onboarding_walkthrough_proof.py",
+            "```",
+            "",
+            "Evidence locations:",
+            f"- Diagnostics: `{DIAGNOSTICS_LOG}`",
+            f"- Trace JSONL: `{TRACE_LOG}`",
             "",
             "A pass row must prove:",
             "- app-owned explanation before Accessibility",
