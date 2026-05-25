@@ -346,6 +346,13 @@ if 'assert_claude_prompt_retains_marker' not in claude_block:
     raise SystemExit("Claude model latency proof must verify the prompt marker still exists after each sample")
 if 'restore_claude_draft_if_needed' not in source or 'prompt_app_ax_proof_helper.swift' not in source:
     raise SystemExit("Claude model latency proof must restore focused drafts through the AX helper")
+prompt_helper = Path("script/prompt_app_ax_proof_helper.swift").read_text()
+if "seedWithSelectedTextFallback" not in prompt_helper or "seedWithPasteFallback" not in prompt_helper:
+    raise SystemExit("Prompt app AX helper must fall back when direct AX value seeding does not stick")
+if "clonePasteboardItems" not in prompt_helper or "$0.copy() as? NSPasteboardItem" in prompt_helper:
+    raise SystemExit("Prompt app AX helper must clone pasteboard data without crashing on NSPasteboardItem.copy()")
+if 'let acceptedLabels = ["new chat"]' not in prompt_helper:
+    raise SystemExit("Claude prompt helper must not press task/start buttons that can submit proof text")
 
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proof-field-identity-refresh-relaxed" not in app_delegate:

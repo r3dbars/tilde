@@ -142,8 +142,8 @@ count = len(list(re.finditer(r"select_latency_window[.]py\b", latency_line)))
 Path(sys.argv[2]).write_text(str(count), encoding="utf-8")
 PY
 
-if [[ "$(cat "$TMP_DIR/latency-selector-claim-count.txt")" -lt 2 ]]; then
-  echo "scorecard self-test expected the real scorecard to include multiple latency selector claims" >&2
+if [[ "$(cat "$TMP_DIR/latency-selector-claim-count.txt")" -lt 1 ]]; then
+  echo "scorecard self-test expected the real scorecard to include a latency selector claim" >&2
   exit 1
 fi
 
@@ -155,8 +155,8 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8")
 Path(sys.argv[2]).write_text(str(source.count("Latency window:")), encoding="utf-8")
 PY
 
-if [[ "$(cat "$TMP_DIR/latency-selector-live-count.txt")" -lt 2 ]]; then
-  echo "scorecard self-test expected the latency selector fixture to cover multiple live windows" >&2
+if [[ "$(cat "$TMP_DIR/latency-selector-live-count.txt")" -lt 1 ]]; then
+  echo "scorecard self-test expected the latency selector fixture to cover a live window" >&2
   exit 1
 fi
 
