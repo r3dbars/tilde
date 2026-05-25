@@ -6119,6 +6119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        var fastPhraseFallbackMetadata: [String: String] = [:]
         if requestMode == .phraseContinuation,
            !disablesFastPhraseFallbackForProof {
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
@@ -6197,6 +6198,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 return
             }
+
+            let fastPhraseFallbackOutcome = fastSelection.suppressionReason ?? "no-suggestion"
+            fastPhraseFallbackMetadata = [
+                "fastPhraseFallbackChecked": "true",
+                "fastPhraseFallbackOutcome": fastPhraseFallbackOutcome
+            ]
+            .merging(fastSelectionMetadata) { current, _ in current }
+            setSuggestionDecision("Queued: model phrase after instant \(fastPhraseFallbackOutcome)")
         } else if requestMode == .phraseContinuation,
                   disablesFastPhraseFallbackForProof {
             DiagnosticsLog.shared.record(
@@ -6218,6 +6227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "traceID": String(suggestionID.prefix(8)),
                 "suggestionID": suggestionID
             ]
+            .merging(fastPhraseFallbackMetadata) { current, _ in current }
             .merging(debounceSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
