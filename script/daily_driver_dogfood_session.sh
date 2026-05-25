@@ -275,9 +275,9 @@ load_mark() {
     STARTED_AT="explicit"
     MARK_LABEL="$LABEL"
     MARK_APP_FILTER="$APP_FILTER"
-    APP_STATUS_AT_START="unknown"
-    TRACE_EXISTS_AT_START="unknown"
-    DOGFOOD_READINESS_AT_START="unknown"
+    APP_STATUS_AT_START="$(steadytype_process_status)"
+    TRACE_EXISTS_AT_START="$(trace_exists_status)"
+    DOGFOOD_READINESS_AT_START="$(dogfood_readiness_state "$APP_STATUS_AT_START")"
     return
   fi
 
@@ -1292,7 +1292,7 @@ finish_session() {
 
   local end_line fresh_start report_path trace_eval_output non_annoyance_output sample_gate_output typing_feel_output trust_gate_output
   local prompt_safety_output sensitive_safety_output
-  local trace_eval_status non_annoyance_status sample_gate_status typing_feel_status trust_gate_status prompt_safety_status sensitive_safety_status safety_snapshot_status gate_status timestamp
+  local trace_eval_status non_annoyance_status sample_gate_status typing_feel_status trust_gate_status prompt_safety_status sensitive_safety_status safety_snapshot_status start_readiness_status gate_status timestamp
   end_line="${END_LINE_OVERRIDE:-$(current_trace_line)}"
   require_integer "end line" "$end_line"
   if ((end_line <= START_LINE)); then
@@ -1391,8 +1391,13 @@ finish_session() {
     safety_snapshot_status="1"
   fi
 
+  start_readiness_status="0"
+  if [[ "${DOGFOOD_READINESS_AT_START:-unknown}" != "pass" ]]; then
+    start_readiness_status="1"
+  fi
+
   gate_status="pass"
-  if ((sample_gate_status != 0 || trust_gate_status != 0 || typing_feel_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0 || safety_snapshot_status != 0)); then
+  if ((sample_gate_status != 0 || trust_gate_status != 0 || typing_feel_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0 || safety_snapshot_status != 0 || start_readiness_status != 0)); then
     gate_status="fail"
   fi
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -1414,6 +1419,7 @@ finish_session() {
     echo "- Trace: \`$TRACE_PATH\`."
     echo "- Fresh lines: \`$fresh_start-$end_line\`."
     echo "- Gate: \`$gate_status\`."
+    echo "- Start readiness status: \`$start_readiness_status\`."
     echo "- Safety snapshot status: \`$safety_snapshot_status\`."
     echo "- Prompt no-submit safety status: \`$prompt_safety_status\`."
     echo "- Sensitive field safety status: \`$sensitive_safety_status\`."
@@ -1435,6 +1441,21 @@ finish_session() {
     echo "| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |"
     echo "| --- | ---: | --- | ---: | --- | --- | --- | --- |"
     echo "| ${APP_FILTER:-mixed} |  |  |  |  |  |  |  |"
+    echo
+    echo "## Start Readiness Gate"
+    echo
+    echo '```text'
+    echo "App status at start: ${APP_STATUS_AT_START:-unknown}"
+    echo "Trace existed at start: ${TRACE_EXISTS_AT_START:-unknown}"
+    echo "Start readiness: ${DOGFOOD_READINESS_AT_START:-unknown}"
+    if ((start_readiness_status == 0)); then
+      echo "Result: pass"
+    else
+      echo "Result: fail"
+      echo "Failures:"
+      echo "- SteadyType was not confirmed running when the dogfood session started"
+    fi
+    echo '```'
     echo
     echo "## Completed Report Review"
     echo

@@ -255,11 +255,12 @@ daily-driver pass cannot hide stale wrong-field safety.
 The dogfood `start` command now records whether SteadyType was running when the
 session began, whether the trace already existed, and a readiness verdict. The
 finished report carries the same start-readiness fields, so a session that was
-accidentally started while the app was off is obvious later. The dogfood
-`status` command is now a preflight too: it reports whether the trace exists,
-whether SteadyType is running, warns to run `./script/build_and_run.sh --verify`
-when the app is off, shows the saved mark, rows since the mark, the redacted app
-filter, and the exact next start/finish/review command.
+accidentally started while the app was off fails the dogfood gate instead of
+looking like valid daily-driver proof. The dogfood `status` command is now a
+preflight too: it reports whether the trace exists, whether SteadyType is
+running, warns to run `./script/build_and_run.sh --verify` when the app is off,
+shows the saved mark, rows since the mark, the redacted app filter, and the
+exact next start/finish/review command.
 When the session has new trace rows, it also runs the metadata-only sample gate
 as a preview, so the tester can see shown suggestions, phrase suggestions,
 accepted-kept reach, source mix, and no-show reasons before finishing the
@@ -354,7 +355,7 @@ helping.
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and status preflight expose instant phrase vs model-backed source mix plus live redacted typing-feel score | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and start/status preflights that expose whether SteadyType was running before and during the dogfood session while naming the next dogfood action; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and start/status preflights that expose whether SteadyType was running before and during the dogfood session; reports now fail if SteadyType was not confirmed running at the start; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 
