@@ -278,6 +278,12 @@ Self-test the audit harness with fixtures:
 ./script/check_local_quality_audit_self_test.sh
 ```
 
+The checked daily-driver audit report is guarded in smoke tests:
+
+```bash
+./script/check_daily_driver_local_quality_audit_report.sh
+```
+
 For a clean app-specific slice:
 
 ```bash

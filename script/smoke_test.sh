@@ -15,6 +15,7 @@ swift package resolve
 swift test
 ./script/check_test_coverage_manifest.sh
 ./script/check_quality_eval.sh
+./script/check_daily_driver_local_quality_audit_report.sh
 ./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
