@@ -1458,6 +1458,19 @@ wait_for_log_pattern_optional() {
   return 1
 }
 
+log_since_has_fields() {
+  local start_line="$1"
+  local prefix="$2"
+  shift 2
+  local lines
+  lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
+  local field
+  for field in "$@"; do
+    lines="$(grep -F "$field" <<<"$lines" || true)"
+  done
+  [[ -n "$lines" ]]
+}
+
 wait_for_log_fields() {
   local start_line="$1"
   local label="$2"
@@ -1467,13 +1480,7 @@ wait_for_log_fields() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    local lines
-    lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
-    local field
-    for field in "$@"; do
-      lines="$(grep -F "$field" <<<"$lines" || true)"
-    done
-    if [[ -n "$lines" ]]; then
+    if log_since_has_fields "$start_line" "$prefix" "$@"; then
       return 0
     fi
     sleep 0.2
@@ -1494,19 +1501,53 @@ wait_for_log_fields_optional() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    local lines
-    lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
-    local field
-    for field in "$@"; do
-      lines="$(grep -F "$field" <<<"$lines" || true)"
-    done
-    if [[ -n "$lines" ]]; then
+    if log_since_has_fields "$start_line" "$prefix" "$@"; then
       return 0
     fi
     sleep 0.2
   done
 
   return 1
+}
+
+wait_for_claude_code_terminal_tab_acceptance() {
+  local start_line="$1"
+  local host_name="$2"
+  local timeout_seconds="$3"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if log_since_has_fields "$start_line" \
+      "keyboard-action" \
+      "app=com.anthropic.claude-code" \
+      "key=tab" \
+      "action=acceptNextWord" \
+      "handled=true"; then
+      return 0
+    fi
+
+    if log_since_has_fields "$start_line" \
+      "keyboard-action" \
+      "app=com.anthropic.claude-code" \
+      "key=tab" \
+      "action=acceptNextWord" \
+      "handled=false"; then
+      echo "Claude Code $host_name Tab acceptance failed closed." >&2
+      echo "Required fields: keyboard-action app=com.anthropic.claude-code key=tab action=acceptNextWord handled=true" >&2
+      echo "Observed handled=false; the app consumed Tab and refused to insert unverified text." >&2
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+      exit 1
+    fi
+
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Claude Code $host_name Tab acceptance." >&2
+  echo "Required fields: keyboard-action app=com.anthropic.claude-code key=tab action=acceptNextWord handled=true" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
 }
 
 wait_for_obsidian_long_note_second_suggestion() {
@@ -10210,12 +10251,10 @@ run_claude_code_terminal_host_smoke() {
   fi
 
   press_key_code_cgevent 48
-  wait_for_log_fields "$accept_start_line" "Claude Code $host_name Tab acceptance" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}" \
-    "keyboard-action" \
-    "app=com.anthropic.claude-code" \
-    "key=tab" \
-    "action=acceptNextWord" \
-    "handled=true"
+  wait_for_claude_code_terminal_tab_acceptance \
+    "$accept_start_line" \
+    "$host_name" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}"
   wait_for_log_pattern "$accept_start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code $host_name successful insertion" 12
   wait_for_log_pattern "$accept_start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code $host_name verified insertion" 12
   wait_for_screenshot_capture_if_enabled "$accept_start_line" "com.anthropic.claude-code" "Claude Code $host_name proof"
