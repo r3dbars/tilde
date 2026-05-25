@@ -469,7 +469,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             cleanedCandidates = [fallbackSuggestion]
             candidateSelection = candidateRanker.selection(
                 cleanedCandidates,
-                mode: request.mode,
+                mode: request.mode == .phraseContinuation ? .wordCompletion : request.mode,
                 textBeforeCursor: request.textBeforeCursor,
                 behaviorProfileID: request.behaviorProfile.id
             )
@@ -686,8 +686,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     }
 
     static func localWordCompletionFallbackSelection(for request: CompletionRequest) -> WordCompletionCandidateSelection? {
-        guard request.mode == .wordCompletion,
-              request.textAfterCursor.first?.isLetter != true else {
+        guard request.textAfterCursor.first?.isLetter != true,
+              request.mode == .wordCompletion || shouldUseWordCompletionFallbackForPhraseContinuation(request) else {
             return nil
         }
 
@@ -700,6 +700,17 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         return selection
+    }
+
+    private static func shouldUseWordCompletionFallbackForPhraseContinuation(_ request: CompletionRequest) -> Bool {
+        guard request.mode == .phraseContinuation,
+              let fragment = trailingWordFragment(in: request.textBeforeCursor),
+              fragment.count >= 3,
+              fragment.allSatisfy(\.isLetter) else {
+            return false
+        }
+
+        return true
     }
 
     static func retryPromptForShortHighWordCandidate(

@@ -13,15 +13,13 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         fieldIdentity: FocusedFieldIdentity,
         currentSuggestionBundleIdentifier: String?,
         currentSuggestionFieldIdentity: FocusedFieldIdentity?,
+        currentSuggestionTextBeforeCursor: String?,
         currentSuggestionAgeMilliseconds: Int?,
         isInvalidatedByUserTyping: Bool,
         textBeforeCursor: String,
         textAfterCursor: String
     ) -> Bool {
-        guard blockReason == .tooLittleContext,
-              !isInvalidatedByUserTyping,
-              textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              textAfterCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        guard !isInvalidatedByUserTyping,
               currentSuggestionBundleIdentifier == appBundleIdentifier,
               currentSuggestionFieldIdentity == fieldIdentity,
               let currentSuggestionAgeMilliseconds,
@@ -29,6 +27,14 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
             return false
         }
 
-        return true
+        switch blockReason {
+        case .tooLittleContext:
+            return textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && textAfterCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .middleOfLine:
+            return currentSuggestionTextBeforeCursor.map { textBeforeCursor + textAfterCursor == $0 } == true
+        default:
+            return false
+        }
     }
 }

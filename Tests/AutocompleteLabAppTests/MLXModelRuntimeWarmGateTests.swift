@@ -296,6 +296,25 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(selection.selectionSource == "fast-word-completion")
     }
 
+    @Test("Phrase continuation partial words can fall back to local word completion")
+    func phraseContinuationPartialWordsCanUseLocalWordFallback() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "Smoke proof feels instant and stays inst",
+            mode: .phraseContinuation
+        )
+
+        let selection = try #require(MLXModelRuntime.localWordCompletionFallbackSelection(for: request))
+
+        #expect(selection.suggestion?.visibleText == "ant")
+        #expect(selection.suppressionReason == nil)
+        #expect(MLXModelRuntime.localWordCompletionFallbackSelection(
+            for: CompletionRequest(
+                textBeforeCursor: "Smoke proof feels instant ",
+                mode: .phraseContinuation
+            )
+        ) == nil)
+    }
+
     @Test("Local word completion fallback stays off in the middle of words")
     func localWordCompletionFallbackStaysOffInTheMiddleOfWords() {
         let request = CompletionRequest(

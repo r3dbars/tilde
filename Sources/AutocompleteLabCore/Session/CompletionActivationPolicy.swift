@@ -227,13 +227,13 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         }
 
         if endsInsideWord(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+            if isWordCompletionEligible(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+                return .allow(.wordCompletion)
+            }
+
             if prefersPhraseContinuationForWordFragments,
                contextWordCount >= minimumPhraseContinuationWords {
                 return .allow(.phraseContinuation)
-            }
-
-            if isWordCompletionEligible(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
-                return .allow(.wordCompletion)
             }
 
             if allowsUnfinishedWordPhraseContinuation,
