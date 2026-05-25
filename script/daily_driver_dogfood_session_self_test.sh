@@ -24,6 +24,8 @@ PREVIEW_MARK_PATH="$TMP_DIR/preview-session.env"
 TRUST_PREVIEW_TRACE_PATH="$TMP_DIR/trust-preview-traces.jsonl"
 TRUST_PREVIEW_MARK_PATH="$TMP_DIR/trust-preview-session.env"
 
+export AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE=running
+
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":200}
 {"timestamp":"2026-05-25T00:01:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":210,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
@@ -49,6 +51,17 @@ JSONL
   --label self-test \
   >"$TMP_DIR/start.out"
 
+for expected in \
+  "Trace exists: yes" \
+  "SteadyType app: running" \
+  "Dogfood readiness: pass"
+do
+  if ! grep -q "$expected" "$TMP_DIR/start.out"; then
+    echo "dogfood self-test start output missing: $expected" >&2
+    exit 1
+  fi
+done
+
 if ! "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
   --trace "$TRACE_PATH" \
   --mark-file "$TMP_DIR/missing-session.env" \
@@ -60,6 +73,8 @@ fi
 
 for expected in \
   "Trace exists: yes" \
+  "SteadyType app: running" \
+  "Dogfood readiness: pass" \
   "Saved mark: none" \
   "Session state: start-needed" \
   "Sample gate preview: start-needed" \
@@ -70,6 +85,27 @@ for expected in \
 do
   if ! grep -q "$expected" "$TMP_DIR/status-no-mark.out"; then
     echo "dogfood self-test status without mark missing: $expected" >&2
+    exit 1
+  fi
+done
+
+if ! AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE=not-running "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
+  --trace "$TRACE_PATH" \
+  --mark-file "$TMP_DIR/missing-session.env" \
+  --app com.apple.TextEdit \
+  >"$TMP_DIR/status-not-running.out"; then
+  echo "dogfood self-test expected not-running status preflight to pass" >&2
+  exit 1
+fi
+
+for expected in \
+  "SteadyType app: not-running" \
+  "Dogfood readiness: attention" \
+  "Dogfood readiness next: ./script/build_and_run.sh --verify" \
+  "Next command: ./script/daily_driver_dogfood_session.sh start --app com.apple.TextEdit"
+do
+  if ! grep -q "$expected" "$TMP_DIR/status-not-running.out"; then
+    echo "dogfood self-test not-running status missing: $expected" >&2
     exit 1
   fi
 done
@@ -86,9 +122,14 @@ fi
 
 for expected in \
   "Trace exists: yes" \
+  "SteadyType app: running" \
+  "Dogfood readiness: pass" \
   "Saved mark: 15" \
   "Label: self-test" \
   "App filter: com.apple.TextEdit" \
+  "App status at start: running" \
+  "Trace existed at start: yes" \
+  "Start readiness: pass" \
   "New trace rows: 0" \
   "Session state: marked-no-new-rows" \
   "Sample gate preview: waiting-for-new-rows" \
@@ -108,6 +149,9 @@ done
   printf "LABEL=%q\n" "preview"
   printf "APP_FILTER=%q\n" "com.apple.TextEdit"
   printf "TRACE_PATH_AT_START=%q\n" "$TRACE_PATH"
+  printf "APP_STATUS_AT_START=%q\n" "running"
+  printf "TRACE_EXISTS_AT_START=%q\n" "yes"
+  printf "DOGFOOD_READINESS_AT_START=%q\n" "pass"
 } >"$PREVIEW_MARK_PATH"
 
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
@@ -116,7 +160,12 @@ done
   >"$TMP_DIR/status-preview.out"
 
 for expected in \
+  "SteadyType app: running" \
+  "Dogfood readiness: pass" \
   "Saved mark: 1" \
+  "App status at start: running" \
+  "Trace existed at start: yes" \
+  "Start readiness: pass" \
   "New trace rows: 14" \
   "Session state: ready-to-finish" \
   "Sample gate preview: pass" \
@@ -161,6 +210,9 @@ JSONL
   printf "LABEL=%q\n" "trust-preview"
   printf "APP_FILTER=%q\n" "com.apple.TextEdit"
   printf "TRACE_PATH_AT_START=%q\n" "$TRUST_PREVIEW_TRACE_PATH"
+  printf "APP_STATUS_AT_START=%q\n" "running"
+  printf "TRACE_EXISTS_AT_START=%q\n" "yes"
+  printf "DOGFOOD_READINESS_AT_START=%q\n" "pass"
 } >"$TRUST_PREVIEW_MARK_PATH"
 
 if ! "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
@@ -199,7 +251,7 @@ fi
 
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
-  --start-line 1 \
+  --mark-file "$PREVIEW_MARK_PATH" \
   --end-line 15 \
   --app com.apple.TextEdit \
   --label self-test \
@@ -208,6 +260,9 @@ fi
 for expected in \
   "Daily Driver Dogfood Session" \
   "Gate: \`pass\`" \
+  "SteadyType app at start: \`running\`" \
+  "Trace existed at start: \`yes\`" \
+  "Start readiness: \`pass\`" \
   "Safety snapshot status: \`0\`" \
   "Prompt no-submit safety status: \`0\`" \
   "Sensitive field safety status: \`0\`" \
