@@ -5986,6 +5986,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         suggestionID: suggestionID,
                         reason: "repeated-miss"
                     )
+                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
                     hideSuggestion()
                     return
                 }
@@ -6030,6 +6031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
             } else {
+                setSuggestionDecision(SuggestionStatusText.notShown(reason: "no-fast-word-candidate"))
                 hideSuggestion()
                 return
             }
@@ -6142,6 +6144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         suggestionID: suggestionID,
                         reason: "repeated-miss"
                     )
+                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
                     hideSuggestion()
                     return
                 }
@@ -6343,6 +6346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             return
                         }
 
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "empty-suggestion"))
                         self.hideSuggestion()
                         return
                     }
@@ -6371,6 +6375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 "reason": "missing-anchor"
                             ]
                         )
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "missing-anchor"))
                         self.hideSuggestion()
                         return
                     }
@@ -6424,6 +6429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             suggestionID: suggestionID,
                             reason: "repeated-miss"
                         )
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
                         self.hideSuggestion()
                         return
                     }
@@ -6455,6 +6461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ) else {
                         return
                     }
+                    self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "engine-error"))
                     self.hideSuggestion(reason: "engine-error")
                 }
             }
@@ -6569,6 +6576,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
             )
+            setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
             hideSuggestion(reason: reason)
             return
         }

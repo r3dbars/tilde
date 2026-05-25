@@ -278,6 +278,9 @@ burst.
 The live status text is less mysterious too. The menu tooltip and Settings
 `Why:` row now say whether the shown suggestion is a word, phrase, or sentence,
 and whether it came from the instant fallback, fast word fallback, or model path.
+When nothing appears after a request, the same line now says whether SteadyType
+stayed quiet because there was no useful suggestion, no fast word match, no
+cursor position, a repeated miss, stale text, or a model error.
 
 The instant phrase predictor now covers the daily-driver complaint language
 directly: "I want this to", "the biggest problem is", "what kills trust most
@@ -293,7 +296,7 @@ profiles while still staying off in prompt, search, form, and code profiles.
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and live status text expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, trust-killer gate, prompt/sensitive safety snapshot, and completed manual-review gate with suggestion quality 4-5, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, trust-killer gate, prompt/sensitive safety snapshot, and completed manual-review gate with suggestion quality 4-5; the status line now explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 

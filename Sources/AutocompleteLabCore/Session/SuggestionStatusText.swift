@@ -13,6 +13,28 @@ public enum SuggestionStatusText {
         return "Shown: \(modeLabel) \(sourceLabel) \(latencyMilliseconds)ms"
     }
 
+    public static func notShown(reason: String) -> String {
+        switch reason {
+        case "empty-suggestion", "no-suggestion", "no-candidates", "low-top-score":
+            return "Quiet: no useful suggestion"
+        case "no-fast-word-candidate":
+            return "Quiet: no fast word match"
+        case "missing-anchor":
+            return "Blocked: no cursor position"
+        case "repeated-miss":
+            return "Blocked: repeated miss"
+        case "engine-error":
+            return "Blocked: model error"
+        case "stale-request", "stale-field", "stale-after-keydown", "stale-text", "stale-focused-context":
+            return "Blocked: stale text"
+        case "too-slow-to-display":
+            return "Blocked: too slow"
+        default:
+            let normalized = normalizedLabel(reason)
+            return "Blocked: \(normalized.isEmpty ? "unknown reason" : normalized)"
+        }
+    }
+
     private static func label(for mode: CompletionRequestMode) -> String {
         switch mode {
         case .wordCompletion:
@@ -33,11 +55,15 @@ public enum SuggestionStatusText {
         case "app-model-result", "model-candidate-ranker", "model-result":
             return "model"
         default:
-            let normalized = source
-                .split(separator: "-")
-                .joined(separator: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = normalizedLabel(source)
             return normalized.isEmpty ? "unknown" : normalized
         }
+    }
+
+    private static func normalizedLabel(_ value: String) -> String {
+        value
+            .split(separator: "-")
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
