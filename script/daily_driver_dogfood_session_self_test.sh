@@ -20,6 +20,7 @@ REVIEW_PASS_REPORT_PATH="$TMP_DIR/review-pass-report.md"
 REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
 REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
 REVIEW_LOW_QUALITY_REPORT_PATH="$TMP_DIR/review-low-quality-report.md"
+PREVIEW_MARK_PATH="$TMP_DIR/preview-session.env"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":200}
@@ -58,6 +59,7 @@ for expected in \
   "Trace exists: yes" \
   "Saved mark: none" \
   "Session state: start-needed" \
+  "Sample gate preview: start-needed" \
   "Next command: ./script/daily_driver_dogfood_session.sh start --app com.apple.TextEdit" \
   "Review command after report: ./script/daily_driver_dogfood_session.sh review --report <report-path>"
 do
@@ -84,6 +86,7 @@ for expected in \
   "App filter: com.apple.TextEdit" \
   "New trace rows: 0" \
   "Session state: marked-no-new-rows" \
+  "Sample gate preview: waiting-for-new-rows" \
   "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
 do
   if ! grep -q "$expected" "$TMP_DIR/status-marked.out"; then
@@ -91,6 +94,46 @@ do
     exit 1
   fi
 done
+
+{
+  printf "START_LINE=%q\n" "1"
+  printf "STARTED_AT=%q\n" "2026-05-25T00:00:00Z"
+  printf "LABEL=%q\n" "preview"
+  printf "APP_FILTER=%q\n" "com.apple.TextEdit"
+  printf "TRACE_PATH_AT_START=%q\n" "$TRACE_PATH"
+} >"$PREVIEW_MARK_PATH"
+
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
+  --trace "$TRACE_PATH" \
+  --mark-file "$PREVIEW_MARK_PATH" \
+  >"$TMP_DIR/status-preview.out"
+
+for expected in \
+  "Saved mark: 1" \
+  "New trace rows: 13" \
+  "Session state: ready-to-finish" \
+  "Sample gate preview: pass" \
+  "Daily-driver sample gate" \
+  "Privacy: redacted metadata counts only" \
+  "Rows scanned: 13" \
+  "Shown suggestions: 5 (minimum 5)" \
+  "Phrase suggestions: 4 (minimum 1)" \
+  "Accepted-kept shown rate: 20% (minimum 15%, 1/5)" \
+  "Source mix: shown / accepted / accepted-kept shown" \
+  "No-show summary: suggestionSuppressed events by reason" \
+  "Result: pass" \
+  "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
+do
+  if ! grep -q "$expected" "$TMP_DIR/status-preview.out"; then
+    echo "dogfood self-test preview status missing: $expected" >&2
+    exit 1
+  fi
+done
+
+if grep -q "displayedText\\|acceptedText\\|rawOutput" "$TMP_DIR/status-preview.out"; then
+  echo "dogfood self-test status preview leaked raw trace text keys" >&2
+  exit 1
+fi
 
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
