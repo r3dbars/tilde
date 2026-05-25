@@ -667,6 +667,360 @@ print("Result: pass")
 PY
 }
 
+run_session_trust_killer_gate() {
+  local trace_path="$1"
+  local start_line="$2"
+  local end_line="$3"
+  local app_filter="$4"
+
+  python3 - \
+    "$trace_path" \
+    "$start_line" \
+    "$end_line" \
+    "$app_filter" <<'PY'
+import json
+import sys
+from collections import Counter
+
+path = sys.argv[1]
+start_line = int(sys.argv[2])
+end_line = int(sys.argv[3])
+app_filter = sys.argv[4]
+
+prompt_app_bundle_ids = {
+    "com.openai.codex",
+    "com.anthropic.claude-code",
+    "com.anthropic.claudefordesktop",
+    "com.openai.chat",
+    "com.openai.ChatGPT",
+    "com.openai.atlas",
+    "com.tinyspeck.slackmacgap",
+    "com.hnc.Discord",
+    "com.hnc.DiscordPTB",
+    "com.hnc.DiscordCanary",
+    "ru.keepcoder.Telegram",
+}
+browser_chat_surface_ids = {
+    "chatgpt",
+    "slack",
+    "discord",
+    "discord-ptb",
+    "discord-canary",
+    "browser-chat-harness",
+    "real-browser-chat-harness",
+}
+sensitive_field_kinds = {
+    "search",
+    "form",
+    "url",
+    "secure",
+    "password",
+    "unprovenSurface",
+}
+
+
+def metadata(event):
+    value = event.get("metadata") or {}
+    return value if isinstance(value, dict) else {}
+
+
+def signal_text(event):
+    return " ".join(
+        [
+            str(event.get("triggerReason") or ""),
+            str(event.get("outcome") or ""),
+            str(event.get("reason") or ""),
+            str(metadata(event).get("annoyanceSignal") or ""),
+            str(metadata(event).get("survivalClass") or ""),
+            str(metadata(event).get("finishReason") or ""),
+        ]
+    ).lower()
+
+
+def contains_signal(event, token):
+    return token in signal_text(event)
+
+
+def truthy(value):
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def field_kind(event):
+    return str(metadata(event).get("fieldKind") or event.get("fieldKind") or "")
+
+
+def sensitive_category(event):
+    event_metadata = metadata(event)
+    return event_metadata.get("sensitiveSuppressionCategory") or event_metadata.get("sensitiveFieldCategory")
+
+
+def is_sensitive_field_presentation(event):
+    return (
+        event.get("type") == "suggestionPresented"
+        and field_kind(event) in sensitive_field_kinds
+    )
+
+
+def is_sensitive_category_presentation(event):
+    return event.get("type") == "suggestionPresented" and sensitive_category(event) is not None
+
+
+def is_unsupported_presentation(event):
+    return (
+        event.get("type") == "suggestionPresented"
+        and metadata(event).get("supportState") == "unsupported"
+    )
+
+
+def is_detached_without_caret(event):
+    event_metadata = metadata(event)
+    return (
+        event.get("type") == "suggestionPresented"
+        and event_metadata.get("effectiveRenderMode") == "floatingMirror"
+        and event_metadata.get("hasCaretRect") == "false"
+    )
+
+
+def is_duplicate_insertion(event):
+    return (
+        event.get("type") == "insertionFailed"
+        and (
+            truthy(metadata(event).get("duplicateDetected"))
+            or contains_signal(event, "duplicate")
+        )
+    )
+
+
+def is_wrong_insertion(event):
+    return event.get("type") == "insertionFailed" and not is_duplicate_insertion(event)
+
+
+def is_tab_conflict(event):
+    event_metadata = metadata(event)
+    return (
+        truthy(event_metadata.get("tabConflict"))
+        or truthy(event_metadata.get("sendKeyCollision"))
+        or truthy(event_metadata.get("keyCollision"))
+        or contains_signal(event, "tab-conflict")
+        or contains_signal(event, "tab conflict")
+        or contains_signal(event, "send-key-collision")
+    )
+
+
+def is_focus_steal(event):
+    event_metadata = metadata(event)
+    return (
+        truthy(event_metadata.get("focusStealing"))
+        or truthy(event_metadata.get("focusSteal"))
+        or contains_signal(event, "focus-steal")
+        or contains_signal(event, "focus steal")
+    )
+
+
+def is_accepted_then_deleted(event):
+    event_metadata = metadata(event)
+    return (
+        "acceptedthendeleted" in signal_text(event)
+        or "accepted-then-deleted" in signal_text(event)
+        or (
+            event.get("type") == "acceptedTextEdited"
+            and event_metadata.get("deletedWithinTwoSeconds") == "true"
+        )
+        or (
+            event.get("type") == "acceptanceRetentionCleared"
+            and "deleted" in str(event.get("reason") or "").lower()
+        )
+    )
+
+
+def is_browser_chat_event(event):
+    event_metadata = metadata(event)
+    return (
+        event_metadata.get("browserSurfaceSafetyClass") == "browser-chat"
+        or event_metadata.get("promptSafetyMetricSurface") == "browser-chat"
+        or event_metadata.get("browserChatSurface") is not None
+        or event_metadata.get("browserChatProofSurface") is not None
+        or event_metadata.get("browserSurface") in browser_chat_surface_ids
+    )
+
+
+def is_prompt_event(event):
+    event_metadata = metadata(event)
+    return (
+        event.get("appBundleIdentifier") in prompt_app_bundle_ids
+        or event_metadata.get("promptSafetyMode") is not None
+        or event_metadata.get("behaviorProfile") == "ai_chat"
+        or is_browser_chat_event(event)
+    )
+
+
+def is_prompt_accidental_submit(event):
+    event_metadata = metadata(event)
+    reason = str(event.get("reason") or "")
+    outcome = str(event.get("outcome") or "")
+    return (
+        truthy(event_metadata.get("accidentalSubmit"))
+        or event_metadata.get("checkpoint") == "fieldSend"
+        or "field-send" in reason
+        or "field-send" in outcome
+        or "accidental-submit" in reason
+    )
+
+
+def is_prompt_mutation(event):
+    event_metadata = metadata(event)
+    reason = str(event.get("reason") or "")
+    return (
+        truthy(event_metadata.get("promptMutationWithoutUserIntent"))
+        or "prompt-mutation" in reason
+        or "mutation-outside-accepted-span" in reason
+    )
+
+
+def is_prompt_wrong_context(event):
+    reason = str(event.get("reason") or "")
+    return (
+        reason == "wrong-app-or-field-before-accept"
+        or "wrong-context" in reason
+        or metadata(event).get("acceptanceGuardReason") is not None
+    )
+
+
+def is_prompt_full_accept_without_proof(event):
+    event_metadata = metadata(event)
+    fields = [
+        str(event.get("outcome") or ""),
+        str(event.get("reason") or ""),
+        str(event.get("requestMode") or ""),
+        str(event_metadata.get("acceptMode") or ""),
+        str(event_metadata.get("keyboardAction") or ""),
+        str(event_metadata.get("action") or ""),
+        str(event_metadata.get("proofMode") or ""),
+    ]
+    lowered = [field.lower() for field in fields]
+    return any(
+        "acceptallvisible" in field
+        or "accept-all-visible" in field
+        or "fullaccept" in field
+        or "full-accept" in field
+        or "accept all" in field
+        or "acceptall" in field
+        for field in lowered
+    )
+
+
+def is_prompt_content_violation(event):
+    reason = str(event.get("reason") or "")
+    return (
+        truthy(metadata(event).get("contentPolicyViolation"))
+        or "suggestion-content-violation" in reason
+        or "accepted-text-prompt-" in reason
+    )
+
+
+matched = []
+scanned_rows = 0
+with open(path, "r", encoding="utf-8") as handle:
+    for line_number, line in enumerate(handle, start=1):
+        if line_number < start_line:
+            continue
+        if line_number > end_line:
+            break
+        scanned_rows += 1
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise SystemExit(f"invalid JSONL on line {line_number}: {error}") from error
+        if app_filter and event.get("appBundleIdentifier") != app_filter:
+            continue
+        matched.append(event)
+
+prompt_events = [event for event in matched if is_prompt_event(event)]
+counters = Counter()
+counters["insertion failures"] = sum(1 for event in matched if is_wrong_insertion(event))
+counters["duplicate insertions"] = sum(1 for event in matched if is_duplicate_insertion(event))
+counters["wrong-context suppressions"] = sum(
+    1
+    for event in matched
+    if event.get("type") == "suggestionSuppressed"
+    and event.get("reason") == "wrong-app-or-field-before-accept"
+)
+counters["caret geometry failures"] = sum(
+    1 for event in matched if event.get("type") == "caretGeometryFailed"
+)
+counters["sensitive field presentations"] = sum(
+    1 for event in matched if is_sensitive_field_presentation(event)
+)
+counters["sensitive category presentations"] = sum(
+    1 for event in matched if is_sensitive_category_presentation(event)
+)
+counters["unsupported app presentations"] = sum(
+    1 for event in matched if is_unsupported_presentation(event)
+)
+counters["detached suggestions without caret"] = sum(
+    1 for event in matched if is_detached_without_caret(event)
+)
+counters["focus steal signals"] = sum(1 for event in matched if is_focus_steal(event))
+counters["tab conflict signals"] = sum(1 for event in matched if is_tab_conflict(event))
+counters["accepted then deleted"] = sum(1 for event in matched if is_accepted_then_deleted(event))
+counters["app disabled events"] = sum(1 for event in matched if event.get("type") == "appDisabled")
+counters["prompt accidental submits"] = sum(
+    1 for event in prompt_events if is_prompt_accidental_submit(event)
+)
+counters["prompt send key collisions"] = sum(1 for event in prompt_events if is_tab_conflict(event))
+counters["prompt mutation without intent"] = sum(1 for event in prompt_events if is_prompt_mutation(event))
+counters["prompt wrong-context insertions"] = sum(
+    1 for event in prompt_events if is_prompt_wrong_context(event)
+)
+counters["prompt full accepts without proof"] = sum(
+    1 for event in prompt_events if is_prompt_full_accept_without_proof(event)
+)
+counters["prompt content violations"] = sum(1 for event in prompt_events if is_prompt_content_violation(event))
+
+failure_order = [
+    "insertion failures",
+    "duplicate insertions",
+    "wrong-context suppressions",
+    "caret geometry failures",
+    "sensitive field presentations",
+    "sensitive category presentations",
+    "unsupported app presentations",
+    "detached suggestions without caret",
+    "focus steal signals",
+    "tab conflict signals",
+    "accepted then deleted",
+    "app disabled events",
+    "prompt accidental submits",
+    "prompt send key collisions",
+    "prompt mutation without intent",
+    "prompt wrong-context insertions",
+    "prompt full accepts without proof",
+    "prompt content violations",
+]
+failures = [(name, counters[name]) for name in failure_order if counters[name] > 0]
+
+print("Daily-driver trust-killer gate")
+print("Privacy: redacted metadata counts only")
+print(f"App filter: {app_filter or 'all supported apps'}")
+print(f"Rows scanned: {scanned_rows}")
+print(f"Rows matched: {len(matched)}")
+print(f"Prompt-class events: {len(prompt_events)}")
+print("Trust-killer counts:")
+for name in failure_order:
+    print(f"{name.title()}: {counters[name]}")
+if failures:
+    print("Result: fail")
+    print("Failures:")
+    for name, count in failures:
+        print(f"- {name} ({count})")
+    raise SystemExit(1)
+print("Result: pass")
+PY
+}
+
 default_report_path() {
   local timestamp safe_label
   timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
@@ -690,9 +1044,9 @@ finish_session() {
     MIN_TYPING_FEEL_SCORE=0
   fi
 
-  local end_line fresh_start report_path trace_eval_output non_annoyance_output sample_gate_output typing_feel_output
+  local end_line fresh_start report_path trace_eval_output non_annoyance_output sample_gate_output typing_feel_output trust_gate_output
   local prompt_safety_output sensitive_safety_output
-  local trace_eval_status non_annoyance_status sample_gate_status typing_feel_status prompt_safety_status sensitive_safety_status safety_snapshot_status gate_status timestamp
+  local trace_eval_status non_annoyance_status sample_gate_status typing_feel_status trust_gate_status prompt_safety_status sensitive_safety_status safety_snapshot_status gate_status timestamp
   end_line="${END_LINE_OVERRIDE:-$(current_trace_line)}"
   require_integer "end line" "$end_line"
   if ((end_line <= START_LINE)); then
@@ -708,9 +1062,10 @@ finish_session() {
   non_annoyance_output="$(mktemp)"
   sample_gate_output="$(mktemp)"
   typing_feel_output="$(mktemp)"
+  trust_gate_output="$(mktemp)"
   prompt_safety_output="$(mktemp)"
   sensitive_safety_output="$(mktemp)"
-  trap 'rm -f "$trace_eval_output" "$non_annoyance_output" "$sample_gate_output" "$typing_feel_output" "$prompt_safety_output" "$sensitive_safety_output"' RETURN
+  trap 'rm -f "$trace_eval_output" "$non_annoyance_output" "$sample_gate_output" "$typing_feel_output" "$trust_gate_output" "$prompt_safety_output" "$sensitive_safety_output"' RETURN
 
   set +e
   "$ROOT_DIR/script/check_prompt_app_proof_self_test.sh" \
@@ -735,6 +1090,14 @@ finish_session() {
     "$MIN_PHRASE_VISIBLE_WORDS" \
     >"$sample_gate_output" 2>&1
   sample_gate_status=$?
+
+  run_session_trust_killer_gate \
+    "$TRACE_PATH" \
+    "$fresh_start" \
+    "$end_line" \
+    "$APP_FILTER" \
+    >"$trust_gate_output" 2>&1
+  trust_gate_status=$?
 
   local -a typing_feel_args=(
     "$TRACE_PATH"
@@ -783,7 +1146,7 @@ finish_session() {
   fi
 
   gate_status="pass"
-  if ((sample_gate_status != 0 || typing_feel_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0 || safety_snapshot_status != 0)); then
+  if ((sample_gate_status != 0 || trust_gate_status != 0 || typing_feel_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0 || safety_snapshot_status != 0)); then
     gate_status="fail"
   fi
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -806,6 +1169,7 @@ finish_session() {
     echo "- Prompt no-submit safety status: \`$prompt_safety_status\`."
     echo "- Sensitive field safety status: \`$sensitive_safety_status\`."
     echo "- Sample gate status: \`$sample_gate_status\`."
+    echo "- Trust-killer gate status: \`$trust_gate_status\`."
     echo "- Reach minimum: accepted-kept / shown \`$MIN_KEPT_PER_SHOWN_PERCENT%\`."
     echo "- Typing feel status: \`$typing_feel_status\`."
     echo "- Non-annoyance status: \`$non_annoyance_status\`."
@@ -854,6 +1218,14 @@ finish_session() {
     echo
     echo '```text'
     cat "$sample_gate_output"
+    echo '```'
+    echo
+    echo "## Trust-Killer Gate"
+    echo
+    echo "The session must stay free of wrong-field accepts, failed insertions, sensitive-field displays, unsupported app displays, detached placement, prompt-submit risk, and similar trust-killers."
+    echo
+    echo '```text'
+    cat "$trust_gate_output"
     echo '```'
     echo
     echo "## Typing Feel Score"
@@ -992,6 +1364,10 @@ if re.search(r"Safety snapshot status:\s*`[1-9][0-9]*`", text):
     failures.append("daily-driver safety snapshot failed")
 if not re.search(r"Safety snapshot status:\s*`0`", text):
     failures.append("daily-driver safety snapshot pass marker missing")
+if re.search(r"Trust-killer gate status:\s*`[1-9][0-9]*`", text):
+    failures.append("daily-driver trust-killer gate failed")
+if not re.search(r"Trust-killer gate status:\s*`0`", text):
+    failures.append("daily-driver trust-killer pass marker missing")
 if not re.search(r"Prompt no-submit safety status:\s*`?0`?", text):
     failures.append("prompt no-submit safety pass marker missing")
 if not re.search(r"Sensitive field safety status:\s*`?0`?", text):
@@ -1033,6 +1409,7 @@ print("Privacy: redacted manual labels only")
 print(f"Report: {path}")
 print(f"Automated gate: {'pass' if automated_gate_pass else 'missing'}")
 print("Safety snapshot: pass" if re.search(r"Safety snapshot status:\s*`0`", text) else "Safety snapshot: missing")
+print("Trust-killer gate: pass" if re.search(r"Trust-killer gate status:\s*`0`", text) else "Trust-killer gate: missing")
 print(f"App: {app or 'blank'}")
 print(f"Minutes: {minutes or 'blank'}")
 print(f"Did reach for it: {reached or 'blank'}")
