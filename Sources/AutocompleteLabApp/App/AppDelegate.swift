@@ -6194,7 +6194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         ]
                         .merging(learningDecision.metadata) { current, _ in current }
                     )
-                    setSuggestionDecision("Queued: model phrase after instant learning restraint")
+                    setSuggestionDecision("\(SuggestionStatusText.notShown(reason: reason)); queued model phrase")
                 } else {
                     presentSuggestion(
                         fastSuggestion,
