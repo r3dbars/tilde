@@ -7620,7 +7620,12 @@ cleanup_claude_code_terminal_proof() {
 }
 
 wait_for_claude_code_terminal_prompt() {
-  claude_code_terminal_ax_helper wait \
+  swift script/terminal_prompt_ax_proof_helper.swift wait \
+    --bundle "$(claude_code_host_bundle_id)" \
+    --display "$(claude_code_host_display_name)" \
+    --marker "$(claude_code_proof_marker)" \
+    --hint "for shortcuts" \
+    --hint "❯" \
     --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
 }
 
@@ -9886,7 +9891,7 @@ run_claude_code_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_seed_start sample_start stable_context context_prefix trigger_word trigger_text expected_text trigger_char_count
+  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_iteration_start sample_seed_start sample_start stable_context context_prefix trigger_word trigger_text expected_text trigger_char_count
   if [[ "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" != *"$marker"* ]]; then
     echo "Claude Code model latency proof title must include $marker." >&2
     exit 2
@@ -9915,6 +9920,7 @@ run_claude_code_model_latency() {
 
     assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "Claude Code model latency sample $sample_index"
     assert_frontmost_app "Terminal" "Claude Code model latency seed $sample_index"
+    sample_iteration_start="$(line_count "$LOG_PATH")"
     clear_claude_code_terminal_prompt_line
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_CLEAR_SETTLE_SECONDS:-0.7}"
     sample_seed_start="$(line_count "$LOG_PATH")"
@@ -9933,7 +9939,7 @@ run_claude_code_model_latency() {
       "candidateSelectionSource=app-model-result"; then
       assert_claude_code_terminal_prompt_retains_marker
       visible_sample_count=$((visible_sample_count + 1))
-    elif wait_for_log_fields_optional "$sample_seed_start" "1" \
+    elif wait_for_log_fields_optional "$sample_iteration_start" "1" \
       "suggestion-blocked" \
       "app=com.anthropic.claude-code" \
       "reason=empty-suggestion"; then

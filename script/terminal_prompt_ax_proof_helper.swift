@@ -16,6 +16,7 @@ struct Snapshot {
     let frontmostBundleIdentifier: String?
     let textCount: Int
     let titleCount: Int
+    let markerWindowCount: Int
     let hasMarker: Bool
     let hasText: Bool
     let hasHint: Bool
@@ -138,6 +139,10 @@ func collectWindowTitles(from appElement: AXUIElement) -> [String] {
         .filter { !$0.isEmpty }
 }
 
+func windows(from appElement: AXUIElement) -> [AXUIElement] {
+    copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
+}
+
 func frontmostBundleIdentifier() -> String? {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
@@ -172,6 +177,7 @@ func snapshot(options: Options) -> Snapshot {
             frontmostBundleIdentifier: frontmost,
             textCount: 0,
             titleCount: 0,
+            markerWindowCount: 0,
             hasMarker: false,
             hasText: false,
             hasHint: false,
@@ -184,11 +190,21 @@ func snapshot(options: Options) -> Snapshot {
     AXUIElementSetMessagingTimeout(appElement, 0.8)
 
     var texts: [String] = []
-    if let focused = focusedElement(in: appElement) {
+    let allWindows = windows(from: appElement)
+    let markerWindows = allWindows.filter { window in
+        containsText(stringAttribute(window, kAXTitleAttribute), options.marker, caseInsensitive: true)
+    }
+    let scopedWindows = markerWindows.isEmpty ? allWindows : markerWindows
+    for window in scopedWindows {
+        collectText(from: window, into: &texts)
+    }
+    if markerWindows.isEmpty, let focused = focusedElement(in: appElement) {
         collectText(from: focused, into: &texts)
     }
-    collectText(from: appElement, into: &texts)
-    let titles = collectWindowTitles(from: appElement)
+
+    let titles = scopedWindows
+        .map { stringAttribute($0, kAXTitleAttribute) }
+        .filter { !$0.isEmpty }
     let searchable = texts + titles
     let joinedSearchable = searchable.joined(separator: "\n")
 
@@ -210,6 +226,7 @@ func snapshot(options: Options) -> Snapshot {
         frontmostBundleIdentifier: frontmost,
         textCount: texts.count,
         titleCount: titles.count,
+        markerWindowCount: markerWindows.count,
         hasMarker: hasMarker,
         hasText: hasText,
         hasHint: hasHint,
@@ -220,7 +237,7 @@ func snapshot(options: Options) -> Snapshot {
 
 func describeFailure(_ snapshot: Snapshot, options: Options) -> String {
     let frontmost = snapshot.frontmostBundleIdentifier ?? "none"
-    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
+    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), markerWindows=\(snapshot.markerWindowCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
 }
 
 let options = parseOptions()
