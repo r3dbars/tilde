@@ -321,16 +321,20 @@ print_status() {
         echo "New trace rows: $((line - START_LINE))"
         if ((line > START_LINE)); then
           echo "Session state: ready-to-finish"
+          print_status_sample_preview "$START_LINE" "$line" "$APP_FILTER"
         else
           echo "Session state: marked-no-new-rows"
+          echo "Sample gate preview: waiting-for-new-rows"
         fi
       else
         echo "New trace rows: trace-rotated"
         echo "Session state: restart-needed"
+        echo "Sample gate preview: restart-needed"
       fi
     else
       echo "New trace rows: unknown"
       echo "Session state: mark-invalid"
+      echo "Sample gate preview: mark-invalid"
     fi
     if [[ -n "${APP_FILTER:-}" ]]; then
       finish_app_arg=" --app ${APP_FILTER}"
@@ -339,9 +343,51 @@ print_status() {
   else
     echo "Saved mark: none"
     echo "Session state: start-needed"
+    echo "Sample gate preview: start-needed"
     echo "Next command: ./script/daily_driver_dogfood_session.sh start${APP_FILTER:+ --app $APP_FILTER}"
   fi
   echo "Review command after report: ./script/daily_driver_dogfood_session.sh review --report <report-path>"
+}
+
+print_status_sample_preview() {
+  local start_line="$1"
+  local end_line="$2"
+  local app_filter="$3"
+  local fresh_start preview_output preview_status
+  fresh_start=$((start_line + 1))
+  if [[ ! -f "$TRACE_PATH" ]]; then
+    echo "Sample gate preview: trace-missing"
+    return
+  fi
+  if ((end_line < fresh_start)); then
+    echo "Sample gate preview: waiting-for-new-rows"
+    return
+  fi
+
+  set +e
+  preview_output="$(
+    run_session_sample_gate \
+      "$TRACE_PATH" \
+      "$fresh_start" \
+      "$end_line" \
+      "$app_filter" \
+      "$MIN_SHOWN" \
+      "$MIN_ACCEPTED" \
+      "$MIN_KEPT" \
+      "$MIN_KEPT_PER_SHOWN_PERCENT" \
+      "$MIN_ACTIVE_MINUTES" \
+      "$MIN_PHRASE_SHOWN" \
+      "$MIN_PHRASE_VISIBLE_WORDS" 2>&1
+  )"
+  preview_status=$?
+  set -e
+
+  if ((preview_status == 0)); then
+    echo "Sample gate preview: pass"
+  else
+    echo "Sample gate preview: fail"
+  fi
+  echo "$preview_output"
 }
 
 run_session_sample_gate() {
