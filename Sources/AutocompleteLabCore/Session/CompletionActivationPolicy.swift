@@ -157,7 +157,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
         fieldKind: AXFieldKind = .multilineCompose,
-        allowsUnknownFieldKind: Bool = false
+        allowsUnknownFieldKind: Bool = false,
+        allowsTrustedProofSensitiveContent: Bool = false
     ) -> Bool {
         decision(
             textBeforeCursor: textBeforeCursor,
@@ -166,7 +167,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             selectedTextLength: selectedTextLength,
             isFieldSuppressed: isFieldSuppressed,
             fieldKind: fieldKind,
-            allowsUnknownFieldKind: allowsUnknownFieldKind
+            allowsUnknownFieldKind: allowsUnknownFieldKind,
+            allowsTrustedProofSensitiveContent: allowsTrustedProofSensitiveContent
         ).canSuggest
     }
 
@@ -177,7 +179,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
         selectedTextLength: Int = 0,
         isFieldSuppressed: Bool,
         fieldKind: AXFieldKind = .multilineCompose,
-        allowsUnknownFieldKind: Bool = false
+        allowsUnknownFieldKind: Bool = false,
+        allowsTrustedProofSensitiveContent: Bool = false
     ) -> CompletionActivationDecision {
         if isSecure || fieldKind == .secure {
             return .block(.secureField)
@@ -199,7 +202,8 @@ public struct CompletionActivationPolicy: Equatable, Sendable {
             return .block(.blockedFieldKind)
         }
 
-        if looksSensitive(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
+        if !allowsTrustedProofSensitiveContent,
+           looksSensitive(textBeforeCursor: textBeforeCursor, textAfterCursor: textAfterCursor) {
             return .block(.sensitiveContent)
         }
 

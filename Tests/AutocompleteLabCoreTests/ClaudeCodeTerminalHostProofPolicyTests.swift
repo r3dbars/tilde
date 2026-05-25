@@ -965,6 +965,226 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(effective.reason == "claude-code-terminal-host-proof")
     }
 
+    @Test("iTerm proof can recover marked prompt from terminal screen text")
+    func iTermProofCanRecoverMarkedPromptFromTerminalScreenText() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:zsh"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.googlecode.iterm2",
+            windowTitle: "Claude Code",
+            focusedText: "con",
+            rawTextBeforeCursor: "con",
+            terminalScreenText: """
+            Claude Code
+            ❯ Make this setting STEADYTYPECLAUDECODEPROOF con
+            """,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+        #expect(effective.kind == .multilineCompose)
+        #expect(metadata["terminalProofScreenHasMarker"] == "true")
+        #expect(metadata["terminalProofRecoverableInput"] == "true")
+    }
+
+    @Test("iTerm proof can recover wrapped prefix before terminal screen marker")
+    func iTermProofCanRecoverWrappedPrefixBeforeTerminalScreenMarker() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.googlecode.iterm2",
+            windowTitle: "Claude Code",
+            focusedText: "con",
+            rawTextBeforeCursor: "con",
+            terminalScreenText: """
+            Claude Code
+            ❯ Make this setting
+            STEADYTYPECLAUDECODEPROOF con
+            ? for shortcuts
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+    }
+
+    @Test("Terminal screen marker recovery rejects marker-only tail text")
+    func terminalScreenMarkerRecoveryRejectsMarkerOnlyTailText() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:zsh"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.googlecode.iterm2",
+            windowTitle: "Claude Code",
+            focusedText: "con",
+            rawTextBeforeCursor: "con",
+            terminalScreenText: """
+            Claude Code
+            STEADYTYPECLAUDECODEPROOF con
+            """,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(effective == raw)
+    }
+
+    @Test("Terminal screen marker recovery must match current typed suffix")
+    func terminalScreenMarkerRecoveryMustMatchCurrentTypedSuffix() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:zsh"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.googlecode.iterm2",
+            windowTitle: "Claude Code",
+            focusedText: "abc",
+            rawTextBeforeCursor: "abc",
+            terminalScreenText: """
+            Claude Code
+            ❯ Make this setting STEADYTYPECLAUDECODEPROOF con
+            """,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(effective == raw)
+    }
+
+    @Test("Title-only terminal proof marker cannot validate focused tail text")
+    func titleOnlyTerminalProofMarkerCannotValidateFocusedTailText() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:zsh"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.googlecode.iterm2",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "con",
+            rawTextBeforeCursor: "con",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(effective == raw)
+    }
+
+    @Test("Title-only terminal proof marker cannot validate half typed marker fragments")
+    func titleOnlyTerminalProofMarkerCannotValidateHalfTypedMarkerFragments() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:zsh"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.googlecode.iterm2",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Make this setting STEADYTYPECLAUDECODE",
+            rawTextBeforeCursor: "Make this setting STEADYTYPECLAUDECODE",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(effective == raw)
+    }
+
+    @Test("Ghostty proof can allow trusted sensitive activation bypass")
+    func ghosttyProofCanAllowTrustedSensitiveActivationBypass() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Make this setting the feature con",
+            rawTextBeforeCursor: "Make this setting the feature con",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
+        #expect(ClaudeCodeTerminalHostProofPolicy.allowsSensitiveActivationBypass(
+            for: context,
+            proofInputText: "Make this setting the feature con"
+        ))
+    }
+
+    @Test("Ghostty proof sensitive activation bypass rejects mismatched or command input")
+    func ghosttyProofSensitiveActivationBypassRejectsMismatchedOrCommandInput() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Make this setting the feature con",
+            rawTextBeforeCursor: "Make this setting the feature con",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+        let commandContext = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "rm -rf local-fixture con",
+            rawTextBeforeCursor: "rm -rf local-fixture con",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        #expect(!ClaudeCodeTerminalHostProofPolicy.allowsSensitiveActivationBypass(
+            for: context,
+            proofInputText: "Make this setting the feature abc"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.allowsSensitiveActivationBypass(
+            for: commandContext,
+            proofInputText: "rm -rf local-fixture con"
+        ))
+    }
+
+    @Test("Previously verified proof input can keep sensitive bypass after marker repair")
+    func previouslyVerifiedProofInputCanKeepSensitiveBypassAfterMarkerRepair() {
+        #expect(ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "Make this setting the feature configurable"
+        ))
+
+        #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "rm -rf local-fixture con"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "Make this setting STEADYTYPECLAUDECODE"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "Make this"
+        ))
+    }
+
     @Test("Unsafe terminal proof keeps raw suppressed field kind")
     func unsafeTerminalProofKeepsRawSuppressedFieldKind() {
         let raw = AXFieldClassification(

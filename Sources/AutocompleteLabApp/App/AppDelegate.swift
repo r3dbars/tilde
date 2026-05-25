@@ -2085,6 +2085,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let allowsTrustedProofSensitiveContent = allowsClaudeCodeTerminalHostProofSensitiveActivationBypass(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: suggestionFieldClassification
+        )
         let rawActivationDecision = activationPolicy(for: profile).decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
@@ -2092,8 +2099,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selectedTextLength: context.selectedTextLength,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
             fieldKind: suggestionFieldClassification.kind,
-            allowsUnknownFieldKind: profile.allowsUnknownFieldKind
+            allowsUnknownFieldKind: profile.allowsUnknownFieldKind,
+            allowsTrustedProofSensitiveContent: allowsTrustedProofSensitiveContent
         )
+        if allowsTrustedProofSensitiveContent {
+            recordClaudeCodeTerminalHostProofSensitiveActivationBypass(
+                context: context,
+                hostBundleIdentifier: frontmostApp.bundleIdentifier,
+                rawDecision: rawActivationDecision
+            )
+        }
         let activationDecision = proofAdjustedActivationDecision(
             rawActivationDecision,
             context: context,
@@ -2406,12 +2421,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+        let searchableInputText = [
+            focusedLine,
+            context.textBeforeCursor,
+            context.textAfterCursor
+        ].joined(separator: "\n")
+        let terminalScreenText = ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText)
+            ? ""
+            : (accessibilityClient.focusedWindowText(for: app) ?? "")
         return ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: app.bundleIdentifier,
             windowTitle: context.fingerprint.windowTitle ?? "",
             focusedText: focusedLine,
             rawTextBeforeCursor: context.textBeforeCursor,
             rawTextAfterCursor: context.textAfterCursor,
+            terminalScreenText: terminalScreenText,
             proofModeEnabled: activeAppProofBundleIdentifiers.contains(
                 ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             )
@@ -2459,12 +2483,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: proofContext)
     }
 
+    private func allowsClaudeCodeTerminalHostProofSensitiveActivationBypass(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        fieldClassification: AXFieldClassification
+    ) -> Bool {
+        guard isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier),
+              fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+              !context.isSecure,
+              context.selectedTextLength == 0,
+              !suppressedFieldIdentities.contains(fieldIdentity),
+              claudeCodeTerminalHostProofInputSignature(
+                context: context,
+                hostBundleIdentifier: app.bundleIdentifier
+              ) == lastClaudeCodeTerminalProofInputSignature,
+              ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+                proofInputText: context.textBeforeCursor
+              ) else {
+            return false
+        }
+
+        return true
+    }
+
+    private func recordClaudeCodeTerminalHostProofSensitiveActivationBypass(
+        context: FocusedTextContext,
+        hostBundleIdentifier: String,
+        rawDecision: CompletionActivationDecision
+    ) {
+        guard rawDecision.canSuggest else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-sensitive-activation-bypass",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "host": hostBundleIdentifier,
+                "beforeChars": String(context.textBeforeCursor.count),
+                "afterChars": String(context.textAfterCursor.count),
+                "requestMode": rawDecision.requestMode?.rawValue ?? "none"
+            ]
+        )
+    }
+
     private func effectiveSuggestionFieldClassification(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
         profile: CompatibilityProfile,
         raw classification: AXFieldClassification
     ) -> AXFieldClassification {
+        if isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier),
+           claudeCodeTerminalHostProofInputSignature(
+            context: context,
+            hostBundleIdentifier: app.bundleIdentifier
+           ) == lastClaudeCodeTerminalProofInputSignature {
+            return ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+        }
+
         guard let proofContext = claudeCodeTerminalHostProofContext(
             app: app,
             context: context,
@@ -2858,6 +2936,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hostBundleIdentifier: app.bundleIdentifier,
                 profile: profile
             )
+        } else if isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) {
+            lastClaudeCodeTerminalProofInputSignature = nil
         }
 
         let syntheticCaretBundleIdentifier = syntheticTextAreaCaretBundleIdentifier(
@@ -2866,7 +2949,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         guard supportsSyntheticTextAreaCaret(for: app, profile: profile),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
-              context.caretRect == nil,
+              shouldUseSyntheticTextAreaCaret(for: app, profile: profile, context: context),
               let syntheticCaret = syntheticTextAreaCaretRect(
                 for: context,
                 bundleIdentifier: syntheticCaretBundleIdentifier
@@ -2929,6 +3012,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func shouldUseSyntheticTextAreaCaret(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile,
+        context: FocusedTextContext
+    ) -> Bool {
+        guard context.caretRect != nil else {
+            return true
+        }
+
+        guard isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) else {
+            return false
+        }
+
+        return true
+    }
+
     private func claudeCodeTerminalHostProofInputText(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
@@ -2955,12 +3057,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostBundleIdentifier: String,
         profile: CompatibilityProfile
     ) {
-        let signature = [
-            hostBundleIdentifier,
-            String(context.elementIdentifier),
-            String(context.textBeforeCursor.count),
-            String(context.textAfterCursor.count)
-        ].joined(separator: "|")
+        let signature = claudeCodeTerminalHostProofInputSignature(
+            context: context,
+            hostBundleIdentifier: hostBundleIdentifier
+        )
 
         guard signature != lastClaudeCodeTerminalProofInputSignature else {
             return
@@ -2986,6 +3086,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "partialWordCasing": partialWordShape?.casing.rawValue ?? PartialWordCasing.none.rawValue
             ]
         )
+    }
+
+    private func claudeCodeTerminalHostProofInputSignature(
+        context: FocusedTextContext,
+        hostBundleIdentifier: String
+    ) -> String {
+        [
+            hostBundleIdentifier,
+            String(context.elementIdentifier),
+            String(context.textBeforeCursor.count),
+            String(context.textAfterCursor.count),
+            claudeCodeTerminalHostProofInputToken(context.textBeforeCursor)
+        ].joined(separator: "|")
+    }
+
+    private func claudeCodeTerminalHostProofInputToken(_ text: String) -> String {
+        let tokens = AcceptanceSurvivalClassifier.looseTokens(in: text)
+        return TracePrivacyFingerprint.prefixFamilyMetadata(
+            for: tokens,
+            secret: tracePrivacySecretStore.secret()
+        )["prefixFamilyHMACToken"] ?? "empty"
     }
 
     private func supportsSyntheticTextAreaCaret(
@@ -9171,10 +9292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return false
         }
-        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
-            return false
-        }
-        guard let lastTextSnapshot else {
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              let lastTextSnapshot else {
             return false
         }
 
@@ -9202,7 +9321,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return verified
         }
 
-        if Self.postUnicodeTextKeyEvents(acceptedText) {
+        if Self.postHardwareTextKeyEvents(
+            acceptedText,
+            processIdentifier: frontmostApp.processIdentifier
+        ) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgHardwareKeyEvents",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "cgHardwareKeyEventsBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "hardware-unverified-mutated-input",
+                        "source": "cgHardwareKeyEventsBaseline"
+                    ]
+                )
+                return false
+            }
+        }
+
+        if Self.postUnicodeTextKeyEvents(
+            acceptedText,
+            processIdentifier: frontmostApp.processIdentifier
+        ) {
             let verified = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: expectedProofInputText,
                 frontmostApp: frontmostApp,
@@ -9250,44 +9423,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        if Self.postHardwareTextKeyEvents(acceptedText) {
-            let verified = verifyClaudeCodeTerminalHostProofInsertion(
-                expectedProofInputText: expectedProofInputText,
-                frontmostApp: frontmostApp,
-                profile: currentProfile,
-                attempts: 24
-            )
-            DiagnosticsLog.shared.record(
-                "claude-code-terminal-host-proof-insert",
-                metadata: [
-                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "true",
-                    "source": "cgHardwareKeyEvents",
-                    "verified": String(verified)
-                ]
-            )
-            if verified {
-                return true
-            }
-
-            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
-                expectedProofInputText: originalProofInputText,
-                frontmostApp: frontmostApp,
-                profile: currentProfile,
-                attempts: 4
-            )
-            guard promptStayedUnchanged else {
-                DiagnosticsLog.shared.record(
-                    "claude-code-terminal-host-proof-insert",
-                    metadata: [
-                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                        "posted": "false",
-                        "reason": "hardware-unverified-mutated-input",
-                        "source": "cgHardwareKeyEvents"
-                    ]
-                )
-                return false
-            }
+        if insertClaudeCodeTerminalHostProofPasteboardText(
+            acceptedText,
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: currentProfile
+        ) {
+            return true
         }
 
         DiagnosticsLog.shared.record(
@@ -9295,10 +9438,125 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "posted": "false",
-                "reason": "terminal-pasteboard-fallback-disabled",
+                "reason": "terminal-verified-insertion-failed",
                 "source": "failClosed"
             ]
         )
+        return false
+    }
+
+    private func insertClaudeCodeTerminalHostProofPasteboardText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> Bool {
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-text-not-one-line",
+                    "source": "pasteboardCommandV"
+                ]
+            )
+            return false
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-set-failed",
+                    "source": "pasteboardCommandV"
+                ]
+            )
+            return false
+        }
+        let fallbackChangeCount = pasteboard.changeCount
+
+        guard Self.postCommandVKey() else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-command-v-failed",
+                    "source": "pasteboardCommandV"
+                ]
+            )
+            return false
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        schedulePasteboardRestore(
+            insertedText: acceptedText,
+            fallbackChangeCount: fallbackChangeCount,
+            originalItems: originalItems,
+            delaySeconds: 0.35
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": "pasteboardCommandV",
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return true
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": "pasteboardCommandVBaseline",
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        if !promptStayedUnchanged {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-unverified-mutated-input",
+                    "source": "pasteboardCommandVBaseline"
+                ]
+            )
+        }
         return false
     }
 
@@ -9360,7 +9618,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    nonisolated private static func postUnicodeTextKeyEvents(_ text: String) -> Bool {
+    nonisolated private static func postUnicodeTextKeyEvents(
+        _ text: String,
+        processIdentifier: pid_t? = nil
+    ) -> Bool {
         guard !text.isEmpty else {
             return false
         }
@@ -9375,14 +9636,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         characters.withUnsafeMutableBufferPointer { buffer in
             keyDown.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
             keyUp.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
-            keyDown.post(tap: .cghidEventTap)
-            keyUp.post(tap: .cghidEventTap)
+            if let processIdentifier {
+                keyDown.postToPid(processIdentifier)
+                keyUp.postToPid(processIdentifier)
+            } else {
+                keyDown.post(tap: .cghidEventTap)
+                keyUp.post(tap: .cghidEventTap)
+            }
         }
 
         return true
     }
 
-    nonisolated private static func postHardwareTextKeyEvents(_ text: String) -> Bool {
+    nonisolated private static func postHardwareTextKeyEvents(
+        _ text: String,
+        processIdentifier: pid_t? = nil
+    ) -> Bool {
         guard let strokes = KeyboardTextEventPlan.hardwareKeyStrokes(for: text),
               let source = CGEventSource(stateID: .hidSystemState) else {
             return false
@@ -9404,8 +9673,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             keyDown.flags = stroke.flags
             keyUp.flags = stroke.flags
-            keyDown.post(tap: .cghidEventTap)
-            keyUp.post(tap: .cghidEventTap)
+            if let processIdentifier {
+                keyDown.postToPid(processIdentifier)
+                keyUp.postToPid(processIdentifier)
+            } else {
+                keyDown.post(tap: .cghidEventTap)
+                keyUp.post(tap: .cghidEventTap)
+            }
         }
 
         return true
@@ -9663,7 +9937,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.post(tap: .cghidEventTap)
     }
 
-    nonisolated private static func postCommandVKey() -> Bool {
+    nonisolated private static func postCommandVKey(processIdentifier: pid_t? = nil) -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
@@ -9672,8 +9946,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        if let processIdentifier {
+            keyDown.postToPid(processIdentifier)
+            keyUp.postToPid(processIdentifier)
+        } else {
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
         return true
     }
 

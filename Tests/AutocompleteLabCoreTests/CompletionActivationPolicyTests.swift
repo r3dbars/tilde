@@ -205,6 +205,38 @@ struct CompletionActivationPolicyTests {
         ) == .block(.sensitiveContent))
     }
 
+    @Test("Trusted proof sensitive-content opt-in still keeps safety gates")
+    func trustedProofSensitiveContentOptInStillKeepsSafetyGates() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "Command line: make this setting con",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose,
+            allowsTrustedProofSensitiveContent: true
+        ) == .allow(.wordCompletion))
+
+        #expect(policy.decision(
+            textBeforeCursor: "Command line: make this setting con",
+            textAfterCursor: "",
+            isSecure: true,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose,
+            allowsTrustedProofSensitiveContent: true
+        ) == .block(.secureField))
+
+        #expect(policy.decision(
+            textBeforeCursor: "Command line: make this setting con",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: true,
+            fieldKind: .multilineCompose,
+            allowsTrustedProofSensitiveContent: true
+        ) == .block(.suppressedField))
+    }
+
     @Test("Blocks very short context")
     func blocksShortContext() {
         let policy = CompletionActivationPolicy()
