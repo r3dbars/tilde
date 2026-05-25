@@ -39,6 +39,13 @@ struct SuggestionAggressivenessTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
+        #expect(activation.decision(
+            textBeforeCursor: "I feel ready now. ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
 
         let trigger = tuning.triggerPolicy(supportPace: tuning.pace)
         #expect(trigger.decision(
@@ -51,6 +58,11 @@ struct SuggestionAggressivenessTests {
             currentTextBeforeCursor: "I feel ready now ",
             requestMode: .phraseContinuation
         ) == .request(delayMilliseconds: 80))
+        #expect(trigger.decision(
+            previousTextBeforeCursor: "I feel ready now",
+            currentTextBeforeCursor: "I feel ready now.",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 180))
     }
 
     @Test("normal starts suggestions sooner without using the most eager thresholds")
@@ -120,7 +132,7 @@ struct SuggestionAggressivenessTests {
         #expect(veryProactiveTrigger.minimumWordCompletionCharacters == 2)
         #expect(veryProactiveTrigger.minimumPhraseContinuationWords == 2)
         #expect(!veryProactiveTrigger.allowsPlainLineStartPhraseContinuation)
-        #expect(!veryProactiveTrigger.allowsSentenceBoundaryRequest)
+        #expect(veryProactiveTrigger.allowsSentenceBoundaryRequest)
 
         let maxTrigger = max.triggerPolicy(supportPace: .eager)
         #expect(maxTrigger.wordBoundaryDelayMilliseconds == 80)
@@ -128,8 +140,35 @@ struct SuggestionAggressivenessTests {
         #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 180)
         #expect(maxTrigger.pauseDelayMilliseconds == 80)
         #expect(maxTrigger.minimumWordCompletionCharacters == 2)
+        #expect(maxTrigger.allowsSentenceBoundaryRequest)
         #expect(max.traceMetadata["suggestionAggressivenessLevel"] == "5")
         #expect(max.traceMetadata["suggestionMaxVisibleWords"] == "20")
+    }
+
+    @Test("prompt-safe tuning keeps sentence boundaries quiet")
+    func promptSafeTuningKeepsSentenceBoundariesQuiet() {
+        let tuning = SuggestionTuning(aggressivenessLevel: 4)
+        let activation = tuning.activationPolicy(
+            supportPace: .eager,
+            allowsSentenceBoundaryContinuation: false
+        )
+        let trigger = tuning.triggerPolicy(
+            supportPace: .eager,
+            allowsSentenceBoundaryContinuation: false
+        )
+
+        #expect(activation.decision(
+            textBeforeCursor: "This prompt should stay safe. ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.terminalSentenceBoundary))
+        #expect(trigger.decision(
+            previousTextBeforeCursor: "This prompt should stay safe",
+            currentTextBeforeCursor: "This prompt should stay safe.",
+            requestMode: .phraseContinuation
+        ) == .skip)
     }
 
     @Test("extra tuning knobs independently control timing confidence and learning")

@@ -522,7 +522,7 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .block(.terminalSentenceBoundary))
+        ) == .allow(.phraseContinuation))
         #expect(quiet.decision(
             textBeforeCursor: "di",
             textAfterCursor: "",

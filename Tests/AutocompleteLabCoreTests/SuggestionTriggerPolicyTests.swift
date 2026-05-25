@@ -182,14 +182,14 @@ struct SuggestionTriggerPolicyTests {
         ) == .request(delayMilliseconds: 80))
     }
 
-    @Test("Very proactive tuning stays quiet after sentence boundaries")
-    func veryProactiveTuningStaysQuietAfterSentenceBoundaries() {
+    @Test("Very proactive tuning requests next-sentence phrases after sentence boundaries")
+    func veryProactiveTuningRequestsNextSentencePhrasesAfterSentenceBoundaries() {
         let policy = SuggestionTuning(aggressivenessLevel: 4).triggerPolicy(supportPace: .eager)
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works",
             currentTextBeforeCursor: "I think this works."
-        ) == .skip)
+        ) == .request(delayMilliseconds: 180))
     }
 
     @Test("Sentence boundaries stay quiet by default")

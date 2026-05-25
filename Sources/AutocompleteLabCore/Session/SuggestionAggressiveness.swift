@@ -266,10 +266,16 @@ public struct SuggestionTuning: Equatable, Sendable {
             )
     }
 
-    public func activationPolicy(supportPace: SuggestionPace) -> CompletionActivationPolicy {
+    public func activationPolicy(
+        supportPace: SuggestionPace,
+        allowsSentenceBoundaryContinuation: Bool = true
+    ) -> CompletionActivationPolicy {
         guard supportPace == .eager else {
             return CompletionActivationPolicy(pace: supportPace)
         }
+
+        let allowsTerminalSentenceBoundary = allowsSentenceBoundaryContinuation
+            && aggressivenessLevel >= 4
 
         if aggressivenessLevel >= 5 {
             return CompletionActivationPolicy(
@@ -278,7 +284,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseStartWords,
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 18,
-                allowsTerminalSentenceBoundary: false,
+                allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
                 allowsUnfinishedWordPhraseContinuation: true,
                 prefersPhraseContinuationForWordFragments: true
             )
@@ -291,7 +297,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseStartWords,
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 16,
-                allowsTerminalSentenceBoundary: false,
+                allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
                 allowsUnfinishedWordPhraseContinuation: true,
                 prefersPhraseContinuationForWordFragments: true
             )
@@ -308,10 +314,16 @@ public struct SuggestionTuning: Equatable, Sendable {
         )
     }
 
-    public func triggerPolicy(supportPace: SuggestionPace) -> SuggestionTriggerPolicy {
+    public func triggerPolicy(
+        supportPace: SuggestionPace,
+        allowsSentenceBoundaryContinuation: Bool = true
+    ) -> SuggestionTriggerPolicy {
         guard supportPace == .eager else {
             return SuggestionTriggerPolicy(pace: supportPace)
         }
+
+        let allowsSentenceBoundaryRequest = allowsSentenceBoundaryContinuation
+            && aggressivenessLevel >= 4
 
         switch aggressivenessLevel {
         case 3:
@@ -330,7 +342,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseStartWords,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: false,
-                allowsSentenceBoundaryRequest: false
+                allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         case 5:
             return SuggestionTriggerPolicy(
@@ -346,7 +358,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseStartWords,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: false,
-                allowsSentenceBoundaryRequest: false
+                allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         default:
             return responseSpeedTriggerPolicy

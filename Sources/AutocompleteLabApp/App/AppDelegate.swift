@@ -11356,8 +11356,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func allowsSentenceBoundaryContinuation(for profile: CompatibilityProfile) -> Bool {
+        !profile.promptAppSafetyMode.isPromptSurface
+    }
+
     private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
-        suggestionTuning.activationPolicy(supportPace: effectiveSuggestionPace(for: profile))
+        suggestionTuning.activationPolicy(
+            supportPace: effectiveSuggestionPace(for: profile),
+            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile)
+        )
     }
 
     private func proofAdjustedActivationDecision(
@@ -11405,7 +11412,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func triggerPolicy(for profile: CompatibilityProfile) -> SuggestionTriggerPolicy {
-        suggestionTuning.triggerPolicy(supportPace: effectiveSuggestionPace(for: profile))
+        suggestionTuning.triggerPolicy(
+            supportPace: effectiveSuggestionPace(for: profile),
+            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile)
+        )
     }
 
     private func maxVisibleWords(
