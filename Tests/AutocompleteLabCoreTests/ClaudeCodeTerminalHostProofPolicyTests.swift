@@ -431,6 +431,48 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Can we make this red")
     }
 
+    @Test("Terminal-host proof input strips Claude numbered prompt decoration")
+    func terminalHostProofInputStripsClaudeNumberedPromptDecoration() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "1. Can we make this red",
+            rawTextBeforeCursor: "1. Can we make this red",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Can we make this red")
+    }
+
+    @Test("Terminal-host proof input preserves trailing space after numbered prompt decoration")
+    func terminalHostProofInputPreservesTrailingSpaceAfterNumberedPromptDecoration() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "1. Can we make this red ",
+            rawTextBeforeCursor: "1. Can we make this red ",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Can we make this red ")
+    }
+
+    @Test("Terminal-host proof keeps numbered command-shaped prompt lines blocked")
+    func terminalHostProofKeepsNumberedCommandShapedPromptLinesBlocked() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "1. git status",
+            rawTextBeforeCursor: "1. git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+    }
+
     @Test("Terminal-host proof input uses vetted prompt line when Claude chrome trails cursor")
     func terminalHostProofInputUsesVettedPromptLineWhenClaudeChromeTrailsCursor() {
         let context = ClaudeCodeTerminalHostProofContext(

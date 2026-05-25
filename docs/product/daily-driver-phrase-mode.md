@@ -95,12 +95,17 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
   `for shortcuts` or `>` instead of generic `Claude Code` title text,
 - the disposable sample loop now tracks early empty model outputs from the whole
   sample iteration so the proof can report empty candidates instead of only
-  timing out on the later visible-suggestion wait.
+  timing out on the later visible-suggestion wait,
+- Claude Code Terminal proof input now strips a leading numbered prompt
+  decoration like `1. ` before the text is sent to the model, while numbered
+  shell-command lines such as `1. git status` remain blocked.
 
 Fresh live proof is still not green: the current Terminal-hosted Claude Code
-model-latency run reaches the MLX word-completion path, but Terminal AX reports
-a numbered prompt shape with a six-letter partial word and the model output
-cleans to zero candidates. That remains a proof blocker, not a support claim.
+model-latency run now reaches the MLX word-completion path with the numbered
+decoration removed, but the word-completion output still cleans to zero
+candidates for the sanitized prompt. Subsequent Terminal AX reads then include
+scrollback and hit the multiline-command blocker. That remains a proof blocker,
+not a support claim.
 
 ## Scorecard
 
@@ -108,7 +113,7 @@ cleans to zero candidates. That remains a proof blocker, not a support claim.
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
-| Typing speed | Subsecond repaired phrase results can display; Claude Code Terminal latency proof reaches MLX but still cleans empty from a bad AX prompt shape | Feels ready during fast typing | Fix Terminal prompt context shape, then refresh Obsidian/TextEdit latency proof |
+| Typing speed | Subsecond repaired phrase results can display; Claude Code Terminal latency proof reaches MLX with sanitized prompt text but still cleans empty | Feels ready during fast typing | Fix Claude Code word-completion no-candidate path, then refresh Obsidian/TextEdit latency proof |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 

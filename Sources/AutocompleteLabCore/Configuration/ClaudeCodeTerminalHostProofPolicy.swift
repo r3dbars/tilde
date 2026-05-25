@@ -305,6 +305,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         text = removingProofMarkers(from: text)
             .trimmingLeadingWhitespace()
+        text = removingLeadingNumberedPromptDecoration(from: text)
+            .trimmingLeadingWhitespace()
         while text.contains("  ") {
             text = text.replacingOccurrences(of: "  ", with: " ")
         }
@@ -320,6 +322,31 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return trimmedText
+    }
+
+    private static func removingLeadingNumberedPromptDecoration(from text: String) -> String {
+        var index = text.startIndex
+        var digitCount = 0
+        while index < text.endIndex,
+              text[index].isNumber,
+              digitCount < 2 {
+            digitCount += 1
+            index = text.index(after: index)
+        }
+
+        guard digitCount > 0,
+              index < text.endIndex,
+              text[index] == "." else {
+            return text
+        }
+
+        let afterDot = text.index(after: index)
+        guard afterDot < text.endIndex,
+              text[afterDot].isWhitespace else {
+            return text
+        }
+
+        return String(text[afterDot...]).trimmingLeadingWhitespace()
     }
 
     private static func looksLikeShellPrompt(_ line: String, windowTitle: String) -> Bool {
