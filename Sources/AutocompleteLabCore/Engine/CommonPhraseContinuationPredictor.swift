@@ -170,7 +170,15 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
 
         let trimmed = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clampedMaxWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         guard let last = trimmed.last, last.isLetter || last.isNumber else {
+            if let candidate = markdownLabelCandidate(
+                for: trimmed,
+                behaviorProfileID: behaviorProfileID
+            ) {
+                return selection(for: candidate, maxVisibleWords: clampedMaxWords)
+            }
+
             return CommonPhraseContinuationSelection(
                 suggestion: nil,
                 matchedContextSuffix: nil,
@@ -180,6 +188,7 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
 
         let context = normalizedPhrase(trimmed)
+        let words = words(in: context)
         guard !context.isEmpty else {
             return CommonPhraseContinuationSelection(
                 suggestion: nil,
@@ -189,7 +198,12 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             )
         }
 
-        guard let candidate = bestCandidate(for: context) else {
+        guard let candidate = bestCandidate(
+            for: context,
+            rawContext: trimmed,
+            words: words,
+            behaviorProfileID: behaviorProfileID
+        ) else {
             return CommonPhraseContinuationSelection(
                 suggestion: nil,
                 matchedContextSuffix: nil,
@@ -198,10 +212,16 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             )
         }
 
-        let clampedMaxWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
+        return selection(for: candidate, maxVisibleWords: clampedMaxWords)
+    }
+
+    private func selection(
+        for candidate: CommonPhraseContinuationCandidate,
+        maxVisibleWords: Int
+    ) -> CommonPhraseContinuationSelection {
         let suggestion = CompletionSuggestion(
             text: " \(candidate.continuation)",
-            maxVisibleWords: clampedMaxWords
+            maxVisibleWords: maxVisibleWords
         )
 
         return CommonPhraseContinuationSelection(
@@ -212,7 +232,12 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         )
     }
 
-    private func bestCandidate(for context: String) -> CommonPhraseContinuationCandidate? {
+    private func bestCandidate(
+        for context: String,
+        rawContext: String,
+        words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
         if let prior = bestPrior(for: context) {
             return CommonPhraseContinuationCandidate(
                 continuation: prior.continuation,
@@ -221,7 +246,15 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             )
         }
 
-        return intentPatternCandidate(for: context)
+        if let markdownCandidate = markdownLineCandidate(
+            for: rawContext,
+            words: words,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            return markdownCandidate
+        }
+
+        return intentPatternCandidate(for: words)
     }
 
     private func bestPrior(for context: String) -> CommonPhraseContinuationPrior? {
@@ -239,8 +272,7 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             .first
     }
 
-    private func intentPatternCandidate(for context: String) -> CommonPhraseContinuationCandidate? {
-        let words = words(in: context)
+    private func intentPatternCandidate(for words: [String]) -> CommonPhraseContinuationCandidate? {
         guard words.count >= 2 else {
             return nil
         }
@@ -297,6 +329,72 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         return nil
     }
 
+    private func markdownLabelCandidate(
+        for rawContext: String,
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsMarkdownNotePrediction(for: behaviorProfileID) else {
+            return nil
+        }
+
+        let line = currentLine(in: rawContext)
+        guard line.hasSuffix(":") else {
+            return nil
+        }
+
+        return markdownCandidate(forLine: String(line.dropLast()))
+    }
+
+    private func markdownLineCandidate(
+        for rawContext: String,
+        words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsMarkdownNotePrediction(for: behaviorProfileID) else {
+            return nil
+        }
+
+        if let candidate = markdownCandidate(forLine: currentLine(in: rawContext)) {
+            return candidate
+        }
+
+        if hasSuffix(["what", "matters", "today"], in: words) {
+            return intentCandidate("markdown-what-matters-today", "is the next clear step")
+        }
+        if hasSuffix(["before", "i", "forget"], in: words) {
+            return intentCandidate("markdown-before-i-forget", "capture the important detail")
+        }
+        if hasSuffix(["follow", "up", "on"], in: words) {
+            return intentCandidate("markdown-follow-up-on", "the open thread today")
+        }
+
+        return nil
+    }
+
+    private func markdownCandidate(forLine rawLine: String) -> CommonPhraseContinuationCandidate? {
+        let line = normalizedMarkdownLine(rawLine)
+        guard !line.isEmpty else {
+            return nil
+        }
+
+        switch line {
+        case "next", "next step", "next steps":
+            return intentCandidate("markdown-next", "write the smallest concrete action")
+        case "todo", "todos", "to do", "action", "action item", "action items":
+            return intentCandidate("markdown-action-items", "make the next step concrete")
+        case "decision", "decisions", "decision log":
+            return intentCandidate("markdown-decisions", "capture what changed today")
+        case "open question", "open questions", "questions":
+            return intentCandidate("markdown-open-questions", "capture what still feels unclear")
+        case "meeting note", "meeting notes", "notes":
+            return intentCandidate("markdown-meeting-notes", "capture decisions and next steps")
+        case "why", "why this matters":
+            return intentCandidate("markdown-why-this-matters", "connect it to the user")
+        default:
+            return nil
+        }
+    }
+
     private func intentCandidate(_ label: String, _ continuation: String) -> CommonPhraseContinuationCandidate {
         CommonPhraseContinuationCandidate(
             continuation: continuation,
@@ -314,6 +412,15 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
     }
 
+    private func allowsMarkdownNotePrediction(for behaviorProfileID: AutocompleteBehaviorProfileID?) -> Bool {
+        switch behaviorProfileID {
+        case .some(.docsProse), .some(.notes), .some(.bullets), .none:
+            true
+        case .some:
+            false
+        }
+    }
+
     private func normalizedPhrase(_ text: String) -> String {
         text
             .lowercased()
@@ -327,6 +434,23 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         normalizedPhrase(text)
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
             .map(String.init)
+    }
+
+    private func currentLine(in text: String) -> String {
+        text
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .last
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private func normalizedMarkdownLine(_ text: String) -> String {
+        text
+            .lowercased()
+            .replacingOccurrences(of: #"^\s*(#{1,6}\s*)?([-*+]\s*)?(\[[ xX]\]\s*)?"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^\s*\d+[\.)]\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ":")))
     }
 
     private func hasAnySuffix(_ suffixes: [[String]], in words: [String]) -> Bool {
