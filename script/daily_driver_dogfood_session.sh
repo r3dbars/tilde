@@ -23,6 +23,9 @@ MIN_SHOWN="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_SHOWN:-5}"
 MIN_ACCEPTED="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_ACCEPTED:-1}"
 MIN_KEPT="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_KEPT:-1}"
 MIN_ACTIVE_MINUTES="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_ACTIVE_MINUTES:-5}"
+MIN_TYPING_FEEL_SCORE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_TYPING_FEEL_SCORE:-85}"
+TYPING_FEEL_TARGET_SHOWN_PER_MINUTE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_TARGET_SHOWN_PER_MINUTE:-3}"
+TYPING_FEEL_LATE_MS="${AUTOCOMPLETE_LAB_DAILY_DRIVER_LATE_MS:-750}"
 
 usage() {
   cat <<'EOF'
@@ -45,6 +48,12 @@ Options:
   --min-kept N      Minimum accepted-and-kept suggestions. Default: 1.
   --min-active-minutes N
                     Minimum active trace span. Default: 5.
+  --min-typing-feel-score N
+                    Minimum redacted typing-feel score. Default: 85.
+  --target-shown-per-minute N
+                    Soft typing-feel target for suggestion cadence. Default: 3.
+  --typing-feel-late-ms N
+                    Shown latency above this is counted as late. Default: 750.
   --allow-low-sample
                     Lower all sample minimums to 0 for harness/debug slices.
   --no-gate         Write the report even if gates fail and exit 0.
@@ -134,6 +143,27 @@ while [[ $# -gt 0 ]]; do
       ;;
     --min-active-minutes=*)
       MIN_ACTIVE_MINUTES="${1#--min-active-minutes=}"
+      ;;
+    --min-typing-feel-score)
+      shift
+      MIN_TYPING_FEEL_SCORE="${1:-}"
+      ;;
+    --min-typing-feel-score=*)
+      MIN_TYPING_FEEL_SCORE="${1#--min-typing-feel-score=}"
+      ;;
+    --target-shown-per-minute)
+      shift
+      TYPING_FEEL_TARGET_SHOWN_PER_MINUTE="${1:-}"
+      ;;
+    --target-shown-per-minute=*)
+      TYPING_FEEL_TARGET_SHOWN_PER_MINUTE="${1#--target-shown-per-minute=}"
+      ;;
+    --typing-feel-late-ms)
+      shift
+      TYPING_FEEL_LATE_MS="${1:-}"
+      ;;
+    --typing-feel-late-ms=*)
+      TYPING_FEEL_LATE_MS="${1#--typing-feel-late-ms=}"
       ;;
     --allow-low-sample)
       ALLOW_LOW_SAMPLE=1
@@ -466,10 +496,11 @@ finish_session() {
     MIN_ACCEPTED=0
     MIN_KEPT=0
     MIN_ACTIVE_MINUTES=0
+    MIN_TYPING_FEEL_SCORE=0
   fi
 
-  local end_line fresh_start report_path trace_eval_output non_annoyance_output sample_gate_output
-  local trace_eval_status non_annoyance_status sample_gate_status gate_status timestamp
+  local end_line fresh_start report_path trace_eval_output non_annoyance_output sample_gate_output typing_feel_output
+  local trace_eval_status non_annoyance_status sample_gate_status typing_feel_status gate_status timestamp
   end_line="${END_LINE_OVERRIDE:-$(current_trace_line)}"
   require_integer "end line" "$end_line"
   if ((end_line <= START_LINE)); then
@@ -484,7 +515,8 @@ finish_session() {
   trace_eval_output="$(mktemp)"
   non_annoyance_output="$(mktemp)"
   sample_gate_output="$(mktemp)"
-  trap 'rm -f "$trace_eval_output" "$non_annoyance_output" "$sample_gate_output"' RETURN
+  typing_feel_output="$(mktemp)"
+  trap 'rm -f "$trace_eval_output" "$non_annoyance_output" "$sample_gate_output" "$typing_feel_output"' RETURN
 
   set +e
   run_session_sample_gate \
@@ -498,6 +530,22 @@ finish_session() {
     "$MIN_ACTIVE_MINUTES" \
     >"$sample_gate_output" 2>&1
   sample_gate_status=$?
+
+  local -a typing_feel_args=(
+    "$TRACE_PATH"
+    --start-line "$START_LINE"
+    --end-line "$end_line"
+    --late-ms "$TYPING_FEEL_LATE_MS"
+    --target-shown-per-minute "$TYPING_FEEL_TARGET_SHOWN_PER_MINUTE"
+    --fail-under "$MIN_TYPING_FEEL_SCORE"
+  )
+  if [[ -n "$APP_FILTER" ]]; then
+    typing_feel_args+=(--app "$APP_FILTER")
+  fi
+  "$ROOT_DIR/script/typing_feel_score_report.py" \
+    "${typing_feel_args[@]}" \
+    >"$typing_feel_output" 2>&1
+  typing_feel_status=$?
 
   "$ROOT_DIR/script/non_annoyance_report.py" \
     "$TRACE_PATH" \
@@ -525,7 +573,7 @@ finish_session() {
   set -e
 
   gate_status="pass"
-  if ((sample_gate_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0)); then
+  if ((sample_gate_status != 0 || typing_feel_status != 0 || non_annoyance_status != 0 || trace_eval_status != 0)); then
     gate_status="fail"
   fi
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -545,9 +593,13 @@ finish_session() {
     echo "- Fresh lines: \`$fresh_start-$end_line\`."
     echo "- Gate: \`$gate_status\`."
     echo "- Sample gate status: \`$sample_gate_status\`."
+    echo "- Typing feel status: \`$typing_feel_status\`."
     echo "- Non-annoyance status: \`$non_annoyance_status\`."
     echo "- Trace eval status: \`$trace_eval_status\`."
     echo "- Sample minimums: shown \`$MIN_SHOWN\`, accepted \`$MIN_ACCEPTED\`, accepted-kept \`$MIN_KEPT\`, active minutes \`$MIN_ACTIVE_MINUTES\`."
+    echo "- Typing feel minimum score: \`$MIN_TYPING_FEEL_SCORE\`."
+    echo "- Typing feel cadence target: \`$TYPING_FEEL_TARGET_SHOWN_PER_MINUTE\` shown/min."
+    echo "- Typing feel late threshold: \`$TYPING_FEEL_LATE_MS\` ms."
     echo "- Low-sample override: \`$ALLOW_LOW_SAMPLE\`."
     echo
     echo "## Manual Trust Row"
@@ -560,6 +612,12 @@ finish_session() {
     echo
     echo '```text'
     cat "$sample_gate_output"
+    echo '```'
+    echo
+    echo "## Typing Feel Score"
+    echo
+    echo '```text'
+    cat "$typing_feel_output"
     echo '```'
     echo
     echo "## Non-Annoyance Gate"
