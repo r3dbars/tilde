@@ -78,6 +78,18 @@ LOG
   done
   exit 0
 fi
+if [[ "${1:-}" == "claude-code-model-latency" ]]; then
+  cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
+$base_timestamp app-proof-mode-started app=com.anthropic.claude-code scenario=claude-code-model-latency
+LOG
+  for sample in 1 2 3 4 5; do
+    cat >>"$AUTOCOMPLETE_LAB_TRACE_PATH" <<LOG
+{"timestamp":"$base_timestamp","sessionID":"fresh-claude-code","suggestionID":"fresh-claude-code-${run_number}-${sample}","type":"modelResult","appBundleIdentifier":"com.anthropic.claude-code","requestMode":"wordCompletion","latencyMilliseconds":120,"metadata":{"behaviorProfile":"ai_chat","firstTokenLatencyMilliseconds":"90","totalGenerationLatencyMilliseconds":"120"}}
+{"timestamp":"$base_timestamp","sessionID":"fresh-claude-code","suggestionID":"fresh-claude-code-${run_number}-${sample}","type":"suggestionPresented","appBundleIdentifier":"com.anthropic.claude-code","requestMode":"wordCompletion","latencyMilliseconds":130,"metadata":{"behaviorProfile":"ai_chat","candidateSelectionSource":"app-model-result","promptSafetyMode":"wordOnly"}}
+LOG
+  done
+  exit 0
+fi
 if [[ "${1:-}" == "textedit-default-model-latency" ]]; then
   for sample in 1 2 3 4 5; do
     cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
@@ -350,6 +362,49 @@ fi
 
 if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
   echo "fresh latency proof self-test expected no skip-build rerun for claude model-latency target" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+: >"$SMOKE_LOG"
+: >"$DIAGNOSTICS_LOG"
+: >"$TRACE_LOG"
+CLAUDE_CODE_MODEL_OUTPUT="$(
+  AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-claude-code-model.lock" \
+    ./script/fresh_latency_proof.sh --target claude-code-model-latency --runs 3
+)"
+
+if ! grep -F "claude-code-model-latency collects the proof sample set in one launch; forcing --runs 1." <<<"$CLAUDE_CODE_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected claude-code-model-latency to force one run" >&2
+  echo "$CLAUDE_CODE_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency beta gate passed." <<<"$CLAUDE_CODE_MODEL_OUTPUT" >/dev/null ||
+   ! grep -F "First visible / keystroke-to-visible: n=5" <<<"$CLAUDE_CODE_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected claude-code model-latency target to pass with one bounded launch" >&2
+  echo "$CLAUDE_CODE_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if [[ "$(wc -l <"$SMOKE_LOG" | tr -d ' ')" != "1" ]]; then
+  echo "fresh latency proof self-test expected one claude-code model-latency smoke run" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if [[ "$(sed -n '1p' "$SMOKE_LOG")" != "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 claude-code-model-latency --manual-gate" ]]; then
+  echo "fresh latency proof self-test expected claude-code model-latency smoke with manual gate and screenshot trace" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
+  echo "fresh latency proof self-test expected no skip-build rerun for claude-code model-latency target" >&2
   cat "$SMOKE_LOG" >&2
   exit 1
 fi

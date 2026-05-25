@@ -102,6 +102,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
     )
 
     public static let proofMarker = "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF"
+    public static let compactProofMarker = "STEADYTYPECLAUDECODEPROOF"
+    private static let proofMarkers = [proofMarker, compactProofMarker]
 
     public static func hostVariant(for bundleIdentifier: String) -> ClaudeCodeTerminalHostVariant? {
         supportedHostVariants.first { $0.bundleIdentifier == bundleIdentifier }
@@ -149,7 +151,12 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return .blocked(.proofModeRequired)
         }
 
-        let focusedTextHasProofMarker = context.focusedText.localizedCaseInsensitiveContains(proofMarker)
+        let focusedLine = effectiveFocusedInputLine(
+            focusedText: context.focusedText,
+            rawTextBeforeCursor: context.rawTextBeforeCursor,
+            rawTextAfterCursor: context.rawTextAfterCursor
+        )
+        let focusedTextHasProofMarker = containsProofMarker(focusedLine)
 
         if !focusedTextHasProofMarker,
            looksLikeMarkedMultilineBuffer(
@@ -161,14 +168,15 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         let searchableText = [
             context.windowTitle,
+            focusedLine,
             context.focusedText
         ].joined(separator: "\n")
 
-        guard searchableText.localizedCaseInsensitiveContains(proofMarker) else {
+        guard containsProofMarker(searchableText) else {
             return .blocked(.missingProofMarker)
         }
 
-        let nonEmptyLines = context.focusedText
+        let nonEmptyLines = focusedLine
             .split(whereSeparator: \.isNewline)
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -199,34 +207,40 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         textBeforeCursor: String,
         textAfterCursor: String
     ) -> String {
-        let beforeLine = textBeforeCursor
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .last
-            .map(String.init) ?? ""
-        let afterLine = textAfterCursor
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .first
-            .map(String.init) ?? ""
+        let beforeLine = lineFragments(textBeforeCursor).last ?? ""
+        let afterLine = lineFragments(textAfterCursor).first ?? ""
+        let physicalLine = beforeLine + afterLine
+        if !containsProofMarker(physicalLine),
+           let wrappedLine = wrappedMarkedPromptInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
+           ) {
+            return wrappedLine
+        }
 
-        return beforeLine + afterLine
+        return physicalLine
     }
 
     public static func proofInputText(
         textBeforeCursor: String,
         textAfterCursor: String
     ) -> String? {
-        let afterLine = textAfterCursor
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .first
-            .map(String.init) ?? ""
-        guard afterLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard safePromptTextAfterCursor(textAfterCursor) else {
             return nil
         }
 
-        let beforeLine = textBeforeCursor
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .last
-            .map(String.init) ?? ""
+        let beforeLine = lineFragments(textBeforeCursor).last ?? ""
+        if containsProofMarker(beforeLine) {
+            return sanitizedProofInputLine(beforeLine)
+        }
+
+        if let wrappedLine = wrappedMarkedPromptInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
+        ) {
+            return sanitizedProofInputLine(wrappedLine)
+        }
+
         return sanitizedProofInputLine(beforeLine)
     }
 
@@ -239,8 +253,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             text = text.trimmingLeadingWhitespace()
         }
 
-        text = text
-            .replacingOccurrences(of: proofMarker, with: "")
+        text = removingProofMarkers(from: text)
             .trimmingLeadingWhitespace()
 
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -260,9 +273,9 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let shellPrefixes = ["$", "%", "#", "❯", "➜"]
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("❯"),
-           (trimmed.localizedCaseInsensitiveContains(proofMarker)
+           (containsProofMarker(trimmed)
             || windowTitle.localizedCaseInsensitiveContains("Claude Code")
-            && windowTitle.localizedCaseInsensitiveContains(proofMarker)) {
+            && containsProofMarker(windowTitle)) {
             return false
         }
 
@@ -383,7 +396,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return true
         }
 
-        if trimmed.localizedCaseInsensitiveContains(proofMarker) {
+        if containsProofMarker(trimmed) {
             return false
         }
 
@@ -419,10 +432,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         textBeforeCursor: String,
         textAfterCursor: String
     ) -> Bool {
-        guard let markerRange = textBeforeCursor.range(
-            of: proofMarker,
-            options: [.caseInsensitive, .backwards]
-        ) else {
+        guard let markerRange = lastProofMarkerRange(in: textBeforeCursor) else {
             return false
         }
 
@@ -434,6 +444,161 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.hasPrefix("Try \"")
             || trimmed.hasPrefix("Try '")
+    }
+
+    private static func effectiveFocusedInputLine(
+        focusedText: String,
+        rawTextBeforeCursor: String,
+        rawTextAfterCursor: String
+    ) -> String {
+        let focusedFragments = lineFragments(focusedText)
+        if focusedFragments.count <= 1 {
+            return focusedText
+        }
+
+        if let markedFocusedLine = lastMarkedPromptLine(in: focusedText) {
+            return markedFocusedLine
+        }
+
+        if !rawTextBeforeCursor.isEmpty || !rawTextAfterCursor.isEmpty {
+            return focusedInputLine(
+                textBeforeCursor: rawTextBeforeCursor,
+                textAfterCursor: rawTextAfterCursor
+            )
+        }
+
+        return focusedText
+    }
+
+    private static func lastMarkedPromptLine(in text: String) -> String? {
+        let fragments = lineFragments(text)
+        for index in fragments.indices.reversed() {
+            let line = fragments[index]
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  containsProofMarker(trimmed) else {
+                continue
+            }
+
+            let trailingLines = fragments[(index + 1)...]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if trailingLines.allSatisfy(isAllowedTrailingClaudePromptHint) {
+                return line
+            }
+        }
+        return nil
+    }
+
+    private static func isAllowedTrailingClaudePromptHint(_ line: String) -> Bool {
+        let lowered = line.lowercased()
+        return lowered == "? for shortcuts"
+            || lowered.hasSuffix(" for shortcuts")
+            || lowered.contains("shift+tab")
+    }
+
+    private static func wrappedMarkedPromptInputLine(
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> String? {
+        guard safePromptTextAfterCursor(textAfterCursor),
+              let markerRange = lastProofMarkerRange(in: textBeforeCursor) else {
+            return nil
+        }
+
+        let textBeforeMarker = String(textBeforeCursor[..<markerRange.lowerBound])
+        let promptPrefix = lineFragments(textBeforeMarker).last ?? ""
+        let trimmedPromptPrefix = promptPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedPromptPrefix.isEmpty || trimmedPromptPrefix == "❯" else {
+            return nil
+        }
+
+        let markedSegment = promptPrefix + String(textBeforeCursor[markerRange.lowerBound...])
+        let fragments = lineFragments(markedSegment)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !fragments.isEmpty,
+              fragments.contains(where: containsProofMarker),
+              fragments.allSatisfy(isSafeWrappedPromptFragment) else {
+            return nil
+        }
+
+        var line = fragments.joined(separator: " ")
+        let firstAfterLine = lineFragments(textAfterCursor).first ?? ""
+        if firstAfterLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           firstAfterLine.contains(where: \.isWhitespace) {
+            line += " "
+        }
+        return line
+    }
+
+    private static func safePromptTextAfterCursor(_ textAfterCursor: String) -> Bool {
+        let firstFragment = lineFragments(textAfterCursor)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return firstFragment.isEmpty
+            || isAllowedTrailingClaudePromptHint(firstFragment)
+    }
+
+    private static func isSafeWrappedPromptFragment(_ fragment: String) -> Bool {
+        if looksLikeActiveAgentOutput(fragment) {
+            return false
+        }
+
+        let trimmed = fragment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return true
+        }
+
+        if trimmed.hasPrefix("$")
+            || trimmed.hasPrefix("%")
+            || trimmed.hasPrefix("#")
+            || trimmed.hasPrefix("➜") {
+            return false
+        }
+
+        if trimmed.hasPrefix("❯"),
+           !containsProofMarker(trimmed) {
+            return false
+        }
+
+        return true
+    }
+
+    private static func containsProofMarker(_ text: String) -> Bool {
+        proofMarkers.contains { marker in
+            text.localizedCaseInsensitiveContains(marker)
+        }
+    }
+
+    private static func lastProofMarkerRange(in text: String) -> Range<String.Index>? {
+        proofMarkers
+            .compactMap { marker in
+                text.range(of: marker, options: [.caseInsensitive, .backwards])
+            }
+            .max { lhs, rhs in lhs.lowerBound < rhs.lowerBound }
+    }
+
+    private static func removingProofMarkers(from text: String) -> String {
+        proofMarkers.reduce(text) { partialText, marker in
+            partialText.replacingOccurrences(
+                of: marker,
+                with: "",
+                options: [.caseInsensitive]
+            )
+        }
+    }
+
+    private static func lineFragments(_ text: String) -> [String] {
+        var fragments = [""]
+        for character in text {
+            if character.isNewline {
+                fragments.append("")
+            } else {
+                fragments[fragments.count - 1].append(character)
+            }
+        }
+        return fragments
     }
 }
 
