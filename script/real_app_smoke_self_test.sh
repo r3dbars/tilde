@@ -9,7 +9,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
 if ! grep -F "fails closed unless" "$TMP_DIR/help.txt" >/dev/null ||
-   ! grep -F "this checkout's dist/SteadyType.app binary" "$TMP_DIR/help.txt" >/dev/null; then
+   ! grep -F "this checkout's dist/SteadyType.app binary" "$TMP_DIR/help.txt" >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1" "$TMP_DIR/help.txt" >/dev/null; then
   echo "real app smoke help must explain --skip-build checkout verification" >&2
   exit 1
 fi
@@ -146,6 +147,14 @@ if script/real_app_smoke.sh claude-model-latency --skip-build --dry-run >"$TMP_D
 fi
 if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/claude-model-latency-skip-build.txt" >/dev/null; then
   echo "real app smoke self-test expected Claude model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
+AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1 \
+  script/real_app_smoke.sh claude-model-latency --skip-build --dry-run >"$TMP_DIR/claude-model-latency-skip-build-allowed.txt" 2>&1
+if ! grep -F "Packaged model latency proof: reusing the already-running app because AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1 is set." "$TMP_DIR/claude-model-latency-skip-build-allowed.txt" >/dev/null ||
+   ! grep -F "Safety: strict latency selector must still prove the tagged runtime launch for this app binary." "$TMP_DIR/claude-model-latency-skip-build-allowed.txt" >/dev/null; then
+  echo "real app smoke self-test expected guarded packaged Claude model latency --skip-build proof to be allowed with an explicit env opt-in" >&2
   exit 1
 fi
 
