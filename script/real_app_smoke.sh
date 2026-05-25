@@ -7627,13 +7627,16 @@ wait_for_claude_code_terminal_prompt() {
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
     --hint "for shortcuts" \
-    --hint "❯" \
+    --hint "Try \"fix lint errors\"" \
     --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
 }
 
 assert_claude_code_terminal_prompt_ready() {
   local proof_text="$1"
-  claude_code_terminal_ax_helper wait \
+  swift script/terminal_prompt_ax_proof_helper.swift wait \
+    --bundle "$(claude_code_host_bundle_id)" \
+    --display "$(claude_code_host_display_name)" \
+    --marker "$(claude_code_proof_marker)" \
     --text "$proof_text" \
     --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS:-4}"
 }
