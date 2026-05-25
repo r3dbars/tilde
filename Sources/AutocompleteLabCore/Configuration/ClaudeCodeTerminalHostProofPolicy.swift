@@ -345,15 +345,20 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return nil
         }
 
-        if let recoveredInput = recoveredMarkedTerminalScreenInputText(for: context) {
-            return recoveredInput
-        }
-
         let directInputText = [
             context.focusedText,
             context.rawTextBeforeCursor,
             context.rawTextAfterCursor
         ].joined(separator: "\n")
+        if !containsProofMarker(directInputText),
+           let screenInputText = titleScopedTerminalScreenInputText(for: context) {
+            return screenInputText
+        }
+
+        if let recoveredInput = recoveredMarkedTerminalScreenInputText(for: context) {
+            return recoveredInput
+        }
+
         if !containsProofMarker(directInputText) {
             if containsProofMarker(context.terminalScreenText)
                 || titleHasScopedProofMarker(context.windowTitle) {
@@ -470,6 +475,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let afterLine = lineFragments(context.rawTextAfterCursor).first ?? ""
         let recovery = recoveredMarkedTerminalScreenInputAnalysis(for: context)
         let recoveredInput = recovery.inputText
+        let titleScopedScreenInput = titleScopedTerminalScreenInputText(for: context)
         let markerTailFragments = lastProofMarkerRange(in: context.rawTextBeforeCursor).map { markerRange in
             lineFragments(String(context.rawTextBeforeCursor[markerRange.lowerBound...]))
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -499,6 +505,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             ),
             "terminalProofRecoverableInput": String(recoveredInput != nil),
             "terminalProofRecoveryRejectionReason": recovery.rejectionReason,
+            "terminalProofTitleScopedScreenRecoverable": String(titleScopedScreenInput != nil),
+            "terminalProofTitleScopedScreenBeforeChars": String(titleScopedScreenInput?.count ?? 0),
             "terminalProofRecoveredBeforeChars": String(recoveredInput?.count ?? 0),
             "terminalProofRecoveredWordCount": String(recoveredInput?.split(whereSeparator: \.isWhitespace).count ?? 0),
             "terminalProofRecoveredPartialWordCharacters": String(recoveredPartialWordShape?.characterCount ?? 0),
@@ -1143,6 +1151,115 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         return nil
     }
 
+    private static func titleScopedTerminalScreenInputText(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> String? {
+        guard titleHasScopedProofMarker(context.windowTitle),
+              !context.terminalScreenText.isEmpty else {
+            return nil
+        }
+
+        let fragments = lineFragments(context.terminalScreenText)
+        guard !fragments.isEmpty else {
+            return nil
+        }
+
+        var trailingRowsArePromptChromeOnly = true
+        for offset in fragments.indices.reversed() {
+            let trimmed = fragments[offset].trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                continue
+            }
+
+            if isAllowedTrailingClaudePromptHint(trimmed) || looksLikeClaudePromptChromeLine(trimmed) {
+                continue
+            }
+
+            if trailingRowsArePromptChromeOnly,
+               let currentLine = titleScopedTerminalScreenPromptLine(
+                endingAt: offset,
+                fragments: fragments
+               ),
+               let inputText = safeTitleScopedPromptInputLine(currentLine) {
+                return inputText
+            }
+
+            trailingRowsArePromptChromeOnly = false
+        }
+
+        return nil
+    }
+
+    private static func titleScopedTerminalScreenPromptLine(
+        endingAt index: Int,
+        fragments: [String]
+    ) -> String? {
+        let current = fragments[index].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !current.isEmpty,
+              !containsProofMarker(current),
+              !looksLikeClaudePromptChromeLine(current),
+              !looksLikeActiveAgentOutput(current) else {
+            return nil
+        }
+
+        let currentStartsWithPromptResidue = current.strippingLeadingPromptResidue() != current.trimmingLeadingWhitespace()
+        guard !currentStartsWithPromptResidue else {
+            return current
+        }
+
+        var promptFragments = [current]
+        var previousIndex = index - 1
+        var remainingPrefixFragments = 2
+        while previousIndex >= fragments.startIndex, remainingPrefixFragments > 0 {
+            let previous = fragments[previousIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isSafeTitleScopedTerminalScreenPrefixFragment(previous) else {
+                break
+            }
+            promptFragments.insert(previous, at: 0)
+            remainingPrefixFragments -= 1
+            previousIndex -= 1
+        }
+
+        return promptFragments.joined(separator: " ")
+    }
+
+    private static func isSafeTitleScopedTerminalScreenPrefixFragment(_ fragment: String) -> Bool {
+        let trimmed = fragment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !containsProofMarker(trimmed),
+              !looksLikeClaudePromptChromeLine(trimmed),
+              !looksLikeActiveAgentOutput(trimmed),
+              let inputText = safeTitleScopedPromptInputLine(trimmed) else {
+            return false
+        }
+
+        return inputText.split(whereSeparator: \.isWhitespace).count >= 2
+    }
+
+    private static func safeTitleScopedPromptInputLine(_ line: String) -> String? {
+        guard !containsProofMarker(line),
+              let inputText = sanitizedProofInputLine(line) else {
+            return nil
+        }
+
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = trimmed.split(whereSeparator: \.isWhitespace)
+        let letterCount = trimmed.filter(\.isLetter).count
+        let digitCount = trimmed.filter(\.isNumber).count
+        guard words.count >= 3,
+              letterCount >= 8,
+              letterCount >= digitCount,
+              !containsIncompleteProofMarkerFragment(trimmed),
+              !looksLikeShellCommandInput(trimmed),
+              !looksLikeTerminalShellCommandLine(trimmed),
+              !looksLikeActiveAgentOutput(trimmed),
+              !looksLikeClaudePromptChromeLine(trimmed) else {
+            return nil
+        }
+
+        return inputText
+    }
+
     private static func isSafeTerminalScreenPromptPrefixFragment(_ fragment: String) -> Bool {
         let trimmed = fragment.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
@@ -1326,6 +1443,10 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         if ["╭", "╰", "│", "┌", "└", "├", "─"].contains(where: { trimmed.hasPrefix($0) }) {
+            return true
+        }
+
+        if looksLikePlaceholderPrompt(trimmed) {
             return true
         }
 

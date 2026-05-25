@@ -49,6 +49,7 @@ public struct CommonPhraseContinuationPrior: Equatable, Sendable {
         CommonPhraseContinuationPrior(contextSuffix: "while i am typing fast it should", continuation: "stay short and clear", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the suggestion should be less timid and", continuation: "more confident about next words", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the next suggestion should be a", continuation: "short useful phrase", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "make this setting the feature", continuation: "configurable", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "build the app run the proof write the", continuation: "small repro", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "tested the button tested the button and now need", continuation: "one fresh check", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the quiet mode should stay", continuation: "calm in the background", score: 0.28),
@@ -146,21 +147,27 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
     public func suggestion(
         for textBeforeCursor: String,
         behaviorProfileID: AutocompleteBehaviorProfileID?,
-        maxVisibleWords: Int = 4
+        maxVisibleWords: Int = 4,
+        allowsPromptAppPrediction: Bool = false
     ) -> CompletionSuggestion? {
         selection(
             for: textBeforeCursor,
             behaviorProfileID: behaviorProfileID,
-            maxVisibleWords: maxVisibleWords
+            maxVisibleWords: maxVisibleWords,
+            allowsPromptAppPrediction: allowsPromptAppPrediction
         ).suggestion
     }
 
     public func selection(
         for textBeforeCursor: String,
         behaviorProfileID: AutocompleteBehaviorProfileID?,
-        maxVisibleWords: Int = 4
+        maxVisibleWords: Int = 4,
+        allowsPromptAppPrediction: Bool = false
     ) -> CommonPhraseContinuationSelection {
-        guard allowsPrediction(for: behaviorProfileID) else {
+        guard allowsPrediction(
+            for: behaviorProfileID,
+            allowsPromptAppPrediction: allowsPromptAppPrediction
+        ) else {
             return CommonPhraseContinuationSelection(
                 suggestion: nil,
                 matchedContextSuffix: nil,
@@ -403,9 +410,14 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         )
     }
 
-    private func allowsPrediction(for behaviorProfileID: AutocompleteBehaviorProfileID?) -> Bool {
+    private func allowsPrediction(
+        for behaviorProfileID: AutocompleteBehaviorProfileID?,
+        allowsPromptAppPrediction: Bool
+    ) -> Bool {
         switch behaviorProfileID {
-        case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
+        case .some(.aiChat):
+            allowsPromptAppPrediction
+        case .some(.coding), .some(.forms), .some(.search):
             false
         case .some, .none:
             true

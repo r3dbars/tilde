@@ -427,6 +427,30 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast phrase selection can opt into prompt-app proof prediction")
+    func fastPhraseSelectionPromptAppProofPrediction() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let blockedSelection = orchestrator.fastPhraseSelection(
+            for: "Please make this",
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true
+        )
+        let proofSelection = orchestrator.fastPhraseSelection(
+            for: "Please make this",
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true,
+            allowPromptAppPrediction: true
+        )
+
+        #expect(blockedSelection.suppressionReason == "unsupported-profile")
+        #expect(proofSelection.suggestion?.visibleText == " clearer")
+        #expect(proofSelection.traceMetadata["predictivePhraseMatch"] == "please make this")
+    }
+
+    @MainActor
     @Test("Fast phrase fallback uses accepted-kept learning restraint")
     func fastPhraseFallbackUsesAcceptedKeptLearningRestraint() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
