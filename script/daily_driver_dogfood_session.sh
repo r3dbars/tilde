@@ -1603,6 +1603,67 @@ def quality_score(value):
     return int(match.group(1))
 
 
+def normalized_label(value):
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def summary_value(label):
+    escaped = re.escape(label)
+    match = re.search(rf"- {escaped}:\s*`([^`]*)`", text)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def active_minute_minimum():
+    match = re.search(r"Sample minimums:.*active minutes `([^`]*)`", text)
+    if match is None:
+        return 5.0
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return 5.0
+
+
+def app_matches_filter(app_value, app_filter):
+    normalized_app = normalized_label(app_value)
+    normalized_filter = normalized_label(app_filter)
+    if not normalized_filter or normalized_filter in {"allsupportedapps", "mixed"}:
+        return True
+    bundle_tail = normalized_label(app_filter.split(".")[-1])
+    aliases = {
+        "comappletextedit": {"textedit"},
+        "comapplenotes": {"notes", "applenotes"},
+        "mdobsidian": {"obsidian"},
+        "comgooglechrome": {"chrome", "googlechrome"},
+    }.get(normalized_filter, set())
+    candidates = {normalized_filter, bundle_tail, *aliases}
+    return any(candidate and (candidate in normalized_app or normalized_app in candidate) for candidate in candidates)
+
+
+def placement_describes_trust_break(value):
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+    if not normalized:
+        return False
+    negative_phrases = {
+        "wrong",
+        "weird",
+        "off",
+        "bad",
+        "poor",
+        "untrusted",
+        "unreliable",
+        "misaligned",
+        "not aligned",
+        "not trusted",
+        "not right",
+        "jumped",
+        "detached",
+        "floating wrong",
+    }
+    return any(phrase in normalized for phrase in negative_phrases)
+
+
 def manual_row():
     header_index = None
     for index, line in enumerate(lines):
@@ -1653,14 +1714,20 @@ if row is None:
 app, minutes, reached, quality, magic, annoying, placement, keep = row
 quality = quality_score(quality)
 automated_gate_pass = re.search(r"Gate:\s*`pass`", text) is not None
+app_filter = summary_value("App filter")
+minimum_minutes = active_minute_minimum()
 if not app:
     failures.append("manual app cell is blank")
+elif not app_matches_filter(app, app_filter):
+    failures.append("manual app must match the report app filter")
 try:
     parsed_minutes = float(minutes)
 except ValueError:
     parsed_minutes = 0.0
 if parsed_minutes <= 0:
     failures.append("manual minutes must be greater than 0")
+elif parsed_minutes < minimum_minutes:
+    failures.append(f"manual minutes must meet active session minimum ({minimum_minutes:g})")
 if not truthy_verdict(reached):
     failures.append("manual reach verdict must be yes/useful")
 if quality is None or quality < 4:
@@ -1671,6 +1738,8 @@ if not annoying:
     failures.append("manual annoying moment is blank; use none if there was none")
 if not placement:
     failures.append("manual placement trust is blank")
+elif placement_describes_trust_break(placement):
+    failures.append("manual placement trust must not describe wrong or unstable placement")
 if not truthy_verdict(keep):
     failures.append("manual keep-it-on-tomorrow verdict must be yes")
 
@@ -1680,8 +1749,10 @@ print(f"Report: {path}")
 print(f"Automated gate: {'pass' if automated_gate_pass else 'missing'}")
 print("Safety snapshot: pass" if re.search(r"Safety snapshot status:\s*`0`", text) else "Safety snapshot: missing")
 print("Trust-killer gate: pass" if re.search(r"Trust-killer gate status:\s*`0`", text) else "Trust-killer gate: missing")
+print(f"App filter: {app_filter or 'blank'}")
 print(f"App: {app or 'blank'}")
 print(f"Minutes: {minutes or 'blank'}")
+print(f"Active minute minimum: {minimum_minutes:g}")
 print(f"Did reach for it: {reached or 'blank'}")
 print(f"Suggestion quality: {quality if quality is not None else 'blank'}")
 print(f"Magic moment: {'filled' if magic else 'blank'}")
