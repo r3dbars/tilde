@@ -22,6 +22,9 @@ REVIEW_PASS_REPORT_PATH="$TMP_DIR/review-pass-report.md"
 REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
 REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
 REVIEW_LOW_QUALITY_REPORT_PATH="$TMP_DIR/review-low-quality-report.md"
+REVIEW_APP_MISMATCH_REPORT_PATH="$TMP_DIR/review-app-mismatch-report.md"
+REVIEW_LOW_MINUTES_REPORT_PATH="$TMP_DIR/review-low-minutes-report.md"
+REVIEW_BAD_PLACEMENT_REPORT_PATH="$TMP_DIR/review-bad-placement-report.md"
 PREVIEW_MARK_PATH="$TMP_DIR/preview-session.env"
 TRUST_PREVIEW_TRACE_PATH="$TMP_DIR/trust-preview-traces.jsonl"
 TRUST_PREVIEW_MARK_PATH="$TMP_DIR/trust-preview-session.env"
@@ -452,6 +455,8 @@ This report is redacted. It should contain trace metadata and manual labels only
 - Trust-killer gate status: `0`.
 - Prompt no-submit safety status: `0`.
 - Sensitive field safety status: `0`.
+- App filter: `com.apple.TextEdit`.
+- Sample minimums: shown `5`, phrase shown `1`, accepted `1`, accepted-kept `1`, active minutes `5`.
 
 ## Manual Trust Row
 
@@ -469,13 +474,152 @@ for expected in \
   "Automated gate: pass" \
   "Safety snapshot: pass" \
   "Trust-killer gate: pass" \
+  "App filter: com.apple.TextEdit" \
   "Did reach for it: yes" \
+  "Active minute minimum: 5" \
   "Suggestion quality: 5" \
   "Keep it on tomorrow: yes" \
   "Result: pass"
 do
   if ! grep -q "$expected" "$TMP_DIR/review-pass.out"; then
     echo "dogfood self-test review pass output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+cat >"$REVIEW_APP_MISMATCH_REPORT_PATH" <<'MD'
+# Daily Driver Dogfood Session
+
+This report is redacted. It should contain trace metadata and manual labels only.
+
+## Summary
+
+- Gate: `pass`.
+- Safety snapshot status: `0`.
+- Trust-killer gate status: `0`.
+- Prompt no-submit safety status: `0`.
+- Sensitive field safety status: `0`.
+- App filter: `com.apple.TextEdit`.
+- Sample minimums: shown `5`, phrase shown `1`, accepted `1`, accepted-kept `1`, active minutes `5`.
+
+## Manual Trust Row
+
+| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | ---: | --- | --- | --- | --- |
+| md.obsidian | 12 | yes | 5 | predicted useful next words | none | aligned | yes |
+MD
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REVIEW_APP_MISMATCH_REPORT_PATH" \
+  >"$TMP_DIR/review-app-mismatch.out" 2>&1
+review_app_mismatch_status=$?
+set -e
+
+if [[ "$review_app_mismatch_status" -eq 0 ]]; then
+  echo "dogfood self-test expected app mismatch manual review to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Result: fail" \
+  "App filter: com.apple.TextEdit" \
+  "App: md.obsidian" \
+  "manual app must match the report app filter"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-app-mismatch.out"; then
+    echo "dogfood self-test app mismatch review output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+cat >"$REVIEW_LOW_MINUTES_REPORT_PATH" <<'MD'
+# Daily Driver Dogfood Session
+
+This report is redacted. It should contain trace metadata and manual labels only.
+
+## Summary
+
+- Gate: `pass`.
+- Safety snapshot status: `0`.
+- Trust-killer gate status: `0`.
+- Prompt no-submit safety status: `0`.
+- Sensitive field safety status: `0`.
+- App filter: `com.apple.TextEdit`.
+- Sample minimums: shown `5`, phrase shown `1`, accepted `1`, accepted-kept `1`, active minutes `5`.
+
+## Manual Trust Row
+
+| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | ---: | --- | --- | --- | --- |
+| com.apple.TextEdit | 3 | yes | 5 | predicted useful next words | none | aligned | yes |
+MD
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REVIEW_LOW_MINUTES_REPORT_PATH" \
+  >"$TMP_DIR/review-low-minutes.out" 2>&1
+review_low_minutes_status=$?
+set -e
+
+if [[ "$review_low_minutes_status" -eq 0 ]]; then
+  echo "dogfood self-test expected low minutes manual review to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Result: fail" \
+  "Minutes: 3" \
+  "Active minute minimum: 5" \
+  "manual minutes must meet active session minimum (5)"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-low-minutes.out"; then
+    echo "dogfood self-test low minutes review output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+cat >"$REVIEW_BAD_PLACEMENT_REPORT_PATH" <<'MD'
+# Daily Driver Dogfood Session
+
+This report is redacted. It should contain trace metadata and manual labels only.
+
+## Summary
+
+- Gate: `pass`.
+- Safety snapshot status: `0`.
+- Trust-killer gate status: `0`.
+- Prompt no-submit safety status: `0`.
+- Sensitive field safety status: `0`.
+- App filter: `com.apple.TextEdit`.
+- Sample minimums: shown `5`, phrase shown `1`, accepted `1`, accepted-kept `1`, active minutes `5`.
+
+## Manual Trust Row
+
+| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | ---: | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | 5 | predicted useful next words | none | weird and misaligned | yes |
+MD
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REVIEW_BAD_PLACEMENT_REPORT_PATH" \
+  >"$TMP_DIR/review-bad-placement.out" 2>&1
+review_bad_placement_status=$?
+set -e
+
+if [[ "$review_bad_placement_status" -eq 0 ]]; then
+  echo "dogfood self-test expected bad placement manual review to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Result: fail" \
+  "Placement trust: filled" \
+  "manual placement trust must not describe wrong or unstable placement"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-bad-placement.out"; then
+    echo "dogfood self-test bad placement review output missing: $expected" >&2
     exit 1
   fi
 done

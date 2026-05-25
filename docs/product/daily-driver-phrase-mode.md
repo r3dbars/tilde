@@ -261,9 +261,12 @@ invisible, or never-reached-for trace from being counted as a daily-driver pass.
 After the human fills the Manual Trust Row, `review --report` gates the completed
 report too: the automated gate must pass, the row must be filled, the user must
 say they reached for it, suggestion quality must be scored 4 or 5, and they
-must say they would keep it on tomorrow. The same report now carries a redacted
-safety snapshot for prompt no-submit and sensitive-field suppression, so a
-daily-driver pass cannot hide stale wrong-field safety.
+must say they would keep it on tomorrow. The manual row must also match the
+report's app filter, meet the same active-minute minimum as the trace gate, and
+avoid describing placement as wrong, weird, detached, or unstable. The same
+report now carries a redacted safety snapshot for prompt no-submit and
+sensitive-field suppression, so a daily-driver pass cannot hide stale
+wrong-field safety.
 The dogfood `start` command now records whether SteadyType was running when the
 session began, whether the trace already existed, and a readiness verdict. The
 finished report carries the same start-readiness fields, so a session that was
@@ -367,7 +370,7 @@ helping.
 | Placement reliability | All beta-safe strict target rows are fresh again on `15a6f895d091`: TextEdit, Notes title/body/checklist, Obsidian default/theme/pane/long-note, and Chrome textarea/contenteditable all pass `./script/manual_smoke_status.sh --strict` with strict visual trace evidence | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and status preflight expose instant phrase vs model-backed source mix plus live redacted typing-feel score | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green on the current build and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and start/status preflights that expose whether SteadyType was running before and during the dogfood session; reports now fail if SteadyType was not confirmed running at the start; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green on the current build and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with app/filter match, active-minute match, suggestion quality 4-5, and no placement-trust negatives, plus start/status preflights that expose whether SteadyType was running before and during the dogfood session; reports now fail if SteadyType was not confirmed running at the start; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 
