@@ -387,7 +387,7 @@ def strict_latency_selector_command() -> list[str]:
     proof_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_APP", "com.google.Chrome")
     proof_scenario = os.environ.get(
         "AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_SCENARIO",
-        "chrome-textarea-model-latency",
+        "chrome-contenteditable-model-latency",
     )
     trace_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_TRACE_APP", proof_app)
     request_mode = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_REQUEST_MODE", "wordCompletion")

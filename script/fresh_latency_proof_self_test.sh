@@ -37,9 +37,10 @@ LOG
   done
   exit 0
 fi
-if [[ "${1:-}" == "chrome-textarea-model-latency" ]]; then
+if [[ "${1:-}" == "chrome-textarea-model-latency" || "${1:-}" == "chrome-contenteditable-model-latency" ]]; then
+  scenario="${1:-}"
   cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
-$base_timestamp app-proof-mode-started app=com.google.Chrome scenario=chrome-textarea-model-latency
+$base_timestamp app-proof-mode-started app=com.google.Chrome scenario=$scenario
 LOG
   for sample in 1 2 3 4 5; do
     cat >>"$AUTOCOMPLETE_LAB_TRACE_PATH" <<LOG
@@ -192,6 +193,49 @@ fi
 
 if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
   echo "fresh latency proof self-test expected no skip-build rerun for chrome model-latency target" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+: >"$SMOKE_LOG"
+: >"$DIAGNOSTICS_LOG"
+: >"$TRACE_LOG"
+CHROME_CONTENTEDITABLE_MODEL_OUTPUT="$(
+  AUTOCOMPLETE_LAB_LOG="$DIAGNOSTICS_LOG" \
+  AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_REAL_APP_SMOKE_SCRIPT="$SMOKE_STUB" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_SMOKE_LOG="$SMOKE_LOG" \
+  AUTOCOMPLETE_LAB_FRESH_LATENCY_LOCK_DIR="$TMP_DIR/fresh-latency-chrome-contenteditable-model.lock" \
+    ./script/fresh_latency_proof.sh --target chrome-contenteditable-model-latency --runs 3
+)"
+
+if ! grep -F "chrome-contenteditable-model-latency collects the proof sample set in one launch; forcing --runs 1." <<<"$CHROME_CONTENTEDITABLE_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected chrome-contenteditable-model-latency to force one run" >&2
+  echo "$CHROME_CONTENTEDITABLE_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Latency beta gate passed." <<<"$CHROME_CONTENTEDITABLE_MODEL_OUTPUT" >/dev/null ||
+   ! grep -F "First visible / keystroke-to-visible: n=5" <<<"$CHROME_CONTENTEDITABLE_MODEL_OUTPUT" >/dev/null; then
+  echo "fresh latency proof self-test expected chrome contenteditable model-latency target to pass with one bounded launch" >&2
+  echo "$CHROME_CONTENTEDITABLE_MODEL_OUTPUT" >&2
+  exit 1
+fi
+
+if [[ "$(wc -l <"$SMOKE_LOG" | tr -d ' ')" != "1" ]]; then
+  echo "fresh latency proof self-test expected one chrome contenteditable model-latency smoke run" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if [[ "$(sed -n '1p' "$SMOKE_LOG")" != "chrome-contenteditable-model-latency" ]]; then
+  echo "fresh latency proof self-test expected chrome contenteditable model-latency smoke without --skip-build" >&2
+  cat "$SMOKE_LOG" >&2
+  exit 1
+fi
+
+if grep -F -- "--skip-build" "$SMOKE_LOG" >/dev/null; then
+  echo "fresh latency proof self-test expected no skip-build rerun for chrome contenteditable model-latency target" >&2
   cat "$SMOKE_LOG" >&2
   exit 1
 fi

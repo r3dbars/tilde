@@ -17,7 +17,7 @@ FRESH_LATENCY_LOCK_HELD=0
 
 usage() {
   cat <<'EOF'
-Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency]
+Usage: script/fresh_latency_proof.sh [--runs N] [--target textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency|chrome-contenteditable-model-latency]
 
 Runs a fresh bounded latency proof: current-app smoke launches, rebuild-skipped
 reruns only where proof mode can safely reuse the app, then
@@ -71,10 +71,10 @@ if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || ((RUNS < 1)); then
 fi
 
 case "$TARGET_APP" in
-  textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency)
+  textedit|textedit-model-latency|textedit-default-model-latency|chrome-textarea-model-latency|chrome-contenteditable-model-latency)
     ;;
   *)
-    echo "--target must be textedit, textedit-model-latency, textedit-default-model-latency, or chrome-textarea-model-latency" >&2
+    echo "--target must be textedit, textedit-model-latency, textedit-default-model-latency, chrome-textarea-model-latency, or chrome-contenteditable-model-latency" >&2
     exit 2
     ;;
 esac
@@ -84,7 +84,7 @@ if [[ "$TARGET_APP" =~ ^textedit-(default-)?model-latency$ && "$RUNS" != "1" ]];
   RUNS=1
 fi
 
-if [[ "$TARGET_APP" == "chrome-textarea-model-latency" && "$RUNS" != "1" ]]; then
+if [[ "$TARGET_APP" =~ ^chrome-(textarea|contenteditable)-model-latency$ && "$RUNS" != "1" ]]; then
   echo "$TARGET_APP collects the proof sample set in one launch; forcing --runs 1."
   RUNS=1
 fi
@@ -120,8 +120,8 @@ run_smoke() {
   local args=("$TARGET_APP")
 
   case "$TARGET_APP" in
-    chrome-textarea-model-latency)
-      args=(chrome-textarea-model-latency)
+    chrome-textarea-model-latency|chrome-contenteditable-model-latency)
+      args=("$TARGET_APP")
       ;;
   esac
 
