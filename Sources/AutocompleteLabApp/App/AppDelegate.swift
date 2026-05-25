@@ -1932,6 +1932,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile
         )
         let fieldClassification = fieldClassification(for: context)
+        let suggestionFieldClassification = effectiveSuggestionFieldClassification(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            raw: fieldClassification
+        )
         rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
@@ -2085,7 +2091,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isSecure: context.isSecure,
             selectedTextLength: context.selectedTextLength,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
-            fieldKind: fieldClassification.kind,
+            fieldKind: suggestionFieldClassification.kind,
             allowsUnknownFieldKind: profile.allowsUnknownFieldKind
         )
         let activationDecision = proofAdjustedActivationDecision(
@@ -2093,13 +2099,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile,
             fieldIdentity: fieldIdentity,
-            fieldKind: fieldClassification.kind
+            fieldKind: suggestionFieldClassification.kind
         )
         rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
             requestMode: activationDecision.requestMode,
-            fieldKind: fieldClassification.kind
+            fieldKind: suggestionFieldClassification.kind
         )
 
         guard activationDecision.canSuggest else {
@@ -2136,7 +2142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
-                metadata: fieldClassification.traceMetadata
+                metadata: suggestionFieldClassification.traceMetadata
             )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
@@ -2146,7 +2152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": activationDecision.blockReasonDescription
                 ]
-                .merging(fieldClassification.traceMetadata) { current, _ in current }
+                .merging(suggestionFieldClassification.traceMetadata) { current, _ in current }
             )
             hideSuggestion()
             return
@@ -2155,7 +2161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let requestMode = activationDecision.requestMode ?? .phraseContinuation
         if shouldSuppressObsidianPostAcceptanceRefresh(context: context, profile: profile) {
             invalidatePendingSuggestionRequest()
-            let metadata = fieldClassification.traceMetadata
+            let metadata = suggestionFieldClassification.traceMetadata
                 .merging(["reason": "obsidian-post-acceptance-settle"]) { current, _ in current }
             setSuggestionDecision("Waiting: Obsidian accepted text settled")
             showFieldStatusIndicator(.ready, context: context)
@@ -2206,7 +2212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for: snapshot,
                 cooldown: cooldown
             )
-            let metadata = fieldClassification.traceMetadata
+            let metadata = suggestionFieldClassification.traceMetadata
                 .merging(cooldown.metadata) { current, _ in current }
                 .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
             RawAutocompleteTraceLog.shared.record(
@@ -2236,13 +2242,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
-            fieldKind: fieldClassification.kind
+            fieldKind: suggestionFieldClassification.kind
         )
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
         guard !quietMode.isActive else {
             setSuggestionDecision("Waiting: \(quietMode.traceReason)")
             showFieldStatusIndicator(.waiting, context: context)
-            let metadata = fieldClassification.traceMetadata
+            let metadata = suggestionFieldClassification.traceMetadata
                 .merging(quietMode.metadata) { current, _ in current }
                 .merging(["reason": quietMode.traceReason]) { current, _ in current }
             RawAutocompleteTraceLog.shared.record(
@@ -2326,9 +2332,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let currentLineStructure = CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
+        let suggestionAppBundleIdentifier = suggestionBundleIdentifier(for: frontmostApp, profile: profile)
         let triggerBehaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: frontmostApp.bundleIdentifier,
-            fieldKind: fieldClassification.kind,
+            appBundleIdentifier: suggestionAppBundleIdentifier,
+            fieldKind: suggestionFieldClassification.kind,
             currentLineStructure: currentLineStructure
         ))
         let triggerDecision = triggerPolicy(for: profile).decision(
@@ -2369,9 +2376,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleSuggestion(
             context: context,
             profile: profile,
-            appBundleIdentifier: suggestionBundleIdentifier(for: frontmostApp, profile: profile),
+            appBundleIdentifier: suggestionAppBundleIdentifier,
             fieldIdentity: fieldIdentity,
-            fieldClassification: fieldClassification,
+            fieldClassification: suggestionFieldClassification,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode,
@@ -2383,11 +2390,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func claudeCodeTerminalHostProofBlockReason(
+    private func claudeCodeTerminalHostProofContext(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
         profile: CompatibilityProfile
-    ) -> String? {
+    ) -> ClaudeCodeTerminalHostProofContext? {
         guard isClaudeCodeTerminalHostProof(
             profile: profile,
             hostBundleIdentifier: app.bundleIdentifier
@@ -2399,7 +2406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
-        let proofContext = ClaudeCodeTerminalHostProofContext(
+        return ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: app.bundleIdentifier,
             windowTitle: context.fingerprint.windowTitle ?? "",
             focusedText: focusedLine,
@@ -2409,6 +2416,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             )
         )
+    }
+
+    private func claudeCodeTerminalHostProofBlockReason(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> String? {
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ) else {
+            return nil
+        }
         let decision = ClaudeCodeTerminalHostProofPolicy.evaluate(proofContext)
 
         switch decision {
@@ -2427,28 +2448,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context: FocusedTextContext,
         profile: CompatibilityProfile
     ) -> [String: String] {
-        guard isClaudeCodeTerminalHostProof(
-            profile: profile,
-            hostBundleIdentifier: app.bundleIdentifier
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
         ) else {
             return [:]
         }
 
-        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor
-        )
-        let proofContext = ClaudeCodeTerminalHostProofContext(
-            hostBundleIdentifier: app.bundleIdentifier,
-            windowTitle: context.fingerprint.windowTitle ?? "",
-            focusedText: focusedLine,
-            rawTextBeforeCursor: context.textBeforeCursor,
-            rawTextAfterCursor: context.textAfterCursor,
-            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
-                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            )
-        )
         return ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: proofContext)
+    }
+
+    private func effectiveSuggestionFieldClassification(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        raw classification: AXFieldClassification
+    ) -> AXFieldClassification {
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ) else {
+            return classification
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: classification,
+            for: proofContext
+        )
+    }
+
+    private func effectiveSuggestionFieldClassificationForCurrentFrontmost(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        raw classification: AXFieldClassification
+    ) -> AXFieldClassification {
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+            return classification
+        }
+
+        return effectiveSuggestionFieldClassification(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            raw: classification
+        )
     }
 
     private func suggestionBundleIdentifier(
@@ -2887,9 +2932,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context: FocusedTextContext,
         profile: CompatibilityProfile
     ) -> String? {
-        guard isClaudeCodeTerminalHostProof(
-            profile: profile,
-            hostBundleIdentifier: app.bundleIdentifier
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
         ),
               claudeCodeTerminalHostProofBlockReason(
                 app: app,
@@ -2899,22 +2945,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor
-        )
-        return ClaudeCodeTerminalHostProofPolicy.proofInputText(
-            for: ClaudeCodeTerminalHostProofContext(
-                hostBundleIdentifier: app.bundleIdentifier,
-                windowTitle: context.fingerprint.windowTitle ?? "",
-                focusedText: focusedLine,
-                rawTextBeforeCursor: context.textBeforeCursor,
-                rawTextAfterCursor: context.textAfterCursor,
-                proofModeEnabled: activeAppProofBundleIdentifiers.contains(
-                    ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                )
-            )
-        )
+        return ClaudeCodeTerminalHostProofPolicy.proofInputText(for: proofContext)
     }
 
     private func recordClaudeCodeTerminalHostProofInputRepair(
@@ -3579,16 +3610,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "hasBaseline": String(verificationBaseline != nil)
                 ]
             )
-            guard let acceptedText = suggestionSession.nextWordAcceptance() else {
+            guard let rawAcceptedText = suggestionSession.nextWordAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
             }
+            let acceptedText = acceptedTextForCurrentAcceptance(rawAcceptedText, action: action)
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-text-ready",
                 key: key,
                 action: action,
                 metadata: [
-                    "acceptedChars": String(acceptedText.count)
+                    "acceptedChars": String(acceptedText.count),
+                    "rawAcceptedChars": String(rawAcceptedText.count)
                 ]
             )
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
@@ -3754,6 +3787,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func acceptedTextForCurrentAcceptance(
+        _ acceptedText: String,
+        action: KeyboardAction
+    ) -> String {
+        guard let currentProfile,
+              shouldUseClaudeCodeTerminalHostProofDirectInsertion(
+                profile: currentProfile,
+                action: action
+              ) else {
+            return acceptedText
+        }
+
+        let trimmed = acceptedText.trimmingTrailingWhitespace()
+        return trimmed.isEmpty ? acceptedText : trimmed
+    }
+
     private func currentSuggestionAcceptanceDecision(
         allowCodexProofSnapshotFastPath: Bool = false,
         allowObsidianSnapshotFastPath: Bool = false
@@ -3839,7 +3888,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             previousSnapshot: lastTextSnapshot
         )
-        if fieldClassification(for: context).suppressesSuggestionsByDefault {
+        let rawFieldClassification = fieldClassification(for: context)
+        let acceptanceFieldClassification = effectiveSuggestionFieldClassification(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            raw: rawFieldClassification
+        )
+        if acceptanceFieldClassification.suppressesSuggestionsByDefault {
             blockReason = .currentBecameSuppressedField
             return nil
         }
@@ -3984,7 +4040,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func terminalHostProofSnapshotMatchesCurrentSuggestion() -> Bool {
         guard currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-              currentSuggestionRequestMode == .wordCompletion,
+              currentSuggestionRequestMode != nil,
               let currentProfile,
               currentProfile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
               currentProfile.supportsOneWordAcceptance,
@@ -6705,7 +6761,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let displayFieldClassification = fieldClassification(for: context)
+        let rawDisplayFieldClassification = fieldClassification(for: context)
+        let displayFieldClassification = effectiveSuggestionFieldClassificationForCurrentFrontmost(
+            context: context,
+            profile: profile,
+            raw: rawDisplayFieldClassification
+        )
+        let displayRequestMetadata = traceRequestMetadata(
+            request: request,
+            fieldClassification: displayFieldClassification
+        )
         let acceptedAndKeptSignal = acceptedAndKeptSignal(
             request: request,
             fieldClassification: displayFieldClassification,
@@ -6872,7 +6937,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             placement: placement,
             latencyMilliseconds: latencyMilliseconds,
-            requestMetadata: traceRequestMetadata(request: request, context: context),
+            requestMetadata: displayRequestMetadata,
             geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
             learningMetadata: learningAdjustment.metadata,
             candidateSelectionMetadata: candidateSelectionMetadata,
@@ -7020,7 +7085,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile,
             fieldIdentity: fieldIdentity,
-            fieldClassification: displayFieldClassification,
+            fieldClassification: rawDisplayFieldClassification,
             suggestion: suggestion,
             latencyMilliseconds: latencyMilliseconds,
             triggerReason: triggerReason,
@@ -7869,7 +7934,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         keyboardEventTap?.suppressPassthroughObservation(
             until: Date().addingTimeInterval(
-                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
+                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action)
                     || shouldUseCodexProofDirectInsertion(profile: profile)
                     || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
                     || shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
@@ -7901,7 +7966,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
-        if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile) {
+        if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action) {
             let succeeded = insertClaudeCodeTerminalHostProofText(acceptedText)
             DiagnosticsLog.shared.record(
                 "insert",
@@ -8104,10 +8169,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
+    private func shouldUseClaudeCodeTerminalHostProofDirectInsertion(
+        profile: CompatibilityProfile,
+        action: KeyboardAction?
+    ) -> Bool {
         currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            && currentSuggestionRequestMode == .wordCompletion
+            && action == .acceptNextWord
+            && currentSuggestionRequestMode != nil
             && profile.insertionMode == .clipboardFallbackOptIn
             && profile.requiresNoSubmitAcceptanceProof
     }
@@ -9103,6 +9172,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let frontmostApp = accessibilityClient.frontmostApplication() else {
             return false
         }
+        guard let lastTextSnapshot else {
+            return false
+        }
+
+        let expectedProofInputText = lastTextSnapshot.textBeforeCursor
+            + acceptedText
+            + lastTextSnapshot.textAfterCursor
+
+        if accessibilityClient.insertText(acceptedText, allowDescendantTextFallback: false) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "axSelectedText",
+                    "verified": String(verified)
+                ]
+            )
+            return verified
+        }
+
+        if Self.postUnicodeTextKeyEvents(acceptedText) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgUnicodeKeyEvents",
+                    "verified": String(verified)
+                ]
+            )
+            return verified
+        }
 
         let pasteboard = NSPasteboard.general
         let originalItems = pasteboard.pasteboardItems?.compactMap {
@@ -9133,6 +9246,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let posted = Self.postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
             processIdentifier: frontmostApp.processIdentifier
         )
+        let verified = posted
+            && verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
         schedulePasteboardRestore(
             insertedText: acceptedText,
             fallbackChangeCount: fallbackChangeCount,
@@ -9143,11 +9262,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "posted": String(posted),
-                "source": "accessibilityMenuPaste"
+                "source": "accessibilityMenuPaste",
+                "verified": String(verified)
             ]
         )
 
-        return posted
+        return verified
+    }
+
+    private func verifyClaudeCodeTerminalHostProofInsertion(
+        expectedProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        attempts: Int = 8,
+        delaySeconds: TimeInterval = 0.05
+    ) -> Bool {
+        guard let profile else {
+            return false
+        }
+
+        for attempt in 0..<attempts {
+            if attempt > 0 {
+                Thread.sleep(forTimeInterval: delaySeconds)
+            }
+
+            guard let currentContext = accessibilityClient.focusedTextContext(
+                for: frontmostApp,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            ) else {
+                continue
+            }
+
+            let currentProofInputText = claudeCodeTerminalHostProofInputText(
+                app: frontmostApp,
+                context: currentContext,
+                profile: profile
+            )
+            if currentProofInputText == expectedProofInputText {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func schedulePasteboardRestore(
@@ -9199,6 +9355,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return AXUIElementPerformAction(pasteItem, kAXPressAction as CFString) == .success
+    }
+
+    nonisolated private static func postUnicodeTextKeyEvents(_ text: String) -> Bool {
+        guard !text.isEmpty else {
+            return false
+        }
+
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+            return false
+        }
+
+        var characters = Array(text.utf16)
+        characters.withUnsafeMutableBufferPointer { buffer in
+            keyDown.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+            keyUp.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
+
+        return true
     }
 
     nonisolated private static func axAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -12717,6 +12895,16 @@ private struct FieldControlTarget: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let requestMode: CompletionRequestMode?
     let fieldKind: AXFieldKind
+}
+
+private extension String {
+    func trimmingTrailingWhitespace() -> String {
+        var result = self
+        while result.last?.isWhitespace == true {
+            result.removeLast()
+        }
+        return result
+    }
 }
 
 private extension FocusedFieldIdentityInput {

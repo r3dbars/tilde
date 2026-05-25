@@ -62,6 +62,10 @@ public struct ClaudeCodeTerminalHostVariant: Equatable, Sendable {
 
 public enum ClaudeCodeTerminalHostProofPolicy {
     public static let virtualBundleIdentifier = "com.anthropic.claude-code"
+    public static let proofFieldClassification = AXFieldClassification(
+        kind: .multilineCompose,
+        reason: "claude-code-terminal-host-proof"
+    )
 
     public static let supportedHostVariants: [ClaudeCodeTerminalHostVariant] = [
         ClaudeCodeTerminalHostVariant(
@@ -157,7 +161,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
             promptAppSafetyMode: .wordOnly,
-            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not shell or agent output. It uses clipboard paste insertion through the terminal host's own Paste menu so one-word completion text can be accepted without submitting the prompt."
+            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not shell or agent output. It prefers verified AX selected-text insertion, then verified Unicode key-event insertion, then verified clipboard paste through the terminal host's own Paste menu, so one-word completion text can be accepted without submitting the prompt."
         )
     }
 
@@ -337,6 +341,18 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             textBeforeCursor: context.rawTextBeforeCursor,
             textAfterCursor: context.rawTextAfterCursor
         )
+    }
+
+    public static func effectiveFieldClassification(
+        raw classification: AXFieldClassification,
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> AXFieldClassification {
+        guard evaluate(context) == .eligible,
+              proofInputText(for: context) != nil else {
+            return classification
+        }
+
+        return proofFieldClassification
     }
 
     public static func diagnosticMetadata(
