@@ -1454,12 +1454,51 @@ if ! grep -F 'Claude Code model latency sample $sample_index must include $marke
   echo "real app smoke self-test expected Claude Code model latency samples to carry the current-line proof marker" >&2
   exit 1
 fi
+if ! grep -F "model-backed visible suggestion during the typed sample window" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to count model-backed suggestions from the typed sample window" >&2
+  exit 1
+fi
 if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint "❯"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Claude Code prompt readiness to require Claude-specific chrome, not a generic prompt glyph" >&2
   exit 1
 fi
+if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint / { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to use process proof instead of brittle placeholder hints" >&2
+  exit 1
+fi
+if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /wait_for_claude_code_terminal_process/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to wait for the launched claude process" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to settle before typing samples" >&2
+  exit 1
+fi
 if awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /assert_claude_code_terminal_prompt_retains_marker\(\)/ { in_assert = 0 } in_assert && /claude_code_terminal_ax_helper wait/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected typed Claude Code prompt text checks not to require placeholder hints" >&2
+  exit 1
+fi
+if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "process_tree_contains_name" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal proof cleanup/readiness to track the disposable process tree" >&2
+  exit 1
+fi
+if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open -na Terminal "$launch_script"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal launch to use a disposable command file" >&2
+  exit 1
+fi
+if ! grep -F 'printf '"'"'cd %q\n'"'"' "$ROOT_DIR"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal proof to launch Claude from the trusted repo root" >&2
+  exit 1
+fi
+if awk '/open_claude_code_terminal_proof\(\)/ { in_open = 1 } /cleanup_claude_code_terminal_proof\(\)/ { in_open = 0 } in_open && /keystroke shellCommand|AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_COMMAND/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal launch not to type the launch command into a shell" >&2
+  exit 1
+fi
+if ! grep -F "wait_for_new_terminal_pids" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "wait_for_frontmost_claude_code_terminal_proof_process" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal launch to activate the disposable Terminal process before typing" >&2
   exit 1
 fi
 if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/null ||

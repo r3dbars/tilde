@@ -96,6 +96,16 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
   `Claude Code` title text or a zsh prompt glyph,
 - typed Claude Code sample checks now require the proof marker plus sample text
   directly, without requiring placeholder hints after real text has been typed,
+- Claude Code Terminal proof now launches through a disposable `.command` file
+  from the trusted repo root, tracks the exact disposable Terminal process,
+  waits for the launched `claude` child process, and cleans up only that proof
+  process,
+- the Terminal AX helper now combines the marker-titled window with the focused
+  input node for the same frontmost Terminal process, so alternate-screen
+  Claude prompt text can be proved without stitching across stale windows,
+- Claude Code model-latency accounting now treats the cleared typed sample
+  window as the proof window because Terminal/Claude can produce the model
+  result while the seed and trigger text are still arriving,
 - the disposable sample loop now tracks early empty model outputs from the whole
   sample iteration so the proof can report empty candidates instead of only
   timing out on the later visible-suggestion wait,
@@ -114,14 +124,13 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
   `wordCompletionFallbackUsed` / `wordCompletionFallbackSource` in proof
   metadata.
 
-Fresh live proof is still not green: after the stricter Claude-specific prompt
-check, the Terminal-hosted Claude Code model-latency run now fails earlier
-instead of accepting a zsh prompt glyph as readiness. Earlier in this cycle, the
-helper proved it can see the current-line marker plus seed text in the frontmost
-Terminal process, and that zsh/unproven surfaces are blocked fail-closed. The
-next live pass needs to fix the Terminal launch/wait step so the sample is typed
-into an actual Claude Code prompt, not zsh or stale scrollback. That remains a
-proof blocker, not a support claim.
+Fresh live proof is still not fully green: the Terminal-hosted Claude Code
+model-latency run now launches a disposable Claude prompt, proves marker plus
+typed prompt text through AX, and records a model-backed visible word-completion
+suggestion in roughly 380ms. The next failure is narrower: sample 2 is blocked
+as `claude-code-terminal-host-shellCommandDetected` after prompt reset/scrollback
+state leaks into the proof policy. That remains a proof blocker, not a support
+claim.
 
 ## Scorecard
 
@@ -129,7 +138,7 @@ proof blocker, not a support claim.
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion now has a tested local suffix rescue after no-candidate failures, but Claude Code live proof still fails before a clean prompt sample | Feels ready during fast typing | Fix Claude Code Terminal launch/wait into the actual prompt, then refresh Obsidian/TextEdit latency proof |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue, and Claude Code Terminal now reaches a first model-backed visible suggestion before failing on sample 2 prompt reset safety | Feels ready during fast typing | Fix Claude Code Terminal multi-sample prompt reset/scrollback, then refresh Obsidian/TextEdit latency proof |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 
