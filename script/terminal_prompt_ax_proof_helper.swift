@@ -254,11 +254,18 @@ func snapshot(options: Options) -> Snapshot {
         let title = stringAttribute(window, kAXTitleAttribute)
         scopedSearchables.append(windowTexts + (title.isEmpty ? [] : [title]))
     }
-    if markerWindows.isEmpty, let focused = focusedElement(in: appElement) {
+    if let focused = focusedElement(in: appElement) {
         var focusedTexts: [String] = []
         collectText(from: focused, into: &focusedTexts)
         texts.append(contentsOf: focusedTexts)
-        scopedSearchables.append(focusedTexts)
+        if markerWindows.isEmpty {
+            scopedSearchables.append(focusedTexts)
+        } else {
+            for window in markerWindows {
+                let title = stringAttribute(window, kAXTitleAttribute)
+                scopedSearchables.append(focusedTexts + (title.isEmpty ? [] : [title]))
+            }
+        }
     }
 
     let titles = scopedWindows

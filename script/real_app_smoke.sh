@@ -63,6 +63,8 @@ CODEX_DRAFT_BACKUP_ACTIVE=0
 CLAUDE_CODE_TERMINAL_PROOF_TITLE=""
 CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 CLAUDE_DRAFT_BACKUP_PATH=""
+CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
 SMOKE_PHASE="startup"
 
 usage() {
@@ -7572,10 +7574,166 @@ claude_code_terminal_ax_helper() {
     "$@"
 }
 
+terminal_pid_list() {
+  pgrep -x Terminal || true
+}
+
+pid_list_difference() {
+  local after="$1"
+  local before="$2"
+  local pid
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    if ! printf '%s\n' "$before" | grep -qxF "$pid"; then
+      printf '%s\n' "$pid"
+    fi
+  done <<<"$after"
+}
+
+wait_for_new_terminal_pids() {
+  local before="$1"
+  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline after new_pids
+
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=12
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    after="$(terminal_pid_list)"
+    new_pids="$(pid_list_difference "$after" "$before" | tr '\n' ' ')"
+    new_pids="${new_pids% }"
+    if [[ -n "$new_pids" ]]; then
+      printf '%s\n' "$new_pids"
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Claude Code Terminal proof did not create a disposable Terminal process." >&2
+  return 1
+}
+
+frontmost_process_id() {
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  get unix id of first application process whose frontmost is true
+end tell
+APPLESCRIPT
+}
+
+activate_process_id() {
+  local target_pid="$1"
+  AUTOCOMPLETE_LAB_TARGET_PID="$target_pid" osascript <<'APPLESCRIPT'
+set targetPid to (system attribute "AUTOCOMPLETE_LAB_TARGET_PID") as integer
+tell application "System Events"
+  set frontmost of first application process whose unix id is targetPid to true
+end tell
+APPLESCRIPT
+}
+
+wait_for_frontmost_claude_code_terminal_proof_process() {
+  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline root_pid frontmost_pid
+
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
+    exit 1
+  fi
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=12
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    activate_process_id "$root_pid" >/dev/null 2>&1 || true
+    break
+  done
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if [[ "$frontmost_pid" == "$root_pid" ]]; then
+        return 0
+      fi
+    done
+    sleep 0.2
+  done
+
+  echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+  exit 1
+}
+
+process_tree_contains_name() {
+  local root_pid="$1"
+  local expected_name="$2"
+  local child command_name
+
+  [[ -z "$root_pid" || -z "$expected_name" ]] && return 1
+  while IFS= read -r child; do
+    [[ -z "$child" ]] && continue
+    command_name="$(ps -p "$child" -o comm= 2>/dev/null || true)"
+    command_name="${command_name##*/}"
+    if [[ "$command_name" == "$expected_name" || "$command_name" == "-$expected_name" ]]; then
+      return 0
+    fi
+    if process_tree_contains_name "$child" "$expected_name"; then
+      return 0
+    fi
+  done < <(pgrep -P "$root_pid" 2>/dev/null || true)
+  return 1
+}
+
+wait_for_claude_code_terminal_process_name() {
+  local expected_name="$1"
+  local label="${2:-$expected_name}"
+  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline root_pid
+
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" || -z "$expected_name" ]]; then
+    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
+    exit 1
+  fi
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=20
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if process_tree_contains_name "$root_pid" "$expected_name"; then
+        return 0
+      fi
+    done
+    sleep 0.2
+  done
+
+  echo "Claude Code Terminal proof did not start $label under disposable Terminal pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+  exit 1
+}
+
+wait_for_claude_code_terminal_process() {
+  wait_for_claude_code_terminal_process_name "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
+}
+
 open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
-  local claude_bin title_sequence quoted_dir quoted_title quoted_claude shell_command
+  local claude_bin title_sequence launch_script terminal_pids_before
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -7589,24 +7747,20 @@ open_claude_code_terminal_proof() {
   fi
 
   title_sequence=$'\033]0;'"$proof_title"$'\007'
-  printf -v quoted_dir '%q' "$proof_dir"
-  printf -v quoted_title '%q' "$title_sequence"
-  printf -v quoted_claude '%q' "$claude_bin"
-  shell_command="cd $quoted_dir; printf $quoted_title; exec $quoted_claude"
+  launch_script="$proof_dir/steadytype-claude-code-proof.command"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'cd %q\n' "$ROOT_DIR"
+    printf 'printf %q\n' "$title_sequence"
+    printf 'exec %q\n' "$claude_bin"
+  } >"$launch_script"
+  chmod +x "$launch_script"
 
-  open -na Terminal "$proof_dir"
-  wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_COMMAND="$shell_command" osascript <<'APPLESCRIPT'
-set shellCommand to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_COMMAND"
-tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not "com.apple.Terminal" then
-    error "Terminal is not frontmost for Claude Code proof launch."
-  end if
-  keystroke shellCommand
-  key code 36
-end tell
-APPLESCRIPT
+  terminal_pids_before="$(terminal_pid_list)"
+  open -na Terminal "$launch_script"
+  CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
+  wait_for_frontmost_claude_code_terminal_proof_process
 }
 
 cleanup_claude_code_terminal_proof() {
@@ -7614,21 +7768,26 @@ cleanup_claude_code_terminal_proof() {
     return 0
   fi
 
-  if [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
+  elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
     pkill -x Terminal >/dev/null 2>&1 || true
   fi
   CLAUDE_CODE_TERMINAL_PROOF_TITLE=""
+  CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 }
 
 wait_for_claude_code_terminal_prompt() {
+  wait_for_frontmost_claude_code_terminal_proof_process
+  wait_for_claude_code_terminal_process
   swift script/terminal_prompt_ax_proof_helper.swift wait \
     --bundle "$(claude_code_host_bundle_id)" \
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
-    --hint "for shortcuts" \
-    --hint "Try \"fix lint errors\"" \
     --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS:-3}"
 }
 
 assert_claude_code_terminal_prompt_ready() {
@@ -9934,18 +10093,17 @@ run_claude_code_model_latency() {
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_CLEAR_SETTLE_SECONDS:-0.7}"
     sample_seed_start="$(line_count "$LOG_PATH")"
     type_claude_code_terminal_raw_smoke_text "$stable_context"
-    claude_code_terminal_ax_helper wait \
-      --text "$stable_context" \
-      --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS:-4}"
+    assert_claude_code_terminal_prompt_ready "$stable_context"
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.35}"
     sample_start="$(line_count "$LOG_PATH")"
     type_claude_code_terminal_raw_smoke_text "$trigger_text"
     assert_claude_code_terminal_prompt_ready "$expected_text"
-    if wait_for_log_fields_optional "$sample_start" "8" \
+    if wait_for_log_fields_optional "$sample_iteration_start" "8" \
       "suggestion-presented" \
       "app=com.anthropic.claude-code" \
       "requestMode=wordCompletion" \
       "candidateSelectionSource=app-model-result"; then
+      echo "Claude Code model latency sample $sample_index produced a model-backed visible suggestion during the typed sample window." >&2
       assert_claude_code_terminal_prompt_retains_marker
       visible_sample_count=$((visible_sample_count + 1))
     elif wait_for_log_fields_optional "$sample_iteration_start" "1" \
