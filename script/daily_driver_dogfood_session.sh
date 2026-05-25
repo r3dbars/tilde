@@ -323,22 +323,26 @@ print_status() {
           echo "Session state: ready-to-finish"
           print_status_sample_preview "$START_LINE" "$line" "$APP_FILTER"
           print_status_trust_killer_preview "$START_LINE" "$line" "$APP_FILTER"
+          print_status_typing_feel_preview "$START_LINE" "$line" "$APP_FILTER"
         else
           echo "Session state: marked-no-new-rows"
           echo "Sample gate preview: waiting-for-new-rows"
           echo "Trust-killer preview: waiting-for-new-rows"
+          echo "Typing feel preview: waiting-for-new-rows"
         fi
       else
         echo "New trace rows: trace-rotated"
         echo "Session state: restart-needed"
         echo "Sample gate preview: restart-needed"
         echo "Trust-killer preview: restart-needed"
+        echo "Typing feel preview: restart-needed"
       fi
     else
       echo "New trace rows: unknown"
       echo "Session state: mark-invalid"
       echo "Sample gate preview: mark-invalid"
       echo "Trust-killer preview: mark-invalid"
+      echo "Typing feel preview: mark-invalid"
     fi
     if [[ -n "${APP_FILTER:-}" ]]; then
       finish_app_arg=" --app ${APP_FILTER}"
@@ -349,6 +353,7 @@ print_status() {
     echo "Session state: start-needed"
     echo "Sample gate preview: start-needed"
     echo "Trust-killer preview: start-needed"
+    echo "Typing feel preview: start-needed"
     echo "Next command: ./script/daily_driver_dogfood_session.sh start${APP_FILTER:+ --app $APP_FILTER}"
   fi
   echo "Review command after report: ./script/daily_driver_dogfood_session.sh review --report <report-path>"
@@ -425,6 +430,48 @@ print_status_trust_killer_preview() {
     echo "Trust-killer preview: pass"
   else
     echo "Trust-killer preview: fail"
+  fi
+  echo "$preview_output"
+}
+
+print_status_typing_feel_preview() {
+  local start_line="$1"
+  local end_line="$2"
+  local app_filter="$3"
+  local preview_output preview_status
+  if [[ ! -f "$TRACE_PATH" ]]; then
+    echo "Typing feel preview: trace-missing"
+    return
+  fi
+  if ((end_line <= start_line)); then
+    echo "Typing feel preview: waiting-for-new-rows"
+    return
+  fi
+
+  local -a typing_feel_args=(
+    "$TRACE_PATH"
+    --start-line "$start_line"
+    --end-line "$end_line"
+    --late-ms "$TYPING_FEEL_LATE_MS"
+    --target-shown-per-minute "$TYPING_FEEL_TARGET_SHOWN_PER_MINUTE"
+    --fail-under "$MIN_TYPING_FEEL_SCORE"
+  )
+  if [[ -n "$app_filter" ]]; then
+    typing_feel_args+=(--app "$app_filter")
+  fi
+
+  set +e
+  preview_output="$(
+    "$ROOT_DIR/script/typing_feel_score_report.py" \
+      "${typing_feel_args[@]}" 2>&1
+  )"
+  preview_status=$?
+  set -e
+
+  if ((preview_status == 0)); then
+    echo "Typing feel preview: pass"
+  else
+    echo "Typing feel preview: fail"
   fi
   echo "$preview_output"
 }
