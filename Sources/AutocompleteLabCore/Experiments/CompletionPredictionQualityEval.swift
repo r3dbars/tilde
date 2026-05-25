@@ -652,10 +652,10 @@ public enum CompletionPredictionQualityEvaluator {
         PositiveTemplate(textBeforeCursor: "The biggest problem is", expectedVisibleText: "suggestions feel too timid", distractors: ["shipping everything now", "opening another app"]),
         PositiveTemplate(textBeforeCursor: "What kills trust most is", expectedVisibleText: "wrong fields showing up", distractors: ["adding more buttons", "writing a roadmap"]),
         PositiveTemplate(textBeforeCursor: "The review should focus on", expectedVisibleText: "real user risk", distractors: ["shipping everything", "writing a roadmap"]),
-        PositiveTemplate(textBeforeCursor: "The most important thing is to", expectedVisibleText: "keep the scope small", distractors: ["make everything automatic", "send the prompt now"]),
-        PositiveTemplate(textBeforeCursor: "It should almost always", expectedVisibleText: "show up while writing", distractors: ["open a new window", "write an explanation"]),
-        PositiveTemplate(textBeforeCursor: "This sentence should continue", expectedVisibleText: "without sounding too formal", distractors: ["with a new section", "by answering the prompt"]),
-        PositiveTemplate(textBeforeCursor: "The draft feels calmer when it", expectedVisibleText: "stays short and specific", distractors: ["adds a pitch deck", "answers the prompt"])
+        PositiveTemplate(textBeforeCursor: "I think what matters is", expectedVisibleText: "that it feels effortless", distractors: ["open a new window", "send the prompt now"]),
+        PositiveTemplate(textBeforeCursor: "What makes this useful is", expectedVisibleText: "getting the words right", distractors: ["adding more buttons", "writing a roadmap"]),
+        PositiveTemplate(textBeforeCursor: "This would be better if it", expectedVisibleText: "predicted the next phrase", distractors: ["opened another app", "answered the prompt"]),
+        PositiveTemplate(textBeforeCursor: "When this feels magical it", expectedVisibleText: "knows the next phrase", distractors: ["adds a pitch deck", "runs the command"])
     ]
 
     private static let negativeTemplates = [
