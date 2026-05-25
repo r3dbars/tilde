@@ -337,13 +337,14 @@ redacted Markdown report:
 The report goes under `dist/daily-driver-dogfood/` by default. It includes the
 session sample gate, non-annoyance gate, trace eval output, line bounds, and a
 manual trust row. By default, `finish` requires at least 5 active minutes,
-5 shown suggestions, 1 accepted suggestion, 1 accepted-and-kept signal, and an
-85/100 redacted typing-feel score. The typing-feel score summarizes shown/min,
-accepted-kept rate, typed-over rate, accepted-then-deleted, late suggestions,
-insertion failures, and caret failures without raw text. Use `--allow-low-sample`
-only for harness/debug slices, not daily-driver proof. Do not paste raw writing,
-prompts, screenshots, document names, URLs, recipients, or subjects into that
-manual row.
+5 shown suggestions, 1 accepted suggestion, 1 accepted-and-kept signal, a 15%
+accepted-kept / shown reach rate, and an 85/100 redacted typing-feel score. The
+typing-feel score summarizes shown/min, accepted-kept rate, typed-over rate,
+accepted-then-deleted, late suggestions, insertion failures, and caret failures
+without raw text. Use `--min-kept-per-shown-percent` only when a specific
+dogfood lane needs a stricter reach bar. Use `--allow-low-sample` only for
+harness/debug slices, not daily-driver proof. Do not paste raw writing, prompts,
+screenshots, document names, URLs, recipients, or subjects into that manual row.
 
 For a frozen replay slice, capture both bounds:
 

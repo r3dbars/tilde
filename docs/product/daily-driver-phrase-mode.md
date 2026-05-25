@@ -226,12 +226,12 @@ The real writing-session pass now has a repeatable redacted wrapper:
 `dist/daily-driver-dogfood/` with the non-annoyance gate, trace eval summary,
 line bounds, and a manual trust row. `finish` now also enforces a metadata-only
 sample gate by default: at least 5 active minutes, 5 shown suggestions,
-1 accepted suggestion, 1 accepted-and-kept signal, and an 85/100 redacted
-typing-feel score. The score makes typed-over rate, accepted-then-deleted,
-late suggestions, insertion failures, and caret failures visible in the same
-artifact as the manual trust row. This does not create the subjective proof by
-itself, but it prevents a tiny or annoying happy-path trace from being counted
-as a daily-driver pass.
+1 accepted suggestion, 1 accepted-and-kept signal, a 15% accepted-kept / shown
+reach rate, and an 85/100 redacted typing-feel score. The score makes typed-over
+rate, accepted-then-deleted, late suggestions, insertion failures, and caret
+failures visible in the same artifact as the manual trust row. This does not
+create the subjective proof by itself, but it prevents a tiny, annoying, or
+never-reached-for trace from being counted as a daily-driver pass.
 
 Wrong-field safety now has both prompt-app and sensitive-field gates in the
 default smoke path. Prompt no-submit self-tests cover accidental submit, send
@@ -258,7 +258,7 @@ it waits.
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; local quality audit also covers 9 unsafe/sensitive suppressions | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample plus redacted typing-feel score, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, then finish the dogfood report |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, redacted typing-feel score, and accepted-kept / shown reach gate, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, then finish the dogfood report |
 
 ## Long-Running Loop
 

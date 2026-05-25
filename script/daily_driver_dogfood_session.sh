@@ -22,6 +22,7 @@ ALLOW_LOW_SAMPLE=0
 MIN_SHOWN="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_SHOWN:-5}"
 MIN_ACCEPTED="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_ACCEPTED:-1}"
 MIN_KEPT="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_KEPT:-1}"
+MIN_KEPT_PER_SHOWN_PERCENT="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_KEPT_PER_SHOWN_PERCENT:-15}"
 MIN_ACTIVE_MINUTES="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_ACTIVE_MINUTES:-5}"
 MIN_TYPING_FEEL_SCORE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_TYPING_FEEL_SCORE:-85}"
 TYPING_FEEL_TARGET_SHOWN_PER_MINUTE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_TARGET_SHOWN_PER_MINUTE:-3}"
@@ -46,6 +47,8 @@ Options:
   --min-shown N     Minimum shown suggestions for a real session. Default: 5.
   --min-accepted N  Minimum accepted suggestions. Default: 1.
   --min-kept N      Minimum accepted-and-kept suggestions. Default: 1.
+  --min-kept-per-shown-percent N
+                    Minimum accepted-and-kept / shown reach rate. Default: 15.
   --min-active-minutes N
                     Minimum active trace span. Default: 5.
   --min-typing-feel-score N
@@ -136,6 +139,13 @@ while [[ $# -gt 0 ]]; do
       ;;
     --min-kept=*)
       MIN_KEPT="${1#--min-kept=}"
+      ;;
+    --min-kept-per-shown-percent)
+      shift
+      MIN_KEPT_PER_SHOWN_PERCENT="${1:-}"
+      ;;
+    --min-kept-per-shown-percent=*)
+      MIN_KEPT_PER_SHOWN_PERCENT="${1#--min-kept-per-shown-percent=}"
       ;;
     --min-active-minutes)
       shift
@@ -288,7 +298,8 @@ run_session_sample_gate() {
   local min_shown="$5"
   local min_accepted="$6"
   local min_kept="$7"
-  local min_active_minutes="$8"
+  local min_kept_per_shown_percent="$8"
+  local min_active_minutes="$9"
 
   python3 - \
     "$trace_path" \
@@ -298,6 +309,7 @@ run_session_sample_gate() {
     "$min_shown" \
     "$min_accepted" \
     "$min_kept" \
+    "$min_kept_per_shown_percent" \
     "$min_active_minutes" <<'PY'
 import json
 import sys
@@ -332,7 +344,8 @@ def parse_float(name, raw):
 min_shown = parse_int("min shown", sys.argv[5])
 min_accepted = parse_int("min accepted", sys.argv[6])
 min_kept = parse_int("min accepted-kept", sys.argv[7])
-min_active_minutes = parse_float("min active minutes", sys.argv[8])
+min_kept_per_shown_percent = parse_float("min accepted-kept shown percent", sys.argv[8])
+min_active_minutes = parse_float("min active minutes", sys.argv[9])
 
 
 def parse_timestamp(value):
@@ -365,6 +378,18 @@ def acceptance_key(line_number, event):
 
 def truthy(value):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def format_percent(value):
+    if abs(value - round(value)) < 0.005:
+        return f"{round(value):.0f}%"
+    return f"{value:.1f}%"
+
+
+def rate_percent(numerator, denominator):
+    if denominator <= 0:
+        return 0.0
+    return (float(numerator) / float(denominator)) * 100.0
 
 
 def kept_event(event):
@@ -415,6 +440,11 @@ accepted_suggestion_keys = {
     for line_number, event in matched
     if event.get("type") == "suggestionAccepted"
 }
+accepted_to_suggestion = {
+    acceptance_key(line_number, event): suggestion_key(line_number, event)
+    for line_number, event in matched
+    if event.get("type") == "suggestionAccepted"
+}
 kept_keys = {
     acceptance_key(line_number, event)
     for line_number, event in matched
@@ -433,6 +463,13 @@ if accepted_keys:
     )
 else:
     accepted_kept = len(kept_keys)
+accepted_kept_shown_keys = set(kept_suggestion_keys.intersection(presented_keys))
+for accepted_key in kept_keys:
+    suggestion = accepted_to_suggestion.get(accepted_key)
+    if suggestion and suggestion in presented_keys:
+        accepted_kept_shown_keys.add(suggestion)
+accepted_kept_shown = len(accepted_kept_shown_keys)
+accepted_kept_shown_percent = rate_percent(accepted_kept_shown, len(presented_keys))
 
 dates = [
     parsed
@@ -458,9 +495,16 @@ if len(accepted_keys) < min_accepted:
     failures.append(f"accepted suggestions below minimum ({len(accepted_keys)}/{min_accepted})")
 if accepted_kept < min_kept:
     failures.append(f"accepted-kept suggestions below minimum ({accepted_kept}/{min_kept})")
+if accepted_kept_shown_percent < min_kept_per_shown_percent:
+    failures.append(
+        "accepted-kept shown rate below minimum "
+        f"({format_percent(accepted_kept_shown_percent)}/"
+        f"{format_percent(min_kept_per_shown_percent)})"
+    )
 
 print("Daily-driver sample gate")
 print("Privacy: redacted metadata counts only")
+print("Reach test: accepted-and-kept / shown")
 print(f"App filter: {app_filter or 'all supported apps'}")
 print(f"Rows scanned: {scanned_rows}")
 print(f"Rows matched: {len(matched)}")
@@ -468,6 +512,12 @@ print(f"Active minutes: {active_minutes:.2f} (minimum {min_active_minutes:g})")
 print(f"Shown suggestions: {len(presented_keys)} (minimum {min_shown})")
 print(f"Accepted suggestions: {len(accepted_keys)} (minimum {min_accepted})")
 print(f"Accepted-kept suggestions: {accepted_kept} (minimum {min_kept})")
+print(
+    "Accepted-kept shown rate: "
+    f"{format_percent(accepted_kept_shown_percent)} "
+    f"(minimum {format_percent(min_kept_per_shown_percent)}, "
+    f"{accepted_kept_shown}/{len(presented_keys)})"
+)
 if failures:
     print("Result: fail")
     print("Failures:")
@@ -495,6 +545,7 @@ finish_session() {
     MIN_SHOWN=0
     MIN_ACCEPTED=0
     MIN_KEPT=0
+    MIN_KEPT_PER_SHOWN_PERCENT=0
     MIN_ACTIVE_MINUTES=0
     MIN_TYPING_FEEL_SCORE=0
   fi
@@ -527,6 +578,7 @@ finish_session() {
     "$MIN_SHOWN" \
     "$MIN_ACCEPTED" \
     "$MIN_KEPT" \
+    "$MIN_KEPT_PER_SHOWN_PERCENT" \
     "$MIN_ACTIVE_MINUTES" \
     >"$sample_gate_output" 2>&1
   sample_gate_status=$?
@@ -593,6 +645,7 @@ finish_session() {
     echo "- Fresh lines: \`$fresh_start-$end_line\`."
     echo "- Gate: \`$gate_status\`."
     echo "- Sample gate status: \`$sample_gate_status\`."
+    echo "- Reach minimum: accepted-kept / shown \`$MIN_KEPT_PER_SHOWN_PERCENT%\`."
     echo "- Typing feel status: \`$typing_feel_status\`."
     echo "- Non-annoyance status: \`$non_annoyance_status\`."
     echo "- Trace eval status: \`$trace_eval_status\`."
@@ -607,6 +660,13 @@ finish_session() {
     echo "| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |"
     echo "| --- | ---: | --- | --- | --- | --- | --- |"
     echo "| ${APP_FILTER:-mixed} |  |  |  |  |  |  |"
+    echo
+    echo "## Reach Test"
+    echo
+    echo "The session should show that useful suggestions were reached for and kept, not only that the app stayed technically quiet."
+    echo
+    echo "- Required accepted-kept / shown rate: \`$MIN_KEPT_PER_SHOWN_PERCENT%\`."
+    echo "- Result appears in the sample gate output below."
     echo
     echo "## Session Sample Gate"
     echo

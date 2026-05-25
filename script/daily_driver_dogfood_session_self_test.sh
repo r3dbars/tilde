@@ -11,6 +11,7 @@ REPORT_PATH="$TMP_DIR/report.md"
 LOW_REPORT_PATH="$TMP_DIR/low-report.md"
 LOW_OVERRIDE_REPORT_PATH="$TMP_DIR/low-override-report.md"
 HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
+REACH_REPORT_PATH="$TMP_DIR/reach-report.md"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":200}
@@ -52,9 +53,13 @@ for expected in \
   "Gate: \`pass\`" \
   "Session Sample Gate" \
   "Sample gate status: \`0\`" \
+  "Reach minimum: accepted-kept / shown \`15%\`" \
+  "Reach Test" \
+  "Reach test: accepted-and-kept / shown" \
   "Typing feel status: \`0\`" \
   "Shown suggestions: 5 (minimum 5)" \
   "Accepted-kept suggestions: 1 (minimum 1)" \
+  "Accepted-kept shown rate: 20% (minimum 15%, 1/5)" \
   "Typing Feel Score" \
   "Typing feel score report" \
   "Non-Annoyance Gate" \
@@ -107,6 +112,37 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
   --start-line 1 \
+  --end-line 12 \
+  --app com.apple.TextEdit \
+  --label self-test-reach \
+  --report "$REACH_REPORT_PATH" \
+  --min-kept-per-shown-percent 25 \
+  >"$TMP_DIR/reach.out" 2>&1
+reach_status=$?
+set -e
+
+if [[ "$reach_status" -eq 0 ]]; then
+  echo "dogfood self-test expected high reach threshold to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Gate: \`fail\`" \
+  "Sample gate status: \`1\`" \
+  "Typing feel status: \`0\`" \
+  "Reach minimum: accepted-kept / shown \`25%\`" \
+  "accepted-kept shown rate below minimum (20%/25%)"
+do
+  if ! grep -q "$expected" "$REACH_REPORT_PATH"; then
+    echo "dogfood self-test reach report missing: $expected" >&2
+    exit 1
+  fi
+done
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
+  --trace "$TRACE_PATH" \
+  --start-line 1 \
   --end-line 5 \
   --app com.apple.TextEdit \
   --label self-test-low \
@@ -147,7 +183,8 @@ for expected in \
   "Sample gate status: \`0\`" \
   "Typing feel status: \`0\`" \
   "Low-sample override: \`1\`" \
-  "Shown suggestions: 1 (minimum 0)"
+  "Shown suggestions: 1 (minimum 0)" \
+  "Accepted-kept shown rate: 100% (minimum 0%, 1/1)"
 do
   if ! grep -q "$expected" "$LOW_OVERRIDE_REPORT_PATH"; then
     echo "dogfood self-test low-sample override report missing: $expected" >&2
