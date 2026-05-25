@@ -33,6 +33,8 @@ cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:03:20Z","sessionID":"s","suggestionID":"s3","type":"suggestionTypedOver","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"typed-against-visible-suggestion"}
 {"timestamp":"2026-05-25T00:04:00Z","sessionID":"s","suggestionID":"s4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","latencyMilliseconds":240,"metadata":{"candidateSelectionSource":"fast-word-completion","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"1","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:04:15Z","sessionID":"s","suggestionID":"s4","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"field-changed"}
+{"timestamp":"2026-05-25T00:05:00Z","sessionID":"s","suggestionID":"q1","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"model-result","reason":"empty-suggestion","metadata":{"candidateSelectionSource":"app-model-result","fieldKind":"plain"}}
+{"timestamp":"2026-05-25T00:05:10Z","sessionID":"s","suggestionID":"q2","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"predictive-phrase-fallback","reason":"no-suggestion","metadata":{"candidateSelectionSource":"predictive-phrase-fallback","fieldKind":"plain"}}
 {"timestamp":"2026-05-25T00:06:10Z","sessionID":"s","suggestionID":"s5","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":250,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 JSONL
 
@@ -43,7 +45,7 @@ JSONL
   --label self-test \
   >"$TMP_DIR/start.out"
 
-if ! grep -q "START_LINE=12" "$MARK_PATH"; then
+if ! grep -q "START_LINE=14" "$MARK_PATH"; then
   echo "dogfood self-test did not save current start line" >&2
   exit 1
 fi
@@ -51,7 +53,7 @@ fi
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
   --start-line 1 \
-  --end-line 12 \
+  --end-line 14 \
   --app com.apple.TextEdit \
   --label self-test \
   --report "$REPORT_PATH"
@@ -95,6 +97,12 @@ for expected in \
   "Model-backed shown: 2" \
   "Word fallback shown: 1" \
   "Unknown source shown: 0" \
+  "No-show summary: suggestionSuppressed events by reason" \
+  "empty-suggestion: 1" \
+  "no-suggestion: 1" \
+  "No-show triggers: suggestionSuppressed events by trigger" \
+  "model-result: 1" \
+  "predictive-phrase-fallback: 1" \
   "Typing Feel Score" \
   "Typing feel score report" \
   "Non-Annoyance Gate" \
@@ -102,7 +110,7 @@ for expected in \
   "Manual Trust Row" \
   "Completed Report Review" \
   "daily_driver_dogfood_session.sh review --report" \
-  "Fresh lines: \`2-12\`"
+  "Fresh lines: \`2-14\`"
 do
   if ! grep -q "$expected" "$REPORT_PATH"; then
     echo "dogfood self-test report missing: $expected" >&2
@@ -120,7 +128,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$SHORT_PHRASE_TRACE_PATH" \
   --start-line 1 \
-  --end-line 12 \
+  --end-line 14 \
   --app com.apple.TextEdit \
   --label self-test-short-phrase \
   --report "$SHORT_PHRASE_REPORT_PATH" \
@@ -155,7 +163,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRUST_KILLER_TRACE_PATH" \
   --start-line 1 \
-  --end-line 13 \
+  --end-line 15 \
   --app com.apple.TextEdit \
   --label self-test-trust-killer \
   --report "$TRUST_KILLER_REPORT_PATH" \
@@ -381,7 +389,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
   --start-line 1 \
-  --end-line 12 \
+  --end-line 14 \
   --app com.apple.TextEdit \
   --label self-test-high-score \
   --report "$HIGH_SCORE_REPORT_PATH" \
@@ -411,7 +419,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
   --start-line 1 \
-  --end-line 12 \
+  --end-line 14 \
   --app com.apple.TextEdit \
   --label self-test-reach \
   --report "$REACH_REPORT_PATH" \
