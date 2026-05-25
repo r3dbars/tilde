@@ -651,11 +651,11 @@ public enum CompletionPredictionQualityEvaluator {
         PositiveTemplate(textBeforeCursor: "Can you please", expectedVisibleText: "take a look", distractors: ["make a plan", "send it now"]),
         PositiveTemplate(textBeforeCursor: "We should probably", expectedVisibleText: "keep it simple", distractors: ["make it bigger", "start a roadmap"]),
         PositiveTemplate(textBeforeCursor: "I want to", expectedVisibleText: "move this forward", distractors: ["rewrite the whole", "open the settings"]),
-        PositiveTemplate(textBeforeCursor: "It would help to", expectedVisibleText: "make it easier", distractors: ["ship it today", "schedule a meeting"]),
+        PositiveTemplate(textBeforeCursor: "The review should focus on", expectedVisibleText: "real user risk", distractors: ["shipping everything", "writing a roadmap"]),
         PositiveTemplate(textBeforeCursor: "The most important thing is to", expectedVisibleText: "keep the scope small", distractors: ["make everything automatic", "send the prompt now"]),
         PositiveTemplate(textBeforeCursor: "I am trying to", expectedVisibleText: "figure out how to", distractors: ["maximize the workflow", "submit this immediately"]),
         PositiveTemplate(textBeforeCursor: "This sentence should continue", expectedVisibleText: "without sounding too formal", distractors: ["with a new section", "by answering the prompt"]),
-        PositiveTemplate(textBeforeCursor: "The safest version is to", expectedVisibleText: "make this easier to", distractors: ["run a shell command", "approve the action"])
+        PositiveTemplate(textBeforeCursor: "The draft feels calmer when it", expectedVisibleText: "stays short and specific", distractors: ["adds a pitch deck", "answers the prompt"])
     ]
 
     private static let negativeTemplates = [

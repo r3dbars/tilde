@@ -254,13 +254,16 @@ requests, meeting notes, launch checks, and action items while still staying
 off in prompt, search, form, and code profiles. When the instant phrase path
 does not have a safe match, the queued model request now carries redacted
 diagnostic metadata for the fallback outcome so the app is less mysterious while
-it waits.
+it waits. The instant predictor now also normalizes internal punctuation and
+newlines, so audit-shaped writing like `Before we ship, we should`, quick reply
+drafts, decision logs, review notes, and checklist continuations can hit the
+fast path instead of missing because of commas or list breaks.
 
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
-| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more 3-5 word daily-driver writing contexts | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
+| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-5 word daily-driver contexts, including punctuation and list-shaped writing | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; local quality audit also covers 9 unsafe/sensitive suppressions | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |

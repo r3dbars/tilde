@@ -30,18 +30,39 @@ public struct CommonPhraseContinuationPrior: Equatable, Sendable {
         CommonPhraseContinuationPrior(contextSuffix: "we should probably", continuation: "keep it simple", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "i want to", continuation: "move this forward", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "it would help to", continuation: "make it easier", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "i want this note to feel", continuation: "light and clear", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the draft feels calmer when it", continuation: "stays short and specific", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the review should focus on", continuation: "real user risk", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "a good reply here would be", continuation: "short kind and specific", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "before we ship we should", continuation: "run one small check", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the meeting notes need a", continuation: "clear next step", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the onboarding screen should make", continuation: "permission feel clear", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the local test should fail only when", continuation: "proof is missing", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "make the copy", continuation: "short and clear", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "hold the risky path until", continuation: "proof exists", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "this bug is easiest to test with", continuation: "small fixture case", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "after the demo capture the", continuation: "open questions quickly", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "product update should mention", continuation: "one clear change", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "in obsidian this note should capture", continuation: "the key details clearly", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "before touching the terminal command we should", continuation: "verify the input", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "a quick text back should say", continuation: "something short and clear", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "while i am typing fast it should", continuation: "stay short and clear", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the suggestion should be less timid and", continuation: "more confident about next words", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the next suggestion should be a", continuation: "short useful phrase", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "build the app run the proof write the", continuation: "small repro", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "tested the button tested the button and now need", continuation: "one fresh check", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the quiet mode should stay", continuation: "calm in the background", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the next step is to", continuation: "write a small repro", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "autocomplete should", continuation: "stay silent when unsafe", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "press tab and confirm", continuation: "next word only", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the browser comment should be", continuation: "short and clear", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "today i want to focus on", continuation: "small focused tasks", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "i am trying to say this in a way that feels", continuation: "natural and human", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the message should make one thing", continuation: "clear right away", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the action item needs an", continuation: "owner and deadline", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "what i want is", continuation: "something fast and reliable", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "this should feel", continuation: "fast enough to trust", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "if this works tomorrow i will", continuation: "leave it turned on", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the most important thing is to", continuation: "keep the scope small", score: 0.26),
         CommonPhraseContinuationPrior(contextSuffix: "i am trying to", continuation: "figure out how to", score: 0.26),
         CommonPhraseContinuationPrior(contextSuffix: "this sentence should continue", continuation: "without sounding too formal", score: 0.26),
@@ -52,7 +73,9 @@ public struct CommonPhraseContinuationPrior: Equatable, Sendable {
         text
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"[^\p{L}\p{N}]+"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func words(in text: String) -> [String] {
@@ -196,6 +219,8 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         text
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"[^\p{L}\p{N}]+"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
