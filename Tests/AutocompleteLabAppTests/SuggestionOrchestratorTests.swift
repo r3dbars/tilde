@@ -427,6 +427,87 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast phrase fallback uses accepted-kept learning restraint")
+    func fastPhraseFallbackUsesAcceptedKeptLearningRestraint() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let request = CompletionRequest(
+            textBeforeCursor: "I think what matters is",
+            textAfterCursor: "",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: .multilineCompose,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "fast-phrase-learning"
+        )
+        let key = acceptedAndKeptKey(
+            request: request,
+            fieldKind: .multilineCompose,
+            profile: profile
+        )
+
+        var rejectedStore = AcceptedAndKeptLearningStore(priorWeight: 1)
+        var rejectedSignal = rejectedStore.signal(for: key)
+        for offset in 0..<6 {
+            rejectedSignal = rejectedStore.record(
+                .rejected,
+                key: key,
+                now: Date(timeIntervalSince1970: Double(offset))
+            )
+        }
+
+        let rejectedDecision = orchestrator.fastPhraseFallbackLearningDecision(
+            acceptedAndKeptSignal: rejectedSignal,
+            probabilityThreshold: rejectedStore.probabilityThreshold(for: .phraseContinuation)
+        )
+
+        #expect(rejectedDecision.shouldSuppress)
+        #expect(rejectedDecision.reason == "fast-phrase-learning-restraint")
+        #expect(rejectedDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "true")
+        #expect(rejectedDecision.metadata["fastPhraseFallbackLearningThreshold"] == "0.300")
+        #expect(rejectedDecision.metadata["acceptedAndKeptSamples"] == "6")
+        #expect(rejectedDecision.metadata["acceptedAndKeptRejected"] == "6")
+
+        var earlyStore = AcceptedAndKeptLearningStore(priorWeight: 1)
+        var earlySignal = earlyStore.signal(for: key)
+        for offset in 0..<5 {
+            earlySignal = earlyStore.record(
+                .rejected,
+                key: key,
+                now: Date(timeIntervalSince1970: Double(offset))
+            )
+        }
+
+        let earlyDecision = orchestrator.fastPhraseFallbackLearningDecision(
+            acceptedAndKeptSignal: earlySignal,
+            probabilityThreshold: earlyStore.probabilityThreshold(for: .phraseContinuation)
+        )
+
+        #expect(!earlyDecision.shouldSuppress)
+        #expect(earlyDecision.reason == nil)
+        #expect(earlyDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "false")
+
+        var keptStore = AcceptedAndKeptLearningStore(priorWeight: 1)
+        var keptSignal = keptStore.signal(for: key)
+        for offset in 0..<6 {
+            keptSignal = keptStore.record(
+                .kept,
+                key: key,
+                now: Date(timeIntervalSince1970: Double(offset))
+            )
+        }
+
+        let keptDecision = orchestrator.fastPhraseFallbackLearningDecision(
+            acceptedAndKeptSignal: keptSignal,
+            probabilityThreshold: keptStore.probabilityThreshold(for: .phraseContinuation)
+        )
+
+        #expect(!keptDecision.shouldSuppress)
+        #expect(keptDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "false")
+    }
+
+    @MainActor
     @Test("App model result metadata is trace safe")
     func appModelResultMetadataIsTraceSafe() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

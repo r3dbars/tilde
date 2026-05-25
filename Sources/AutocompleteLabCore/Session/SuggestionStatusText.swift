@@ -23,6 +23,8 @@ public enum SuggestionStatusText {
             return "Blocked: no cursor position"
         case "repeated-miss":
             return "Blocked: repeated miss"
+        case "fast-phrase-learning-restraint":
+            return "Quiet: recent rejects"
         case "engine-error":
             return "Blocked: model error"
         case "stale-request", "stale-field", "stale-after-keydown", "stale-text", "stale-focused-context":
