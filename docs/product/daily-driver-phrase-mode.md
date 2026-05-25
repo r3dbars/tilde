@@ -252,6 +252,11 @@ say they reached for it, suggestion quality must be scored 4 or 5, and they
 must say they would keep it on tomorrow. The same report now carries a redacted
 safety snapshot for prompt no-submit and sensitive-field suppression, so a
 daily-driver pass cannot hide stale wrong-field safety.
+The dogfood `status` command is now a preflight too: it reports whether the
+trace exists, whether SteadyType is running, the saved mark, rows since the
+mark, the redacted app filter, and the exact next start/finish/review command.
+That makes the remaining manual proof less likely to fail because of a stale
+mark, rotated trace, or forgotten finish command.
 
 Wrong-field safety now has both prompt-app and sensitive-field gates in the
 default smoke path. Prompt no-submit self-tests cover accidental submit, send
@@ -309,7 +314,7 @@ code surfaces remain blocked.
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and live status text expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, and completed manual-review gate with suggestion quality 4-5; the status line also explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and a preflight status command that names the next dogfood action; the status line also explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 

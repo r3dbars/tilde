@@ -224,6 +224,14 @@ current_trace_line() {
   fi
 }
 
+steadytype_process_status() {
+  if pgrep -x SteadyType >/dev/null 2>&1; then
+    echo "running"
+  else
+    echo "not-running"
+  fi
+}
+
 require_integer() {
   local name="$1"
   local value="$2"
@@ -293,10 +301,14 @@ EOF
 }
 
 print_status() {
-  local line
+  local line app_status finish_app_arg
   line="$(current_trace_line)"
+  app_status="$(steadytype_process_status)"
+  finish_app_arg=""
   echo "Trace: $TRACE_PATH"
+  echo "Trace exists: $([[ -f "$TRACE_PATH" ]] && echo yes || echo no)"
   echo "Current line: $line"
+  echo "SteadyType app: $app_status"
   if [[ -f "$MARK_PATH" ]]; then
     # shellcheck source=/dev/null
     source "$MARK_PATH"
@@ -305,11 +317,31 @@ print_status() {
     echo "Label: ${LABEL:-daily-driver}"
     echo "App filter: ${APP_FILTER:-all supported apps}"
     if [[ "${START_LINE:-}" =~ ^[0-9]+$ ]]; then
-      echo "New trace rows: $((line - START_LINE))"
+      if ((line >= START_LINE)); then
+        echo "New trace rows: $((line - START_LINE))"
+        if ((line > START_LINE)); then
+          echo "Session state: ready-to-finish"
+        else
+          echo "Session state: marked-no-new-rows"
+        fi
+      else
+        echo "New trace rows: trace-rotated"
+        echo "Session state: restart-needed"
+      fi
+    else
+      echo "New trace rows: unknown"
+      echo "Session state: mark-invalid"
     fi
+    if [[ -n "${APP_FILTER:-}" ]]; then
+      finish_app_arg=" --app ${APP_FILTER}"
+    fi
+    echo "Next command: ./script/daily_driver_dogfood_session.sh finish${finish_app_arg}"
   else
     echo "Saved mark: none"
+    echo "Session state: start-needed"
+    echo "Next command: ./script/daily_driver_dogfood_session.sh start${APP_FILTER:+ --app $APP_FILTER}"
   fi
+  echo "Review command after report: ./script/daily_driver_dogfood_session.sh review --report <report-path>"
 }
 
 run_session_sample_gate() {

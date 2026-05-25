@@ -45,10 +45,52 @@ JSONL
   --label self-test \
   >"$TMP_DIR/start.out"
 
+if ! "$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
+  --trace "$TRACE_PATH" \
+  --mark-file "$TMP_DIR/missing-session.env" \
+  --app com.apple.TextEdit \
+  >"$TMP_DIR/status-no-mark.out"; then
+  echo "dogfood self-test expected status without mark to pass" >&2
+  exit 1
+fi
+
+for expected in \
+  "Trace exists: yes" \
+  "Saved mark: none" \
+  "Session state: start-needed" \
+  "Next command: ./script/daily_driver_dogfood_session.sh start --app com.apple.TextEdit" \
+  "Review command after report: ./script/daily_driver_dogfood_session.sh review --report <report-path>"
+do
+  if ! grep -q "$expected" "$TMP_DIR/status-no-mark.out"; then
+    echo "dogfood self-test status without mark missing: $expected" >&2
+    exit 1
+  fi
+done
+
 if ! grep -q "START_LINE=14" "$MARK_PATH"; then
   echo "dogfood self-test did not save current start line" >&2
   exit 1
 fi
+
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" status \
+  --trace "$TRACE_PATH" \
+  --mark-file "$MARK_PATH" \
+  >"$TMP_DIR/status-marked.out"
+
+for expected in \
+  "Trace exists: yes" \
+  "Saved mark: 14" \
+  "Label: self-test" \
+  "App filter: com.apple.TextEdit" \
+  "New trace rows: 0" \
+  "Session state: marked-no-new-rows" \
+  "Next command: ./script/daily_driver_dogfood_session.sh finish --app com.apple.TextEdit"
+do
+  if ! grep -q "$expected" "$TMP_DIR/status-marked.out"; then
+    echo "dogfood self-test marked status missing: $expected" >&2
+    exit 1
+  fi
+done
 
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
