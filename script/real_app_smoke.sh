@@ -18,6 +18,7 @@ CHROME_FIXTURE_WAS_SET=0
 CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}"
 CHROME_ACCESSIBILITY_MODE_WAS_SET=0
 CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
+CHROME_MODEL_LATENCY=0
 CHROME_REMOTE_DEBUGGING_PORT=""
 NATIVE_UNDO_PROOF="${AUTOCOMPLETE_LAB_NATIVE_UNDO_PROOF:-0}"
 CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
@@ -60,7 +61,7 @@ SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -112,6 +113,9 @@ Use
 --fixture all to run every local Chrome browser/editor fixture with one app
 build. Add --include-default-real-editor-proof with --fixture all to rerun real
 Monaco and ProseMirror in default Chrome AX mode after the forced lane.
+Use chrome-textarea-model-latency to relaunch SteadyType with fast completions
+and phrase continuations disabled, then prove the local model path in the
+disposable Chrome textarea fixture.
 
 Claude Code is proof-only through supported terminal hosts. Use --host or the
 claude-code-<host> aliases to record host-specific proof labels without enabling
@@ -120,8 +124,8 @@ normal terminal suggestions.
 --skip-build reuses the already-running AutocompleteLab app. It fails closed unless
 the only running SteadyType process is this checkout's dist/SteadyType.app binary
 and that process already has any proof-mode environment needed by the smoke pass.
-The textedit-model-latency lane does not allow --skip-build because it must
-relaunch SteadyType with fast word completions disabled before sampling.
+The model-latency lanes do not allow --skip-build because they must relaunch
+SteadyType with fast word completions disabled before sampling.
 
 --native-undo-proof relaunches AutocompleteLab with app rollback disabled,
 passes Command-Z through to the target app, and records native single-edit undo
@@ -244,6 +248,12 @@ case "$APP" in
   textedit-default-model-latency)
     APP="textedit"
     TEXTEDIT_VARIANT="default-model-latency"
+    ;;
+  chrome-textarea-model-latency)
+    APP="chrome"
+    CHROME_FIXTURE="textarea"
+    CHROME_FIXTURE_WAS_SET=1
+    CHROME_MODEL_LATENCY=1
     ;;
   notes-title)
     APP="notes"
@@ -455,6 +465,12 @@ fi
 
 if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]]; then
   echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with word completions and the fast phrase fallback disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "chrome" && "$CHROME_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]]; then
+  echo "$REQUESTED_APP cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
@@ -2276,6 +2292,54 @@ prepare_model_latency_runtime_options() {
 
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_chrome_model_latency_runtime_options() {
+  local scenario="chrome-${CHROME_FIXTURE}-model-latency"
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Chrome $CHROME_FIXTURE model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
+  echo "Chrome $CHROME_FIXTURE model latency proof scenario: $scenario"
+  echo "Chrome $CHROME_FIXTURE model latency proof suppresses annoyance learning for synthetic event-tap probe keys."
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so Chrome model-latency proof mode only applies if the app was launched with this environment." >&2
   fi
 }
 
@@ -8614,6 +8678,10 @@ describe_plan() {
         echo "Plan: build the app bundle, open a disposable Chrome $CHROME_FIXTURE fixture, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
+      if [[ "$CHROME_MODEL_LATENCY" == "1" ]]; then
+        echo "Safety: Chrome model latency proof disables fast word completions and phrase continuations for each launch so local word-completion model timing is required."
+        echo "Safety: Chrome model latency proof tags the runtime launch with scenario chrome-$CHROME_FIXTURE-model-latency so generic Chrome samples cannot satisfy the beta gate."
+      fi
       echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
       echo "Safety: Chrome setup text is seeded before SteadyType launches whenever the smoke builds the app itself."
       echo "Safety: later Chrome setup pauses SteadyType while disposable text is seeded, then relaunches the current app bundle before proof resumes."
@@ -11026,9 +11094,18 @@ APPLESCRIPT
 
   local first_fragment="Smoke proof feels inst"
   local second_fragment=" and stays inst"
+  local second_fragments=()
   if [[ "$fixture" == "codemirror-official" ]]; then
     first_fragment="Smoke proof feels dicta"
     second_fragment=" and stays dicta"
+  fi
+  second_fragments=("$second_fragment")
+  if [[ "$fixture" == "contenteditable" ]]; then
+    second_fragments=(
+      "$second_fragment"
+      " while the editor keeps inst"
+      " and the rich text field feels inst"
+    )
   fi
 
   pause_steadytype_for_chrome_setup
@@ -11067,6 +11144,36 @@ APPLESCRIPT
   local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
 
+  if [[ "$CHROME_MODEL_LATENCY" == "1" ]]; then
+    local latency_fragment latency_index latency_start_line
+    local latency_fragments=(
+      " and the browser proof stays inst"
+      " while the local model stays inst"
+      " and the textarea keeps feeling inst"
+      " and the final browser sample stays inst"
+    )
+    latency_index=0
+    for latency_fragment in "${latency_fragments[@]}"; do
+      latency_index=$((latency_index + 1))
+      focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+      if [[ -n "$chrome_pid" ]]; then
+        assert_frontmost_process_id "$chrome_pid" "Chrome $fixture model latency $latency_index"
+      else
+        assert_frontmost_app "Google Chrome" "Chrome $fixture model latency $latency_index"
+      fi
+      latency_start_line="$(line_count "$LOG_PATH")"
+      type_chrome_smoke_text_with_system_events "$latency_fragment"
+      wait_for_chrome_focused_text_contains "$fixture" "$chrome_pid" "$latency_fragment" "Chrome $fixture model latency fragment $latency_index" 8
+      wait_for_log_fields "$latency_start_line" "Chrome $fixture model latency suggestion $latency_index" 20 \
+        "suggestion-presented" \
+        "app=com.google.Chrome" \
+        "candidateSelectionSource=app-model-result"
+    done
+
+    echo "Chrome $fixture model latency proof collected model-backed visible samples in one launch."
+    return 0
+  fi
+
   if ! chrome_fixture_requires_full_accept "$fixture"; then
     sleep 1
     local proof_label
@@ -11087,16 +11194,37 @@ APPLESCRIPT
     return 0
   fi
 
-  if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
-  fi
-  pause_steadytype_for_chrome_setup
-  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" "$second_fragment"
-  second_start_line="$(line_count "$LOG_PATH")"
-  launch_steadytype_after_chrome_setup "$fixture" "$second_start_line" "$chrome_pid" "$chrome_url"
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  local second_attempt=0 second_suggestion_found=0
+  for second_fragment in "${second_fragments[@]}"; do
+    second_attempt=$((second_attempt + 1))
+    if [[ -z "$chrome_pid" ]]; then
+      focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
+    fi
+    pause_steadytype_for_chrome_setup
+    type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment $second_attempt" "$second_fragment"
+    second_start_line="$(line_count "$LOG_PATH")"
+    launch_steadytype_after_chrome_setup "$fixture" "$second_start_line" "$chrome_pid" "$chrome_url"
+    focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
-  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
+    if wait_for_log_fields_optional "$second_start_line" 14 \
+      "suggestion-presented" \
+      "app=com.google.Chrome"; then
+      second_suggestion_found=1
+      break
+    fi
+    if wait_for_log_fields_optional "$second_start_line" 1 \
+      "suggestion-blocked" \
+      "app=com.google.Chrome" \
+      "reason=empty-suggestion"; then
+      echo "Chrome $fixture second suggestion attempt $second_attempt returned empty; retrying with another disposable fragment." >&2
+      continue
+    fi
+    wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion" 1
+  done
+  if ((second_suggestion_found == 0)); then
+    echo "Chrome $fixture second suggestion exhausted ${#second_fragments[@]} disposable fragments." >&2
+    wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion" 1
+  fi
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
   if [[ -z "$chrome_pid" ]]; then
     focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
@@ -11147,6 +11275,9 @@ run_chrome() {
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   prepare_temporary_app_enablement
+  if [[ "$CHROME_MODEL_LATENCY" == "1" ]]; then
+    prepare_chrome_model_latency_runtime_options
+  fi
   if [[ "$SKIP_BUILD" == "1" ]]; then
     build_if_needed
     wait_for_accessibility_ready "$runtime_start_line" "Chrome Accessibility readiness" 20 "$SKIP_BUILD"

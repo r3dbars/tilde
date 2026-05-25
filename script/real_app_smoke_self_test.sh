@@ -70,6 +70,25 @@ if ! grep -F "must relaunch with word completions and the fast phrase fallback d
   exit 1
 fi
 
+script/real_app_smoke.sh chrome-textarea-model-latency --dry-run >"$TMP_DIR/chrome-textarea-model-latency.txt"
+if ! grep -F "Real app smoke: chrome" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome fixture: textarea" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome model latency proof disables fast word completions and phrase continuations" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario chrome-textarea-model-latency" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F 'Chrome $CHROME_FIXTURE model latency proof scenario: $scenario' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome textarea model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome-textarea-model-latency --skip-build --dry-run >"$TMP_DIR/chrome-textarea-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Chrome textarea model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/chrome-textarea-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected Chrome textarea model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
@@ -325,7 +344,7 @@ if "wait_for_appkit_activation_frontmost()" not in source or "frontmost_process_
     raise SystemExit("real app smoke must probe the frontmost process before falling back to System Events activation")
 PY
 
-if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
+if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
   exit 1
 fi
@@ -354,12 +373,12 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_AX_WRITE_TIMEOUT_SECONDS' script/real_ap
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency to trim native completion suffixes before waiting for visible proof" >&2
   exit 1
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fell back to AX replacement' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'unexpectedly long ($suffix_length chars); falling back to AX replacement' script/real_app_smoke.sh >/dev/null ||
@@ -617,6 +636,11 @@ fi
 script/real_app_smoke.sh chrome --fixture contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable.txt"
 if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-contenteditable.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome contenteditable dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F '" while the editor keeps inst"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Chrome $fixture second suggestion attempt $second_attempt returned empty; retrying with another disposable fragment.' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Chrome contenteditable proof to retry empty second suggestions" >&2
   exit 1
 fi
 
