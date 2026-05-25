@@ -199,15 +199,27 @@ trace lines `22950-22959`. All three recorded 2 accepted insertions,
 `./script/manual_smoke_status.sh --strict` now reports Notes and Obsidian as
 passed, leaving TextEdit plus Chrome textarea/contenteditable as stale rows.
 
+The remaining beta-safe proof rows are fresh now as well. TextEdit passed at
+`2026-05-25T05:39:15Z` with diagnostics lines `342509-342588` and trace lines
+`22961-22978`. Chrome textarea passed at `2026-05-25T05:40:16Z` with
+diagnostics lines `342590-342748` and trace lines `22979-23004`; Chrome
+contenteditable passed at `2026-05-25T05:40:56Z` with diagnostics lines
+`342755-342999` and trace lines `23006-23055`. Each row recorded 2 accepted
+insertions, `inlineAdjacent|floatingMirror` placement, and strict visual trace
+evidence. `./script/manual_smoke_status.sh --strict` now exits green: TextEdit,
+Notes title/body/checklist, Obsidian default/theme/pane/long-note, and Chrome
+textarea/contenteditable are all covered, and the screenshot-backed placement
+gate still passes.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
-| Placement reliability | Obsidian and Notes have fresh strict visual proof; TextEdit latency is fresh green but its strict insertion row is stale; Chrome rows remain stale | Correct or honest fallback in Obsidian first, then the normal writing apps | Refresh TextEdit insertion proof, then Chrome textarea/contenteditable |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit now have fresh green model-backed latency proof | Feels ready during fast typing | Refresh Chrome proof, then run a real writing-session quality pass |
+| Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Dogfood a real writing session, then expand only with exact proof |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session quality pass while typing fast |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
-| Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
+| Daily-driver feel | Core proof grid is green, but it still needs a full writing-session dogfood pass | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 
 ## Long-Running Loop
 
