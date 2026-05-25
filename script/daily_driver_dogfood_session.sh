@@ -315,6 +315,7 @@ run_session_sample_gate() {
     "$min_active_minutes" <<'PY'
 import json
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 
 path = sys.argv[1]
@@ -371,6 +372,19 @@ def metadata(event):
 
 def suggestion_key(line_number, event):
     return str(event.get("suggestionID") or event.get("id") or f"line:{line_number}")
+
+
+def selection_source(event):
+    event_metadata = metadata(event)
+    source = (
+        event.get("candidateSelectionSource")
+        or event_metadata.get("candidateSelectionSource")
+        or event.get("triggerReason")
+        or event_metadata.get("triggerReason")
+        or "unknown"
+    )
+    source = str(source).strip()
+    return source or "unknown"
 
 
 def acceptance_key(line_number, event):
@@ -457,6 +471,12 @@ kept_suggestion_keys = {
     for line_number, event in matched
     if event.get("type") == "acceptedTextEdited" and kept_event(event)
 }
+presented_source_by_key = {
+    suggestion_key(line_number, event): selection_source(event)
+    for line_number, event in matched
+    if event.get("type") == "suggestionPresented"
+}
+presented_source_counts = Counter(presented_source_by_key.values())
 if accepted_keys:
     accepted_kept = len(kept_keys.intersection(accepted_keys))
     accepted_kept = max(
@@ -472,6 +492,34 @@ for accepted_key in kept_keys:
         accepted_kept_shown_keys.add(suggestion)
 accepted_kept_shown = len(accepted_kept_shown_keys)
 accepted_kept_shown_percent = rate_percent(accepted_kept_shown, len(presented_keys))
+accepted_source_counts = Counter(
+    presented_source_by_key[suggestion]
+    for suggestion in accepted_suggestion_keys
+    if suggestion in presented_source_by_key
+)
+accepted_kept_source_counts = Counter(
+    presented_source_by_key[suggestion]
+    for suggestion in accepted_kept_shown_keys
+    if suggestion in presented_source_by_key
+)
+all_sources = sorted(
+    presented_source_counts.keys(),
+    key=lambda source: (-presented_source_counts[source], source),
+)
+model_backed_sources = {"app-model-result", "model-candidate-ranker"}
+word_fallback_sources = {"fast-word-completion", "predictive-word-fallback"}
+instant_phrase_shown = presented_source_counts.get("predictive-phrase-fallback", 0)
+model_backed_shown = sum(
+    count
+    for source, count in presented_source_counts.items()
+    if source in model_backed_sources
+)
+word_fallback_shown = sum(
+    count
+    for source, count in presented_source_counts.items()
+    if source in word_fallback_sources
+)
+unknown_source_shown = presented_source_counts.get("unknown", 0)
 
 dates = [
     parsed
@@ -520,6 +568,20 @@ print(
     f"(minimum {format_percent(min_kept_per_shown_percent)}, "
     f"{accepted_kept_shown}/{len(presented_keys)})"
 )
+print("Source mix: shown / accepted / accepted-kept shown")
+if all_sources:
+    for source in all_sources:
+        print(
+            f"- {source}: {presented_source_counts[source]} / "
+            f"{accepted_source_counts[source]} / "
+            f"{accepted_kept_source_counts[source]}"
+        )
+else:
+    print("- none: 0 / 0 / 0")
+print(f"Instant phrase fallback shown: {instant_phrase_shown}")
+print(f"Model-backed shown: {model_backed_shown}")
+print(f"Word fallback shown: {word_fallback_shown}")
+print(f"Unknown source shown: {unknown_source_shown}")
 if failures:
     print("Result: fail")
     print("Failures:")
