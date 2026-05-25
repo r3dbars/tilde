@@ -7,6 +7,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 TRACE_PATH="$TMP_DIR/traces.jsonl"
 SHORT_PHRASE_TRACE_PATH="$TMP_DIR/short-phrase-traces.jsonl"
+TRUST_KILLER_TRACE_PATH="$TMP_DIR/trust-killer-traces.jsonl"
 MARK_PATH="$TMP_DIR/session.env"
 REPORT_PATH="$TMP_DIR/report.md"
 LOW_REPORT_PATH="$TMP_DIR/low-report.md"
@@ -14,6 +15,7 @@ LOW_OVERRIDE_REPORT_PATH="$TMP_DIR/low-override-report.md"
 HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
 REACH_REPORT_PATH="$TMP_DIR/reach-report.md"
 SHORT_PHRASE_REPORT_PATH="$TMP_DIR/short-phrase-report.md"
+TRUST_KILLER_REPORT_PATH="$TMP_DIR/trust-killer-report.md"
 REVIEW_PASS_REPORT_PATH="$TMP_DIR/review-pass-report.md"
 REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
 REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
@@ -65,6 +67,15 @@ for expected in \
   "Sensitive field proof self-test passed." \
   "Session Sample Gate" \
   "Sample gate status: \`0\`" \
+  "Trust-killer gate status: \`0\`" \
+  "Trust-Killer Gate" \
+  "Daily-driver trust-killer gate" \
+  "Trust-killer counts:" \
+  "Insertion Failures: 0" \
+  "Wrong-Context Suppressions: 0" \
+  "Caret Geometry Failures: 0" \
+  "Sensitive Field Presentations: 0" \
+  "Prompt Accidental Submits: 0" \
   "Reach minimum: accepted-kept / shown \`15%\`" \
   "Reach Test" \
   "Reach test: accepted-and-kept / shown" \
@@ -136,6 +147,42 @@ do
   fi
 done
 
+cp "$TRACE_PATH" "$TRUST_KILLER_TRACE_PATH"
+cat >>"$TRUST_KILLER_TRACE_PATH" <<'JSONL'
+{"timestamp":"2026-05-25T00:06:20Z","sessionID":"s","suggestionID":"bad-insert","type":"insertionFailed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"verification-failed","metadata":{"fieldKind":"plain"}}
+JSONL
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
+  --trace "$TRUST_KILLER_TRACE_PATH" \
+  --start-line 1 \
+  --end-line 13 \
+  --app com.apple.TextEdit \
+  --label self-test-trust-killer \
+  --report "$TRUST_KILLER_REPORT_PATH" \
+  >"$TMP_DIR/trust-killer.out" 2>&1
+trust_killer_status=$?
+set -e
+
+if [[ "$trust_killer_status" -eq 0 ]]; then
+  echo "dogfood self-test expected trust-killer slice to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Gate: \`fail\`" \
+  "Sample gate status: \`0\`" \
+  "Trust-killer gate status: \`1\`" \
+  "Trust-Killer Gate" \
+  "Insertion Failures: 1" \
+  "Result: fail" \
+  "insertion failures (1)"
+do
+  if ! grep -q "$expected" "$TRUST_KILLER_REPORT_PATH"; then
+    echo "dogfood self-test trust-killer report missing: $expected" >&2
+    exit 1
+  fi
+done
+
 cat >"$REVIEW_PASS_REPORT_PATH" <<'MD'
 # Daily Driver Dogfood Session
 
@@ -145,6 +192,7 @@ This report is redacted. It should contain trace metadata and manual labels only
 
 - Gate: `pass`.
 - Safety snapshot status: `0`.
+- Trust-killer gate status: `0`.
 - Prompt no-submit safety status: `0`.
 - Sensitive field safety status: `0`.
 
@@ -163,6 +211,7 @@ for expected in \
   "Daily-driver manual review gate" \
   "Automated gate: pass" \
   "Safety snapshot: pass" \
+  "Trust-killer gate: pass" \
   "Did reach for it: yes" \
   "Suggestion quality: 5" \
   "Keep it on tomorrow: yes" \
@@ -183,6 +232,7 @@ This report is redacted. It should contain trace metadata and manual labels only
 
 - Gate: `pass`.
 - Safety snapshot status: `0`.
+- Trust-killer gate status: `0`.
 - Prompt no-submit safety status: `0`.
 - Sensitive field safety status: `0`.
 
@@ -250,6 +300,7 @@ This report is redacted. It should contain trace metadata and manual labels only
 
 - Gate: `fail`.
 - Safety snapshot status: `0`.
+- Trust-killer gate status: `0`.
 - Prompt no-submit safety status: `0`.
 - Sensitive field safety status: `0`.
 
@@ -292,6 +343,7 @@ This report is redacted. It should contain trace metadata and manual labels only
 
 - Gate: `pass`.
 - Safety snapshot status: `1`.
+- Trust-killer gate status: `0`.
 - Prompt no-submit safety status: `1`.
 - Sensitive field safety status: `0`.
 

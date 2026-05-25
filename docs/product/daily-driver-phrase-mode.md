@@ -231,8 +231,13 @@ accepted-kept / shown reach rate, and an 85/100 redacted typing-feel score.
 Phrase suggestions must carry metadata proving at least 3 visible words, so a
 session cannot pass with timid one-word or two-word phrase nubs. The score makes
 typed-over rate, accepted-then-deleted, late suggestions, insertion failures,
-and caret failures visible in the same artifact as the manual trust row. The same sample
-gate now prints source mix counts for shown / accepted / accepted-kept
+and caret failures visible in the same artifact as the manual trust row. A
+separate trust-killer gate now fails the report on wrong-context suppressions,
+failed or duplicate insertions, caret geometry failures, sensitive-field or
+unsupported-app displays, detached placement without a caret, focus steals, Tab
+conflicts, accepted-then-deleted signals, prompt-submit risk, unsafe full
+accepts, and prompt content violations. The same sample gate now prints source
+mix counts for shown / accepted / accepted-kept
 suggestions, including instant phrase fallback, model-backed, word fallback, and
 unknown sources, so a dogfood report can show whether the fast path actually
 helped. This does not create the subjective proof by itself, but it prevents a
@@ -277,8 +282,8 @@ burst.
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-5 word daily-driver contexts, including punctuation and list-shaped writing; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
-| Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; local quality audit also covers 9 unsafe/sensitive suppressions | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, prompt/sensitive safety snapshot, and completed manual-review gate with suggestion quality 4-5, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, trust-killer gate, prompt/sensitive safety snapshot, and completed manual-review gate with suggestion quality 4-5, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 
