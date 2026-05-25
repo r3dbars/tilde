@@ -61,6 +61,21 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts Claude Code proof setting phrase instantly")
+    func predictsClaudeCodeProofSettingPhraseInstantly() {
+        let selection = predictor.selection(
+            for: "Make this setting the feature",
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 4,
+            allowsPromptAppPrediction: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " configurable")
+        #expect(selection.matchedContextSuffix == "make this setting the feature")
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+        #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+    }
+
     @Test("Predicts daily-driver audit phrases through punctuation and lists")
     func predictsDailyDriverAuditPhrasesThroughPunctuationAndLists() {
         let cases: [(String, String, String)] = [
@@ -270,6 +285,25 @@ struct CommonPhraseContinuationPredictorTests {
             for: "Can you",
             behaviorProfileID: .aiChat
         ).suppressionReason == "unsupported-profile")
+    }
+
+    @Test("Allows explicit prompt-app proof prediction while keeping prompt apps blocked by default")
+    func allowsExplicitPromptAppProofPrediction() {
+        let blocked = predictor.selection(
+            for: "Please make this",
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 4
+        )
+        let allowed = predictor.selection(
+            for: "Please make this",
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 4,
+            allowsPromptAppPrediction: true
+        )
+
+        #expect(blocked.suppressionReason == "unsupported-profile")
+        #expect(allowed.suggestion?.visibleText == " clearer")
+        #expect(allowed.matchedContextSuffix == "please make this")
     }
 
     @Test("Stays silent without a full-word phrase anchor")

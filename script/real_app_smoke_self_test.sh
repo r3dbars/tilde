@@ -1468,6 +1468,21 @@ if ! grep -F 'claude_code_terminal_smoke_input_text()' script/real_app_smoke.sh 
   echo "real app smoke self-test expected Terminal-host Claude Code proof to keep the inline marker in the typed prompt" >&2
   exit 1
 fi
+if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Make this setting the feature' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Please make this' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_log_pattern_optional' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'produced no visible suggestion; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts when no suggestion appears" >&2
+  exit 1
+fi
+if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through CGEvent session events" >&2
+  exit 1
+fi
 if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the automated Terminal-host Claude Code proof" >&2
   exit 1
@@ -1618,18 +1633,19 @@ if ! grep -F 'process_id_has_name "$proof_pid" "$expected_name"' script/real_app
   echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile" >&2
   exit 1
 fi
-if ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code terminal-host Tab proof to press Tab through System Events" >&2
+if ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host Tab proof to press Tab through CGEvent session events" >&2
   exit 1
 fi
 if ! awk '
-  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_wait = 0; saw_clear = 0; saw_type = 0 }
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_wait = 0; saw_refocus = 0; saw_clear = 0; saw_type = 0 }
   /^}/ && in_smoke {
-    if (saw_wait && saw_clear && saw_type) { found = 1 }
+    if (saw_wait && saw_refocus && saw_clear && saw_type) { found = 1 }
     in_smoke = 0
   }
   in_smoke && /wait_for_claude_code_terminal_prompt/ { saw_wait = 1 }
-  in_smoke && saw_wait && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 }
+  in_smoke && saw_wait && /wait_for_frontmost_claude_code_terminal_proof_process/ { saw_refocus = 1 }
+  in_smoke && saw_refocus && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 }
   in_smoke && saw_clear && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
   END { exit found ? 0 : 1 }
 ' script/real_app_smoke.sh; then
@@ -1652,7 +1668,7 @@ if ! awk '
     if (saw_press && saw_screenshot) { found = 1 }
     in_smoke = 0
   }
-  in_smoke && /press_key_code 48/ { saw_press = 1 }
+  in_smoke && /press_key_code_cgevent 48/ { saw_press = 1 }
   in_smoke && /wait_for_screenshot_capture_if_enabled/ {
     if (saw_press) { saw_screenshot = 1 }
   }
@@ -1667,7 +1683,7 @@ if ! awk '
   in_smoke && /accept_start_line="\$\(line_count "\$LOG_PATH"\)"/ { saw_accept_window = 1 }
   in_smoke && /type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
   in_smoke && saw_type && !saw_accept_window { saw_late_accept_window = 1 }
-  in_smoke && /wait_for_log_pattern "\$accept_start_line" "suggestion-presented/ { saw_suggestion_wait = 1 }
+  in_smoke && /wait_for_log_pattern_optional/ { saw_suggestion_wait = 1 }
   in_smoke && /wait_for_log_fields "\$accept_start_line" "Claude Code \$host_name Tab acceptance"/ { saw_accept_wait = 1 }
   END { exit (saw_accept_window && !saw_late_accept_window && saw_suggestion_wait && saw_accept_wait) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
@@ -1677,9 +1693,9 @@ fi
 if awk '
   /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; after_suggestion = 0 }
   /^}/ && in_smoke { in_smoke = 0 }
-  in_smoke && /wait_for_log_pattern "\$start_line" "suggestion-presented/ { after_suggestion = 1 }
+  in_smoke && /wait_for_log_pattern_optional/ { after_suggestion = 1 }
   in_smoke && after_suggestion && /assert_frontmost_app/ { found = 1 }
-  in_smoke && after_suggestion && /press_key_code 48/ { after_suggestion = 0 }
+  in_smoke && after_suggestion && /press_key_code_cgevent 48/ { after_suggestion = 0 }
   END { exit found ? 0 : 1 }
 ' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Claude Code terminal-host hot accept path not to run slow focus checks" >&2

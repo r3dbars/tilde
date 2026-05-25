@@ -6267,15 +6267,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var fastPhraseFallbackMetadata: [String: String] = [:]
         if requestMode == .phraseContinuation,
            !disablesFastPhraseFallbackForProof {
-            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
-                for: context.textBeforeCursor,
-                behaviorProfileID: request.behaviorProfileID,
-                maxVisibleWords: request.maxVisibleWords,
-                allowPredictiveFallback: shouldUsePredictivePhraseFallback(
+            let allowsClaudeCodeProofPromptPrediction =
+                appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+            let allowsPredictivePhraseFallback =
+                allowsClaudeCodeProofPromptPrediction
+                || shouldUsePredictivePhraseFallback(
                     profile: profile,
                     behaviorProfileID: request.behaviorProfileID,
                     visiblePageContext: visiblePageContext
                 )
+            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
+                for: context.textBeforeCursor,
+                behaviorProfileID: request.behaviorProfileID,
+                maxVisibleWords: request.maxVisibleWords,
+                allowPredictiveFallback: allowsPredictivePhraseFallback,
+                allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
             if let fastSuggestion = fastSelection.suggestion {

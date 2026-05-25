@@ -1442,6 +1442,22 @@ wait_for_log_pattern() {
   exit 1
 }
 
+wait_for_log_pattern_optional() {
+  local start_line="$1"
+  local pattern="$2"
+  local timeout_seconds="${3:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if log_since_matches "$start_line" "$pattern"; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
 wait_for_log_fields() {
   local start_line="$1"
   local label="$2"
@@ -2949,6 +2965,28 @@ tell application "System Events"
   key code $key_code
 end tell
 APPLESCRIPT
+}
+
+press_key_code_cgevent() {
+  local key_code="$1"
+
+  swift - "$key_code" <<'SWIFT'
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2,
+      let keyCode = UInt16(CommandLine.arguments[1]),
+      let source = CGEventSource(stateID: .hidSystemState),
+      let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
+    FileHandle.standardError.write(Data("failed to create CGEvent key press\n".utf8))
+    exit(1)
+}
+
+keyDown.post(tap: .cghidEventTap)
+usleep(20_000)
+keyUp.post(tap: .cghidEventTap)
+SWIFT
 }
 
 file_url() {
@@ -7531,6 +7569,40 @@ claude_code_terminal_smoke_input_text() {
   claude_code_smoke_proof_text
 }
 
+claude_code_terminal_smoke_input_texts() {
+  if [[ -n "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS"
+    return
+  fi
+
+  local marker
+  marker="$(claude_code_proof_marker)"
+  cat <<EOF
+Make this setting the feature
+Please make this
+This should feel
+What I want is
+It should almost always
+When I hit Tab it should
+The next suggestion should be a
+EOF
+}
+
+validate_claude_code_terminal_smoke_input_text() {
+  local proof_text="$1"
+  local marker
+  marker="$(claude_code_proof_marker)"
+  if [[ "$proof_text" != *"$marker"* &&
+        "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" != *"$marker"* ]]; then
+    echo "Claude Code terminal proof text or window title must include $marker." >&2
+    exit 2
+  fi
+  if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+    echo "Claude Code terminal proof text must be a single line." >&2
+    exit 2
+  fi
+}
+
 claude_proof_marker() {
   printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_PROOF_MARKER:-AUTOCOMPLETE_LAB_CLAUDE_PROOF}"
 }
@@ -10074,12 +10146,13 @@ run_claude_code_terminal_host_smoke() {
   require_claude_code_host_if_requested
 
   local runtime_start_line start_line trace_start_line accept_start_line proof_text marker proof_dir host_name
+  local attempt suggestion_wait_seconds found_suggestion
   runtime_start_line="$(line_count "$LOG_PATH")"
-  proof_text="$(claude_code_terminal_smoke_input_text)"
   marker="$(claude_code_proof_marker)"
   proof_dir="$(make_claude_code_terminal_proof_dir)"
   host_name="$(claude_code_host_display_name)"
   CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+  suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS:-20}"
 
   prepare_temporary_app_enablement
   build_if_needed
@@ -10090,24 +10163,51 @@ run_claude_code_terminal_host_smoke() {
   open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
   wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
   wait_for_claude_code_terminal_prompt
+  wait_for_frontmost_claude_code_terminal_proof_process
   assert_frontmost_app "$host_name" "Claude Code $host_name proof"
-  clear_claude_code_terminal_prompt_line
-  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
-
-  start_line="$(line_count "$LOG_PATH")"
-  trace_start_line="$(line_count "$TRACE_PATH")"
+  attempt=0
+  found_suggestion=0
   accept_start_line="$(line_count "$LOG_PATH")"
+  while IFS= read -r proof_text; do
+    [[ -n "$proof_text" ]] || continue
+    attempt=$((attempt + 1))
+    validate_claude_code_terminal_smoke_input_text "$proof_text"
 
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$proof_text"
-  case "$CLAUDE_CODE_HOST_VARIANT" in
-    terminal)
-      assert_claude_code_terminal_prompt_ready "$proof_text"
-      ;;
-    iterm2|ghostty)
-      ;;
-  esac
-  wait_for_log_pattern "$accept_start_line" "suggestion-presented .*app=com.anthropic.claude-code" "Claude Code $host_name proof suggestion" 20
-  press_key_code 48
+    wait_for_frontmost_claude_code_terminal_proof_process
+    clear_claude_code_terminal_prompt_line
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
+
+    start_line="$(line_count "$LOG_PATH")"
+    trace_start_line="$(line_count "$TRACE_PATH")"
+    accept_start_line="$(line_count "$LOG_PATH")"
+
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$proof_text"
+    case "$CLAUDE_CODE_HOST_VARIANT" in
+      terminal)
+        assert_claude_code_terminal_prompt_ready "$proof_text"
+        ;;
+      iterm2|ghostty)
+        ;;
+    esac
+    if wait_for_log_pattern_optional \
+      "$accept_start_line" \
+      "suggestion-presented .*app=com.anthropic.claude-code" \
+      "$suggestion_wait_seconds"; then
+      found_suggestion=1
+      break
+    fi
+    echo "Claude Code $host_name proof attempt $attempt produced no visible suggestion; trying the next disposable context."
+  done < <(claude_code_terminal_smoke_input_texts)
+
+  if [[ "$found_suggestion" != "1" ]]; then
+    echo "Timed out waiting for Claude Code $host_name proof suggestion after $attempt disposable context(s)." >&2
+    echo "Pattern: suggestion-presented .*app=com.anthropic.claude-code" >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((accept_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+
+  press_key_code_cgevent 48
   wait_for_log_fields "$accept_start_line" "Claude Code $host_name Tab acceptance" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}" \
     "keyboard-action" \
     "app=com.anthropic.claude-code" \

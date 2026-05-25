@@ -450,7 +450,8 @@ final class SuggestionOrchestrator {
         for textBeforeCursor: String,
         behaviorProfileID: AutocompleteBehaviorProfileID?,
         maxVisibleWords: Int,
-        allowPredictiveFallback: Bool = false
+        allowPredictiveFallback: Bool = false,
+        allowPromptAppPrediction: Bool = false
     ) -> CommonPhraseContinuationSelection {
         guard allowPredictiveFallback else {
             return CommonPhraseContinuationSelection(
@@ -464,7 +465,8 @@ final class SuggestionOrchestrator {
         return commonPhrasePredictor.selection(
             for: textBeforeCursor,
             behaviorProfileID: behaviorProfileID,
-            maxVisibleWords: maxVisibleWords
+            maxVisibleWords: maxVisibleWords,
+            allowsPromptAppPrediction: allowPromptAppPrediction
         )
     }
 

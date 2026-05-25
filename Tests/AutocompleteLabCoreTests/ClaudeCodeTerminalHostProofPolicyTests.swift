@@ -1139,6 +1139,76 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ))
     }
 
+    @Test("Ghostty proof accepts title-scoped natural prompt text")
+    func ghosttyProofAcceptsTitleScopedNaturalPromptText() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Please make this",
+            rawTextBeforeCursor: "Please make this",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Please make this")
+        #expect(ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: AXFieldClassification(kind: .unprovenSurface, reason: "unprovenSurface:terminal"),
+            for: context
+        ) == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
+    }
+
+    @Test("Ghostty proof prefers title-scoped screen prompt over stale AX text")
+    func ghosttyProofPrefersTitleScopedScreenPromptOverStaleAXText() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "build 2026-05-25 proof",
+            rawTextBeforeCursor: "build 2026-05-25 proof",
+            terminalScreenText: """
+            Claude Code STEADYTYPECLAUDECODEPROOF
+            Some older output
+            ❯ Make this setting the feature
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature")
+        #expect(ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: AXFieldClassification(kind: .unprovenSurface, reason: "unprovenSurface:terminal"),
+            for: context
+        ) == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
+
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+        #expect(metadata["terminalProofTitleScopedScreenRecoverable"] == "true")
+        #expect(metadata["terminalProofTitleScopedScreenBeforeChars"] == "29")
+    }
+
+    @Test("Ghostty title-scoped screen recovery keeps shell commands blocked")
+    func ghosttyTitleScopedScreenRecoveryKeepsShellCommandsBlocked() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "git status",
+            rawTextBeforeCursor: "git status",
+            terminalScreenText: """
+            Claude Code STEADYTYPECLAUDECODEPROOF
+            ❯ git status
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+    }
+
     @Test("Ghostty proof sensitive activation bypass rejects mismatched or command input")
     func ghosttyProofSensitiveActivationBypassRejectsMismatchedOrCommandInput() {
         let context = ClaudeCodeTerminalHostProofContext(
