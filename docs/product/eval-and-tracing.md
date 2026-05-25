@@ -329,6 +329,7 @@ For the daily-driver dogfood loop, prefer the wrapper that creates a local
 redacted Markdown report:
 
 ```bash
+./script/daily_driver_dogfood_session.sh status --app md.obsidian
 ./script/daily_driver_dogfood_session.sh start --app md.obsidian --label obsidian-note
 # write normally for 10-20 minutes; accept, dismiss, and type through naturally
 ./script/daily_driver_dogfood_session.sh finish --app md.obsidian
@@ -350,17 +351,22 @@ insertion failures, and caret failures without raw text. Use
 stricter reach bar. Use `--allow-low-sample` only for harness/debug slices, not
 daily-driver proof. Do not paste raw writing, prompts, screenshots, document
 names, URLs, recipients, or subjects into that manual row.
+Run `status` before `start` if possible. The dogfood gate records whether
+SteadyType was running when the session began, and a session that starts while
+the app is off does not count as daily-driver proof.
 The same report has a trust-killer gate that fails closed on failed or duplicate
 insertions, wrong-context accept suppression, caret geometry failures,
 sensitive-field or unsupported-app presentations, detached placement without a
 caret, focus steals, Tab conflicts, accepted-then-deleted signals, prompt-submit
 risk, unsafe full accepts, and prompt content violations.
 After filling the Manual Trust Row, `review --report` verifies that the automated
-gate passed, the manual labels are filled, the user reached for it, suggestion
-quality is scored 4 or 5, and they would keep it on tomorrow. The finished
-report also includes a redacted safety snapshot for prompt no-submit and
-sensitive-field suppression, and `review` fails closed if the safety snapshot or
-trust-killer pass marker is missing or failed.
+gate passed, the manual labels are filled, the app cell matches the report app
+filter, the session minutes meet the active-minute minimum, the user reached for
+it, suggestion quality is scored 4 or 5, placement is not described as wrong or
+unstable, and they would keep it on tomorrow. The finished report also includes
+a redacted safety snapshot for prompt no-submit and sensitive-field suppression,
+and `review` fails closed if the safety snapshot or trust-killer pass marker is
+missing or failed.
 
 For a frozen replay slice, capture both bounds:
 
