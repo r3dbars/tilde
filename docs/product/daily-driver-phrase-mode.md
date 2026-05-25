@@ -170,12 +170,20 @@ p95=231ms`, total generation `n=10 avg=242ms p95=286ms`, event-tap raw
 p99Max=22ms max=24ms`, and zero late shown suggestions, event-tap failures, AX
 slow markers, or AX skips.
 
+Obsidian long-note proof is fresh again too. The run at `2026-05-25T05:28:30Z`
+passed with 2 accepted insertions, `floatingMirror` placement, strict visual
+trace evidence, diagnostics lines `341505-341625`, and trace lines
+`22846-22857`. The useful failure before that pass was the harness sending
+Escape after the first long-note accept, which correctly recorded
+`field-suppressed reason=escape`; the proof now uses neutral setup focus instead
+of injecting Escape into the Obsidian field.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
-| Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit latency is fresh green; Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then Notes |
+| Placement reliability | Obsidian long-note has fresh strict visual proof; older Obsidian default/theme/pane rows are stale for this build; TextEdit latency is fresh green; Notes and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian default/theme/pane, then Notes |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit now have fresh green model-backed latency proof | Feels ready during fast typing | Refresh Obsidian/Notes proof, then run a real writing-session quality pass |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |

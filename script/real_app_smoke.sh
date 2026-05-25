@@ -11287,7 +11287,6 @@ run_obsidian() {
 
   local first_expected_suffix
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    press_key_code 53
     sleep 0.2
     activate_neutral_smoke_setup_app
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant"
