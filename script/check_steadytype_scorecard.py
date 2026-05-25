@@ -384,10 +384,13 @@ def read_or_run_output(fixture_path: Path | None, command: list[str]) -> str:
 
 
 def strict_latency_selector_command() -> list[str]:
-    proof_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_APP", "com.openai.codex")
+    proof_app = os.environ.get(
+        "AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_APP",
+        "com.anthropic.claudefordesktop",
+    )
     proof_scenario = os.environ.get(
         "AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_SCENARIO",
-        "codex-model-latency",
+        "claude-model-latency",
     )
     trace_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_TRACE_APP", proof_app)
     request_mode = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_REQUEST_MODE", "wordCompletion")
