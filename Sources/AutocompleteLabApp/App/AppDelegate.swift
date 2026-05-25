@@ -2418,25 +2418,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
-        let decision = ClaudeCodeTerminalHostProofPolicy.evaluate(
-            ClaudeCodeTerminalHostProofContext(
-                hostBundleIdentifier: app.bundleIdentifier,
-                windowTitle: context.fingerprint.windowTitle ?? "",
-                focusedText: focusedLine,
-                rawTextBeforeCursor: context.textBeforeCursor,
-                rawTextAfterCursor: context.textAfterCursor,
-                proofModeEnabled: activeAppProofBundleIdentifiers.contains(
-                    ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                )
+        let proofContext = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: app.bundleIdentifier,
+            windowTitle: context.fingerprint.windowTitle ?? "",
+            focusedText: focusedLine,
+            rawTextBeforeCursor: context.textBeforeCursor,
+            rawTextAfterCursor: context.textAfterCursor,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             )
         )
+        let decision = ClaudeCodeTerminalHostProofPolicy.evaluate(proofContext)
 
         switch decision {
         case .eligible:
-            guard ClaudeCodeTerminalHostProofPolicy.proofInputText(
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor
-            ) != nil else {
+            guard ClaudeCodeTerminalHostProofPolicy.proofInputText(for: proofContext) != nil else {
                 return "claude-code-terminal-host-unsafeInputLine"
             }
             return nil
@@ -2879,9 +2875,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        return ClaudeCodeTerminalHostProofPolicy.proofInputText(
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
+        )
+        return ClaudeCodeTerminalHostProofPolicy.proofInputText(
+            for: ClaudeCodeTerminalHostProofContext(
+                hostBundleIdentifier: app.bundleIdentifier,
+                windowTitle: context.fingerprint.windowTitle ?? "",
+                focusedText: focusedLine,
+                rawTextBeforeCursor: context.textBeforeCursor,
+                rawTextAfterCursor: context.textAfterCursor,
+                proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                    ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                )
+            )
         )
     }
 
@@ -2902,6 +2910,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         lastClaudeCodeTerminalProofInputSignature = signature
+        let partialWordShape = PartialWordShape.from(textBeforeCursor: context.textBeforeCursor)
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-input",
             metadata: [
@@ -2909,7 +2918,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "host": hostBundleIdentifier,
                 "source": "focused-input-line",
                 "beforeChars": String(context.textBeforeCursor.count),
-                "afterChars": String(context.textAfterCursor.count)
+                "afterChars": String(context.textAfterCursor.count),
+                "wordCount": String(context.textBeforeCursor.split(whereSeparator: \.isWhitespace).count),
+                "hasPromptGlyph": String(context.textBeforeCursor.contains("❯")),
+                "hasProofMarker": String(
+                    ClaudeCodeTerminalHostProofPolicy.containsProofMarker(context.textBeforeCursor)
+                ),
+                "partialWordCharacters": String(partialWordShape?.characterCount ?? 0),
+                "partialWordLetters": String(partialWordShape?.letterCount ?? 0),
+                "partialWordCasing": partialWordShape?.casing.rawValue ?? PartialWordCasing.none.rawValue
             ]
         )
     }
