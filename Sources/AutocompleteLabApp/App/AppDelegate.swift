@@ -1781,15 +1781,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentProfile = profile
             setSuggestionDecision("Blocked: \(terminalHostBlockReason)")
             showFieldStatusIndicator(.blocked, context: rawContext)
+            var metadata = claudeCodeTerminalHostProofDiagnosticMetadata(
+                app: frontmostApp,
+                context: rawContext,
+                profile: profile
+            )
+            metadata["reason"] = terminalHostBlockReason
+            metadata["terminalHostBundleIdentifier"] = frontmostApp.bundleIdentifier
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: rawContext,
                 profile: profile,
                 fieldIdentity: fieldIdentity(app: frontmostApp, context: rawContext, profile: profile),
-                metadata: [
-                    "reason": terminalHostBlockReason,
-                    "terminalHostBundleIdentifier": frontmostApp.bundleIdentifier
-                ]
+                metadata: metadata
             )
             hideSuggestion()
             return
@@ -2439,6 +2443,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case let .blocked(reason):
             return "claude-code-terminal-host-\(reason.rawValue)"
         }
+    }
+
+    private func claudeCodeTerminalHostProofDiagnosticMetadata(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> [String: String] {
+        guard isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) else {
+            return [:]
+        }
+
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
+        let proofContext = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: app.bundleIdentifier,
+            windowTitle: context.fingerprint.windowTitle ?? "",
+            focusedText: focusedLine,
+            rawTextBeforeCursor: context.textBeforeCursor,
+            rawTextAfterCursor: context.textAfterCursor,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            )
+        )
+        return ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: proofContext)
     }
 
     private func suggestionBundleIdentifier(
