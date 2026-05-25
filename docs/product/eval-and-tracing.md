@@ -311,6 +311,20 @@ replay profile is `full`; use `smoke-slice` for bounded real-app smoke proof
 that does not try to prove stale cancellation, annoyance, final kept horizon,
 or model-result candidate metadata in the same slice.
 
+For the daily-driver dogfood loop, prefer the wrapper that creates a local
+redacted Markdown report:
+
+```bash
+./script/daily_driver_dogfood_session.sh start --app md.obsidian --label obsidian-note
+# write normally for 10-20 minutes; accept, dismiss, and type through naturally
+./script/daily_driver_dogfood_session.sh finish --app md.obsidian
+```
+
+The report goes under `dist/daily-driver-dogfood/` by default. It includes the
+non-annoyance gate, trace eval output, line bounds, and a manual trust row. Do
+not paste raw writing, prompts, screenshots, document names, URLs, recipients,
+or subjects into that manual row.
+
 For a frozen replay slice, capture both bounds:
 
 ```bash
