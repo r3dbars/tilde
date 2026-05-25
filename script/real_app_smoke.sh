@@ -2983,6 +2983,8 @@ guard CommandLine.arguments.count == 2,
     exit(1)
 }
 
+keyDown.flags = []
+keyUp.flags = []
 keyDown.post(tap: .cghidEventTap)
 usleep(20_000)
 keyUp.post(tap: .cghidEventTap)
