@@ -38,6 +38,7 @@ cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:04:15Z","sessionID":"s","suggestionID":"s4","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"field-changed"}
 {"timestamp":"2026-05-25T00:05:00Z","sessionID":"s","suggestionID":"q1","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"model-result","reason":"empty-suggestion","metadata":{"candidateSelectionSource":"app-model-result","fieldKind":"plain"}}
 {"timestamp":"2026-05-25T00:05:10Z","sessionID":"s","suggestionID":"q2","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"predictive-phrase-fallback","reason":"no-suggestion","metadata":{"candidateSelectionSource":"predictive-phrase-fallback","fieldKind":"plain"}}
+{"timestamp":"2026-05-25T00:05:20Z","sessionID":"s","suggestionID":"q3","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"predictive-phrase-fallback","reason":"fast-phrase-learning-restraint","metadata":{"candidateSelectionSource":"predictive-phrase-fallback","fieldKind":"plain","fastPhraseFallbackLearningSuppressed":"true","acceptedAndKeptSamples":"6","acceptedAndKeptRejected":"6"}}
 {"timestamp":"2026-05-25T00:06:10Z","sessionID":"s","suggestionID":"s5","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":250,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 JSONL
 
@@ -73,7 +74,7 @@ do
   fi
 done
 
-if ! grep -q "START_LINE=14" "$MARK_PATH"; then
+if ! grep -q "START_LINE=15" "$MARK_PATH"; then
   echo "dogfood self-test did not save current start line" >&2
   exit 1
 fi
@@ -85,7 +86,7 @@ fi
 
 for expected in \
   "Trace exists: yes" \
-  "Saved mark: 14" \
+  "Saved mark: 15" \
   "Label: self-test" \
   "App filter: com.apple.TextEdit" \
   "New trace rows: 0" \
@@ -116,16 +117,17 @@ done
 
 for expected in \
   "Saved mark: 1" \
-  "New trace rows: 13" \
+  "New trace rows: 14" \
   "Session state: ready-to-finish" \
   "Sample gate preview: pass" \
   "Daily-driver sample gate" \
   "Privacy: redacted metadata counts only" \
-  "Rows scanned: 13" \
+  "Rows scanned: 14" \
   "Shown suggestions: 5 (minimum 5)" \
   "Phrase suggestions: 4 (minimum 1)" \
   "Accepted-kept shown rate: 20% (minimum 15%, 1/5)" \
   "Source mix: shown / accepted / accepted-kept shown" \
+  "Instant phrase learned restraint: 1" \
   "No-show summary: suggestionSuppressed events by reason" \
   "Trust-killer preview: pass" \
   "Daily-driver trust-killer gate" \
@@ -198,7 +200,7 @@ fi
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
   --start-line 1 \
-  --end-line 14 \
+  --end-line 15 \
   --app com.apple.TextEdit \
   --label self-test \
   --report "$REPORT_PATH"
@@ -239,15 +241,17 @@ for expected in \
   "app-model-result: 2 / 0 / 0" \
   "fast-word-completion: 1 / 0 / 0" \
   "Instant phrase fallback shown: 2" \
+  "Instant phrase learned restraint: 1" \
   "Model-backed shown: 2" \
   "Word fallback shown: 1" \
   "Unknown source shown: 0" \
   "No-show summary: suggestionSuppressed events by reason" \
   "empty-suggestion: 1" \
   "no-suggestion: 1" \
+  "fast-phrase-learning-restraint: 1" \
   "No-show triggers: suggestionSuppressed events by trigger" \
   "model-result: 1" \
-  "predictive-phrase-fallback: 1" \
+  "predictive-phrase-fallback: 2" \
   "Typing Feel Score" \
   "Typing feel score report" \
   "Non-Annoyance Gate" \
@@ -255,7 +259,7 @@ for expected in \
   "Manual Trust Row" \
   "Completed Report Review" \
   "daily_driver_dogfood_session.sh review --report" \
-  "Fresh lines: \`2-14\`"
+  "Fresh lines: \`2-15\`"
 do
   if ! grep -q "$expected" "$REPORT_PATH"; then
     echo "dogfood self-test report missing: $expected" >&2
@@ -273,7 +277,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$SHORT_PHRASE_TRACE_PATH" \
   --start-line 1 \
-  --end-line 14 \
+  --end-line 15 \
   --app com.apple.TextEdit \
   --label self-test-short-phrase \
   --report "$SHORT_PHRASE_REPORT_PATH" \
@@ -308,7 +312,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRUST_KILLER_TRACE_PATH" \
   --start-line 1 \
-  --end-line 15 \
+  --end-line 16 \
   --app com.apple.TextEdit \
   --label self-test-trust-killer \
   --report "$TRUST_KILLER_REPORT_PATH" \
@@ -534,7 +538,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
   --start-line 1 \
-  --end-line 14 \
+  --end-line 15 \
   --app com.apple.TextEdit \
   --label self-test-high-score \
   --report "$HIGH_SCORE_REPORT_PATH" \
@@ -564,7 +568,7 @@ set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$TRACE_PATH" \
   --start-line 1 \
-  --end-line 14 \
+  --end-line 15 \
   --app com.apple.TextEdit \
   --label self-test-reach \
   --report "$REACH_REPORT_PATH" \

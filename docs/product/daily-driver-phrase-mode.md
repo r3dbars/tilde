@@ -329,7 +329,10 @@ enough local evidence that accepted instant phrases are not being kept for the
 current app, field kind, request mode, and writing profile, SteadyType skips
 that zero-latency canned phrase and queues the model phrase instead. The trace
 metadata stays redacted and the live status can say `Quiet: recent rejects`, so
-the app is less mysterious when it chooses restraint.
+the app is less mysterious when it chooses restraint. The dogfood status and
+report now also print `Instant phrase learned restraint`, so a session can show
+when SteadyType skipped a canned phrase because local learning said it was not
+helping.
 
 ## Scorecard
 
