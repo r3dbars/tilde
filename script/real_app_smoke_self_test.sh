@@ -128,6 +128,27 @@ if ! grep -F "must relaunch with fast word completions and phrase continuations 
   exit 1
 fi
 
+script/real_app_smoke.sh claude-model-latency --dry-run >"$TMP_DIR/claude-model-latency.txt"
+if ! grep -F "Real app smoke: claude" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "Claude desktop prompt model latency proof" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "model-backed visible word completions in one launch" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "disables fast word completions and phrase continuations" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario claude-model-latency" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "never presses Enter or full accept" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "prompt no-submit gate on the same trace slice" "$TMP_DIR/claude-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Claude model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh claude-model-latency --skip-build --dry-run >"$TMP_DIR/claude-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Claude model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/claude-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected Claude model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
@@ -137,7 +158,9 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'prepare_codex_model_latency_runtime_options' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'prepare_claude_model_latency_runtime_options' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="codex-model-latency"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="claude-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_textedit_event_tap_probe_key' script/real_app_smoke.sh >/dev/null ||
    ! grep -F -- '--require-event-tap-samples "$event_tap_sample_count"' script/real_app_smoke.sh >/dev/null; then
@@ -248,10 +271,10 @@ if "AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1" not in default_prepare_blo
     raise SystemExit("default-model phrase proof must disable seed word completions before measuring the trailing-space trigger")
 
 codex_start = source.index('run_codex_model_latency()')
-codex_end = source.index('run_manual_gated()', codex_start)
+codex_end = source.index('run_claude_model_latency()', codex_start)
 codex_block = source[codex_start:codex_end]
 codex_prepare_start = source.index('prepare_codex_model_latency_runtime_options()')
-codex_prepare_end = source.index('prepare_default_model_latency_runtime_options()', codex_prepare_start)
+codex_prepare_end = source.index('prepare_claude_model_latency_runtime_options()', codex_prepare_start)
 codex_prepare_block = source[codex_prepare_start:codex_prepare_end]
 if 'prepare_codex_model_latency_runtime_options' not in codex_block:
     raise SystemExit("Codex model latency proof must prepare proof-only runtime flags")
@@ -277,6 +300,43 @@ if 'reason=empty-suggestion' not in codex_block:
     raise SystemExit("Codex model latency proof must skip empty model candidates and try another disposable context")
 if 'assert_codex_prompt_retains_marker' not in codex_block:
     raise SystemExit("Codex model latency proof must verify the prompt marker still exists after each sample")
+
+claude_start = source.index('run_claude_model_latency()')
+claude_end = source.index('run_manual_gated()', claude_start)
+claude_block = source[claude_start:claude_end]
+claude_prepare_start = source.index('prepare_claude_model_latency_runtime_options()')
+claude_prepare_end = source.index('prepare_default_model_latency_runtime_options()', claude_prepare_start)
+claude_prepare_block = source[claude_prepare_start:claude_prepare_end]
+if 'prepare_claude_model_latency_runtime_options' not in claude_block:
+    raise SystemExit("Claude model latency proof must prepare proof-only runtime flags")
+if 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' not in claude_prepare_block:
+    raise SystemExit("Claude model latency proof must disable fast word completions")
+if 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' not in claude_prepare_block:
+    raise SystemExit("Claude model latency proof must disable phrase continuations")
+if 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"' not in claude_prepare_block or 'local scenario="claude-model-latency"' not in claude_prepare_block:
+    raise SystemExit("Claude model latency proof must tag its runtime scenario")
+if 'press_key_code' in claude_block or 'press_accept_all_shortcut' in claude_block or 'key code 36' in claude_block:
+    raise SystemExit("Claude model latency proof must not press Tab, Enter, or full accept")
+if 'type_claude_raw_smoke_text "$trigger_text"' not in claude_block:
+    raise SystemExit("Claude model latency proof must type only the trigger character through live key events")
+if 'AUTOCOMPLETE_LAB_CLAUDE_MODEL_LATENCY_SEED_SETTLE_SECONDS' not in claude_block:
+    raise SystemExit("Claude model latency proof must let the stable AX seed settle before live key-trigger typing")
+if 'open -a Claude' not in claude_block or 'wait_for_frontmost_app "Claude"' not in claude_block:
+    raise SystemExit("Claude model latency proof must launch and focus Claude before AX seeding")
+if 'AUTOCOMPLETE_LAB_CLAUDE_COMPOSER_DISCOVERY_TIMEOUT_SECONDS' not in source:
+    raise SystemExit("Claude model latency proof must give the launched composer a bounded discovery window")
+if 'AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="claude-model-latency"' not in claude_block:
+    raise SystemExit("Claude model latency proof must run prompt no-submit proof on the same trace slice")
+if 'visible_sample_count >= 5' not in claude_block:
+    raise SystemExit("Claude model latency proof must stop only after five visible model-backed samples")
+if '"requestMode=wordCompletion"' not in claude_block or '"candidateSelectionSource=app-model-result"' not in claude_block:
+    raise SystemExit("Claude model latency proof must require model-backed word-completion visibility")
+if 'reason=empty-suggestion' not in claude_block:
+    raise SystemExit("Claude model latency proof must skip empty model candidates and try another disposable context")
+if 'assert_claude_prompt_retains_marker' not in claude_block:
+    raise SystemExit("Claude model latency proof must verify the prompt marker still exists after each sample")
+if 'restore_claude_draft_if_needed' not in source or 'prompt_app_ax_proof_helper.swift' not in source:
+    raise SystemExit("Claude model latency proof must restore focused drafts through the AX helper")
 
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proof-field-identity-refresh-relaxed" not in app_delegate:

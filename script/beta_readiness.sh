@@ -444,9 +444,9 @@ latency_beta_gate() {
     --expected-asset "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     --min-first-visible-samples "${AUTOCOMPLETE_LAB_BETA_MIN_FIRST_VISIBLE_SAMPLES:-5}" \
     --min-model-samples "${AUTOCOMPLETE_LAB_BETA_MIN_MODEL_SAMPLES:-5}" \
-    --required-proof-app "${AUTOCOMPLETE_LAB_BETA_LATENCY_PROOF_APP:-com.openai.codex}" \
-    --required-proof-scenario "${AUTOCOMPLETE_LAB_BETA_LATENCY_PROOF_SCENARIO:-codex-model-latency}" \
-    --required-trace-app "${AUTOCOMPLETE_LAB_BETA_LATENCY_TRACE_APP:-com.openai.codex}" \
+    --required-proof-app "${AUTOCOMPLETE_LAB_BETA_LATENCY_PROOF_APP:-com.anthropic.claudefordesktop}" \
+    --required-proof-scenario "${AUTOCOMPLETE_LAB_BETA_LATENCY_PROOF_SCENARIO:-claude-model-latency}" \
+    --required-trace-app "${AUTOCOMPLETE_LAB_BETA_LATENCY_TRACE_APP:-com.anthropic.claudefordesktop}" \
     --required-request-mode "${AUTOCOMPLETE_LAB_BETA_LATENCY_REQUEST_MODE:-wordCompletion}" \
     --app-binary "${AUTOCOMPLETE_LAB_BETA_LATENCY_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType}" \
     --require-model-backed-visible \
