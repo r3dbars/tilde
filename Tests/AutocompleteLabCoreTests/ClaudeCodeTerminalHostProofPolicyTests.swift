@@ -259,6 +259,10 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(byID["alacritty"]?.bundleIdentifier == "org.alacritty")
         #expect(byID["wezterm"]?.bundleIdentifier == "com.github.wez.wezterm")
         #expect(ClaudeCodeTerminalHostProofPolicy.hostVariant(for: "com.googlecode.iterm2")?.proofLabel == "claude-code-iterm2")
+        #expect(
+            byID["ghostty"]?.manualProofCommand
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host ghostty --manual-gate"
+        )
     }
 
     @Test("Terminal-host proof extracts the current input line from scrollback")

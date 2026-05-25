@@ -211,6 +211,40 @@ struct SettingsWindowControllerStateTests {
         #expect(claudeCode.proofCommandText == nil)
         #expect(!claudeCode.canToggle)
 
+        let terminalHost = SettingsCurrentAppState(
+            displayName: "iTerm2",
+            bundleIdentifier: "com.googlecode.iterm2",
+            supportStatus: store.supportStatus(for: "com.googlecode.iterm2"),
+            isEnabled: false,
+            disabledAppCount: 0
+        )
+
+        #expect(terminalHost.statusText == "Current app: iTerm2 is blocked outside Claude Code proof")
+        #expect(
+            terminalHost.detailText
+                == "iTerm2 stays blocked for normal typing. Only an explicit Claude Code host proof check can use this terminal."
+        )
+        #expect(terminalHost.modeText == "Mode: Claude Code terminal-host proof only")
+        #expect(terminalHost.acceptanceText == "Keys: off except one-word Tab during an explicit proof check.")
+        #expect(terminalHost.fallbackText == "Fallback: unavailable outside the manual Claude Code proof lane.")
+        #expect(terminalHost.proofButtonTitle == "Manual Check Only")
+        #expect(!terminalHost.canStartProof)
+        #expect(!terminalHost.canToggle)
+        #expect(terminalHost.shouldShowCheckControls)
+        #expect(
+            terminalHost.proofText
+                == "Check: run the iTerm2 Claude Code proof, press Tab once, and do not press Enter."
+        )
+        #expect(
+            terminalHost.proofCommandText
+                == "Manual check: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate"
+        )
+        #expect(
+            terminalHost.proofCommandClipboardText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate"
+        )
+        #expect(terminalHost.canCopyProofCommand)
+
         let unsupported = SettingsCurrentAppState(
             displayName: "Unknown",
             bundleIdentifier: "com.example.UnknownEditor",

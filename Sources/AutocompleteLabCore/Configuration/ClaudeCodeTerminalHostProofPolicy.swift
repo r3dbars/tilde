@@ -54,6 +54,10 @@ public struct ClaudeCodeTerminalHostVariant: Equatable, Sendable {
     public var proofLabel: String {
         "claude-code-\(id)"
     }
+
+    public var manualProofCommand: String {
+        "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host \(id) --manual-gate"
+    }
 }
 
 public enum ClaudeCodeTerminalHostProofPolicy {
