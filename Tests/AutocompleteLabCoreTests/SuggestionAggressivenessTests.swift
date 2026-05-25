@@ -171,6 +171,39 @@ struct SuggestionAggressivenessTests {
         ) == .skip)
     }
 
+    @Test("daily-driver line start opt-in can ask after one Obsidian word")
+    func dailyDriverLineStartOptInCanAskAfterOneObsidianWord() {
+        let tuning = SuggestionTuning(aggressivenessLevel: 4, phraseStartWords: 2)
+        let defaultTrigger = tuning.triggerPolicy(supportPace: .eager)
+        let obsidianTrigger = tuning.triggerPolicy(
+            supportPace: .eager,
+            minimumPhraseContinuationWords: 1,
+            allowsPlainLineStartPhraseContinuation: true
+        )
+        let obsidianActivation = tuning.activationPolicy(
+            supportPace: .eager,
+            minimumPhraseContinuationWords: 1
+        )
+
+        #expect(defaultTrigger.decision(
+            previousTextBeforeCursor: "Plan",
+            currentTextBeforeCursor: "Plan ",
+            requestMode: .phraseContinuation
+        ) == .skip)
+        #expect(obsidianTrigger.decision(
+            previousTextBeforeCursor: "Plan",
+            currentTextBeforeCursor: "Plan ",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 80))
+        #expect(obsidianActivation.decision(
+            textBeforeCursor: "Plan ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+    }
+
     @Test("extra tuning knobs independently control timing confidence and learning")
     func extraTuningKnobsIndependentlyControlTimingConfidenceAndLearning() {
         let loose = SuggestionTuning(

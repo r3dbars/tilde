@@ -268,7 +268,8 @@ public struct SuggestionTuning: Equatable, Sendable {
 
     public func activationPolicy(
         supportPace: SuggestionPace,
-        allowsSentenceBoundaryContinuation: Bool = true
+        allowsSentenceBoundaryContinuation: Bool = true,
+        minimumPhraseContinuationWords: Int? = nil
     ) -> CompletionActivationPolicy {
         guard supportPace == .eager else {
             return CompletionActivationPolicy(pace: supportPace)
@@ -276,12 +277,14 @@ public struct SuggestionTuning: Equatable, Sendable {
 
         let allowsTerminalSentenceBoundary = allowsSentenceBoundaryContinuation
             && aggressivenessLevel >= 4
+        let phraseContinuationWords = minimumPhraseContinuationWords
+            .map(Self.clampedPhraseStartWords) ?? phraseStartWords
 
         if aggressivenessLevel >= 5 {
             return CompletionActivationPolicy(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 18,
                 allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
@@ -294,7 +297,7 @@ public struct SuggestionTuning: Equatable, Sendable {
             return CompletionActivationPolicy(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 16,
                 allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
@@ -306,7 +309,7 @@ public struct SuggestionTuning: Equatable, Sendable {
         return CompletionActivationPolicy(
             minimumContextCharacters: 1,
             minimumContextWords: 1,
-            minimumPhraseContinuationWords: phraseStartWords,
+            minimumPhraseContinuationWords: phraseContinuationWords,
             minimumWordCompletionCharacters: wordStartCharacters,
             maximumWordCompletionCharacters: 16,
             allowsTerminalSentenceBoundary: false,
@@ -316,7 +319,9 @@ public struct SuggestionTuning: Equatable, Sendable {
 
     public func triggerPolicy(
         supportPace: SuggestionPace,
-        allowsSentenceBoundaryContinuation: Bool = true
+        allowsSentenceBoundaryContinuation: Bool = true,
+        minimumPhraseContinuationWords: Int? = nil,
+        allowsPlainLineStartPhraseContinuation: Bool = false
     ) -> SuggestionTriggerPolicy {
         guard supportPace == .eager else {
             return SuggestionTriggerPolicy(pace: supportPace)
@@ -324,6 +329,8 @@ public struct SuggestionTuning: Equatable, Sendable {
 
         let allowsSentenceBoundaryRequest = allowsSentenceBoundaryContinuation
             && aggressivenessLevel >= 4
+        let phraseContinuationWords = minimumPhraseContinuationWords
+            .map(Self.clampedPhraseStartWords) ?? phraseStartWords
 
         switch aggressivenessLevel {
         case 3:
@@ -339,9 +346,9 @@ public struct SuggestionTuning: Equatable, Sendable {
                 sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 240),
                 pauseDelayMilliseconds: min(responseSpeedDelays.pause, 100),
                 minimumWordCompletionCharacters: wordStartCharacters,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
-                allowsPlainLineStartPhraseContinuation: false,
+                allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
                 allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         case 5:
@@ -355,9 +362,9 @@ public struct SuggestionTuning: Equatable, Sendable {
                 sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 200),
                 pauseDelayMilliseconds: min(responseSpeedDelays.pause, 80),
                 minimumWordCompletionCharacters: wordStartCharacters,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
-                allowsPlainLineStartPhraseContinuation: false,
+                allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
                 allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         default:
