@@ -245,7 +245,10 @@ The instant phrase fallback is broader now too. It can produce zero-latency
 3-5 word daily-driver phrases for common writing contexts like Obsidian note
 capture, fast-typing trust, less-timid suggestion wording, short useful phrase
 requests, meeting notes, launch checks, and action items while still staying
-off in prompt, search, form, and code profiles.
+off in prompt, search, form, and code profiles. When the instant phrase path
+does not have a safe match, the queued model request now carries redacted
+diagnostic metadata for the fallback outcome so the app is less mysterious while
+it waits.
 
 ## Scorecard
 
