@@ -522,8 +522,11 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
     private static func looksLikePlaceholderPrompt(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
         return trimmed.hasPrefix("Try \"")
             || trimmed.hasPrefix("Try '")
+            || lowered == "for shortcuts"
+            || lowered.hasSuffix(" for shortcuts")
     }
 
     private static func titleHasScopedProofMarker(_ title: String) -> Bool {

@@ -24,6 +24,21 @@ struct Snapshot {
     let expectedTokenMatches: Int
 }
 
+struct SearchState {
+    let hasMarker: Bool
+    let hasText: Bool
+    let hasHint: Bool
+    let expectedTokenCount: Int
+    let expectedTokenMatches: Int
+
+    var score: Int {
+        (hasMarker ? 1_000 : 0)
+            + (hasText ? 1_000 : 0)
+            + (hasHint ? 1_000 : 0)
+            + expectedTokenMatches
+    }
+}
+
 func fail(_ message: String, code: Int32 = 1) -> Never {
     fputs("\(message)\n", stderr)
     exit(code)
@@ -147,6 +162,17 @@ func frontmostBundleIdentifier() -> String? {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
 
+func targetRunningApplication(options: Options) -> NSRunningApplication? {
+    if let frontmostApplication = NSWorkspace.shared.frontmostApplication,
+       frontmostApplication.bundleIdentifier == options.bundleIdentifier {
+        return frontmostApplication
+    }
+
+    return NSWorkspace.shared.runningApplications.first {
+        $0.bundleIdentifier == options.bundleIdentifier
+    }
+}
+
 func normalizedWhitespace(_ text: String) -> String {
     text
         .split(whereSeparator: \.isWhitespace)
@@ -169,10 +195,35 @@ func containsText(_ haystack: String, _ needle: String, caseInsensitive: Bool = 
     return normalizedWhitespace(haystack).contains(normalizedWhitespace(needle))
 }
 
+func searchState(in searchable: [String], options: Options) -> SearchState {
+    let joinedSearchable = searchable.joined(separator: "\n")
+    let hasMarker = containsText(joinedSearchable, options.marker, caseInsensitive: true)
+    let expectedTokens = normalizedWhitespace(options.text).split(separator: " ")
+    let expectedTokenMatches = expectedTokens.filter { token in
+        containsText(joinedSearchable, String(token))
+    }.count
+    let hasNearCompleteText = expectedTokens.count >= 4
+        && expectedTokenMatches >= expectedTokens.count - 1
+    let hasText = options.text.isEmpty
+        || containsText(joinedSearchable, options.text)
+        || hasNearCompleteText
+    let hasHint = options.hints.isEmpty || options.hints.contains { hint in
+        containsText(joinedSearchable, hint, caseInsensitive: true)
+    }
+
+    return SearchState(
+        hasMarker: hasMarker,
+        hasText: hasText,
+        hasHint: hasHint,
+        expectedTokenCount: expectedTokens.count,
+        expectedTokenMatches: expectedTokenMatches
+    )
+}
+
 func snapshot(options: Options) -> Snapshot {
     let frontmost = frontmostBundleIdentifier()
     guard frontmost == options.bundleIdentifier,
-          let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == options.bundleIdentifier }) else {
+          let app = targetRunningApplication(options: options) else {
         return Snapshot(
             frontmostBundleIdentifier: frontmost,
             textCount: 0,
@@ -190,48 +241,44 @@ func snapshot(options: Options) -> Snapshot {
     AXUIElementSetMessagingTimeout(appElement, 0.8)
 
     var texts: [String] = []
+    var scopedSearchables: [[String]] = []
     let allWindows = windows(from: appElement)
     let markerWindows = allWindows.filter { window in
         containsText(stringAttribute(window, kAXTitleAttribute), options.marker, caseInsensitive: true)
     }
     let scopedWindows = markerWindows.isEmpty ? allWindows : markerWindows
     for window in scopedWindows {
-        collectText(from: window, into: &texts)
+        var windowTexts: [String] = []
+        collectText(from: window, into: &windowTexts)
+        texts.append(contentsOf: windowTexts)
+        let title = stringAttribute(window, kAXTitleAttribute)
+        scopedSearchables.append(windowTexts + (title.isEmpty ? [] : [title]))
     }
     if markerWindows.isEmpty, let focused = focusedElement(in: appElement) {
-        collectText(from: focused, into: &texts)
+        var focusedTexts: [String] = []
+        collectText(from: focused, into: &focusedTexts)
+        texts.append(contentsOf: focusedTexts)
+        scopedSearchables.append(focusedTexts)
     }
 
     let titles = scopedWindows
         .map { stringAttribute($0, kAXTitleAttribute) }
         .filter { !$0.isEmpty }
-    let searchable = texts + titles
-    let joinedSearchable = searchable.joined(separator: "\n")
-
-    let hasMarker = containsText(joinedSearchable, options.marker, caseInsensitive: true)
-    let expectedTokens = normalizedWhitespace(options.text).split(separator: " ")
-    let expectedTokenMatches = expectedTokens.filter { token in
-        containsText(joinedSearchable, String(token))
-    }.count
-    let hasNearCompleteText = expectedTokens.count >= 4
-        && expectedTokenMatches >= expectedTokens.count - 1
-    let hasText = options.text.isEmpty
-        || containsText(joinedSearchable, options.text)
-        || hasNearCompleteText
-    let hasHint = options.hints.isEmpty || options.hints.contains { hint in
-        containsText(joinedSearchable, hint, caseInsensitive: true)
-    }
+    let bestState = scopedSearchables
+        .map { searchState(in: $0, options: options) }
+        .max { $0.score < $1.score }
+        ?? searchState(in: texts + titles, options: options)
 
     return Snapshot(
         frontmostBundleIdentifier: frontmost,
         textCount: texts.count,
         titleCount: titles.count,
         markerWindowCount: markerWindows.count,
-        hasMarker: hasMarker,
-        hasText: hasText,
-        hasHint: hasHint,
-        expectedTokenCount: expectedTokens.count,
-        expectedTokenMatches: expectedTokenMatches
+        hasMarker: bestState.hasMarker,
+        hasText: bestState.hasText,
+        hasHint: bestState.hasHint,
+        expectedTokenCount: bestState.expectedTokenCount,
+        expectedTokenMatches: bestState.expectedTokenMatches
     )
 }
 

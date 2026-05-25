@@ -400,13 +400,20 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
         var retryAttempted = false
         var retryUsed = false
+        var wordCompletionFallbackUsed = false
+        var wordCompletionFallbackSource: String?
 
-        if let retryPrompt = Self.retryPromptForShortHighWordCandidate(
+        let retryPrompt = Self.retryPromptForEmptyWordCompletionCandidate(
+            request: request,
+            cleanedCandidates: cleanedCandidates,
+            candidateSelection: candidateSelection
+        ) ?? Self.retryPromptForShortHighWordCandidate(
             request: request,
             cleanedCandidates: cleanedCandidates,
             candidateSelection: candidateSelection,
             effectiveMaxVisibleWords: effectiveMaxVisibleWords(for: request)
-        ) {
+        )
+        if let retryPrompt {
             retryAttempted = true
             DiagnosticsLog.shared.record(
                 "mlx-completion-retry-scheduled",
@@ -454,6 +461,29 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             }
         }
 
+        if candidateSelection.suggestion == nil,
+           let fallbackSelection = Self.localWordCompletionFallbackSelection(for: request),
+           let fallbackSuggestion = fallbackSelection.suggestion {
+            wordCompletionFallbackUsed = true
+            wordCompletionFallbackSource = fallbackSelection.selectionSource
+            cleanedCandidates = [fallbackSuggestion]
+            candidateSelection = candidateRanker.selection(
+                cleanedCandidates,
+                mode: request.mode,
+                textBeforeCursor: request.textBeforeCursor,
+                behaviorProfileID: request.behaviorProfile.id
+            )
+            DiagnosticsLog.shared.record(
+                "mlx-word-completion-fallback-used",
+                metadata: [
+                    "app": request.appBundleIdentifier ?? "unknown",
+                    "source": fallbackSelection.selectionSource,
+                    "candidateCount": String(fallbackSelection.candidateCount),
+                    "mode": request.mode.rawValue
+                ]
+            )
+        }
+
         let cleanedSuggestion = candidateSelection.suggestion
         let candidateTopScore = candidateSelection.rankedCandidates.first?.score
         let cleanedAt = Date()
@@ -479,6 +509,10 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["cleanedChars"] = String(cleanedSuggestion?.visibleText.count ?? 0)
         timingMetadata["retryAttempted"] = String(retryAttempted)
         timingMetadata["retryUsed"] = String(retryUsed)
+        timingMetadata["wordCompletionFallbackUsed"] = String(wordCompletionFallbackUsed)
+        if let wordCompletionFallbackSource {
+            timingMetadata["wordCompletionFallbackSource"] = wordCompletionFallbackSource
+        }
         timingMetadata.merge(generation.promptCacheTraceMetadata) { current, _ in current }
 
         DiagnosticsLog.shared.record(
@@ -496,7 +530,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             candidateSuppressionReason: candidateSelection.suppressionReason?.rawValue,
             suggestionID: request.suggestionID,
             latencyMilliseconds: totalMilliseconds,
-            firstTokenLatencyMilliseconds: generation.firstChunkMilliseconds
+            firstTokenLatencyMilliseconds: generation.firstChunkMilliseconds,
+            extraMetadata: [
+                "retryAttempted": String(retryAttempted),
+                "retryUsed": String(retryUsed),
+                "wordCompletionFallbackUsed": String(wordCompletionFallbackUsed),
+                "wordCompletionFallbackSource": wordCompletionFallbackSource ?? "none"
+            ]
         )
 
         try cancellationCoordinator.check(epoch: cancellationEpoch)
@@ -603,6 +643,65 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
     }
 
+    static func retryPromptForEmptyWordCompletionCandidate(
+        request: CompletionRequest,
+        cleanedCandidates: [CompletionSuggestion],
+        candidateSelection: CompletionCandidateSelection
+    ) -> CompletionPrompt? {
+        guard request.mode == .wordCompletion,
+              cleanedCandidates.isEmpty,
+              candidateSelection.suppressionReason == .noCandidates,
+              let fragment = trailingWordFragment(in: request.textBeforeCursor),
+              fragment.count >= 3,
+              fragment.allSatisfy(\.isLetter)
+        else {
+            return nil
+        }
+
+        let context = String(request.textBeforeCursor.suffix(220))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !context.isEmpty else {
+            return nil
+        }
+
+        let system = """
+        Inline word completion retry.
+        The previous answer did not produce a usable suffix.
+        Return only the missing suffix for the current partially typed word.
+        The suffix must be letters only: no spaces, punctuation, quotes, labels, or explanations.
+        Do not repeat the partial word or the Before cursor text.
+        If the suffix would complete the wrong word, return \(CompletionPromptBuilder.noSuggestionToken).
+        Example Before cursor: The privacy note should stay redac
+        Example suffix: ted
+        Example Before cursor: The setting should be configu
+        Example suffix: rable
+        """
+        let user = """
+        Before cursor:
+        \(context)
+
+        Suffix only, letters only, or \(CompletionPromptBuilder.noSuggestionToken):
+        """
+        return CompletionPrompt(system: system, user: user)
+    }
+
+    static func localWordCompletionFallbackSelection(for request: CompletionRequest) -> WordCompletionCandidateSelection? {
+        guard request.mode == .wordCompletion,
+              request.textAfterCursor.first?.isLetter != true else {
+            return nil
+        }
+
+        let selection = WordCompletionCandidateRanker(staticWords: wordCompletionFallbackWords).selection(
+            for: request.textBeforeCursor,
+            recentWords: request.visiblePageContext?.completionCandidateWords ?? []
+        )
+        guard selection.suggestion != nil else {
+            return nil
+        }
+
+        return selection
+    }
+
     static func retryPromptForShortHighWordCandidate(
         request: CompletionRequest,
         cleanedCandidates: [CompletionSuggestion],
@@ -686,6 +785,28 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         return suggestion.visibleWordCount >= effectiveMaxVisibleWords
             || rawOutput.contains(where: { [".", "!", "?", "\n"].contains($0) })
     }
+
+    private static func trailingWordFragment(in text: String) -> String? {
+        guard let last = text.last, last.isLetter else {
+            return nil
+        }
+
+        return text.split(whereSeparator: { !$0.isLetter }).last.map(String.init)
+    }
+
+    private static let wordCompletionFallbackWords = WordCompletionCandidateRanker.defaultWords + [
+        "redacted",
+        "configurable",
+        "visible",
+        "quickly",
+        "transition",
+        "validate",
+        "immediate",
+        "concise",
+        "predictable",
+        "helpful",
+        "responsive"
+    ]
 
     private static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int(end.timeIntervalSince(start) * 1000))

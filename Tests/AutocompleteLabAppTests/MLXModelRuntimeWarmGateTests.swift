@@ -124,12 +124,12 @@ struct MLXModelRuntimeWarmGateTests {
     @Test("Daily driver retry prompt repairs too-short phrase candidates")
     func dailyDriverRetryPromptRepairsTooShortPhraseCandidates() throws {
         let request = CompletionRequest(
-            textBeforeCursor: "Smoke proof feels ",
+            textBeforeCursor: "The panel should feel ",
             maxVisibleWords: 8,
             mode: .phraseContinuation
         )
         let shortCandidate = CompletionSuggestion(
-            text: " instant",
+            text: " clear",
             maxVisibleWords: 8
         )
         let selection = CompletionCandidateRanker().selection(
@@ -150,8 +150,8 @@ struct MLXModelRuntimeWarmGateTests {
 
         #expect(prompt.system.contains("previous answer was too short"))
         #expect(prompt.system.contains("3-8 words"))
-        #expect(prompt.system.contains("instant"))
-        #expect(prompt.user.contains("Smoke proof feels"))
+        #expect(prompt.system.contains("clear"))
+        #expect(prompt.user.contains("The panel should feel"))
         #expect(prompt.user.hasSuffix("Next 3-8 words, or <NO_SUGGESTION>:"))
     }
 
@@ -216,6 +216,95 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(prompt.system.contains("Choose a fresh continuation"))
         #expect(prompt.system.contains("3-8 words"))
         #expect(prompt.user.contains("Smoke proof feels"))
+    }
+
+    @Test("Word completion retry prompt repairs empty model candidates")
+    func wordCompletionRetryPromptRepairsEmptyModelCandidates() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "The privacy note should stay redac",
+            mode: .wordCompletion
+        )
+        let selection = CompletionCandidateRanker().selection(
+            [],
+            mode: .wordCompletion,
+            textBeforeCursor: request.textBeforeCursor,
+            behaviorProfileID: request.behaviorProfile.id
+        )
+
+        #expect(selection.suppressionReason == CompletionCandidateSuppressionReason.noCandidates)
+
+        let prompt = try #require(MLXModelRuntime.retryPromptForEmptyWordCompletionCandidate(
+            request: request,
+            cleanedCandidates: [],
+            candidateSelection: selection
+        ))
+
+        #expect(prompt.system.contains("Inline word completion retry"))
+        #expect(prompt.system.contains("letters only"))
+        #expect(prompt.system.contains("Example suffix: ted"))
+        #expect(prompt.user.contains("The privacy note should stay redac"))
+        #expect(prompt.user.hasSuffix("Suffix only, letters only, or <NO_SUGGESTION>:"))
+    }
+
+    @Test("Word completion retry prompt stays off for usable model candidates")
+    func wordCompletionRetryPromptStaysOffForUsableModelCandidates() {
+        let request = CompletionRequest(
+            textBeforeCursor: "The privacy note should stay redac",
+            mode: .wordCompletion
+        )
+        let candidate = CompletionSuggestion(text: "ted", maxVisibleWords: 1)
+        let selection = CompletionCandidateRanker().selection(
+            [candidate],
+            mode: .wordCompletion,
+            textBeforeCursor: request.textBeforeCursor,
+            behaviorProfileID: request.behaviorProfile.id
+        )
+
+        #expect(selection.suggestion != nil)
+        #expect(MLXModelRuntime.retryPromptForEmptyWordCompletionCandidate(
+            request: request,
+            cleanedCandidates: [candidate],
+            candidateSelection: selection
+        ) == nil)
+    }
+
+    @Test("Local word completion fallback rescues empty model suffixes")
+    func localWordCompletionFallbackRescuesEmptyModelSuffixes() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "Privacy note redac",
+            mode: .wordCompletion
+        )
+
+        let selection = try #require(MLXModelRuntime.localWordCompletionFallbackSelection(for: request))
+
+        #expect(selection.suggestion?.visibleText == "ted")
+        #expect(selection.selectionSource == "fast-word-completion")
+    }
+
+    @Test("Local word completion fallback uses visible page words")
+    func localWordCompletionFallbackUsesVisiblePageWords() throws {
+        let context = try #require(VisiblePageContext(text: "Obsidian vault uses local markdown notes"))
+        let request = CompletionRequest(
+            textBeforeCursor: "Open Obsid",
+            visiblePageContext: context,
+            mode: .wordCompletion
+        )
+
+        let selection = try #require(MLXModelRuntime.localWordCompletionFallbackSelection(for: request))
+
+        #expect(selection.suggestion?.visibleText == "ian")
+        #expect(selection.selectionSource == "fast-word-completion")
+    }
+
+    @Test("Local word completion fallback stays off in the middle of words")
+    func localWordCompletionFallbackStaysOffInTheMiddleOfWords() {
+        let request = CompletionRequest(
+            textBeforeCursor: "Privacy note redac",
+            textAfterCursor: "tion",
+            mode: .wordCompletion
+        )
+
+        #expect(MLXModelRuntime.localWordCompletionFallbackSelection(for: request) == nil)
     }
 
     @Test("High word retry prompt stays off when the first pass is good")

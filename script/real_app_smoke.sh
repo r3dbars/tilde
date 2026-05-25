@@ -7465,19 +7465,21 @@ claude_code_model_latency_proof_texts() {
     return
   fi
 
+  local marker
+  marker="$(claude_code_proof_marker)"
   cat <<EOF
-Can we make this redac
-Make this setting configu
-Keep overlay visi
-Keep writing qui
-Make transition transi
-Autocomplete should valida
-Next response feels immed
-Useful suggestion stays conci
-Editor placement remains accura
-Typed phrase becomes predicta
-Model answer stays helpfu
-Completion remains respons
+$marker Privacy note redac
+$marker Make this setting configu
+$marker Keep overlay visi
+$marker Keep writing qui
+$marker Make transition transi
+$marker Autocomplete should valida
+$marker Next response feels immed
+$marker Useful suggestion stays conci
+$marker Editor placement remains accura
+$marker Typed phrase becomes predicta
+$marker Model answer stays helpfu
+$marker Completion remains respons
 EOF
 }
 
@@ -9906,6 +9908,10 @@ run_claude_code_model_latency() {
     sample_index=$((sample_index + 1))
     if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
       echo "Claude Code model latency sample $sample_index must be a single line." >&2
+      exit 2
+    fi
+    if [[ "$proof_text" != *"$marker"* ]]; then
+      echo "Claude Code model latency sample $sample_index must include $marker." >&2
       exit 2
     fi
     trigger_word="${proof_text##* }"
