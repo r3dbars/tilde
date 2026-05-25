@@ -75,9 +75,9 @@ Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
 Claude Code, and Claude desktop are manual-gated so this script never types
 into private notes, vaults, terminal prompts, or agent prompts by surprise.
-The Codex lane uses a targeted disposable proof helper after the manual gate:
-it seeds AUTOCOMPLETE_LAB_CODEX_PROOF text into a safe composer, presses Tab
-once, and never presses Enter.
+The Codex and Terminal-host Claude Code lanes use targeted disposable proof
+helpers after the manual gate: they seed marked proof text, press Tab once, and
+never press Enter.
 
 Notes proof must use notes-title, notes-body, notes-checklist, their
 notes-*-undo variants, or explicit Notes variant lanes such as
@@ -7494,6 +7494,21 @@ $marker Completion remains respons
 EOF
 }
 
+claude_code_smoke_proof_text() {
+  local marker proof_text
+  marker="$(claude_code_proof_marker)"
+  proof_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TEXT:-$marker Make this setting con}"
+  if [[ "$proof_text" != *"$marker"* ]]; then
+    echo "Claude Code proof text must include $marker." >&2
+    exit 2
+  fi
+  if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+    echo "Claude Code proof text must be a single line." >&2
+    exit 2
+  fi
+  printf '%s\n' "$proof_text"
+}
+
 claude_proof_marker() {
   printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_PROOF_MARKER:-AUTOCOMPLETE_LAB_CLAUDE_PROOF}"
 }
@@ -9518,6 +9533,9 @@ describe_plan() {
         echo "Safety: Claude Code model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
         echo "Safety: Claude Code model latency proof tags the runtime launch with scenario claude-code-model-latency so generic terminal samples cannot satisfy the strict selector."
         echo "Safety: pass --manual-gate to continue. The helper never presses Tab, Enter, or full accept; it runs the prompt no-submit gate on the same trace slice."
+      elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "terminal" ]]; then
+        echo "Plan: manual-gated automated Terminal-host Claude Code proof. The script opens a fresh title-marked disposable Terminal Claude Code prompt, types marked proof text, presses Tab once, and validates one-word no-submit proof on the same trace slice."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; iTerm2/Ghostty stay manual until they have their own disposable launch path."
       else
         echo "Plan: manual-gated terminal-host Claude Code proof. The script validates one-word Tab accept without submit after you run it."
       fi
@@ -9895,6 +9913,64 @@ run_codex() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh codex --check --visual
+}
+
+run_claude_code_terminal_host_smoke() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "terminal" ]]; then
+    run_manual_gated
+    return
+  fi
+
+  require_claude_code_host_if_requested
+
+  local runtime_start_line start_line trace_start_line proof_text marker proof_dir
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  proof_text="$(claude_code_smoke_proof_text)"
+  marker="$(claude_code_proof_marker)"
+  proof_dir="$(make_claude_code_terminal_proof_dir)"
+  CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+
+  prepare_temporary_app_enablement
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Claude Code Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Claude Code runtime readiness" 60 "$SKIP_BUILD"
+
+  cleanup_stale_claude_code_terminal_proofs
+  open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
+  wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  wait_for_claude_code_terminal_prompt
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  type_claude_code_terminal_raw_smoke_text "$proof_text"
+  assert_claude_code_terminal_prompt_ready "$proof_text"
+  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.anthropic.claude-code" "Claude Code Terminal proof suggestion" 20
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.anthropic.claude-code" "Claude Code Terminal proof"
+  assert_frontmost_app "Terminal" "Claude Code Terminal proof"
+  sleep 0.2
+  press_key_code 48
+  wait_for_log_fields "$start_line" "Claude Code Terminal Tab acceptance" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}" \
+    "keyboard-action" \
+    "app=com.anthropic.claude-code" \
+    "key=tab" \
+    "action=acceptNextWord" \
+    "handled=true"
+  wait_for_log_pattern "$start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code Terminal successful insertion" 12
+  wait_for_log_pattern "$start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code Terminal verified insertion" 12
+  assert_claude_code_terminal_prompt_retains_marker
+
+  sleep 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+  AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$(claude_code_host_proof_label)" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT="$CLAUDE_CODE_HOST_VARIANT" \
+    ./script/manual_smoke_session.sh claude-code --check --visual
 }
 
 run_codex_model_latency() {
@@ -12455,7 +12531,7 @@ case "$APP" in
     if [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]]; then
       run_claude_code_model_latency
     else
-      run_manual_gated
+      run_claude_code_terminal_host_smoke
     fi
     ;;
   claude)

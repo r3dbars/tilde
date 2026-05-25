@@ -1428,6 +1428,15 @@ if ! grep -F "Claude Code proof label: claude-code-terminal" "$TMP_DIR/claude-co
   echo "real app smoke self-test did not print the Claude Code Terminal proof label" >&2
   exit 1
 fi
+if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the automated Terminal-host Claude Code proof" >&2
+  exit 1
+fi
+if ! grep -F "run_claude_code_terminal_host_smoke" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code to automate proof and confirm the no-submit marker" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh claude-code-model-latency --dry-run >"$TMP_DIR/claude-code-model-latency.txt"
 if ! grep -F "terminal-host Claude Code model latency proof" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
@@ -1553,6 +1562,23 @@ if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/nu
    ! grep -F "check_prompt_app_proof.sh" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "claude-code-model-latency" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code model latency helper, typing, prompt proof, and scenario wiring" >&2
+  exit 1
+fi
+if ! grep -F '"source": "cgUnicodeKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"reason": "unicode-unverified-mutated-input"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgHardwareKeyEvents"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"reason": "terminal-pasteboard-fallback-disabled"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal insertion to fall through safely after unverified Unicode key events" >&2
+  exit 1
+fi
+if grep -F "accessibilityMenuPaste" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   grep -F "postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   grep -F "pasteboard-prepare-start" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal fallback not to use blocking pasteboard or AX menu paths" >&2
+  exit 1
+fi
+if awk '/if Self\.postUnicodeTextKeyEvents\(acceptedText\)/ { in_unicode = 1 } /let pasteboard = NSPasteboard\.general/ { in_unicode = 0 } in_unicode && /return verified/ { found = 1 } END { exit found ? 0 : 1 }' Sources/AutocompleteLabApp/App/AppDelegate.swift; then
+  echo "real app smoke self-test expected unverified Claude Code Terminal Unicode insertion not to skip paste fallback" >&2
   exit 1
 fi
 if grep -F "press_key_code 48" script/real_app_smoke.sh | grep -F "claude_code" >/dev/null; then

@@ -9181,6 +9181,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let expectedProofInputText = lastTextSnapshot.textBeforeCursor
             + acceptedText
             + lastTextSnapshot.textAfterCursor
+        let originalProofInputText = lastTextSnapshot.textBeforeCursor
+            + lastTextSnapshot.textAfterCursor
 
         if accessibilityClient.insertText(acceptedText, allowDescendantTextFallback: false) {
             let verified = verifyClaudeCodeTerminalHostProofInsertion(
@@ -9216,60 +9218,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "verified": String(verified)
                 ]
             )
-            return verified
-        }
-
-        let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
-        func restoreOriginalPasteboard() {
-            pasteboard.clearContents()
-            if !originalItems.isEmpty {
-                pasteboard.writeObjects(originalItems)
+            if verified {
+                return true
             }
-        }
-        pasteboard.clearContents()
-        guard pasteboard.setString(acceptedText, forType: .string) else {
-            restoreOriginalPasteboard()
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": "pasteboard-set-failed",
-                    "source": "helperPaste"
+                    "source": "cgUnicodeKeyEventsBaseline",
+                    "verified": String(promptStayedUnchanged)
                 ]
             )
-            return false
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "unicode-unverified-mutated-input",
+                        "source": "cgUnicodeKeyEventsBaseline"
+                    ]
+                )
+                return false
+            }
         }
-        let fallbackChangeCount = pasteboard.changeCount
 
-        let posted = Self.postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
-            processIdentifier: frontmostApp.processIdentifier
-        )
-        let verified = posted
-            && verifyClaudeCodeTerminalHostProofInsertion(
+        if Self.postHardwareTextKeyEvents(acceptedText) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: expectedProofInputText,
                 frontmostApp: frontmostApp,
-                profile: currentProfile
+                profile: currentProfile,
+                attempts: 24
             )
-        schedulePasteboardRestore(
-            insertedText: acceptedText,
-            fallbackChangeCount: fallbackChangeCount,
-            originalItems: originalItems
-        )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgHardwareKeyEvents",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "hardware-unverified-mutated-input",
+                        "source": "cgHardwareKeyEvents"
+                    ]
+                )
+                return false
+            }
+        }
+
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                "posted": String(posted),
-                "source": "accessibilityMenuPaste",
-                "verified": String(verified)
+                "posted": "false",
+                "reason": "terminal-pasteboard-fallback-disabled",
+                "source": "failClosed"
             ]
         )
-
-        return verified
+        return false
     }
 
     private func verifyClaudeCodeTerminalHostProofInsertion(
@@ -9330,35 +9360,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    nonisolated private static func postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
-        processIdentifier: pid_t
-    ) -> Bool {
-        let appElement = AXUIElementCreateApplication(processIdentifier)
-        guard let menuBarValue = axAttribute(appElement, kAXMenuBarAttribute),
-              let editItem = axDescendant(
-                  in: menuBarValue as! AXUIElement,
-                  title: "Edit",
-                  role: kAXMenuBarItemRole as String,
-                  maxDepth: 2
-              ) else {
-            return false
-        }
-
-        AXUIElementPerformAction(editItem, kAXPressAction as CFString)
-        Thread.sleep(forTimeInterval: 0.05)
-
-        guard let pasteItem = axDescendant(
-            in: editItem,
-            title: "Paste",
-            role: kAXMenuItemRole as String,
-            maxDepth: 4
-        ) else {
-            return false
-        }
-
-        return AXUIElementPerformAction(pasteItem, kAXPressAction as CFString) == .success
-    }
-
     nonisolated private static func postUnicodeTextKeyEvents(_ text: String) -> Bool {
         guard !text.isEmpty else {
             return false
@@ -9374,6 +9375,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         characters.withUnsafeMutableBufferPointer { buffer in
             keyDown.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
             keyUp.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
+
+        return true
+    }
+
+    nonisolated private static func postHardwareTextKeyEvents(_ text: String) -> Bool {
+        guard let strokes = KeyboardTextEventPlan.hardwareKeyStrokes(for: text),
+              let source = CGEventSource(stateID: .hidSystemState) else {
+            return false
+        }
+
+        for stroke in strokes {
+            guard let keyDown = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: stroke.virtualKey,
+                keyDown: true
+            ),
+                  let keyUp = CGEvent(
+                      keyboardEventSource: source,
+                      virtualKey: stroke.virtualKey,
+                      keyDown: false
+                  ) else {
+                return false
+            }
+
+            keyDown.flags = stroke.flags
+            keyUp.flags = stroke.flags
             keyDown.post(tap: .cghidEventTap)
             keyUp.post(tap: .cghidEventTap)
         }
