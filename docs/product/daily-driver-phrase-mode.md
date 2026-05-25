@@ -234,7 +234,10 @@ create the subjective proof by itself, but it prevents a tiny, annoying, or
 never-reached-for trace from being counted as a daily-driver pass.
 After the human fills the Manual Trust Row, `review --report` gates the completed
 report too: the automated gate must pass, the row must be filled, the user must
-say they reached for it, and they must say they would keep it on tomorrow.
+say they reached for it, and they must say they would keep it on tomorrow. The
+same report now carries a redacted safety snapshot for prompt no-submit and
+sensitive-field suppression, so a daily-driver pass cannot hide stale
+wrong-field safety.
 
 Wrong-field safety now has both prompt-app and sensitive-field gates in the
 default smoke path. Prompt no-submit self-tests cover accidental submit, send
@@ -261,7 +264,7 @@ it waits.
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; local quality audit also covers 9 unsafe/sensitive suppressions | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, redacted typing-feel score, accepted-kept / shown reach gate, and completed manual-review gate, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, redacted typing-feel score, accepted-kept / shown reach gate, prompt/sensitive safety snapshot, and completed manual-review gate, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 
