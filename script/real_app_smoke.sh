@@ -12076,7 +12076,7 @@ run_textedit_default_model_latency() {
       "mlx-completion-timing" \
       "app=com.apple.TextEdit" \
       "mode=phraseContinuation" \
-      "maxTokens=11"
+      "maxTokens=14"
     if wait_for_log_fields_optional "$sample_start" 8 \
       "suggestion-presented" \
       "app=com.apple.TextEdit" \
