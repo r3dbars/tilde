@@ -49,6 +49,7 @@ struct SuggestionStatusTextTests {
     func notShownStatusExplainsTrustBlockers() {
         #expect(SuggestionStatusText.notShown(reason: "missing-anchor") == "Blocked: no cursor position")
         #expect(SuggestionStatusText.notShown(reason: "repeated-miss") == "Blocked: repeated miss")
+        #expect(SuggestionStatusText.notShown(reason: "fast-phrase-learning-restraint") == "Quiet: recent rejects")
         #expect(SuggestionStatusText.notShown(reason: "engine-error") == "Blocked: model error")
         #expect(SuggestionStatusText.notShown(reason: "stale-after-keydown") == "Blocked: stale text")
     }

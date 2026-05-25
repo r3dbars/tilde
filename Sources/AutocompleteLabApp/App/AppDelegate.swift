@@ -6149,30 +6149,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
 
-                presentSuggestion(
-                    fastSuggestion,
-                    suggestionID: suggestionID,
+                let acceptedAndKeptSignal = acceptedAndKeptSignal(
                     request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: 0,
-                    triggerReason: "predictive-phrase-fallback",
-                    requestTicket: requestTicket,
-                    candidateSelectionMetadata: fastSelectionMetadata,
-                    refreshBeforePresenting: false
+                    fieldClassification: fieldClassification,
+                    profile: profile
                 )
-                return
+                let learningDecision = suggestionOrchestrator.fastPhraseFallbackLearningDecision(
+                    acceptedAndKeptSignal: acceptedAndKeptSignal,
+                    probabilityThreshold: acceptedAndKeptLearning.probabilityThreshold(for: request.mode)
+                )
+                let fastPresentationMetadata = fastSelectionMetadata
+                    .merging(learningDecision.metadata) { current, _ in current }
+                if learningDecision.shouldSuppress {
+                    let reason = learningDecision.reason ?? "fast-phrase-learning-restraint"
+                    fastPhraseFallbackMetadata = [
+                        "fastPhraseFallbackChecked": "true",
+                        "fastPhraseFallbackOutcome": reason
+                    ]
+                    .merging(fastPresentationMetadata) { current, _ in current }
+                    RawAutocompleteTraceLog.shared.record(
+                        type: .suggestionSuppressed,
+                        suggestionID: suggestionID,
+                        appBundleIdentifier: appBundleIdentifier,
+                        fieldIdentity: fieldIdentityDescription,
+                        requestMode: request.mode.rawValue,
+                        triggerReason: "predictive-phrase-fallback",
+                        textBeforeCursor: request.textBeforeCursor,
+                        textAfterCursor: request.textAfterCursor,
+                        latencyMilliseconds: 0,
+                        reason: reason,
+                        metadata: [
+                            "renderMode": renderMode.rawValue
+                        ]
+                        .merging(fastPresentationMetadata) { current, _ in current }
+                        .merging(requestMetadata) { current, _ in current }
+                    )
+                    recordSuggestionEvent(
+                        "suggestion-blocked",
+                        context: context,
+                        profile: profile,
+                        metadata: [
+                            "reason": reason,
+                            "triggerReason": "predictive-phrase-fallback"
+                        ]
+                        .merging(learningDecision.metadata) { current, _ in current }
+                    )
+                    setSuggestionDecision("Queued: model phrase after instant learning restraint")
+                } else {
+                    presentSuggestion(
+                        fastSuggestion,
+                        suggestionID: suggestionID,
+                        request: request,
+                        context: context,
+                        profile: profile,
+                        fieldIdentity: fieldIdentity,
+                        renderMode: renderMode,
+                        latencyMilliseconds: 0,
+                        triggerReason: "predictive-phrase-fallback",
+                        requestTicket: requestTicket,
+                        candidateSelectionMetadata: fastPresentationMetadata,
+                        refreshBeforePresenting: false
+                    )
+                    return
+                }
             }
 
             let fastPhraseFallbackOutcome = fastSelection.suppressionReason ?? "no-suggestion"
-            fastPhraseFallbackMetadata = [
-                "fastPhraseFallbackChecked": "true",
-                "fastPhraseFallbackOutcome": fastPhraseFallbackOutcome
-            ]
-            .merging(fastSelectionMetadata) { current, _ in current }
-            setSuggestionDecision("Queued: model phrase after instant \(fastPhraseFallbackOutcome)")
+            if fastPhraseFallbackMetadata.isEmpty {
+                fastPhraseFallbackMetadata = [
+                    "fastPhraseFallbackChecked": "true",
+                    "fastPhraseFallbackOutcome": fastPhraseFallbackOutcome
+                ]
+                .merging(fastSelectionMetadata) { current, _ in current }
+                setSuggestionDecision("Queued: model phrase after instant \(fastPhraseFallbackOutcome)")
+            }
         } else if requestMode == .phraseContinuation,
                   disablesFastPhraseFallbackForProof {
             DiagnosticsLog.shared.record(

@@ -1,6 +1,12 @@
 import Foundation
 import AutocompleteLabCore
 
+struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
+    let shouldSuppress: Bool
+    let reason: String?
+    let metadata: [String: String]
+}
+
 @MainActor
 final class SuggestionOrchestrator {
     private static let maximumFinalModelDisplayLatencyMilliseconds = 750
@@ -462,6 +468,33 @@ final class SuggestionOrchestrator {
         )
     }
 
+    nonisolated func fastPhraseFallbackLearningDecision(
+        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal,
+        probabilityThreshold: Double,
+        minimumSamples: Int = 6,
+        minimumLearningRestraint: Double = 0.35
+    ) -> FastPhraseFallbackLearningDecision {
+        let boundedMinimumSamples = max(0, minimumSamples)
+        let boundedMinimumLearningRestraint = max(0, minimumLearningRestraint)
+        let shouldSuppress = acceptedAndKeptSignal.sampleCount >= boundedMinimumSamples
+            && acceptedAndKeptSignal.probability < probabilityThreshold
+            && acceptedAndKeptSignal.learningRestraint >= boundedMinimumLearningRestraint
+        let reason = shouldSuppress ? "fast-phrase-learning-restraint" : nil
+        var metadata = acceptedAndKeptSignal.traceMetadata
+        metadata["fastPhraseFallbackLearningThreshold"] = Self.traceDecimal(probabilityThreshold)
+        metadata["fastPhraseFallbackLearningMinimumSamples"] = String(boundedMinimumSamples)
+        metadata["fastPhraseFallbackLearningMinimumRestraint"] = Self.traceDecimal(boundedMinimumLearningRestraint)
+        metadata["fastPhraseFallbackLearningSuppressed"] = String(shouldSuppress)
+        if let reason {
+            metadata["fastPhraseFallbackLearningReason"] = reason
+        }
+        return FastPhraseFallbackLearningDecision(
+            shouldSuppress: shouldSuppress,
+            reason: reason,
+            metadata: metadata
+        )
+    }
+
     nonisolated func appModelResultCandidateSelectionMetadata(
         for suggestion: CompletionSuggestion
     ) -> [String: String] {
@@ -681,6 +714,10 @@ final class SuggestionOrchestrator {
         }
 
         return displayComponent(base + acceptedAndKeptSignal.utilityAdjustment)
+    }
+
+    nonisolated private static func traceDecimal(_ value: Double) -> String {
+        String(format: "%.3f", value)
     }
 
     nonisolated private static func displayStyleFit(

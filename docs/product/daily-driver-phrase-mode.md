@@ -324,15 +324,22 @@ continuations. This makes the instant path less like canned autocomplete and
 more able to finish a real thought, while still staying off prompt, search,
 form, and code profiles.
 
+The instant phrase path now listens to accepted-and-kept learning too. After
+enough local evidence that accepted instant phrases are not being kept for the
+current app, field kind, request mode, and writing profile, SteadyType skips
+that zero-latency canned phrase and queues the model phrase instead. The trace
+metadata stays redacted and the live status can say `Quiet: recent rejects`, so
+the app is less mysterious when it chooses restraint.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
-| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-6 word daily-driver contexts, including punctuation, list-shaped writing, complaint language, finish-my-thought sentence shapes, reusable writing-intent endings, and guarded connector-thought phrases like because/so-that/which-means/the-fix-is; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
+| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-6 word daily-driver contexts, including punctuation, list-shaped writing, complaint language, finish-my-thought sentence shapes, reusable writing-intent endings, and guarded connector-thought phrases like because/so-that/which-means/the-fix-is; the same instant path now respects accepted-and-kept restraint before showing again after repeated local rejects; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and status preflight expose instant phrase vs model-backed source mix plus live redacted typing-feel score | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and a preflight status command that previews sample-gate progress, trust-killer counts, and typing-feel score while naming the next dogfood action; the status line also explains common no-show outcomes instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with suggestion quality 4-5, and a preflight status command that previews sample-gate progress, trust-killer counts, and typing-feel score while naming the next dogfood action; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
 ## Long-Running Loop
 
