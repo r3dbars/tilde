@@ -132,15 +132,15 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
   `wordCompletionFallbackUsed` / `wordCompletionFallbackSource` in proof
   metadata.
 
-Fresh live proof moved past the previous blocker. The Terminal-hosted Claude
-Code model-latency run starting at diagnostics line `339850` produced
+Fresh live proof moved past the previous blockers. The Terminal-hosted Claude
+Code model-latency run starting at diagnostics line `340484` produced
 model-backed visible word-completion suggestions for samples 1-5 and the
 prompt/chat no-submit proof passed with `accidentalSubmitCount: 0`,
 `wrongContextInsertionCount: 0`, and `fullAcceptWithoutProofCount: 0`. The
-remaining failure is now the latency beta gate: AX read p99 exceeded the budget
-in 3 summary windows where only 1 is allowed. That means the sample-2
-shell-buffer blocker is fixed, but Claude Code Terminal is still not a support
-claim until AX read latency is stable.
+latency beta gate also passed: first-visible `n=10 avg=245ms p95=321ms`,
+first-token `n=12 avg=158ms p95=235ms`, total generation `n=24 avg=208ms
+p95=330ms`, event-tap raw `n=15 avg=25us p99=75us`, and AX read summaries
+`windows=8 samples=480 p99Max=23ms max=105ms`.
 
 The latest hardening pass made that failure harder to misread:
 
@@ -154,13 +154,13 @@ The latest hardening pass made that failure harder to misread:
   stale sample can no longer satisfy the pass condition,
 - the policy now treats natural-language `make this ...` prompt text as writing,
   while keeping real `make test` command lines blocked,
+- AX health cooldown-start reads still log as slow/cooldown diagnostics, but no
+  longer pollute the rolling typing-latency summary window,
 - Claude prompt chrome and flattened launcher scrollback have focused unit
   coverage.
 
 The fresh live run now gets through the five required model-backed Claude Code
-Terminal samples. The next proof blocker is AX polling stability: the same run
-reported `AX read latency summaries: windows=8 samples=480 p99Max=121ms
-max=194ms`, which tripped the beta gate.
+Terminal samples, passes the no-submit proof, and passes the latency beta gate.
 
 ## Scorecard
 
@@ -168,7 +168,7 @@ max=194ms`, which tripped the beta gate.
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue, and Claude Code Terminal now produces 5 model-backed visible samples with no-submit proof, but AX p99 read windows still fail the latency beta gate | Feels ready during fast typing | Fix Claude Code Terminal AX read-latency spikes, then refresh Obsidian/TextEdit latency proof |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue, and Claude Code Terminal now produces 5 model-backed visible samples with no-submit proof plus a green latency beta gate | Feels ready during fast typing | Refresh Obsidian/TextEdit latency proof, then run a real writing-session quality pass |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 

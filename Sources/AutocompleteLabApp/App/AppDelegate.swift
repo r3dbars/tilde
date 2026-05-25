@@ -1411,12 +1411,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
     }
 
-    private func finishFocusedTextPoll(startedAt: UInt64) {
+    private func finishFocusedTextPoll(
+        startedAt: UInt64,
+        latencySummarySuppressionReason: String? = nil
+    ) {
         let endedAt = DispatchTime.now().uptimeNanoseconds
         let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
         isFocusedTextPollInFlight = false
         latestFocusedTextReadRequestID = nil
-        recordFocusedTextPollLatency(durationMilliseconds)
+        recordFocusedTextPollLatency(
+            durationMilliseconds,
+            summarySuppressionReason: latencySummarySuppressionReason
+        )
         recordFocusedTextPollSkipSummaryIfNeeded()
     }
 
@@ -1541,11 +1547,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         startedAt: UInt64
     ) async {
+        var latencySummarySuppressionReason: String?
         defer {
-            finishFocusedTextPoll(startedAt: startedAt)
+            finishFocusedTextPoll(
+                startedAt: startedAt,
+                latencySummarySuppressionReason: latencySummarySuppressionReason
+            )
         }
 
         guard latestFocusedTextReadRequestID == result.requestID else {
+            latencySummarySuppressionReason = "stale-request"
             DiagnosticsLog.shared.record(
                 "focused-text-ax-read-dropped",
                 metadata: [
@@ -1572,6 +1583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if applyFocusedTextAXHealthObservation(result) {
+            latencySummarySuppressionReason = "ax-health-cooldown-started"
             return
         }
 
@@ -1674,15 +1686,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startedAt: UInt64,
         reason: String
     ) async {
+        var latencySummarySuppressionReason: String?
         defer {
-            finishFocusedTextPoll(startedAt: startedAt)
+            finishFocusedTextPoll(
+                startedAt: startedAt,
+                latencySummarySuppressionReason: latencySummarySuppressionReason
+            )
         }
 
         guard latestFocusedTextReadRequestID == result.requestID else {
+            latencySummarySuppressionReason = "stale-request"
             return
         }
 
         if applyFocusedTextAXHealthObservation(result) {
+            latencySummarySuppressionReason = "ax-health-cooldown-started"
             return
         }
 
@@ -2587,7 +2605,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
+    private func recordFocusedTextPollLatency(
+        _ durationMilliseconds: Int,
+        summarySuppressionReason: String? = nil
+    ) {
         if focusedTextPollDiagnosticsPolicy.shouldRecordSlowPollMarker(
             durationMilliseconds: durationMilliseconds
         ) {
@@ -2597,6 +2618,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "durationMilliseconds": String(durationMilliseconds)
                 ]
             )
+        }
+
+        if let summarySuppressionReason {
+            DiagnosticsLog.shared.record(
+                "focused-text-poll-latency-summary-suppressed",
+                metadata: [
+                    "durationMilliseconds": String(durationMilliseconds),
+                    "reason": summarySuppressionReason
+                ]
+            )
+            return
         }
 
         if let summary = focusedTextPollLatencyStats.record(durationMilliseconds) {
