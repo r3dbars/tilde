@@ -219,15 +219,22 @@ overall `100/100`, relevance `100/100`, 15 display-eligible continuations, and
 word suffixes, and obvious unsafe/sensitive suppression, but it does not replace
 a real writing-session dogfood pass.
 
+The real writing-session pass now has a repeatable redacted wrapper:
+`./script/daily_driver_dogfood_session.sh start` saves a trace line mark, and
+`./script/daily_driver_dogfood_session.sh finish` writes a local report under
+`dist/daily-driver-dogfood/` with the non-annoyance gate, trace eval summary,
+line bounds, and a manual trust row. This does not create the subjective proof
+by itself, but it makes the next dogfood session auditable instead of vibes-only.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 18/18 | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
-| Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Dogfood a real writing session, then expand only with exact proof |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session quality pass while typing fast |
+| Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
-| Daily-driver feel | Core proof grid is green, but it still needs a full writing-session dogfood pass | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper exists, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, then finish the dogfood report |
 
 ## Long-Running Loop
 
