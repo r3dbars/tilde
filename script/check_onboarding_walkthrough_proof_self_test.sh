@@ -53,6 +53,12 @@ if ! grep -F "./script/build_and_run.sh --verify" "$TMP_DIR/template.txt" >/dev/
   exit 1
 fi
 
+if ! grep -F "./script/onboarding_walkthrough_evidence_helper.py --print-commands" "$TMP_DIR/template.txt" >/dev/null; then
+  echo "onboarding proof self-test missing evidence helper command in template output" >&2
+  cat "$TMP_DIR/template.txt" >&2
+  exit 1
+fi
+
 if ! grep -F "~/Library/Logs/SteadyType/diagnostics.log" "$TMP_DIR/template.txt" >/dev/null; then
   echo "onboarding proof self-test missing diagnostics path in template output" >&2
   cat "$TMP_DIR/template.txt" >&2
@@ -83,6 +89,11 @@ fi
 
 if ! grep -F "./script/build_and_run.sh --verify" docs/product/onboarding-walkthrough-proof.md >/dev/null; then
   echo "onboarding proof self-test missing build verification command in runbook" >&2
+  exit 1
+fi
+
+if ! grep -F "./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready" docs/product/onboarding-walkthrough-proof.md >/dev/null; then
+  echo "onboarding proof self-test missing evidence helper before-delete command in runbook" >&2
   exit 1
 fi
 

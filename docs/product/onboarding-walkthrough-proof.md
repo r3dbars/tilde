@@ -50,15 +50,29 @@ The row still needs real observed values. Update the time, clean macOS user, and
 
 1. Run `./script/build_and_run.sh --verify`.
 2. Open Settings and complete Practice in TextEdit.
-3. Confirm Accessibility, local model ready, TextEdit opened, `Tab`, `Esc`, Pause, and Delete Local Logs.
-4. Add one real row to the checklist using line ranges or counters, not raw typed text.
-5. Run `./script/check_onboarding_walkthrough_proof.py`.
+3. Confirm Accessibility, local model ready, TextEdit opened, `Tab`, `Esc`, and Pause.
+4. Before clicking Delete Local Logs, run:
+
+```bash
+./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready
+```
+
+5. Click Delete Local Logs from Practice.
+6. After deletion, run:
+
+```bash
+./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready
+```
+
+7. Add one real row to the checklist using helper line ranges or counters, not raw typed text.
+8. Run `./script/check_onboarding_walkthrough_proof.py`.
 
 ## Useful Commands
 
 ```bash
 date -u +"%Y-%m-%dT%H:%M:%SZ"
 git rev-parse --short=12 HEAD
+./script/onboarding_walkthrough_evidence_helper.py --print-commands
 ./script/check_onboarding_walkthrough_proof.py --print-template
 ./script/check_onboarding_walkthrough_proof.py
 ```

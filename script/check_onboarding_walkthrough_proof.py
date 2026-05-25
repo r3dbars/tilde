@@ -338,6 +338,8 @@ def recording_template() -> str:
             "Copyable proof commands:",
             "```bash",
             "./script/build_and_run.sh --verify",
+            "./script/onboarding_walkthrough_evidence_helper.py --print-commands",
+            "# During the real clean-user walkthrough, run the helper before and after Delete Local Logs.",
             "./script/check_onboarding_walkthrough_proof.py --print-template",
             "# After the real walkthrough row is recorded:",
             "./script/check_onboarding_walkthrough_proof.py",
