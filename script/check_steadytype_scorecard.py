@@ -29,6 +29,9 @@ REQUIRED_AREAS = [
     "test/proof coverage",
 ]
 
+DAILY_DRIVER_LOCAL_QUALITY_REPORT = "docs/evals/daily-driver-local-quality-audit-2026-05-25.md"
+DAILY_DRIVER_LOCAL_QUALITY_GATE = "./script/check_daily_driver_local_quality_audit_report.sh"
+
 EVIDENCE_MARKERS = (
     "`./script/",
     "`script/",
@@ -598,6 +601,7 @@ def validate_scorecard(
     overall = parse_overall(source, failures)
     rows = parse_rows(source, failures)
     seen: dict[str, tuple[int, str]] = {}
+    product_scorecard = "# SteadyType Product Scorecard" in source
 
     for row in rows:
         raw_area = row["area"]
@@ -638,6 +642,22 @@ def validate_scorecard(
             if unresolved_terms:
                 joined = ", ".join(dict.fromkeys(unresolved_terms))
                 failures.append(f"{raw_area}: 100/100 requires resolved row gates; unresolved language found: {joined}")
+
+        if product_scorecard and area == "suggestion quality":
+            if DAILY_DRIVER_LOCAL_QUALITY_GATE not in evidence:
+                failures.append(
+                    f"{raw_area}: evidence must name {DAILY_DRIVER_LOCAL_QUALITY_GATE} now that the "
+                    "daily-driver audit report is checked in"
+                )
+            if DAILY_DRIVER_LOCAL_QUALITY_REPORT not in evidence:
+                failures.append(
+                    f"{raw_area}: evidence must name {DAILY_DRIVER_LOCAL_QUALITY_REPORT} now that the "
+                    "daily-driver audit report is checked in"
+                )
+            if "local_quality_audit.py" in next_proof or "local quality audit" in next_proof.lower():
+                failures.append(
+                    f"{raw_area}: next proof must move past the checked local audit toward real writing dogfood"
+                )
 
     missing = [area for area in REQUIRED_AREAS if area not in seen]
     extra = [raw for key, (_, raw) in seen.items() if key not in REQUIRED_AREAS]

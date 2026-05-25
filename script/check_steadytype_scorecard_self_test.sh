@@ -17,6 +17,42 @@ if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/pass.txt" >/dev/null; the
   exit 1
 fi
 
+STALE_SUGGESTION_QUALITY="$TMP_DIR/stale-suggestion-quality.md"
+python3 - "$SCORECARD" "$STALE_SUGGESTION_QUALITY" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace(
+    "`./script/check_daily_driver_local_quality_audit_report.sh`: passed for `docs/evals/daily-driver-local-quality-audit-2026-05-25.md` with 45 disposable rows, 36 display-eligible rows, 9 expected suppression rows, 100/100 overall, 100/100 relevance, and no raw output persisted.",
+    "`./script/check_quality_eval.sh`: passed.",
+    1,
+)
+source = source.replace(
+    "Run a real writing dogfood session, fill the Manual Trust Row, then gate it with `./script/daily_driver_dogfood_session.sh review --report <report>`.",
+    "Add a short `AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 ./script/local_quality_audit.py` report without durable raw prompt text.",
+    1,
+)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_SUGGESTION_QUALITY" >"$TMP_DIR/stale-suggestion-quality.txt" 2>&1; then
+  echo "scorecard self-test expected stale suggestion-quality proof to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Suggestion quality: evidence must name ./script/check_daily_driver_local_quality_audit_report.sh" \
+  "Suggestion quality: evidence must name docs/evals/daily-driver-local-quality-audit-2026-05-25.md" \
+  "Suggestion quality: next proof must move past the checked local audit"
+do
+  if ! grep -F "$expected" "$TMP_DIR/stale-suggestion-quality.txt" >/dev/null; then
+    echo "scorecard self-test missing stale suggestion-quality failure: $expected" >&2
+    cat "$TMP_DIR/stale-suggestion-quality.txt" >&2
+    exit 1
+  fi
+done
+
 MANUAL_LIVE="$TMP_DIR/manual-live.txt"
 PROOF_LIVE="$TMP_DIR/proof-live.txt"
 LATENCY_SELECTOR_LIVE="$TMP_DIR/latency-selector-live.txt"
