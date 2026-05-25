@@ -130,6 +130,12 @@ public struct CommonPhraseContinuationSelection: Equatable, Sendable {
     }
 }
 
+private struct CommonPhraseContinuationCandidate: Equatable, Sendable {
+    let continuation: String
+    let matchLabel: String
+    let score: Double
+}
+
 public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
     public let priors: [CommonPhraseContinuationPrior]
 
@@ -183,7 +189,7 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             )
         }
 
-        guard let prior = bestPrior(for: context) else {
+        guard let candidate = bestCandidate(for: context) else {
             return CommonPhraseContinuationSelection(
                 suggestion: nil,
                 matchedContextSuffix: nil,
@@ -194,16 +200,28 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
 
         let clampedMaxWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         let suggestion = CompletionSuggestion(
-            text: " \(prior.continuation)",
+            text: " \(candidate.continuation)",
             maxVisibleWords: clampedMaxWords
         )
 
         return CommonPhraseContinuationSelection(
             suggestion: suggestion,
-            matchedContextSuffix: prior.contextSuffix,
-            score: prior.score,
+            matchedContextSuffix: candidate.matchLabel,
+            score: candidate.score,
             suppressionReason: nil
         )
+    }
+
+    private func bestCandidate(for context: String) -> CommonPhraseContinuationCandidate? {
+        if let prior = bestPrior(for: context) {
+            return CommonPhraseContinuationCandidate(
+                continuation: prior.continuation,
+                matchLabel: prior.contextSuffix,
+                score: prior.score
+            )
+        }
+
+        return intentPatternCandidate(for: context)
     }
 
     private func bestPrior(for context: String) -> CommonPhraseContinuationPrior? {
@@ -219,6 +237,49 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
                 return $0.score > $1.score
             }
             .first
+    }
+
+    private func intentPatternCandidate(for context: String) -> CommonPhraseContinuationCandidate? {
+        let words = words(in: context)
+        guard words.count >= 2 else {
+            return nil
+        }
+
+        if hasSuffix(["what", "i", "mean", "is"], in: words) {
+            return intentCandidate("what-i-mean-is", "this should feel natural")
+        }
+        if hasAnySuffix([["my", "point", "is"], ["the", "point", "is"]], in: words) {
+            return intentCandidate("point-is", "this should feel clear")
+        }
+        if hasSuffix(["better", "if", "it"], in: words),
+           words.contains(where: { ["app", "draft", "feature", "message", "suggestion", "this"].contains($0) }) {
+            return intentCandidate("better-if-it", "predicted the next phrase")
+        }
+        if hasSuffix(["we", "need", "to"], in: words) {
+            return intentCandidate("we-need-to", "make this feel simpler")
+        }
+        if hasSuffix(["i", "need", "to"], in: words) {
+            return intentCandidate("i-need-to", "say this more clearly")
+        }
+        if hasSuffix(["next", "step", "is"], in: words) {
+            return intentCandidate("next-step-is", "to make this concrete")
+        }
+        if hasSuffix(["the", "goal", "is"], in: words) {
+            return intentCandidate("the-goal-is", "to make writing faster")
+        }
+        if hasSuffix(["can", "you"], in: words) {
+            return intentCandidate("can-you", "take a look at")
+        }
+
+        return nil
+    }
+
+    private func intentCandidate(_ label: String, _ continuation: String) -> CommonPhraseContinuationCandidate {
+        CommonPhraseContinuationCandidate(
+            continuation: continuation,
+            matchLabel: "intent-\(label)",
+            score: 0.27
+        )
     }
 
     private func allowsPrediction(for behaviorProfileID: AutocompleteBehaviorProfileID?) -> Bool {
@@ -237,5 +298,22 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             .replacingOccurrences(of: #"[^\p{L}\p{N}]+"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func words(in text: String) -> [String] {
+        normalizedPhrase(text)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+    }
+
+    private func hasAnySuffix(_ suffixes: [[String]], in words: [String]) -> Bool {
+        suffixes.contains { hasSuffix($0, in: words) }
+    }
+
+    private func hasSuffix(_ suffix: [String], in words: [String]) -> Bool {
+        guard words.count >= suffix.count else {
+            return false
+        }
+        return Array(words.suffix(suffix.count)) == suffix
     }
 }
