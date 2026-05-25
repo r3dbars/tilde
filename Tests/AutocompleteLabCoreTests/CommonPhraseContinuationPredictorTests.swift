@@ -36,6 +36,31 @@ struct CommonPhraseContinuationPredictorTests {
         #expect(secondSmokeSelection.matchedContextSuffix == "and stays")
     }
 
+    @Test("Predicts daily-driver writing phrases instantly")
+    func predictsDailyDriverWritingPhrasesInstantly() {
+        let cases: [(String, String, String)] = [
+            ("Obsidian scratchpad: In Obsidian this note should capture", " the key details clearly", "in obsidian this note should capture"),
+            ("While I am typing fast it should", " stay short and clear", "while i am typing fast it should"),
+            ("The suggestion should be less timid and", " more confident about next words", "the suggestion should be less timid and"),
+            ("The next suggestion should be a", " short useful phrase", "the next suggestion should be a"),
+            ("The action item needs an", " owner and deadline", "the action item needs an")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 3)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
     func blocksUnsafeProfiles() {
         #expect(predictor.suggestion(
