@@ -2664,6 +2664,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if focusedTextAXHealthSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
             during: cooldown,
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionHostBundleIdentifier: currentSuggestionHostBundleIdentifierForVisibility(),
             currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
             currentFieldIdentity: currentFieldIdentity,
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
@@ -2776,6 +2777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
             if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
                 currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                currentSuggestionHostBundleIdentifier: currentSuggestionHostBundleIdentifierForVisibility(),
                 currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
                 currentFieldIdentity: currentFieldIdentity,
                 frontmostBundleIdentifier: frontmostBundleIdentifier,
@@ -2839,6 +2841,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return max(0, Int(now.timeIntervalSince(currentSuggestionPresentedAt) * 1000))
+    }
+
+    private func currentSuggestionHostBundleIdentifierForVisibility() -> String? {
+        guard currentSuggestionAppBundleIdentifier
+            == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            let hostBundleIdentifier = currentSuggestionFieldIdentity?.bundleIdentifier,
+            ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
+        else {
+            return nil
+        }
+
+        return hostBundleIdentifier
     }
 
     private func shouldPreserveVisibleSuggestionAfterActivationBlock(

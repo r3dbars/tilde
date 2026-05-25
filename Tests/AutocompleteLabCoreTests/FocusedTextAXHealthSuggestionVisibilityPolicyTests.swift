@@ -18,6 +18,23 @@ struct FocusedTextAXHealthSuggestionVisibilityPolicyTests {
         ))
     }
 
+    @Test("Preserves virtual app suggestion during host AX cooldown")
+    func preservesVirtualAppSuggestionDuringHostAXCooldown() {
+        let policy = FocusedTextAXHealthSuggestionVisibilityPolicy()
+        let cooldown = focusedTextAXCooldown(bundleIdentifier: "com.mitchellh.ghostty")
+
+        #expect(!policy.shouldHideVisibleSuggestion(
+            during: cooldown,
+            currentSuggestionBundleIdentifier: "com.anthropic.claude-code",
+            currentSuggestionHostBundleIdentifier: "com.mitchellh.ghostty",
+            currentSuggestionFieldIdentity: fieldIdentity(1, bundleIdentifier: "com.mitchellh.ghostty"),
+            currentFieldIdentity: fieldIdentity(1, bundleIdentifier: "com.mitchellh.ghostty"),
+            isInvalidatedByUserTyping: false,
+            currentSuggestionAgeMilliseconds: 120,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+    }
+
     @Test("Hides visible suggestion after user typing invalidates it")
     func hidesSuggestionInvalidatedByTyping() {
         let policy = FocusedTextAXHealthSuggestionVisibilityPolicy()
@@ -140,9 +157,12 @@ struct FocusedTextAXHealthSuggestionVisibilityPolicyTests {
         )
     }
 
-    private func fieldIdentity(_ elementIdentifier: Int) -> FocusedFieldIdentity {
+    private func fieldIdentity(
+        _ elementIdentifier: Int,
+        bundleIdentifier: String = "com.apple.Notes"
+    ) -> FocusedFieldIdentity {
         FocusedFieldIdentity(
-            bundleIdentifier: "com.apple.Notes",
+            bundleIdentifier: bundleIdentifier,
             processIdentifier: 123,
             elementIdentifier: elementIdentifier
         )
