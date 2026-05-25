@@ -819,9 +819,9 @@ finish_session() {
     echo
     echo "## Manual Trust Row"
     echo
-    echo "| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |"
-    echo "| --- | ---: | --- | --- | --- | --- | --- |"
-    echo "| ${APP_FILTER:-mixed} |  |  |  |  |  |  |"
+    echo "| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |"
+    echo "| --- | ---: | --- | ---: | --- | --- | --- | --- |"
+    echo "| ${APP_FILTER:-mixed} |  |  |  |  |  |  |  |"
     echo
     echo "## Completed Report Review"
     echo
@@ -951,10 +951,20 @@ def truthy_verdict(value):
     }
 
 
+def quality_score(value):
+    normalized = value.strip()
+    if not normalized:
+        return None
+    match = re.search(r"\b([1-5])\b", normalized)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
 def manual_row():
     header_index = None
     for index, line in enumerate(lines):
-        if "| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |" in line:
+        if "| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |" in line:
             header_index = index
             break
     if header_index is None:
@@ -966,8 +976,8 @@ def manual_row():
         if cells and all(set(cell.replace(" ", "")) <= {"-",
                                                         ":"} for cell in cells):
             continue
-        if len(cells) >= 7:
-            return cells[:7]
+        if len(cells) >= 8:
+            return cells[:8]
     return None
 
 
@@ -992,9 +1002,10 @@ if re.search(r"displayedText|acceptedText|rawOutput", text):
 row = manual_row()
 if row is None:
     failures.append("manual trust row missing")
-    row = ["", "", "", "", "", "", ""]
+    row = ["", "", "", "", "", "", "", ""]
 
-app, minutes, reached, magic, annoying, placement, keep = row
+app, minutes, reached, quality, magic, annoying, placement, keep = row
+quality = quality_score(quality)
 automated_gate_pass = re.search(r"Gate:\s*`pass`", text) is not None
 if not app:
     failures.append("manual app cell is blank")
@@ -1006,6 +1017,8 @@ if parsed_minutes <= 0:
     failures.append("manual minutes must be greater than 0")
 if not truthy_verdict(reached):
     failures.append("manual reach verdict must be yes/useful")
+if quality is None or quality < 4:
+    failures.append("manual suggestion quality score must be 4 or 5")
 if not magic:
     failures.append("manual magic moment is blank")
 if not annoying:
@@ -1023,6 +1036,7 @@ print("Safety snapshot: pass" if re.search(r"Safety snapshot status:\s*`0`", tex
 print(f"App: {app or 'blank'}")
 print(f"Minutes: {minutes or 'blank'}")
 print(f"Did reach for it: {reached or 'blank'}")
+print(f"Suggestion quality: {quality if quality is not None else 'blank'}")
 print(f"Magic moment: {'filled' if magic else 'blank'}")
 print(f"Annoying moment: {'filled' if annoying else 'blank'}")
 print(f"Placement trust: {'filled' if placement else 'blank'}")

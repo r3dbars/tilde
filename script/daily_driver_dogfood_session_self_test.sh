@@ -17,6 +17,7 @@ SHORT_PHRASE_REPORT_PATH="$TMP_DIR/short-phrase-report.md"
 REVIEW_PASS_REPORT_PATH="$TMP_DIR/review-pass-report.md"
 REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
 REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
+REVIEW_LOW_QUALITY_REPORT_PATH="$TMP_DIR/review-low-quality-report.md"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":200}
@@ -149,9 +150,9 @@ This report is redacted. It should contain trace metadata and manual labels only
 
 ## Manual Trust Row
 
-| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
-| --- | ---: | --- | --- | --- | --- | --- |
-| com.apple.TextEdit | 12 | yes | predicted useful next words | none | aligned | yes |
+| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | ---: | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | 5 | predicted useful next words | none | aligned | yes |
 MD
 
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
@@ -163,11 +164,54 @@ for expected in \
   "Automated gate: pass" \
   "Safety snapshot: pass" \
   "Did reach for it: yes" \
+  "Suggestion quality: 5" \
   "Keep it on tomorrow: yes" \
   "Result: pass"
 do
   if ! grep -q "$expected" "$TMP_DIR/review-pass.out"; then
     echo "dogfood self-test review pass output missing: $expected" >&2
+    exit 1
+  fi
+done
+
+cat >"$REVIEW_LOW_QUALITY_REPORT_PATH" <<'MD'
+# Daily Driver Dogfood Session
+
+This report is redacted. It should contain trace metadata and manual labels only.
+
+## Summary
+
+- Gate: `pass`.
+- Safety snapshot status: `0`.
+- Prompt no-submit safety status: `0`.
+- Sensitive field safety status: `0`.
+
+## Manual Trust Row
+
+| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | ---: | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | 3 | predicted useful next words | none | aligned | yes |
+MD
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" review \
+  --report "$REVIEW_LOW_QUALITY_REPORT_PATH" \
+  >"$TMP_DIR/review-low-quality.out" 2>&1
+review_low_quality_status=$?
+set -e
+
+if [[ "$review_low_quality_status" -eq 0 ]]; then
+  echo "dogfood self-test expected low quality manual review to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Result: fail" \
+  "Suggestion quality: 3" \
+  "manual suggestion quality score must be 4 or 5"
+do
+  if ! grep -q "$expected" "$TMP_DIR/review-low-quality.out"; then
+    echo "dogfood self-test low quality review output missing: $expected" >&2
     exit 1
   fi
 done
@@ -188,6 +232,7 @@ for expected in \
   "Result: fail" \
   "manual minutes must be greater than 0" \
   "manual reach verdict must be yes/useful" \
+  "manual suggestion quality score must be 4 or 5" \
   "manual keep-it-on-tomorrow verdict must be yes"
 do
   if ! grep -q "$expected" "$TMP_DIR/review-blank.out"; then
@@ -210,9 +255,9 @@ This report is redacted. It should contain trace metadata and manual labels only
 
 ## Manual Trust Row
 
-| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
-| --- | ---: | --- | --- | --- | --- | --- |
-| com.apple.TextEdit | 12 | yes | predicted useful next words | none | aligned | yes |
+| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | ---: | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | 5 | predicted useful next words | none | aligned | yes |
 MD
 
 set +e
@@ -252,9 +297,9 @@ This report is redacted. It should contain trace metadata and manual labels only
 
 ## Manual Trust Row
 
-| App | Minutes | Did I reach for it? | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
-| --- | ---: | --- | --- | --- | --- | --- |
-| com.apple.TextEdit | 12 | yes | predicted useful next words | none | aligned | yes |
+| App | Minutes | Did I reach for it? | Suggestion quality (1-5) | Magic moment | Annoying moment | Placement trust | Keep it on tomorrow? |
+| --- | ---: | --- | ---: | --- | --- | --- | --- |
+| com.apple.TextEdit | 12 | yes | 5 | predicted useful next words | none | aligned | yes |
 MD
 
 set +e

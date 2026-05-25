@@ -351,10 +351,11 @@ stricter reach bar. Use `--allow-low-sample` only for harness/debug slices, not
 daily-driver proof. Do not paste raw writing, prompts, screenshots, document
 names, URLs, recipients, or subjects into that manual row.
 After filling the Manual Trust Row, `review --report` verifies that the automated
-gate passed, the manual labels are filled, the user reached for it, and they
-would keep it on tomorrow. The finished report also includes a redacted safety
-snapshot for prompt no-submit and sensitive-field suppression, and `review`
-fails closed if that snapshot is missing or failed.
+gate passed, the manual labels are filled, the user reached for it, suggestion
+quality is scored 4 or 5, and they would keep it on tomorrow. The finished
+report also includes a redacted safety snapshot for prompt no-submit and
+sensitive-field suppression, and `review` fails closed if that snapshot is
+missing or failed.
 
 For a frozen replay slice, capture both bounds:
 
