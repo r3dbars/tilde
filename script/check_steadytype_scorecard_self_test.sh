@@ -27,6 +27,11 @@ if ! grep -F -- "claude-code-model-latency" script/check_steadytype_scorecard.py
   exit 1
 fi
 
+if ! grep -F -- "textedit-model-latency" script/check_steadytype_scorecard.py >/dev/null; then
+  echo "scorecard self-test expected live latency selector to understand TextEdit latency claims" >&2
+  exit 1
+fi
+
 STALE_SUGGESTION_QUALITY="$TMP_DIR/stale-suggestion-quality.md"
 python3 - "$SCORECARD" "$STALE_SUGGESTION_QUALITY" <<'PY'
 from pathlib import Path
