@@ -211,11 +211,19 @@ Notes title/body/checklist, Obsidian default/theme/pane/long-note, and Chrome
 textarea/contenteditable are all covered, and the screenshot-backed placement
 gate still passes.
 
+A disposable local quality audit now covers the current model path without
+persisting raw prompt text or raw model output. The 18-row audit in
+`docs/evals/daily-driver-local-quality-audit-2026-05-25.md` passed with
+overall `100/100`, relevance `100/100`, 15 display-eligible continuations, and
+3 expected suppressions. This is useful evidence for short continuations,
+word suffixes, and obvious unsafe/sensitive suppression, but it does not replace
+a real writing-session dogfood pass.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
-| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
+| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 18/18 | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Dogfood a real writing session, then expand only with exact proof |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session quality pass while typing fast |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
