@@ -225,10 +225,38 @@ current_trace_line() {
 }
 
 steadytype_process_status() {
+  if [[ -n "${AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE:-}" ]]; then
+    echo "$AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE"
+    return
+  fi
   if pgrep -x SteadyType >/dev/null 2>&1; then
     echo "running"
   else
     echo "not-running"
+  fi
+}
+
+trace_exists_status() {
+  if [[ -f "$TRACE_PATH" ]]; then
+    echo "yes"
+  else
+    echo "no"
+  fi
+}
+
+dogfood_readiness_state() {
+  local app_status="$1"
+  if [[ "$app_status" == "running" ]]; then
+    echo "pass"
+  else
+    echo "attention"
+  fi
+}
+
+print_readiness_next_step() {
+  local readiness="$1"
+  if [[ "$readiness" != "pass" ]]; then
+    echo "Dogfood readiness next: ./script/build_and_run.sh --verify"
   fi
 }
 
@@ -247,6 +275,9 @@ load_mark() {
     STARTED_AT="explicit"
     MARK_LABEL="$LABEL"
     MARK_APP_FILTER="$APP_FILTER"
+    APP_STATUS_AT_START="unknown"
+    TRACE_EXISTS_AT_START="unknown"
+    DOGFOOD_READINESS_AT_START="unknown"
     return
   fi
 
@@ -262,6 +293,9 @@ load_mark() {
   STARTED_AT="${STARTED_AT:-unknown}"
   MARK_LABEL="${LABEL:-daily-driver}"
   MARK_APP_FILTER="${APP_FILTER:-}"
+  APP_STATUS_AT_START="${APP_STATUS_AT_START:-unknown}"
+  TRACE_EXISTS_AT_START="${TRACE_EXISTS_AT_START:-unknown}"
+  DOGFOOD_READINESS_AT_START="${DOGFOOD_READINESS_AT_START:-unknown}"
 
   if [[ -z "$APP_FILTER" ]]; then
     APP_FILTER="$MARK_APP_FILTER"
@@ -272,9 +306,12 @@ load_mark() {
 }
 
 write_start_mark() {
-  local line started_at
+  local line started_at app_status trace_exists readiness
   line="$(current_trace_line)"
   started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  app_status="$(steadytype_process_status)"
+  trace_exists="$(trace_exists_status)"
+  readiness="$(dogfood_readiness_state "$app_status")"
   mkdir -p "$(dirname "$MARK_PATH")"
   {
     printf "START_LINE=%q\n" "$line"
@@ -282,15 +319,22 @@ write_start_mark() {
     printf "LABEL=%q\n" "$LABEL"
     printf "APP_FILTER=%q\n" "$APP_FILTER"
     printf "TRACE_PATH_AT_START=%q\n" "$TRACE_PATH"
+    printf "APP_STATUS_AT_START=%q\n" "$app_status"
+    printf "TRACE_EXISTS_AT_START=%q\n" "$trace_exists"
+    printf "DOGFOOD_READINESS_AT_START=%q\n" "$readiness"
   } >"$MARK_PATH"
 
   cat <<EOF
 Daily-driver dogfood mark saved.
 Trace: $TRACE_PATH
+Trace exists: $trace_exists
 Start line: $line
 Mark: $MARK_PATH
 Label: $LABEL
 App filter: ${APP_FILTER:-all supported apps}
+SteadyType app: $app_status
+Dogfood readiness: $readiness
+$(print_readiness_next_step "$readiness")
 
 Now write normally for 10-20 minutes. Accept with Tab/backtick only when useful,
 dismiss with Esc when wrong, and do not paste raw writing into the final report.
@@ -301,14 +345,18 @@ EOF
 }
 
 print_status() {
-  local line app_status finish_app_arg
+  local line app_status trace_exists readiness finish_app_arg
   line="$(current_trace_line)"
   app_status="$(steadytype_process_status)"
+  trace_exists="$(trace_exists_status)"
+  readiness="$(dogfood_readiness_state "$app_status")"
   finish_app_arg=""
   echo "Trace: $TRACE_PATH"
-  echo "Trace exists: $([[ -f "$TRACE_PATH" ]] && echo yes || echo no)"
+  echo "Trace exists: $trace_exists"
   echo "Current line: $line"
   echo "SteadyType app: $app_status"
+  echo "Dogfood readiness: $readiness"
+  print_readiness_next_step "$readiness"
   if [[ -f "$MARK_PATH" ]]; then
     # shellcheck source=/dev/null
     source "$MARK_PATH"
@@ -316,6 +364,9 @@ print_status() {
     echo "Started at: ${STARTED_AT:-unknown}"
     echo "Label: ${LABEL:-daily-driver}"
     echo "App filter: ${APP_FILTER:-all supported apps}"
+    echo "App status at start: ${APP_STATUS_AT_START:-unknown}"
+    echo "Trace existed at start: ${TRACE_EXISTS_AT_START:-unknown}"
+    echo "Start readiness: ${DOGFOOD_READINESS_AT_START:-unknown}"
     if [[ "${START_LINE:-}" =~ ^[0-9]+$ ]]; then
       if ((line >= START_LINE)); then
         echo "New trace rows: $((line - START_LINE))"
@@ -1355,6 +1406,9 @@ finish_session() {
     echo
     echo "- Finished at: \`$timestamp\`."
     echo "- Started at: \`${STARTED_AT:-unknown}\`."
+    echo "- SteadyType app at start: \`${APP_STATUS_AT_START:-unknown}\`."
+    echo "- Trace existed at start: \`${TRACE_EXISTS_AT_START:-unknown}\`."
+    echo "- Start readiness: \`${DOGFOOD_READINESS_AT_START:-unknown}\`."
     echo "- Label: \`$LABEL\`."
     echo "- App filter: \`${APP_FILTER:-all supported apps}\`."
     echo "- Trace: \`$TRACE_PATH\`."
