@@ -17,6 +17,11 @@ if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/pass.txt" >/dev/null; the
   exit 1
 fi
 
+if ! grep -F -- "--expected-executable-sha256" script/check_steadytype_scorecard.py >/dev/null; then
+  echo "scorecard self-test expected live latency selector to pin the app executable hash" >&2
+  exit 1
+fi
+
 STALE_SUGGESTION_QUALITY="$TMP_DIR/stale-suggestion-quality.md"
 python3 - "$SCORECARD" "$STALE_SUGGESTION_QUALITY" <<'PY'
 from pathlib import Path

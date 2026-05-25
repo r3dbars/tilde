@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import subprocess
 from dataclasses import dataclass
@@ -386,6 +387,25 @@ def read_or_run_output(fixture_path: Path | None, command: list[str]) -> str:
     return f"{result.stdout}\n{result.stderr}"
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def latency_executable_sha256() -> str:
+    override = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_EXECUTABLE_SHA256", "").strip()
+    if override:
+        return override
+
+    app_binary = ROOT_DIR / "dist/SteadyType.app/Contents/MacOS/SteadyType"
+    if app_binary.is_file():
+        return sha256_file(app_binary)
+    return ""
+
+
 def strict_latency_selector_command() -> list[str]:
     proof_app = os.environ.get(
         "AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_APP",
@@ -397,7 +417,7 @@ def strict_latency_selector_command() -> list[str]:
     )
     trace_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_TRACE_APP", proof_app)
     request_mode = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_REQUEST_MODE", "wordCompletion")
-    return [
+    command = [
         "./script/select_latency_window.py",
         "--diagnostics-log",
         str(Path.home() / "Library/Logs/SteadyType/diagnostics.log"),
@@ -420,6 +440,10 @@ def strict_latency_selector_command() -> list[str]:
         "--require-model-backed-visible",
         "--forbid-fast-word-visible",
     ]
+    executable_sha256 = latency_executable_sha256()
+    if executable_sha256:
+        command.extend(["--expected-executable-sha256", executable_sha256])
+    return command
 
 
 def parse_manual_smoke_live_count(output: str) -> int | None:
