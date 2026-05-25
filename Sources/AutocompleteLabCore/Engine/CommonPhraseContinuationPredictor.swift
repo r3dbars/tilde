@@ -270,6 +270,29 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         if hasSuffix(["can", "you"], in: words) {
             return intentCandidate("can-you", "take a look at")
         }
+        if hasSuffix(["because"], in: words), containsDailyDriverTopic(words) {
+            return intentCandidate("daily-driver-because", "it saves real time")
+        }
+        if hasSuffix(["so", "that"], in: words), containsWritingMotionTopic(words) {
+            return intentCandidate("daily-driver-so-that", "writing keeps moving forward")
+        }
+        if hasSuffix(["which", "means"], in: words) {
+            if containsAny(["late", "slow", "wrong", "timid", "miss", "misses", "fails", "failure"], in: words) {
+                return intentCandidate("daily-driver-which-means-trust", "it loses trust quickly")
+            }
+            if containsDailyDriverTopic(words) {
+                return intentCandidate("daily-driver-which-means", "next step is clear")
+            }
+        }
+        if hasSuffix(["the", "reason", "is"], in: words), containsDailyDriverTopic(words) {
+            return intentCandidate("daily-driver-reason-is", "it feels genuinely useful")
+        }
+        if hasAnySuffix([["the", "fix", "is"], ["fix", "is"]], in: words), containsDailyDriverTopic(words) {
+            return intentCandidate("daily-driver-fix-is", "to make it predictable")
+        }
+        if hasSuffix(["we", "should", "prove"], in: words), containsDailyDriverTopic(words) {
+            return intentCandidate("daily-driver-prove", "it works while writing")
+        }
 
         return nil
     }
@@ -315,5 +338,56 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return false
         }
         return Array(words.suffix(suffix.count)) == suffix
+    }
+
+    private func containsDailyDriverTopic(_ words: [String]) -> Bool {
+        containsAny(
+            [
+                "app",
+                "autocomplete",
+                "caret",
+                "daily",
+                "driver",
+                "field",
+                "fields",
+                "phrase",
+                "phrases",
+                "steadytype",
+                "suggestion",
+                "suggestions",
+                "tab",
+                "trust",
+                "typing",
+                "words",
+                "writing"
+            ],
+            in: words
+        )
+    }
+
+    private func containsWritingMotionTopic(_ words: [String]) -> Bool {
+        containsAny(
+            [
+                "app",
+                "autocomplete",
+                "draft",
+                "note",
+                "notes",
+                "phrase",
+                "steadytype",
+                "suggestion",
+                "suggestions",
+                "typing",
+                "words",
+                "write",
+                "writing"
+            ],
+            in: words
+        )
+    }
+
+    private func containsAny(_ candidates: [String], in words: [String]) -> Bool {
+        let wordSet = Set(words)
+        return candidates.contains { wordSet.contains($0) }
     }
 }
