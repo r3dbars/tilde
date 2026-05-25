@@ -13,6 +13,7 @@ TEXTEDIT_VARIANT=""
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
+ALLOW_MODEL_LATENCY_SKIP_BUILD="${AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD:-0}"
 CHROME_FIXTURE="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-textarea}"
 CHROME_FIXTURE_WAS_SET=0
 CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}"
@@ -67,6 +68,19 @@ CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
 SMOKE_PHASE="startup"
+
+allow_model_latency_skip_build() {
+  [[ "$ALLOW_MODEL_LATENCY_SKIP_BUILD" =~ ^(1|true|yes|on)$ ]]
+}
+
+is_model_latency_lane() {
+  [[ "$TEXTEDIT_VARIANT" == "model-latency" ]] ||
+    [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]] ||
+    [[ "$CHROME_MODEL_LATENCY" == "1" ]] ||
+    [[ "$CODEX_MODEL_LATENCY" == "1" ]] ||
+    [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]] ||
+    [[ "$CLAUDE_MODEL_LATENCY" == "1" ]]
+}
 
 usage() {
   cat <<'EOF'
@@ -144,7 +158,10 @@ normal terminal suggestions.
 the only running SteadyType process is this checkout's dist/SteadyType.app binary
 and that process already has any proof-mode environment needed by the smoke pass.
 The model-latency lanes do not allow --skip-build because they must relaunch
-SteadyType with fast word completions disabled before sampling.
+SteadyType with fast word completions disabled before sampling. For packaged
+release artifact proof only, set AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1
+after launching that exact app with the required proof-mode environment; the
+strict latency selector must still prove the tagged runtime launch.
 
 --native-undo-proof relaunches AutocompleteLab with app rollback disabled,
 passes Command-Z through to the target app, and records native single-edit undo
@@ -496,37 +513,37 @@ if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$SKIP_BUILD" == "1" ]]; then
   exit 2
 fi
 
-if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "textedit-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
 
-if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with word completions and the fast phrase fallback disabled before sampling." >&2
   usage >&2
   exit 2
 fi
 
-if [[ "$APP" == "chrome" && "$CHROME_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "chrome" && "$CHROME_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "$REQUESTED_APP cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
 
-if [[ "$APP" == "codex" && "$CODEX_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "codex" && "$CODEX_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "codex-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
 
-if [[ "$APP" == "claude" && "$CLAUDE_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "claude" && "$CLAUDE_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "claude-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
 
-if [[ "$APP" == "claude-code" && "$CLAUDE_CODE_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "claude-code" && "$CLAUDE_CODE_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "claude-code-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
@@ -9442,6 +9459,10 @@ describe_plan() {
   echo "Diagnostics log: $LOG_PATH"
   echo "Trace log: $TRACE_PATH"
   echo "Proof mode bundle(s): $proof_bundle_ids"
+  if [[ "$SKIP_BUILD" == "1" ]] && is_model_latency_lane && allow_model_latency_skip_build; then
+    echo "Packaged model latency proof: reusing the already-running app because AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1 is set."
+    echo "Safety: strict latency selector must still prove the tagged runtime launch for this app binary."
+  fi
   case "$APP" in
     textedit)
       if [[ -n "$TEXTEDIT_VARIANT" ]]; then
