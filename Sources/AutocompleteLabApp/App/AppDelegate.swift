@@ -6387,12 +6387,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionInvalidatedByUserKeyDown
             && currentSuggestionID == suggestionID
+        let refreshedContext = refreshBeforePresenting
+            ? refreshedPresentationContext(
+                for: request,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            )
+            : (context: Optional(context), reason: nil)
+        let verifiedRefreshContext = refreshBeforePresenting ? refreshedContext.context : nil
+        let freshnessFieldIdentity = verifiedRefreshContext == nil
+            ? currentFieldIdentity
+            : fieldIdentity
+        let freshnessSnapshot = verifiedRefreshContext.map {
+            FocusedTextSnapshot(
+                fieldIdentity: fieldIdentity,
+                textBeforeCursor: $0.textBeforeCursor,
+                textAfterCursor: $0.textAfterCursor
+            )
+        } ?? lastTextSnapshot
         if let suppressionReason = suggestionOrchestrator.presentationSuppressionReason(
             requestTicket: requestTicket,
             request: request,
             fieldIdentity: fieldIdentity,
-            currentFieldIdentity: currentFieldIdentity,
-            currentSnapshot: lastTextSnapshot,
+            currentFieldIdentity: freshnessFieldIdentity,
+            currentSnapshot: freshnessSnapshot,
             invalidatedByUserTyping: invalidatedByVisibleUserTyping
         ) {
             let reason = suppressionReason.rawValue
@@ -6401,7 +6419,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging([
                     "presentationFreshness": "stale",
-                    "presentationFreshnessReason": reason
+                    "presentationFreshnessReason": reason,
+                    "presentationFreshnessSource": verifiedRefreshContext == nil ? "cached-snapshot" : "live-refresh"
                 ]) { current, _ in current }
             setSuggestionDecision("Blocked: \(reason)")
             RawAutocompleteTraceLog.shared.record(
@@ -6431,13 +6450,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let refreshedContext = refreshBeforePresenting
-            ? refreshedPresentationContext(
-                for: request,
-                profile: profile,
-                fieldIdentity: fieldIdentity
-            )
-            : (context: Optional(context), reason: nil)
         guard let context = refreshedContext.context else {
             let reason = refreshedContext.reason ?? "stale-focused-context"
             RawAutocompleteTraceLog.shared.record(
@@ -6913,20 +6925,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             previousSnapshot: lastTextSnapshot
         )
-        guard self.fieldIdentity(
-            app: frontmostApp,
-            context: context,
-            profile: profile
-        ) == fieldIdentity else {
-            return (nil, "stale-field")
-        }
-
         guard context.textBeforeCursor == request.textBeforeCursor,
               context.textAfterCursor == request.textAfterCursor else {
             return (nil, "stale-text")
         }
 
+        let refreshedFieldIdentity = self.fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: profile
+        )
+        if refreshedFieldIdentity != fieldIdentity {
+            if !canTrustPromptProofFieldIdentityRefresh(
+                requestFieldIdentity: fieldIdentity,
+                refreshedFieldIdentity: refreshedFieldIdentity,
+                profile: profile
+            ) {
+                return (nil, "stale-field")
+            }
+            DiagnosticsLog.shared.record(
+                "prompt-proof-field-identity-refresh-relaxed",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "requestFieldIdentity": fieldIdentity.traceDescription,
+                    "refreshedFieldIdentity": refreshedFieldIdentity.traceDescription
+                ]
+            )
+        }
+
         return (context, nil)
+    }
+
+    private func canTrustPromptProofFieldIdentityRefresh(
+        requestFieldIdentity: FocusedFieldIdentity,
+        refreshedFieldIdentity: FocusedFieldIdentity,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        profile.promptAppSafetyMode == .wordOnly
+            && profile.requiresNoSubmitAcceptanceProof
+            && activeAppProofBundleIdentifiers.contains(profile.bundleIdentifier)
+            && requestFieldIdentity.bundleIdentifier == refreshedFieldIdentity.bundleIdentifier
+            && requestFieldIdentity.processIdentifier == refreshedFieldIdentity.processIdentifier
     }
 
     private func frontmostAppMatchesSuggestion(
