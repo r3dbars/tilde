@@ -148,6 +148,34 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts reusable writing intent patterns instantly")
+    func predictsReusableWritingIntentPatternsInstantly() {
+        let cases: [(String, String, String)] = [
+            ("Quick thought: what I mean is", " this should feel natural", "intent-what-i-mean-is"),
+            ("My point is", " this should feel clear", "intent-point-is"),
+            ("The app would be better if it", " predicted the next phrase", "intent-better-if-it"),
+            ("For tomorrow, we need to", " make this feel simpler", "intent-we-need-to"),
+            ("I need to", " say this more clearly", "intent-i-need-to"),
+            ("Next step is", " to make this concrete", "intent-next-step-is"),
+            ("The goal is", " to make writing faster", "intent-the-goal-is"),
+            ("Can you", " take a look at", "intent-can-you")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount == 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
     func blocksUnsafeProfiles() {
         #expect(predictor.suggestion(
@@ -171,6 +199,10 @@ struct CommonPhraseContinuationPredictorTests {
             for: "let app should",
             behaviorProfileID: .coding
         ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Can you",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
     }
 
     @Test("Stays silent without a full-word phrase anchor")
@@ -183,6 +215,10 @@ struct CommonPhraseContinuationPredictorTests {
             for: "I just wanted to,",
             behaviorProfileID: .docsProse
         ).suppressionReason == "not-word-boundary")
+        #expect(predictor.selection(
+            for: "Would be better if it",
+            behaviorProfileID: .docsProse
+        ).suppressionReason == "no-match")
     }
 
     @Test("Clamps phrase suggestions to the requested visible word count")

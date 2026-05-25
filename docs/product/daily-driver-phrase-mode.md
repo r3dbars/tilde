@@ -294,12 +294,18 @@ It now also covers more finish-my-thought writing: "I think what matters is",
 "what I am trying to say is", "this would be better if it", "what makes this
 useful is", and "when this feels magical it" can produce 4-word continuations
 without waiting for the model path.
+The same instant path now has a small intent-pattern layer too, so reusable
+sentence endings like "what I mean is", "my point is", "the app would be better
+if it", "we need to", "next step is", "the goal is", and "can you" can produce
+4-word writing continuations without needing an exact canned prior. These
+patterns still stay behind the same profile gates, so prompt, search, form, and
+code surfaces remain blocked.
 
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
-| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-6 word daily-driver contexts, including punctuation, list-shaped writing, complaint language, and finish-my-thought sentence shapes; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
+| Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-6 word daily-driver contexts, including punctuation, list-shaped writing, complaint language, finish-my-thought sentence shapes, and reusable writing-intent endings; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and live status text expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
