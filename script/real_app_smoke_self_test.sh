@@ -1693,10 +1693,20 @@ if ! awk '
   in_smoke && /type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
   in_smoke && saw_type && !saw_accept_window { saw_late_accept_window = 1 }
   in_smoke && /wait_for_log_pattern_optional/ { saw_suggestion_wait = 1 }
-  in_smoke && /wait_for_log_fields "\$accept_start_line" "Claude Code \$host_name Tab acceptance"/ { saw_accept_wait = 1 }
+  in_smoke && /wait_for_claude_code_terminal_tab_acceptance/ { saw_accept_wait = 1 }
   END { exit (saw_accept_window && !saw_late_accept_window && saw_suggestion_wait && saw_accept_wait) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Claude Code terminal-host acceptance waits to start before typing can race the proof" >&2
+  exit 1
+fi
+if ! awk '
+  /wait_for_claude_code_terminal_tab_acceptance\(\)/ { in_helper = 1 }
+  /^}/ && in_helper { in_helper = 0 }
+  in_helper && /handled=false/ { saw_fail_closed = 1 }
+  in_helper && /Observed handled=false/ { saw_message = 1 }
+  END { exit (saw_fail_closed && saw_message) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host acceptance helper to fail fast on handled=false" >&2
   exit 1
 fi
 if awk '
