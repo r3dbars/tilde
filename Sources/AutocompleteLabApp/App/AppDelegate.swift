@@ -2026,19 +2026,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSnapshot: snapshot,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
-        if typingBurstDecision.shouldSuppressSuggestions {
+        let typingBurstRequestMode = activationPolicy(for: profile).decision(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            isSecure: context.isSecure,
+            selectedTextLength: context.selectedTextLength,
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            fieldKind: fieldClassification.kind,
+            allowsUnknownFieldKind: profile.allowsUnknownFieldKind
+        ).requestMode
+        if typingBurstDecision.shouldSuppress(requestMode: typingBurstRequestMode) {
             lastTextSnapshot = snapshot
             invalidatePendingSuggestionRequest()
             currentSuggestionInvalidatedByUserKeyDown = true
-            let requestMode = activationPolicy(for: profile).decision(
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor,
-                isSecure: context.isSecure,
-                selectedTextLength: context.selectedTextLength,
-                isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
-                fieldKind: fieldClassification.kind,
-                allowsUnknownFieldKind: profile.allowsUnknownFieldKind
-            ).requestMode?.rawValue ?? ""
+            let requestMode = typingBurstRequestMode?.rawValue ?? ""
             let metadata = fieldClassification.traceMetadata
                 .merging(typingBurstDecision.traceMetadata) { current, _ in current }
                 .merging(["reason": "typing-burst"]) { current, _ in current }

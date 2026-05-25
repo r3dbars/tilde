@@ -263,13 +263,18 @@ newlines, so audit-shaped writing like `Before we ship, we should`, quick reply
 drafts, decision logs, review notes, and checklist continuations can hit the
 fast path instead of missing because of commas or list breaks.
 
+Fast typing bursts now keep word completion alive. The burst gate still pauses
+phrase/sentence continuations when someone is moving too quickly for a heavier
+model pass, but partial-word completions can keep showing up during the
+type-accept-type loop instead of being globally suppressed.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-5 word daily-driver contexts, including punctuation and list-shaped writing | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; dogfood reports now expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof; fast typing bursts now leave word completion available; dogfood reports expose instant phrase vs model-backed source mix | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; local quality audit also covers 9 unsafe/sensitive suppressions | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
 | Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, prompt/sensitive safety snapshot, and completed manual-review gate, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |
 
