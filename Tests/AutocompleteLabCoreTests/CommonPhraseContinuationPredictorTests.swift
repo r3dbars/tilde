@@ -120,6 +120,34 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts finish-my-thought writing phrases instantly")
+    func predictsFinishMyThoughtWritingPhrasesInstantly() {
+        let cases: [(String, String, String)] = [
+            ("I think what matters is", " that it feels effortless", "i think what matters is"),
+            ("What I am trying to say is", " this should feel natural", "what i am trying to say is"),
+            ("The next thing I want to", " write is the thought", "the next thing i want to"),
+            ("This would be better if it", " predicted the next phrase", "this would be better if it"),
+            ("The way I would say it is", " keep it very simple", "the way i would say it is"),
+            ("What makes this useful is", " getting the words right", "what makes this useful is"),
+            ("When this feels magical it", " knows the next phrase", "when this feels magical it"),
+            ("If I am writing fast I", " want help finishing thoughts", "if i am writing fast i")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount == 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
     func blocksUnsafeProfiles() {
         #expect(predictor.suggestion(
