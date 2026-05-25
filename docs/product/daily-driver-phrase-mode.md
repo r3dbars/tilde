@@ -86,13 +86,29 @@ Validation from the cycle so far:
   current for the app build, with TextEdit, Notes, Obsidian long note, and Chrome
   fixture rows still stale.
 
+Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
+
+- Claude Code Terminal model-latency proof now scopes its AX readiness check to
+  the marker-titled disposable Terminal window instead of mixing marker text
+  from one Terminal window with prompt text from another,
+- the initial Claude Code prompt wait now requires prompt chrome such as
+  `for shortcuts` or `>` instead of generic `Claude Code` title text,
+- the disposable sample loop now tracks early empty model outputs from the whole
+  sample iteration so the proof can report empty candidates instead of only
+  timing out on the later visible-suggestion wait.
+
+Fresh live proof is still not green: the current Terminal-hosted Claude Code
+model-latency run reaches the MLX word-completion path, but Terminal AX reports
+a numbered prompt shape with a six-letter partial word and the model output
+cleans to zero candidates. That remains a proof blocker, not a support claim.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
-| Typing speed | Subsecond repaired phrase results can display; live latency proof is still narrow | Feels ready during fast typing | Fresh latency proof across Obsidian and TextEdit |
+| Typing speed | Subsecond repaired phrase results can display; Claude Code Terminal latency proof reaches MLX but still cleans empty from a bad AX prompt shape | Feels ready during fast typing | Fix Terminal prompt context shape, then refresh Obsidian/TextEdit latency proof |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 
