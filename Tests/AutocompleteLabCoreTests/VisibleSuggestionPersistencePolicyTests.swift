@@ -89,7 +89,20 @@ struct VisibleSuggestionPersistencePolicyTests {
             currentSuggestionBundleIdentifier: "com.google.Chrome",
             currentSuggestionFieldIdentity: fieldIdentity,
             currentSuggestionTextBeforeCursor: "Smoke proof feels instant and stays inst",
-            currentSuggestionAgeMilliseconds: 350,
+            currentSuggestionAgeMilliseconds: 4_999,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "Smoke pro",
+            textAfterCursor: "of feels instant and stays inst"
+        ))
+
+        #expect(!policy.shouldPreserveAfterActivationBlock(
+            blockReason: .middleOfLine,
+            appBundleIdentifier: "com.google.Chrome",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.google.Chrome",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "Smoke proof feels instant and stays inst",
+            currentSuggestionAgeMilliseconds: 5_001,
             isInvalidatedByUserTyping: false,
             textBeforeCursor: "Smoke pro",
             textAfterCursor: "of feels instant and stays inst"
@@ -106,6 +119,55 @@ struct VisibleSuggestionPersistencePolicyTests {
             isInvalidatedByUserTyping: false,
             textBeforeCursor: "Different pro",
             textAfterCursor: "of text"
+        ))
+    }
+
+    @Test("preserves same-text middle splits during geometry invalidation")
+    func preservesSameTextMiddleSplitsDuringGeometryInvalidation() {
+        let policy = VisibleSuggestionPersistencePolicy()
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: "com.google.Chrome",
+            processIdentifier: 42,
+            elementIdentifier: 99
+        )
+
+        #expect(policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.google.Chrome",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.google.Chrome",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "Smoke proof feels instant and stays inst",
+            currentSuggestionAgeMilliseconds: 4_999,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "Smoke pro",
+            textAfterCursor: "of feels instant and stays inst"
+        ))
+
+        #expect(policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .textLineChanged,
+            appBundleIdentifier: "com.google.Chrome",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.google.Chrome",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "Smoke proof feels instant and stays inst",
+            currentSuggestionAgeMilliseconds: 350,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "Smoke pro",
+            textAfterCursor: "of feels instant and stays inst"
+        ))
+
+        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "com.google.Chrome",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "com.google.Chrome",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: "Smoke proof feels instant and stays inst",
+            currentSuggestionAgeMilliseconds: 5_001,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "Smoke pro",
+            textAfterCursor: "of feels instant and stays inst"
         ))
     }
 
