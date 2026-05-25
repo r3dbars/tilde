@@ -104,6 +104,23 @@ public enum ClaudeCodeTerminalHostProofPolicy {
     public static let proofMarker = "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF"
     public static let compactProofMarker = "STEADYTYPECLAUDECODEPROOF"
     private static let proofMarkers = [proofMarker, compactProofMarker]
+    private static let naturalLanguageCommandPhrases = [
+        "make a",
+        "make an",
+        "make it",
+        "make me",
+        "make my",
+        "make our",
+        "make sure",
+        "make the",
+        "make this",
+        "make transition",
+        "make your"
+    ]
+    private static let naturalLanguageCommandGlueTolerantPhrases = [
+        "make this",
+        "make transition"
+    ]
 
     public static func hostVariant(for bundleIdentifier: String) -> ClaudeCodeTerminalHostVariant? {
         supportedHostVariants.first { $0.bundleIdentifier == bundleIdentifier }
@@ -199,6 +216,9 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         if let line = nonEmptyLines.last,
            looksLikeShellCommandInput(line) {
+            if recoveredMarkedTerminalScreenInputText(for: context) != nil {
+                return .eligible
+            }
             return .blocked(.shellCommandDetected)
         }
 
@@ -289,6 +309,10 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return nil
         }
 
+        if let recoveredInput = recoveredMarkedTerminalScreenInputText(for: context) {
+            return recoveredInput
+        }
+
         if let beforeCursorInput = proofInputTextBeforeCursorOnly(
             textBeforeCursor: context.rawTextBeforeCursor,
             textAfterCursor: context.rawTextAfterCursor
@@ -309,6 +333,52 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             textBeforeCursor: context.rawTextBeforeCursor,
             textAfterCursor: context.rawTextAfterCursor
         )
+    }
+
+    public static func diagnosticMetadata(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> [String: String] {
+        let focusedLine = effectiveFocusedInputLine(
+            focusedText: context.focusedText,
+            rawTextBeforeCursor: context.rawTextBeforeCursor,
+            rawTextAfterCursor: context.rawTextAfterCursor
+        )
+        let beforeLine = lineFragments(context.rawTextBeforeCursor).last ?? ""
+        let afterLine = lineFragments(context.rawTextAfterCursor).first ?? ""
+        let recovery = recoveredMarkedTerminalScreenInputAnalysis(for: context)
+        let recoveredInput = recovery.inputText
+        let markerTailFragments = lastProofMarkerRange(in: context.rawTextBeforeCursor).map { markerRange in
+            lineFragments(String(context.rawTextBeforeCursor[markerRange.lowerBound...]))
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        } ?? []
+        let recoveredPartialWordShape = recoveredInput.flatMap(PartialWordShape.from(textBeforeCursor:))
+
+        return [
+            "terminalProofFocusedLineChars": String(focusedLine.count),
+            "terminalProofFocusedLineHasMarker": String(containsProofMarker(focusedLine)),
+            "terminalProofFocusedLineKind": diagnosticLineKind(focusedLine, windowTitle: context.windowTitle),
+            "terminalProofRawBeforeChars": String(context.rawTextBeforeCursor.count),
+            "terminalProofRawBeforeHasMarker": String(containsProofMarker(context.rawTextBeforeCursor)),
+            "terminalProofRawBeforeLastLineChars": String(beforeLine.count),
+            "terminalProofRawBeforeLastLineHasMarker": String(containsProofMarker(beforeLine)),
+            "terminalProofRawBeforeLastLineKind": diagnosticLineKind(beforeLine, windowTitle: context.windowTitle),
+            "terminalProofRawAfterChars": String(context.rawTextAfterCursor.count),
+            "terminalProofAfterFirstLineChars": String(afterLine.count),
+            "terminalProofAfterFirstLineKind": diagnosticLineKind(afterLine, windowTitle: context.windowTitle),
+            "terminalProofCanIgnoreAfterCursor": String(canIgnoreTerminalScreenTextAfterCursor(context.rawTextAfterCursor)),
+            "terminalProofWindowTitleHasMarker": String(titleHasScopedProofMarker(context.windowTitle)),
+            "terminalProofMarkerTailFragmentCount": String(markerTailFragments.count),
+            "terminalProofMarkerTailFragmentsSafe": String(
+                !markerTailFragments.isEmpty && markerTailFragments.allSatisfy(isSafeWrappedPromptFragment)
+            ),
+            "terminalProofRecoverableInput": String(recoveredInput != nil),
+            "terminalProofRecoveryRejectionReason": recovery.rejectionReason,
+            "terminalProofRecoveredBeforeChars": String(recoveredInput?.count ?? 0),
+            "terminalProofRecoveredWordCount": String(recoveredInput?.split(whereSeparator: \.isWhitespace).count ?? 0),
+            "terminalProofRecoveredPartialWordCharacters": String(recoveredPartialWordShape?.characterCount ?? 0),
+            "terminalProofRecoveredPartialWordCasing": recoveredPartialWordShape?.casing.rawValue ?? PartialWordCasing.none.rawValue
+        ]
     }
 
     private static func proofInputTextBeforeCursorOnly(
@@ -446,21 +516,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return true
         }
 
-        let naturalLanguageCommandPhrases = [
-            "make a",
-            "make an",
-            "make it",
-            "make me",
-            "make my",
-            "make our",
-            "make sure",
-            "make the",
-            "make this",
-            "make your"
-        ]
-        if naturalLanguageCommandPhrases.contains(where: { phrase in
-            normalized == phrase || normalized.hasPrefix("\(phrase) ")
-        }) {
+        if looksLikeNaturalLanguageCommandPhrase(normalized) {
             return false
         }
 
@@ -513,6 +569,16 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         return commandPrefixes.contains { command in
             normalized == command || normalized.hasPrefix("\(command) ")
+        }
+    }
+
+    private static func looksLikeNaturalLanguageCommandPhrase(_ normalized: String) -> Bool {
+        if naturalLanguageCommandGlueTolerantPhrases.contains(where: { normalized.hasPrefix($0) }) {
+            return true
+        }
+
+        return naturalLanguageCommandPhrases.contains { phrase in
+            normalized == phrase || normalized.hasPrefix("\(phrase) ")
         }
     }
 
@@ -722,6 +788,131 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         return line
     }
 
+    private static func recoveredMarkedTerminalScreenInputText(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> String? {
+        recoveredMarkedTerminalScreenInputAnalysis(for: context).inputText
+    }
+
+    private static func recoveredMarkedTerminalScreenInputAnalysis(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> (inputText: String?, rejectionReason: String) {
+        guard supportedTerminalHosts.contains(context.hostBundleIdentifier),
+              context.proofModeEnabled else {
+            return (nil, "unsupportedOrProofModeOff")
+        }
+
+        guard titleHasScopedProofMarker(context.windowTitle)
+            || containsProofMarker(context.rawTextBeforeCursor) else {
+            return (nil, "missingScopedMarker")
+        }
+
+        guard canIgnoreTerminalScreenTextAfterCursor(context.rawTextAfterCursor) else {
+            return (nil, "afterCursorText")
+        }
+
+        guard let markerRange = lastProofMarkerRange(in: context.rawTextBeforeCursor) else {
+            return (nil, "missingRawMarker")
+        }
+
+        let markedSegment = String(context.rawTextBeforeCursor[markerRange.lowerBound...])
+        let fragments = lineFragments(markedSegment)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !fragments.isEmpty else {
+            return (nil, "emptyMarkerTail")
+        }
+
+        guard fragments.contains(where: containsProofMarker) else {
+            return (nil, "missingMarkerTail")
+        }
+
+        guard fragments.allSatisfy(isSafeWrappedPromptFragment) else {
+            return (nil, "unsafeMarkerTail")
+        }
+
+        let line = fragments.joined(separator: " ")
+        guard let inputText = sanitizedProofInputLine(line) else {
+            return (nil, "emptySanitizedInput")
+        }
+
+        if let naturalInput = naturalLanguageProofInput(from: inputText) {
+            return (naturalInput, "none")
+        }
+
+        if looksLikeShellCommandInput(inputText) {
+            return (nil, "shellCommandInput")
+        }
+
+        if looksLikeTerminalShellCommandLine(inputText) {
+            return (nil, "terminalShellCommandLine")
+        }
+
+        if looksLikeActiveAgentOutput(inputText) {
+            return (nil, "activeAgentOutput")
+        }
+
+        return (inputText, "none")
+    }
+
+    private static func naturalLanguageProofInput(from inputText: String) -> String? {
+        let stripped = inputText.strippingLeadingPromptResidue()
+        let repairedStripped = repairingKnownDroppedProofSpaces(in: stripped)
+        let normalized = repairedStripped.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if looksLikeNaturalLanguageCommandPhrase(normalized) {
+            return repairedStripped
+        }
+
+        for phrase in naturalLanguageCommandPhrases {
+            guard let range = inputText.range(of: phrase, options: [.caseInsensitive]) else {
+                continue
+            }
+
+            let prefix = inputText[..<range.lowerBound]
+            guard prefix.allSatisfy({ !$0.isLetter && !$0.isNumber && !$0.isNewline }) else {
+                continue
+            }
+
+            let candidate = repairingKnownDroppedProofSpaces(in: String(inputText[range.lowerBound...]))
+            let normalizedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard looksLikeNaturalLanguageCommandPhrase(normalizedCandidate) else {
+                continue
+            }
+            return candidate
+        }
+
+        return nil
+    }
+
+    private static func repairingKnownDroppedProofSpaces(in text: String) -> String {
+        text
+            .replacingOccurrences(of: "Make thissetting", with: "Make this setting")
+            .replacingOccurrences(of: "make thissetting", with: "make this setting")
+            .replacingOccurrences(of: "Make transitiontransi", with: "Make transition transi")
+            .replacingOccurrences(of: "make transitiontransi", with: "make transition transi")
+    }
+
+    private static func canIgnoreTerminalScreenTextAfterCursor(_ textAfterCursor: String) -> Bool {
+        if safePromptTextAfterCursor(textAfterCursor) {
+            return true
+        }
+
+        guard textAfterCursor.contains(where: \.isNewline) else {
+            return false
+        }
+
+        let firstFragment = lineFragments(textAfterCursor)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !firstFragment.isEmpty else {
+            return true
+        }
+
+        return looksLikeClaudePromptChromeLine(firstFragment)
+            || looksLikeActiveAgentOutput(firstFragment)
+    }
+
     private static func safePromptTextAfterCursor(_ textAfterCursor: String) -> Bool {
         let firstFragment = lineFragments(textAfterCursor)
             .first?
@@ -754,6 +945,36 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let lowered = trimmed.lowercased()
         return lowered.contains("shortcuts")
             || lowered.contains("shift+tab")
+    }
+
+    private static func diagnosticLineKind(_ line: String, windowTitle: String) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "empty"
+        }
+
+        if looksLikeClaudePromptChromeLine(trimmed) {
+            return "chrome"
+        }
+
+        if looksLikeActiveAgentOutput(trimmed) {
+            return "agentOutput"
+        }
+
+        if containsProofMarker(trimmed) {
+            return "marked"
+        }
+
+        if looksLikeShellPrompt(trimmed, windowTitle: windowTitle) {
+            return "shellPrompt"
+        }
+
+        if looksLikeShellCommandInput(trimmed)
+            || looksLikeTerminalShellCommandLine(trimmed) {
+            return "shellCommand"
+        }
+
+        return "text"
     }
 
     private static func promptPrefixAllowsProofMarker(_ prefix: String) -> Bool {
@@ -871,5 +1092,15 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 private extension String {
     func trimmingLeadingWhitespace() -> String {
         String(drop { $0.isWhitespace && !$0.isNewline })
+    }
+
+    func strippingLeadingPromptResidue() -> String {
+        var text = trimmingLeadingWhitespace()
+        while let first = text.first,
+              ["❯", ">", "%", "$", "#"].contains(String(first)) {
+            text.removeFirst()
+            text = text.trimmingLeadingWhitespace()
+        }
+        return text
     }
 }

@@ -595,6 +595,196 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
     }
 
+    @Test("Terminal-host proof recovers current marker when Terminal screen trails cursor")
+    func terminalHostProofRecoversCurrentMarkerWhenTerminalScreenTrailsCursor() {
+        let textBeforeCursor = """
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        """
+        let textAfterCursor = """
+        ╭────────────────────────────────────╮
+        │ Try "fix lint errors"              │
+        ╰────────────────────────────────────╯
+        old terminal screen text
+        """
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+        #expect(metadata["terminalProofCanIgnoreAfterCursor"] == "true")
+        #expect(metadata["terminalProofAfterFirstLineKind"] == "chrome")
+        #expect(metadata["terminalProofRecoverableInput"] == "true")
+        #expect(metadata["terminalProofRecoveryRejectionReason"] == "none")
+        #expect(metadata["terminalProofRecoveredBeforeChars"] == "21")
+        #expect(metadata["terminalProofRecoveredWordCount"] == "4")
+        #expect(metadata["terminalProofRecoveredPartialWordCharacters"] == "3")
+    }
+
+    @Test("Terminal-host proof recovers make-this sample when marker starts the prompt row")
+    func terminalHostProofRecoversMakeThisSampleWhenMarkerStartsPromptRow() {
+        let textBeforeCursor = "STEADYTYPECLAUDECODEPROOF Make this setting con"
+        let textAfterCursor = " \n╭────────────────────────────────────╮\n"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+        #expect(metadata["terminalProofRecoverableInput"] == "true")
+        #expect(metadata["terminalProofRecoveryRejectionReason"] == "none")
+        #expect(metadata["terminalProofRecoveredBeforeChars"] == "21")
+    }
+
+    @Test("Terminal-host proof recovers make-this sample after prompt residue")
+    func terminalHostProofRecoversMakeThisSampleAfterPromptResidue() {
+        let textBeforeCursor = "›STEADYTYPECLAUDECODEPROOF Make this setting con"
+        let textAfterCursor = " \n╭────────────────────────────────────╮\n"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+        #expect(metadata["terminalProofRecoverableInput"] == "true")
+        #expect(metadata["terminalProofRecoveryRejectionReason"] == "none")
+        #expect(metadata["terminalProofRecoveredBeforeChars"] == "21")
+    }
+
+    @Test("Terminal-host proof recovers make-this sample when Terminal drops a typed space")
+    func terminalHostProofRecoversMakeThisSampleWhenTerminalDropsTypedSpace() {
+        let textBeforeCursor = "❯\u{00a0}STEADYTYPECLAUDECODEPROOF Make thissetting con"
+        let textAfterCursor = " \n╭────────────────────────────────────╮\n"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+        #expect(metadata["terminalProofRecoverableInput"] == "true")
+        #expect(metadata["terminalProofRecoveryRejectionReason"] == "none")
+        #expect(metadata["terminalProofRecoveredBeforeChars"] == "21")
+    }
+
+    @Test("Terminal-host proof keeps marked shell command sample blocked")
+    func terminalHostProofKeepsMarkedShellCommandSampleBlocked() {
+        let textBeforeCursor = "STEADYTYPECLAUDECODEPROOF make test"
+        let textAfterCursor = " \n╭────────────────────────────────────╮\n"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+        #expect(metadata["terminalProofRecoverableInput"] == "false")
+        #expect(metadata["terminalProofRecoveryRejectionReason"] == "shellCommandInput")
+    }
+
+    @Test("Terminal-host proof keeps make all command sample blocked")
+    func terminalHostProofKeepsMakeAllCommandSampleBlocked() {
+        let textBeforeCursor = "STEADYTYPECLAUDECODEPROOF make all"
+        let textAfterCursor = " \n╭────────────────────────────────────╮\n"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+    }
+
+    @Test("Terminal-host proof does not recover current marker when same-line suffix remains")
+    func terminalHostProofDoesNotRecoverCurrentMarkerWithSameLineSuffix() {
+        let textBeforeCursor = """
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        """
+        let textAfterCursor = """
+        figu
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+        #expect(metadata["terminalProofCanIgnoreAfterCursor"] == "false")
+        #expect(metadata["terminalProofAfterFirstLineKind"] == "text")
+        #expect(metadata["terminalProofRecoverableInput"] == "false")
+        #expect(metadata["terminalProofRawBeforeLastLineKind"] == "marked")
+    }
+
+    @Test("Terminal-host proof does not recover command text from marked terminal screen")
+    func terminalHostProofDoesNotRecoverCommandTextFromMarkedTerminalScreen() {
+        let textBeforeCursor = """
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF git status
+        """
+        let textAfterCursor = """
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: textBeforeCursor + textAfterCursor,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+    }
+
     @Test("Terminal-host proof input does not bypass command-shaped prompt lines")
     func terminalHostProofInputDoesNotBypassCommandShapedPromptLines() {
         let context = ClaudeCodeTerminalHostProofContext(

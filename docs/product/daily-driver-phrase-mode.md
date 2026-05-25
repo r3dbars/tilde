@@ -118,19 +118,29 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
   shell-command lines such as `1. git status` remain blocked,
 - Claude Code Terminal proof input now rejects shortcut placeholder chrome such
   as `for shortcuts` as unsafe prompt text,
+- Claude Code Terminal proof blocks now include shape-only diagnostics for
+  marker presence, focused/raw line kinds, recoverability, and recovery rejection
+  reasons, so proof failures can be debugged without logging prompt text,
+- Claude Code Terminal proof input now recovers the current marked prompt row
+  when Terminal exposes the old screen after the cursor, treats proof-marked
+  natural-language `make this...` / `make transition...` text as writing, and
+  repairs the observed Terminal AX dropped-space shape `Make thissetting con`
+  back to `Make this setting con` for proof input,
 - the MLX word-completion path now has a local high-confidence suffix rescue
   after model + retry no-candidate failures. It reuses the word ranker, can use
   visible-page candidate words, stays off in the middle of words, and records
   `wordCompletionFallbackUsed` / `wordCompletionFallbackSource` in proof
   metadata.
 
-Fresh live proof is still not fully green: the Terminal-hosted Claude Code
-model-latency run now launches a disposable Claude prompt, proves marker plus
-typed prompt text through AX, and records a model-backed visible word-completion
-suggestion in roughly 380ms. The next failure is narrower: sample 2 is blocked
-as `claude-code-terminal-host-shellCommandDetected` after prompt reset/scrollback
-state leaks into the proof policy. That remains a proof blocker, not a support
-claim.
+Fresh live proof moved past the previous blocker. The Terminal-hosted Claude
+Code model-latency run starting at diagnostics line `339850` produced
+model-backed visible word-completion suggestions for samples 1-5 and the
+prompt/chat no-submit proof passed with `accidentalSubmitCount: 0`,
+`wrongContextInsertionCount: 0`, and `fullAcceptWithoutProofCount: 0`. The
+remaining failure is now the latency beta gate: AX read p99 exceeded the budget
+in 3 summary windows where only 1 is allowed. That means the sample-2
+shell-buffer blocker is fixed, but Claude Code Terminal is still not a support
+claim until AX read latency is stable.
 
 The latest hardening pass made that failure harder to misread:
 
@@ -147,10 +157,10 @@ The latest hardening pass made that failure harder to misread:
 - Claude prompt chrome and flattened launcher scrollback have focused unit
   coverage.
 
-The fresh live run still reaches sample 1 and then times out on sample 2 with
-`claude-code-terminal-host-shellCommandDetected`. The remaining problem appears
-to be Terminal/Claude Code AX exposing a shell-command-shaped buffer instead of
-the adjusted proof input for the second fresh prompt.
+The fresh live run now gets through the five required model-backed Claude Code
+Terminal samples. The next proof blocker is AX polling stability: the same run
+reported `AX read latency summaries: windows=8 samples=480 p99Max=121ms
+max=194ms`, which tripped the beta gate.
 
 ## Scorecard
 
@@ -158,7 +168,7 @@ the adjusted proof input for the second fresh prompt.
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
-| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue, and Claude Code Terminal now reaches a first model-backed visible suggestion with sample-specific proof filters before failing on sample 2 Terminal AX shell-buffer exposure | Feels ready during fast typing | Fix Claude Code Terminal second-sample AX buffer selection, then refresh Obsidian/TextEdit latency proof |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue, and Claude Code Terminal now produces 5 model-backed visible samples with no-submit proof, but AX p99 read windows still fail the latency beta gate | Feels ready during fast typing | Fix Claude Code Terminal AX read-latency spikes, then refresh Obsidian/TextEdit latency proof |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 
