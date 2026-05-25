@@ -1446,6 +1446,10 @@ if ! grep -F "model-backed visible suggestions without submitting" "$TMP_DIR/cla
   echo "real app smoke self-test did not state the Claude Code model latency proof target" >&2
   exit 1
 fi
+if ! grep -F "fresh title-marked disposable Terminal Claude Code prompt per sample" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not state the Claude Code model latency fresh-prompt sampling plan" >&2
+  exit 1
+fi
 if ! grep -F "Claude Code host: Terminal (com.apple.Terminal)" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
   echo "real app smoke self-test expected Claude Code model latency to pin Terminal" >&2
   exit 1
@@ -1456,6 +1460,49 @@ if ! grep -F 'Claude Code model latency sample $sample_index must include $marke
 fi
 if ! grep -F "model-backed visible suggestion during the typed sample window" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code model latency to count model-backed suggestions from the typed sample window" >&2
+  exit 1
+fi
+if ! grep -F 'expected_before_chars="${#expected_user_text}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"beforeChars=$expected_before_chars"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"partialWordCharacters=${#trigger_text}"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to match the exact typed sample shape" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to expose a settle knob" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SUGGESTION_WAIT_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to expose a suggestion wait knob" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_FRESH_PROMPT_PER_SAMPLE" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to expose fresh-prompt sampling control" >&2
+  exit 1
+fi
+if ! grep -F "cleanup_stale_claude_code_terminal_proofs" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "make_claude_code_terminal_proof_dir" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "steadytype-claude-code-proof" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "kill -KILL" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to clean up stale proof Terminal windows" >&2
+  exit 1
+fi
+if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /keystroke "k" using command down/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to clear Terminal scrollback" >&2
+  exit 1
+fi
+if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /keystroke "l" using control down/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to clear the visible screen" >&2
+  exit 1
+fi
+if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /key code 53/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to dismiss stale visible suggestions with Esc" >&2
+  exit 1
+fi
+if awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /(key code 36|key code 48|keystroke return|keystroke tab)/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing not to press Enter or Tab" >&2
   exit 1
 fi
 if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint "❯"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then

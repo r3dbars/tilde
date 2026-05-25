@@ -513,7 +513,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(
             textBeforeCursor: context.rawTextBeforeCursor,
             textAfterCursor: context.rawTextAfterCursor
-        ) == nil)
+        ) == "Can we make this dicta")
     }
 
     @Test("Terminal-host proof input prefers before-cursor text over full AX line")
@@ -538,6 +538,63 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Can we make this d")
     }
 
+    @Test("Terminal-host proof ignores Claude chrome after a marked current line")
+    func terminalHostProofIgnoresClaudeChromeAfterMarkedCurrentLine() {
+        let textBeforeCursor = """
+        Claude Code
+        ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        """
+        let textAfterCursor = """
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: focusedLine,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(focusedLine == "❯ STEADYTYPECLAUDECODEPROOF Make this setting con")
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+    }
+
+    @Test("Terminal-host proof recovers current marker when Terminal flattens launcher scrollback")
+    func terminalHostProofRecoversCurrentMarkerFromFlattenedLauncherScrollback() {
+        let textBeforeCursor = """
+        redbars@Mac % cd /Users/redbars/.codex/worktrees/32b9/transcripted-autocomplete-lab; /opt/homebrew/bin/claude Claude Code ❯ STEADYTYPECLAUDECODEPROOF Make this setting con
+        """
+        let textAfterCursor = """
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let focusedLine = ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: focusedLine,
+            rawTextBeforeCursor: textBeforeCursor,
+            rawTextAfterCursor: textAfterCursor,
+            proofModeEnabled: true
+        )
+
+        #expect(focusedLine == "STEADYTYPECLAUDECODEPROOF Make this setting con")
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting con")
+    }
+
     @Test("Terminal-host proof input does not bypass command-shaped prompt lines")
     func terminalHostProofInputDoesNotBypassCommandShapedPromptLines() {
         let context = ClaudeCodeTerminalHostProofContext(
@@ -545,6 +602,20 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
             focusedText: "git status",
             rawTextBeforeCursor: "git status",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+    }
+
+    @Test("Terminal-host proof keeps make command lines blocked")
+    func terminalHostProofKeepsMakeCommandLinesBlocked() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "make test",
+            rawTextBeforeCursor: "make test",
             proofModeEnabled: true
         )
 
