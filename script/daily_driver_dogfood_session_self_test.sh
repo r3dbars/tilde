@@ -18,17 +18,17 @@ REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":200}
-{"timestamp":"2026-05-25T00:01:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":210,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:01:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":210,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:01:01Z","sessionID":"s","suggestionID":"s1","type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","metadata":{"acceptanceID":"a1"}}
 {"timestamp":"2026-05-25T00:01:02Z","sessionID":"s","suggestionID":"s1","type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","metadata":{"acceptanceID":"a1"}}
 {"timestamp":"2026-05-25T00:01:12Z","sessionID":"s","suggestionID":"s1","type":"acceptedTextEdited","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","metadata":{"acceptanceID":"a1","checkpoint":"10s","survivalClass":"exactKept","strongAcceptedAndKept":"true"}}
-{"timestamp":"2026-05-25T00:02:00Z","sessionID":"s","suggestionID":"s2","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":220,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:02:00Z","sessionID":"s","suggestionID":"s2","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":220,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:02:10Z","sessionID":"s","suggestionID":"s2","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","reason":"escape-dismissed"}
-{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":230,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":230,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:03:20Z","sessionID":"s","suggestionID":"s3","type":"suggestionTypedOver","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","reason":"typed-against-visible-suggestion"}
-{"timestamp":"2026-05-25T00:04:00Z","sessionID":"s","suggestionID":"s4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":240,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:04:00Z","sessionID":"s","suggestionID":"s4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":240,"metadata":{"candidateSelectionSource":"fast-word-completion","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:04:15Z","sessionID":"s","suggestionID":"s4","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","reason":"field-changed"}
-{"timestamp":"2026-05-25T00:06:10Z","sessionID":"s","suggestionID":"s5","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":250,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:06:10Z","sessionID":"s","suggestionID":"s5","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":250,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 JSONL
 
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" start \
@@ -69,6 +69,14 @@ for expected in \
   "Shown suggestions: 5 (minimum 5)" \
   "Accepted-kept suggestions: 1 (minimum 1)" \
   "Accepted-kept shown rate: 20% (minimum 15%, 1/5)" \
+  "Source mix: shown / accepted / accepted-kept shown" \
+  "predictive-phrase-fallback: 2 / 1 / 1" \
+  "app-model-result: 2 / 0 / 0" \
+  "fast-word-completion: 1 / 0 / 0" \
+  "Instant phrase fallback shown: 2" \
+  "Model-backed shown: 2" \
+  "Word fallback shown: 1" \
+  "Unknown source shown: 0" \
   "Typing Feel Score" \
   "Typing feel score report" \
   "Non-Annoyance Gate" \
@@ -340,7 +348,9 @@ for expected in \
   "Typing feel status: \`0\`" \
   "Low-sample override: \`1\`" \
   "Shown suggestions: 1 (minimum 0)" \
-  "Accepted-kept shown rate: 100% (minimum 0%, 1/1)"
+  "Accepted-kept shown rate: 100% (minimum 0%, 1/1)" \
+  "predictive-phrase-fallback: 1 / 1 / 1" \
+  "Instant phrase fallback shown: 1"
 do
   if ! grep -q "$expected" "$LOW_OVERRIDE_REPORT_PATH"; then
     echo "dogfood self-test low-sample override report missing: $expected" >&2
