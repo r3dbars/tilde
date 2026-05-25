@@ -112,6 +112,22 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
 
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+    }
+
+    @Test("Terminal-host proof input rejects Claude Code shortcut hints")
+    func terminalHostProofInputRejectsClaudeCodeShortcutHints() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
+            focusedText: "Press ? for shortcuts",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.sanitizedProofInputLine("for shortcuts") == nil)
+        #expect(ClaudeCodeTerminalHostProofPolicy.sanitizedProofInputLine("Press ? for shortcuts") == nil)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
     }
 
     @Test("Terminal-host proof rejects prompt glyph when title marker is not Claude Code scoped")

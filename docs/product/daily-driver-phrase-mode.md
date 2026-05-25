@@ -96,16 +96,29 @@ Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
 - the disposable sample loop now tracks early empty model outputs from the whole
   sample iteration so the proof can report empty candidates instead of only
   timing out on the later visible-suggestion wait,
+- Claude Code Terminal model-latency samples now type the compact proof marker
+  on the current sample line instead of relying only on window-title proof, and
+  the Terminal AX helper binds reads to the frontmost Terminal process so older
+  Terminal instances cannot satisfy the check,
 - Claude Code Terminal proof input now strips a leading numbered prompt
   decoration like `1. ` before the text is sent to the model, while numbered
-  shell-command lines such as `1. git status` remain blocked.
+  shell-command lines such as `1. git status` remain blocked,
+- Claude Code Terminal proof input now rejects shortcut placeholder chrome such
+  as `for shortcuts` as unsafe prompt text,
+- the MLX word-completion path now has a local high-confidence suffix rescue
+  after model + retry no-candidate failures. It reuses the word ranker, can use
+  visible-page candidate words, stays off in the middle of words, and records
+  `wordCompletionFallbackUsed` / `wordCompletionFallbackSource` in proof
+  metadata.
 
 Fresh live proof is still not green: the current Terminal-hosted Claude Code
-model-latency run now reaches the MLX word-completion path with the numbered
-decoration removed, but the word-completion output still cleans to zero
-candidates for the sanitized prompt. Subsequent Terminal AX reads then include
-scrollback and hit the multiline-command blocker. That remains a proof blocker,
-not a support claim.
+model-latency run now proves the helper can see the current-line marker plus
+seed text in the frontmost Terminal process. The typed marker line is still
+classified as a zsh/unproven surface and blocked, which is the right fail-closed
+behavior, and a later stale Claude prompt can still reach the model and clean to
+zero candidates. The next live pass needs to fix the Terminal launch/wait step
+so the sample is typed into an actual Claude Code prompt, not zsh or stale
+scrollback. That remains a proof blocker, not a support claim.
 
 ## Scorecard
 
@@ -113,7 +126,7 @@ not a support claim.
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
 | Placement reliability | Obsidian default/theme/pane have fresh strict visual proof; TextEdit, Notes, long-note, and Chrome rows remain stale | Correct or honest fallback in Obsidian first | Refresh Obsidian long-note, then TextEdit/Notes |
-| Typing speed | Subsecond repaired phrase results can display; Claude Code Terminal latency proof reaches MLX with sanitized prompt text but still cleans empty | Feels ready during fast typing | Fix Claude Code word-completion no-candidate path, then refresh Obsidian/TextEdit latency proof |
+| Typing speed | Subsecond repaired phrase results can display; MLX word completion now has a tested local suffix rescue after no-candidate failures, but Claude Code live proof still fails before a clean prompt sample | Feels ready during fast typing | Fix Claude Code Terminal launch/wait into the actual prompt, then refresh Obsidian/TextEdit latency proof |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
 | Daily-driver feel | User gut baseline: about 60%; Obsidian default is less flaky but not enough | User leaves it on and misses it when off | One full writing session with SteadyType enabled |
 

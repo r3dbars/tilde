@@ -1450,6 +1450,10 @@ if ! grep -F "Claude Code host: Terminal (com.apple.Terminal)" "$TMP_DIR/claude-
   echo "real app smoke self-test expected Claude Code model latency to pin Terminal" >&2
   exit 1
 fi
+if ! grep -F 'Claude Code model latency sample $sample_index must include $marker' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency samples to carry the current-line proof marker" >&2
+  exit 1
+fi
 if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "type_claude_code_terminal_raw_smoke_text" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "check_prompt_app_proof.sh" script/real_app_smoke.sh >/dev/null ||
