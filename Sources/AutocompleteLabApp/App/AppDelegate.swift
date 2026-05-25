@@ -9793,12 +9793,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         if invalidation.shouldInvalidate {
             let reason = invalidation.reason?.rawValue ?? "unknown"
+            let currentRequest = suggestionOrchestrator.currentRequest
+            let preservesPendingRequest = suggestionGeometryChangePolicy
+                .shouldPreservePendingRequestWhenVisibleSuggestionInvalidates(
+                    hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                    hasPendingSuggestionRequest: currentRequest != nil,
+                    pendingRequestTextBeforeCursor: currentRequest?.textBeforeCursor,
+                    pendingRequestTextAfterCursor: currentRequest?.textAfterCursor,
+                    pendingRequestFieldIdentityDescription: currentRequest?.fieldIdentityDescription,
+                    currentTextBeforeCursor: context.textBeforeCursor,
+                    currentTextAfterCursor: context.textAfterCursor,
+                    currentFieldIdentityDescription: currentGeometrySnapshot.fieldIdentity?.traceDescription
+                )
             preservesResidualSuggestionAfterNextWordAccept = false
-            invalidatePendingSuggestionRequest()
+            if !preservesPendingRequest {
+                invalidatePendingSuggestionRequest()
+            }
             hideSuggestion(
                 reason: "stale-geometry-\(reason)",
                 metadata: invalidation.metadata
                     .merging(geometryTraceMetadata()) { current, _ in current }
+                    .merging(["pendingRequestPreserved": String(preservesPendingRequest)]) { current, _ in current }
             )
             return
         }

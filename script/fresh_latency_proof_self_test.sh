@@ -93,7 +93,7 @@ fi
 if [[ "${1:-}" == "textedit-default-model-latency" ]]; then
   for sample in 1 2 3 4 5; do
     cat >>"$AUTOCOMPLETE_LAB_LOG" <<LOG
-$base_timestamp mlx-completion-timing app=com.apple.TextEdit cleanedChars=18 cleanupMilliseconds=0 firstChunkMilliseconds=90 generationMilliseconds=120 maxTokens=11 mode=phraseContinuation promptMilliseconds=0 rawChars=18 sessionMilliseconds=0 totalMilliseconds=121
+$base_timestamp mlx-completion-timing app=com.apple.TextEdit cleanedChars=18 cleanupMilliseconds=0 firstChunkMilliseconds=90 generationMilliseconds=120 maxTokens=14 mode=phraseContinuation promptMilliseconds=0 rawChars=18 sessionMilliseconds=0 totalMilliseconds=121
 $base_timestamp suggestion-presented app=com.apple.TextEdit candidateSelectionSource=app-model-result latencyMilliseconds=130 requestMode=phraseContinuation traceID=fresh-default-${sample}
 LOG
   done
