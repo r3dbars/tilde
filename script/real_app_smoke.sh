@@ -11423,6 +11423,29 @@ assert_obsidian_long_note_file_preserved() {
   exit 3
 }
 
+assert_obsidian_first_accept_tail_for_variant() {
+  local manual_app="$1"
+  local current_tail="$2"
+
+  if [[ "$manual_app" == "obsidian-run-on" ]]; then
+    case "$current_tail" in
+      *"Smoke proof feels "*)
+        return 0
+        ;;
+    esac
+  else
+    case "$current_tail" in
+      "Smoke proof feels "*)
+        return 0
+        ;;
+    esac
+  fi
+
+  echo "Obsidian first accept did not preserve the disposable proof prefix." >&2
+  echo "Current tail: $current_tail" >&2
+  exit 3
+}
+
 activate_neutral_smoke_setup_app() {
   open -a Finder >/dev/null 2>&1 || true
   try_wait_for_frontmost_app "Finder" 3 >/dev/null 2>&1 || true
@@ -11537,7 +11560,7 @@ run_obsidian() {
     unset AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN
     export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=1
   fi
-  if [[ "$manual_app" == "obsidian-long-note" && -z "${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}" ]]; then
+  if [[ "$manual_app" =~ ^obsidian-(long-note|run-on)$ && -z "${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}" ]]; then
     export AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
@@ -11633,15 +11656,7 @@ run_obsidian() {
     settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
     local first_raw_tail_line second_fragment
     first_expected_suffix="$(obsidian_smoke_note_trimmed_tail_line)"
-    case "$first_expected_suffix" in
-      "Smoke proof feels "*)
-        ;;
-      *)
-        echo "Obsidian first accept did not preserve the disposable proof prefix." >&2
-        echo "Current tail: $first_expected_suffix" >&2
-        exit 3
-        ;;
-    esac
+    assert_obsidian_first_accept_tail_for_variant "$manual_app" "$first_expected_suffix"
     assert_obsidian_smoke_target "$first_expected_suffix"
     first_raw_tail_line="$(obsidian_smoke_note_tail_line)"
     second_fragment=" and stays"
@@ -11688,7 +11703,9 @@ run_obsidian() {
     wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
   else
-    activate_obsidian_for_smoke
+    if [[ "$manual_app" != "obsidian-run-on" ]]; then
+      activate_obsidian_for_smoke
+    fi
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
