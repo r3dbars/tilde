@@ -108,4 +108,100 @@ struct VisibleSuggestionPersistencePolicyTests {
             textAfterCursor: "of text"
         ))
     }
+
+    @Test("preserves Obsidian suggestions through document-start AX teleport")
+    func preservesObsidianSuggestionsThroughDocumentStartAXTeleport() {
+        let policy = VisibleSuggestionPersistencePolicy()
+        let fieldIdentity = FocusedFieldIdentity(
+            bundleIdentifier: "md.obsidian",
+            processIdentifier: 42,
+            elementIdentifier: 99
+        )
+        let visibleTail = "This long wrapped Obsidian line keeps the caret at the end while Smoke proof feels instant and stays"
+
+        #expect(policy.shouldPreserveAfterActivationBlock(
+            blockReason: .tooLittleContext,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "md.obsidian",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: visibleTail,
+            currentSuggestionAgeMilliseconds: 92,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "",
+            textAfterCursor: visibleTail
+        ))
+        #expect(policy.shouldPreserveAfterActivationBlock(
+            blockReason: .markdownCodeContext,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "md.obsidian",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: visibleTail,
+            currentSuggestionAgeMilliseconds: 92,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "`",
+            textAfterCursor: visibleTail
+        ))
+        #expect(policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "md.obsidian",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: visibleTail,
+            currentSuggestionAgeMilliseconds: 92,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "",
+            textAfterCursor: visibleTail
+        ))
+        #expect(policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "md.obsidian",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: visibleTail,
+            currentSuggestionAgeMilliseconds: 1_700,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "",
+            textAfterCursor: visibleTail
+        ))
+        #expect(!policy.shouldPreserveAfterActivationBlock(
+            blockReason: .markdownCodeContext,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "md.obsidian",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: visibleTail,
+            currentSuggestionAgeMilliseconds: 92,
+            isInvalidatedByUserTyping: true,
+            textBeforeCursor: "`",
+            textAfterCursor: visibleTail
+        ))
+        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .windowChanged,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "md.obsidian",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: visibleTail,
+            currentSuggestionAgeMilliseconds: 92,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "",
+            textAfterCursor: visibleTail
+        ))
+        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: .caretChanged,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: "md.obsidian",
+            currentSuggestionFieldIdentity: fieldIdentity,
+            currentSuggestionTextBeforeCursor: visibleTail,
+            currentSuggestionAgeMilliseconds: 2_501,
+            isInvalidatedByUserTyping: false,
+            textBeforeCursor: "",
+            textAfterCursor: visibleTail
+        ))
+    }
 }

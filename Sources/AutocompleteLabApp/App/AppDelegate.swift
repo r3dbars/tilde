@@ -4427,13 +4427,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let lastTextSnapshot,
               shownSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
               shownSnapshot.fieldIdentity == lastTextSnapshot.fieldIdentity,
-              shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
-              shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor,
               shownSnapshot.selectedTextLength == 0 else {
             return false
         }
 
-        return true
+        if shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+           shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor {
+            return true
+        }
+
+        return visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
+            blockReason: .tooLittleContext,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionTextBeforeCursor: shownSnapshot.textBeforeCursor,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            textAfterCursor: lastTextSnapshot.textAfterCursor
+        )
     }
 
     private func recordObsidianSnapshotFastPath(stage: String) {
@@ -10428,6 +10442,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         if invalidation.shouldInvalidate {
             let reason = invalidation.reason?.rawValue ?? "unknown"
+            if let geometryFieldIdentity = currentGeometrySnapshot.fieldIdentity,
+               shouldPreserveVisibleSuggestionDuringGeometryInvalidation(
+                invalidation: invalidation,
+                context: context,
+                profile: profile,
+                fieldIdentity: geometryFieldIdentity
+            ) {
+                updateKeyboardEventTapSnapshot()
+                setSuggestionDecision("Shown: preserving current suggestion")
+                recordSuggestionEvent(
+                    "suggestion-preserved",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": "obsidian-document-start-geometry-teleport",
+                        "geometryInvalidationReason": reason,
+                        "fieldIdentity": geometryFieldIdentity.traceDescription
+                    ]
+                    .merging(invalidation.metadata) { current, _ in current }
+                    .merging(geometryTraceMetadata()) { current, _ in current }
+                )
+                return
+            }
+
             let currentRequest = suggestionOrchestrator.currentRequest
             let preservesPendingRequest = suggestionGeometryChangePolicy
                 .shouldPreservePendingRequestWhenVisibleSuggestionInvalidates(
@@ -10486,6 +10524,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return true
+    }
+
+    private func shouldPreserveVisibleSuggestionDuringGeometryInvalidation(
+        invalidation: SuggestionGeometryInvalidationDecision,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Bool {
+        visibleSuggestionPersistencePolicy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: invalidation.reason,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor
+        )
     }
 
     private func recordAcceptedText(_ acceptedText: String) {
