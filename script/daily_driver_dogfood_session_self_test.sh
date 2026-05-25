@@ -10,6 +10,7 @@ MARK_PATH="$TMP_DIR/session.env"
 REPORT_PATH="$TMP_DIR/report.md"
 LOW_REPORT_PATH="$TMP_DIR/low-report.md"
 LOW_OVERRIDE_REPORT_PATH="$TMP_DIR/low-override-report.md"
+HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":200}
@@ -22,7 +23,7 @@ cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":230,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:03:20Z","sessionID":"s","suggestionID":"s3","type":"suggestionTypedOver","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","reason":"typed-against-visible-suggestion"}
 {"timestamp":"2026-05-25T00:04:00Z","sessionID":"s","suggestionID":"s4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":240,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
-{"timestamp":"2026-05-25T00:04:15Z","sessionID":"s","suggestionID":"s4","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","outcome":"typed-through"}
+{"timestamp":"2026-05-25T00:04:15Z","sessionID":"s","suggestionID":"s4","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","reason":"field-changed"}
 {"timestamp":"2026-05-25T00:06:10Z","sessionID":"s","suggestionID":"s5","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phrase","latencyMilliseconds":250,"metadata":{"effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 JSONL
 
@@ -51,8 +52,11 @@ for expected in \
   "Gate: \`pass\`" \
   "Session Sample Gate" \
   "Sample gate status: \`0\`" \
+  "Typing feel status: \`0\`" \
   "Shown suggestions: 5 (minimum 5)" \
   "Accepted-kept suggestions: 1 (minimum 1)" \
+  "Typing Feel Score" \
+  "Typing feel score report" \
   "Non-Annoyance Gate" \
   "Trace Eval" \
   "Manual Trust Row" \
@@ -68,6 +72,36 @@ if grep -q "displayedText\\|acceptedText\\|rawOutput" "$REPORT_PATH"; then
   echo "dogfood self-test report leaked raw trace text keys" >&2
   exit 1
 fi
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
+  --trace "$TRACE_PATH" \
+  --start-line 1 \
+  --end-line 12 \
+  --app com.apple.TextEdit \
+  --label self-test-high-score \
+  --report "$HIGH_SCORE_REPORT_PATH" \
+  --min-typing-feel-score 95 \
+  >"$TMP_DIR/high-score.out" 2>&1
+high_score_status=$?
+set -e
+
+if [[ "$high_score_status" -eq 0 ]]; then
+  echo "dogfood self-test expected high typing-feel threshold to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Gate: \`fail\`" \
+  "Sample gate status: \`0\`" \
+  "Typing feel status: \`1\`" \
+  "Typing feel minimum score: \`95\`"
+do
+  if ! grep -q "$expected" "$HIGH_SCORE_REPORT_PATH"; then
+    echo "dogfood self-test high-score report missing: $expected" >&2
+    exit 1
+  fi
+done
 
 set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
@@ -89,6 +123,7 @@ fi
 for expected in \
   "Gate: \`fail\`" \
   "Sample gate status: \`1\`" \
+  "Typing feel status: \`0\`" \
   "shown suggestions below minimum (1/5)" \
   "active minutes below minimum"
 do
@@ -110,6 +145,7 @@ done
 for expected in \
   "Gate: \`pass\`" \
   "Sample gate status: \`0\`" \
+  "Typing feel status: \`0\`" \
   "Low-sample override: \`1\`" \
   "Shown suggestions: 1 (minimum 0)"
 do
