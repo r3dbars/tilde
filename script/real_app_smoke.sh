@@ -61,7 +61,7 @@ SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -113,9 +113,9 @@ Use
 --fixture all to run every local Chrome browser/editor fixture with one app
 build. Add --include-default-real-editor-proof with --fixture all to rerun real
 Monaco and ProseMirror in default Chrome AX mode after the forced lane.
-Use chrome-textarea-model-latency to relaunch SteadyType with fast completions
-and phrase continuations disabled, then prove the local model path in the
-disposable Chrome textarea fixture.
+Use chrome-textarea-model-latency or chrome-contenteditable-model-latency to
+relaunch SteadyType with fast completions and phrase continuations disabled,
+then prove the local model path in a disposable Chrome fixture.
 
 Claude Code is proof-only through supported terminal hosts. Use --host or the
 claude-code-<host> aliases to record host-specific proof labels without enabling
@@ -252,6 +252,12 @@ case "$APP" in
   chrome-textarea-model-latency)
     APP="chrome"
     CHROME_FIXTURE="textarea"
+    CHROME_FIXTURE_WAS_SET=1
+    CHROME_MODEL_LATENCY=1
+    ;;
+  chrome-contenteditable-model-latency)
+    APP="chrome"
+    CHROME_FIXTURE="contenteditable"
     CHROME_FIXTURE_WAS_SET=1
     CHROME_MODEL_LATENCY=1
     ;;

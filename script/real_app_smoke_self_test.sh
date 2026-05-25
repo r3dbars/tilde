@@ -89,6 +89,24 @@ if ! grep -F "must relaunch with fast word completions and phrase continuations 
   exit 1
 fi
 
+script/real_app_smoke.sh chrome-contenteditable-model-latency --dry-run >"$TMP_DIR/chrome-contenteditable-model-latency.txt"
+if ! grep -F "Real app smoke: chrome" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome fixture: contenteditable" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome model latency proof disables fast word completions and phrase continuations" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario chrome-contenteditable-model-latency" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome contenteditable model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome-contenteditable-model-latency --skip-build --dry-run >"$TMP_DIR/chrome-contenteditable-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Chrome contenteditable model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/chrome-contenteditable-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected Chrome contenteditable model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
