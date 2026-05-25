@@ -9372,6 +9372,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        if Self.postHardwareTextKeyEvents(acceptedText) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgHardwareKeyEventsGlobal",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "cgHardwareKeyEventsGlobalBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "hardware-global-unverified-mutated-input",
+                        "source": "cgHardwareKeyEventsGlobalBaseline"
+                    ]
+                )
+                return false
+            }
+        }
+
         if Self.postUnicodeTextKeyEvents(
             acceptedText,
             processIdentifier: frontmostApp.processIdentifier
@@ -9417,6 +9466,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "posted": "false",
                         "reason": "unicode-unverified-mutated-input",
                         "source": "cgUnicodeKeyEventsBaseline"
+                    ]
+                )
+                return false
+            }
+        }
+
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        if Self.postUnicodeTextKeyEvents(acceptedText) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgUnicodeKeyEventsGlobal",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "cgUnicodeKeyEventsGlobalBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "unicode-global-unverified-mutated-input",
+                        "source": "cgUnicodeKeyEventsGlobalBaseline"
                     ]
                 )
                 return false
@@ -9477,85 +9575,126 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        pasteboard.clearContents()
-        guard pasteboard.setString(acceptedText, forType: .string) else {
-            restoreOriginalPasteboard()
+        func setPasteboardString(for source: String) -> Int? {
+            pasteboard.clearContents()
+            guard pasteboard.setString(acceptedText, forType: .string) else {
+                restoreOriginalPasteboard()
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "pasteboard-set-failed",
+                        "source": source
+                    ]
+                )
+                return nil
+            }
+            return pasteboard.changeCount
+        }
+
+        func tryPasteboardCommandV(
+            source: String,
+            baselineSource: String,
+            failedReason: String,
+            mutatedInputReason: String,
+            processIdentifier: pid_t?
+        ) -> (verified: Bool, safeToContinue: Bool) {
+            guard let fallbackChangeCount = setPasteboardString(for: source) else {
+                return (false, false)
+            }
+
+            guard Self.postCommandVKey(processIdentifier: processIdentifier) else {
+                restoreOriginalPasteboard()
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": failedReason,
+                        "source": source
+                    ]
+                )
+                return (false, true)
+            }
+
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 24
+            )
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": "pasteboard-set-failed",
-                    "source": "pasteboardCommandV"
+                    "posted": "true",
+                    "source": source,
+                    "verified": String(verified)
                 ]
             )
-            return false
-        }
-        let fallbackChangeCount = pasteboard.changeCount
+            if verified {
+                schedulePasteboardRestore(
+                    insertedText: acceptedText,
+                    fallbackChangeCount: fallbackChangeCount,
+                    originalItems: originalItems,
+                    delaySeconds: 0.35
+                )
+                return (true, false)
+            }
 
-        guard Self.postCommandVKey() else {
             restoreOriginalPasteboard()
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": "pasteboard-command-v-failed",
-                    "source": "pasteboardCommandV"
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
                 ]
             )
-            return false
+            if !promptStayedUnchanged {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": mutatedInputReason,
+                        "source": baselineSource
+                    ]
+                )
+            }
+            return (false, promptStayedUnchanged)
         }
 
-        let verified = verifyClaudeCodeTerminalHostProofInsertion(
-            expectedProofInputText: expectedProofInputText,
-            frontmostApp: frontmostApp,
-            profile: profile,
-            attempts: 24
+        let targetedPasteOutcome = tryPasteboardCommandV(
+            source: "pasteboardCommandVToPid",
+            baselineSource: "pasteboardCommandVToPidBaseline",
+            failedReason: "pasteboard-command-v-to-pid-failed",
+            mutatedInputReason: "pasteboard-to-pid-unverified-mutated-input",
+            processIdentifier: frontmostApp.processIdentifier
         )
-        schedulePasteboardRestore(
-            insertedText: acceptedText,
-            fallbackChangeCount: fallbackChangeCount,
-            originalItems: originalItems,
-            delaySeconds: 0.35
-        )
-        DiagnosticsLog.shared.record(
-            "claude-code-terminal-host-proof-insert",
-            metadata: [
-                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                "posted": "true",
-                "source": "pasteboardCommandV",
-                "verified": String(verified)
-            ]
-        )
-        if verified {
+        if targetedPasteOutcome.verified {
             return true
         }
+        guard targetedPasteOutcome.safeToContinue else {
+            return false
+        }
 
-        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
-            expectedProofInputText: originalProofInputText,
-            frontmostApp: frontmostApp,
-            profile: profile,
-            attempts: 4
+        let globalPasteOutcome = tryPasteboardCommandV(
+            source: "pasteboardCommandV",
+            baselineSource: "pasteboardCommandVBaseline",
+            failedReason: "pasteboard-command-v-failed",
+            mutatedInputReason: "pasteboard-unverified-mutated-input",
+            processIdentifier: nil
         )
-        DiagnosticsLog.shared.record(
-            "claude-code-terminal-host-proof-insert",
-            metadata: [
-                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                "source": "pasteboardCommandVBaseline",
-                "verified": String(promptStayedUnchanged)
-            ]
-        )
-        if !promptStayedUnchanged {
-            DiagnosticsLog.shared.record(
-                "claude-code-terminal-host-proof-insert",
-                metadata: [
-                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": "pasteboard-unverified-mutated-input",
-                    "source": "pasteboardCommandVBaseline"
-                ]
-            )
+        if globalPasteOutcome.verified {
+            return true
         }
         return false
     }

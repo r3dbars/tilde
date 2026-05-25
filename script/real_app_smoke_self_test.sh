@@ -352,6 +352,28 @@ if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proo
     raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
 if "pollTimer?.fireDate" in app_delegate:
     raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
+terminal_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(")
+terminal_insert_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_insert_start)
+terminal_insert_block = app_delegate[terminal_insert_start:terminal_insert_end]
+targeted_source = terminal_insert_block.index('source: "pasteboardCommandVToPid"')
+global_source = terminal_insert_block.index('source: "pasteboardCommandV"', targeted_source)
+if targeted_source > global_source:
+    raise SystemExit("Claude Code terminal-host paste proof must try pid-targeted Command-V before global Command-V")
+if "processIdentifier: frontmostApp.processIdentifier" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must post Command-V to the verified frontmost terminal pid")
+if "pasteboardCommandVToPidBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must verify the prompt stayed unchanged after an unverified pid paste")
+if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must fail closed if pid paste mutates the prompt unexpectedly")
+if "guard targetedPasteOutcome.safeToContinue else" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must not continue to global paste after unsafe pid insertion")
+terminal_main_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofText(")
+terminal_main_insert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", terminal_main_insert_start)
+terminal_main_insert_block = app_delegate[terminal_main_insert_start:terminal_main_insert_end]
+if "cgHardwareKeyEventsGlobal" not in terminal_main_insert_block or "cgUnicodeKeyEventsGlobal" not in terminal_main_insert_block:
+    raise SystemExit("Claude Code terminal-host insertion must try verified global text key events before paste fallback")
+if terminal_main_insert_block.count("keyboardEventTap?.suppressPassthroughObservation(for: 0.5)") < 2:
+    raise SystemExit("Claude Code terminal-host global key insertion must suppress synthetic typing passthrough observation")
 insert_start = app_delegate.index("private func insertObsidianDirectValueText(")
 insert_end = app_delegate.index("private func insertObsidianSystemEventsPasteText(", insert_start)
 insert_block = app_delegate[insert_start:insert_end]
@@ -1692,8 +1714,14 @@ if ! grep -F '"source": "cgHardwareKeyEvents"' Sources/AutocompleteLabApp/App/Ap
    ! grep -F '"source": "cgHardwareKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    ! grep -F '"source": "cgUnicodeKeyEvents"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    ! grep -F '"source": "cgUnicodeKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
-   ! grep -F '"source": "pasteboardCommandV"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
-   ! grep -F '"source": "pasteboardCommandVBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgHardwareKeyEventsGlobal"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgHardwareKeyEventsGlobalBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEventsGlobal"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEventsGlobalBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'source: "pasteboardCommandVToPid"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'baselineSource: "pasteboardCommandVToPidBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'source: "pasteboardCommandV"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'baselineSource: "pasteboardCommandVBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    ! grep -F '"reason": "terminal-verified-insertion-failed"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
   echo "real app smoke self-test expected Claude Code Terminal insertion to try verified key events and proof-only paste before failing closed" >&2
   exit 1
@@ -1706,7 +1734,7 @@ if grep -F "accessibilityMenuPaste" Sources/AutocompleteLabApp/App/AppDelegate.s
 fi
 if ! grep -F 'schedulePasteboardRestore' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    ! grep -F 'pasteboard.changeCount' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
-   ! grep -F 'postCommandVKey()' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+   ! grep -F 'postCommandVKey(processIdentifier: processIdentifier)' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
   echo "real app smoke self-test expected proof-only paste fallback to restore the pasteboard after verified insertion attempts" >&2
   exit 1
 fi
