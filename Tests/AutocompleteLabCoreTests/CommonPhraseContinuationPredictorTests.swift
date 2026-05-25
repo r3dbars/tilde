@@ -176,6 +176,37 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts daily-driver connector thoughts instantly")
+    func predictsDailyDriverConnectorThoughtsInstantly() {
+        let cases: [(String, String, String)] = [
+            ("I want SteadyType because", " it saves real time", "intent-daily-driver-because"),
+            ("This typing app needs to work so that", " writing keeps moving forward", "intent-daily-driver-so-that"),
+            ("The suggestion shows up late which means", " it loses trust quickly", "intent-daily-driver-which-means-trust"),
+            ("For SteadyType, the reason is", " it feels genuinely useful", "intent-daily-driver-reason-is"),
+            ("The autocomplete fix is", " to make it predictable", "intent-daily-driver-fix-is"),
+            ("For phrase suggestions, we should prove", " it works while writing", "intent-daily-driver-prove")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount == 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "Can you submit because",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+    }
+
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
     func blocksUnsafeProfiles() {
         #expect(predictor.suggestion(
