@@ -223,8 +223,11 @@ The real writing-session pass now has a repeatable redacted wrapper:
 `./script/daily_driver_dogfood_session.sh start` saves a trace line mark, and
 `./script/daily_driver_dogfood_session.sh finish` writes a local report under
 `dist/daily-driver-dogfood/` with the non-annoyance gate, trace eval summary,
-line bounds, and a manual trust row. This does not create the subjective proof
-by itself, but it makes the next dogfood session auditable instead of vibes-only.
+line bounds, and a manual trust row. `finish` now also enforces a metadata-only
+sample gate by default: at least 5 active minutes, 5 shown suggestions,
+1 accepted suggestion, and 1 accepted-and-kept signal. This does not create the
+subjective proof by itself, but it prevents a tiny happy-path trace from being
+counted as a daily-driver pass.
 
 ## Scorecard
 
@@ -234,7 +237,7 @@ by itself, but it makes the next dogfood session auditable instead of vibes-only
 | Placement reliability | All beta-safe strict target rows are fresh: TextEdit, Notes, Obsidian, Chrome textarea/contenteditable | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; Claude Code Terminal and TextEdit have green model-backed latency proof | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Unit and eval gates pass | Zero sensitive/wrong-field suggestions | Fresh prompt no-submit and sensitive-field proof |
-| Daily-driver feel | Core proof grid is green and the dogfood report wrapper exists, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, then finish the dogfood report |
+| Daily-driver feel | Core proof grid is green and the dogfood report wrapper now requires a real-sized trace sample, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, then finish the dogfood report |
 
 ## Long-Running Loop
 

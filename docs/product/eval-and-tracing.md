@@ -321,7 +321,10 @@ redacted Markdown report:
 ```
 
 The report goes under `dist/daily-driver-dogfood/` by default. It includes the
-non-annoyance gate, trace eval output, line bounds, and a manual trust row. Do
+session sample gate, non-annoyance gate, trace eval output, line bounds, and a
+manual trust row. By default, `finish` requires at least 5 active minutes,
+5 shown suggestions, 1 accepted suggestion, and 1 accepted-and-kept signal. Use
+`--allow-low-sample` only for harness/debug slices, not daily-driver proof. Do
 not paste raw writing, prompts, screenshots, document names, URLs, recipients,
 or subjects into that manual row.
 
