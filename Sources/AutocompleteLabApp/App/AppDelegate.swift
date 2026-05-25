@@ -2026,49 +2026,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSnapshot: snapshot,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
-        let typingBurstRequestMode = activationPolicy(for: profile).decision(
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor,
-            isSecure: context.isSecure,
-            selectedTextLength: context.selectedTextLength,
-            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
-            fieldKind: fieldClassification.kind,
-            allowsUnknownFieldKind: profile.allowsUnknownFieldKind
-        ).requestMode
-        if typingBurstDecision.shouldSuppress(requestMode: typingBurstRequestMode) {
-            lastTextSnapshot = snapshot
-            invalidatePendingSuggestionRequest()
-            currentSuggestionInvalidatedByUserKeyDown = true
-            let requestMode = typingBurstRequestMode?.rawValue ?? ""
-            let metadata = fieldClassification.traceMetadata
-                .merging(typingBurstDecision.traceMetadata) { current, _ in current }
-                .merging(["reason": "typing-burst"]) { current, _ in current }
-            if suggestionSession.hasVisibleSuggestion {
-                hideSuggestion(reason: "typing-burst", metadata: typingBurstDecision.traceMetadata)
-            }
-            setSuggestionDecision("Waiting: fast typing")
-            showFieldStatusIndicator(.waiting, context: context)
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: UUID().uuidString,
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: requestMode,
-                triggerReason: "typing-burst-policy",
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor,
-                reason: "typing-burst",
-                metadata: metadata
-            )
-            recordBlockedSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: metadata
-            )
-            return
-        }
         if advanceVisibleSuggestionForTypingProgressIfNeeded(
             context: context,
             profile: profile,
@@ -2418,6 +2375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode,
+            typingBurstDecision: typingBurstDecision,
             visiblePageContext: cachedVisiblePageContext(
                 context: context,
                 appBundleIdentifier: frontmostApp.bundleIdentifier
@@ -5856,6 +5814,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
         requestMode: CompletionRequestMode,
+        typingBurstDecision: TypingBurstDecision = .idle,
         visiblePageContext: VisiblePageContext?
     ) {
         cancelPrefixCooldownRetry()
@@ -5892,6 +5851,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             policyDelayMilliseconds: delayMilliseconds,
             renderMode: renderMode
         )
+        let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
+            ? [:]
+            : typingBurstDecision.traceMetadata
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -5905,6 +5867,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "renderMode": renderMode.rawValue
             ]
+            .merging(typingBurstMetadata) { current, _ in current }
             .merging(debounceSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
@@ -6219,6 +6182,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Queued: proof model phrase continuation")
         }
 
+        if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
+            let metadata = [
+                "renderMode": renderMode.rawValue,
+                "reason": "typing-burst-model-continuation"
+            ]
+            .merging(fieldClassification.traceMetadata) { current, _ in current }
+            .merging(typingBurstMetadata) { current, _ in current }
+            .merging(fastPhraseFallbackMetadata) { current, _ in current }
+            .merging(requestMetadata) { current, _ in current }
+            setSuggestionDecision("Waiting: fast typing")
+            showFieldStatusIndicator(.waiting, context: context)
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentityDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: "typing-burst-policy",
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                reason: "typing-burst-model-continuation",
+                metadata: metadata
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: metadata
+            )
+            hideSuggestion(reason: "typing-burst", metadata: typingBurstMetadata)
+            return
+        }
+
         recordSuggestionEvent(
             "suggestion-request-scheduled",
             context: context,
@@ -6228,6 +6225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "traceID": String(suggestionID.prefix(8)),
                 "suggestionID": suggestionID
             ]
+            .merging(typingBurstMetadata) { current, _ in current }
             .merging(fastPhraseFallbackMetadata) { current, _ in current }
             .merging(debounceSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
