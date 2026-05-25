@@ -93,6 +93,33 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts daily-driver complaint phrases instantly")
+    func predictsDailyDriverComplaintPhrasesInstantly() {
+        let cases: [(String, String, String)] = [
+            ("I want this to", " finish the sentence naturally", "i want this to"),
+            ("The biggest problem is", " suggestions feel too timid", "the biggest problem is"),
+            ("What kills trust most is", " wrong fields showing up", "what kills trust most is"),
+            ("It should almost always", " show up while writing", "it should almost always"),
+            ("This needs to feel", " fast enough to trust", "this needs to feel"),
+            ("When I hit Tab it should", " accept exactly the next word", "when i hit tab it should"),
+            ("The best daily driver shape is", " short phrase autocomplete", "the best daily driver shape is")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 3)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
     func blocksUnsafeProfiles() {
         #expect(predictor.suggestion(
