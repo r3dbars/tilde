@@ -372,6 +372,13 @@ def default_latency_selector_target() -> LatencySelectorTarget:
 
 def infer_latency_selector_target(snippet: str, match_start: int) -> LatencySelectorTarget:
     context = snippet[max(0, match_start - 320):match_start].lower()
+    if "textedit strict selector" in context:
+        return LatencySelectorTarget(
+            proof_app="com.apple.TextEdit",
+            proof_scenario="textedit-model-latency",
+            trace_app="com.apple.TextEdit",
+            request_mode="wordCompletion",
+        )
     if "claude code strict selector" in context:
         return LatencySelectorTarget(
             proof_app="com.anthropic.claude-code",
