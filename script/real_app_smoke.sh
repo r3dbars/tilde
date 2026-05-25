@@ -65,6 +65,7 @@ CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 CLAUDE_DRAFT_BACKUP_PATH=""
 CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
+CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
 SMOKE_PHASE="startup"
 
 usage() {
@@ -7497,7 +7498,7 @@ EOF
 claude_code_smoke_proof_text() {
   local marker proof_text
   marker="$(claude_code_proof_marker)"
-  proof_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TEXT:-$marker Make this setting con}"
+  proof_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TEXT:-Make this setting $marker the feature con}"
   if [[ "$proof_text" != *"$marker"* ]]; then
     echo "Claude Code proof text must include $marker." >&2
     exit 2
@@ -7507,6 +7508,10 @@ claude_code_smoke_proof_text() {
     exit 2
   fi
   printf '%s\n' "$proof_text"
+}
+
+claude_code_terminal_smoke_input_text() {
+  claude_code_smoke_proof_text
 }
 
 claude_proof_marker() {
@@ -7598,8 +7603,45 @@ claude_code_terminal_ax_helper() {
     "$@"
 }
 
+claude_code_host_process_name() {
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal)
+      printf 'Terminal\n'
+      ;;
+    iterm2)
+      printf 'iTerm2\n'
+      ;;
+    ghostty)
+      printf 'ghostty\n'
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+claude_code_host_open_app_name() {
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal)
+      printf 'Terminal\n'
+      ;;
+    iterm2)
+      printf 'iTerm\n'
+      ;;
+    ghostty)
+      printf 'Ghostty\n'
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
 terminal_pid_list() {
-  pgrep -x Terminal || true
+  local process_name
+  process_name="$(claude_code_host_process_name)"
+  [[ -n "$process_name" ]] || return 0
+  pgrep -x "$process_name" || true
 }
 
 pid_list_difference() {
@@ -7640,7 +7682,7 @@ wait_for_new_terminal_pids() {
     sleep 0.2
   done
 
-  echo "Claude Code Terminal proof did not create a disposable Terminal process." >&2
+  echo "Claude Code Terminal proof did not create a disposable $(claude_code_host_display_name) process." >&2
   return 1
 }
 
@@ -7718,12 +7760,23 @@ process_tree_contains_name() {
   return 1
 }
 
+process_id_has_name() {
+  local pid="$1"
+  local expected_name="$2"
+  local command_name
+
+  [[ -z "$pid" || -z "$expected_name" ]] && return 1
+  command_name="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+  command_name="${command_name##*/}"
+  [[ "$command_name" == "$expected_name" || "$command_name" == "-$expected_name" ]]
+}
+
 wait_for_claude_code_terminal_process_name() {
   local expected_name="$1"
   local label="${2:-$expected_name}"
   local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
   local timeout_seconds="${timeout%%.*}"
-  local deadline root_pid
+  local deadline root_pid proof_pid
 
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" || -z "$expected_name" ]]; then
     echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
@@ -7738,6 +7791,13 @@ wait_for_claude_code_terminal_process_name() {
 
   deadline=$((SECONDS + timeout_seconds))
   while ((SECONDS <= deadline)); do
+    if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
+          -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+      proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+      if process_id_has_name "$proof_pid" "$expected_name"; then
+        return 0
+      fi
+    fi
     for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
       if process_tree_contains_name "$root_pid" "$expected_name"; then
         return 0
@@ -7746,7 +7806,7 @@ wait_for_claude_code_terminal_process_name() {
     sleep 0.2
   done
 
-  echo "Claude Code Terminal proof did not start $label under disposable Terminal pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+  echo "Claude Code Terminal proof did not start $label under disposable $(claude_code_host_display_name) pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
   exit 1
 }
 
@@ -7757,14 +7817,21 @@ wait_for_claude_code_terminal_process() {
 open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
-  local claude_bin title_sequence launch_script terminal_pids_before
+  local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
     exit 1
   fi
+  host_process="$(claude_code_host_process_name)"
+  host_app="$(claude_code_host_open_app_name)"
+  if [[ -z "$host_process" || -z "$host_app" ]]; then
+    echo "Claude Code $(claude_code_host_display_name) proof does not have an automated disposable launch path yet." >&2
+    echo "Leaving this as an honest host-variant proof gap; normal terminal suggestions remain blocked." >&2
+    exit 1
+  fi
 
-  if pgrep -x Terminal >/dev/null 2>&1; then
+  if pgrep -x "$host_process" >/dev/null 2>&1; then
     CLAUDE_CODE_TERMINAL_WAS_RUNNING=1
   else
     CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
@@ -7772,16 +7839,29 @@ open_claude_code_terminal_proof() {
 
   title_sequence=$'\033]0;'"$proof_title"$'\007'
   launch_script="$proof_dir/steadytype-claude-code-proof.command"
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE="$proof_dir/claude.pid"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q\n' "$ROOT_DIR"
+    printf 'printf '"'"'%%s\\n'"'"' "$$" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"
     printf 'printf %q\n' "$title_sequence"
     printf 'exec %q\n' "$claude_bin"
   } >"$launch_script"
   chmod +x "$launch_script"
 
   terminal_pids_before="$(terminal_pid_list)"
-  open -na Terminal "$launch_script"
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal|iterm2)
+      open -na "$host_app" "$launch_script"
+      ;;
+    ghostty)
+      open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"
+      ;;
+    *)
+      echo "Claude Code $(claude_code_host_display_name) proof does not have an automated disposable launch path yet." >&2
+      exit 1
+      ;;
+  esac
   CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
   wait_for_frontmost_claude_code_terminal_proof_process
@@ -7790,6 +7870,15 @@ open_claude_code_terminal_proof() {
 cleanup_claude_code_terminal_proof() {
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" ]]; then
     return 0
+  fi
+
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
+        -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+    local proof_process_pid
+    proof_process_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+    if [[ -n "$proof_process_pid" ]]; then
+      kill "$proof_process_pid" >/dev/null 2>&1 || true
+    fi
   fi
 
   if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
@@ -7803,12 +7892,15 @@ cleanup_claude_code_terminal_proof() {
     done
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
   elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
-    pkill -x Terminal >/dev/null 2>&1 || true
+    local host_process
+    host_process="$(claude_code_host_process_name)"
+    [[ -n "$host_process" ]] && pkill -x "$host_process" >/dev/null 2>&1 || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
   fi
   CLAUDE_CODE_TERMINAL_PROOF_TITLE=""
   CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 }
 
@@ -7824,7 +7916,8 @@ set stalePids to ""
 tell application "System Events"
   repeat with terminalProcess in application processes
     try
-      if bundle identifier of terminalProcess is "com.apple.Terminal" then
+      set terminalBundle to bundle identifier of terminalProcess
+      if terminalBundle is "com.apple.Terminal" or terminalBundle is "com.googlecode.iterm2" or terminalBundle is "com.mitchellh.ghostty" then
         set hasProofWindow to false
         repeat with terminalWindow in windows of terminalProcess
           try
@@ -7865,11 +7958,22 @@ APPLESCRIPT
 wait_for_claude_code_terminal_prompt() {
   wait_for_frontmost_claude_code_terminal_proof_process
   wait_for_claude_code_terminal_process
-  swift script/terminal_prompt_ax_proof_helper.swift wait \
-    --bundle "$(claude_code_host_bundle_id)" \
-    --display "$(claude_code_host_display_name)" \
-    --marker "$(claude_code_proof_marker)" \
-    --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
+
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal)
+      swift script/terminal_prompt_ax_proof_helper.swift wait \
+        --bundle "$(claude_code_host_bundle_id)" \
+        --display "$(claude_code_host_display_name)" \
+        --marker "$(claude_code_proof_marker)" \
+        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
+      ;;
+    iterm2|ghostty)
+      ;;
+    *)
+      echo "Claude Code $(claude_code_host_display_name) prompt readiness is not automated for this host." >&2
+      exit 1
+      ;;
+  esac
   sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS:-3}"
 }
 
@@ -7889,6 +7993,22 @@ assert_claude_code_terminal_prompt_retains_marker() {
 
 type_claude_code_terminal_raw_smoke_text() {
   local text="$1"
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE:-0}" == "1" ]]; then
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not hostBundle then
+    error "Claude Code terminal host is not frontmost for proof typing."
+  end if
+  keystroke rawText
+end tell
+APPLESCRIPT
+    return
+  fi
 
   AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
@@ -9535,7 +9655,10 @@ describe_plan() {
         echo "Safety: pass --manual-gate to continue. The helper never presses Tab, Enter, or full accept; it runs the prompt no-submit gate on the same trace slice."
       elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "terminal" ]]; then
         echo "Plan: manual-gated automated Terminal-host Claude Code proof. The script opens a fresh title-marked disposable Terminal Claude Code prompt, types marked proof text, presses Tab once, and validates one-word no-submit proof on the same trace slice."
-        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; iTerm2/Ghostty stay manual until they have their own disposable launch path."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept."
+      elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "iterm2" || "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+        echo "Plan: manual-gated automated $host_name-host Claude Code proof. The script opens a fresh title-marked disposable $host_name Claude Code prompt, types marked proof text, presses Tab once, and validates one-word no-submit proof on the same trace slice."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; unsupported terminal hosts stay manual until they have their own disposable launch path."
       else
         echo "Plan: manual-gated terminal-host Claude Code proof. The script validates one-word Tab accept without submit after you run it."
       fi
@@ -9920,18 +10043,21 @@ run_claude_code_terminal_host_smoke() {
     echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
     exit 2
   fi
-  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "terminal" ]]; then
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "terminal" &&
+        "$CLAUDE_CODE_HOST_VARIANT" != "iterm2" &&
+        "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ]]; then
     run_manual_gated
     return
   fi
 
   require_claude_code_host_if_requested
 
-  local runtime_start_line start_line trace_start_line proof_text marker proof_dir
+  local runtime_start_line start_line trace_start_line accept_start_line proof_text marker proof_dir host_name
   runtime_start_line="$(line_count "$LOG_PATH")"
-  proof_text="$(claude_code_smoke_proof_text)"
+  proof_text="$(claude_code_terminal_smoke_input_text)"
   marker="$(claude_code_proof_marker)"
   proof_dir="$(make_claude_code_terminal_proof_dir)"
+  host_name="$(claude_code_host_display_name)"
   CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
 
   prepare_temporary_app_enablement
@@ -9941,27 +10067,35 @@ run_claude_code_terminal_host_smoke() {
 
   cleanup_stale_claude_code_terminal_proofs
   open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
-  wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
   wait_for_claude_code_terminal_prompt
+  assert_frontmost_app "$host_name" "Claude Code $host_name proof"
+  clear_claude_code_terminal_prompt_line
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
+  accept_start_line="$(line_count "$LOG_PATH")"
 
-  type_claude_code_terminal_raw_smoke_text "$proof_text"
-  assert_claude_code_terminal_prompt_ready "$proof_text"
-  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.anthropic.claude-code" "Claude Code Terminal proof suggestion" 20
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.anthropic.claude-code" "Claude Code Terminal proof"
-  assert_frontmost_app "Terminal" "Claude Code Terminal proof"
-  sleep 0.2
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$proof_text"
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal)
+      assert_claude_code_terminal_prompt_ready "$proof_text"
+      ;;
+    iterm2|ghostty)
+      ;;
+  esac
+  wait_for_log_pattern "$accept_start_line" "suggestion-presented .*app=com.anthropic.claude-code" "Claude Code $host_name proof suggestion" 20
   press_key_code 48
-  wait_for_log_fields "$start_line" "Claude Code Terminal Tab acceptance" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}" \
+  wait_for_log_fields "$accept_start_line" "Claude Code $host_name Tab acceptance" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}" \
     "keyboard-action" \
     "app=com.anthropic.claude-code" \
     "key=tab" \
     "action=acceptNextWord" \
     "handled=true"
-  wait_for_log_pattern "$start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code Terminal successful insertion" 12
-  wait_for_log_pattern "$start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code Terminal verified insertion" 12
+  wait_for_log_pattern "$accept_start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code $host_name successful insertion" 12
+  wait_for_log_pattern "$accept_start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code $host_name verified insertion" 12
+  wait_for_screenshot_capture_if_enabled "$accept_start_line" "com.anthropic.claude-code" "Claude Code $host_name proof"
   assert_claude_code_terminal_prompt_retains_marker
 
   sleep 1

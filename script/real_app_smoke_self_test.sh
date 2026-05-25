@@ -1428,8 +1428,35 @@ if ! grep -F "Claude Code proof label: claude-code-terminal" "$TMP_DIR/claude-co
   echo "real app smoke self-test did not print the Claude Code Terminal proof label" >&2
   exit 1
 fi
+if ! grep -F 'proof_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TEXT:-Make this setting $marker the feature con}"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code default proof text to keep the marker near the caret" >&2
+  exit 1
+fi
+if ! grep -F 'claude_code_terminal_smoke_input_text()' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/claude_code_terminal_smoke_input_text\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /claude_code_smoke_proof_text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to keep the inline marker in the typed prompt" >&2
+  exit 1
+fi
 if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the automated Terminal-host Claude Code proof" >&2
+  exit 1
+fi
+script/real_app_smoke.sh claude-code-iterm2 --dry-run >"$TMP_DIR/claude-code-iterm2.txt"
+if ! grep -F "Claude Code host: iTerm2 (com.googlecode.iterm2)" "$TMP_DIR/claude-code-iterm2.txt" >/dev/null; then
+  echo "real app smoke self-test did not parse the Claude Code iTerm2 alias" >&2
+  exit 1
+fi
+if ! grep -F "automated iTerm2-host Claude Code proof" "$TMP_DIR/claude-code-iterm2.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the automated iTerm2-host Claude Code proof" >&2
+  exit 1
+fi
+script/real_app_smoke.sh claude-code-ghostty --dry-run >"$TMP_DIR/claude-code-ghostty.txt"
+if ! grep -F "Claude Code host: Ghostty (com.mitchellh.ghostty)" "$TMP_DIR/claude-code-ghostty.txt" >/dev/null; then
+  echo "real app smoke self-test did not parse the Claude Code Ghostty alias" >&2
+  exit 1
+fi
+if ! grep -F "automated Ghostty-host Claude Code proof" "$TMP_DIR/claude-code-ghostty.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the automated Ghostty-host Claude Code proof" >&2
   exit 1
 fi
 if ! grep -F "run_claude_code_terminal_host_smoke" script/real_app_smoke.sh >/dev/null ||
@@ -1526,6 +1553,10 @@ if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_cla
   echo "real app smoke self-test expected Claude Code prompt readiness to wait for the launched claude process" >&2
   exit 1
 fi
+if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /iterm2\|ghostty/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected iTerm2 and Ghostty prompt readiness to rely on process proof before typed marker checks" >&2
+  exit 1
+fi
 if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code prompt readiness to settle before typing samples" >&2
   exit 1
@@ -1535,13 +1566,96 @@ if awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /assert
   exit 1
 fi
 if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$proof_dir/claude.pid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "process_tree_contains_name" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Claude Code Terminal proof cleanup/readiness to track the disposable process tree" >&2
+  echo "real app smoke self-test expected Claude Code Terminal proof cleanup/readiness to track the disposable Claude process" >&2
+  exit 1
+fi
+if ! grep -F 'open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof launch to set a title marker and disable window restoration" >&2
   exit 1
 fi
 if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'open -na Terminal "$launch_script"' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Claude Code Terminal launch to use a disposable command file" >&2
+   ! grep -F 'open -na "$host_app" "$launch_script"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host launch to use disposable command files" >&2
+  exit 1
+fi
+if ! grep -F 'process_id_has_name "$proof_pid" "$expected_name"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile" >&2
+  exit 1
+fi
+if ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host Tab proof to press Tab through System Events" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_wait = 0; saw_clear = 0; saw_type = 0 }
+  /^}/ && in_smoke {
+    if (saw_wait && saw_clear && saw_type) { found = 1 }
+    in_smoke = 0
+  }
+  in_smoke && /wait_for_claude_code_terminal_prompt/ { saw_wait = 1 }
+  in_smoke && saw_wait && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 }
+  in_smoke && saw_clear && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host proof to clear stale prompt text before bulk typing" >&2
+  exit 1
+fi
+if ! awk '
+  /type_claude_code_terminal_raw_smoke_text\(\)/ { in_type = 1; saw_bulk_flag = 0 }
+  /^}/ && in_type { in_type = 0 }
+  in_type && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE/ { saw_bulk_flag = 1 }
+  in_type && saw_bulk_flag && /keystroke rawText/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host proof typing to support bulk text input" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_press = 0; saw_screenshot = 0 }
+  /^}/ && in_smoke {
+    if (saw_press && saw_screenshot) { found = 1 }
+    in_smoke = 0
+  }
+  in_smoke && /press_key_code 48/ { saw_press = 1 }
+  in_smoke && /wait_for_screenshot_capture_if_enabled/ {
+    if (saw_press) { saw_screenshot = 1 }
+  }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host Tab acceptance before screenshot waiting" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_accept_window = 0; saw_type = 0 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /accept_start_line="\$\(line_count "\$LOG_PATH"\)"/ { saw_accept_window = 1 }
+  in_smoke && /type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
+  in_smoke && saw_type && !saw_accept_window { saw_late_accept_window = 1 }
+  in_smoke && /wait_for_log_pattern "\$accept_start_line" "suggestion-presented/ { saw_suggestion_wait = 1 }
+  in_smoke && /wait_for_log_fields "\$accept_start_line" "Claude Code \$host_name Tab acceptance"/ { saw_accept_wait = 1 }
+  END { exit (saw_accept_window && !saw_late_accept_window && saw_suggestion_wait && saw_accept_wait) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host acceptance waits to start before typing can race the proof" >&2
+  exit 1
+fi
+if awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; after_suggestion = 0 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /wait_for_log_pattern "\$start_line" "suggestion-presented/ { after_suggestion = 1 }
+  in_smoke && after_suggestion && /assert_frontmost_app/ { found = 1 }
+  in_smoke && after_suggestion && /press_key_code 48/ { after_suggestion = 0 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host hot accept path not to run slow focus checks" >&2
+  exit 1
+fi
+if ! grep -F 'kill "$proof_process_pid"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host cleanup to kill the proof claude pid" >&2
   exit 1
 fi
 if ! grep -F 'printf '"'"'cd %q\n'"'"' "$ROOT_DIR"' script/real_app_smoke.sh >/dev/null; then
@@ -1552,9 +1666,10 @@ if awk '/open_claude_code_terminal_proof\(\)/ { in_open = 1 } /cleanup_claude_co
   echo "real app smoke self-test expected Claude Code Terminal launch not to type the launch command into a shell" >&2
   exit 1
 fi
-if ! grep -F "wait_for_new_terminal_pids" script/real_app_smoke.sh >/dev/null ||
+if ! grep -F "claude_code_host_process_name" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "wait_for_new_terminal_pids" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "wait_for_frontmost_claude_code_terminal_proof_process" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Claude Code Terminal launch to activate the disposable Terminal process before typing" >&2
+  echo "real app smoke self-test expected Claude Code terminal-host launch to activate the disposable host process before typing" >&2
   exit 1
 fi
 if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/null ||
@@ -1564,21 +1679,30 @@ if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/nu
   echo "real app smoke self-test expected Claude Code model latency helper, typing, prompt proof, and scenario wiring" >&2
   exit 1
 fi
-if ! grep -F '"source": "cgUnicodeKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
-   ! grep -F '"reason": "unicode-unverified-mutated-input"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
-   ! grep -F '"source": "cgHardwareKeyEvents"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
-   ! grep -F '"reason": "terminal-pasteboard-fallback-disabled"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
-  echo "real app smoke self-test expected Claude Code Terminal insertion to fall through safely after unverified Unicode key events" >&2
+if ! grep -F '"source": "cgHardwareKeyEvents"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgHardwareKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEvents"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "pasteboardCommandV"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "pasteboardCommandVBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"reason": "terminal-verified-insertion-failed"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal insertion to try verified key events and proof-only paste before failing closed" >&2
   exit 1
 fi
 if grep -F "accessibilityMenuPaste" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    grep -F "postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    grep -F "pasteboard-prepare-start" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
-  echo "real app smoke self-test expected Claude Code Terminal fallback not to use blocking pasteboard or AX menu paths" >&2
+  echo "real app smoke self-test expected Claude Code Terminal fallback not to use blocking AX menu paths" >&2
   exit 1
 fi
-if awk '/if Self\.postUnicodeTextKeyEvents\(acceptedText\)/ { in_unicode = 1 } /let pasteboard = NSPasteboard\.general/ { in_unicode = 0 } in_unicode && /return verified/ { found = 1 } END { exit found ? 0 : 1 }' Sources/AutocompleteLabApp/App/AppDelegate.swift; then
-  echo "real app smoke self-test expected unverified Claude Code Terminal Unicode insertion not to skip paste fallback" >&2
+if ! grep -F 'schedulePasteboardRestore' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'pasteboard.changeCount' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'postCommandVKey()' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected proof-only paste fallback to restore the pasteboard after verified insertion attempts" >&2
+  exit 1
+fi
+if awk '/if Self\.postUnicodeTextKeyEvents/ { in_unicode = 1 } /if insertClaudeCodeTerminalHostProofPasteboardText/ { in_unicode = 0 } in_unicode && /return verified/ { found = 1 } END { exit found ? 0 : 1 }' Sources/AutocompleteLabApp/App/AppDelegate.swift; then
+  echo "real app smoke self-test expected unverified Claude Code Terminal Unicode insertion not to skip verified paste fallback" >&2
   exit 1
 fi
 if grep -F "press_key_code 48" script/real_app_smoke.sh | grep -F "claude_code" >/dev/null; then
@@ -1591,12 +1715,6 @@ if script/real_app_smoke.sh claude-code-model-latency --skip-build --dry-run >/d
 fi
 if ! grep -F "claude-code-model-latency cannot be combined with --skip-build" "$TMP_DIR/claude-code-model-latency-skip-build.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Claude Code model latency skip-build failure" >&2
-  exit 1
-fi
-
-script/real_app_smoke.sh claude-code-iterm2 --dry-run >"$TMP_DIR/claude-code-iterm2.txt"
-if ! grep -F "Claude Code host: iTerm2 (com.googlecode.iterm2)" "$TMP_DIR/claude-code-iterm2.txt" >/dev/null; then
-  echo "real app smoke self-test did not parse the Claude Code iTerm2 alias" >&2
   exit 1
 fi
 
