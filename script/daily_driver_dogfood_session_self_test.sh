@@ -16,6 +16,8 @@ HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
 REACH_REPORT_PATH="$TMP_DIR/reach-report.md"
 SHORT_PHRASE_REPORT_PATH="$TMP_DIR/short-phrase-report.md"
 TRUST_KILLER_REPORT_PATH="$TMP_DIR/trust-killer-report.md"
+NOT_READY_MARK_PATH="$TMP_DIR/not-ready-session.env"
+NOT_READY_REPORT_PATH="$TMP_DIR/not-ready-report.md"
 REVIEW_PASS_REPORT_PATH="$TMP_DIR/review-pass-report.md"
 REVIEW_FAIL_REPORT_PATH="$TMP_DIR/review-fail-report.md"
 REVIEW_UNSAFE_REPORT_PATH="$TMP_DIR/review-unsafe-report.md"
@@ -260,6 +262,7 @@ fi
 for expected in \
   "Daily Driver Dogfood Session" \
   "Gate: \`pass\`" \
+  "Start readiness status: \`0\`" \
   "SteadyType app at start: \`running\`" \
   "Trace existed at start: \`yes\`" \
   "Start readiness: \`pass\`" \
@@ -318,6 +321,48 @@ for expected in \
 do
   if ! grep -q "$expected" "$REPORT_PATH"; then
     echo "dogfood self-test report missing: $expected" >&2
+    exit 1
+  fi
+done
+
+{
+  printf "START_LINE=%q\n" "1"
+  printf "STARTED_AT=%q\n" "2026-05-25T00:00:00Z"
+  printf "LABEL=%q\n" "not-ready"
+  printf "APP_FILTER=%q\n" "com.apple.TextEdit"
+  printf "TRACE_PATH_AT_START=%q\n" "$TRACE_PATH"
+  printf "APP_STATUS_AT_START=%q\n" "not-running"
+  printf "TRACE_EXISTS_AT_START=%q\n" "yes"
+  printf "DOGFOOD_READINESS_AT_START=%q\n" "attention"
+} >"$NOT_READY_MARK_PATH"
+
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
+  --trace "$TRACE_PATH" \
+  --mark-file "$NOT_READY_MARK_PATH" \
+  --end-line 15 \
+  --app com.apple.TextEdit \
+  --label self-test-not-ready \
+  --report "$NOT_READY_REPORT_PATH" \
+  >"$TMP_DIR/not-ready.out" 2>&1
+not_ready_status=$?
+set -e
+
+if [[ "$not_ready_status" -eq 0 ]]; then
+  echo "dogfood self-test expected not-ready start slice to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Gate: \`fail\`" \
+  "Start readiness status: \`1\`" \
+  "SteadyType app at start: \`not-running\`" \
+  "Start readiness: \`attention\`" \
+  "Start Readiness Gate" \
+  "SteadyType was not confirmed running when the dogfood session started"
+do
+  if ! grep -q "$expected" "$NOT_READY_REPORT_PATH"; then
+    echo "dogfood self-test not-ready report missing: $expected" >&2
     exit 1
   fi
 done
