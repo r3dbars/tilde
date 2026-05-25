@@ -729,6 +729,13 @@ all_sources = sorted(
 model_backed_sources = {"app-model-result", "model-candidate-ranker"}
 word_fallback_sources = {"fast-word-completion", "predictive-word-fallback"}
 instant_phrase_shown = presented_source_counts.get("predictive-phrase-fallback", 0)
+instant_phrase_learned_restraint = sum(
+    1
+    for event in suppressed_events
+    if str(event.get("reason") or metadata(event).get("reason") or "").strip()
+    == "fast-phrase-learning-restraint"
+    and selection_source(event) == "predictive-phrase-fallback"
+)
 model_backed_shown = sum(
     count
     for source, count in presented_source_counts.items()
@@ -829,6 +836,7 @@ if all_sources:
 else:
     print("- none: 0 / 0 / 0")
 print(f"Instant phrase fallback shown: {instant_phrase_shown}")
+print(f"Instant phrase learned restraint: {instant_phrase_learned_restraint}")
 print(f"Model-backed shown: {model_backed_shown}")
 print(f"Word fallback shown: {word_fallback_shown}")
 print(f"Unknown source shown: {unknown_source_shown}")
