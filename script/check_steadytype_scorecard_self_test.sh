@@ -22,6 +22,11 @@ if ! grep -F -- "--expected-executable-sha256" script/check_steadytype_scorecard
   exit 1
 fi
 
+if ! grep -F -- "claude-code-model-latency" script/check_steadytype_scorecard.py >/dev/null; then
+  echo "scorecard self-test expected live latency selector to understand Claude Code latency claims" >&2
+  exit 1
+fi
+
 STALE_SUGGESTION_QUALITY="$TMP_DIR/stale-suggestion-quality.md"
 python3 - "$SCORECARD" "$STALE_SUGGESTION_QUALITY" <<'PY'
 from pathlib import Path
@@ -84,43 +89,76 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 latency_line = next(line for line in source.splitlines() if line.startswith("| Latency |"))
-green = re.search(
+green = re.compile(
     r"select_latency_window[.]py\b[^|]*?: selected "
     r"diagnosticsLine=([0-9]+), traceStartLine=([0-9]+), "
     r"firstVisibleSamples=([0-9]+), modelSamples=([0-9]+), "
     r"fastWordVisibleSamples=([0-9]+)",
-    latency_line,
 )
-red = re.search(
+red = re.compile(
     r"select_latency_window[.]py\b[^|]*?: failed red because "
     r"(.+?), with diagnosticsLine=([0-9]+), traceStartLine=([0-9]+), "
     r"firstVisibleSamples=([0-9]+), modelSamples=([0-9]+), "
     r"fastWordVisibleSamples=([0-9]+)",
-    latency_line,
 )
-if green:
-    diagnostics, trace, first_visible, model, fast_word = green.groups()
-    output = (
+
+outputs = []
+for green_match in green.finditer(latency_line):
+    diagnostics, trace, first_visible, model, fast_word = green_match.groups()
+    outputs.append((
+        green_match.start(),
         f"AUTOCOMPLETE_LAB_LOG_START_LINE={int(diagnostics) - 1}\n"
         f"AUTOCOMPLETE_LAB_TRACE_START_LINE={trace}\n"
         "Latency window: selected latest sampled default runtime launch; "
         f"diagnosticsLine={diagnostics}; traceStartLine={trace}; diagnosticsEndLine=none; "
         f"traceEndLine=none; firstVisibleSamples={first_visible}; modelSamples={model}; "
-        f"fastWordVisibleSamples={fast_word}\n"
-    )
-elif red:
-    reason, diagnostics, trace, first_visible, model, fast_word = red.groups()
-    output = (
+        f"fastWordVisibleSamples={fast_word}\n",
+    ))
+for red_match in red.finditer(latency_line):
+    reason, diagnostics, trace, first_visible, model, fast_word = red_match.groups()
+    outputs.append((
+        red_match.start(),
         f"Latency window: {reason}; diagnosticsLine={diagnostics}; traceStartLine={trace}; "
         "diagnosticsEndLine=none; traceEndLine=none; "
         f"firstVisibleSamples={first_visible}; modelSamples={model}; "
-        f"fastWordVisibleSamples={fast_word}\n"
-    )
-else:
+        f"fastWordVisibleSamples={fast_word}\n",
+    ))
+
+if not outputs:
     raise SystemExit("could not parse scorecard latency selector claim")
 
-Path(sys.argv[2]).write_text(output, encoding="utf-8")
+fixture = "".join(output for _, output in sorted(outputs))
+Path(sys.argv[2]).write_text(fixture, encoding="utf-8")
 PY
+
+python3 - "$SCORECARD" "$TMP_DIR/latency-selector-claim-count.txt" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+latency_line = next(line for line in source.splitlines() if line.startswith("| Latency |"))
+count = len(list(re.finditer(r"select_latency_window[.]py\b", latency_line)))
+Path(sys.argv[2]).write_text(str(count), encoding="utf-8")
+PY
+
+if [[ "$(cat "$TMP_DIR/latency-selector-claim-count.txt")" -lt 2 ]]; then
+  echo "scorecard self-test expected the real scorecard to include multiple latency selector claims" >&2
+  exit 1
+fi
+
+python3 - "$LATENCY_SELECTOR_LIVE" "$TMP_DIR/latency-selector-live-count.txt" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+Path(sys.argv[2]).write_text(str(source.count("Latency window:")), encoding="utf-8")
+PY
+
+if [[ "$(cat "$TMP_DIR/latency-selector-live-count.txt")" -lt 2 ]]; then
+  echo "scorecard self-test expected the latency selector fixture to cover multiple live windows" >&2
+  exit 1
+fi
 
 python3 script/check_steadytype_scorecard.py \
   --scorecard "$SCORECARD" \

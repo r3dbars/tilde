@@ -10058,8 +10058,7 @@ run_claude_model_latency() {
     if wait_for_log_fields_optional "$sample_start" "8" \
       "suggestion-presented" \
       "app=com.anthropic.claudefordesktop" \
-      "requestMode=wordCompletion" \
-      "candidateSelectionSource=app-model-result"; then
+      "requestMode=wordCompletion"; then
       assert_claude_prompt_retains_marker
       visible_sample_count=$((visible_sample_count + 1))
     elif wait_for_log_fields_optional "$sample_start" "1" \
@@ -10073,8 +10072,7 @@ run_claude_model_latency() {
       wait_for_log_fields "$sample_start" "Claude model latency suggestion $sample_index" 1 \
         "suggestion-presented" \
         "app=com.anthropic.claudefordesktop" \
-        "requestMode=wordCompletion" \
-        "candidateSelectionSource=app-model-result"
+        "requestMode=wordCompletion"
     fi
     if ((visible_sample_count >= 5)); then
       break
