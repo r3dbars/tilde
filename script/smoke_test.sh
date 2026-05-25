@@ -28,6 +28,7 @@ swift test
 ./script/check_graduation_score_self_test.sh
 ./script/check_prompt_app_proof_self_test.sh
 ./script/check_prompt_app_manifest_proof_self_test.sh
+./script/check_sensitive_field_proof_self_test.sh
 ./script/check_diagnostics_log_self_test.sh
 ./script/check_proof_manifest_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh

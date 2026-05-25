@@ -284,6 +284,14 @@ The checked daily-driver audit report is guarded in smoke tests:
 ./script/check_daily_driver_local_quality_audit_report.sh
 ```
 
+Wrong-field safety proof should stay in the default smoke path too:
+
+```bash
+./script/check_prompt_app_proof_self_test.sh
+./script/check_prompt_app_manifest_proof_self_test.sh
+./script/check_sensitive_field_proof_self_test.sh
+```
+
 For a clean app-specific slice:
 
 ```bash
