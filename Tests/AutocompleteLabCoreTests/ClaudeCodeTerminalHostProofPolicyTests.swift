@@ -941,4 +941,49 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
         #expect(input == nil)
     }
+
+    @Test("Eligible proof marker maps unsafe terminal field kind to proof compose")
+    func eligibleProofMarkerMapsUnsafeTerminalFieldKindToProofCompose() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:zsh"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "Claude Code",
+            focusedText: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Make this setting con",
+            rawTextBeforeCursor: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF Make this setting con",
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(effective.kind == .multilineCompose)
+        #expect(effective.reason == "claude-code-terminal-host-proof")
+    }
+
+    @Test("Unsafe terminal proof keeps raw suppressed field kind")
+    func unsafeTerminalProofKeepsRawSuppressedFieldKind() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:zsh"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.apple.Terminal",
+            windowTitle: "zsh",
+            focusedText: "git status",
+            rawTextBeforeCursor: "git status",
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(effective == raw)
+    }
 }
