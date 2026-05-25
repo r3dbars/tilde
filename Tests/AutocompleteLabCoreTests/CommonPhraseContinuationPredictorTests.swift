@@ -207,6 +207,42 @@ struct CommonPhraseContinuationPredictorTests {
         ).suppressionReason == "unsupported-profile")
     }
 
+    @Test("Predicts Obsidian markdown note labels instantly")
+    func predictsObsidianMarkdownNoteLabelsInstantly() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("## Next:", .docsProse, " write the smallest concrete action", "intent-markdown-next"),
+            ("- [ ] TODO:", .bullets, " make the next step concrete", "intent-markdown-action-items"),
+            ("# Open questions:", .docsProse, " capture what still feels unclear", "intent-markdown-open-questions"),
+            ("Meeting notes\nDecisions:", .docsProse, " capture what changed today", "intent-markdown-decisions"),
+            ("What matters today", .notes, " is the next clear step", "intent-markdown-what-matters-today"),
+            ("Quick capture\nBefore I forget", .docsProse, " capture the important detail", "intent-markdown-before-i-forget"),
+            ("- Follow up on", .bullets, " the open thread today", "intent-markdown-follow-up-on")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "Prompt\nNext:",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Email\nNext:",
+            behaviorProfileID: .email
+        ).suppressionReason == "not-word-boundary")
+    }
+
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
     func blocksUnsafeProfiles() {
         #expect(predictor.suggestion(
