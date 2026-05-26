@@ -26,6 +26,8 @@ MIN_KEPT_PER_SHOWN_PERCENT="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_KEPT_PER_SHOWN_P
 MIN_ACTIVE_MINUTES="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_ACTIVE_MINUTES:-5}"
 MIN_PHRASE_SHOWN="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_PHRASE_SHOWN:-1}"
 MIN_PHRASE_VISIBLE_WORDS="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_PHRASE_VISIBLE_WORDS:-3}"
+MIN_INSTANT_PHRASE_SHOWN="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_INSTANT_PHRASE_SHOWN:-1}"
+MAX_INSTANT_PHRASE_LATENCY_MS="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MAX_INSTANT_PHRASE_LATENCY_MS:-1}"
 MIN_TYPING_FEEL_SCORE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_MIN_TYPING_FEEL_SCORE:-85}"
 TYPING_FEEL_TARGET_SHOWN_PER_MINUTE="${AUTOCOMPLETE_LAB_DAILY_DRIVER_TARGET_SHOWN_PER_MINUTE:-3}"
 TYPING_FEEL_LATE_MS="${AUTOCOMPLETE_LAB_DAILY_DRIVER_LATE_MS:-750}"
@@ -57,6 +59,10 @@ Options:
                     Minimum phrase/sentence suggestions shown. Default: 1.
   --min-phrase-visible-words N
                     Minimum visible words for phrase/sentence suggestions. Default: 3.
+  --min-instant-phrase-shown N
+                    Minimum predictive instant phrase suggestions shown. Default: 1.
+  --max-instant-phrase-latency-ms N
+                    Maximum latency for instant phrase rows. Default: 1.
   --min-typing-feel-score N
                     Minimum redacted typing-feel score. Default: 85.
   --target-shown-per-minute N
@@ -175,6 +181,20 @@ while [[ $# -gt 0 ]]; do
       ;;
     --min-phrase-visible-words=*)
       MIN_PHRASE_VISIBLE_WORDS="${1#--min-phrase-visible-words=}"
+      ;;
+    --min-instant-phrase-shown)
+      shift
+      MIN_INSTANT_PHRASE_SHOWN="${1:-}"
+      ;;
+    --min-instant-phrase-shown=*)
+      MIN_INSTANT_PHRASE_SHOWN="${1#--min-instant-phrase-shown=}"
+      ;;
+    --max-instant-phrase-latency-ms)
+      shift
+      MAX_INSTANT_PHRASE_LATENCY_MS="${1:-}"
+      ;;
+    --max-instant-phrase-latency-ms=*)
+      MAX_INSTANT_PHRASE_LATENCY_MS="${1#--max-instant-phrase-latency-ms=}"
       ;;
     --min-typing-feel-score)
       shift
@@ -438,7 +458,9 @@ print_status_sample_preview() {
       "$MIN_KEPT_PER_SHOWN_PERCENT" \
       "$MIN_ACTIVE_MINUTES" \
       "$MIN_PHRASE_SHOWN" \
-      "$MIN_PHRASE_VISIBLE_WORDS" 2>&1
+      "$MIN_PHRASE_VISIBLE_WORDS" \
+      "$MIN_INSTANT_PHRASE_SHOWN" \
+      "$MAX_INSTANT_PHRASE_LATENCY_MS" 2>&1
   )"
   preview_status=$?
   set -e
@@ -539,6 +561,8 @@ run_session_sample_gate() {
   local min_active_minutes="$9"
   local min_phrase_shown="${10}"
   local min_phrase_visible_words="${11}"
+  local min_instant_phrase_shown="${12}"
+  local max_instant_phrase_latency_ms="${13}"
 
   python3 - \
     "$trace_path" \
@@ -551,7 +575,9 @@ run_session_sample_gate() {
     "$min_kept_per_shown_percent" \
     "$min_active_minutes" \
     "$min_phrase_shown" \
-    "$min_phrase_visible_words" <<'PY'
+    "$min_phrase_visible_words" \
+    "$min_instant_phrase_shown" \
+    "$max_instant_phrase_latency_ms" <<'PY'
 import json
 import sys
 from collections import Counter
@@ -590,6 +616,8 @@ min_kept_per_shown_percent = parse_float("min accepted-kept shown percent", sys.
 min_active_minutes = parse_float("min active minutes", sys.argv[9])
 min_phrase_shown = parse_int("min phrase shown", sys.argv[10])
 min_phrase_visible_words = parse_int("min phrase visible words", sys.argv[11])
+min_instant_phrase_shown = parse_int("min instant phrase shown", sys.argv[12])
+max_instant_phrase_latency_ms = parse_int("max instant phrase latency ms", sys.argv[13])
 
 
 def parse_timestamp(value):
@@ -645,6 +673,20 @@ def visible_word_count(event):
         if value >= 0:
             return value
     return None
+
+
+def latency_milliseconds(event):
+    if "latencyMilliseconds" in event:
+        raw = event.get("latencyMilliseconds")
+    else:
+        raw = metadata(event).get("latencyMilliseconds")
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
 
 
 def acceptance_key(line_number, event):
@@ -780,6 +822,20 @@ all_sources = sorted(
 model_backed_sources = {"app-model-result", "model-candidate-ranker"}
 word_fallback_sources = {"fast-word-completion", "predictive-word-fallback"}
 instant_phrase_shown = presented_source_counts.get("predictive-phrase-fallback", 0)
+instant_phrase_presented = [
+    event
+    for _, event in matched
+    if event.get("type") == "suggestionPresented"
+    and selection_source(event) == "predictive-phrase-fallback"
+]
+instant_phrase_latencies = [
+    latency
+    for event in instant_phrase_presented
+    for latency in [latency_milliseconds(event)]
+    if latency is not None
+]
+instant_phrase_missing_latency = len(instant_phrase_presented) - len(instant_phrase_latencies)
+instant_phrase_max_latency = max(instant_phrase_latencies) if instant_phrase_latencies else None
 instant_phrase_learned_restraint = sum(
     1
     for event in suppressed_events
@@ -838,6 +894,18 @@ if len(presented_keys) < min_shown:
     failures.append(f"shown suggestions below minimum ({len(presented_keys)}/{min_shown})")
 if len(phrase_presented) < min_phrase_shown:
     failures.append(f"phrase suggestions below minimum ({len(phrase_presented)}/{min_phrase_shown})")
+if instant_phrase_shown < min_instant_phrase_shown:
+    failures.append(
+        "instant phrase fallback below minimum "
+        f"({instant_phrase_shown}/{min_instant_phrase_shown})"
+    )
+if instant_phrase_missing_latency > 0:
+    failures.append(f"instant phrase latency missing ({instant_phrase_missing_latency})")
+if instant_phrase_max_latency is not None and instant_phrase_max_latency > max_instant_phrase_latency_ms:
+    failures.append(
+        "instant phrase latency above maximum "
+        f"({instant_phrase_max_latency}/{max_instant_phrase_latency_ms} ms)"
+    )
 if phrase_missing_word_count > 0:
     failures.append(f"phrase suggestions missing visible word count ({phrase_missing_word_count})")
 if phrase_too_short > 0:
@@ -886,7 +954,15 @@ if all_sources:
         )
 else:
     print("- none: 0 / 0 / 0")
-print(f"Instant phrase fallback shown: {instant_phrase_shown}")
+print(f"Instant phrase fallback shown: {instant_phrase_shown} (minimum {min_instant_phrase_shown})")
+if instant_phrase_max_latency is None:
+    print(f"Instant phrase max latency: n/a (maximum {max_instant_phrase_latency_ms}ms)")
+else:
+    print(
+        "Instant phrase max latency: "
+        f"{instant_phrase_max_latency}ms (maximum {max_instant_phrase_latency_ms}ms)"
+    )
+print(f"Instant phrase latency samples missing: {instant_phrase_missing_latency}")
 print(f"Instant phrase learned restraint: {instant_phrase_learned_restraint}")
 print(f"Model-backed shown: {model_backed_shown}")
 print(f"Word fallback shown: {word_fallback_shown}")
@@ -1287,6 +1363,7 @@ finish_session() {
     MIN_KEPT_PER_SHOWN_PERCENT=0
     MIN_ACTIVE_MINUTES=0
     MIN_PHRASE_SHOWN=0
+    MIN_INSTANT_PHRASE_SHOWN=0
     MIN_TYPING_FEEL_SCORE=0
   fi
 
@@ -1334,6 +1411,8 @@ finish_session() {
     "$MIN_ACTIVE_MINUTES" \
     "$MIN_PHRASE_SHOWN" \
     "$MIN_PHRASE_VISIBLE_WORDS" \
+    "$MIN_INSTANT_PHRASE_SHOWN" \
+    "$MAX_INSTANT_PHRASE_LATENCY_MS" \
     >"$sample_gate_output" 2>&1
   sample_gate_status=$?
 
@@ -1431,6 +1510,7 @@ finish_session() {
     echo "- Trace eval status: \`$trace_eval_status\`."
     echo "- Sample minimums: shown \`$MIN_SHOWN\`, phrase shown \`$MIN_PHRASE_SHOWN\`, accepted \`$MIN_ACCEPTED\`, accepted-kept \`$MIN_KEPT\`, active minutes \`$MIN_ACTIVE_MINUTES\`."
     echo "- Phrase visible word minimum: \`$MIN_PHRASE_VISIBLE_WORDS\`."
+    echo "- Instant phrase minimum: shown \`$MIN_INSTANT_PHRASE_SHOWN\`, latency <= \`$MAX_INSTANT_PHRASE_LATENCY_MS\` ms."
     echo "- Typing feel minimum score: \`$MIN_TYPING_FEEL_SCORE\`."
     echo "- Typing feel cadence target: \`$TYPING_FEEL_TARGET_SHOWN_PER_MINUTE\` shown/min."
     echo "- Typing feel late threshold: \`$TYPING_FEEL_LATE_MS\` ms."

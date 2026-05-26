@@ -341,10 +341,11 @@ The report goes under `dist/daily-driver-dogfood/` by default. It includes the
 session sample gate, non-annoyance gate, trace eval output, line bounds, and a
 manual trust row. By default, `finish` requires at least 5 active minutes,
 5 shown suggestions, 1 phrase suggestion, 1 accepted suggestion,
-1 accepted-and-kept signal, a 15% accepted-kept / shown reach rate, and an
-85/100 redacted typing-feel score. Phrase suggestions must include metadata
-showing at least 3 visible words, so one-word or two-word phrase nubs do not
-count as daily-driver proof. The typing-feel score summarizes shown/min,
+1 accepted-and-kept signal, 1 instant phrase fallback with <=1ms recorded
+latency, a 15% accepted-kept / shown reach rate, and an 85/100 redacted
+typing-feel score. Phrase suggestions must include metadata showing at least 3
+visible words, so one-word or two-word phrase nubs do not count as daily-driver
+proof. The typing-feel score summarizes shown/min,
 accepted-kept rate, typed-over rate, accepted-then-deleted, late suggestions,
 insertion failures, and caret failures without raw text. Use
 `--min-kept-per-shown-percent` only when a specific dogfood lane needs a
