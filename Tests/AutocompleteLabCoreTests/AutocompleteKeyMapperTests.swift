@@ -48,6 +48,13 @@ struct AutocompleteKeyMapperTests {
         #expect(mapper.key(physicalKey: .backtick, modifiers: [.command, .shift]) == .other)
     }
 
+    @Test("Control Backtick maps to suggest now")
+    func controlBacktickMapsToSuggestNow() {
+        let mapper = AutocompleteKeyMapper()
+
+        #expect(mapper.key(physicalKey: .backtick, modifiers: [.control]) == .controlBacktick)
+    }
+
     @Test("IME and dead-key modifier chords pass through")
     func imeAndDeadKeyModifierChordsPassThrough() {
         let mapper = AutocompleteKeyMapper()

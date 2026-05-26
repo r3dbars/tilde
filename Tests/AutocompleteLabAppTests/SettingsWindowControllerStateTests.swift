@@ -820,7 +820,8 @@ struct SettingsWindowControllerStateTests {
     func keyboardShortcutCopySupportsDirectAcceptAllEditing() {
         let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
 
-        #expect(backtick.statusText == "Shortcuts: Tab accepts one word + space | Backtick accepts whole suggestion")
+        #expect(backtick.statusText == "Shortcuts: Tab accepts one word + space | Control-Backtick asks once")
+        #expect(backtick.acceptAllStatusText == "Backtick accepts whole suggestion")
         #expect(backtick.conflictText == "Conflict check: choose an app")
         #expect(backtick.perAppProfileText == "Per-app profile: choose an app to check whole-suggestion accept.")
         #expect(backtick.acceptAllPickerLabel == "Whole suggestion:")
@@ -828,7 +829,8 @@ struct SettingsWindowControllerStateTests {
 
         let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
 
-        #expect(optionTab.statusText == "Shortcuts: Tab accepts one word + space | Option-Tab accepts whole suggestion")
+        #expect(optionTab.statusText == "Shortcuts: Tab accepts one word + space | Control-Backtick asks once")
+        #expect(optionTab.acceptAllStatusText == "Option-Tab accepts whole suggestion")
         #expect(optionTab.conflictDetailText == "Open a writing app to check the shortcut against that app profile.")
         #expect(optionTab.acceptAllPickerLabel == "Whole suggestion:")
         #expect(optionTab.cycleButtonTitle == "Use Backtick")
@@ -859,6 +861,65 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(codex.conflictText == "Conflict check: whole-suggestion accept is off in Codex")
         #expect(codex.perAppProfileText == "Per-app profile: Codex allows Tab one-word accept only.")
+    }
+
+    @Test("Trust state gathers local privacy current surface and why copy")
+    func trustStateGathersLocalPrivacyCurrentSurfaceAndWhyCopy() {
+        let currentApp = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+        let privacy = SettingsPrivacyState(
+            tracingPaused: false,
+            rawContentTracingEnabled: false,
+            rawContentTracingExpiresAt: nil,
+            screenshotTracingEnabled: false,
+            screenshotTracingExpiresAt: nil,
+            visiblePageContextEnabled: false,
+            screenCaptureAccessGranted: false,
+            diagnosticsPath: "/tmp/diagnostics.log",
+            tracePath: "/tmp/traces.jsonl"
+        )
+        let trust = SettingsTrustState(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: readyRuntimeReport,
+            currentApp: currentApp,
+            privacy: privacy,
+            lastSuggestionDecision: "Waiting: cadence policy"
+        )
+
+        #expect(trust.statusText == "Trust: local and quiet")
+        #expect(trust.localModeText == "Local mode: app-owned model, ready.")
+        #expect(trust.typedTextText == "Typed text storage: off by default.")
+        #expect(trust.currentSurfaceText == "Current app: TextEdit is green and on")
+        #expect(trust.whyText == "Why now: Waiting: cadence policy")
+
+        let rawCapture = SettingsTrustState(
+            isTrusted: true,
+            suggestionsPaused: true,
+            runtimeReport: readyRuntimeReport,
+            currentApp: currentApp,
+            privacy: SettingsPrivacyState(
+                tracingPaused: false,
+                rawContentTracingEnabled: true,
+                rawContentTracingExpiresAt: nil,
+                screenshotTracingEnabled: false,
+                screenshotTracingExpiresAt: nil,
+                visiblePageContextEnabled: false,
+                personalCaptureEnabled: true,
+                screenCaptureAccessGranted: false,
+                diagnosticsPath: "/tmp/diagnostics.log",
+                tracePath: "/tmp/traces.jsonl"
+            ),
+            lastSuggestionDecision: "Paused"
+        )
+
+        #expect(rawCapture.statusText == "Trust: suggestions are paused")
+        #expect(rawCapture.typedTextText == "Typed text storage: local opt-in capture is on.")
     }
 
     @Test("Pause state copy stays shared across surfaces")

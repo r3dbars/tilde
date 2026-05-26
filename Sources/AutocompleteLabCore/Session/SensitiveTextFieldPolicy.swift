@@ -132,7 +132,9 @@ public struct SensitiveTextFieldPolicy: Equatable, Sendable {
 
     private static let sensitivePhrasesByCategory: [(SensitiveFieldProofCategory, Set<String>)] = [
         (.passwordManager, [
-            "1password", "bitwarden", "dashlane", "lastpass", "password manager"
+            "1password", "bitwarden", "dashlane", "lastpass", "password manager",
+            "keepass", "keepassxc", "keeweb", "keeper", "nordpass",
+            "proton pass", "roboform"
         ]),
         (.privatePrompt, [
             "private prompt", "private chat", "confidential prompt",
