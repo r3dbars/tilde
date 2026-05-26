@@ -177,7 +177,7 @@ require_pattern "Tests/AutocompleteLabCoreTests/TypingBurstPolicyTests.swift" "F
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift" "Blocks thin-context phrase continuations" "low-confidence weak-context coverage"
-require_pattern "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift" "Yellow profiles make long phrase suggestions low confidence" "profile confidence penalty coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift" "Yellow short phrase mode makes long phrase suggestions low confidence" "profile confidence penalty coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift" "Secure field traces keep only shape data by default" "secure-field trace privacy coverage"

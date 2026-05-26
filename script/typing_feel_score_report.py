@@ -55,6 +55,11 @@ def parse_args() -> argparse.Namespace:
             else None
         ),
     )
+    parser.add_argument(
+        "--app",
+        default=os.environ.get("AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP", ""),
+        help="Optional app bundle filter for a single dogfood surface.",
+    )
     parser.add_argument("--json", action="store_true", help="Print a redacted JSON summary.")
     parser.add_argument(
         "--late-ms",
@@ -464,6 +469,11 @@ def main() -> int:
         raise SystemExit(f"trace log missing: {args.trace}")
 
     events = load_events(args.trace, args.start_line, args.end_line)
+    if args.app:
+        events = [
+            event for event in events
+            if event.get("appBundleIdentifier") == args.app
+        ]
     if not events:
         raise SystemExit("trace slice is empty")
 

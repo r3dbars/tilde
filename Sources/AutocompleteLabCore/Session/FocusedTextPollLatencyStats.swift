@@ -10,7 +10,14 @@ public struct FocusedTextPollLatencyStats: Equatable, Sendable {
         self.samples.reserveCapacity(self.sampleWindow)
     }
 
-    public mutating func record(_ durationMilliseconds: Int) -> FocusedTextPollLatencySummary? {
+    public mutating func record(
+        _ durationMilliseconds: Int,
+        includeInSummary: Bool = true
+    ) -> FocusedTextPollLatencySummary? {
+        guard includeInSummary else {
+            return nil
+        }
+
         samples.append(max(0, durationMilliseconds))
 
         guard samples.count >= sampleWindow else {

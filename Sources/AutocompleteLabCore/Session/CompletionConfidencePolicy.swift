@@ -63,7 +63,11 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
             reasons.append("slow-over-500ms")
         }
 
-        if latencyMilliseconds > maximumDisplayLatencyMilliseconds {
+        let displayLatencyBudget = displayLatencyBudgetMilliseconds(
+            suggestion: suggestion,
+            mode: mode
+        )
+        if latencyMilliseconds > displayLatencyBudget {
             score -= 100
             reasons.append("too-slow-to-display")
         }
@@ -71,6 +75,11 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
         if mode == .phraseContinuation {
             let wordCount = suggestion.visibleWordCount
             if suggestion.maxVisibleWords >= 12 {
+                if wordCount > suggestion.maxVisibleWords {
+                    score -= 45
+                    reasons.append("too-many-visible-words")
+                }
+            } else if suggestion.maxVisibleWords >= 8 {
                 if wordCount > suggestion.maxVisibleWords {
                     score -= 45
                     reasons.append("too-many-visible-words")
@@ -86,10 +95,10 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
             let contextWords = textBeforeCursor
                 .split(whereSeparator: { $0.isWhitespace })
                 .count
-            if contextWords < 4 {
+            if contextWords < 2 {
                 score -= 55
                 reasons.append("thin-context")
-            } else if contextWords < 6 {
+            } else if contextWords < 4 {
                 score -= 20
                 reasons.append("thin-context")
             }
@@ -110,6 +119,22 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
         }
 
         return CompletionConfidenceDecision(bucket: bucket, score: score, reasons: reasons)
+    }
+
+    private func displayLatencyBudgetMilliseconds(
+        suggestion: CompletionSuggestion,
+        mode: CompletionRequestMode
+    ) -> Int {
+        guard mode == .phraseContinuation,
+              suggestion.maxVisibleWords >= 8,
+              suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
+                forVisibleWords: suggestion.maxVisibleWords
+              )
+        else {
+            return maximumDisplayLatencyMilliseconds
+        }
+
+        return max(maximumDisplayLatencyMilliseconds, 1_000)
     }
 
     private func looksGenericOrAssistantLike(_ text: String) -> Bool {

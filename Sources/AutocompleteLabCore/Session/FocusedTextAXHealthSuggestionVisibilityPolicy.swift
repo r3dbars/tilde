@@ -6,6 +6,7 @@ public struct FocusedTextAXHealthSuggestionVisibilityPolicy: Equatable, Sendable
     public func shouldHideVisibleSuggestion(
         during cooldown: FocusedTextAXHealthCooldown,
         currentSuggestionBundleIdentifier: String?,
+        currentSuggestionHostBundleIdentifier: String? = nil,
         currentSuggestionFieldIdentity: FocusedFieldIdentity?,
         currentFieldIdentity: FocusedFieldIdentity?,
         isInvalidatedByUserTyping: Bool,
@@ -28,7 +29,9 @@ public struct FocusedTextAXHealthSuggestionVisibilityPolicy: Equatable, Sendable
             return true
         }
 
-        guard currentSuggestionBundleIdentifier == cooldown.bundleIdentifier else {
+        let suggestionOwnsCooldownApp = currentSuggestionBundleIdentifier == cooldown.bundleIdentifier
+            || currentSuggestionHostBundleIdentifier == cooldown.bundleIdentifier
+        guard suggestionOwnsCooldownApp else {
             return true
         }
 

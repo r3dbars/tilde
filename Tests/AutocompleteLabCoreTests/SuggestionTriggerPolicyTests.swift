@@ -179,17 +179,17 @@ struct SuggestionTriggerPolicyTests {
             previousTextBeforeCursor: "This feels ready",
             currentTextBeforeCursor: "This feels ready ",
             requestMode: .phraseContinuation
-        ) == .request(delayMilliseconds: 100))
+        ) == .request(delayMilliseconds: 80))
     }
 
-    @Test("Very proactive tuning stays quiet after sentence boundaries")
-    func veryProactiveTuningStaysQuietAfterSentenceBoundaries() {
+    @Test("Very proactive tuning requests next-sentence phrases after sentence boundaries")
+    func veryProactiveTuningRequestsNextSentencePhrasesAfterSentenceBoundaries() {
         let policy = SuggestionTuning(aggressivenessLevel: 4).triggerPolicy(supportPace: .eager)
 
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works",
             currentTextBeforeCursor: "I think this works."
-        ) == .skip)
+        ) == .request(delayMilliseconds: 180))
     }
 
     @Test("Sentence boundaries stay quiet by default")
@@ -263,6 +263,34 @@ struct SuggestionTriggerPolicyTests {
         #expect(policy.decision(
             previousTextBeforeCursor: "I think this works.\nPlan",
             currentTextBeforeCursor: "I think this works.\nPlan "
+        ) == .skip)
+    }
+
+    @Test("Plain line start phrase opt-in is limited to boundary context")
+    func plainLineStartPhraseOptInIsLimitedToBoundaryContext() {
+        let policy = SuggestionTriggerPolicy(
+            wordBoundaryDelayMilliseconds: 80,
+            minimumPhraseContinuationWords: 1,
+            allowsPlainLineStartPhraseContinuation: true
+        )
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nPlan",
+            currentTextBeforeCursor: "I think this works.\nPlan ",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 80))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\nPla",
+            currentTextBeforeCursor: "I think this works.\nPlan",
+            requestMode: .phraseContinuation
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "I think this works.\n- Plan",
+            currentTextBeforeCursor: "I think this works.\n- Plan ",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
         ) == .skip)
     }
 

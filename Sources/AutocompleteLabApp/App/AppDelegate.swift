@@ -18,6 +18,10 @@ struct CodexProofFocusedTargetPolicy {
     static let bundleIdentifier = "com.openai.codex"
     static let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
 
+    static func allowsOneWordProofRequestMode(_ requestMode: CompletionRequestMode?) -> Bool {
+        requestMode == .wordCompletion || requestMode == .phraseContinuation
+    }
+
     func matches(
         app: RunningApplicationInfo,
         profile: CompatibilityProfile,
@@ -32,7 +36,7 @@ struct CodexProofFocusedTargetPolicy {
         shownTargetFingerprint: FocusedTargetFingerprint? = nil
     ) -> Bool {
         guard suggestionBundleIdentifier == Self.bundleIdentifier,
-              requestMode == .wordCompletion,
+              Self.allowsOneWordProofRequestMode(requestMode),
               profile.bundleIdentifier == Self.bundleIdentifier,
               profile.supportsOneWordAcceptance,
               !profile.supportsFullAcceptance,
@@ -265,6 +269,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
     private let textContextRepairPolicy = TextContextRepairPolicy()
+    private let obsidianTrustedEndOfDocumentSnapshotPolicy = ObsidianTrustedEndOfDocumentSnapshotPolicy()
+    private let proofActivationModePolicy = ProofActivationModePolicy()
     private let tracePrivacySecretStore = TracePrivacySecretStore()
     private let suggestionCadenceResetPolicy = SuggestionCadenceResetPolicy()
     private var modelRuntimeBundle = AppModelRuntimeFactory.makeRuntime()
@@ -292,6 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
     private let obsidianTabPassthroughRepairPolicy = ObsidianTabPassthroughRepairPolicy()
+    private let obsidianFullAcceptCaretRepairPolicy = ObsidianFullAcceptCaretRepairPolicy()
     private let suggestionInterruptionPolicy = SuggestionInterruptionPolicy()
     private let workspaceFocusChangePolicy = WorkspaceFocusChangePolicy()
     private let visibleSuggestionPersistencePolicy = VisibleSuggestionPersistencePolicy()
@@ -466,6 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
+    private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot?
     private var personalCaptureLastSnapshot: FocusedTextSnapshot?
     private var lastFocusedTextChangeAt: Date?
     private var lastRequestedTextBeforeCursor: String?
@@ -527,6 +535,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
     private let maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds = 750
+    private let maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds = 5_000
     private var focusedTextPollingPause = FocusedTextPollingPause()
     private var lastFocusedTextPollAttemptAt: Date?
     private var suggestionsPaused = false
@@ -1407,12 +1416,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
     }
 
-    private func finishFocusedTextPoll(startedAt: UInt64) {
+    private func finishFocusedTextPoll(
+        startedAt: UInt64,
+        latencySummarySuppressionReason: String? = nil
+    ) {
         let endedAt = DispatchTime.now().uptimeNanoseconds
         let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
         isFocusedTextPollInFlight = false
         latestFocusedTextReadRequestID = nil
-        recordFocusedTextPollLatency(durationMilliseconds)
+        recordFocusedTextPollLatency(
+            durationMilliseconds,
+            summarySuppressionReason: latencySummarySuppressionReason
+        )
         recordFocusedTextPollSkipSummaryIfNeeded()
     }
 
@@ -1537,11 +1552,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         startedAt: UInt64
     ) async {
+        var latencySummarySuppressionReason: String?
         defer {
-            finishFocusedTextPoll(startedAt: startedAt)
+            finishFocusedTextPoll(
+                startedAt: startedAt,
+                latencySummarySuppressionReason: latencySummarySuppressionReason
+            )
         }
 
         guard latestFocusedTextReadRequestID == result.requestID else {
+            latencySummarySuppressionReason = "stale-request"
             DiagnosticsLog.shared.record(
                 "focused-text-ax-read-dropped",
                 metadata: [
@@ -1568,6 +1588,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if applyFocusedTextAXHealthObservation(result) {
+            latencySummarySuppressionReason = "ax-health-cooldown-started"
             return
         }
 
@@ -1670,15 +1691,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startedAt: UInt64,
         reason: String
     ) async {
+        var latencySummarySuppressionReason: String?
         defer {
-            finishFocusedTextPoll(startedAt: startedAt)
+            finishFocusedTextPoll(
+                startedAt: startedAt,
+                latencySummarySuppressionReason: latencySummarySuppressionReason
+            )
         }
 
         guard latestFocusedTextReadRequestID == result.requestID else {
+            latencySummarySuppressionReason = "stale-request"
             return
         }
 
         if applyFocusedTextAXHealthObservation(result) {
+            latencySummarySuppressionReason = "ax-health-cooldown-started"
             return
         }
 
@@ -1777,15 +1804,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentProfile = profile
             setSuggestionDecision("Blocked: \(terminalHostBlockReason)")
             showFieldStatusIndicator(.blocked, context: rawContext)
+            var metadata = claudeCodeTerminalHostProofDiagnosticMetadata(
+                app: frontmostApp,
+                context: rawContext,
+                profile: profile
+            )
+            metadata["reason"] = terminalHostBlockReason
+            metadata["terminalHostBundleIdentifier"] = frontmostApp.bundleIdentifier
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: rawContext,
                 profile: profile,
                 fieldIdentity: fieldIdentity(app: frontmostApp, context: rawContext, profile: profile),
-                metadata: [
-                    "reason": terminalHostBlockReason,
-                    "terminalHostBundleIdentifier": frontmostApp.bundleIdentifier
-                ]
+                metadata: metadata
             )
             hideSuggestion()
             return
@@ -1889,11 +1920,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let repairPreviousSnapshot = obsidianTrustedEndOfDocumentSnapshotPolicy.repairPreviousSnapshot(
+            fieldIdentity: rawFieldIdentity,
+            previousSnapshot: previousSnapshot,
+            trustedSnapshot: lastTrustedObsidianEndOfDocumentSnapshot
+        )
         let context = presentationAdjustedContext(
             rawContext,
             app: frontmostApp,
             profile: profile,
-            previousSnapshot: previousSnapshot
+            previousSnapshot: repairPreviousSnapshot
         )
         let fieldIdentity = fieldIdentity(
             app: frontmostApp,
@@ -1901,6 +1937,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile
         )
         let fieldClassification = fieldClassification(for: context)
+        let suggestionFieldClassification = effectiveSuggestionFieldClassification(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            raw: fieldClassification
+        )
         rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
@@ -1917,6 +1959,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+        rememberTrustedObsidianEndOfDocumentSnapshotIfNeeded(snapshot)
         recordPersonalCaptureSnapshot(
             context: context,
             app: frontmostApp,
@@ -1994,48 +2037,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSnapshot: snapshot,
             appBundleIdentifier: frontmostApp.bundleIdentifier
         )
-        if typingBurstDecision.shouldSuppressSuggestions {
-            lastTextSnapshot = snapshot
-            invalidatePendingSuggestionRequest()
-            currentSuggestionInvalidatedByUserKeyDown = true
-            let requestMode = activationPolicy(for: profile).decision(
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor,
-                isSecure: context.isSecure,
-                selectedTextLength: context.selectedTextLength,
-                isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
-                fieldKind: fieldClassification.kind,
-                allowsUnknownFieldKind: profile.allowsUnknownFieldKind
-            ).requestMode?.rawValue ?? ""
-            let metadata = fieldClassification.traceMetadata
-                .merging(typingBurstDecision.traceMetadata) { current, _ in current }
-                .merging(["reason": "typing-burst"]) { current, _ in current }
-            if suggestionSession.hasVisibleSuggestion {
-                hideSuggestion(reason: "typing-burst", metadata: typingBurstDecision.traceMetadata)
-            }
-            setSuggestionDecision("Waiting: fast typing")
-            showFieldStatusIndicator(.waiting, context: context)
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: UUID().uuidString,
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: requestMode,
-                triggerReason: "typing-burst-policy",
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor,
-                reason: "typing-burst",
-                metadata: metadata
-            )
-            recordBlockedSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: metadata
-            )
-            return
-        }
         if advanceVisibleSuggestionForTypingProgressIfNeeded(
             context: context,
             profile: profile,
@@ -2089,20 +2090,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let activationDecision = activationPolicy(for: profile).decision(
+        let allowsTrustedProofSensitiveContent = allowsClaudeCodeTerminalHostProofSensitiveActivationBypass(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            fieldClassification: suggestionFieldClassification
+        )
+        let rawActivationDecision = activationPolicy(for: profile).decision(
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             isSecure: context.isSecure,
             selectedTextLength: context.selectedTextLength,
             isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
-            fieldKind: fieldClassification.kind,
-            allowsUnknownFieldKind: profile.allowsUnknownFieldKind
+            fieldKind: suggestionFieldClassification.kind,
+            allowsUnknownFieldKind: profile.allowsUnknownFieldKind,
+            allowsTrustedProofSensitiveContent: allowsTrustedProofSensitiveContent
+        )
+        if allowsTrustedProofSensitiveContent {
+            recordClaudeCodeTerminalHostProofSensitiveActivationBypass(
+                context: context,
+                hostBundleIdentifier: frontmostApp.bundleIdentifier,
+                rawDecision: rawActivationDecision
+            )
+        }
+        let activationDecision = proofAdjustedActivationDecision(
+            rawActivationDecision,
+            context: context,
+            profile: profile,
+            fieldIdentity: fieldIdentity,
+            fieldKind: suggestionFieldClassification.kind
         )
         rememberFieldControlTarget(
             app: frontmostApp,
             fieldIdentity: fieldIdentity,
             requestMode: activationDecision.requestMode,
-            fieldKind: fieldClassification.kind
+            fieldKind: suggestionFieldClassification.kind
         )
 
         guard activationDecision.canSuggest else {
@@ -2139,7 +2162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textBeforeCursor: context.textBeforeCursor,
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
-                metadata: fieldClassification.traceMetadata
+                metadata: suggestionFieldClassification.traceMetadata
             )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
@@ -2149,7 +2172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "reason": activationDecision.blockReasonDescription
                 ]
-                .merging(fieldClassification.traceMetadata) { current, _ in current }
+                .merging(suggestionFieldClassification.traceMetadata) { current, _ in current }
             )
             hideSuggestion()
             return
@@ -2158,7 +2181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let requestMode = activationDecision.requestMode ?? .phraseContinuation
         if shouldSuppressObsidianPostAcceptanceRefresh(context: context, profile: profile) {
             invalidatePendingSuggestionRequest()
-            let metadata = fieldClassification.traceMetadata
+            let metadata = suggestionFieldClassification.traceMetadata
                 .merging(["reason": "obsidian-post-acceptance-settle"]) { current, _ in current }
             setSuggestionDecision("Waiting: Obsidian accepted text settled")
             showFieldStatusIndicator(.ready, context: context)
@@ -2209,7 +2232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 for: snapshot,
                 cooldown: cooldown
             )
-            let metadata = fieldClassification.traceMetadata
+            let metadata = suggestionFieldClassification.traceMetadata
                 .merging(cooldown.metadata) { current, _ in current }
                 .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
             RawAutocompleteTraceLog.shared.record(
@@ -2239,13 +2262,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: profile.bundleIdentifier,
             fieldIdentity: fieldIdentity,
             requestMode: requestMode,
-            fieldKind: fieldClassification.kind
+            fieldKind: suggestionFieldClassification.kind
         )
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
         guard !quietMode.isActive else {
             setSuggestionDecision("Waiting: \(quietMode.traceReason)")
             showFieldStatusIndicator(.waiting, context: context)
-            let metadata = fieldClassification.traceMetadata
+            let metadata = suggestionFieldClassification.traceMetadata
                 .merging(quietMode.metadata) { current, _ in current }
                 .merging(["reason": quietMode.traceReason]) { current, _ in current }
             RawAutocompleteTraceLog.shared.record(
@@ -2329,9 +2352,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let currentLineStructure = CurrentLineStructure.from(textBeforeCursor: context.textBeforeCursor)
+        let suggestionAppBundleIdentifier = suggestionBundleIdentifier(for: frontmostApp, profile: profile)
         let triggerBehaviorProfile = AutocompleteBehaviorProfileResolver().profile(for: AutocompleteBehaviorProfileInput(
-            appBundleIdentifier: frontmostApp.bundleIdentifier,
-            fieldKind: fieldClassification.kind,
+            appBundleIdentifier: suggestionAppBundleIdentifier,
+            fieldKind: suggestionFieldClassification.kind,
             currentLineStructure: currentLineStructure
         ))
         let triggerDecision = triggerPolicy(for: profile).decision(
@@ -2372,12 +2396,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleSuggestion(
             context: context,
             profile: profile,
-            appBundleIdentifier: suggestionBundleIdentifier(for: frontmostApp, profile: profile),
+            appBundleIdentifier: suggestionAppBundleIdentifier,
             fieldIdentity: fieldIdentity,
-            fieldClassification: fieldClassification,
+            fieldClassification: suggestionFieldClassification,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
             requestMode: requestMode,
+            typingBurstDecision: typingBurstDecision,
             visiblePageContext: cachedVisiblePageContext(
                 context: context,
                 appBundleIdentifier: frontmostApp.bundleIdentifier
@@ -2385,11 +2410,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func claudeCodeTerminalHostProofBlockReason(
+    private func claudeCodeTerminalHostProofContext(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
         profile: CompatibilityProfile
-    ) -> String? {
+    ) -> ClaudeCodeTerminalHostProofContext? {
         guard isClaudeCodeTerminalHostProof(
             profile: profile,
             hostBundleIdentifier: app.bundleIdentifier
@@ -2401,31 +2426,157 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
-        let decision = ClaudeCodeTerminalHostProofPolicy.evaluate(
-            ClaudeCodeTerminalHostProofContext(
-                hostBundleIdentifier: app.bundleIdentifier,
-                windowTitle: context.fingerprint.windowTitle ?? "",
-                focusedText: focusedLine,
-                rawTextBeforeCursor: context.textBeforeCursor,
-                rawTextAfterCursor: context.textAfterCursor,
-                proofModeEnabled: activeAppProofBundleIdentifiers.contains(
-                    ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                )
+        let searchableInputText = [
+            focusedLine,
+            context.textBeforeCursor,
+            context.textAfterCursor
+        ].joined(separator: "\n")
+        let terminalScreenText = ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText)
+            ? ""
+            : (accessibilityClient.focusedWindowText(for: app) ?? "")
+        return ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: app.bundleIdentifier,
+            windowTitle: context.fingerprint.windowTitle ?? "",
+            focusedText: focusedLine,
+            rawTextBeforeCursor: context.textBeforeCursor,
+            rawTextAfterCursor: context.textAfterCursor,
+            terminalScreenText: terminalScreenText,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             )
         )
+    }
+
+    private func claudeCodeTerminalHostProofBlockReason(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> String? {
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ) else {
+            return nil
+        }
+        let decision = ClaudeCodeTerminalHostProofPolicy.evaluate(proofContext)
 
         switch decision {
         case .eligible:
-            guard ClaudeCodeTerminalHostProofPolicy.proofInputText(
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor
-            ) != nil else {
+            guard ClaudeCodeTerminalHostProofPolicy.proofInputText(for: proofContext) != nil else {
                 return "claude-code-terminal-host-unsafeInputLine"
             }
             return nil
         case let .blocked(reason):
             return "claude-code-terminal-host-\(reason.rawValue)"
         }
+    }
+
+    private func claudeCodeTerminalHostProofDiagnosticMetadata(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> [String: String] {
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ) else {
+            return [:]
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: proofContext)
+    }
+
+    private func allowsClaudeCodeTerminalHostProofSensitiveActivationBypass(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        fieldClassification: AXFieldClassification
+    ) -> Bool {
+        guard isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier),
+              fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+              !context.isSecure,
+              context.selectedTextLength == 0,
+              !suppressedFieldIdentities.contains(fieldIdentity),
+              claudeCodeTerminalHostProofInputSignature(
+                context: context,
+                hostBundleIdentifier: app.bundleIdentifier
+              ) == lastClaudeCodeTerminalProofInputSignature,
+              ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+                proofInputText: context.textBeforeCursor
+              ) else {
+            return false
+        }
+
+        return true
+    }
+
+    private func recordClaudeCodeTerminalHostProofSensitiveActivationBypass(
+        context: FocusedTextContext,
+        hostBundleIdentifier: String,
+        rawDecision: CompletionActivationDecision
+    ) {
+        guard rawDecision.canSuggest else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-sensitive-activation-bypass",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "host": hostBundleIdentifier,
+                "beforeChars": String(context.textBeforeCursor.count),
+                "afterChars": String(context.textAfterCursor.count),
+                "requestMode": rawDecision.requestMode?.rawValue ?? "none"
+            ]
+        )
+    }
+
+    private func effectiveSuggestionFieldClassification(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        raw classification: AXFieldClassification
+    ) -> AXFieldClassification {
+        if isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier),
+           claudeCodeTerminalHostProofInputSignature(
+            context: context,
+            hostBundleIdentifier: app.bundleIdentifier
+           ) == lastClaudeCodeTerminalProofInputSignature {
+            return ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+        }
+
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ) else {
+            return classification
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: classification,
+            for: proofContext
+        )
+    }
+
+    private func effectiveSuggestionFieldClassificationForCurrentFrontmost(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        raw classification: AXFieldClassification
+    ) -> AXFieldClassification {
+        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+            return classification
+        }
+
+        return effectiveSuggestionFieldClassification(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            raw: classification
+        )
     }
 
     private func suggestionBundleIdentifier(
@@ -2517,6 +2668,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if focusedTextAXHealthSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
             during: cooldown,
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionHostBundleIdentifier: currentSuggestionHostBundleIdentifierForVisibility(),
             currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
             currentFieldIdentity: currentFieldIdentity,
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
@@ -2541,7 +2693,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func recordFocusedTextPollLatency(_ durationMilliseconds: Int) {
+    private func recordFocusedTextPollLatency(
+        _ durationMilliseconds: Int,
+        summarySuppressionReason: String? = nil
+    ) {
         if focusedTextPollDiagnosticsPolicy.shouldRecordSlowPollMarker(
             durationMilliseconds: durationMilliseconds
         ) {
@@ -2551,6 +2706,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "durationMilliseconds": String(durationMilliseconds)
                 ]
             )
+        }
+
+        if let summarySuppressionReason {
+            DiagnosticsLog.shared.record(
+                "focused-text-poll-latency-summary-suppressed",
+                metadata: [
+                    "durationMilliseconds": String(durationMilliseconds),
+                    "reason": summarySuppressionReason
+                ]
+            )
+            return
         }
 
         if let summary = focusedTextPollLatencyStats.record(durationMilliseconds) {
@@ -2615,6 +2781,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
             if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
                 currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                currentSuggestionHostBundleIdentifier: currentSuggestionHostBundleIdentifierForVisibility(),
                 currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
                 currentFieldIdentity: currentFieldIdentity,
                 frontmostBundleIdentifier: frontmostBundleIdentifier,
@@ -2680,6 +2847,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return max(0, Int(now.timeIntervalSince(currentSuggestionPresentedAt) * 1000))
     }
 
+    private func currentSuggestionHostBundleIdentifierForVisibility() -> String? {
+        guard currentSuggestionAppBundleIdentifier
+            == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            let hostBundleIdentifier = currentSuggestionFieldIdentity?.bundleIdentifier,
+            ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
+        else {
+            return nil
+        }
+
+        return hostBundleIdentifier
+    }
+
     private func shouldPreserveVisibleSuggestionAfterActivationBlock(
         activationDecision: CompletionActivationDecision,
         context: FocusedTextContext,
@@ -2696,6 +2875,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
             currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
             currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
             textBeforeCursor: context.textBeforeCursor,
@@ -2714,6 +2894,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
             currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
             currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
             textBeforeCursor: context.textBeforeCursor,
@@ -2774,6 +2955,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hostBundleIdentifier: app.bundleIdentifier,
                 profile: profile
             )
+        } else if isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) {
+            lastClaudeCodeTerminalProofInputSignature = nil
         }
 
         let syntheticCaretBundleIdentifier = syntheticTextAreaCaretBundleIdentifier(
@@ -2782,7 +2968,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         guard supportsSyntheticTextAreaCaret(for: app, profile: profile),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
-              context.caretRect == nil,
+              shouldUseSyntheticTextAreaCaret(for: app, profile: profile, context: context),
               let syntheticCaret = syntheticTextAreaCaretRect(
                 for: context,
                 bundleIdentifier: syntheticCaretBundleIdentifier
@@ -2845,14 +3031,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func shouldUseSyntheticTextAreaCaret(
+        for app: RunningApplicationInfo,
+        profile: CompatibilityProfile,
+        context: FocusedTextContext
+    ) -> Bool {
+        guard context.caretRect != nil else {
+            return true
+        }
+
+        guard isClaudeCodeTerminalHostProof(
+            profile: profile,
+            hostBundleIdentifier: app.bundleIdentifier
+        ) else {
+            return false
+        }
+
+        return true
+    }
+
     private func claudeCodeTerminalHostProofInputText(
         app: RunningApplicationInfo,
         context: FocusedTextContext,
         profile: CompatibilityProfile
     ) -> String? {
-        guard isClaudeCodeTerminalHostProof(
-            profile: profile,
-            hostBundleIdentifier: app.bundleIdentifier
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
         ),
               claudeCodeTerminalHostProofBlockReason(
                 app: app,
@@ -2862,10 +3068,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        return ClaudeCodeTerminalHostProofPolicy.proofInputText(
-            textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor
-        )
+        return ClaudeCodeTerminalHostProofPolicy.proofInputText(for: proofContext)
     }
 
     private func recordClaudeCodeTerminalHostProofInputRepair(
@@ -2873,18 +3076,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostBundleIdentifier: String,
         profile: CompatibilityProfile
     ) {
-        let signature = [
-            hostBundleIdentifier,
-            String(context.elementIdentifier),
-            String(context.textBeforeCursor.count),
-            String(context.textAfterCursor.count)
-        ].joined(separator: "|")
+        let signature = claudeCodeTerminalHostProofInputSignature(
+            context: context,
+            hostBundleIdentifier: hostBundleIdentifier
+        )
 
         guard signature != lastClaudeCodeTerminalProofInputSignature else {
             return
         }
 
         lastClaudeCodeTerminalProofInputSignature = signature
+        let partialWordShape = PartialWordShape.from(textBeforeCursor: context.textBeforeCursor)
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-input",
             metadata: [
@@ -2892,9 +3094,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "host": hostBundleIdentifier,
                 "source": "focused-input-line",
                 "beforeChars": String(context.textBeforeCursor.count),
-                "afterChars": String(context.textAfterCursor.count)
+                "afterChars": String(context.textAfterCursor.count),
+                "wordCount": String(context.textBeforeCursor.split(whereSeparator: \.isWhitespace).count),
+                "hasPromptGlyph": String(context.textBeforeCursor.contains("❯")),
+                "hasProofMarker": String(
+                    ClaudeCodeTerminalHostProofPolicy.containsProofMarker(context.textBeforeCursor)
+                ),
+                "partialWordCharacters": String(partialWordShape?.characterCount ?? 0),
+                "partialWordLetters": String(partialWordShape?.letterCount ?? 0),
+                "partialWordCasing": partialWordShape?.casing.rawValue ?? PartialWordCasing.none.rawValue
             ]
         )
+    }
+
+    private func claudeCodeTerminalHostProofInputSignature(
+        context: FocusedTextContext,
+        hostBundleIdentifier: String
+    ) -> String {
+        [
+            hostBundleIdentifier,
+            String(context.elementIdentifier),
+            String(context.textBeforeCursor.count),
+            String(context.textAfterCursor.count),
+            claudeCodeTerminalHostProofInputToken(context.textBeforeCursor)
+        ].joined(separator: "|")
+    }
+
+    private func claudeCodeTerminalHostProofInputToken(_ text: String) -> String {
+        let tokens = AcceptanceSurvivalClassifier.looseTokens(in: text)
+        return TracePrivacyFingerprint.prefixFamilyMetadata(
+            for: tokens,
+            secret: tracePrivacySecretStore.secret()
+        )["prefixFamilyHMACToken"] ?? "empty"
     }
 
     private func supportsSyntheticTextAreaCaret(
@@ -3235,6 +3466,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func rememberTrustedObsidianEndOfDocumentSnapshotIfNeeded(_ snapshot: FocusedTextSnapshot) {
+        guard obsidianTrustedEndOfDocumentSnapshotPolicy.shouldRemember(snapshot: snapshot) else {
+            return
+        }
+
+        lastTrustedObsidianEndOfDocumentSnapshot = snapshot
+    }
+
     @discardableResult
     private func startKeyboardEventTapIfPossible() -> Bool {
         cancelKeyboardEventTapIdleStop()
@@ -3503,6 +3742,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let verificationBaseline = insertionVerificationBaseline(
                 acceptanceID: acceptanceID,
                 acceptedAt: acceptedAt,
+                action: action,
                 acceptMode: action.diagnosticName
             )
             recordClaudeCodeTerminalHostProofKeyboardProgress(
@@ -3513,16 +3753,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "hasBaseline": String(verificationBaseline != nil)
                 ]
             )
-            guard let acceptedText = suggestionSession.nextWordAcceptance() else {
+            guard let rawAcceptedText = suggestionSession.nextWordAcceptance() else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "missing-accepted-text")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .missingAcceptedText)
             }
+            let acceptedText = acceptedTextForCurrentAcceptance(rawAcceptedText, action: action)
             recordClaudeCodeTerminalHostProofKeyboardProgress(
                 stage: "accept-next-word-text-ready",
                 key: key,
                 action: action,
                 metadata: [
-                    "acceptedChars": String(acceptedText.count)
+                    "acceptedChars": String(acceptedText.count),
+                    "rawAcceptedChars": String(rawAcceptedText.count)
                 ]
             )
             guard let acceptanceProof = suggestionAcceptanceProof(action: action, acceptedText: acceptedText) else {
@@ -3540,7 +3782,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 key: key,
                 action: action
             )
-            guard insertAcceptedText(acceptedText) else {
+            guard insertAcceptedText(acceptedText, action: action) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -3606,6 +3848,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let verificationBaseline = insertionVerificationBaseline(
                 acceptanceID: acceptanceID,
                 acceptedAt: acceptedAt,
+                action: action,
                 acceptMode: action.diagnosticName
             )
             guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
@@ -3616,7 +3859,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "acceptance-proof-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
-            guard insertAcceptedText(acceptedText) else {
+            guard insertAcceptedText(acceptedText, action: action) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -3686,6 +3929,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return .replayOriginalKey(.passThroughAction)
         }
+    }
+
+    private func acceptedTextForCurrentAcceptance(
+        _ acceptedText: String,
+        action: KeyboardAction
+    ) -> String {
+        guard let currentProfile,
+              shouldUseClaudeCodeTerminalHostProofDirectInsertion(
+                profile: currentProfile,
+                action: action
+              ) else {
+            return acceptedText
+        }
+
+        let trimmed = acceptedText.trimmingTrailingWhitespace()
+        return trimmed.isEmpty ? acceptedText : trimmed
     }
 
     private func currentSuggestionAcceptanceDecision(
@@ -3773,7 +4032,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             previousSnapshot: lastTextSnapshot
         )
-        if fieldClassification(for: context).suppressesSuggestionsByDefault {
+        let rawFieldClassification = fieldClassification(for: context)
+        let acceptanceFieldClassification = effectiveSuggestionFieldClassification(
+            app: frontmostApp,
+            context: context,
+            profile: profile,
+            raw: rawFieldClassification
+        )
+        if acceptanceFieldClassification.suppressesSuggestionsByDefault {
             blockReason = .currentBecameSuppressedField
             return nil
         }
@@ -3918,7 +4184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func terminalHostProofSnapshotMatchesCurrentSuggestion() -> Bool {
         guard currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-              currentSuggestionRequestMode == .wordCompletion,
+              currentSuggestionRequestMode != nil,
               let currentProfile,
               currentProfile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
               currentProfile.supportsOneWordAcceptance,
@@ -4083,7 +4349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
         let marker = CodexProofFocusedTargetPolicy.marker
         guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
-              currentSuggestionRequestMode == .wordCompletion,
+              CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode),
               let currentProfile,
               currentProfile.bundleIdentifier == bundleIdentifier,
               currentProfile.supportsOneWordAcceptance,
@@ -4182,13 +4448,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let lastTextSnapshot,
               shownSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
               shownSnapshot.fieldIdentity == lastTextSnapshot.fieldIdentity,
-              shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
-              shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor,
               shownSnapshot.selectedTextLength == 0 else {
             return false
         }
 
-        return true
+        if shownSnapshot.textBeforeCursor == lastTextSnapshot.textBeforeCursor,
+           shownSnapshot.textAfterCursor == lastTextSnapshot.textAfterCursor {
+            return true
+        }
+
+        return visibleSuggestionPersistencePolicy.shouldPreserveAfterActivationBlock(
+            blockReason: .tooLittleContext,
+            appBundleIdentifier: "md.obsidian",
+            fieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionTextBeforeCursor: shownSnapshot.textBeforeCursor,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: lastTextSnapshot.textBeforeCursor,
+            textAfterCursor: lastTextSnapshot.textAfterCursor
+        )
     }
 
     private func recordObsidianSnapshotFastPath(stage: String) {
@@ -4509,6 +4789,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func insertionVerificationBaseline(
         acceptanceID: String,
         acceptedAt: Date,
+        action: KeyboardAction?,
         acceptMode: String
     ) -> InsertionVerificationBaseline? {
         guard let currentFieldIdentity,
@@ -4537,6 +4818,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: currentSuggestionRequestMode,
             acceptanceID: acceptanceID,
             acceptedAt: acceptedAt,
+            action: action,
             acceptMode: acceptMode,
             fieldKind: fieldKind,
             fieldKindReason: fieldClassification?.reason ?? "unknown",
@@ -4696,7 +4978,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: baseline.profile,
                         retryCount: baseline.retryCount
                     )
-                    if insertAcceptedText(acceptedText, skippingInsertionModes: skippedModes) {
+                    if insertAcceptedText(
+                        acceptedText,
+                        skippingInsertionModes: skippedModes,
+                        action: baseline.action
+                    ) {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
                             targetFingerprint: baseline.targetFingerprint,
@@ -4707,6 +4993,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             requestMode: baseline.requestMode,
                             acceptanceID: baseline.acceptanceID,
                             acceptedAt: baseline.acceptedAt,
+                            action: baseline.action,
                             acceptMode: baseline.acceptMode,
                             fieldKind: baseline.fieldKind,
                             fieldKindReason: baseline.fieldKindReason,
@@ -5075,7 +5362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let replacementText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
         guard !acceptedText.isEmpty,
               baseline.profile.bundleIdentifier == bundleIdentifier,
-              baseline.requestMode == .wordCompletion,
+              CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(baseline.requestMode),
               baseline.profile.supportsOneWordAcceptance,
               !baseline.profile.supportsFullAcceptance,
               baseline.profile.requiresNoSubmitAcceptanceProof,
@@ -5210,7 +5497,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             containing: baseline.previousTextBeforeCursor,
             maxDepth: 32
         ) != nil else {
-            return nil
+            guard activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+                  ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT"] == "1",
+                  Self.obsidianProofDocumentConfirmsInsertion(expectedText: expectedText) else {
+                return nil
+            }
+
+            DiagnosticsLog.shared.record(
+                "obsidian-proof-document-insert-verification-fast-path",
+                metadata: [
+                    "app": bundleIdentifier,
+                    "acceptedChars": String(acceptedText.count),
+                    "previousBeforeChars": String(baseline.previousTextBeforeCursor.count),
+                    "previousAfterChars": String(baseline.previousTextAfterCursor.count),
+                    "reason": reason
+                ]
+            )
+            return FocusedTextContext(
+                elementIdentifier: baseline.fieldIdentity.elementIdentifier,
+                role: "AXTextArea",
+                subrole: nil,
+                fingerprint: FocusedElementFingerprint(),
+                textBeforeCursor: baseline.previousTextBeforeCursor + acceptedText,
+                textAfterCursor: baseline.previousTextAfterCursor,
+                selectedText: "",
+                selectedTextLength: 0,
+                caretRect: nil,
+                elementRect: nil,
+                windowRect: nil,
+                windowIdentifier: nil,
+                textLineRect: nil,
+                textStyle: nil,
+                isSecure: false,
+                fieldClassification: AXFieldClassification(kind: baseline.fieldKind, reason: baseline.fieldKindReason),
+                caretIsSynthetic: true,
+                capabilities: FocusedTextCapabilities(
+                    canReadValue: true,
+                    canReadSelectedTextRange: true,
+                    canReadBoundsForRange: false,
+                    canReadAttributedText: false,
+                    canSetSelectedText: true
+                )
+            )
         }
 
         DiagnosticsLog.shared.record(
@@ -5707,6 +6035,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
         requestMode: CompletionRequestMode,
+        typingBurstDecision: TypingBurstDecision = .idle,
         visiblePageContext: VisiblePageContext?
     ) {
         cancelPrefixCooldownRetry()
@@ -5743,6 +6072,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             policyDelayMilliseconds: delayMilliseconds,
             renderMode: renderMode
         )
+        let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
+            ? [:]
+            : typingBurstDecision.traceMetadata
 
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionRequested,
@@ -5756,6 +6088,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "renderMode": renderMode.rawValue
             ]
+            .merging(typingBurstMetadata) { current, _ in current }
             .merging(debounceSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
@@ -5874,6 +6207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         suggestionID: suggestionID,
                         reason: "repeated-miss"
                     )
+                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
                     hideSuggestion()
                     return
                 }
@@ -5918,6 +6252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 repositionVisibleSuggestion(context: context, profile: profile)
                 return
             } else {
+                setSuggestionDecision(SuggestionStatusText.notShown(reason: "no-fast-word-candidate"))
                 hideSuggestion()
                 return
             }
@@ -5971,17 +6306,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        var fastPhraseFallbackMetadata: [String: String] = [:]
         if requestMode == .phraseContinuation,
            !disablesFastPhraseFallbackForProof {
-            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
-                for: context.textBeforeCursor,
-                behaviorProfileID: request.behaviorProfileID,
-                maxVisibleWords: request.maxVisibleWords,
-                allowPredictiveFallback: shouldUsePredictivePhraseFallback(
+            let allowsClaudeCodeProofPromptPrediction =
+                appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+            let allowsPredictivePhraseFallback =
+                allowsClaudeCodeProofPromptPrediction
+                || shouldUsePredictivePhraseFallback(
                     profile: profile,
                     behaviorProfileID: request.behaviorProfileID,
                     visiblePageContext: visiblePageContext
                 )
+            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
+                for: context.textBeforeCursor,
+                behaviorProfileID: request.behaviorProfileID,
+                maxVisibleWords: request.maxVisibleWords,
+                allowPredictiveFallback: allowsPredictivePhraseFallback,
+                allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
             if let fastSuggestion = fastSelection.suggestion {
@@ -6029,25 +6372,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         suggestionID: suggestionID,
                         reason: "repeated-miss"
                     )
+                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
                     hideSuggestion()
                     return
                 }
 
-                presentSuggestion(
-                    fastSuggestion,
-                    suggestionID: suggestionID,
+                let acceptedAndKeptSignal = acceptedAndKeptSignal(
                     request: request,
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    renderMode: renderMode,
-                    latencyMilliseconds: 0,
-                    triggerReason: "predictive-phrase-fallback",
-                    requestTicket: requestTicket,
-                    candidateSelectionMetadata: fastSelectionMetadata,
-                    refreshBeforePresenting: false
+                    fieldClassification: fieldClassification,
+                    profile: profile
                 )
-                return
+                let learningDecision = suggestionOrchestrator.fastPhraseFallbackLearningDecision(
+                    acceptedAndKeptSignal: acceptedAndKeptSignal,
+                    probabilityThreshold: acceptedAndKeptLearning.probabilityThreshold(for: request.mode)
+                )
+                let fastPresentationMetadata = fastSelectionMetadata
+                    .merging(learningDecision.metadata) { current, _ in current }
+                if learningDecision.shouldSuppress {
+                    let reason = learningDecision.reason ?? "fast-phrase-learning-restraint"
+                    fastPhraseFallbackMetadata = [
+                        "fastPhraseFallbackChecked": "true",
+                        "fastPhraseFallbackOutcome": reason
+                    ]
+                    .merging(fastPresentationMetadata) { current, _ in current }
+                    RawAutocompleteTraceLog.shared.record(
+                        type: .suggestionSuppressed,
+                        suggestionID: suggestionID,
+                        appBundleIdentifier: appBundleIdentifier,
+                        fieldIdentity: fieldIdentityDescription,
+                        requestMode: request.mode.rawValue,
+                        triggerReason: "predictive-phrase-fallback",
+                        textBeforeCursor: request.textBeforeCursor,
+                        textAfterCursor: request.textAfterCursor,
+                        latencyMilliseconds: 0,
+                        reason: reason,
+                        metadata: [
+                            "renderMode": renderMode.rawValue
+                        ]
+                        .merging(fastPresentationMetadata) { current, _ in current }
+                        .merging(requestMetadata) { current, _ in current }
+                    )
+                    recordSuggestionEvent(
+                        "suggestion-blocked",
+                        context: context,
+                        profile: profile,
+                        metadata: [
+                            "reason": reason,
+                            "triggerReason": "predictive-phrase-fallback"
+                        ]
+                        .merging(learningDecision.metadata) { current, _ in current }
+                    )
+                    setSuggestionDecision("\(SuggestionStatusText.notShown(reason: reason)); queued model phrase")
+                } else {
+                    presentSuggestion(
+                        fastSuggestion,
+                        suggestionID: suggestionID,
+                        request: request,
+                        context: context,
+                        profile: profile,
+                        fieldIdentity: fieldIdentity,
+                        renderMode: renderMode,
+                        latencyMilliseconds: 0,
+                        triggerReason: "predictive-phrase-fallback",
+                        requestTicket: requestTicket,
+                        candidateSelectionMetadata: fastPresentationMetadata,
+                        refreshBeforePresenting: false
+                    )
+                    return
+                }
+            }
+
+            let fastPhraseFallbackOutcome = fastSelection.suppressionReason ?? "no-suggestion"
+            if fastPhraseFallbackMetadata.isEmpty {
+                fastPhraseFallbackMetadata = [
+                    "fastPhraseFallbackChecked": "true",
+                    "fastPhraseFallbackOutcome": fastPhraseFallbackOutcome
+                ]
+                .merging(fastSelectionMetadata) { current, _ in current }
+                setSuggestionDecision("Queued: model phrase after instant \(fastPhraseFallbackOutcome)")
             }
         } else if requestMode == .phraseContinuation,
                   disablesFastPhraseFallbackForProof {
@@ -6061,6 +6463,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Queued: proof model phrase continuation")
         }
 
+        if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
+            let metadata = [
+                "renderMode": renderMode.rawValue,
+                "reason": "typing-burst-model-continuation"
+            ]
+            .merging(fieldClassification.traceMetadata) { current, _ in current }
+            .merging(typingBurstMetadata) { current, _ in current }
+            .merging(fastPhraseFallbackMetadata) { current, _ in current }
+            .merging(requestMetadata) { current, _ in current }
+            setSuggestionDecision("Waiting: fast typing")
+            showFieldStatusIndicator(.waiting, context: context)
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: suggestionID,
+                appBundleIdentifier: appBundleIdentifier,
+                fieldIdentity: fieldIdentityDescription,
+                requestMode: request.mode.rawValue,
+                triggerReason: "typing-burst-policy",
+                textBeforeCursor: request.textBeforeCursor,
+                textAfterCursor: request.textAfterCursor,
+                reason: "typing-burst-model-continuation",
+                metadata: metadata
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: metadata
+            )
+            hideSuggestion(reason: "typing-burst", metadata: typingBurstMetadata)
+            return
+        }
+
         recordSuggestionEvent(
             "suggestion-request-scheduled",
             context: context,
@@ -6070,6 +6506,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "traceID": String(suggestionID.prefix(8)),
                 "suggestionID": suggestionID
             ]
+            .merging(typingBurstMetadata) { current, _ in current }
+            .merging(fastPhraseFallbackMetadata) { current, _ in current }
             .merging(debounceSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
@@ -6186,6 +6624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             return
                         }
 
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "empty-suggestion"))
                         self.hideSuggestion()
                         return
                     }
@@ -6214,6 +6653,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 "reason": "missing-anchor"
                             ]
                         )
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "missing-anchor"))
                         self.hideSuggestion()
                         return
                     }
@@ -6267,6 +6707,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             suggestionID: suggestionID,
                             reason: "repeated-miss"
                         )
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "repeated-miss"))
                         self.hideSuggestion()
                         return
                     }
@@ -6298,6 +6739,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ) else {
                         return
                     }
+                    self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "engine-error"))
                     self.hideSuggestion(reason: "engine-error")
                 }
             }
@@ -6321,12 +6763,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionInvalidatedByUserKeyDown
             && currentSuggestionID == suggestionID
+        let refreshedContext = refreshBeforePresenting
+            ? refreshedPresentationContext(
+                for: request,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            )
+            : (context: Optional(context), reason: nil)
+        let verifiedRefreshContext = refreshBeforePresenting ? refreshedContext.context : nil
+        let freshnessFieldIdentity = verifiedRefreshContext == nil
+            ? currentFieldIdentity
+            : fieldIdentity
+        let freshnessSnapshot = verifiedRefreshContext.map {
+            FocusedTextSnapshot(
+                fieldIdentity: fieldIdentity,
+                textBeforeCursor: $0.textBeforeCursor,
+                textAfterCursor: $0.textAfterCursor
+            )
+        } ?? lastTextSnapshot
         if let suppressionReason = suggestionOrchestrator.presentationSuppressionReason(
             requestTicket: requestTicket,
             request: request,
             fieldIdentity: fieldIdentity,
-            currentFieldIdentity: currentFieldIdentity,
-            currentSnapshot: lastTextSnapshot,
+            currentFieldIdentity: freshnessFieldIdentity,
+            currentSnapshot: freshnessSnapshot,
             invalidatedByUserTyping: invalidatedByVisibleUserTyping
         ) {
             let reason = suppressionReason.rawValue
@@ -6335,7 +6795,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging([
                     "presentationFreshness": "stale",
-                    "presentationFreshnessReason": reason
+                    "presentationFreshnessReason": reason,
+                    "presentationFreshnessSource": verifiedRefreshContext == nil ? "cached-snapshot" : "live-refresh"
                 ]) { current, _ in current }
             setSuggestionDecision("Blocked: \(reason)")
             RawAutocompleteTraceLog.shared.record(
@@ -6365,13 +6826,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let refreshedContext = refreshBeforePresenting
-            ? refreshedPresentationContext(
-                for: request,
-                profile: profile,
-                fieldIdentity: fieldIdentity
-            )
-            : (context: Optional(context), reason: nil)
         guard let context = refreshedContext.context else {
             let reason = refreshedContext.reason ?? "stale-focused-context"
             RawAutocompleteTraceLog.shared.record(
@@ -6400,6 +6854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(traceRequestMetadata(request: request, context: originalContext)) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
             )
+            setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
             hideSuggestion(reason: reason)
             return
         }
@@ -6478,7 +6933,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let displayFieldClassification = fieldClassification(for: context)
+        let rawDisplayFieldClassification = fieldClassification(for: context)
+        let displayFieldClassification = effectiveSuggestionFieldClassificationForCurrentFrontmost(
+            context: context,
+            profile: profile,
+            raw: rawDisplayFieldClassification
+        )
+        let displayRequestMetadata = traceRequestMetadata(
+            request: request,
+            fieldClassification: displayFieldClassification
+        )
         let acceptedAndKeptSignal = acceptedAndKeptSignal(
             request: request,
             fieldClassification: displayFieldClassification,
@@ -6507,8 +6971,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let displayScoreTrace = displayScoreDecision.trace
         guard displayScoreDecision.shouldDisplay else {
             let reason = displayScoreMetadata["displayScoreSuppressionReason"] ?? "display-score"
+            let displaySuppressionReason = DisplayScoreSuppressionReason(rawValue: reason)
             let shouldKeepStreamedSuggestion: Bool
-            if reason == DisplayScoreSuppressionReason.tooSlowToDisplay.rawValue,
+            if displaySuppressionReason == .tooSlowToDisplay,
                let requestTicket {
                 shouldKeepStreamedSuggestion = suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
                     suggestionID: suggestionID,
@@ -6521,9 +6986,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 shouldKeepStreamedSuggestion = false
             }
-            let lateSuggestionMetadata = shouldKeepStreamedSuggestion
-                ? ["keptVisibleStreamingSuggestion": "true"]
-                : [:]
+            let visibleSuggestionAction = suggestionReplacementVisibilityPolicy.action(
+                forDisplaySuppressionReason: displaySuppressionReason,
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+                sameFieldAsCurrentSuggestion: currentSuggestionAppBundleIdentifier == (request.appBundleIdentifier ?? profile.bundleIdentifier)
+                    && currentSuggestionFieldIdentity == fieldIdentity,
+                currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+                maximumPreservedAgeMilliseconds: maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds
+            )
+            let shouldKeepCurrentVisibleSuggestion = shouldKeepStreamedSuggestion
+                || visibleSuggestionAction == .keepCurrentVisible
+            var lateSuggestionMetadata: [String: String] = [:]
+            if shouldKeepStreamedSuggestion {
+                lateSuggestionMetadata["keptVisibleStreamingSuggestion"] = "true"
+            }
+            if visibleSuggestionAction == .keepCurrentVisible {
+                lateSuggestionMetadata["keptVisibleSuggestionAfterLateSuppression"] = "true"
+                lateSuggestionMetadata["lateSuppressionPreservedAgeMilliseconds"] =
+                    currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
+            }
             setSuggestionDecision("Blocked: display score \(reason)")
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -6557,11 +7039,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .merging(placement.metadata) { current, _ in current }
                 .merging(candidateSelectionMetadata) { current, _ in current }
                 .merging(displayScoreMetadata) { current, _ in current }
-                .merging(lateSuggestionMetadata) { current, _ in current }
+                    .merging(lateSuggestionMetadata) { current, _ in current }
             )
-            if shouldKeepStreamedSuggestion {
-                setSuggestionDecision("Shown: kept streamed suggestion")
+            if shouldKeepCurrentVisibleSuggestion {
+                setSuggestionDecision(
+                    shouldKeepStreamedSuggestion
+                        ? "Shown: kept streamed suggestion"
+                        : "Shown: kept visible suggestion after late \(reason)"
+                )
+                showFieldStatusIndicator(.shown, context: context)
                 repositionVisibleSuggestion(context: context, profile: profile)
+                updateKeyboardEventTapSnapshot()
                 return
             }
             hideSuggestion(reason: reason)
@@ -6645,7 +7133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldIdentity: fieldIdentity,
             placement: placement,
             latencyMilliseconds: latencyMilliseconds,
-            requestMetadata: traceRequestMetadata(request: request, context: context),
+            requestMetadata: displayRequestMetadata,
             geometryMetadata: traceGeometryMetadata(context: context, renderMode: placement.renderMode),
             learningMetadata: learningAdjustment.metadata,
             candidateSelectionMetadata: candidateSelectionMetadata,
@@ -6710,7 +7198,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             placement: deliveredPlacement
         )
         suggestionSession.present(suggestion)
-        setSuggestionDecision("Shown: \(triggerReason) \(latencyMilliseconds)ms")
+        setSuggestionDecision(
+            SuggestionStatusText.shown(
+                mode: request.mode,
+                triggerReason: triggerReason,
+                latencyMilliseconds: latencyMilliseconds,
+                metadata: candidateSelectionMetadata
+            )
+        )
         currentSuggestionID = suggestionID
         currentSuggestionAppBundleIdentifier = request.appBundleIdentifier ?? profile.bundleIdentifier
         currentSuggestionFieldIdentity = fieldIdentity
@@ -6786,7 +7281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: context,
             profile: profile,
             fieldIdentity: fieldIdentity,
-            fieldClassification: displayFieldClassification,
+            fieldClassification: rawDisplayFieldClassification,
             suggestion: suggestion,
             latencyMilliseconds: latencyMilliseconds,
             triggerReason: triggerReason,
@@ -6847,20 +7342,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             previousSnapshot: lastTextSnapshot
         )
-        guard self.fieldIdentity(
-            app: frontmostApp,
-            context: context,
-            profile: profile
-        ) == fieldIdentity else {
-            return (nil, "stale-field")
-        }
-
         guard context.textBeforeCursor == request.textBeforeCursor,
               context.textAfterCursor == request.textAfterCursor else {
             return (nil, "stale-text")
         }
 
+        let refreshedFieldIdentity = self.fieldIdentity(
+            app: frontmostApp,
+            context: context,
+            profile: profile
+        )
+        if refreshedFieldIdentity != fieldIdentity {
+            if !canTrustPromptProofFieldIdentityRefresh(
+                requestFieldIdentity: fieldIdentity,
+                refreshedFieldIdentity: refreshedFieldIdentity,
+                profile: profile
+            ) {
+                return (nil, "stale-field")
+            }
+            DiagnosticsLog.shared.record(
+                "prompt-proof-field-identity-refresh-relaxed",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "requestFieldIdentity": fieldIdentity.traceDescription,
+                    "refreshedFieldIdentity": refreshedFieldIdentity.traceDescription
+                ]
+            )
+        }
+
         return (context, nil)
+    }
+
+    private func canTrustPromptProofFieldIdentityRefresh(
+        requestFieldIdentity: FocusedFieldIdentity,
+        refreshedFieldIdentity: FocusedFieldIdentity,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        profile.promptAppSafetyMode == .wordOnly
+            && profile.requiresNoSubmitAcceptanceProof
+            && activeAppProofBundleIdentifiers.contains(profile.bundleIdentifier)
+            && requestFieldIdentity.bundleIdentifier == refreshedFieldIdentity.bundleIdentifier
+            && requestFieldIdentity.processIdentifier == refreshedFieldIdentity.processIdentifier
     }
 
     private func frontmostAppMatchesSuggestion(
@@ -7542,7 +8064,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func insertAcceptedText(
         _ acceptedText: String,
-        skippingInsertionModes skippedModes: Set<InsertionMode> = []
+        skippingInsertionModes skippedModes: Set<InsertionMode> = [],
+        action: KeyboardAction? = nil
     ) -> Bool {
         guard let profile = currentProfile else {
             setSuggestionDecision("Blocked: missing compatibility profile")
@@ -7607,10 +8130,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         keyboardEventTap?.suppressPassthroughObservation(
             until: Date().addingTimeInterval(
-                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile)
+                shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action)
                     || shouldUseCodexProofDirectInsertion(profile: profile)
                     || shouldUseClaudeDesktopProofDirectInsertion(profile: profile)
-                    || shouldUseObsidianDirectValueInsertion(profile: profile)
+                    || shouldUseObsidianDirectValueInsertion(profile: profile, action: action)
                     || shouldUseObsidianSystemEventsInsertion(profile: profile) ? 0.75 : 0.25
             )
         )
@@ -7639,7 +8162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
-        if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile) {
+        if shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action) {
             let succeeded = insertClaudeCodeTerminalHostProofText(acceptedText)
             DiagnosticsLog.shared.record(
                 "insert",
@@ -7687,7 +8210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
-        if shouldUseObsidianDirectValueInsertion(profile: profile) {
+        if shouldUseObsidianDirectValueInsertion(profile: profile, action: action) {
             let succeeded = insertObsidianDirectValueText(acceptedText, profile: profile)
             DiagnosticsLog.shared.record(
                 "insert",
@@ -7735,6 +8258,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return succeeded
         }
 
+        repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
+
         let result = insertionEngine.insert(
             acceptedText,
             profile: profile,
@@ -7764,10 +8289,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return result.succeeded
     }
 
-    private func shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
+    private func repairObsidianFullAcceptCaretIfNeeded(
+        profile: CompatibilityProfile,
+        action: KeyboardAction?
+    ) {
+        guard obsidianFullAcceptCaretRepairPolicy.shouldRepair(
+            bundleIdentifier: profile.bundleIdentifier,
+            action: action,
+            snapshot: lastTextSnapshot,
+            currentFieldIdentity: currentFieldIdentity
+        ),
+              let lastTextSnapshot,
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == "md.obsidian",
+              frontmostApp.processIdentifier == lastTextSnapshot.fieldIdentity.processIdentifier else {
+            return
+        }
+
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        let expectedText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
+        let textArea = Self.axTextAreaDescendantContainingText(
+            in: appElement,
+            containing: lastTextSnapshot.textBeforeCursor,
+            elementIdentifier: lastTextSnapshot.fieldIdentity.elementIdentifier,
+            maxDepth: 32
+        ) ?? Self.axTextAreaDescendant(
+            in: appElement,
+            matchingValue: expectedText,
+            containing: lastTextSnapshot.textBeforeCursor,
+            maxDepth: 32
+        )
+
+        guard let textArea else {
+            DiagnosticsLog.shared.record(
+                "obsidian-full-accept-caret-repair",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "success": "false",
+                    "reason": "text-area-not-found",
+                    "beforeChars": String(lastTextSnapshot.textBeforeCursor.count)
+                ]
+            )
+            return
+        }
+
+        let cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count
+        AXUIElementSetAttributeValue(textArea, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+        Thread.sleep(forTimeInterval: 0.05)
+        var cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+            textArea,
+            location: cursorUTF16Offset
+        )
+        var usedCommandRightFallback = false
+        var usedDocumentEndFallback = false
+        if !cursorMatches {
+            Self.postCommandRightKey()
+            usedCommandRightFallback = true
+            Thread.sleep(forTimeInterval: 0.05)
+            Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+            Thread.sleep(forTimeInterval: 0.05)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+        }
+        if !cursorMatches,
+           lastTextSnapshot.textAfterCursor.isEmpty {
+            Self.postCommandDownKey()
+            usedDocumentEndFallback = true
+            Thread.sleep(forTimeInterval: 0.05)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+        }
+        DiagnosticsLog.shared.record(
+            "obsidian-full-accept-caret-repair",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "success": String(cursorMatches),
+                "commandRightFallback": String(usedCommandRightFallback),
+                "documentEndFallback": String(usedDocumentEndFallback),
+                "beforeChars": String(lastTextSnapshot.textBeforeCursor.count),
+                "cursorUTF16Offset": String(cursorUTF16Offset)
+            ]
+        )
+    }
+
+    private func shouldUseClaudeCodeTerminalHostProofDirectInsertion(
+        profile: CompatibilityProfile,
+        action: KeyboardAction?
+    ) -> Bool {
         currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            && currentSuggestionRequestMode == .wordCompletion
+            && action == .acceptNextWord
+            && currentSuggestionRequestMode != nil
             && profile.insertionMode == .clipboardFallbackOptIn
             && profile.requiresNoSubmitAcceptanceProof
     }
@@ -7775,7 +8392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldUseCodexProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
         currentSuggestionAppBundleIdentifier == "com.openai.codex"
             && profile.bundleIdentifier == "com.openai.codex"
-            && currentSuggestionRequestMode == .wordCompletion
+            && CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode)
             && profile.insertionMode == .axValueReplacement
             && profile.requiresNoSubmitAcceptanceProof
             && activeAppProofBundleIdentifiers.contains("com.openai.codex")
@@ -7790,10 +8407,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && profile.promptAppSafetyMode == .wordOnly
     }
 
-    private func shouldUseObsidianDirectValueInsertion(profile: CompatibilityProfile) -> Bool {
+    private func shouldUseObsidianDirectValueInsertion(
+        profile: CompatibilityProfile,
+        action: KeyboardAction?
+    ) -> Bool {
         currentSuggestionAppBundleIdentifier == "md.obsidian"
             && profile.bundleIdentifier == "md.obsidian"
-            && profile.insertionMode == .axValueReplacement
+            && action == .acceptAllVisible
+            && activeAppProofBundleIdentifiers.contains("md.obsidian")
             && ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT"] == "1"
     }
 
@@ -7826,6 +8447,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let previousText = lastTextSnapshot.textBeforeCursor + lastTextSnapshot.textAfterCursor
         let acceptedReplacementText = lastTextSnapshot.textBeforeCursor + acceptedText + lastTextSnapshot.textAfterCursor
+        let proofDocumentPlan = Self.obsidianProofDocumentInsertionPlan(
+            acceptedText: acceptedText,
+            snapshot: lastTextSnapshot
+        )
         let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
         let exactTextArea = Self.axTextAreaDescendant(
             in: appElement,
@@ -7854,9 +8479,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let matchSource: String
         if let exactTextArea {
             matchedTextArea = exactTextArea
-            replacementText = acceptedReplacementText
-            cursorUTF16Offset = lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
-            matchSource = "exact"
+            replacementText = proofDocumentPlan?.replacementText ?? acceptedReplacementText
+            cursorUTF16Offset = proofDocumentPlan?.cursorUTF16Offset
+                ?? lastTextSnapshot.textBeforeCursor.utf16.count + acceptedText.utf16.count
+            matchSource = proofDocumentPlan?.matchSource ?? "exact"
         } else if let focusedTextAreaElementIdentifier,
                   let containingTextArea = Self.axTextAreaDescendantContainingText(
             in: appElement,
@@ -7872,14 +8498,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     textAfterCursor: lastTextSnapshot.textAfterCursor
                   ) {
             matchedTextArea = containingTextArea
-            replacementText = currentValue.replacingCharacters(
-                in: replacementRange,
-                with: acceptedReplacementText
-            )
-            cursorUTF16Offset = currentValue[..<replacementRange.lowerBound].utf16.count
-                + lastTextSnapshot.textBeforeCursor.utf16.count
-                + acceptedText.utf16.count
-            matchSource = "containingText"
+            if let proofDocumentPlan {
+                replacementText = proofDocumentPlan.replacementText
+                cursorUTF16Offset = proofDocumentPlan.cursorUTF16Offset
+                matchSource = proofDocumentPlan.matchSource
+            } else {
+                replacementText = currentValue.replacingCharacters(
+                    in: replacementRange,
+                    with: acceptedReplacementText
+                )
+                cursorUTF16Offset = currentValue[..<replacementRange.lowerBound].utf16.count
+                    + lastTextSnapshot.textBeforeCursor.utf16.count
+                    + acceptedText.utf16.count
+                matchSource = "containingText"
+            }
         } else {
             DiagnosticsLog.shared.record(
                 "obsidian-direct-value-insert",
@@ -7935,6 +8567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         var succeeded = false
         var cursorMatches = false
+        var proofDocumentVerified = false
         var currentText: String?
         for _ in 0..<5 {
             currentText = Self.axStringAttribute(textArea, kAXValueAttribute)
@@ -7959,12 +8592,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
+        if !succeeded,
+           proofDocumentPlan != nil {
+            for _ in 0..<40 {
+                if Self.obsidianProofDocumentText() == replacementText
+                    || Self.obsidianProofDocumentConfirmsInsertion(expectedText: acceptedReplacementText) {
+                    proofDocumentVerified = true
+                    break
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+        if !succeeded,
+           proofDocumentVerified {
+            if let currentText {
+                let visibleCursorUTF16Offset = currentText.utf16.count
+                Self.setAXSelectedTextRange(textArea, location: visibleCursorUTF16Offset, length: 0)
+                Thread.sleep(forTimeInterval: 0.05)
+                cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                    textArea,
+                    location: visibleCursorUTF16Offset
+                )
+            }
+            succeeded = true
+        }
         DiagnosticsLog.shared.record(
             "obsidian-direct-value-insert",
             metadata: [
                 "app": bundleIdentifier,
                 "success": String(succeeded),
                 "cursorMatches": String(cursorMatches),
+                "proofDocumentVerified": String(proofDocumentVerified),
                 "documentEndCursorFallback": String(usedDocumentEndCursorFallback),
                 "acceptedChars": String(acceptedText.count),
                 "currentChars": String(currentText?.count ?? -1),
@@ -7974,6 +8632,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return succeeded
+    }
+
+    nonisolated private static func obsidianProofDocumentInsertionPlan(
+        acceptedText: String,
+        snapshot: FocusedTextSnapshot
+    ) -> ObsidianProofDocumentInsertionPlan? {
+        guard let proofDocumentText = obsidianProofDocumentText() else {
+            return nil
+        }
+
+        return ObsidianProofDocumentInsertionPlanner().plan(
+            proofDocumentText: proofDocumentText,
+            textBeforeCursor: snapshot.textBeforeCursor,
+            textAfterCursor: snapshot.textAfterCursor,
+            acceptedText: acceptedText,
+            marker: obsidianProofDocumentMarker()
+        )
+    }
+
+    nonisolated private static func obsidianProofDocumentText() -> String? {
+        let url = obsidianProofDocumentURL()
+        guard isSafeObsidianProofDocumentURL(url) else {
+            return nil
+        }
+
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    nonisolated private static func obsidianProofDocumentURL() -> URL {
+        if let configuredPath = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_FILE"],
+           !configuredPath.isEmpty {
+            return URL(fileURLWithPath: configuredPath)
+        }
+
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md")
+    }
+
+    nonisolated private static func obsidianProofDocumentMarker() -> String {
+        ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"]
+            ?? "Autocomplete Lab Obsidian proof"
+    }
+
+    nonisolated private static func obsidianProofDocumentConfirmsInsertion(expectedText: String) -> Bool {
+        guard !expectedText.isEmpty,
+              let proofDocumentText = obsidianProofDocumentText() else {
+            return false
+        }
+
+        return proofDocumentText.hasSuffix(expectedText)
+            || proofDocumentText.contains(expectedText)
+    }
+
+    nonisolated private static func isSafeObsidianProofDocumentURL(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return path.contains("/Library/Application Support/AutocompleteLab/ObsidianProofVault/")
+            && url.pathExtension == "md"
     }
 
     private func insertObsidianSystemEventsPasteText(_ acceptedText: String) -> Bool {
@@ -8126,6 +8841,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let verificationBaseline = insertionVerificationBaseline(
             acceptanceID: acceptanceID,
             acceptedAt: acceptedAt,
+            action: action,
             acceptMode: action.diagnosticName
         )
 
@@ -8662,7 +9378,291 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return false
         }
-        guard let frontmostApp = accessibilityClient.frontmostApplication() else {
+        guard let frontmostApp = accessibilityClient.frontmostApplication(),
+              let lastTextSnapshot else {
+            return false
+        }
+
+        let expectedProofInputText = lastTextSnapshot.textBeforeCursor
+            + acceptedText
+            + lastTextSnapshot.textAfterCursor
+        let originalProofInputText = lastTextSnapshot.textBeforeCursor
+            + lastTextSnapshot.textAfterCursor
+
+        if accessibilityClient.insertText(acceptedText, allowDescendantTextFallback: false) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "axSelectedText",
+                    "verified": String(verified)
+                ]
+            )
+            return verified
+        }
+
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" {
+            let ghosttyInputOutcome = insertGhosttyTerminalHostProofAppleScriptText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyInputOutcome.verified {
+                return true
+            }
+            guard ghosttyInputOutcome.safeToContinue else {
+                return false
+            }
+        }
+
+        if Self.postHardwareTextKeyEvents(
+            acceptedText,
+            processIdentifier: frontmostApp.processIdentifier
+        ) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgHardwareKeyEvents",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "cgHardwareKeyEventsBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "hardware-unverified-mutated-input",
+                        "source": "cgHardwareKeyEventsBaseline"
+                    ]
+                )
+                return false
+            }
+        }
+
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        if Self.postHardwareTextKeyEvents(acceptedText) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgHardwareKeyEventsGlobal",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "cgHardwareKeyEventsGlobalBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "hardware-global-unverified-mutated-input",
+                        "source": "cgHardwareKeyEventsGlobalBaseline"
+                    ]
+                )
+                return false
+            }
+        }
+
+        if Self.postUnicodeTextKeyEvents(
+            acceptedText,
+            processIdentifier: frontmostApp.processIdentifier
+        ) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgUnicodeKeyEvents",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "cgUnicodeKeyEventsBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "unicode-unverified-mutated-input",
+                        "source": "cgUnicodeKeyEventsBaseline"
+                    ]
+                )
+                return false
+            }
+        }
+
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        if Self.postUnicodeTextKeyEvents(acceptedText) {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": "cgUnicodeKeyEventsGlobal",
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return true
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "cgUnicodeKeyEventsGlobalBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "unicode-global-unverified-mutated-input",
+                        "source": "cgUnicodeKeyEventsGlobalBaseline"
+                    ]
+                )
+                return false
+            }
+        }
+
+        if insertClaudeCodeTerminalHostProofPasteboardText(
+            acceptedText,
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: currentProfile
+        ) {
+            return true
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "false",
+                "reason": "terminal-verified-insertion-failed",
+                "source": "failClosed"
+            ]
+        )
+        return false
+    }
+
+    private func insertClaudeCodeTerminalHostProofPasteboardText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> Bool {
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-text-not-one-line",
+                    "source": "pasteboardCommandV"
+                ]
+            )
             return false
         }
 
@@ -8676,40 +9676,307 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 pasteboard.writeObjects(originalItems)
             }
         }
-        pasteboard.clearContents()
-        guard pasteboard.setString(acceptedText, forType: .string) else {
+
+        func setPasteboardString(for source: String) -> Int? {
+            pasteboard.clearContents()
+            guard pasteboard.setString(acceptedText, forType: .string) else {
+                restoreOriginalPasteboard()
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "pasteboard-set-failed",
+                        "source": source
+                    ]
+                )
+                return nil
+            }
+            return pasteboard.changeCount
+        }
+
+        func tryPasteboardCommandV(
+            source: String,
+            baselineSource: String,
+            failedReason: String,
+            mutatedInputReason: String,
+            processIdentifier: pid_t?
+        ) -> (verified: Bool, safeToContinue: Bool) {
+            guard let fallbackChangeCount = setPasteboardString(for: source) else {
+                return (false, false)
+            }
+
+            guard Self.postCommandVKey(processIdentifier: processIdentifier) else {
+                restoreOriginalPasteboard()
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": failedReason,
+                        "source": source
+                    ]
+                )
+                return (false, true)
+            }
+
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": source,
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                schedulePasteboardRestore(
+                    insertedText: acceptedText,
+                    fallbackChangeCount: fallbackChangeCount,
+                    originalItems: originalItems,
+                    delaySeconds: 0.35
+                )
+                return (true, false)
+            }
+
             restoreOriginalPasteboard()
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            if !promptStayedUnchanged {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": mutatedInputReason,
+                        "source": baselineSource
+                    ]
+                )
+            }
+            return (false, promptStayedUnchanged)
+        }
+
+        let targetedPasteOutcome = tryPasteboardCommandV(
+            source: "pasteboardCommandVToPid",
+            baselineSource: "pasteboardCommandVToPidBaseline",
+            failedReason: "pasteboard-command-v-to-pid-failed",
+            mutatedInputReason: "pasteboard-to-pid-unverified-mutated-input",
+            processIdentifier: frontmostApp.processIdentifier
+        )
+        if targetedPasteOutcome.verified {
+            return true
+        }
+        guard targetedPasteOutcome.safeToContinue else {
+            return false
+        }
+
+        let globalPasteOutcome = tryPasteboardCommandV(
+            source: "pasteboardCommandV",
+            baselineSource: "pasteboardCommandVBaseline",
+            failedReason: "pasteboard-command-v-failed",
+            mutatedInputReason: "pasteboard-unverified-mutated-input",
+            processIdentifier: nil
+        )
+        if globalPasteOutcome.verified {
+            return true
+        }
+        return false
+    }
+
+    private func insertGhosttyTerminalHostProofAppleScriptText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyAppleScriptInputText"
+        let baselineSource = "ghosttyAppleScriptInputTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "pasteboard-set-failed",
-                    "source": "helperPaste"
+                    "reason": "ghostty-apple-script-text-not-one-line",
+                    "source": source
                 ]
             )
-            return false
+            return (false, false)
         }
-        let fallbackChangeCount = pasteboard.changeCount
 
-        let posted = Self.postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
-            processIdentifier: frontmostApp.processIdentifier
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "source": source,
+                "stage": "start"
+            ]
         )
-        schedulePasteboardRestore(
-            insertedText: acceptedText,
-            fallbackChangeCount: fallbackChangeCount,
-            originalItems: originalItems
+
+        let scriptSource = """
+        tell application id "com.mitchellh.ghostty"
+            if not frontmost then return false
+            if not (exists front window) then return false
+            set targetWindow to front window
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            input text \(Self.appleScriptStringLiteral(acceptedText)) to targetTerminal
+            return true
+        end tell
+        """
+        guard let script = NSAppleScript(source: scriptSource) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-create-failed",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        var errorInfo: NSDictionary?
+        let result = script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-failed",
+                    "source": source,
+                    "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
+                    "errorMessage": errorInfo["NSAppleScriptErrorMessage"] as? String ?? ""
+                ]
+            )
+            return (false, true)
+        }
+
+        guard result.booleanValue else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
         )
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                "posted": String(posted),
-                "source": "accessibilityMenuPaste"
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
             ]
         )
+        if verified {
+            return (true, false)
+        }
 
-        return posted
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    nonisolated private static func appleScriptStringLiteral(_ text: String) -> String {
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
+    private func verifyClaudeCodeTerminalHostProofInsertion(
+        expectedProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        attempts: Int = 8,
+        delaySeconds: TimeInterval = 0.05
+    ) -> Bool {
+        guard let profile else {
+            return false
+        }
+
+        for attempt in 0..<attempts {
+            if attempt > 0 {
+                Thread.sleep(forTimeInterval: delaySeconds)
+            }
+
+            guard let currentContext = accessibilityClient.focusedTextContext(
+                for: frontmostApp,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            ) else {
+                continue
+            }
+
+            let currentProofInputText = claudeCodeTerminalHostProofInputText(
+                app: frontmostApp,
+                context: currentContext,
+                profile: profile
+            )
+            if currentProofInputText == expectedProofInputText {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func schedulePasteboardRestore(
@@ -8734,33 +10001,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    nonisolated private static func postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu(
-        processIdentifier: pid_t
+    nonisolated private static func postUnicodeTextKeyEvents(
+        _ text: String,
+        processIdentifier: pid_t? = nil
     ) -> Bool {
-        let appElement = AXUIElementCreateApplication(processIdentifier)
-        guard let menuBarValue = axAttribute(appElement, kAXMenuBarAttribute),
-              let editItem = axDescendant(
-                  in: menuBarValue as! AXUIElement,
-                  title: "Edit",
-                  role: kAXMenuBarItemRole as String,
-                  maxDepth: 2
-              ) else {
+        guard !text.isEmpty else {
             return false
         }
 
-        AXUIElementPerformAction(editItem, kAXPressAction as CFString)
-        Thread.sleep(forTimeInterval: 0.05)
-
-        guard let pasteItem = axDescendant(
-            in: editItem,
-            title: "Paste",
-            role: kAXMenuItemRole as String,
-            maxDepth: 4
-        ) else {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
             return false
         }
 
-        return AXUIElementPerformAction(pasteItem, kAXPressAction as CFString) == .success
+        var characters = Array(text.utf16)
+        characters.withUnsafeMutableBufferPointer { buffer in
+            keyDown.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+            keyUp.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+            if let processIdentifier {
+                keyDown.postToPid(processIdentifier)
+                keyUp.postToPid(processIdentifier)
+            } else {
+                keyDown.post(tap: .cghidEventTap)
+                keyUp.post(tap: .cghidEventTap)
+            }
+        }
+
+        return true
+    }
+
+    nonisolated private static func postHardwareTextKeyEvents(
+        _ text: String,
+        processIdentifier: pid_t? = nil
+    ) -> Bool {
+        guard let strokes = KeyboardTextEventPlan.hardwareKeyStrokes(for: text),
+              let source = CGEventSource(stateID: .hidSystemState) else {
+            return false
+        }
+
+        for stroke in strokes {
+            guard let keyDown = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: stroke.virtualKey,
+                keyDown: true
+            ),
+                  let keyUp = CGEvent(
+                      keyboardEventSource: source,
+                      virtualKey: stroke.virtualKey,
+                      keyDown: false
+                  ) else {
+                return false
+            }
+
+            keyDown.flags = stroke.flags
+            keyUp.flags = stroke.flags
+            if let processIdentifier {
+                keyDown.postToPid(processIdentifier)
+                keyUp.postToPid(processIdentifier)
+            } else {
+                keyDown.post(tap: .cghidEventTap)
+                keyUp.post(tap: .cghidEventTap)
+            }
+        }
+
+        return true
     }
 
     nonisolated private static func axAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
@@ -9015,7 +10320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.post(tap: .cghidEventTap)
     }
 
-    nonisolated private static func postCommandVKey() -> Bool {
+    nonisolated private static func postCommandVKey(processIdentifier: pid_t? = nil) -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
@@ -9024,8 +10329,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        if let processIdentifier {
+            keyDown.postToPid(processIdentifier)
+            keyUp.postToPid(processIdentifier)
+        } else {
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
         return true
     }
 
@@ -9355,12 +10665,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         if invalidation.shouldInvalidate {
             let reason = invalidation.reason?.rawValue ?? "unknown"
+            if let geometryFieldIdentity = currentGeometrySnapshot.fieldIdentity,
+               shouldPreserveVisibleSuggestionDuringGeometryInvalidation(
+                invalidation: invalidation,
+                context: context,
+                profile: profile,
+                fieldIdentity: geometryFieldIdentity
+            ) {
+                updateKeyboardEventTapSnapshot()
+                setSuggestionDecision("Shown: preserving current suggestion")
+                recordSuggestionEvent(
+                    "suggestion-preserved",
+                    context: context,
+                    profile: profile,
+                    metadata: [
+                        "reason": geometryPreservationReason(
+                            context: context,
+                            profile: profile
+                        ),
+                        "geometryInvalidationReason": reason,
+                        "fieldIdentity": geometryFieldIdentity.traceDescription
+                    ]
+                    .merging(invalidation.metadata) { current, _ in current }
+                    .merging(geometryTraceMetadata()) { current, _ in current }
+                )
+                return
+            }
+
+            let currentRequest = suggestionOrchestrator.currentRequest
+            let preservesPendingRequest = suggestionGeometryChangePolicy
+                .shouldPreservePendingRequestWhenVisibleSuggestionInvalidates(
+                    hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                    hasPendingSuggestionRequest: currentRequest != nil,
+                    pendingRequestTextBeforeCursor: currentRequest?.textBeforeCursor,
+                    pendingRequestTextAfterCursor: currentRequest?.textAfterCursor,
+                    pendingRequestFieldIdentityDescription: currentRequest?.fieldIdentityDescription,
+                    currentTextBeforeCursor: context.textBeforeCursor,
+                    currentTextAfterCursor: context.textAfterCursor,
+                    currentFieldIdentityDescription: currentGeometrySnapshot.fieldIdentity?.traceDescription
+                )
             preservesResidualSuggestionAfterNextWordAccept = false
-            invalidatePendingSuggestionRequest()
+            if !preservesPendingRequest {
+                invalidatePendingSuggestionRequest()
+            }
             hideSuggestion(
                 reason: "stale-geometry-\(reason)",
                 metadata: invalidation.metadata
                     .merging(geometryTraceMetadata()) { current, _ in current }
+                    .merging(["pendingRequestPreserved": String(preservesPendingRequest)]) { current, _ in current }
             )
             return
         }
@@ -9398,6 +10750,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return true
+    }
+
+    private func shouldPreserveVisibleSuggestionDuringGeometryInvalidation(
+        invalidation: SuggestionGeometryInvalidationDecision,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Bool {
+        visibleSuggestionPersistencePolicy.shouldPreserveDuringGeometryInvalidation(
+            invalidationReason: invalidation.reason,
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
+            isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            promptProofModeEnabled: activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier),
+            promptProofBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            promptProofMarker: CodexProofFocusedTargetPolicy.marker
+        )
+    }
+
+    private func geometryPreservationReason(
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> String {
+        if profile.bundleIdentifier == "md.obsidian" {
+            return "obsidian-document-start-geometry-teleport"
+        }
+
+        if profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier,
+           activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier) {
+            return "codex-proof-target-geometry-churn"
+        }
+
+        if currentSuggestionTextBeforeCursor.map({ context.textBeforeCursor + context.textAfterCursor == $0 }) == true {
+            return "transient-same-text-geometry-split"
+        }
+
+        return "transient-geometry-change"
     }
 
     private func recordAcceptedText(_ acceptedText: String) {
@@ -10903,12 +12298,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private func allowsSentenceBoundaryContinuation(for profile: CompatibilityProfile) -> Bool {
+        !profile.promptAppSafetyMode.isPromptSurface
+    }
+
+    private func usesDailyDriverLineStartPhraseContinuation(for profile: CompatibilityProfile) -> Bool {
+        profile.bundleIdentifier == "md.obsidian"
+            && suggestionTuning.aggressivenessLevel >= 4
+            && !profile.promptAppSafetyMode.isPromptSurface
+    }
+
+    private func minimumPhraseContinuationWords(for profile: CompatibilityProfile) -> Int {
+        usesDailyDriverLineStartPhraseContinuation(for: profile)
+            ? 1
+            : suggestionTuning.phraseStartWords
+    }
+
     private func activationPolicy(for profile: CompatibilityProfile) -> CompletionActivationPolicy {
-        suggestionTuning.activationPolicy(supportPace: effectiveSuggestionPace(for: profile))
+        suggestionTuning.activationPolicy(
+            supportPace: effectiveSuggestionPace(for: profile),
+            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile),
+            minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile)
+        )
+    }
+
+    private func proofAdjustedActivationDecision(
+        _ decision: CompletionActivationDecision,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        fieldKind: AXFieldKind
+    ) -> CompletionActivationDecision {
+        guard runtimeProofOptions.disablesPhraseContinuation(
+            appBundleIdentifier: profile.bundleIdentifier,
+            activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+        ) else {
+            return decision
+        }
+
+        let wordFallbackDecision = CompletionActivationPolicy(
+            minimumContextCharacters: 1,
+            minimumContextWords: 1,
+            minimumPhraseContinuationWords: suggestionTuning.phraseStartWords,
+            minimumWordCompletionCharacters: suggestionTuning.wordStartCharacters,
+            maximumWordCompletionCharacters: 18,
+            allowsTerminalSentenceBoundary: false,
+            allowsUnfinishedWordPhraseContinuation: false,
+            prefersPhraseContinuationForWordFragments: false
+        ).decision(
+            textBeforeCursor: context.textBeforeCursor,
+            textAfterCursor: context.textAfterCursor,
+            isSecure: context.isSecure,
+            selectedTextLength: context.selectedTextLength,
+            isFieldSuppressed: suppressedFieldIdentities.contains(fieldIdentity),
+            fieldKind: fieldKind,
+            allowsUnknownFieldKind: profile.allowsUnknownFieldKind
+        )
+
+        return proofActivationModePolicy.adjustedDecision(
+            original: decision,
+            wordFallback: wordFallbackDecision,
+            disablesPhraseContinuation: true,
+            disablesWordCompletion: runtimeProofOptions.disablesWordCompletion(
+                appBundleIdentifier: profile.bundleIdentifier,
+                activeProofBundleIdentifiers: activeAppProofBundleIdentifiers
+            )
+        )
     }
 
     private func triggerPolicy(for profile: CompatibilityProfile) -> SuggestionTriggerPolicy {
-        suggestionTuning.triggerPolicy(supportPace: effectiveSuggestionPace(for: profile))
+        suggestionTuning.triggerPolicy(
+            supportPace: effectiveSuggestionPace(for: profile),
+            allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile),
+            minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile),
+            allowsPlainLineStartPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile)
+        )
     }
 
     private func maxVisibleWords(
@@ -11730,7 +13194,7 @@ private extension AppDelegate {
     }
 
     static var currentSuggestionTuningDefaultsVersion: Int {
-        3
+        4
     }
 
     static var previousDefaultSuggestionAggressivenessLevel: Int {
@@ -11964,6 +13428,13 @@ private extension AppDelegate {
             level = SuggestionTuning.defaultAggressivenessLevel
         }
 
+        let storedTuningVersion = defaults.object(forKey: Self.suggestionTuningDefaultsVersionDefaultsKey) as? Int
+        let shouldMigrateDailyDriverDefaults = (storedTuningVersion ?? 0) < Self.currentSuggestionTuningDefaultsVersion
+        if shouldMigrateDailyDriverDefaults,
+           level == 3 {
+            level = SuggestionTuning.defaultAggressivenessLevel
+        }
+
         let maxVisibleWords: Int
         if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
             maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
@@ -11974,18 +13445,33 @@ private extension AppDelegate {
         let wordStartCharacters = defaults.object(forKey: Self.suggestionWordStartCharactersDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionWordStartCharactersDefaultsKey)
             : SuggestionTuning.defaultWordStartCharacters
-        let phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
+        var phraseStartWords = defaults.object(forKey: Self.suggestionPhraseStartWordsDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionPhraseStartWordsDefaultsKey)
             : SuggestionTuning.defaultPhraseStartWords
-        let responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
+        var responseSpeedLevel = defaults.object(forKey: Self.suggestionResponseSpeedLevelDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionResponseSpeedLevelDefaultsKey)
             : SuggestionTuning.defaultResponseSpeedLevel
-        let confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
+        var confidenceLevel = defaults.object(forKey: Self.suggestionConfidenceLevelDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionConfidenceLevelDefaultsKey)
             : SuggestionTuning.defaultConfidenceLevel
-        let learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
+        var learningRestraintLevel = defaults.object(forKey: Self.suggestionLearningRestraintLevelDefaultsKey) != nil
             ? defaults.integer(forKey: Self.suggestionLearningRestraintLevelDefaultsKey)
             : SuggestionTuning.defaultLearningRestraintLevel
+
+        if shouldMigrateDailyDriverDefaults {
+            if phraseStartWords == 3 {
+                phraseStartWords = SuggestionTuning.defaultPhraseStartWords
+            }
+            if responseSpeedLevel == 3 {
+                responseSpeedLevel = SuggestionTuning.defaultResponseSpeedLevel
+            }
+            if confidenceLevel == 3 {
+                confidenceLevel = SuggestionTuning.defaultConfidenceLevel
+            }
+            if learningRestraintLevel == 2 {
+                learningRestraintLevel = SuggestionTuning.defaultLearningRestraintLevel
+            }
+        }
 
         suggestionTuning = SuggestionTuning(
             aggressivenessLevel: level,
@@ -12105,6 +13591,7 @@ private struct InsertionVerificationBaseline: Equatable {
     let requestMode: CompletionRequestMode?
     let acceptanceID: String
     let acceptedAt: Date
+    let action: KeyboardAction?
     let acceptMode: String
     let fieldKind: AXFieldKind
     let fieldKindReason: String
@@ -12188,6 +13675,16 @@ private struct FieldControlTarget: Equatable {
     let fieldIdentity: FocusedFieldIdentity
     let requestMode: CompletionRequestMode?
     let fieldKind: AXFieldKind
+}
+
+private extension String {
+    func trimmingTrailingWhitespace() -> String {
+        var result = self
+        while result.last?.isWhitespace == true {
+            result.removeLast()
+        }
+        return result
+    }
 }
 
 private extension FocusedFieldIdentityInput {
