@@ -260,6 +260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let personalCaptureJournal = PersonalCaptureJournalWriter.shared
     private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
     private let suggestionControlPolicy = SuggestionControlPolicy()
+    private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let visiblePageContextProvider = VisiblePageContextProvider()
@@ -1598,10 +1599,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordMissingFocusedContextDiagnostics(app: result.app, profile: profile)
         }
 
-        guard let rawContext = result.context, !rawContext.isSecure else {
+        guard let rawContext = result.context else {
             clearFocusedFieldState()
             currentProfile = profile
-            setSuggestionDecision("Blocked: no editable text field or secure field")
+            setSuggestionDecision("Blocked: no editable text field")
+            hideSuggestion()
+            return
+        }
+
+        guard !rawContext.isSecure else {
+            clearFocusedFieldState()
+            currentProfile = profile
+            setSuggestionDecision("Blocked: secure field")
             hideSuggestion()
             return
         }
@@ -2127,7 +2136,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
+            let userFacingReason = suggestionSilenceExplanationPolicy.activationBlockReason(
+                for: activationDecision,
+                fieldClassification: fieldClassification
+            )
+            setSuggestionDecision("Blocked: \(userFacingReason)")
             showFieldStatusIndicator(.blocked, context: context)
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -2140,6 +2153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
                 metadata: fieldClassification.traceMetadata
+                    .merging(["silenceExplanation": userFacingReason]) { current, _ in current }
             )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
@@ -2147,7 +2161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 metadata: [
-                    "reason": activationDecision.blockReasonDescription
+                    "reason": activationDecision.blockReasonDescription,
+                    "silenceExplanation": userFacingReason
                 ]
                 .merging(fieldClassification.traceMetadata) { current, _ in current }
             )
