@@ -3,6 +3,32 @@ import Testing
 
 @Suite("Magic writing OCR prompt eval")
 struct MagicWritingOCRPromptEvalTests {
+    @Test("Screen-aware prompt keeps reply context without echoing the active line")
+    func screenAwarePromptKeepsReplyContextWithoutEchoingActiveLine() throws {
+        let activeLine = "The safest next step is"
+        let pageContext = try #require(VisiblePageContext(
+            captureScope: .visibleScreen,
+            activeApplicationName: "Notes",
+            excludingActiveTextLine: activeLine,
+            text: """
+            Decision: keep OCR local and filtered
+            Draft
+            The safest next step is to verify the trace
+            """
+        ))
+        let prompt = CompletionPromptBuilder(maxVisibleWords: 8).prompt(for: CompletionRequest(
+            textBeforeCursor: activeLine,
+            appBundleIdentifier: "com.apple.Notes",
+            visiblePageContext: pageContext,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation
+        ))
+
+        #expect(prompt.user.contains("Decision: keep OCR local and filtered"))
+        #expect(!prompt.user.contains("The safest next step is to verify the trace"))
+        #expect(pageContext.traceMetadata["visiblePageContextActiveLineFiltered"] == "true")
+    }
+
     @Test("Screen-aware prompt and max cadence cover one hundred writing situations")
     func screenAwarePromptAndMaxCadenceCoverOneHundredWritingSituations() throws {
         let scenarios = MagicWritingScenario.hundredCaseCorpus
