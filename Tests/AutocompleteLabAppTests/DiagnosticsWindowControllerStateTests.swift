@@ -259,6 +259,12 @@ struct DiagnosticsWindowControllerStateTests {
                         "currentLineContentWords": "4"
                     ],
                     displayedText: "Launch Plan"
+                ),
+                event(
+                    metadata: [
+                        "visiblePageContextActiveLineFiltered": "true"
+                    ],
+                    displayedText: "Launch Plan"
                 )
             ]
         )
@@ -267,8 +273,28 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(diagnostics.text.contains("Document title shape: length=short, words=3, extension=md, untitled=false, unsaved=true"))
         #expect(diagnostics.text.contains("Partial word shape: chars=9, letters=9, digits=0, casing=titlecase, hyphen=false, apostrophe=false"))
         #expect(diagnostics.text.contains("Current line shape: kind=checklist_unchecked, marker=dash, indent=2, contentWords=4"))
+        #expect(diagnostics.text.contains("Screen context active-line filter: removed active typed line"))
         #expect(!diagnostics.text.contains("Launch"))
         #expect(!diagnostics.text.contains("Plan"))
+    }
+
+    @Test("Prompt context diagnostics report no OCR active line filtering without raw text")
+    func promptContextDiagnosticsReportNoOCRActiveLineFilteringWithoutRawText() {
+        let diagnostics = PromptContextDiagnostics(
+            recentEvents: [
+                event(
+                    metadata: [
+                        "visiblePageContextActiveLineFiltered": "false"
+                    ],
+                    displayedText: "Private draft sentence"
+                )
+            ]
+        )
+
+        #expect(diagnostics.text.contains("Screen context active-line filter: no active line removed"))
+        #expect(!diagnostics.text.contains("Private"))
+        #expect(!diagnostics.text.contains("draft"))
+        #expect(!diagnostics.text.contains("sentence"))
     }
 
     @Test("Prompt context diagnostics stay useful before shape data exists")
@@ -279,6 +305,7 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(diagnostics.text.contains("Document title shape: no recent title-shape metadata"))
         #expect(diagnostics.text.contains("Partial word shape: no recent partial-word metadata"))
         #expect(diagnostics.text.contains("Current line shape: no recent line-shape metadata"))
+        #expect(diagnostics.text.contains("Screen context active-line filter: no recent OCR context metadata"))
     }
 
     @Test("Learning diagnostics expose kept annoyance and miss state")

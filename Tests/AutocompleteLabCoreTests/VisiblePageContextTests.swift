@@ -54,4 +54,35 @@ struct VisiblePageContextTests {
         #expect(!context.completionCandidateWords.contains("Settings"))
         #expect(context.traceMetadata["visiblePageContextCompletionCandidateWords"] != "0")
     }
+
+    @Test("Filters the active typed line out of visible OCR context")
+    func filtersActiveTypedLineOutOfVisibleOCRContext() throws {
+        let context = try #require(VisiblePageContext(
+            excludingActiveTextLine: "The launch note should",
+            text: """
+            Sam: Can you send the launch note today?
+            Draft
+            The launch note should
+            """
+        ))
+
+        #expect(context.text.contains("Sam: Can you send the launch note today?"))
+        #expect(!context.text.contains("The launch note should"))
+        #expect(context.activeTextLineFiltered)
+        #expect(context.traceMetadata["visiblePageContextActiveLineFiltered"] == "true")
+    }
+
+    @Test("Filters OCR lines that contain the active typed prefix")
+    func filtersOCRLinesThatContainActiveTypedPrefix() throws {
+        let context = try #require(VisiblePageContext(
+            excludingActiveTextLine: "We should keep this local",
+            text: """
+            Goal: make autocomplete calmer
+            We should keep this local and fast
+            """
+        ))
+
+        #expect(context.text == "Goal: make autocomplete calmer")
+        #expect(context.activeTextLineFiltered)
+    }
 }
