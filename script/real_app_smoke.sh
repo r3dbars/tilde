@@ -1421,6 +1421,33 @@ wait_for_log_line_number() {
   exit 1
 }
 
+wait_for_log_line_number_optional() {
+  local start_line="$1"
+  local pattern="$2"
+  local timeout_seconds="${3:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local matched_line
+  MATCHED_LOG_LINE=0
+
+  while ((SECONDS <= deadline)); do
+    if [[ -f "$LOG_PATH" ]]; then
+      matched_line="$(awk -v start="$start_line" -v pattern="$pattern" '
+        NR > start && $0 ~ pattern {
+          print NR
+          exit
+        }
+      ' "$LOG_PATH" 2>/dev/null || true)"
+      if [[ -n "$matched_line" ]]; then
+        MATCHED_LOG_LINE="$matched_line"
+        return 0
+      fi
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
 wait_for_log_pattern() {
   local start_line="$1"
   local pattern="$2"
@@ -7997,6 +8024,20 @@ end tell
 APPLESCRIPT
 }
 
+frontmost_claude_code_terminal_proof_process_is_active() {
+  local frontmost_pid root_pid
+
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 1
+  frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if [[ "$frontmost_pid" == "$root_pid" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 wait_for_frontmost_claude_code_terminal_proof_process() {
   local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
   local timeout_seconds="${timeout%%.*}"
@@ -8031,6 +8072,56 @@ wait_for_frontmost_claude_code_terminal_proof_process() {
 
   echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
   exit 1
+}
+
+prepare_claude_code_terminal_suggestion_for_hot_accept() {
+  local suggestion_line="$1"
+  local host_name="$2"
+  local refresh_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS:-4}"
+  local max_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_ATTEMPTS:-3}"
+  local attempt=1
+  local current_suggestion_line="$suggestion_line"
+
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
+    max_attempts=1
+  fi
+
+  while ((attempt <= max_attempts)); do
+    if log_since_has_fields "$current_suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code" \
+      "reason=focus-changed"; then
+      echo "Claude Code $host_name suggestion hid after focus changed before Tab; refocusing for a fresh suggestion." >&2
+      wait_for_frontmost_claude_code_terminal_proof_process
+      if wait_for_log_line_number_optional \
+        "$current_suggestion_line" \
+        "suggestion-presented .*app=com.anthropic.claude-code" \
+        "$refresh_wait_seconds"; then
+        current_suggestion_line="$MATCHED_LOG_LINE"
+        attempt=$((attempt + 1))
+        continue
+      fi
+      return 1
+    fi
+
+    if ! frontmost_claude_code_terminal_proof_process_is_active; then
+      echo "Claude Code $host_name proof lost focus before Tab; refocusing for a fresh suggestion." >&2
+      wait_for_frontmost_claude_code_terminal_proof_process
+      if wait_for_log_line_number_optional \
+        "$current_suggestion_line" \
+        "suggestion-presented .*app=com.anthropic.claude-code" \
+        "$refresh_wait_seconds"; then
+        current_suggestion_line="$MATCHED_LOG_LINE"
+        attempt=$((attempt + 1))
+        continue
+      fi
+      return 1
+    fi
+
+    return 0
+  done
+
+  return 1
 }
 
 process_tree_contains_name() {
@@ -10405,7 +10496,7 @@ run_claude_code_terminal_host_smoke() {
   require_claude_code_host_if_requested
 
   local runtime_start_line start_line trace_start_line accept_start_line proof_text marker proof_dir host_name
-  local attempt suggestion_wait_seconds found_suggestion
+  local attempt suggestion_wait_seconds found_suggestion suggestion_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
   proof_dir="$(make_claude_code_terminal_proof_dir)"
@@ -10448,10 +10539,15 @@ run_claude_code_terminal_host_smoke() {
       iterm2|ghostty)
         ;;
     esac
-    if wait_for_log_pattern_optional \
+    if wait_for_log_line_number_optional \
       "$accept_start_line" \
       "suggestion-presented .*app=com.anthropic.claude-code" \
       "$suggestion_wait_seconds"; then
+      suggestion_line="$MATCHED_LOG_LINE"
+      if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
+        echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion before Tab; trying the next disposable context."
+        continue
+      fi
       found_suggestion=1
       break
     fi
