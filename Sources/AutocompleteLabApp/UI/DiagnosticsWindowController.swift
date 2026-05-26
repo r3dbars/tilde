@@ -798,7 +798,8 @@ struct PromptContextDiagnostics: Equatable {
             headlineText,
             latestDocumentTitleShapeText,
             latestPartialWordShapeText,
-            latestCurrentLineShapeText
+            latestCurrentLineShapeText,
+            latestVisiblePageContextFilterText
         ].joined(separator: "\n")
     }
 
@@ -852,6 +853,23 @@ struct PromptContextDiagnostics: Equatable {
         let indentation = event.metadata["currentLineIndentationColumns"] ?? "unknown"
         let contentWords = event.metadata["currentLineContentWords"] ?? "unknown"
         return "Current line shape: kind=\(kind), marker=\(marker), indent=\(indentation), contentWords=\(contentWords)"
+    }
+
+    private var latestVisiblePageContextFilterText: String {
+        guard let event = recentEvents.latestEvent(containingAny: [
+            "visiblePageContextActiveLineFiltered"
+        ]) else {
+            return "Screen context active-line filter: no recent OCR context metadata"
+        }
+
+        switch event.metadata["visiblePageContextActiveLineFiltered"]?.lowercased() {
+        case "true", "1", "yes":
+            return "Screen context active-line filter: removed active typed line"
+        case "false", "0", "no":
+            return "Screen context active-line filter: no active line removed"
+        default:
+            return "Screen context active-line filter: unknown"
+        }
     }
 
     private var shapeEvents: [AutocompleteTraceEvent] {
