@@ -62,7 +62,7 @@ Research-backed caret-locking work now lives in
 - [x] Keep inference tiny.
   - [x] Prompt from a small current sentence/paragraph context window.
   - [x] Cap retained model text to the visible word window.
-  - [x] Generate 2-8 visible words.
+  - [x] Generate 1-3 visible words by default.
   - [x] Suppress one-word twitch completions before they reach the UI.
   - [x] Keep reasoning off.
   - [x] Cancel stale requests when typing continues.

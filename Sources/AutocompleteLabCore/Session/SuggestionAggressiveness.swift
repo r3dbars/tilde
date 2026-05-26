@@ -98,7 +98,7 @@ public struct SuggestionTuning: Equatable, Sendable {
     public static let minimumAggressivenessLevel = 1
     public static let maximumAggressivenessLevel = 5
     public static let defaultAggressivenessLevel = 4
-    public static let defaultMaxVisibleWords = 8
+    public static let defaultMaxVisibleWords = 3
     public static let minimumWordStartCharacters = 1
     public static let maximumWordStartCharacters = 5
     public static let defaultWordStartCharacters = 2

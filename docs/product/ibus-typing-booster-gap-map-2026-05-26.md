@@ -49,4 +49,3 @@ Manual proof still matters after app-code changes:
 ./script/build_and_run.sh --verify
 ./script/manual_smoke_status.sh --strict
 ```
-

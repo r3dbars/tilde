@@ -494,6 +494,10 @@ struct SettingsWindowControllerStateTests {
                 == "Learning: local usefulness scores only"
         )
         #expect(
+            privacy.localOnlyProofText
+                == "Proof: autocomplete uses the app-owned local model. No model server. Raw text is off by default. Privacy Bundles stay redacted."
+        )
+        #expect(
             privacy.screenRecordingPermissionText
                 == "Screen Recording: used only for local placement screenshots while enabled."
         )
@@ -972,7 +976,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(quiet.statusText == "Suggestions: 1/5 - Quiet")
         #expect(quiet.detailText == "Fewer suggestions. Waits longer.")
-        #expect(quiet.maxWordsText == "Words shown: 8")
+        #expect(quiet.maxWordsText == "Words shown: 3")
         #expect(normal.statusText == "Suggestions: 2/5 - Normal")
         #expect(normal.detailText == "Balanced suggestions.")
         #expect(normal.maxWordsText == "Words shown: 12")

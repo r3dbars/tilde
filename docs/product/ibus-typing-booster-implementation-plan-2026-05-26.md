@@ -45,4 +45,3 @@ SteadyType should feel calmer than an input-method candidate list. It should hel
 - Cloud fallback for autocomplete.
 - Broad browser claims.
 - Any code, UI, copy, assets, or trade dress from IBus Typing Booster.
-

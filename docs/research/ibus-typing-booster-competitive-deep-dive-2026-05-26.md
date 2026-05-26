@@ -124,4 +124,3 @@ Safe transferable ideas:
 5. Expose pause/silence/why-off states plainly in Settings and Diagnostics.
 6. Keep learning local and opt-in, and provide deletion/removal paths.
 7. Keep app support proof-gated.
-
