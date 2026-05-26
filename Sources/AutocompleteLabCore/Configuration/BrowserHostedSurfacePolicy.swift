@@ -7,6 +7,7 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
     case chatGPT = "chatgpt"
     case slack = "slack"
     case discord = "discord"
+    case webmail = "webmail"
     case login = "browser-login"
     case payment = "browser-payment"
     case passwordManager = "browser-password-manager"
@@ -28,6 +29,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
             return "Slack"
         case .discord:
             return "Discord"
+        case .webmail:
+            return "Browser email"
         case .login:
             return "This login page"
         case .payment:
@@ -47,6 +50,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
         switch self {
         case .chatGPT, .slack, .discord:
             return "browser-chat"
+        case .webmail:
+            return "browser-webmail"
         case .unproven:
             return "browser-unknown"
         case .googleDocs, .notion:
@@ -61,6 +66,8 @@ public enum BrowserHostedSurface: String, Equatable, Sendable {
         switch self {
         case .chatGPT, .slack, .discord:
             return "exact-disposable-real-service-one-word-no-submit-screenshot-insertion"
+        case .webmail:
+            return "exact-disposable-webmail-reply-safe-tab-screenshot-insertion-undo-latency"
         case .googleDocs, .notion:
             return "exact-disposable-real-service-safe-tab-no-submit-screenshot-insertion-undo"
         case .unproven:
@@ -191,6 +198,9 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
         if matchesDiscord(searchableText) {
             return .blocked(BrowserHostedSurfaceBlock(surface: .discord))
         }
+        if matchesWebmail(searchableText) {
+            return .blocked(BrowserHostedSurfaceBlock(surface: .webmail))
+        }
         if matchesLocalProofFixture(searchableText) {
             return .allowed
         }
@@ -268,6 +278,31 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("- discord")
             || containsStandaloneWord("discord", in: searchableText)
             || searchableText == "discord"
+    }
+
+    private func matchesWebmail(_ searchableText: String) -> Bool {
+        searchableText.contains("outlook.office.com")
+            || searchableText.contains("outlook.live.com")
+            || searchableText.contains("mail.google.com")
+            || searchableText.contains("gmail.com")
+            || searchableText.contains("mail.yahoo.com")
+            || searchableText.contains("fastmail.com")
+            || searchableText.contains("app.fastmail.com")
+            || searchableText.contains("proton.me/mail")
+            || searchableText.contains("mail.proton.me")
+            || searchableText.contains("icloud.com/mail")
+            || searchableText.contains("gmail -")
+            || searchableText.contains("- gmail")
+            || searchableText.contains("yahoo mail")
+            || searchableText.contains("fastmail")
+            || searchableText.contains("proton mail")
+            || searchableText.contains("icloud mail")
+            || searchableText.contains("outlook -")
+            || searchableText.contains("- outlook")
+            || searchableText.contains("microsoft outlook")
+            || searchableText.contains("office 365 mail")
+            || searchableText.contains("new message")
+            || searchableText.contains("email reply")
     }
 
     private func containsStandaloneWord(_ word: String, in searchableText: String) -> Bool {

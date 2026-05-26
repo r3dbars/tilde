@@ -76,6 +76,7 @@ struct SensitiveTextFieldPolicyTests {
             (.cryptoWallet, FocusedElementFingerprint(identifier: "seed-phrase", placeholder: "Secret recovery phrase", windowTitle: "Crypto wallet")),
             (.commandLine, FocusedElementFingerprint(identifier: "terminal-command", placeholder: "Command line", windowTitle: "Web terminal")),
             (.passwordManager, FocusedElementFingerprint(title: "1Password", placeholder: "Search 1Password", windowTitle: "1Password")),
+            (.passwordManager, FocusedElementFingerprint(title: "KeePassXC", placeholder: "Search entries", windowTitle: "KeePassXC")),
             (.privatePrompt, FocusedElementFingerprint(placeholder: "Private prompt", windowTitle: "Private chat")),
             (.privateSearch, FocusedElementFingerprint(placeholder: "Private search", windowTitle: "Private Browsing"))
         ]
@@ -112,6 +113,8 @@ struct SensitiveTextFieldPolicyTests {
             (.commandLine, FocusedElementFingerprint(placeholder: "sudo command", windowTitle: "Web terminal")),
             (.commandLine, FocusedElementFingerprint(placeholder: "SSH command", windowTitle: "Codespaces")),
             (.commandLine, FocusedElementFingerprint(windowTitle: "StackBlitz terminal")),
+            (.passwordManager, FocusedElementFingerprint(windowTitle: "Proton Pass")),
+            (.passwordManager, FocusedElementFingerprint(windowTitle: "Keeper password vault")),
             (.privatePrompt, FocusedElementFingerprint(placeholder: "Confidential instructions", windowTitle: "Internal prompt"))
         ]
 
