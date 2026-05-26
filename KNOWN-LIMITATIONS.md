@@ -19,6 +19,8 @@ Stale screenshots and old insertion rows do not make a beta lane current.
 - Full accept stays off in prompt apps until a separate no-submit full-accept
   proof exists.
 - Mail is diagnostics-only until compose insertion is proven safe.
+- Browser webmail, including Gmail and Outlook in a browser, is blocked until
+  disposable compose-body proof exists.
 - Terminal apps are blocked.
 - Password managers, login fields, payment fields, address fields, search
   fields, URL fields, and secure fields stay off.

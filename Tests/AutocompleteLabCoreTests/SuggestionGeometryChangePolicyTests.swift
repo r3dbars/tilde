@@ -193,6 +193,48 @@ struct SuggestionGeometryChangePolicyTests {
         ).shouldInvalidate)
     }
 
+    @Test("Stale visible geometry preserves current pending request")
+    func staleVisibleGeometryPreservesCurrentPendingRequest() {
+        #expect(policy.shouldPreservePendingRequestWhenVisibleSuggestionInvalidates(
+            hasVisibleSuggestion: true,
+            hasPendingSuggestionRequest: true,
+            pendingRequestTextBeforeCursor: "Private beta recovery feels safer because ",
+            pendingRequestTextAfterCursor: "",
+            pendingRequestFieldIdentityDescription: "com.apple.TextEdit:42:1001",
+            currentTextBeforeCursor: "Private beta recovery feels safer because ",
+            currentTextAfterCursor: "",
+            currentFieldIdentityDescription: "com.apple.TextEdit:42:1001"
+        ))
+    }
+
+    @Test("Stale visible geometry cancels stale pending request")
+    func staleVisibleGeometryCancelsStalePendingRequest() {
+        #expect(!policy.shouldPreservePendingRequestWhenVisibleSuggestionInvalidates(
+            hasVisibleSuggestion: true,
+            hasPendingSuggestionRequest: true,
+            pendingRequestTextBeforeCursor: "The local model stays responsive when ",
+            pendingRequestTextAfterCursor: "",
+            pendingRequestFieldIdentityDescription: "com.apple.TextEdit:42:1001",
+            currentTextBeforeCursor: "Private beta recovery feels safer because ",
+            currentTextAfterCursor: "",
+            currentFieldIdentityDescription: "com.apple.TextEdit:42:1001"
+        ))
+    }
+
+    @Test("Stale visible geometry cancels pending request for another field")
+    func staleVisibleGeometryCancelsPendingRequestForAnotherField() {
+        #expect(!policy.shouldPreservePendingRequestWhenVisibleSuggestionInvalidates(
+            hasVisibleSuggestion: true,
+            hasPendingSuggestionRequest: true,
+            pendingRequestTextBeforeCursor: "Private beta recovery feels safer because ",
+            pendingRequestTextAfterCursor: "",
+            pendingRequestFieldIdentityDescription: "com.apple.TextEdit:42:1001",
+            currentTextBeforeCursor: "Private beta recovery feels safer because ",
+            currentTextAfterCursor: "",
+            currentFieldIdentityDescription: "com.apple.TextEdit:42:2002"
+        ))
+    }
+
     private func fieldIdentity(elementIdentifier: Int = 1001) -> FocusedFieldIdentity {
         FocusedFieldIdentity(
             bundleIdentifier: "com.apple.TextEdit",
