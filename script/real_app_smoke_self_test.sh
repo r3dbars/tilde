@@ -1097,13 +1097,21 @@ if ! grep -F "script/real_app_smoke.sh obsidian-theme --manual-gate" "$TMP_DIR/o
   echo "real app smoke self-test did not print the Obsidian theme command" >&2
   exit 1
 fi
+if ! grep -F "script/real_app_smoke.sh obsidian-font-zoom --manual-gate" "$TMP_DIR/obsidian.txt" >/dev/null ||
+   ! grep -F "obsidian-font-zoom|" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test did not expose the Obsidian font/zoom proof lane" >&2
+  exit 1
+fi
 
 if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'local reset_text="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-$marker}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "printf '%s' \"\$reset_text\"" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'obsidian|obsidian-theme|obsidian-pane|obsidian-font-zoom|obsidian-multiline)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
    ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null ||
    ! grep -F "let replacementText = baseText + insertionText" script/obsidian_ax_editor.swift >/dev/null; then
-  echo "real app smoke self-test expected Obsidian reset and append helpers to update the disposable note through guarded AX value replacement" >&2
+  echo "real app smoke self-test expected Obsidian seeding, reset, and append helpers to use the same guarded disposable text" >&2
   exit 1
 fi
 if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smoke.sh >/dev/null ||
