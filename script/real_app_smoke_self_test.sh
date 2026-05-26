@@ -378,9 +378,19 @@ if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must fail closed if pid paste mutates the prompt unexpectedly")
 if "guard targetedPasteOutcome.safeToContinue else" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must not continue to global paste after unsafe pid insertion")
+if '"ghosttyAppleScriptInputText"' not in terminal_insert_block or "input text" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must use Ghostty's native scripting input text command")
+if "ghosttyAppleScriptInputTextBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified scripting input")
+if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must fail closed if scripting input mutates the prompt unexpectedly")
 terminal_main_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofText(")
 terminal_main_insert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", terminal_main_insert_start)
 terminal_main_insert_block = app_delegate[terminal_main_insert_start:terminal_main_insert_end]
+ghostty_script_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofAppleScriptText")
+hardware_source = terminal_main_insert_block.index("Self.postHardwareTextKeyEvents")
+if ghostty_script_source > hardware_source:
+    raise SystemExit("Claude Code Ghostty proof must try native scripting input before slow CG key-event fallbacks")
 if "cgHardwareKeyEventsGlobal" not in terminal_main_insert_block or "cgUnicodeKeyEventsGlobal" not in terminal_main_insert_block:
     raise SystemExit("Claude Code terminal-host insertion must try verified global text key events before paste fallback")
 if terminal_main_insert_block.count("keyboardEventTap?.suppressPassthroughObservation(for: 0.5)") < 2:

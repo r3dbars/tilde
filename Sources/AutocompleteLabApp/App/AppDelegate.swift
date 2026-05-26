@@ -9407,6 +9407,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return verified
         }
 
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" {
+            let ghosttyInputOutcome = insertGhosttyTerminalHostProofAppleScriptText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyInputOutcome.verified {
+                return true
+            }
+            guard ghosttyInputOutcome.safeToContinue else {
+                return false
+            }
+        }
+
         if Self.postHardwareTextKeyEvents(
             acceptedText,
             processIdentifier: frontmostApp.processIdentifier
@@ -9783,6 +9799,148 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         return false
+    }
+
+    private func insertGhosttyTerminalHostProofAppleScriptText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyAppleScriptInputText"
+        let baselineSource = "ghosttyAppleScriptInputTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "source": source,
+                "stage": "start"
+            ]
+        )
+
+        let scriptSource = """
+        tell application id "com.mitchellh.ghostty"
+            if not frontmost then return false
+            if not (exists front window) then return false
+            set targetWindow to front window
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            input text \(Self.appleScriptStringLiteral(acceptedText)) to targetTerminal
+            return true
+        end tell
+        """
+        guard let script = NSAppleScript(source: scriptSource) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-create-failed",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        var errorInfo: NSDictionary?
+        let result = script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-failed",
+                    "source": source,
+                    "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
+                    "errorMessage": errorInfo["NSAppleScriptErrorMessage"] as? String ?? ""
+                ]
+            )
+            return (false, true)
+        }
+
+        guard result.booleanValue else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    nonisolated private static func appleScriptStringLiteral(_ text: String) -> String {
+        let escaped = text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     private func verifyClaudeCodeTerminalHostProofInsertion(
