@@ -7,6 +7,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 TRACE_PATH="$TMP_DIR/traces.jsonl"
 SHORT_PHRASE_TRACE_PATH="$TMP_DIR/short-phrase-traces.jsonl"
+MODEL_ONLY_PHRASE_TRACE_PATH="$TMP_DIR/model-only-phrase-traces.jsonl"
+SLOW_INSTANT_TRACE_PATH="$TMP_DIR/slow-instant-traces.jsonl"
 TRUST_KILLER_TRACE_PATH="$TMP_DIR/trust-killer-traces.jsonl"
 MARK_PATH="$TMP_DIR/session.env"
 REPORT_PATH="$TMP_DIR/report.md"
@@ -15,6 +17,8 @@ LOW_OVERRIDE_REPORT_PATH="$TMP_DIR/low-override-report.md"
 HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
 REACH_REPORT_PATH="$TMP_DIR/reach-report.md"
 SHORT_PHRASE_REPORT_PATH="$TMP_DIR/short-phrase-report.md"
+MODEL_ONLY_PHRASE_REPORT_PATH="$TMP_DIR/model-only-phrase-report.md"
+SLOW_INSTANT_REPORT_PATH="$TMP_DIR/slow-instant-report.md"
 TRUST_KILLER_REPORT_PATH="$TMP_DIR/trust-killer-report.md"
 NOT_READY_MARK_PATH="$TMP_DIR/not-ready-session.env"
 NOT_READY_REPORT_PATH="$TMP_DIR/not-ready-report.md"
@@ -33,13 +37,13 @@ export AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE=running
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":200}
-{"timestamp":"2026-05-25T00:01:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":210,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:01:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:01:01Z","sessionID":"s","suggestionID":"s1","type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","metadata":{"acceptanceID":"a1"}}
 {"timestamp":"2026-05-25T00:01:02Z","sessionID":"s","suggestionID":"s1","type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","metadata":{"acceptanceID":"a1"}}
 {"timestamp":"2026-05-25T00:01:12Z","sessionID":"s","suggestionID":"s1","type":"acceptedTextEdited","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","metadata":{"acceptanceID":"a1","checkpoint":"10s","survivalClass":"exactKept","strongAcceptedAndKept":"true"}}
 {"timestamp":"2026-05-25T00:02:00Z","sessionID":"s","suggestionID":"s2","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":220,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:02:10Z","sessionID":"s","suggestionID":"s2","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"escape-dismissed"}
-{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":230,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:03:20Z","sessionID":"s","suggestionID":"s3","type":"suggestionTypedOver","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"typed-against-visible-suggestion"}
 {"timestamp":"2026-05-25T00:04:00Z","sessionID":"s","suggestionID":"s4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","latencyMilliseconds":240,"metadata":{"candidateSelectionSource":"fast-word-completion","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"1","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:04:15Z","sessionID":"s","suggestionID":"s4","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"field-changed"}
@@ -179,6 +183,9 @@ for expected in \
   "Rows scanned: 14" \
   "Shown suggestions: 5 (minimum 5)" \
   "Phrase suggestions: 4 (minimum 1)" \
+  "Instant phrase fallback shown: 2 (minimum 1)" \
+  "Instant phrase max latency: 0ms (maximum 1ms)" \
+  "Instant phrase latency samples missing: 0" \
   "Accepted-kept shown rate: 20% (minimum 15%, 1/5)" \
   "Source mix: shown / accepted / accepted-kept shown" \
   "Instant phrase learned restraint: 1" \
@@ -293,6 +300,7 @@ for expected in \
   "Shown suggestions: 5 (minimum 5)" \
   "Phrase suggestions: 4 (minimum 1)" \
   "Phrase visible word minimum: 3" \
+  "Instant phrase minimum: shown \`1\`, latency <= \`1\` ms." \
   "Phrase suggestions missing word count: 0" \
   "Phrase suggestions below word minimum: 0" \
   "Accepted-kept suggestions: 1 (minimum 1)" \
@@ -301,7 +309,9 @@ for expected in \
   "predictive-phrase-fallback: 2 / 1 / 1" \
   "app-model-result: 2 / 0 / 0" \
   "fast-word-completion: 1 / 0 / 0" \
-  "Instant phrase fallback shown: 2" \
+  "Instant phrase fallback shown: 2 (minimum 1)" \
+  "Instant phrase max latency: 0ms (maximum 1ms)" \
+  "Instant phrase latency samples missing: 0" \
   "Instant phrase learned restraint: 1" \
   "Model-backed shown: 2" \
   "Word fallback shown: 1" \
@@ -403,6 +413,69 @@ for expected in \
 do
   if ! grep -q "$expected" "$SHORT_PHRASE_REPORT_PATH"; then
     echo "dogfood self-test short-phrase report missing: $expected" >&2
+    exit 1
+  fi
+done
+
+sed 's/predictive-phrase-fallback/app-model-result/g' "$TRACE_PATH" >"$MODEL_ONLY_PHRASE_TRACE_PATH"
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
+  --trace "$MODEL_ONLY_PHRASE_TRACE_PATH" \
+  --start-line 1 \
+  --end-line 15 \
+  --app com.apple.TextEdit \
+  --label self-test-model-only-phrase \
+  --report "$MODEL_ONLY_PHRASE_REPORT_PATH" \
+  >"$TMP_DIR/model-only-phrase.out" 2>&1
+model_only_phrase_status=$?
+set -e
+
+if [[ "$model_only_phrase_status" -eq 0 ]]; then
+  echo "dogfood self-test expected model-only phrase slice to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Gate: \`fail\`" \
+  "Sample gate status: \`1\`" \
+  "Phrase suggestions: 4 (minimum 1)" \
+  "Instant phrase fallback shown: 0 (minimum 1)" \
+  "Instant phrase max latency: n/a (maximum 1ms)" \
+  "instant phrase fallback below minimum (0/1)"
+do
+  if ! grep -q "$expected" "$MODEL_ONLY_PHRASE_REPORT_PATH"; then
+    echo "dogfood self-test model-only phrase report missing: $expected" >&2
+    exit 1
+  fi
+done
+
+sed 's/"latencyMilliseconds":0/"latencyMilliseconds":5/g' "$TRACE_PATH" >"$SLOW_INSTANT_TRACE_PATH"
+set +e
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
+  --trace "$SLOW_INSTANT_TRACE_PATH" \
+  --start-line 1 \
+  --end-line 15 \
+  --app com.apple.TextEdit \
+  --label self-test-slow-instant \
+  --report "$SLOW_INSTANT_REPORT_PATH" \
+  >"$TMP_DIR/slow-instant.out" 2>&1
+slow_instant_status=$?
+set -e
+
+if [[ "$slow_instant_status" -eq 0 ]]; then
+  echo "dogfood self-test expected slow instant phrase slice to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Gate: \`fail\`" \
+  "Sample gate status: \`1\`" \
+  "Instant phrase fallback shown: 2 (minimum 1)" \
+  "Instant phrase max latency: 5ms (maximum 1ms)" \
+  "instant phrase latency above maximum (5/1 ms)"
+do
+  if ! grep -q "$expected" "$SLOW_INSTANT_REPORT_PATH"; then
+    echo "dogfood self-test slow instant report missing: $expected" >&2
     exit 1
   fi
 done
@@ -888,7 +961,9 @@ for expected in \
   "Phrase suggestions below word minimum: 0" \
   "Accepted-kept shown rate: 100% (minimum 0%, 1/1)" \
   "predictive-phrase-fallback: 1 / 1 / 1" \
-  "Instant phrase fallback shown: 1"
+  "Instant phrase fallback shown: 1 (minimum 0)" \
+  "Instant phrase max latency: 0ms (maximum 1ms)" \
+  "Instant phrase latency samples missing: 0"
 do
   if ! grep -q "$expected" "$LOW_OVERRIDE_REPORT_PATH"; then
     echo "dogfood self-test low-sample override report missing: $expected" >&2
