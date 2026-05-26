@@ -113,6 +113,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
                 plan: capturePlan,
                 key: key,
                 app: app,
+                activeTextLine: Self.currentTextLine(from: focusedContext.textBeforeCursor),
                 startedAt: now
             )
         }
@@ -156,6 +157,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         plan: CapturePlan,
         key: CacheKey,
         app: RunningApplicationInfo,
+        activeTextLine: String?,
         startedAt: Date
     ) {
         defer {
@@ -202,7 +204,8 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         guard let pageContext = VisiblePageContext(
             captureScope: plan.scope,
             activeApplicationName: app.localizedName,
-            text: recognizedText
+            text: recognizedText,
+            excludingActiveTextLine: activeTextLine
         ) else {
             DiagnosticsLog.shared.record(
                 "visible-page-context-empty",
@@ -552,5 +555,18 @@ final class VisiblePageContextProvider: @unchecked Sendable {
 
     private static func milliseconds(from start: Date, to end: Date) -> Int {
         max(0, Int(end.timeIntervalSince(start) * 1_000))
+    }
+
+    private static func currentTextLine(from textBeforeCursor: String) -> String? {
+        let line = textBeforeCursor
+            .components(separatedBy: .newlines)
+            .last?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let line, line.count >= 6 else {
+            return nil
+        }
+
+        return line
     }
 }
