@@ -22,7 +22,7 @@ cat >"$DEFAULT_PROOF_LOG_FILE" <<'LOG'
 2026-04-26T18:04:58Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-9B-MLX-4bit
 2026-04-26T18:04:59Z app-proof-mode-started app=com.apple.TextEdit scenario=textedit-default-model-latency
 2026-04-26T18:05:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
-2026-04-26T18:05:03Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=80 generationMilliseconds=110 maxTokens=11 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=111
+2026-04-26T18:05:03Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=80 generationMilliseconds=110 maxTokens=14 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=111
 2026-04-26T18:05:03Z suggestion-presented app=com.apple.TextEdit latencyMilliseconds=135 requestMode=phraseContinuation traceID=textedit-stream
 2026-04-26T18:06:00Z app-proof-mode-started app=md.obsidian
 2026-04-26T18:06:01Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit

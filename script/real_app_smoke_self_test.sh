@@ -9,7 +9,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 script/real_app_smoke.sh textedit --help >"$TMP_DIR/help.txt"
 if ! grep -F "fails closed unless" "$TMP_DIR/help.txt" >/dev/null ||
-   ! grep -F "this checkout's dist/SteadyType.app binary" "$TMP_DIR/help.txt" >/dev/null; then
+   ! grep -F "this checkout's dist/SteadyType.app binary" "$TMP_DIR/help.txt" >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1" "$TMP_DIR/help.txt" >/dev/null; then
   echo "real app smoke help must explain --skip-build checkout verification" >&2
   exit 1
 fi
@@ -70,6 +71,93 @@ if ! grep -F "must relaunch with word completions and the fast phrase fallback d
   exit 1
 fi
 
+script/real_app_smoke.sh chrome-textarea-model-latency --dry-run >"$TMP_DIR/chrome-textarea-model-latency.txt"
+if ! grep -F "Real app smoke: chrome" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome fixture: textarea" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome model latency proof disables fast word completions and phrase continuations" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario chrome-textarea-model-latency" "$TMP_DIR/chrome-textarea-model-latency.txt" >/dev/null ||
+   ! grep -F 'Chrome $CHROME_FIXTURE model latency proof scenario: $scenario' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome textarea model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome-textarea-model-latency --skip-build --dry-run >"$TMP_DIR/chrome-textarea-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Chrome textarea model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/chrome-textarea-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected Chrome textarea model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh chrome-contenteditable-model-latency --dry-run >"$TMP_DIR/chrome-contenteditable-model-latency.txt"
+if ! grep -F "Real app smoke: chrome" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome fixture: contenteditable" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null ||
+   ! grep -F "Chrome model latency proof disables fast word completions and phrase continuations" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario chrome-contenteditable-model-latency" "$TMP_DIR/chrome-contenteditable-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Chrome contenteditable model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh chrome-contenteditable-model-latency --skip-build --dry-run >"$TMP_DIR/chrome-contenteditable-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Chrome contenteditable model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/chrome-contenteditable-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected Chrome contenteditable model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh codex-model-latency --dry-run >"$TMP_DIR/codex-model-latency.txt"
+if ! grep -F "Real app smoke: codex" "$TMP_DIR/codex-model-latency.txt" >/dev/null ||
+   ! grep -F "Codex prompt model latency proof" "$TMP_DIR/codex-model-latency.txt" >/dev/null ||
+   ! grep -F "model-backed visible word completions in one launch" "$TMP_DIR/codex-model-latency.txt" >/dev/null ||
+   ! grep -F "disables fast word completions and phrase continuations" "$TMP_DIR/codex-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario codex-model-latency" "$TMP_DIR/codex-model-latency.txt" >/dev/null ||
+   ! grep -F "never presses Enter or full accept" "$TMP_DIR/codex-model-latency.txt" >/dev/null ||
+   ! grep -F "prompt no-submit gate on the same trace slice" "$TMP_DIR/codex-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Codex model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh codex-model-latency --skip-build --dry-run >"$TMP_DIR/codex-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Codex model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/codex-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected Codex model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh claude-model-latency --dry-run >"$TMP_DIR/claude-model-latency.txt"
+if ! grep -F "Real app smoke: claude" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "Claude desktop prompt model latency proof" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "model-backed visible word completions in one launch" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "disables fast word completions and phrase continuations" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "scenario claude-model-latency" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "never presses Enter or full accept" "$TMP_DIR/claude-model-latency.txt" >/dev/null ||
+   ! grep -F "prompt no-submit gate on the same trace slice" "$TMP_DIR/claude-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not print the Claude model latency dry-run plan" >&2
+  exit 1
+fi
+
+if script/real_app_smoke.sh claude-model-latency --skip-build --dry-run >"$TMP_DIR/claude-model-latency-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Claude model latency --skip-build to fail closed" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with fast word completions and phrase continuations disabled" "$TMP_DIR/claude-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test expected Claude model latency --skip-build failure to explain the proof env requirement" >&2
+  exit 1
+fi
+
+AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1 \
+  script/real_app_smoke.sh claude-model-latency --skip-build --dry-run >"$TMP_DIR/claude-model-latency-skip-build-allowed.txt" 2>&1
+if ! grep -F "Packaged model latency proof: reusing the already-running app because AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1 is set." "$TMP_DIR/claude-model-latency-skip-build-allowed.txt" >/dev/null ||
+   ! grep -F "Safety: strict latency selector must still prove the tagged runtime launch for this app binary." "$TMP_DIR/claude-model-latency-skip-build-allowed.txt" >/dev/null; then
+  echo "real app smoke self-test expected guarded packaged Claude model latency --skip-build proof to be allowed with an explicit env opt-in" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
@@ -77,10 +165,15 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_sm
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'export AUTOCOMPLETE_LAB_TEXTEDIT_SINGLE_WINDOW_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="textedit-model-latency"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'prepare_codex_model_latency_runtime_options' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'prepare_claude_model_latency_runtime_options' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="codex-model-latency"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="claude-model-latency"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency seed settled' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_textedit_event_tap_probe_key' script/real_app_smoke.sh >/dev/null ||
    ! grep -F -- '--require-event-tap-samples "$event_tap_sample_count"' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected model latency proof to seed context before live key-trigger typing with non-word modes disabled" >&2
+  echo "real app smoke self-test expected model latency proof to seed context before sampling with non-word modes disabled" >&2
   exit 1
 fi
 
@@ -89,7 +182,7 @@ if ! grep -F 'run_textedit_default_model_latency()' script/real_app_smoke.sh >/d
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_PHRASE_FALLBACK=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit default model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"mode=phraseContinuation"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F '"maxTokens=11"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"maxTokens=14"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'visible_sample_count' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reason=empty-suggestion' script/real_app_smoke.sh >/dev/null ||
    ! grep -F './script/model_latency_report.py --default-model-proof' script/real_app_smoke.sh >/dev/null; then
@@ -186,9 +279,122 @@ if "prepare_default_model_latency_runtime_options" not in default_block:
 if "AUTOCOMPLETE_LAB_PROOF_DISABLE_WORD_COMPLETION=1" not in default_prepare_block:
     raise SystemExit("default-model phrase proof must disable seed word completions before measuring the trailing-space trigger")
 
+codex_start = source.index('run_codex_model_latency()')
+codex_end = source.index('run_claude_model_latency()', codex_start)
+codex_block = source[codex_start:codex_end]
+codex_prepare_start = source.index('prepare_codex_model_latency_runtime_options()')
+codex_prepare_end = source.index('prepare_claude_model_latency_runtime_options()', codex_prepare_start)
+codex_prepare_block = source[codex_prepare_start:codex_prepare_end]
+if 'prepare_codex_model_latency_runtime_options' not in codex_block:
+    raise SystemExit("Codex model latency proof must prepare proof-only runtime flags")
+if 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' not in codex_prepare_block:
+    raise SystemExit("Codex model latency proof must disable fast word completions")
+if 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' not in codex_prepare_block:
+    raise SystemExit("Codex model latency proof must disable phrase continuations")
+if 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"' not in codex_prepare_block or 'local scenario="codex-model-latency"' not in codex_prepare_block:
+    raise SystemExit("Codex model latency proof must tag its runtime scenario")
+if 'press_key_code' in codex_block or 'press_accept_all_shortcut' in codex_block or 'key code 36' in codex_block:
+    raise SystemExit("Codex model latency proof must not press Tab, Enter, or full accept")
+if 'type_codex_raw_smoke_text "$trigger_text"' not in codex_block:
+    raise SystemExit("Codex model latency proof must type only the trigger character through live key events")
+if 'AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_SEED_SETTLE_SECONDS' not in codex_block:
+    raise SystemExit("Codex model latency proof must let the stable AX seed settle before live key-trigger typing")
+if 'AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="codex-model-latency"' not in codex_block:
+    raise SystemExit("Codex model latency proof must run prompt no-submit proof on the same trace slice")
+if 'visible_sample_count >= 5' not in codex_block:
+    raise SystemExit("Codex model latency proof must stop only after five visible model-backed samples")
+if '"requestMode=wordCompletion"' not in codex_block or '"candidateSelectionSource=app-model-result"' not in codex_block:
+    raise SystemExit("Codex model latency proof must require model-backed word-completion visibility")
+if 'reason=empty-suggestion' not in codex_block:
+    raise SystemExit("Codex model latency proof must skip empty model candidates and try another disposable context")
+if 'assert_codex_prompt_retains_marker' not in codex_block:
+    raise SystemExit("Codex model latency proof must verify the prompt marker still exists after each sample")
+
+claude_start = source.index('run_claude_model_latency()')
+claude_end = source.index('run_manual_gated()', claude_start)
+claude_block = source[claude_start:claude_end]
+claude_prepare_start = source.index('prepare_claude_model_latency_runtime_options()')
+claude_prepare_end = source.index('prepare_default_model_latency_runtime_options()', claude_prepare_start)
+claude_prepare_block = source[claude_prepare_start:claude_prepare_end]
+if 'prepare_claude_model_latency_runtime_options' not in claude_block:
+    raise SystemExit("Claude model latency proof must prepare proof-only runtime flags")
+if 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' not in claude_prepare_block:
+    raise SystemExit("Claude model latency proof must disable fast word completions")
+if 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' not in claude_prepare_block:
+    raise SystemExit("Claude model latency proof must disable phrase continuations")
+if 'AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"' not in claude_prepare_block or 'local scenario="claude-model-latency"' not in claude_prepare_block:
+    raise SystemExit("Claude model latency proof must tag its runtime scenario")
+if 'press_key_code' in claude_block or 'press_accept_all_shortcut' in claude_block or 'key code 36' in claude_block:
+    raise SystemExit("Claude model latency proof must not press Tab, Enter, or full accept")
+if 'type_claude_raw_smoke_text "$trigger_text"' not in claude_block:
+    raise SystemExit("Claude model latency proof must type only the trigger character through live key events")
+if 'AUTOCOMPLETE_LAB_CLAUDE_MODEL_LATENCY_SEED_SETTLE_SECONDS' not in claude_block:
+    raise SystemExit("Claude model latency proof must let the stable AX seed settle before live key-trigger typing")
+if 'open -a Claude' not in claude_block or 'wait_for_frontmost_app "Claude"' not in claude_block:
+    raise SystemExit("Claude model latency proof must launch and focus Claude before AX seeding")
+if 'AUTOCOMPLETE_LAB_CLAUDE_COMPOSER_DISCOVERY_TIMEOUT_SECONDS' not in source:
+    raise SystemExit("Claude model latency proof must give the launched composer a bounded discovery window")
+if 'AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="claude-model-latency"' not in claude_block:
+    raise SystemExit("Claude model latency proof must run prompt no-submit proof on the same trace slice")
+if 'visible_sample_count >= 5' not in claude_block:
+    raise SystemExit("Claude model latency proof must stop only after five visible model-backed samples")
+if '"requestMode=wordCompletion"' not in claude_block or '"candidateSelectionSource=app-model-result"' not in claude_block:
+    raise SystemExit("Claude model latency proof must require model-backed word-completion visibility")
+if 'reason=empty-suggestion' not in claude_block:
+    raise SystemExit("Claude model latency proof must skip empty model candidates and try another disposable context")
+if 'assert_claude_prompt_retains_marker' not in claude_block:
+    raise SystemExit("Claude model latency proof must verify the prompt marker still exists after each sample")
+if 'restore_claude_draft_if_needed' not in source or 'prompt_app_ax_proof_helper.swift' not in source:
+    raise SystemExit("Claude model latency proof must restore focused drafts through the AX helper")
+prompt_helper = Path("script/prompt_app_ax_proof_helper.swift").read_text()
+if "seedWithSelectedTextFallback" not in prompt_helper or "seedWithPasteFallback" not in prompt_helper:
+    raise SystemExit("Prompt app AX helper must fall back when direct AX value seeding does not stick")
+if "waitForStableTreeExactValue" not in prompt_helper or "exactValueInput" not in prompt_helper:
+    raise SystemExit("Prompt app AX helper must verify seeded text stays in the live app tree")
+if "prefersEventBackedSeeding" not in prompt_helper or 'options.bundleIdentifier == "com.openai.codex"' not in prompt_helper:
+    raise SystemExit("Codex prompt helper must use event-backed seeding so React state keeps the proof text")
+if "clonePasteboardItems" not in prompt_helper or "$0.copy() as? NSPasteboardItem" in prompt_helper:
+    raise SystemExit("Prompt app AX helper must clone pasteboard data without crashing on NSPasteboardItem.copy()")
+if 'let acceptedLabels = ["new chat"]' not in prompt_helper:
+    raise SystemExit("Claude prompt helper must not press task/start buttons that can submit proof text")
+
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
+if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proof-field-identity-refresh-relaxed" not in app_delegate:
+    raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
 if "pollTimer?.fireDate" in app_delegate:
     raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
+terminal_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(")
+terminal_insert_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_insert_start)
+terminal_insert_block = app_delegate[terminal_insert_start:terminal_insert_end]
+targeted_source = terminal_insert_block.index('source: "pasteboardCommandVToPid"')
+global_source = terminal_insert_block.index('source: "pasteboardCommandV"', targeted_source)
+if targeted_source > global_source:
+    raise SystemExit("Claude Code terminal-host paste proof must try pid-targeted Command-V before global Command-V")
+if "processIdentifier: frontmostApp.processIdentifier" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must post Command-V to the verified frontmost terminal pid")
+if "pasteboardCommandVToPidBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must verify the prompt stayed unchanged after an unverified pid paste")
+if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must fail closed if pid paste mutates the prompt unexpectedly")
+if "guard targetedPasteOutcome.safeToContinue else" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must not continue to global paste after unsafe pid insertion")
+if '"ghosttyAppleScriptInputText"' not in terminal_insert_block or "input text" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must use Ghostty's native scripting input text command")
+if "ghosttyAppleScriptInputTextBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified scripting input")
+if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must fail closed if scripting input mutates the prompt unexpectedly")
+terminal_main_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofText(")
+terminal_main_insert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", terminal_main_insert_start)
+terminal_main_insert_block = app_delegate[terminal_main_insert_start:terminal_main_insert_end]
+ghostty_script_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofAppleScriptText")
+hardware_source = terminal_main_insert_block.index("Self.postHardwareTextKeyEvents")
+if ghostty_script_source > hardware_source:
+    raise SystemExit("Claude Code Ghostty proof must try native scripting input before slow CG key-event fallbacks")
+if "cgHardwareKeyEventsGlobal" not in terminal_main_insert_block or "cgUnicodeKeyEventsGlobal" not in terminal_main_insert_block:
+    raise SystemExit("Claude Code terminal-host insertion must try verified global text key events before paste fallback")
+if terminal_main_insert_block.count("keyboardEventTap?.suppressPassthroughObservation(for: 0.5)") < 2:
+    raise SystemExit("Claude Code terminal-host global key insertion must suppress synthetic typing passthrough observation")
 insert_start = app_delegate.index("private func insertObsidianDirectValueText(")
 insert_end = app_delegate.index("private func insertObsidianSystemEventsPasteText(", insert_start)
 insert_block = app_delegate[insert_start:insert_end]
@@ -325,7 +531,7 @@ if "wait_for_appkit_activation_frontmost()" not in source or "frontmost_process_
     raise SystemExit("real app smoke must probe the frontmost process before falling back to System Events activation")
 PY
 
-if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
+if ! grep -F 'wait_for_textedit_document_prefix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency typing to tolerate native TextEdit completions" >&2
   exit 1
 fi
@@ -354,12 +560,12 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_AX_WRITE_TIMEOUT_SECONDS' script/real_ap
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency to trim native completion suffixes before waiting for visible proof" >&2
   exit 1
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 117' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fell back to AX replacement' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'unexpectedly long ($suffix_length chars); falling back to AX replacement' script/real_app_smoke.sh >/dev/null ||
@@ -497,6 +703,26 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+current_start = source.index("current_steadytype_app_bundle_pids()")
+current_end = source.index("\nstop_current_steadytype_app_bundle()", current_start)
+current_block = source[current_start:current_end]
+if "current_pgid" in current_block:
+    raise SystemExit(
+        "real app smoke self-test expected current app stop to include smoke-launched apps in the same process group"
+    )
+
+stop_start = source.index("stop_current_steadytype_app_bundle()")
+stop_end = source.index("\nstale_steadytype_app_bundle_pids()", stop_start)
+stop_block = source[stop_start:stop_end]
+if 'kill -9 "$pid"' not in stop_block or "Timed out stopping current SteadyType app bundle before smoke setup." not in stop_block:
+    raise SystemExit(
+        "real app smoke self-test expected current app stop to fail closed if the old app survives TERM"
+    )
+PY
 if ! grep -F 'steadytype_dist_dir()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadytype_app_binary' script/real_app_smoke.sh >/dev/null ||
@@ -607,6 +833,46 @@ if "Archive proof failed after 3 attempts." not in source:
     raise SystemExit("archive proof must retry transient ditto failures before failing the smoke")
 if "SteadyType smoke launch did not settle on this checkout" not in source:
     raise SystemExit("stale process failure message is missing")
+
+chrome_window_start = source.index("focus_chrome_process_window()")
+chrome_window_end = source.index("\nchrome_fixture_click_offsets()", chrome_window_start)
+chrome_window_focus = source[chrome_window_start:chrome_window_end]
+if (
+    "let focusedWindow: AXUIElement?" not in chrome_window_focus
+    or "let firstWindow = windows.first" not in chrome_window_focus
+    or "smokeWindow ?? focusedWindow ?? firstWindow" not in chrome_window_focus
+    or "Chrome smoke focus failed: no accessible Chrome window" not in chrome_window_focus
+):
+    raise SystemExit("Chrome process focus must tolerate a temporarily missing AXFocusedWindow and report real window failures")
+if "guard let windowValue = copyAttribute(appElement, kAXFocusedWindowAttribute)" in chrome_window_focus:
+    raise SystemExit("Chrome process focus must not require AXFocusedWindow before using the smoke window fallback")
+
+chrome_ready = function_body("assert_chrome_ready_for_input")
+focus = chrome_ready.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$expected_url"')
+wait = chrome_ready.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture $label"', focus)
+assert_front = chrome_ready.index('assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"', wait)
+assert_tab = chrome_ready.index('assert_chrome_expected_tab "$fixture" "$expected_url" "$label" "$chrome_pid"', assert_front)
+assert_ax = chrome_ready.index('assert_chrome_focused_editable_ax "$fixture" "$chrome_pid" "$label"', assert_tab)
+if not focus < wait < assert_front < assert_tab < assert_ax:
+    raise SystemExit("Chrome input guard must refocus the isolated fixture before asserting frontmost/editable state")
+
+chrome_fixture = function_body("run_chrome_fixture")
+before_tab = chrome_fixture.index('before_one_word_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"')
+focus_tab = chrome_fixture.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"', before_tab)
+wait_tab_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"', focus_tab)
+wait_tab_app = chrome_fixture.index('wait_for_frontmost_app "Google Chrome" 5', wait_tab_pid)
+press_tab = chrome_fixture.index('press_key_code 48', wait_tab_app)
+if not before_tab < focus_tab < wait_tab_pid < wait_tab_app < press_tab:
+    raise SystemExit("Chrome proof must refocus the editor immediately before Tab acceptance")
+
+before_full = chrome_fixture.index('before_full_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"')
+focus_full = chrome_fixture.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"', before_full)
+wait_full_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"', focus_full)
+wait_full_app = chrome_fixture.index('wait_for_frontmost_app "Google Chrome" 5', wait_full_pid)
+full_start = chrome_fixture.index('full_start_line="$(line_count "$LOG_PATH")"', wait_full_app)
+press_full = chrome_fixture.index('press_accept_all_shortcut', full_start)
+if not before_full < focus_full < wait_full_pid < wait_full_app < full_start < press_full:
+    raise SystemExit("Chrome proof must refocus the editor immediately before full acceptance")
 PY
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then
@@ -617,6 +883,13 @@ fi
 script/real_app_smoke.sh chrome --fixture contenteditable --dry-run >"$TMP_DIR/chrome-contenteditable.txt"
 if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-contenteditable.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Chrome contenteditable dry-run plan" >&2
+  exit 1
+fi
+if ! grep -F '" while the textarea keeps inst"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '" while the editor keeps inst"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Chrome $fixture second suggestion attempt $second_attempt returned empty; retrying with another disposable fragment.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Chrome $fixture second suggestion attempt $second_attempt was too slow to display; retrying with another disposable fragment.' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Chrome textarea/contenteditable proof to retry fragile second suggestions" >&2
   exit 1
 fi
 
@@ -900,18 +1173,30 @@ if ! grep -F "script/real_app_smoke.sh obsidian-theme --manual-gate" "$TMP_DIR/o
   echo "real app smoke self-test did not print the Obsidian theme command" >&2
   exit 1
 fi
+if ! grep -F "script/real_app_smoke.sh obsidian-font-zoom --manual-gate" "$TMP_DIR/obsidian.txt" >/dev/null ||
+   ! grep -F "obsidian-font-zoom|" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test did not expose the Obsidian font/zoom proof lane" >&2
+  exit 1
+fi
 
 if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'local reset_text="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-$marker}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "printf '%s' \"\$reset_text\"" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'obsidian|obsidian-theme|obsidian-pane|obsidian-font-zoom|obsidian-multiline)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'obsidian-markdown-bold)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"**Smoke proof feels "*)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'obsidian-markdown-list)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"- Smoke proof feels "*)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
    ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null ||
    ! grep -F "let replacementText = baseText + insertionText" script/obsidian_ax_editor.swift >/dev/null; then
-  echo "real app smoke self-test expected Obsidian reset and append helpers to update the disposable note through guarded AX value replacement" >&2
+  echo "real app smoke self-test expected Obsidian seeding, reset, and append helpers to use the same guarded disposable text" >&2
   exit 1
 fi
 if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "beforeChars=\${expected_before_chars}±2" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Obsidian long-note proof to allow a tiny CodeMirror file/AX count skew while requiring afterChars=0" >&2
+   ! grep -F "visible viewport beforeChars>=\${min_visible_before_chars}" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to allow viewport-only CodeMirror AX counts while requiring afterChars=0" >&2
   exit 1
 fi
 
@@ -929,23 +1214,25 @@ first_suggestion = source.index('wait_for_log_pattern "$start_line" "suggestion-
 if not (long_seed < long_seed_tail < long_reset < long_caret < long_trigger < first_long_suffix < first_suggestion):
     raise SystemExit("Obsidian long-note proof must seed the note before the trigger, type only the final live character, verify the disposable file suffix, then wait for the first suggestion")
 first_preservation = source.index('assert_obsidian_long_note_file_preserved "Smoke proof feels instant"')
-append = source.index('append_obsidian_smoke_note_file_text " and stays inst"', first_preservation)
+fragment_default = source.index('long_note_second_fragment=" and stays"', first_preservation)
+fragment_spacing = source.index('long_note_second_fragment="and stays"', fragment_default)
+append = source.index('append_obsidian_smoke_note_file_text "$long_note_second_fragment"', fragment_spacing)
 watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', append)
 open_note = source.index('open_obsidian_smoke_note_if_configured', watch)
-focus = source.index('move_obsidian_caret_to_document_end', open_note)
-assertion = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"', focus)
+assertion = source.index('wait_for_obsidian_smoke_target_current_value_end "Smoke proof feels instant and stays"', open_note)
+expected_chars = source.index('long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"', assertion)
 branch_end = source.index('\n  else', append)
-if not (first_preservation < append < watch < open_note < focus < assertion < branch_end):
-    raise SystemExit("Obsidian long-note proof must append the second fragment through the disposable note file, refocus Obsidian, and reassert the caret at the note end")
+if not (first_preservation < fragment_default < fragment_spacing < append < watch < open_note < assertion < expected_chars < branch_end):
+    raise SystemExit("Obsidian long-note proof must append the second fragment through the disposable note file, start log watching before reopening Obsidian, then AX-assert the visible caret end")
 non_long_else = source.index('\n  else', branch_end)
 non_long_settle = source.index('settle_obsidian_focus_for_smoke "Obsidian post-accept setup"', non_long_else)
-non_long_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant"', non_long_settle)
+non_long_assert = source.index('assert_obsidian_smoke_target "$first_expected_suffix"', non_long_settle)
 non_long_watch = source.index('second_start_line="$(line_count "$LOG_PATH")"', non_long_assert)
-non_long_append = source.index('type_obsidian_raw_smoke_text " and stays"', non_long_watch)
+non_long_append = source.index('type_obsidian_raw_smoke_text "$second_fragment"', non_long_watch)
 non_long_wait = source.index('wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"', non_long_append)
-non_long_full_assert = source.index('assert_obsidian_smoke_target "Smoke proof feels instant and stays"', non_long_wait)
-non_long_full_start = source.index('full_start_line="$(line_count "$LOG_PATH")"', non_long_full_assert)
-if not (non_long_settle < non_long_assert < non_long_watch < non_long_append < non_long_wait < non_long_full_assert < non_long_full_start):
+non_long_full_branch = source.index('\n  else', non_long_wait)
+non_long_full_start = source.index('full_start_line="$(line_count "$LOG_PATH")"', non_long_full_branch)
+if not (non_long_settle < non_long_assert < non_long_watch < non_long_append < non_long_wait < non_long_full_branch < non_long_full_start):
     raise SystemExit("Obsidian default/theme/pane proof must settle focus, append the second fragment, wait for the second suggestion, and keep the caret at the appended suffix before full accept")
 PY
 
@@ -958,6 +1245,27 @@ fi
 if ! grep -F "insertObsidianSystemEventsPasteText" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    ! grep -F 'keystroke "v" using command down' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
   echo "real app smoke self-test expected Obsidian insertion to use the proven paste path instead of raw CGEvents" >&2
+  exit 1
+fi
+if ! grep -F 'usedDocumentEndFallback' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"documentEndFallback": String(usedDocumentEndFallback)' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'Self.postCommandDownKey()' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian full accept repair to try a document-end fallback before key insertion" >&2
+  exit 1
+fi
+if ! grep -F 'let action: KeyboardAction?' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'action: baseline.action' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected insertion verification retries to preserve the original acceptance action" >&2
+  exit 1
+fi
+if ! grep -F 'elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'export AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian Markdown list proof to use proof-gated direct value insertion" >&2
+  exit 1
+fi
+if ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'activeAppProofBundleIdentifiers.contains("md.obsidian")' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian long-note proof to opt into direct value insertion only under proof mode" >&2
   exit 1
 fi
 
@@ -980,6 +1288,29 @@ if ! grep -F 'wait_for_frontmost_app "Obsidian" "${AUTOCOMPLETE_LAB_OBSIDIAN_ACT
   echo "real app smoke self-test expected Obsidian activation to wait for frontmost focus before proof actions" >&2
   exit 1
 fi
+if ! grep -F 'application processes whose frontmost is true' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'while IFS= read -r frontmost_identity' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected frontmost checks to handle multiple frontmost System Events processes" >&2
+  exit 1
+fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("open_obsidian_smoke_note_if_configured()")
+end = source.index("\nrun_obsidian()", start)
+block = source[start:end]
+custom_open = block.index('open "$smoke_uri"')
+custom_activate = block.index("activate_obsidian_for_smoke", custom_open)
+custom_return = block.index("return 0", custom_activate)
+vault_open = block.index("obsidian://open?vault=ObsidianProofVault", custom_return)
+vault_activate = block.index("activate_obsidian_for_smoke", vault_open)
+vault_return = block.index("return 0", vault_activate)
+if not custom_open < custom_activate < custom_return < vault_open < vault_activate < vault_return:
+    raise SystemExit(
+        "real app smoke self-test expected both Obsidian URI open paths to reactivate Obsidian before returning"
+    )
+PY
 
 if ! grep -F 'AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-optionTab}"' script/obsidian_deep_sweep.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.4}"' script/obsidian_deep_sweep.sh >/dev/null; then
@@ -1002,12 +1333,14 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
-append_index = source.index('append_obsidian_smoke_note_file_text " and stays inst"')
+append_index = source.index('append_obsidian_smoke_note_file_text "$long_note_second_fragment"')
 start_index = source.index('second_start_line="$(line_count "$LOG_PATH")"', append_index)
 open_index = source.index('open_obsidian_smoke_note_if_configured', append_index)
-if not append_index < start_index < open_index:
+wait_index = source.index('wait_for_obsidian_long_note_second_suggestion "$second_start_line"', open_index)
+assert_index = source.index('wait_for_obsidian_smoke_target_current_value_end "Smoke proof feels instant and stays"', start_index)
+if not append_index < start_index < open_index < assert_index < wait_index:
     raise SystemExit(
-        "real app smoke self-test expected Obsidian long-note log watching to start before refocusing Obsidian"
+        "real app smoke self-test expected Obsidian long-note log watching to start before reopening Obsidian and repair the visible AX caret without stale keyboard events"
     )
 if '"beforeChars=$long_note_expected_before_chars"' in source:
     raise SystemExit(
@@ -1016,24 +1349,28 @@ if '"beforeChars=$long_note_expected_before_chars"' in source:
 
 full_branch = source[source.index('if [[ "$manual_app" == "obsidian-long-note" ]]; then', source.index('wait_for_obsidian_long_note_second_suggestion "$second_start_line"')):]
 full_branch = full_branch[:full_branch.index('else')]
-required = [
-    'wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"',
-    'assert_frontmost_app "Obsidian" "Obsidian long-note"',
-    'press_accept_all_shortcut',
-]
-positions = [full_branch.find(text) for text in required]
-if any(position < 0 for position in positions) or positions != sorted(positions):
+try:
+    full_start_position = full_branch.index('full_start_line="$(line_count "$LOG_PATH")"')
+    press_position = full_branch.index('press_accept_all_shortcut', full_start_position)
+    screenshot_position = full_branch.index('wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"', press_position)
+except ValueError as error:
     raise SystemExit(
-        "real app smoke self-test expected Obsidian long-note proof to capture the second visual frame and preserve editor focus before full accept"
+        "real app smoke self-test expected Obsidian long-note proof to press full accept immediately after the second suggestion, then wait for visual proof"
+    ) from error
+if not (full_start_position < press_position < screenshot_position):
+    raise SystemExit(
+        "real app smoke self-test expected Obsidian long-note proof to press full accept immediately after the second suggestion, then wait for visual proof"
     )
 
 normal_branch = source[source.index('else', source.index('wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified"')):]
-normal_branch = normal_branch[:normal_branch.index('fi', normal_branch.index('type_obsidian_raw_smoke_text " and stays"'))]
+normal_branch = normal_branch[:normal_branch.index('fi', normal_branch.index('type_obsidian_raw_smoke_text "$second_fragment"'))]
 normal_required = [
     'settle_obsidian_focus_for_smoke "Obsidian post-accept setup"',
-    'assert_obsidian_smoke_target "Smoke proof feels instant"',
+    'assert_obsidian_smoke_target "$first_expected_suffix"',
+    'elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then\n      move_obsidian_caret_to_document_end',
     'second_start_line="$(line_count "$LOG_PATH")"',
-    'type_obsidian_raw_smoke_text " and stays"',
+    'type_obsidian_raw_smoke_text "$second_fragment"',
+    'elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" ]]; then\n      set_obsidian_caret_to_value_end\n      move_obsidian_caret_to_document_end',
 ]
 normal_positions = [normal_branch.find(text) for text in normal_required]
 if any(position < 0 for position in normal_positions) or normal_positions != sorted(normal_positions):
@@ -1206,8 +1543,13 @@ if ! grep -F "seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text" "$TMP_DIR/code
   echo "real app smoke self-test did not explain the Codex targeted proof seed" >&2
   exit 1
 fi
-if ! grep -F "backs it up privately and restores it after the no-submit proof" "$TMP_DIR/codex.txt" >/dev/null; then
+if ! grep -F "backs it up privately and restores it after the no-submit proof; empty proof composers are cleared" "$TMP_DIR/codex.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Codex draft restore guard" >&2
+  exit 1
+fi
+if ! grep -F '[[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -f "$CODEX_DRAFT_BACKUP_PATH" ]]' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Cleared Codex proof composer after proof." script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected empty Codex proof composers to be cleared during cleanup" >&2
   exit 1
 fi
 if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev/null; then
@@ -1216,6 +1558,12 @@ if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev
 fi
 if ! grep -F "assert_codex_proof_prompt_ready" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Codex proof to read-verify the focused marker composer before Tab" >&2
+  exit 1
+fi
+if ! grep -F "codex_ax_helper seed" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "prompt_app_ax_proof_helper.swift" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CODEX_COMPOSER_DISCOVERY_TIMEOUT_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Codex proof to use the shared hardened prompt AX helper" >&2
   exit 1
 fi
 if ! grep -F "maxDepth: 12" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
@@ -1230,6 +1578,30 @@ if ! grep -F "codex-proof-insert-verification-fast-path" Sources/AutocompleteLab
   echo "real app smoke self-test expected proof-only Codex insertion verification fast path diagnostics" >&2
   exit 1
 fi
+if ! awk '/run_codex\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex proof to press Tab through CGEvent session events" >&2
+  exit 1
+fi
+if ! grep -F 'ensure_cgevent_keypress_helper()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'cgevent_keypress_helper_path()' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/run_codex\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /ensure_cgevent_keypress_helper/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex proof to warm the CGEvent keypress helper before showing a suggestion" >&2
+  exit 1
+fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("run_codex()")
+end = source.index("run_claude_code_terminal_host_smoke()", start)
+block = source[start:end]
+if block.index("focus_codex_proof_prompt") > block.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"'):
+    raise SystemExit("Codex proof must focus the marker composer before waiting for the visible suggestion")
+after_visible = block.split('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"', 1)[1]
+before_tab = after_visible.split("press_key_code_cgevent 48", 1)[0]
+if "focus_codex_proof_prompt" in before_tab or "assert_codex_proof_prompt_ready" in before_tab:
+    raise SystemExit("Codex proof must not refocus the composer after the suggestion is visible")
+PY
 
 script/real_app_smoke.sh claude-code --dry-run >"$TMP_DIR/claude-code.txt"
 if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/claude-code.txt" >/dev/null; then
@@ -1258,10 +1630,327 @@ if ! grep -F "Claude Code proof label: claude-code-terminal" "$TMP_DIR/claude-co
   echo "real app smoke self-test did not print the Claude Code Terminal proof label" >&2
   exit 1
 fi
-
+if ! grep -F 'proof_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TEXT:-Make this setting $marker the feature con}"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code default proof text to keep the marker near the caret" >&2
+  exit 1
+fi
+if ! grep -F 'claude_code_terminal_smoke_input_text()' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/claude_code_terminal_smoke_input_text\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /claude_code_smoke_proof_text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to keep the inline marker in the typed prompt" >&2
+  exit 1
+fi
+if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Make this setting the feature' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Please make this' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_log_pattern_optional' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'produced no visible suggestion; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts when no suggestion appears" >&2
+  exit 1
+fi
+if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyDown.flags = []' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyUp.flags = []' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through CGEvent session events" >&2
+  exit 1
+fi
+if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the automated Terminal-host Claude Code proof" >&2
+  exit 1
+fi
 script/real_app_smoke.sh claude-code-iterm2 --dry-run >"$TMP_DIR/claude-code-iterm2.txt"
 if ! grep -F "Claude Code host: iTerm2 (com.googlecode.iterm2)" "$TMP_DIR/claude-code-iterm2.txt" >/dev/null; then
   echo "real app smoke self-test did not parse the Claude Code iTerm2 alias" >&2
+  exit 1
+fi
+if ! grep -F "automated iTerm2-host Claude Code proof" "$TMP_DIR/claude-code-iterm2.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the automated iTerm2-host Claude Code proof" >&2
+  exit 1
+fi
+script/real_app_smoke.sh claude-code-ghostty --dry-run >"$TMP_DIR/claude-code-ghostty.txt"
+if ! grep -F "Claude Code host: Ghostty (com.mitchellh.ghostty)" "$TMP_DIR/claude-code-ghostty.txt" >/dev/null; then
+  echo "real app smoke self-test did not parse the Claude Code Ghostty alias" >&2
+  exit 1
+fi
+if ! grep -F "automated Ghostty-host Claude Code proof" "$TMP_DIR/claude-code-ghostty.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the automated Ghostty-host Claude Code proof" >&2
+  exit 1
+fi
+if ! grep -F "run_claude_code_terminal_host_smoke" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code to automate proof and confirm the no-submit marker" >&2
+  exit 1
+fi
+
+script/real_app_smoke.sh claude-code-model-latency --dry-run >"$TMP_DIR/claude-code-model-latency.txt"
+if ! grep -F "terminal-host Claude Code model latency proof" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code model latency proof lane" >&2
+  exit 1
+fi
+if ! grep -F "scenario claude-code-model-latency" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not label the Claude Code model latency proof scenario" >&2
+  exit 1
+fi
+if ! grep -F "never presses Tab, Enter, or full accept" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not state the Claude Code model latency no-submit key guard" >&2
+  exit 1
+fi
+if ! grep -F "model-backed visible suggestions without submitting" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not state the Claude Code model latency proof target" >&2
+  exit 1
+fi
+if ! grep -F "fresh title-marked disposable Terminal Claude Code prompt per sample" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test did not state the Claude Code model latency fresh-prompt sampling plan" >&2
+  exit 1
+fi
+if ! grep -F "Claude Code host: Terminal (com.apple.Terminal)" "$TMP_DIR/claude-code-model-latency.txt" >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to pin Terminal" >&2
+  exit 1
+fi
+if ! grep -F 'Claude Code model latency sample $sample_index must include $marker' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency samples to carry the current-line proof marker" >&2
+  exit 1
+fi
+if ! grep -F "model-backed visible suggestion during the typed sample window" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to count model-backed suggestions from the typed sample window" >&2
+  exit 1
+fi
+if ! grep -F 'expected_before_chars="${#expected_user_text}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"beforeChars=$expected_before_chars"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"partialWordCharacters=${#trigger_text}"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to match the exact typed sample shape" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to expose a settle knob" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SUGGESTION_WAIT_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to expose a suggestion wait knob" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_FRESH_PROMPT_PER_SAMPLE" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to expose fresh-prompt sampling control" >&2
+  exit 1
+fi
+if ! grep -F "cleanup_stale_claude_code_terminal_proofs" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "make_claude_code_terminal_proof_dir" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "steadytype-claude-code-proof" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "kill -KILL" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency to clean up stale proof Terminal windows" >&2
+  exit 1
+fi
+if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /keystroke "k" using command down/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to clear Terminal scrollback" >&2
+  exit 1
+fi
+if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /keystroke "l" using control down/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to clear the visible screen" >&2
+  exit 1
+fi
+if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /key code 53/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to dismiss stale visible suggestions with Esc" >&2
+  exit 1
+fi
+if awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /(key code 36|key code 48|keystroke return|keystroke tab)/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal prompt clearing not to press Enter or Tab" >&2
+  exit 1
+fi
+if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint "❯"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to require Claude-specific chrome, not a generic prompt glyph" >&2
+  exit 1
+fi
+if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint / { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to use process proof instead of brittle placeholder hints" >&2
+  exit 1
+fi
+if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /wait_for_claude_code_terminal_process/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to wait for the launched claude process" >&2
+  exit 1
+fi
+if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /iterm2\|ghostty/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected iTerm2 and Ghostty prompt readiness to rely on process proof before typed marker checks" >&2
+  exit 1
+fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to settle before typing samples" >&2
+  exit 1
+fi
+if awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /assert_claude_code_terminal_prompt_retains_marker\(\)/ { in_assert = 0 } in_assert && /claude_code_terminal_ax_helper wait/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected typed Claude Code prompt text checks not to require placeholder hints" >&2
+  exit 1
+fi
+if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$proof_dir/claude.pid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "process_tree_contains_name" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal proof cleanup/readiness to track the disposable Claude process" >&2
+  exit 1
+fi
+if ! grep -F 'open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof launch to set a title marker and disable window restoration" >&2
+  exit 1
+fi
+if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open -na "$host_app" "$launch_script"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host launch to use disposable command files" >&2
+  exit 1
+fi
+if ! grep -F 'process_id_has_name "$proof_pid" "$expected_name"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile" >&2
+  exit 1
+fi
+if ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host Tab proof to press Tab through CGEvent session events" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_wait = 0; saw_refocus = 0; saw_clear = 0; saw_type = 0 }
+  /^}/ && in_smoke {
+    if (saw_wait && saw_refocus && saw_clear && saw_type) { found = 1 }
+    in_smoke = 0
+  }
+  in_smoke && /wait_for_claude_code_terminal_prompt/ { saw_wait = 1 }
+  in_smoke && saw_wait && /wait_for_frontmost_claude_code_terminal_proof_process/ { saw_refocus = 1 }
+  in_smoke && saw_refocus && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 }
+  in_smoke && saw_clear && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host proof to clear stale prompt text before bulk typing" >&2
+  exit 1
+fi
+if ! awk '
+  /type_claude_code_terminal_raw_smoke_text\(\)/ { in_type = 1; saw_bulk_flag = 0 }
+  /^}/ && in_type { in_type = 0 }
+  in_type && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE/ { saw_bulk_flag = 1 }
+  in_type && saw_bulk_flag && /keystroke rawText/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host proof typing to support bulk text input" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_press = 0; saw_screenshot = 0 }
+  /^}/ && in_smoke {
+    if (saw_press && saw_screenshot) { found = 1 }
+    in_smoke = 0
+  }
+  in_smoke && /press_key_code_cgevent 48/ { saw_press = 1 }
+  in_smoke && /wait_for_screenshot_capture_if_enabled/ {
+    if (saw_press) { saw_screenshot = 1 }
+  }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host Tab acceptance before screenshot waiting" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_accept_window = 0; saw_type = 0 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /accept_start_line="\$\(line_count "\$LOG_PATH"\)"/ { saw_accept_window = 1 }
+  in_smoke && /type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
+  in_smoke && saw_type && !saw_accept_window { saw_late_accept_window = 1 }
+  in_smoke && /wait_for_log_pattern_optional/ { saw_suggestion_wait = 1 }
+  in_smoke && /wait_for_claude_code_terminal_tab_acceptance/ { saw_accept_wait = 1 }
+  END { exit (saw_accept_window && !saw_late_accept_window && saw_suggestion_wait && saw_accept_wait) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host acceptance waits to start before typing can race the proof" >&2
+  exit 1
+fi
+if ! awk '
+  /wait_for_claude_code_terminal_tab_acceptance\(\)/ { in_helper = 1 }
+  /^}/ && in_helper { in_helper = 0 }
+  in_helper && /handled=false/ { saw_fail_closed = 1 }
+  in_helper && /Observed handled=false/ { saw_message = 1 }
+  END { exit (saw_fail_closed && saw_message) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host acceptance helper to fail fast on handled=false" >&2
+  exit 1
+fi
+if awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; after_suggestion = 0 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /wait_for_log_pattern_optional/ { after_suggestion = 1 }
+  in_smoke && after_suggestion && /assert_frontmost_app/ { found = 1 }
+  in_smoke && after_suggestion && /press_key_code_cgevent 48/ { after_suggestion = 0 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host hot accept path not to run slow focus checks" >&2
+  exit 1
+fi
+if ! grep -F 'kill "$proof_process_pid"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host cleanup to kill the proof claude pid" >&2
+  exit 1
+fi
+if ! grep -F 'printf '"'"'cd %q\n'"'"' "$ROOT_DIR"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal proof to launch Claude from the trusted repo root" >&2
+  exit 1
+fi
+if awk '/open_claude_code_terminal_proof\(\)/ { in_open = 1 } /cleanup_claude_code_terminal_proof\(\)/ { in_open = 0 } in_open && /keystroke shellCommand|AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_COMMAND/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code Terminal launch not to type the launch command into a shell" >&2
+  exit 1
+fi
+if ! grep -F "claude_code_host_process_name" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "wait_for_new_terminal_pids" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "wait_for_frontmost_claude_code_terminal_proof_process" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host launch to activate the disposable host process before typing" >&2
+  exit 1
+fi
+if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "type_claude_code_terminal_raw_smoke_text" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "check_prompt_app_proof.sh" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "claude-code-model-latency" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency helper, typing, prompt proof, and scenario wiring" >&2
+  exit 1
+fi
+if ! grep -F '"source": "cgHardwareKeyEvents"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgHardwareKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEvents"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEventsBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgHardwareKeyEventsGlobal"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgHardwareKeyEventsGlobalBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEventsGlobal"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"source": "cgUnicodeKeyEventsGlobalBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'source: "pasteboardCommandVToPid"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'baselineSource: "pasteboardCommandVToPidBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'source: "pasteboardCommandV"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'baselineSource: "pasteboardCommandVBaseline"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"reason": "terminal-verified-insertion-failed"' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal insertion to try verified key events and proof-only paste before failing closed" >&2
+  exit 1
+fi
+if grep -F "accessibilityMenuPaste" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   grep -F "postClaudeCodeTerminalHostProofPasteViaAccessibilityMenu" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   grep -F "pasteboard-prepare-start" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Claude Code Terminal fallback not to use blocking AX menu paths" >&2
+  exit 1
+fi
+if ! grep -F 'schedulePasteboardRestore' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'pasteboard.changeCount' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'postCommandVKey(processIdentifier: processIdentifier)' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected proof-only paste fallback to restore the pasteboard after verified insertion attempts" >&2
+  exit 1
+fi
+if awk '/if Self\.postUnicodeTextKeyEvents/ { in_unicode = 1 } /if insertClaudeCodeTerminalHostProofPasteboardText/ { in_unicode = 0 } in_unicode && /return verified/ { found = 1 } END { exit found ? 0 : 1 }' Sources/AutocompleteLabApp/App/AppDelegate.swift; then
+  echo "real app smoke self-test expected unverified Claude Code Terminal Unicode insertion not to skip verified paste fallback" >&2
+  exit 1
+fi
+if grep -F "press_key_code 48" script/real_app_smoke.sh | grep -F "claude_code" >/dev/null; then
+  echo "real app smoke self-test expected Claude Code model latency not to press Tab" >&2
+  exit 1
+fi
+if script/real_app_smoke.sh claude-code-model-latency --skip-build --dry-run >/dev/null 2>"$TMP_DIR/claude-code-model-latency-skip-build.txt"; then
+  echo "real app smoke self-test expected Claude Code model latency to reject --skip-build" >&2
+  exit 1
+fi
+if ! grep -F "claude-code-model-latency cannot be combined with --skip-build" "$TMP_DIR/claude-code-model-latency-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Claude Code model latency skip-build failure" >&2
   exit 1
 fi
 

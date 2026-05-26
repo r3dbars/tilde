@@ -56,6 +56,7 @@ Useful docs:
 - [Known limitations](KNOWN-LIMITATIONS.md)
 - [Diagnostic export](DIAGNOSTIC-EXPORT.md)
 - [Personal Capture](docs/product/personal-capture.md)
+- [Daily Driver Phrase Mode](docs/product/daily-driver-phrase-mode.md)
 - [Uninstall and delete data](UNINSTALL-DELETE-DATA.md)
 
 ## Runtime

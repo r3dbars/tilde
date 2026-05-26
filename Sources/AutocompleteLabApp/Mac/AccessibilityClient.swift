@@ -691,6 +691,81 @@ final class AccessibilityClient: @unchecked Sendable {
         return (windowValue as! AXUIElement)
     }
 
+    func focusedWindowText(
+        for app: RunningApplicationInfo,
+        maximumCharacters: Int = 4_000
+    ) -> String? {
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        configureMessagingTimeout(for: appElement)
+        var values: [String] = []
+        if let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute),
+           CFGetTypeID(focusedElementValue) == AXUIElementGetTypeID() {
+            collectAccessibleText(
+                from: (focusedElementValue as! AXUIElement),
+                depth: 0,
+                maximumCharacters: maximumCharacters,
+                into: &values
+            )
+        }
+        if let focusedWindow = focusedWindow(for: app.processIdentifier) {
+            collectAccessibleText(
+                from: focusedWindow,
+                depth: 0,
+                maximumCharacters: maximumCharacters,
+                into: &values
+            )
+        }
+        let windows = copyAttribute(appElement, attribute: kAXWindowsAttribute) as? [AXUIElement] ?? []
+        for window in windows {
+            collectAccessibleText(
+                from: window,
+                depth: 0,
+                maximumCharacters: maximumCharacters,
+                into: &values
+            )
+        }
+        let text = values
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    private func collectAccessibleText(
+        from element: AXUIElement,
+        depth: Int,
+        maximumCharacters: Int,
+        into values: inout [String]
+    ) {
+        guard depth <= 12,
+              values.joined(separator: "\n").count < maximumCharacters else {
+            return
+        }
+
+        configureMessagingTimeout(for: element)
+        for attribute in [
+            kAXValueAttribute as String,
+            kAXTitleAttribute as String,
+            kAXDescriptionAttribute as String,
+            kAXHelpAttribute as String
+        ] {
+            guard let value = copyAttribute(element, attribute: attribute) as? String,
+                  !value.isEmpty else {
+                continue
+            }
+            values.append(value)
+        }
+
+        let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        for child in children {
+            collectAccessibleText(
+                from: child,
+                depth: depth + 1,
+                maximumCharacters: maximumCharacters,
+                into: &values
+            )
+        }
+    }
+
     private func bestEditableDescendant(in element: AXUIElement) -> AXUIElement? {
         let result = editableDescendantSearchResult(in: element)
         return result.focusedTextEntry ?? result.firstTextEntry ?? result.focusedWebArea ?? result.firstWebArea

@@ -8,6 +8,8 @@ let marker = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER"] ?? "SteadyTyp
 let expectedSuffix = environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX"] ?? ""
 let resetText = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_TEXT"] ?? marker
 let insertionText = environment["AUTOCOMPLETE_LAB_OBSIDIAN_RAW_TEXT"] ?? ""
+let requireExpectedSuffixInEditor = environment["AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX_REQUIRES_EDITOR"] == "1"
+let focusCurrentValueEnd = environment["AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_CURRENT_VALUE_END"] == "1"
 let defaultProofFile = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent("Library/Application Support/AutocompleteLab/ObsidianProofVault/Proof/placement-proof.md")
 let proofFile = environment["AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_FILE"].map(URL.init(fileURLWithPath:)) ?? defaultProofFile
@@ -163,8 +165,7 @@ func focusAtEnd(_ editor: AXUIElement, text: String) -> Bool {
 }
 
 func focusTextForDocumentEnd(currentText: String, fileText: String = proofFileText()) -> String {
-    guard fileText.localizedCaseInsensitiveContains(marker),
-          fileText.utf16.count > currentText.utf16.count else {
+    guard fileText.localizedCaseInsensitiveContains(marker) else {
         return currentText
     }
 
@@ -175,7 +176,44 @@ func focusTextForDocumentEnd(currentText: String, fileText: String = proofFileTe
         }
     }
 
+    if proofFile.path.contains("AutocompleteLab/ObsidianProofVault/") {
+        return fileText
+    }
+
+    guard fileText.utf16.count > currentText.utf16.count else {
+        return currentText
+    }
+
     return fileText
+}
+
+func focusSelectionTextForDocumentEnd(currentText: String, fileText: String = proofFileText()) -> String {
+    guard fileText.localizedCaseInsensitiveContains(marker) else {
+        return currentText
+    }
+
+    if !expectedSuffix.isEmpty {
+        let trimmedFileText = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedFileText.hasSuffix(expectedSuffix) else {
+            return currentText
+        }
+    }
+
+    if let range = currentText.range(of: fileText) {
+        return String(currentText[..<range.upperBound])
+    }
+
+    let trimmedFileText = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmedFileText.isEmpty,
+       let range = currentText.range(of: trimmedFileText) {
+        return String(currentText[..<range.upperBound])
+    }
+
+    if normalizedWhitespace(currentText).hasSuffix(normalizedWhitespace(fileText)) {
+        return currentText
+    }
+
+    return focusTextForDocumentEnd(currentText: currentText, fileText: fileText)
 }
 
 guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "md.obsidian" }) else {
@@ -209,21 +247,26 @@ case "assert":
     if !expectedSuffix.isEmpty {
         let trimmedCurrentText = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedFileText = fileText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedCurrentText.hasSuffix(expectedSuffix)
-            || trimmedFileText.hasSuffix(expectedSuffix) else {
+        let currentTextHasSuffix = trimmedCurrentText.hasSuffix(expectedSuffix)
+        let fileTextHasSuffix = trimmedFileText.hasSuffix(expectedSuffix)
+        guard currentTextHasSuffix
+            || (!requireExpectedSuffixInEditor && fileTextHasSuffix) else {
             fputs("Refusing Obsidian proof because the focused smoke note does not end with the expected disposable text.\n", stderr)
             exit(3)
         }
     }
 
-    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText, fileText: fileText)) else {
+    let focusText = focusCurrentValueEnd
+        ? currentText
+        : focusSelectionTextForDocumentEnd(currentText: currentText, fileText: fileText)
+    guard focusAtEnd(editor, text: focusText) else {
         fputs("Could not place the Obsidian caret at the disposable editor end.\n", stderr)
         exit(3)
     }
     print("Obsidian smoke target confirmed")
 
 case "focus":
-    guard focusAtEnd(editor, text: focusTextForDocumentEnd(currentText: currentText)) else {
+    guard focusAtEnd(editor, text: focusSelectionTextForDocumentEnd(currentText: currentText)) else {
         exit(3)
     }
 
@@ -254,7 +297,13 @@ case "insert":
         exit(3)
     }
 
-    _ = focusAtEnd(editor, text: replacementText)
+    _ = focusAtEnd(
+        editor,
+        text: focusSelectionTextForDocumentEnd(
+            currentText: textValue(of: editor),
+            fileText: replacementText
+        )
+    )
 
 default:
     fputs("Unknown Obsidian AX editor action: \(action)\n", stderr)
