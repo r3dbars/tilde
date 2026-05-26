@@ -109,6 +109,28 @@ EXPECTED_SURFACES: tuple[ExpectedSurface, ...] = (
         ),
     ),
     ExpectedSurface(
+        surface="Browser webmail",
+        decision="blocked",
+        proof_state="blocked",
+        smoke_command="script/real_app_smoke.sh chrome --fixture browser-webmail",
+        profile_bundles=(
+            "com.google.Chrome",
+            "com.apple.Safari",
+            "com.brave.Browser",
+            "org.mozilla.firefox",
+        ),
+        required_proof=(
+            "compose-body-only placement",
+            "safe one-word Tab",
+            "no send",
+            "no recipient/subject/search/account-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "latency proof",
+            "screenshot-backed current-head evidence",
+        ),
+    ),
+    ExpectedSurface(
         surface="Browser ChatGPT",
         decision="blocked",
         proof_state="blocked",
@@ -454,7 +476,14 @@ def profile_checks() -> list[Check]:
 def smoke_checks() -> list[Check]:
     smoke = text("script/real_app_smoke.sh")
     smoke_self_test = text("script/real_app_smoke_self_test.sh")
-    fixtures = ("google-docs", "notion", "browser-chatgpt", "browser-slack", "browser-discord")
+    fixtures = (
+        "google-docs",
+        "notion",
+        "browser-webmail",
+        "browser-chatgpt",
+        "browser-slack",
+        "browser-discord",
+    )
     return [
         Check(
             4,
@@ -551,6 +580,7 @@ def status_and_test_checks() -> list[Check]:
         "Slack browser/desktop: blocked",
         "Discord browser/desktop: blocked",
         "Mail compose: diagnostics-only",
+        "Browser webmail: blocked",
         "Browser ChatGPT: blocked",
         "Chrome production text fields: blocked",
         "Claude desktop layouts: proof-only",
@@ -573,6 +603,7 @@ def status_and_test_checks() -> list[Check]:
                     "Focused graduation decisions:",
                     "Google Docs browser: blocked",
                     "Mail compose: diagnostics-only",
+                    "Browser webmail: blocked",
                     "Chrome production text fields: blocked",
                     "Claude desktop layouts: proof-only",
                     "Codex layouts: proof-only",

@@ -39,6 +39,10 @@ without sharing what the tester typed.
 
 ## How To Export
 
+For the 2-3 tester pilot, share only the redacted Privacy Bundle. Do not share
+raw logs, screenshots, typed text, prompts, URLs, document names, recipients, or
+subject lines.
+
 Open `Debug` -> `Diagnostics` from the menu bar and use `Export Privacy Bundle`.
 
 For beta feedback, use the structured issue form from `Submit Feedback...`.

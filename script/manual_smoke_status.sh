@@ -376,6 +376,7 @@ print_focused_graduation_decisions() {
   echo "- Slack browser/desktop: blocked - no disposable real-service channel no-send screenshot and insertion proof yet; local fixtures do not count."
   echo "- Discord browser/desktop: blocked - no disposable real-service server/channel no-send screenshot and insertion proof yet; local fixtures do not count."
   echo "- Mail compose: diagnostics-only - compose text is sensitive and insertion is unproven."
+  echo "- Browser webmail: blocked - no disposable real-service compose-body, safe-Tab, no-send, undo, latency, and screenshot proof yet; local fixtures do not count."
   echo "- Browser ChatGPT: blocked - no disposable real-service one-word no-submit screenshot and insertion proof yet; the browser-chat harness does not count."
   echo "- Chrome production text fields: blocked - public or production browser text fields do not count as beta-safe local fixtures."
   echo "- Claude desktop layouts: proof-only - default one-word proof exists; normal beta use and layout variants remain blocked."

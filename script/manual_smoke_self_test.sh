@@ -603,6 +603,7 @@ fi
 if ! grep -F -- "Focused graduation decisions:" "$STATUS_OUTPUT" >/dev/null ||
    ! grep -F -- "- Google Docs browser: blocked" "$STATUS_OUTPUT" >/dev/null ||
    ! grep -F -- "- Mail compose: diagnostics-only" "$STATUS_OUTPUT" >/dev/null ||
+   ! grep -F -- "- Browser webmail: blocked" "$STATUS_OUTPUT" >/dev/null ||
    ! grep -F -- "- Chrome production text fields: blocked" "$STATUS_OUTPUT" >/dev/null ||
    ! grep -F -- "- Claude desktop layouts: proof-only" "$STATUS_OUTPUT" >/dev/null ||
    ! grep -F -- "- Codex layouts: proof-only" "$STATUS_OUTPUT" >/dev/null; then

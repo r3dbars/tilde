@@ -159,6 +159,7 @@ if ! grep -F "Packaged model latency proof: reusing the already-running app beca
 fi
 
 if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'insert_textedit_smoke_fragment()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'TextEdit model latency stable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1' script/real_app_smoke.sh >/dev/null ||
@@ -1001,7 +1002,7 @@ if ! grep -F "does not enable Slack, Discord, ChatGPT, or broad browser chat sup
   exit 1
 fi
 
-for blocked_fixture in google-docs notion browser-chatgpt browser-slack browser-discord; do
+for blocked_fixture in google-docs notion browser-webmail browser-gmail browser-outlook browser-chatgpt browser-slack browser-discord; do
   script/real_app_smoke.sh chrome --fixture "$blocked_fixture" --dry-run >"$TMP_DIR/chrome-$blocked_fixture.txt"
   if ! grep -F "blocked preflight only" "$TMP_DIR/chrome-$blocked_fixture.txt" >/dev/null; then
     echo "real app smoke self-test did not print the Chrome $blocked_fixture blocked plan" >&2
