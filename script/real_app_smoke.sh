@@ -13,11 +13,16 @@ TEXTEDIT_VARIANT=""
 DRY_RUN=0
 MANUAL_GATE=0
 SKIP_BUILD="${AUTOCOMPLETE_LAB_REAL_APP_SKIP_BUILD:-0}"
+ALLOW_MODEL_LATENCY_SKIP_BUILD="${AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD:-0}"
 CHROME_FIXTURE="${AUTOCOMPLETE_LAB_CHROME_FIXTURE:-textarea}"
 CHROME_FIXTURE_WAS_SET=0
 CHROME_ACCESSIBILITY_MODE="${AUTOCOMPLETE_LAB_CHROME_ACCESSIBILITY_MODE:-forced}"
 CHROME_ACCESSIBILITY_MODE_WAS_SET=0
 CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
+CHROME_MODEL_LATENCY=0
+CODEX_MODEL_LATENCY=0
+CLAUDE_CODE_MODEL_LATENCY=0
+CLAUDE_MODEL_LATENCY=0
 CHROME_REMOTE_DEBUGGING_PORT=""
 NATIVE_UNDO_PROOF="${AUTOCOMPLETE_LAB_NATIVE_UNDO_PROOF:-0}"
 CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
@@ -56,19 +61,38 @@ TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
 CODEX_DRAFT_BACKUP_ACTIVE=0
+CLAUDE_CODE_TERMINAL_PROOF_TITLE=""
+CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
+CLAUDE_DRAFT_BACKUP_PATH=""
+CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
+CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
 SMOKE_PHASE="startup"
+
+allow_model_latency_skip_build() {
+  [[ "$ALLOW_MODEL_LATENCY_SKIP_BUILD" =~ ^(1|true|yes|on)$ ]]
+}
+
+is_model_latency_lane() {
+  [[ "$TEXTEDIT_VARIANT" == "model-latency" ]] ||
+    [[ "$TEXTEDIT_VARIANT" == "default-model-latency" ]] ||
+    [[ "$CHROME_MODEL_LATENCY" == "1" ]] ||
+    [[ "$CODEX_MODEL_LATENCY" == "1" ]] ||
+    [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]] ||
+    [[ "$CLAUDE_MODEL_LATENCY" == "1" ]]
+}
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|codex|codex-model-latency|claude-code|claude-code-terminal|claude-code-model-latency|claude-code-terminal-model-latency|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-model-latency|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
 Claude Code, and Claude desktop are manual-gated so this script never types
 into private notes, vaults, terminal prompts, or agent prompts by surprise.
-The Codex lane uses a targeted disposable proof helper after the manual gate:
-it seeds AUTOCOMPLETE_LAB_CODEX_PROOF text into a safe composer, presses Tab
-once, and never presses Enter.
+The Codex and Terminal-host Claude Code lanes use targeted disposable proof
+helpers after the manual gate: they seed marked proof text, press Tab once, and
+never press Enter.
 
 Notes proof must use notes-title, notes-body, notes-checklist, their
 notes-*-undo variants, or explicit Notes variant lanes such as
@@ -112,6 +136,19 @@ Use
 --fixture all to run every local Chrome browser/editor fixture with one app
 build. Add --include-default-real-editor-proof with --fixture all to rerun real
 Monaco and ProseMirror in default Chrome AX mode after the forced lane.
+Use chrome-textarea-model-latency or chrome-contenteditable-model-latency to
+relaunch SteadyType with fast completions and phrase continuations disabled,
+then prove the local model path in a disposable Chrome fixture.
+Use codex-model-latency with --manual-gate to seed disposable Codex prompt text,
+keep Enter untouched, and prove prompt no-submit local model timing in one
+bounded launch.
+Use claude-model-latency with --manual-gate to seed disposable Claude desktop
+prompt text, keep Enter untouched, and prove prompt no-submit local model timing
+in one bounded launch.
+Use claude-code-model-latency with --manual-gate to open a disposable Terminal
+Claude Code prompt, type marked disposable proof context and trigger
+characters, and prove terminal-host no-submit local model timing without Tab,
+Enter, or full accept.
 
 Claude Code is proof-only through supported terminal hosts. Use --host or the
 claude-code-<host> aliases to record host-specific proof labels without enabling
@@ -120,8 +157,11 @@ normal terminal suggestions.
 --skip-build reuses the already-running AutocompleteLab app. It fails closed unless
 the only running SteadyType process is this checkout's dist/SteadyType.app binary
 and that process already has any proof-mode environment needed by the smoke pass.
-The textedit-model-latency lane does not allow --skip-build because it must
-relaunch SteadyType with fast word completions disabled before sampling.
+The model-latency lanes do not allow --skip-build because they must relaunch
+SteadyType with fast word completions disabled before sampling. For packaged
+release artifact proof only, set AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1
+after launching that exact app with the required proof-mode environment; the
+strict latency selector must still prove the tagged runtime launch.
 
 --native-undo-proof relaunches AutocompleteLab with app rollback disabled,
 passes Command-Z through to the target app, and records native single-edit undo
@@ -245,6 +285,26 @@ case "$APP" in
     APP="textedit"
     TEXTEDIT_VARIANT="default-model-latency"
     ;;
+  chrome-textarea-model-latency)
+    APP="chrome"
+    CHROME_FIXTURE="textarea"
+    CHROME_FIXTURE_WAS_SET=1
+    CHROME_MODEL_LATENCY=1
+    ;;
+  chrome-contenteditable-model-latency)
+    APP="chrome"
+    CHROME_FIXTURE="contenteditable"
+    CHROME_FIXTURE_WAS_SET=1
+    CHROME_MODEL_LATENCY=1
+    ;;
+  codex-model-latency)
+    APP="codex"
+    CODEX_MODEL_LATENCY=1
+    ;;
+  claude-model-latency)
+    APP="claude"
+    CLAUDE_MODEL_LATENCY=1
+    ;;
   notes-title)
     APP="notes"
     NOTES_SESSION_APP="notes-title"
@@ -329,6 +389,12 @@ case "$APP" in
     APP="claude-code"
     CLAUDE_CODE_HOST_VARIANT="terminal"
     CLAUDE_CODE_HOST_WAS_SET=1
+    ;;
+  claude-code-model-latency|claude-code-terminal-model-latency)
+    APP="claude-code"
+    CLAUDE_CODE_HOST_VARIANT="terminal"
+    CLAUDE_CODE_HOST_WAS_SET=1
+    CLAUDE_CODE_MODEL_LATENCY=1
     ;;
   claude-code-iterm2)
     APP="claude-code"
@@ -447,14 +513,38 @@ if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ && "$SKIP_BUILD" == "1" ]]; then
   exit 2
 fi
 
-if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "model-latency" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "textedit-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
 
-if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]]; then
+if [[ "$APP" == "textedit" && "$TEXTEDIT_VARIANT" == "default-model-latency" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "textedit-default-model-latency cannot be combined with --skip-build because the app must relaunch with word completions and the fast phrase fallback disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "chrome" && "$CHROME_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
+  echo "$REQUESTED_APP cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "codex" && "$CODEX_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
+  echo "codex-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "claude" && "$CLAUDE_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
+  echo "claude-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "claude-code" && "$CLAUDE_CODE_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
+  echo "claude-code-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
   exit 2
 fi
@@ -642,6 +732,8 @@ cleanup_smoke() {
 
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
+  cleanup_claude_code_terminal_proof
+  restore_claude_draft_if_needed
   cleanup_smoke_chrome_pids
   cleanup_smoke_http_pids
   cleanup_smoke_tmp_dirs
@@ -1260,6 +1352,15 @@ make_tmp_dir() {
   printf '%s\n' "$tmp_dir"
 }
 
+make_claude_code_terminal_proof_dir() {
+  local base_dir tmp_dir
+  base_dir="${TMPDIR:-/tmp}"
+  base_dir="${base_dir%/}"
+  tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
+  SMOKE_TMP_DIRS+=("$tmp_dir")
+  printf '%s\n' "$tmp_dir"
+}
+
 line_count() {
   local path="$1"
   if [[ -f "$path" ]]; then
@@ -1341,6 +1442,35 @@ wait_for_log_pattern() {
   exit 1
 }
 
+wait_for_log_pattern_optional() {
+  local start_line="$1"
+  local pattern="$2"
+  local timeout_seconds="${3:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if log_since_matches "$start_line" "$pattern"; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
+log_since_has_fields() {
+  local start_line="$1"
+  local prefix="$2"
+  shift 2
+  local lines
+  lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
+  local field
+  for field in "$@"; do
+    lines="$(grep -F "$field" <<<"$lines" || true)"
+  done
+  [[ -n "$lines" ]]
+}
+
 wait_for_log_fields() {
   local start_line="$1"
   local label="$2"
@@ -1350,13 +1480,7 @@ wait_for_log_fields() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    local lines
-    lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
-    local field
-    for field in "$@"; do
-      lines="$(grep -F "$field" <<<"$lines" || true)"
-    done
-    if [[ -n "$lines" ]]; then
+    if log_since_has_fields "$start_line" "$prefix" "$@"; then
       return 0
     fi
     sleep 0.2
@@ -1377,19 +1501,53 @@ wait_for_log_fields_optional() {
   local deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
-    local lines
-    lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
-    local field
-    for field in "$@"; do
-      lines="$(grep -F "$field" <<<"$lines" || true)"
-    done
-    if [[ -n "$lines" ]]; then
+    if log_since_has_fields "$start_line" "$prefix" "$@"; then
       return 0
     fi
     sleep 0.2
   done
 
   return 1
+}
+
+wait_for_claude_code_terminal_tab_acceptance() {
+  local start_line="$1"
+  local host_name="$2"
+  local timeout_seconds="$3"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if log_since_has_fields "$start_line" \
+      "keyboard-action" \
+      "app=com.anthropic.claude-code" \
+      "key=tab" \
+      "action=acceptNextWord" \
+      "handled=true"; then
+      return 0
+    fi
+
+    if log_since_has_fields "$start_line" \
+      "keyboard-action" \
+      "app=com.anthropic.claude-code" \
+      "key=tab" \
+      "action=acceptNextWord" \
+      "handled=false"; then
+      echo "Claude Code $host_name Tab acceptance failed closed." >&2
+      echo "Required fields: keyboard-action app=com.anthropic.claude-code key=tab action=acceptNextWord handled=true" >&2
+      echo "Observed handled=false; the app consumed Tab and refused to insert unverified text." >&2
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+      exit 1
+    fi
+
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Claude Code $host_name Tab acceptance." >&2
+  echo "Required fields: keyboard-action app=com.anthropic.claude-code key=tab action=acceptNextWord handled=true" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+  exit 1
 }
 
 wait_for_obsidian_long_note_second_suggestion() {
@@ -1399,16 +1557,23 @@ wait_for_obsidian_long_note_second_suggestion() {
   local deadline=$((SECONDS + timeout_seconds))
   local max_before_chars=$((expected_before_chars + 2))
   local min_before_chars=$((expected_before_chars - 1))
+  local min_visible_before_chars=40
   if (( min_before_chars < 0 )); then
     min_before_chars=0
   fi
 
   while ((SECONDS <= deadline)); do
-    if python3 - "$LOG_PATH" "$start_line" "$min_before_chars" "$max_before_chars" <<'PY'
+    if python3 - "$LOG_PATH" "$start_line" "$min_before_chars" "$max_before_chars" "$min_visible_before_chars" <<'PY'
 import re
 import sys
 
-path, start_line, min_before, max_before = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+path, start_line, min_before, max_before, min_visible_before = (
+    sys.argv[1],
+    int(sys.argv[2]),
+    int(sys.argv[3]),
+    int(sys.argv[4]),
+    int(sys.argv[5]),
+)
 field_pattern = re.compile(r"(^| )([A-Za-z][A-Za-z0-9]*)=([^ ]+)")
 try:
     with open(path, "r", encoding="utf-8") as handle:
@@ -1422,7 +1587,9 @@ try:
                 before_chars = int(fields.get("beforeChars", "-1"))
             except ValueError:
                 continue
-            if min_before <= before_chars <= max_before:
+            full_document_match = min_before <= before_chars <= max_before
+            visible_viewport_match = min_visible_before <= before_chars < min_before
+            if full_document_match or visible_viewport_match:
                 raise SystemExit(0)
 except FileNotFoundError:
     pass
@@ -1435,7 +1602,7 @@ PY
   done
 
   echo "Timed out waiting for Obsidian second suggestion." >&2
-  echo "Required fields: suggestion-presented app=md.obsidian beforeChars=${expected_before_chars}±2 afterChars=0" >&2
+  echo "Required fields: suggestion-presented app=md.obsidian afterChars=0 and beforeChars=${expected_before_chars}±2 or visible viewport beforeChars>=${min_visible_before_chars}" >&2
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
   exit 1
@@ -1735,17 +1902,25 @@ try_wait_for_frontmost_app() {
     local frontmost
     frontmost="$(run_osascript_with_timeout 1 "frontmost app wait probe" \
       -e 'tell application "System Events"' \
-      -e 'set frontProcess to first application process whose frontmost is true' \
+      -e 'set frontIdentities to {}' \
+      -e 'set frontProcesses to application processes whose frontmost is true' \
+      -e 'repeat with frontProcess in frontProcesses' \
       -e 'set frontName to name of frontProcess' \
       -e 'set frontBundle to ""' \
       -e 'try' \
       -e 'set frontBundle to bundle identifier of frontProcess' \
       -e 'end try' \
-      -e 'return frontName & (ASCII character 9) & frontBundle' \
+      -e 'copy (frontName & (ASCII character 9) & frontBundle) to end of frontIdentities' \
+      -e 'end repeat' \
+      -e 'set AppleScript'\''s text item delimiters to (ASCII character 10)' \
+      -e 'return frontIdentities as text' \
       -e 'end tell' 2>/dev/null || true)"
-    if frontmost_app_identity_matches "$frontmost" "$expected"; then
-      return 0
-    fi
+    while IFS= read -r frontmost_identity; do
+      [[ -z "$frontmost_identity" ]] && continue
+      if frontmost_app_identity_matches "$frontmost_identity" "$expected"; then
+        return 0
+      fi
+    done <<<"$frontmost"
     sleep 0.2
   done
 
@@ -2270,6 +2445,198 @@ prepare_model_latency_runtime_options() {
   fi
 }
 
+prepare_chrome_model_latency_runtime_options() {
+  local scenario="chrome-${CHROME_FIXTURE}-model-latency"
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Chrome $CHROME_FIXTURE model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
+  echo "Chrome $CHROME_FIXTURE model latency proof scenario: $scenario"
+  echo "Chrome $CHROME_FIXTURE model latency proof suppresses annoyance learning for synthetic event-tap probe keys."
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so Chrome model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_codex_model_latency_runtime_options() {
+  local scenario="codex-model-latency"
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Codex model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
+  echo "Codex model latency proof scenario: $scenario"
+  echo "Codex model latency proof suppresses annoyance learning for synthetic prompt refresh samples."
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so Codex model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_claude_code_model_latency_runtime_options() {
+  local scenario="claude-code-model-latency"
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Claude Code model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
+  echo "Claude Code model latency proof scenario: $scenario"
+  echo "Claude Code model latency proof suppresses annoyance learning for synthetic terminal prompt refresh samples."
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so Claude Code model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
+prepare_claude_model_latency_runtime_options() {
+  local scenario="claude-model-latency"
+  if [[ "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "$PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_FAST_WORD_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_FAST_WORD_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_PHRASE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_DISABLE_PHRASE_ENV_KEY" "$PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_DISABLE_PHRASE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_FAST_WORD_COMPLETION=1
+  export AUTOCOMPLETE_LAB_PROOF_DISABLE_PHRASE_CONTINUATION=1
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_DISABLE_FAST_WORD_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_DISABLE_PHRASE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Claude model latency proof: fast word completions and phrase continuations disabled so every measured sample must hit the local word-completion model path."
+  echo "Claude model latency proof scenario: $scenario"
+  echo "Claude model latency proof suppresses annoyance learning for synthetic prompt refresh samples."
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    echo "Note: --skip-build uses the already-running app, so Claude model-latency proof mode only applies if the app was launched with this environment." >&2
+  fi
+}
+
 prepare_default_model_latency_runtime_options() {
   if [[ "$PROOF_DISABLE_WORD_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
     PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_DISABLE_WORD_ENV_KEY" 2>/dev/null || true)"
@@ -2647,6 +3014,56 @@ tell application "System Events"
   key code $key_code
 end tell
 APPLESCRIPT
+}
+
+cgevent_keypress_helper_path() {
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v1}"
+}
+
+ensure_cgevent_keypress_helper() {
+  local helper source
+  helper="$(cgevent_keypress_helper_path)"
+  if [[ -x "$helper" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$helper")"
+  source="${helper}.$$.swift"
+  cat >"$source" <<'SWIFT'
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2,
+      let keyCode = UInt16(CommandLine.arguments[1]),
+      let source = CGEventSource(stateID: .hidSystemState),
+      let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
+    FileHandle.standardError.write(Data("failed to create CGEvent key press\n".utf8))
+    exit(1)
+}
+
+keyDown.flags = []
+keyUp.flags = []
+keyDown.post(tap: .cghidEventTap)
+usleep(20_000)
+keyUp.post(tap: .cghidEventTap)
+SWIFT
+
+  if ! swiftc "$source" -o "$helper"; then
+    rm -f "$source" "$helper" >/dev/null 2>&1 || true
+    return 1
+  fi
+  chmod 700 "$helper" >/dev/null 2>&1 || true
+  rm -f "$source" >/dev/null 2>&1 || true
+}
+
+press_key_code_cgevent() {
+  local key_code="$1"
+  local helper
+
+  ensure_cgevent_keypress_helper
+  helper="$(cgevent_keypress_helper_path)"
+  "$helper" "$key_code"
 }
 
 file_url() {
@@ -4161,20 +4578,30 @@ Thread.sleep(forTimeInterval: 0.35)
 let appElement = AXUIElementCreateApplication(pid)
 AXUIElementSetMessagingTimeout(appElement, 0.5)
 
-guard let windowValue = copyAttribute(appElement, kAXFocusedWindowAttribute),
-      let source = CGEventSource(stateID: .hidSystemState) else {
+guard let source = CGEventSource(stateID: .hidSystemState) else {
+    fputs("Chrome smoke focus failed: could not create a CGEvent source for pid \(pid).\n", stderr)
     exit(1)
 }
 
-let focusedWindow = windowValue as! AXUIElement
+let focusedWindow: AXUIElement?
+if let focusedWindowValue = copyAttribute(appElement, kAXFocusedWindowAttribute) {
+    focusedWindow = (focusedWindowValue as! AXUIElement)
+} else {
+    focusedWindow = nil
+}
 let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
 let smokeWindow = windows.first {
     (copyAttribute($0, "AXDocument") as? String ?? "").contains("autocomplete-lab-chrome-")
 }
-let windowElement = smokeWindow ?? focusedWindow
+let firstWindow = windows.first
+guard let windowElement = smokeWindow ?? focusedWindow ?? firstWindow else {
+    fputs("Chrome smoke focus failed: no accessible Chrome window for pid \(pid).\n", stderr)
+    exit(1)
+}
 AXUIElementPerformAction(windowElement, kAXRaiseAction as CFString)
 
 guard let windowBounds = bounds(for: windowElement) else {
+    fputs("Chrome smoke focus failed: target Chrome window has no AX bounds for pid \(pid).\n", stderr)
     exit(1)
 }
 
@@ -4186,6 +4613,7 @@ for eventType in [CGEventType.leftMouseDown, .leftMouseUp] {
         mouseCursorPosition: point,
         mouseButton: .left
     ) else {
+        fputs("Chrome smoke focus failed: could not create click event for pid \(pid).\n", stderr)
         exit(1)
     }
     event.post(tap: .cghidEventTap)
@@ -4555,11 +4983,15 @@ focus_chrome_smoke_editor() {
   if [[ -n "$chrome_pid" ]] && [[ -n "$CHROME_REMOTE_DEBUGGING_PORT" ]] && chrome_fixture_is_official_rich_editor_demo "$fixture"; then
     focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
     chrome_focus_official_demo_editor_with_devtools "$fixture"
+    sleep 0.15
+    chrome_focus_official_demo_editor_with_devtools "$fixture"
     return 0
   fi
 
   if [[ -n "$chrome_pid" ]]; then
     focus_chrome_process_window "$chrome_pid" "$click_x_offset" "$click_y_offset"
+    chrome_focus_smoke_editor_with_devtools "$fixture" >/dev/null 2>&1 || true
+    sleep 0.15
     chrome_focus_smoke_editor_with_devtools "$fixture" >/dev/null 2>&1 || true
     return 0
   fi
@@ -5875,6 +6307,15 @@ textedit_smoke_allows_ax_proof_typing() {
   [[ "${AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION:-0}" =~ ^(1|true|yes|on)$ ]]
 }
 
+insert_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+  local current_text
+
+  current_text="$(textedit_document_text "$window_title")"
+  set_textedit_document_text "$window_title" "${current_text}${fragment}"
+}
+
 type_textedit_smoke_fragment() {
   local window_title="$1"
   local fragment="$2"
@@ -7133,6 +7574,8 @@ assert_chrome_ready_for_input() {
   local label="$4"
 
   if [[ -n "$chrome_pid" ]]; then
+    focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$expected_url"
+    wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture $label"
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"
     assert_chrome_expected_tab "$fixture" "$expected_url" "$label" "$chrome_pid"
     assert_chrome_focused_editable_ax "$fixture" "$chrome_pid" "$label"
@@ -7158,9 +7601,701 @@ codex_proof_text() {
   printf '%s\n' "$proof_text"
 }
 
+codex_model_latency_proof_texts() {
+  if [[ -n "${AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS"
+    return
+  fi
+
+  local proof_nonce="${AUTOCOMPLETE_LAB_CODEX_PROOF_NONCE:-$(date +%s)}"
+  cat <<EOF
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-one Can we make this dicta
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-two The fastest useful prompt should predic
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-three Turn this rough thought into a concise summar
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-four Help me finish this implementation pla
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-five The next response should feel immediate and respons
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-six We need a safer prompt autocomplete validat
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-seven Complete this common phrase The quick brown f
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-eight Complete this common phrase Once upon a t
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-nine Complete this common phrase Thank you for your h
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-ten Complete this common phrase Let me know what you t
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-eleven Complete this common phrase I hope this m
+AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce sample-twelve Complete this common phrase The next step is to v
+EOF
+}
+
+claude_code_proof_marker() {
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-STEADYTYPECLAUDECODEPROOF}"
+}
+
+claude_code_model_latency_proof_texts() {
+  if [[ -n "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TEXTS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TEXTS"
+    return
+  fi
+
+  local marker
+  marker="$(claude_code_proof_marker)"
+  cat <<EOF
+$marker Privacy note redac
+$marker Make this setting configu
+$marker Keep overlay visi
+$marker Keep writing qui
+$marker Make transition transi
+$marker Autocomplete should valida
+$marker Next response feels immed
+$marker Useful suggestion stays conci
+$marker Editor placement remains accura
+$marker Typed phrase becomes predicta
+$marker Model answer stays helpfu
+$marker Completion remains respons
+EOF
+}
+
+claude_code_smoke_proof_text() {
+  local marker proof_text
+  marker="$(claude_code_proof_marker)"
+  proof_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TEXT:-Make this setting $marker the feature con}"
+  if [[ "$proof_text" != *"$marker"* ]]; then
+    echo "Claude Code proof text must include $marker." >&2
+    exit 2
+  fi
+  if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+    echo "Claude Code proof text must be a single line." >&2
+    exit 2
+  fi
+  printf '%s\n' "$proof_text"
+}
+
+claude_code_terminal_smoke_input_text() {
+  claude_code_smoke_proof_text
+}
+
+claude_code_terminal_smoke_input_texts() {
+  if [[ -n "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS"
+    return
+  fi
+
+  local marker
+  marker="$(claude_code_proof_marker)"
+  cat <<EOF
+Make this setting the feature
+Please make this
+This should feel
+What I want is
+It should almost always
+When I hit Tab it should
+The next suggestion should be a
+EOF
+}
+
+validate_claude_code_terminal_smoke_input_text() {
+  local proof_text="$1"
+  local marker
+  marker="$(claude_code_proof_marker)"
+  if [[ "$proof_text" != *"$marker"* &&
+        "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" != *"$marker"* ]]; then
+    echo "Claude Code terminal proof text or window title must include $marker." >&2
+    exit 2
+  fi
+  if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+    echo "Claude Code terminal proof text must be a single line." >&2
+    exit 2
+  fi
+}
+
+claude_proof_marker() {
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_PROOF_MARKER:-AUTOCOMPLETE_LAB_CLAUDE_PROOF}"
+}
+
+claude_model_latency_proof_texts() {
+  if [[ -n "${AUTOCOMPLETE_LAB_CLAUDE_MODEL_LATENCY_TEXTS:-}" ]]; then
+    printf '%s\n' "$AUTOCOMPLETE_LAB_CLAUDE_MODEL_LATENCY_TEXTS"
+    return
+  fi
+
+  local proof_nonce marker
+  proof_nonce="${AUTOCOMPLETE_LAB_CLAUDE_PROOF_NONCE:-$(date +%s)}"
+  marker="$(claude_proof_marker)"
+  cat <<EOF
+$marker $proof_nonce sample-one Can we make this dicta
+$marker $proof_nonce sample-two The fastest useful reply should predic
+$marker $proof_nonce sample-three Turn this rough thought into a concise summar
+$marker $proof_nonce sample-four Help me finish this implementation pla
+$marker $proof_nonce sample-five The next response should feel immediate and respons
+$marker $proof_nonce sample-six We need a safer prompt autocomplete validat
+$marker $proof_nonce sample-seven Complete this common phrase The quick brown f
+$marker $proof_nonce sample-eight Complete this common phrase Once upon a t
+$marker $proof_nonce sample-nine Complete this common phrase Thank you for your h
+$marker $proof_nonce sample-ten Complete this common phrase Let me know what you t
+$marker $proof_nonce sample-eleven Complete this common phrase I hope this m
+$marker $proof_nonce sample-twelve Complete this common phrase The next step is to v
+EOF
+}
+
+claude_ax_helper() {
+  local action="$1"
+  shift
+  swift script/prompt_app_ax_proof_helper.swift "$action" \
+    --bundle com.anthropic.claudefordesktop \
+    --display Claude \
+    --marker "$(claude_proof_marker)" \
+    --hint "Ask Claude" \
+    --hint "Message Claude" \
+    --hint "Reply to Claude" \
+    --hint "How can I help" \
+    "$@"
+}
+
+seed_claude_proof_prompt() {
+  local proof_text="$1"
+  local backup_path="${2:-}"
+  claude_ax_helper seed \
+    --text "$proof_text" \
+    --backup "$backup_path" \
+    --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_COMPOSER_DISCOVERY_TIMEOUT_SECONDS:-10}"
+}
+
+restore_claude_draft_if_needed() {
+  if [[ -z "$CLAUDE_DRAFT_BACKUP_PATH" ]]; then
+    return 0
+  fi
+
+  claude_ax_helper restore --backup "$CLAUDE_DRAFT_BACKUP_PATH" --clear-if-no-backup || true
+  rm -f "$CLAUDE_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+  CLAUDE_DRAFT_BACKUP_PATH=""
+}
+
+focus_claude_proof_prompt() {
+  claude_ax_helper focus
+}
+
+assert_claude_proof_prompt_ready() {
+  local proof_text="$1"
+  claude_ax_helper assert --text "$proof_text"
+}
+
+assert_claude_prompt_retains_marker() {
+  claude_ax_helper contains-marker
+}
+
+claude_code_terminal_ax_helper() {
+  local action="$1"
+  shift
+  swift script/terminal_prompt_ax_proof_helper.swift "$action" \
+    --bundle "$(claude_code_host_bundle_id)" \
+    --display "$(claude_code_host_display_name)" \
+    --marker "$(claude_code_proof_marker)" \
+    --hint "Claude Code" \
+    --hint "Try \"fix lint errors\"" \
+    --hint "for shortcuts" \
+    --hint "❯" \
+    "$@"
+}
+
+claude_code_host_process_name() {
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal)
+      printf 'Terminal\n'
+      ;;
+    iterm2)
+      printf 'iTerm2\n'
+      ;;
+    ghostty)
+      printf 'ghostty\n'
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+claude_code_host_open_app_name() {
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal)
+      printf 'Terminal\n'
+      ;;
+    iterm2)
+      printf 'iTerm\n'
+      ;;
+    ghostty)
+      printf 'Ghostty\n'
+      ;;
+    *)
+      printf '\n'
+      ;;
+  esac
+}
+
+terminal_pid_list() {
+  local process_name
+  process_name="$(claude_code_host_process_name)"
+  [[ -n "$process_name" ]] || return 0
+  pgrep -x "$process_name" || true
+}
+
+pid_list_difference() {
+  local after="$1"
+  local before="$2"
+  local pid
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    if ! printf '%s\n' "$before" | grep -qxF "$pid"; then
+      printf '%s\n' "$pid"
+    fi
+  done <<<"$after"
+}
+
+wait_for_new_terminal_pids() {
+  local before="$1"
+  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline after new_pids
+
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=12
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    after="$(terminal_pid_list)"
+    new_pids="$(pid_list_difference "$after" "$before" | tr '\n' ' ')"
+    new_pids="${new_pids% }"
+    if [[ -n "$new_pids" ]]; then
+      printf '%s\n' "$new_pids"
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Claude Code Terminal proof did not create a disposable $(claude_code_host_display_name) process." >&2
+  return 1
+}
+
+frontmost_process_id() {
+  osascript <<'APPLESCRIPT'
+tell application "System Events"
+  get unix id of first application process whose frontmost is true
+end tell
+APPLESCRIPT
+}
+
+activate_process_id() {
+  local target_pid="$1"
+  AUTOCOMPLETE_LAB_TARGET_PID="$target_pid" osascript <<'APPLESCRIPT'
+set targetPid to (system attribute "AUTOCOMPLETE_LAB_TARGET_PID") as integer
+tell application "System Events"
+  set frontmost of first application process whose unix id is targetPid to true
+end tell
+APPLESCRIPT
+}
+
+wait_for_frontmost_claude_code_terminal_proof_process() {
+  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline root_pid frontmost_pid
+
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
+    exit 1
+  fi
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=12
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    activate_process_id "$root_pid" >/dev/null 2>&1 || true
+    break
+  done
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if [[ "$frontmost_pid" == "$root_pid" ]]; then
+        return 0
+      fi
+    done
+    sleep 0.2
+  done
+
+  echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+  exit 1
+}
+
+process_tree_contains_name() {
+  local root_pid="$1"
+  local expected_name="$2"
+  local child command_name
+
+  [[ -z "$root_pid" || -z "$expected_name" ]] && return 1
+  while IFS= read -r child; do
+    [[ -z "$child" ]] && continue
+    command_name="$(ps -p "$child" -o comm= 2>/dev/null || true)"
+    command_name="${command_name##*/}"
+    if [[ "$command_name" == "$expected_name" || "$command_name" == "-$expected_name" ]]; then
+      return 0
+    fi
+    if process_tree_contains_name "$child" "$expected_name"; then
+      return 0
+    fi
+  done < <(pgrep -P "$root_pid" 2>/dev/null || true)
+  return 1
+}
+
+process_id_has_name() {
+  local pid="$1"
+  local expected_name="$2"
+  local command_name
+
+  [[ -z "$pid" || -z "$expected_name" ]] && return 1
+  command_name="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+  command_name="${command_name##*/}"
+  [[ "$command_name" == "$expected_name" || "$command_name" == "-$expected_name" ]]
+}
+
+wait_for_claude_code_terminal_process_name() {
+  local expected_name="$1"
+  local label="${2:-$expected_name}"
+  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline root_pid proof_pid
+
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" || -z "$expected_name" ]]; then
+    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
+    exit 1
+  fi
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=20
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
+          -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+      proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+      if process_id_has_name "$proof_pid" "$expected_name"; then
+        return 0
+      fi
+    fi
+    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if process_tree_contains_name "$root_pid" "$expected_name"; then
+        return 0
+      fi
+    done
+    sleep 0.2
+  done
+
+  echo "Claude Code Terminal proof did not start $label under disposable $(claude_code_host_display_name) pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+  exit 1
+}
+
+wait_for_claude_code_terminal_process() {
+  wait_for_claude_code_terminal_process_name "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
+}
+
+open_claude_code_terminal_proof() {
+  local proof_dir="$1"
+  local proof_title="$2"
+  local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
+  claude_bin="$(command -v claude || true)"
+  if [[ -z "$claude_bin" ]]; then
+    echo "Claude Code CLI is not installed or not on PATH." >&2
+    exit 1
+  fi
+  host_process="$(claude_code_host_process_name)"
+  host_app="$(claude_code_host_open_app_name)"
+  if [[ -z "$host_process" || -z "$host_app" ]]; then
+    echo "Claude Code $(claude_code_host_display_name) proof does not have an automated disposable launch path yet." >&2
+    echo "Leaving this as an honest host-variant proof gap; normal terminal suggestions remain blocked." >&2
+    exit 1
+  fi
+
+  if pgrep -x "$host_process" >/dev/null 2>&1; then
+    CLAUDE_CODE_TERMINAL_WAS_RUNNING=1
+  else
+    CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
+  fi
+
+  title_sequence=$'\033]0;'"$proof_title"$'\007'
+  launch_script="$proof_dir/steadytype-claude-code-proof.command"
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE="$proof_dir/claude.pid"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'cd %q\n' "$ROOT_DIR"
+    printf 'printf '"'"'%%s\\n'"'"' "$$" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"
+    printf 'printf %q\n' "$title_sequence"
+    printf 'exec %q\n' "$claude_bin"
+  } >"$launch_script"
+  chmod +x "$launch_script"
+
+  terminal_pids_before="$(terminal_pid_list)"
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal|iterm2)
+      open -na "$host_app" "$launch_script"
+      ;;
+    ghostty)
+      open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"
+      ;;
+    *)
+      echo "Claude Code $(claude_code_host_display_name) proof does not have an automated disposable launch path yet." >&2
+      exit 1
+      ;;
+  esac
+  CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
+  wait_for_frontmost_claude_code_terminal_proof_process
+}
+
+cleanup_claude_code_terminal_proof() {
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" ]]; then
+    return 0
+  fi
+
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
+        -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+    local proof_process_pid
+    proof_process_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+    if [[ -n "$proof_process_pid" ]]; then
+      kill "$proof_process_pid" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    local proof_pid
+    for proof_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if kill -0 "$proof_pid" >/dev/null 2>&1; then
+        kill -KILL "$proof_pid" >/dev/null 2>&1 || true
+      fi
+    done
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
+    local host_process
+    host_process="$(claude_code_host_process_name)"
+    [[ -n "$host_process" ]] && pkill -x "$host_process" >/dev/null 2>&1 || true
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  fi
+  CLAUDE_CODE_TERMINAL_PROOF_TITLE=""
+  CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
+  CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
+}
+
+cleanup_stale_claude_code_terminal_proofs() {
+  local marker stale_pids stale_pid
+  marker="$(claude_code_proof_marker)"
+  stale_pids="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}" osascript <<'APPLESCRIPT' || true
+set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
+set proofDirectoryMarker to "steadytype-claude-code-proof"
+set stalePids to ""
+tell application "System Events"
+  repeat with terminalProcess in application processes
+    try
+      set terminalBundle to bundle identifier of terminalProcess
+      if terminalBundle is "com.apple.Terminal" or terminalBundle is "com.googlecode.iterm2" or terminalBundle is "com.mitchellh.ghostty" then
+        set hasProofWindow to false
+        repeat with terminalWindow in windows of terminalProcess
+          try
+            set windowName to name of terminalWindow as text
+            if windowName contains markerText or windowName contains proofDirectoryMarker then
+              set hasProofWindow to true
+            else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
+              set hasProofWindow to true
+            end if
+          end try
+        end repeat
+        if hasProofWindow then
+          set stalePids to stalePids & ((unix id of terminalProcess) as text) & linefeed
+        end if
+      end if
+    end try
+  end repeat
+end tell
+return stalePids
+APPLESCRIPT
+)"
+  while IFS= read -r stale_pid; do
+    [[ -z "$stale_pid" ]] && continue
+    kill "$stale_pid" >/dev/null 2>&1 || true
+  done <<<"$stale_pids"
+  if [[ -n "$stale_pids" ]]; then
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    while IFS= read -r stale_pid; do
+      [[ -z "$stale_pid" ]] && continue
+      if kill -0 "$stale_pid" >/dev/null 2>&1; then
+        kill -KILL "$stale_pid" >/dev/null 2>&1 || true
+      fi
+    done <<<"$stale_pids"
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  fi
+}
+
+wait_for_claude_code_terminal_prompt() {
+  wait_for_frontmost_claude_code_terminal_proof_process
+  wait_for_claude_code_terminal_process
+
+  case "$CLAUDE_CODE_HOST_VARIANT" in
+    terminal)
+      swift script/terminal_prompt_ax_proof_helper.swift wait \
+        --bundle "$(claude_code_host_bundle_id)" \
+        --display "$(claude_code_host_display_name)" \
+        --marker "$(claude_code_proof_marker)" \
+        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
+      ;;
+    iterm2|ghostty)
+      ;;
+    *)
+      echo "Claude Code $(claude_code_host_display_name) prompt readiness is not automated for this host." >&2
+      exit 1
+      ;;
+  esac
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS:-3}"
+}
+
+assert_claude_code_terminal_prompt_ready() {
+  local proof_text="$1"
+  swift script/terminal_prompt_ax_proof_helper.swift wait \
+    --bundle "$(claude_code_host_bundle_id)" \
+    --display "$(claude_code_host_display_name)" \
+    --marker "$(claude_code_proof_marker)" \
+    --text "$proof_text" \
+    --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS:-4}"
+}
+
+assert_claude_code_terminal_prompt_retains_marker() {
+  claude_code_terminal_ax_helper contains-marker
+}
+
+type_claude_code_terminal_raw_smoke_text() {
+  local text="$1"
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE:-0}" == "1" ]]; then
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not hostBundle then
+    error "Claude Code terminal host is not frontmost for proof typing."
+  end if
+  keystroke rawText
+end tell
+APPLESCRIPT
+    return
+  fi
+
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY_SECONDS:-0.012}" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+set keyDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY") as real
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not hostBundle then
+    error "Claude Code terminal host is not frontmost for proof typing."
+  end if
+  repeat with characterIndex from 1 to count characters of rawText
+    keystroke character characterIndex of rawText
+    delay keyDelay
+  end repeat
+end tell
+APPLESCRIPT
+}
+
+clear_claude_code_terminal_prompt_line() {
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not hostBundle then
+    error "Claude Code terminal host is not frontmost for proof line clearing."
+  end if
+  key code 53
+  delay clearDelay
+  keystroke "u" using control down
+  delay clearDelay
+  keystroke "k" using command down
+  delay clearDelay
+  keystroke "l" using control down
+  delay clearDelay
+  keystroke "u" using control down
+end tell
+APPLESCRIPT
+}
+
+type_claude_raw_smoke_text() {
+  local text="$1"
+
+  AUTOCOMPLETE_LAB_CLAUDE_RAW_TEXT="$text" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_RAW_TEXT"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.anthropic.claudefordesktop" then
+    error "Claude is not frontmost for prompt proof typing."
+  end if
+  keystroke rawText
+end tell
+APPLESCRIPT
+}
+
+type_codex_raw_smoke_text() {
+  local text="$1"
+
+  AUTOCOMPLETE_LAB_CODEX_RAW_TEXT="$text" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_CODEX_RAW_TEXT"
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.openai.codex" then
+    error "Codex is not frontmost for prompt proof typing."
+  end if
+  keystroke rawText
+end tell
+APPLESCRIPT
+}
+
+codex_ax_helper() {
+  local action="$1"
+  shift
+  swift script/prompt_app_ax_proof_helper.swift "$action" \
+    --bundle com.openai.codex \
+    --display Codex \
+    --marker "AUTOCOMPLETE_LAB_CODEX_PROOF" \
+    --hint "Ask Codex anything" \
+    --hint "Ask for follow-up changes" \
+    --hint "Describe a task or ask a question" \
+    "$@"
+}
+
 seed_codex_proof_prompt() {
   local proof_text="$1"
   local backup_path="${2:-}"
+
+  codex_ax_helper seed \
+    --text "$proof_text" \
+    --backup "$backup_path" \
+    --clear-if-no-backup \
+    --discovery-timeout "${AUTOCOMPLETE_LAB_CODEX_COMPOSER_DISCOVERY_TIMEOUT_SECONDS:-10}"
+  return 0
 
   swift - "$proof_text" "$backup_path" <<'SWIFT'
 import AppKit
@@ -7473,9 +8608,15 @@ SWIFT
 }
 
 restore_codex_draft_if_needed() {
-  if [[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+  if [[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -f "$CODEX_DRAFT_BACKUP_PATH" ]]; then
     return 0
   fi
+
+  codex_ax_helper restore --backup "$CODEX_DRAFT_BACKUP_PATH" --clear-if-no-backup || true
+  rm -f "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+  CODEX_DRAFT_BACKUP_PATH=""
+  CODEX_DRAFT_BACKUP_ACTIVE=0
+  return 0
 
   swift - "$CODEX_DRAFT_BACKUP_PATH" <<'SWIFT' || true
 import AppKit
@@ -7552,7 +8693,11 @@ AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBoolean
 let result = AXUIElementSetAttributeValue(target, kAXValueAttribute as CFString, restoreText as CFTypeRef)
 if result == .success {
     setSelectedRange(target, location: restoreText.utf16.count, length: 0)
-    print("Restored existing Codex draft after proof: chars=\(restoreText.count)")
+    if restoreText.isEmpty {
+        print("Cleared Codex proof composer after proof.")
+    } else {
+        print("Restored existing Codex draft after proof: chars=\(restoreText.count)")
+    }
 } else {
     fputs("Codex draft restore failed (AX result \(result.rawValue)).\n", stderr)
 }
@@ -7564,6 +8709,9 @@ SWIFT
 }
 
 focus_codex_proof_prompt() {
+  codex_ax_helper focus
+  return 0
+
   swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -7760,6 +8908,9 @@ SWIFT
 assert_codex_proof_prompt_ready() {
   local proof_text="$1"
 
+  codex_ax_helper assert --text "$proof_text"
+  return 0
+
   swift - "$proof_text" <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -7857,6 +9008,9 @@ SWIFT
 }
 
 assert_codex_prompt_retains_marker() {
+  codex_ax_helper contains-marker
+  return 0
+
   swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -8518,6 +9672,10 @@ describe_plan() {
   echo "Diagnostics log: $LOG_PATH"
   echo "Trace log: $TRACE_PATH"
   echo "Proof mode bundle(s): $proof_bundle_ids"
+  if [[ "$SKIP_BUILD" == "1" ]] && is_model_latency_lane && allow_model_latency_skip_build; then
+    echo "Packaged model latency proof: reusing the already-running app because AUTOCOMPLETE_LAB_ALLOW_MODEL_LATENCY_SKIP_BUILD=1 is set."
+    echo "Safety: strict latency selector must still prove the tagged runtime launch for this app binary."
+  fi
   case "$APP" in
     textedit)
       if [[ -n "$TEXTEDIT_VARIANT" ]]; then
@@ -8604,6 +9762,10 @@ describe_plan() {
         echo "Plan: build the app bundle, open a disposable Chrome $CHROME_FIXTURE fixture, seed disposable text, launch SteadyType only for proof, then validate logs and traces."
       fi
       echo "Safety: the smoke launch temporarily enables Chrome only for this proof pass."
+      if [[ "$CHROME_MODEL_LATENCY" == "1" ]]; then
+        echo "Safety: Chrome model latency proof disables fast word completions and phrase continuations for each launch so local word-completion model timing is required."
+        echo "Safety: Chrome model latency proof tags the runtime launch with scenario chrome-$CHROME_FIXTURE-model-latency so generic Chrome samples cannot satisfy the beta gate."
+      fi
       echo "Safety: before Chrome typing, the smoke requires Chrome to expose a focused editable web text target through Accessibility."
       echo "Safety: Chrome setup text is seeded before SteadyType launches whenever the smoke builds the app itself."
       echo "Safety: later Chrome setup pauses SteadyType while disposable text is seeded, then relaunches the current app bundle before proof resumes."
@@ -8696,9 +9858,17 @@ describe_plan() {
       print_obsidian_variant_commands
       ;;
     codex)
-      echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
-      echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
-      echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
+      if [[ "$CODEX_MODEL_LATENCY" == "1" ]]; then
+        echo "Plan: manual-gated Codex prompt model latency proof. The script seeds several stable disposable AUTOCOMPLETE_LAB_CODEX_PROOF prompt contexts, types the trigger character through live key events, and requires model-backed visible word completions in one launch."
+        echo "Safety: Codex model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
+        echo "Safety: Codex model latency proof tags the runtime launch with scenario codex-model-latency so generic prompt samples cannot satisfy the strict selector."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; it runs the prompt no-submit gate on the same trace slice."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
+      else
+        echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
+      fi
       ;;
     claude-code)
       local host_bundle host_name host_status proof_label
@@ -8712,18 +9882,43 @@ describe_plan() {
       else
         host_status="not installed; honest proof gap"
       fi
-      echo "Plan: manual-gated terminal-host Claude Code proof. The script validates one-word Tab accept without submit after you run it."
+      if [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]]; then
+        echo "Plan: manual-gated terminal-host Claude Code model latency proof. The script opens a fresh title-marked disposable Terminal Claude Code prompt per sample, types disposable proof contexts plus trigger characters, and requires model-backed visible word completions."
+        echo "Safety: Claude Code model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
+        echo "Safety: Claude Code model latency proof tags the runtime launch with scenario claude-code-model-latency so generic terminal samples cannot satisfy the strict selector."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Tab, Enter, or full accept; it runs the prompt no-submit gate on the same trace slice."
+      elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "terminal" ]]; then
+        echo "Plan: manual-gated automated Terminal-host Claude Code proof. The script opens a fresh title-marked disposable Terminal Claude Code prompt, types marked proof text, presses Tab once, and validates one-word no-submit proof on the same trace slice."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept."
+      elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "iterm2" || "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+        echo "Plan: manual-gated automated $host_name-host Claude Code proof. The script opens a fresh title-marked disposable $host_name Claude Code prompt, types marked proof text, presses Tab once, and validates one-word no-submit proof on the same trace slice."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; unsupported terminal hosts stay manual until they have their own disposable launch path."
+      else
+        echo "Plan: manual-gated terminal-host Claude Code proof. The script validates one-word Tab accept without submit after you run it."
+      fi
       echo "Claude Code host: $host_name ($host_bundle), $host_status"
       echo "Claude Code proof label: $proof_label"
-      echo "Safety: pass --manual-gate to continue. Use the named supported terminal host, include AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF, and do not press Enter."
-      echo "Proof target: terminal-hosted Claude Code must validate one-word Tab accept without submitting shell input or an agent prompt."
+      echo "Safety: pass --manual-gate to continue. Use the named supported terminal host, include the configured Claude Code proof marker, and do not press Enter."
+      if [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]]; then
+        echo "Proof target: terminal-hosted Claude Code must validate model-backed visible suggestions without submitting shell input or an agent prompt."
+      else
+        echo "Proof target: terminal-hosted Claude Code must validate one-word Tab accept without submitting shell input or an agent prompt."
+      fi
       ;;
     claude)
-      echo "Plan: manual-gated prompt smoke. The script validates one-word Tab accept without submit after you run it."
-      if [[ -n "$CLAUDE_SESSION_APP" ]]; then
-        echo "Claude layout proof: $CLAUDE_SESSION_APP"
+      if [[ "$CLAUDE_MODEL_LATENCY" == "1" ]]; then
+        echo "Plan: manual-gated Claude desktop prompt model latency proof. The script seeds several stable disposable AUTOCOMPLETE_LAB_CLAUDE_PROOF prompt contexts, types the trigger character through live key events, and requires model-backed visible word completions in one launch."
+        echo "Safety: Claude model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
+        echo "Safety: Claude model latency proof tags the runtime launch with scenario claude-model-latency so generic prompt samples cannot satisfy the strict selector."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; it runs the prompt no-submit gate on the same trace slice."
+        echo "Safety: if the focused Claude prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
+      else
+        echo "Plan: manual-gated prompt smoke. The script validates one-word Tab accept without submit after you run it."
+        if [[ -n "$CLAUDE_SESSION_APP" ]]; then
+          echo "Claude layout proof: $CLAUDE_SESSION_APP"
+        fi
+        echo "Safety: pass --manual-gate to continue. Do not press Enter; full accept waits for separate full-accept no-submit proof."
       fi
-      echo "Safety: pass --manual-gate to continue. Do not press Enter; full accept waits for separate full-accept no-submit proof."
       ;;
   esac
 }
@@ -8732,14 +9927,14 @@ build_if_needed() {
   SMOKE_PHASE="build/relaunch current SteadyType"
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
-      AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
     )
     if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
     fi
-    env "${build_run_env[@]}" ./script/build_and_run.sh run
+    env "${build_run_env[@]}" ./script/build_and_run.sh bundle-only
+    launch_current_steadytype_with_smoke_env
   fi
 
   wait_for_current_autocomplete_lab_process
@@ -8800,14 +9995,10 @@ command_matches_steadytype_binary() {
 current_steadytype_app_bundle_pids() {
   local app_binary
   app_binary="$(steadytype_app_binary)"
-  local current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
-  current_pgid="${current_pgid//[[:space:]]/}"
 
   while IFS=$'\t' read -r pid pgid command; do
     [[ -z "$pid" ]] && continue
     [[ "$pid" == "$$" ]] && continue
-    [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
     command_matches_steadytype_binary "$command" "$app_binary" || continue
     printf '%s\n' "$pid"
   done < <(steadytype_app_process_rows)
@@ -8827,6 +10018,17 @@ stop_current_steadytype_app_bundle() {
     fi
     sleep 0.1
   done
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill -9 "$pid" >/dev/null 2>&1 || true
+  done < <(current_steadytype_app_bundle_pids)
+
+  sleep 0.1
+  if [[ -n "$(current_steadytype_app_bundle_pids)" ]]; then
+    echo "Timed out stopping current SteadyType app bundle before smoke setup." >&2
+    exit 1
+  fi
 }
 
 stale_steadytype_app_bundle_pids() {
@@ -8870,12 +10072,7 @@ pause_steadytype_for_chrome_setup() {
   stop_current_steadytype_app_bundle
 }
 
-launch_steadytype_after_chrome_setup() {
-  local fixture="$1"
-  local start_line="$2"
-  local chrome_pid="${3:-}"
-  local chrome_url="${4:-}"
-
+launch_current_steadytype_with_smoke_env() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
   fi
@@ -8918,6 +10115,20 @@ launch_steadytype_after_chrome_setup() {
   disown "$!" 2>/dev/null || true
 
   wait_for_current_autocomplete_lab_process
+}
+
+launch_steadytype_after_chrome_setup() {
+  local fixture="$1"
+  local start_line="$2"
+  local chrome_pid="${3:-}"
+  local chrome_url="${4:-}"
+
+  launch_current_steadytype_with_smoke_env
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    return 0
+  fi
+
   if [[ -n "$chrome_url" ]]; then
     focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   fi
@@ -9045,6 +10256,7 @@ run_codex() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "Codex Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Codex runtime readiness" 60 "$SKIP_BUILD"
+  ensure_cgevent_keypress_helper
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
@@ -9057,9 +10269,8 @@ run_codex() {
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
   assert_frontmost_app "Codex" "Codex proof"
-  assert_codex_proof_prompt_ready "$proof_text"
-  sleep 0.2
-  press_key_code 48
+  sleep 0.05
+  press_key_code_cgevent 48
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \
     "keyboard-action" \
     "app=com.openai.codex" \
@@ -9075,6 +10286,462 @@ run_codex() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh codex --check --visual
+}
+
+run_claude_code_terminal_host_smoke() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "terminal" &&
+        "$CLAUDE_CODE_HOST_VARIANT" != "iterm2" &&
+        "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ]]; then
+    run_manual_gated
+    return
+  fi
+
+  require_claude_code_host_if_requested
+
+  local runtime_start_line start_line trace_start_line accept_start_line proof_text marker proof_dir host_name
+  local attempt suggestion_wait_seconds found_suggestion
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  marker="$(claude_code_proof_marker)"
+  proof_dir="$(make_claude_code_terminal_proof_dir)"
+  host_name="$(claude_code_host_display_name)"
+  CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+  suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS:-20}"
+
+  prepare_temporary_app_enablement
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Claude Code Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Claude Code runtime readiness" 60 "$SKIP_BUILD"
+
+  cleanup_stale_claude_code_terminal_proofs
+  open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
+  wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  wait_for_claude_code_terminal_prompt
+  wait_for_frontmost_claude_code_terminal_proof_process
+  assert_frontmost_app "$host_name" "Claude Code $host_name proof"
+  attempt=0
+  found_suggestion=0
+  accept_start_line="$(line_count "$LOG_PATH")"
+  while IFS= read -r proof_text; do
+    [[ -n "$proof_text" ]] || continue
+    attempt=$((attempt + 1))
+    validate_claude_code_terminal_smoke_input_text "$proof_text"
+
+    wait_for_frontmost_claude_code_terminal_proof_process
+    clear_claude_code_terminal_prompt_line
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
+
+    start_line="$(line_count "$LOG_PATH")"
+    trace_start_line="$(line_count "$TRACE_PATH")"
+    accept_start_line="$(line_count "$LOG_PATH")"
+
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$proof_text"
+    case "$CLAUDE_CODE_HOST_VARIANT" in
+      terminal)
+        assert_claude_code_terminal_prompt_ready "$proof_text"
+        ;;
+      iterm2|ghostty)
+        ;;
+    esac
+    if wait_for_log_pattern_optional \
+      "$accept_start_line" \
+      "suggestion-presented .*app=com.anthropic.claude-code" \
+      "$suggestion_wait_seconds"; then
+      found_suggestion=1
+      break
+    fi
+    echo "Claude Code $host_name proof attempt $attempt produced no visible suggestion; trying the next disposable context."
+  done < <(claude_code_terminal_smoke_input_texts)
+
+  if [[ "$found_suggestion" != "1" ]]; then
+    echo "Timed out waiting for Claude Code $host_name proof suggestion after $attempt disposable context(s)." >&2
+    echo "Pattern: suggestion-presented .*app=com.anthropic.claude-code" >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((accept_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+
+  press_key_code_cgevent 48
+  wait_for_claude_code_terminal_tab_acceptance \
+    "$accept_start_line" \
+    "$host_name" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}"
+  wait_for_log_pattern "$accept_start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code $host_name successful insertion" 12
+  wait_for_log_pattern "$accept_start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code $host_name verified insertion" 12
+  wait_for_screenshot_capture_if_enabled "$accept_start_line" "com.anthropic.claude-code" "Claude Code $host_name proof"
+  assert_claude_code_terminal_prompt_retains_marker
+
+  sleep 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+  AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$(claude_code_host_proof_label)" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT="$CLAUDE_CODE_HOST_VARIANT" \
+    ./script/manual_smoke_session.sh claude-code --check --visual
+}
+
+run_codex_model_latency() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  local runtime_start_line start_line trace_start_line backup_dir proof_runtime_guard_line
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  backup_dir="$(make_tmp_dir)"
+  CODEX_DRAFT_BACKUP_PATH="$backup_dir/codex-draft-backup.txt"
+  : >"$CODEX_DRAFT_BACKUP_PATH"
+  chmod 600 "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+
+  prepare_temporary_app_enablement
+  prepare_codex_model_latency_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Codex model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Codex model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_start stable_context context_prefix trigger_word trigger_text expected_text
+  while IFS= read -r proof_text; do
+    [[ -z "$proof_text" ]] && continue
+    sample_index=$((sample_index + 1))
+    if [[ "$proof_text" != *"AUTOCOMPLETE_LAB_CODEX_PROOF"* ]]; then
+      echo "Codex model latency sample $sample_index must include AUTOCOMPLETE_LAB_CODEX_PROOF." >&2
+      exit 2
+    fi
+    if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+      echo "Codex model latency sample $sample_index must be a single line." >&2
+      exit 2
+    fi
+    trigger_word="${proof_text##* }"
+    context_prefix="${proof_text%"$trigger_word"}"
+    trigger_text="${trigger_word:0:1}"
+    stable_context="$context_prefix"
+    expected_text="${stable_context}${trigger_text}"
+    if [[ -z "$trigger_word" || "$stable_context" == "$proof_text" || -z "$trigger_text" ]]; then
+      echo "Codex model latency sample $sample_index does not contain a stable context plus trigger word." >&2
+      exit 1
+    fi
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "Codex model latency sample $sample_index"
+    seed_codex_proof_prompt "$stable_context" "$CODEX_DRAFT_BACKUP_PATH"
+    if [[ -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+      CODEX_DRAFT_BACKUP_ACTIVE=1
+    fi
+    focus_codex_proof_prompt
+    assert_frontmost_app "Codex" "Codex model latency seed $sample_index"
+    assert_codex_proof_prompt_ready "$stable_context"
+    sleep "${AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.35}"
+    sample_start="$(line_count "$LOG_PATH")"
+    type_codex_raw_smoke_text "$trigger_text"
+    assert_codex_proof_prompt_ready "$expected_text"
+    if wait_for_log_fields_optional "$sample_start" "8" \
+      "suggestion-presented" \
+      "app=com.openai.codex" \
+      "requestMode=wordCompletion" \
+      "candidateSelectionSource=app-model-result"; then
+      assert_codex_prompt_retains_marker
+      visible_sample_count=$((visible_sample_count + 1))
+    elif wait_for_log_fields_optional "$sample_start" "1" \
+      "suggestion-blocked" \
+      "app=com.openai.codex" \
+      "reason=empty-suggestion"; then
+      empty_sample_count=$((empty_sample_count + 1))
+      echo "Codex model latency sample $sample_index produced an empty word candidate; trying the next disposable context." >&2
+      assert_codex_prompt_retains_marker
+    else
+      wait_for_log_fields "$sample_start" "Codex model latency suggestion $sample_index" 1 \
+        "suggestion-presented" \
+        "app=com.openai.codex" \
+        "requestMode=wordCompletion" \
+        "candidateSelectionSource=app-model-result"
+    fi
+    if ((visible_sample_count >= 5)); then
+      break
+    fi
+    sleep 0.35
+  done < <(codex_model_latency_proof_texts)
+
+  if ((visible_sample_count < 5)); then
+    echo "Codex model latency proof expected at least 5 visible model-backed word-completion samples, got $visible_sample_count visible and $empty_sample_count empty from $sample_index attempted contexts." >&2
+    exit 1
+  fi
+
+  sleep 1
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_START_LINE="$((trace_start_line + 1))" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_EXTRA_BUNDLES="com.openai.codex" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="codex-model-latency" \
+    ./script/check_prompt_app_proof.sh
+
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/latency_benchmark_report.py --beta-gate
+}
+
+run_claude_model_latency() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  local runtime_start_line start_line trace_start_line backup_dir proof_runtime_guard_line marker
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  backup_dir="$(make_tmp_dir)"
+  CLAUDE_DRAFT_BACKUP_PATH="$backup_dir/claude-draft-backup.txt"
+  : >"$CLAUDE_DRAFT_BACKUP_PATH"
+  chmod 600 "$CLAUDE_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+  marker="$(claude_proof_marker)"
+
+  prepare_temporary_app_enablement
+  prepare_claude_model_latency_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Claude model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Claude model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
+  open -a Claude
+  wait_for_frontmost_app "Claude" "${AUTOCOMPLETE_LAB_CLAUDE_ACTIVATION_WAIT_SECONDS:-12}"
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_start stable_context context_prefix trigger_word trigger_text expected_text
+  while IFS= read -r proof_text; do
+    [[ -z "$proof_text" ]] && continue
+    sample_index=$((sample_index + 1))
+    if [[ "$proof_text" != *"$marker"* ]]; then
+      echo "Claude model latency sample $sample_index must include $marker." >&2
+      exit 2
+    fi
+    if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+      echo "Claude model latency sample $sample_index must be a single line." >&2
+      exit 2
+    fi
+    trigger_word="${proof_text##* }"
+    context_prefix="${proof_text%"$trigger_word"}"
+    trigger_text="${trigger_word:0:1}"
+    stable_context="$context_prefix"
+    expected_text="${stable_context}${trigger_text}"
+    if [[ -z "$trigger_word" || "$stable_context" == "$proof_text" || -z "$trigger_text" ]]; then
+      echo "Claude model latency sample $sample_index does not contain a stable context plus trigger word." >&2
+      exit 1
+    fi
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "Claude model latency sample $sample_index"
+    seed_claude_proof_prompt "$stable_context" "$CLAUDE_DRAFT_BACKUP_PATH"
+    focus_claude_proof_prompt
+    assert_frontmost_app "Claude" "Claude model latency seed $sample_index"
+    assert_claude_proof_prompt_ready "$stable_context"
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.35}"
+    sample_start="$(line_count "$LOG_PATH")"
+    type_claude_raw_smoke_text "$trigger_text"
+    assert_claude_proof_prompt_ready "$expected_text"
+    if wait_for_log_fields_optional "$sample_start" "8" \
+      "suggestion-presented" \
+      "app=com.anthropic.claudefordesktop" \
+      "requestMode=wordCompletion"; then
+      assert_claude_prompt_retains_marker
+      visible_sample_count=$((visible_sample_count + 1))
+    elif wait_for_log_fields_optional "$sample_start" "1" \
+      "suggestion-blocked" \
+      "app=com.anthropic.claudefordesktop" \
+      "reason=empty-suggestion"; then
+      empty_sample_count=$((empty_sample_count + 1))
+      echo "Claude model latency sample $sample_index produced an empty word candidate; trying the next disposable context." >&2
+      assert_claude_prompt_retains_marker
+    else
+      wait_for_log_fields "$sample_start" "Claude model latency suggestion $sample_index" 1 \
+        "suggestion-presented" \
+        "app=com.anthropic.claudefordesktop" \
+        "requestMode=wordCompletion"
+    fi
+    if ((visible_sample_count >= 5)); then
+      break
+    fi
+    sleep 0.35
+  done < <(claude_model_latency_proof_texts)
+
+  if ((visible_sample_count < 5)); then
+    echo "Claude model latency proof expected at least 5 visible model-backed word-completion samples, got $visible_sample_count visible and $empty_sample_count empty from $sample_index attempted contexts." >&2
+    exit 1
+  fi
+
+  sleep 1
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_START_LINE="$((trace_start_line + 1))" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_EXTRA_BUNDLES="com.anthropic.claudefordesktop" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="claude-model-latency" \
+    ./script/check_prompt_app_proof.sh
+
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/latency_benchmark_report.py --beta-gate
+}
+
+run_claude_code_model_latency() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "terminal" ]]; then
+    echo "claude-code-model-latency currently supports only the Terminal host automation lane." >&2
+    echo "Use claude-code-terminal-model-latency or --host terminal." >&2
+    exit 2
+  fi
+
+  require_claude_code_host_if_requested
+
+  local runtime_start_line start_line trace_start_line proof_runtime_guard_line marker proof_dir
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  marker="$(claude_code_proof_marker)"
+  proof_dir="$(make_claude_code_terminal_proof_dir)"
+  CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+
+  prepare_temporary_app_enablement
+  prepare_claude_code_model_latency_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Claude Code model latency Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Claude Code model latency runtime readiness" "$(textedit_model_latency_runtime_ready_timeout_seconds)" "$SKIP_BUILD"
+  proof_runtime_guard_line="$(latest_runtime_bootstrap_line_number)"
+
+  cleanup_stale_claude_code_terminal_proofs
+  open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
+  wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+  wait_for_claude_code_terminal_prompt
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  local sample_index=0 visible_sample_count=0 empty_sample_count=0 proof_text sample_iteration_start sample_seed_start sample_start stable_context context_prefix trigger_word trigger_text expected_text expected_user_text expected_before_chars trigger_char_count suggestion_wait_seconds fresh_prompt_per_sample prompt_is_fresh
+  if [[ "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" != *"$marker"* ]]; then
+    echo "Claude Code model latency proof title must include $marker." >&2
+    exit 2
+  fi
+  trigger_char_count="${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TRIGGER_CHARS:-3}"
+  if ! [[ "$trigger_char_count" =~ ^[1-9][0-9]*$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TRIGGER_CHARS must be a positive integer." >&2
+    exit 2
+  fi
+  suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SUGGESTION_WAIT_SECONDS:-20}"
+  if ! [[ "$suggestion_wait_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SUGGESTION_WAIT_SECONDS must be a positive integer." >&2
+    exit 2
+  fi
+  fresh_prompt_per_sample="${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_FRESH_PROMPT_PER_SAMPLE:-1}"
+  case "$fresh_prompt_per_sample" in
+    1|true|yes|on) fresh_prompt_per_sample=1 ;;
+    0|false|no|off) fresh_prompt_per_sample=0 ;;
+    *)
+      echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_FRESH_PROMPT_PER_SAMPLE must be a boolean." >&2
+      exit 2
+      ;;
+  esac
+  prompt_is_fresh=1
+  while IFS= read -r proof_text; do
+    [[ -z "$proof_text" ]] && continue
+    sample_index=$((sample_index + 1))
+    if [[ "$fresh_prompt_per_sample" == "1" && "$prompt_is_fresh" != "1" ]]; then
+      cleanup_claude_code_terminal_proof
+      proof_dir="$(make_claude_code_terminal_proof_dir)"
+      CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+      open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
+      wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+      wait_for_claude_code_terminal_prompt
+      prompt_is_fresh=1
+    fi
+    if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+      echo "Claude Code model latency sample $sample_index must be a single line." >&2
+      exit 2
+    fi
+    if [[ "$proof_text" != *"$marker"* ]]; then
+      echo "Claude Code model latency sample $sample_index must include $marker." >&2
+      exit 2
+    fi
+    trigger_word="${proof_text##* }"
+    context_prefix="${proof_text%"$trigger_word"}"
+    trigger_text="${trigger_word:0:trigger_char_count}"
+    stable_context="$context_prefix"
+    expected_text="${stable_context}${trigger_text}"
+    expected_user_text="${expected_text/"$marker"/}"
+    while [[ "$expected_user_text" == " "* || "$expected_user_text" == $'\t'* ]]; do
+      expected_user_text="${expected_user_text#?}"
+    done
+    expected_before_chars="${#expected_user_text}"
+    if [[ -z "$trigger_word" || "$stable_context" == "$proof_text" || -z "$trigger_text" ]]; then
+      echo "Claude Code model latency sample $sample_index does not contain a stable context plus trigger word." >&2
+      exit 1
+    fi
+
+    assert_no_runtime_relaunch_since "$proof_runtime_guard_line" "Claude Code model latency sample $sample_index"
+    assert_frontmost_app "Terminal" "Claude Code model latency seed $sample_index"
+    sample_iteration_start="$(line_count "$LOG_PATH")"
+    if [[ "$prompt_is_fresh" == "1" ]]; then
+      prompt_is_fresh=0
+    else
+      clear_claude_code_terminal_prompt_line
+      sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_CLEAR_SETTLE_SECONDS:-0.7}"
+    fi
+    sample_seed_start="$(line_count "$LOG_PATH")"
+    type_claude_code_terminal_raw_smoke_text "$stable_context"
+    assert_claude_code_terminal_prompt_ready "$stable_context"
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_SEED_SETTLE_SECONDS:-0.35}"
+    sample_start="$(line_count "$LOG_PATH")"
+    type_claude_code_terminal_raw_smoke_text "$trigger_text"
+    assert_claude_code_terminal_prompt_ready "$expected_text"
+    if wait_for_log_fields_optional "$sample_iteration_start" "$suggestion_wait_seconds" \
+      "suggestion-presented" \
+      "app=com.anthropic.claude-code" \
+      "beforeChars=$expected_before_chars" \
+      "partialWordCharacters=${#trigger_text}" \
+      "requestMode=wordCompletion" \
+      "candidateSelectionSource=app-model-result"; then
+      echo "Claude Code model latency sample $sample_index produced a model-backed visible suggestion during the typed sample window." >&2
+      assert_claude_code_terminal_prompt_retains_marker
+      visible_sample_count=$((visible_sample_count + 1))
+    elif wait_for_log_fields_optional "$sample_iteration_start" "1" \
+      "suggestion-blocked" \
+      "app=com.anthropic.claude-code" \
+      "beforeChars=$expected_before_chars" \
+      "reason=empty-suggestion"; then
+      empty_sample_count=$((empty_sample_count + 1))
+      echo "Claude Code model latency sample $sample_index produced an empty word candidate; trying the next disposable context." >&2
+      assert_claude_code_terminal_prompt_retains_marker
+    else
+      wait_for_log_fields "$sample_start" "Claude Code model latency suggestion $sample_index" 1 \
+        "suggestion-presented" \
+        "app=com.anthropic.claude-code" \
+        "beforeChars=$expected_before_chars" \
+        "partialWordCharacters=${#trigger_text}" \
+        "requestMode=wordCompletion" \
+        "candidateSelectionSource=app-model-result"
+    fi
+    if ((visible_sample_count >= 5)); then
+      break
+    fi
+    sleep 0.35
+  done < <(claude_code_model_latency_proof_texts)
+
+  if ((visible_sample_count < 5)); then
+    echo "Claude Code model latency proof expected at least 5 visible model-backed word-completion samples, got $visible_sample_count visible and $empty_sample_count empty from $sample_index attempted contexts." >&2
+    exit 1
+  fi
+
+  sleep 1
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_TRACE_PATH="$TRACE_PATH" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_START_LINE="$((trace_start_line + 1))" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_EXTRA_BUNDLES="com.anthropic.claude-code" \
+  AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE="claude-code-model-latency" \
+    ./script/check_prompt_app_proof.sh
+
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$runtime_start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/latency_benchmark_report.py --beta-gate
 }
 
 run_manual_gated() {
@@ -9348,6 +11015,35 @@ SWIFT
 assert_obsidian_smoke_target() {
   activate_obsidian_for_smoke
   AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="${1:-}" swift script/obsidian_ax_editor.swift assert
+}
+
+wait_for_obsidian_smoke_target_current_value_end() {
+  local expected_suffix="$1"
+  local timeout_seconds="${2:-6}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local output=""
+
+  while ((SECONDS <= deadline)); do
+    if output="$(
+      AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="$expected_suffix" \
+        AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX_REQUIRES_EDITOR=1 \
+        AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_CURRENT_VALUE_END=1 \
+        swift script/obsidian_ax_editor.swift assert 2>/dev/null
+    )"; then
+      sleep 0.1
+      AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX="$expected_suffix" \
+        AUTOCOMPLETE_LAB_OBSIDIAN_EXPECTED_SUFFIX_REQUIRES_EDITOR=1 \
+        AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_CURRENT_VALUE_END=1 \
+        swift script/obsidian_ax_editor.swift assert >/dev/null 2>&1 || true
+      printf '%s\n' "$output"
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Obsidian AX editor to expose expected disposable suffix." >&2
+  echo "Expected suffix: $expected_suffix" >&2
+  exit 3
 }
 
 wait_for_obsidian_smoke_editor_ready() {
@@ -9810,6 +11506,19 @@ append_obsidian_smoke_note_file_text() {
   printf '%s' "$fragment" >>"$smoke_file"
 }
 
+obsidian_smoke_note_trimmed_tail_line() {
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+  tail -n 1 "$smoke_file" 2>/dev/null |
+    sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+obsidian_smoke_note_tail_line() {
+  local smoke_file
+  smoke_file="$(obsidian_smoke_file_path)"
+  tail -n 1 "$smoke_file" 2>/dev/null
+}
+
 wait_for_obsidian_smoke_note_file_suffix() {
   local expected_suffix="$1"
   local timeout_seconds="${2:-5}"
@@ -9839,7 +11548,7 @@ obsidian_smoke_note_file_char_count() {
 
 assert_obsidian_long_note_file_preserved() {
   local expected_suffix="$1"
-  local smoke_file
+  local smoke_file deadline current_tail
   smoke_file="$(obsidian_smoke_file_path)"
 
   if ! grep -Fq "Autocomplete Lab Obsidian scroll filler line 01" "$smoke_file" ||
@@ -9852,7 +11561,61 @@ assert_obsidian_long_note_file_preserved() {
     exit 3
   fi
 
-  wait_for_obsidian_smoke_note_file_suffix "$expected_suffix" 5
+  deadline=$((SECONDS + 5))
+  while ((SECONDS <= deadline)); do
+    current_tail="$(obsidian_smoke_note_trimmed_tail_line)"
+    if [[ "$current_tail" == "$expected_suffix" ]]; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Obsidian long note to end with expected disposable text." >&2
+  echo "Expected trimmed tail: $expected_suffix" >&2
+  echo "Current tail:" >&2
+  tail -c 240 "$smoke_file" >&2 || true
+  echo >&2
+  exit 3
+}
+
+assert_obsidian_first_accept_tail_for_variant() {
+  local manual_app="$1"
+  local current_tail="$2"
+
+  case "$manual_app" in
+    obsidian-run-on)
+      case "$current_tail" in
+        *"Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+    obsidian-markdown-bold)
+      case "$current_tail" in
+        "**Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+    obsidian-markdown-list)
+      case "$current_tail" in
+        "- Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+    *)
+      case "$current_tail" in
+        "Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+  esac
+
+  echo "Obsidian first accept did not preserve the disposable proof prefix." >&2
+  echo "Current tail: $current_tail" >&2
+  exit 3
 }
 
 activate_neutral_smoke_setup_app() {
@@ -9864,9 +11627,10 @@ activate_neutral_smoke_setup_app() {
 obsidian_reset_text_for_variant() {
   local variant="$1"
   local marker="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER:-Autocomplete Lab Obsidian proof}"
+  local reset_text="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-$marker}"
 
   if [[ "$variant" != "obsidian-long-note" ]]; then
-    printf '%s' "$marker"
+    printf '%s' "$reset_text"
     return 0
   fi
 
@@ -9899,6 +11663,7 @@ open_obsidian_smoke_note_if_configured() {
   if [[ -f "$proof_vault/Proof/placement-proof.md" ]]; then
     open "obsidian://open?vault=ObsidianProofVault&file=Proof%2Fplacement-proof"
     sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
+    activate_obsidian_for_smoke
     return 0
   fi
 
@@ -9924,15 +11689,23 @@ run_obsidian() {
       ;;
   esac
 
-  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment
+  local runtime_start_line start_line trace_start_line full_accept_key second_start_line full_start_line obsidian_marker first_fragment long_note_second_fragment
   runtime_start_line="$(line_count "$LOG_PATH")"
-  obsidian_marker="$(obsidian_smoke_marker_text "$manual_app")"
+  local marker_sentinel=$'\034'
+  obsidian_marker="$(obsidian_smoke_marker_text "$manual_app"; printf '%s' "$marker_sentinel")"
+  obsidian_marker="${obsidian_marker%"$marker_sentinel"}"
+  case "$manual_app" in
+    obsidian|obsidian-theme|obsidian-pane|obsidian-font-zoom|obsidian-multiline)
+      obsidian_marker+=" "
+      ;;
+  esac
   first_fragment="Smoke proof feels"
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     first_fragment=""
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1
   elif [[ "$manual_app" == "obsidian-pane" ]]; then
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
@@ -9941,7 +11714,12 @@ run_obsidian() {
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
-  elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+  elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+    export AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1
+  elif [[ "$manual_app" == "obsidian-run-on" ]]; then
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
@@ -9961,17 +11739,21 @@ run_obsidian() {
     unset AUTOCOMPLETE_LAB_OBSIDIAN_SKIP_RESET_RETURN
     export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=1
   fi
+  if [[ "$manual_app" =~ ^obsidian-(long-note|run-on)$ && -z "${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}" ]]; then
+    export AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab
+  fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"
 
   prepare_temporary_app_enablement
-  build_if_needed
-  if [[ "$SKIP_BUILD" != "1" ]]; then
-    wait_for_log_line_number "$runtime_start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
-    runtime_start_line="$MATCHED_LOG_LINE"
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    build_if_needed
+    wait_for_accessibility_ready "$runtime_start_line" "Obsidian Accessibility readiness" 20 "$SKIP_BUILD"
+    wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
+  else
+    build_bundle_if_needed
+    stop_current_steadytype_app_bundle
   fi
-  wait_for_accessibility_ready "$runtime_start_line" "Obsidian Accessibility readiness" 20 "$SKIP_BUILD"
-  wait_for_runtime_ready "$runtime_start_line" "Obsidian runtime readiness" 60 "$SKIP_BUILD"
 
   full_accept_key="$(accept_all_shortcut)"
 
@@ -10017,9 +11799,13 @@ run_obsidian() {
   else
     type_obsidian_raw_smoke_text "$first_fragment"
   fi
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    launch_steadytype_after_chrome_setup "obsidian" "$start_line"
+    wait_for_log_line_number "$start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
+    start_line="$MATCHED_LOG_LINE"
+  fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   activate_obsidian_for_smoke
-  assert_obsidian_smoke_target
   press_key_code 48
   wait_for_log_fields "$start_line" "Obsidian Tab acceptance" 12 \
     "keyboard-action" \
@@ -10030,24 +11816,35 @@ run_obsidian() {
   wait_for_log_pattern "$start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian first verified insertion"
   wait_for_screenshot_capture_if_enabled "$start_line" "md.obsidian" "Obsidian"
 
+  local first_expected_suffix
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    press_key_code 53
     sleep 0.2
     activate_neutral_smoke_setup_app
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant"
-    append_obsidian_smoke_note_file_text " and stays inst"
+    long_note_second_fragment=" and stays"
+    if [[ "$(obsidian_smoke_note_tail_line)" =~ [[:space:]]$ ]]; then
+      long_note_second_fragment="and stays"
+    fi
+    append_obsidian_smoke_note_file_text "$long_note_second_fragment"
     second_start_line="$(line_count "$LOG_PATH")"
     open_obsidian_smoke_note_if_configured
     wait_for_frontmost_app "Obsidian" 8
-    move_obsidian_caret_to_document_end
+    wait_for_obsidian_smoke_target_current_value_end "Smoke proof feels instant and stays" 8
     long_note_expected_before_chars="$(obsidian_smoke_note_file_char_count)"
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
   else
     settle_obsidian_focus_for_smoke "Obsidian post-accept setup"
-    assert_obsidian_smoke_target "Smoke proof feels instant"
+    local first_raw_tail_line second_fragment
+    first_expected_suffix="$(obsidian_smoke_note_trimmed_tail_line)"
+    assert_obsidian_first_accept_tail_for_variant "$manual_app" "$first_expected_suffix"
+    assert_obsidian_smoke_target "$first_expected_suffix"
+    first_raw_tail_line="$(obsidian_smoke_note_tail_line)"
+    second_fragment=" and stays"
+    if [[ "$first_raw_tail_line" =~ [[:space:]]$ ]]; then
+      second_fragment="and stays"
+    fi
     if [[ "$manual_app" == "obsidian-pane" ]]; then
       move_obsidian_caret_to_line_end
-    elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+    elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
       move_obsidian_caret_to_document_end
     elif [[ "$manual_app" == "obsidian-multiline" ]]; then
       set_obsidian_caret_to_value_end
@@ -10059,7 +11856,16 @@ run_obsidian() {
       sleep 0.15
     fi
     second_start_line="$(line_count "$LOG_PATH")"
-    type_obsidian_raw_smoke_text " and stays"
+    AUTOCOMPLETE_LAB_OBSIDIAN_AX_TYPE=1 type_obsidian_raw_smoke_text "$second_fragment"
+    if [[ "$manual_app" == "obsidian-pane" ]]; then
+      set_obsidian_caret_to_value_end
+      move_obsidian_caret_to_line_end
+    elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" ]]; then
+      set_obsidian_caret_to_value_end
+      move_obsidian_caret_to_document_end
+    elif [[ "$manual_app" == "obsidian" || "$manual_app" == "obsidian-theme" ]]; then
+      move_obsidian_caret_to_line_end
+    fi
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
     wait_for_obsidian_long_note_second_suggestion "$second_start_line" "$long_note_expected_before_chars" 12
@@ -10067,13 +11873,7 @@ run_obsidian() {
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=md.obsidian" "Obsidian second suggestion"
   fi
   if [[ "$manual_app" == "obsidian-long-note" ]]; then
-    sleep 0.15
-    activate_obsidian_for_smoke
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays inst"
     full_start_line="$(line_count "$LOG_PATH")"
-    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
-    assert_frontmost_app "Obsidian" "Obsidian long-note"
-    sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.25}"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian long-note full acceptance" 12 \
       "keyboard-action" \
@@ -10082,10 +11882,12 @@ run_obsidian() {
       "action=acceptAllVisible" \
       "handled=true"
     wait_for_log_pattern "$full_start_line" "insert-verification .*app=md.obsidian .*result=verified" "Obsidian long-note second verified insertion"
+    wait_for_screenshot_capture_if_enabled "$second_start_line" "md.obsidian" "Obsidian long-note second"
     assert_obsidian_long_note_file_preserved "Smoke proof feels instant and stays instant"
   else
-    activate_obsidian_for_smoke
-    assert_obsidian_smoke_target "Smoke proof feels instant and stays"
+    if [[ "$manual_app" != "obsidian-run-on" ]]; then
+      activate_obsidian_for_smoke
+    fi
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Obsidian full acceptance" 12 \
@@ -10612,7 +12414,7 @@ run_textedit_model_latency() {
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
 
-  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start stable_context trigger_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
+  local sample_index=0 model_sample_count=0 visible_sample_count=0 event_tap_sample_count=0 event_tap_started=0 fragment sample_start seed_start context_prefix stable_context trigger_word trigger_text expected_text attempt max_attempts attempt_had_model attempt_had_visible attempt_had_event_tap event_tap_start
   max_attempts="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     echo "AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_ATTEMPTS_PER_FRAGMENT must be a positive integer." >&2
@@ -10621,14 +12423,17 @@ run_textedit_model_latency() {
   while IFS= read -r fragment; do
     [[ -z "$fragment" ]] && continue
     sample_index=$((sample_index + 1))
-    stable_context="${fragment% *} "
-    trigger_text="${fragment##* }"
-    if [[ -z "$trigger_text" || "$stable_context" == "$fragment " ]]; then
+    trigger_word="${fragment##* }"
+    context_prefix="${fragment%"$trigger_word"}"
+    stable_context="$context_prefix"
+    trigger_text="${trigger_word:0:1}"
+    expected_text="${stable_context}${trigger_text}"
+    if [[ -z "$trigger_word" || "$stable_context" == "$fragment" || -z "$trigger_text" ]]; then
       echo "TextEdit model latency sample $sample_index does not contain a stable context plus trigger word." >&2
       exit 1
     fi
-    if ((${#trigger_text} < 2)); then
-      echo "TextEdit model latency sample $sample_index trigger word must contain at least two characters." >&2
+    if ((${#trigger_word} < 1)); then
+      echo "TextEdit model latency sample $sample_index trigger word must contain at least one character." >&2
       exit 1
     fi
     attempt_had_model=0
@@ -10669,8 +12474,8 @@ run_textedit_model_latency() {
       AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION=0 \
       AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_KEY_DELAY_SECONDS="${AUTOCOMPLETE_LAB_TEXTEDIT_MODEL_LATENCY_KEY_DELAY_SECONDS:-0.03}" \
         type_textedit_smoke_fragment "$textedit_window_title" "$trigger_text"
-      wait_for_textedit_document_prefix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt" 5
-      trim_textedit_native_completion_suffix "$textedit_window_title" "$fragment" "TextEdit model latency sample $sample_index attempt $attempt"
+      wait_for_textedit_document_prefix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt" 5
+      trim_textedit_native_completion_suffix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"
       if wait_for_log_fields_optional "$sample_start" 20 \
         "mlx-completion-timing" \
         "app=com.apple.TextEdit"; then
@@ -10801,7 +12606,7 @@ run_textedit_default_model_latency() {
       "mlx-completion-timing" \
       "app=com.apple.TextEdit" \
       "mode=phraseContinuation" \
-      "maxTokens=11"
+      "maxTokens=14"
     if wait_for_log_fields_optional "$sample_start" 8 \
       "suggestion-presented" \
       "app=com.apple.TextEdit" \
@@ -10921,9 +12726,25 @@ APPLESCRIPT
 
   local first_fragment="Smoke proof feels inst"
   local second_fragment=" and stays inst"
+  local second_fragments=()
   if [[ "$fixture" == "codemirror-official" ]]; then
     first_fragment="Smoke proof feels dicta"
     second_fragment=" and stays dicta"
+  fi
+  second_fragments=("$second_fragment")
+  if [[ "$fixture" == "textarea" ]]; then
+    second_fragments=(
+      "$second_fragment"
+      " while the textarea keeps inst"
+      " and the browser proof stays inst"
+    )
+  fi
+  if [[ "$fixture" == "contenteditable" ]]; then
+    second_fragments=(
+      "$second_fragment"
+      " while the editor keeps inst"
+      " and the rich text field feels inst"
+    )
   fi
 
   pause_steadytype_for_chrome_setup
@@ -10945,6 +12766,12 @@ APPLESCRIPT
   fi
   local before_one_word_accept_text
   before_one_word_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  if [[ -n "$chrome_pid" ]]; then
+    wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"
+  else
+    wait_for_frontmost_app "Google Chrome" 5
+  fi
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
@@ -10961,6 +12788,36 @@ APPLESCRIPT
   fi
   local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
+
+  if [[ "$CHROME_MODEL_LATENCY" == "1" ]]; then
+    local latency_fragment latency_index latency_start_line
+    local latency_fragments=(
+      " and the browser proof stays inst"
+      " while the local model stays inst"
+      " and the textarea keeps feeling inst"
+      " and the final browser sample stays inst"
+    )
+    latency_index=0
+    for latency_fragment in "${latency_fragments[@]}"; do
+      latency_index=$((latency_index + 1))
+      focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+      if [[ -n "$chrome_pid" ]]; then
+        assert_frontmost_process_id "$chrome_pid" "Chrome $fixture model latency $latency_index"
+      else
+        assert_frontmost_app "Google Chrome" "Chrome $fixture model latency $latency_index"
+      fi
+      latency_start_line="$(line_count "$LOG_PATH")"
+      type_chrome_smoke_text_with_system_events "$latency_fragment"
+      wait_for_chrome_focused_text_contains "$fixture" "$chrome_pid" "$latency_fragment" "Chrome $fixture model latency fragment $latency_index" 8
+      wait_for_log_fields "$latency_start_line" "Chrome $fixture model latency suggestion $latency_index" 20 \
+        "suggestion-presented" \
+        "app=com.google.Chrome" \
+        "candidateSelectionSource=app-model-result"
+    done
+
+    echo "Chrome $fixture model latency proof collected model-backed visible samples in one launch."
+    return 0
+  fi
 
   if ! chrome_fixture_requires_full_accept "$fixture"; then
     sleep 1
@@ -10982,16 +12839,44 @@ APPLESCRIPT
     return 0
   fi
 
-  if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
-  fi
-  pause_steadytype_for_chrome_setup
-  type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment" "$second_fragment"
-  second_start_line="$(line_count "$LOG_PATH")"
-  launch_steadytype_after_chrome_setup "$fixture" "$second_start_line" "$chrome_pid" "$chrome_url"
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  local second_attempt=0 second_suggestion_found=0
+  for second_fragment in "${second_fragments[@]}"; do
+    second_attempt=$((second_attempt + 1))
+    if [[ -z "$chrome_pid" ]]; then
+      focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
+    fi
+    pause_steadytype_for_chrome_setup
+    type_chrome_smoke_text "$fixture" "$chrome_pid" "$chrome_url" "second fragment $second_attempt" "$second_fragment"
+    second_start_line="$(line_count "$LOG_PATH")"
+    launch_steadytype_after_chrome_setup "$fixture" "$second_start_line" "$chrome_pid" "$chrome_url"
+    focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
 
-  wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion"
+    if wait_for_log_fields_optional "$second_start_line" 14 \
+      "suggestion-presented" \
+      "app=com.google.Chrome"; then
+      second_suggestion_found=1
+      break
+    fi
+    if wait_for_log_fields_optional "$second_start_line" 1 \
+      "suggestion-blocked" \
+      "app=com.google.Chrome" \
+      "reason=empty-suggestion"; then
+      echo "Chrome $fixture second suggestion attempt $second_attempt returned empty; retrying with another disposable fragment." >&2
+      continue
+    fi
+    if wait_for_log_fields_optional "$second_start_line" 1 \
+      "suggestion-blocked" \
+      "app=com.google.Chrome" \
+      "reason=too-slow-to-display"; then
+      echo "Chrome $fixture second suggestion attempt $second_attempt was too slow to display; retrying with another disposable fragment." >&2
+      continue
+    fi
+    wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion" 1
+  done
+  if ((second_suggestion_found == 0)); then
+    echo "Chrome $fixture second suggestion exhausted ${#second_fragments[@]} disposable fragments." >&2
+    wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion" 1
+  fi
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
   if [[ -z "$chrome_pid" ]]; then
     focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
@@ -11003,6 +12888,12 @@ APPLESCRIPT
   fi
   local before_full_accept_text
   before_full_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  if [[ -n "$chrome_pid" ]]; then
+    wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"
+  else
+    wait_for_frontmost_app "Google Chrome" 5
+  fi
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "Chrome $fixture full acceptance" 12 \
@@ -11042,6 +12933,9 @@ run_chrome() {
   runtime_start_line="$(line_count "$LOG_PATH")"
 
   prepare_temporary_app_enablement
+  if [[ "$CHROME_MODEL_LATENCY" == "1" ]]; then
+    prepare_chrome_model_latency_runtime_options
+  fi
   if [[ "$SKIP_BUILD" == "1" ]]; then
     build_if_needed
     wait_for_accessibility_ready "$runtime_start_line" "Chrome Accessibility readiness" 20 "$SKIP_BUILD"
@@ -11101,7 +12995,11 @@ case "$APP" in
     run_chrome
     ;;
   codex)
-    run_codex
+    if [[ "$CODEX_MODEL_LATENCY" == "1" ]]; then
+      run_codex_model_latency
+    else
+      run_codex
+    fi
     ;;
   notes)
     run_notes
@@ -11109,7 +13007,18 @@ case "$APP" in
   obsidian)
     run_obsidian
     ;;
-  claude-code|claude)
-    run_manual_gated
+  claude-code)
+    if [[ "$CLAUDE_CODE_MODEL_LATENCY" == "1" ]]; then
+      run_claude_code_model_latency
+    else
+      run_claude_code_terminal_host_smoke
+    fi
+    ;;
+  claude)
+    if [[ "$CLAUDE_MODEL_LATENCY" == "1" ]]; then
+      run_claude_model_latency
+    else
+      run_manual_gated
+    fi
     ;;
 esac

@@ -16,6 +16,22 @@ struct FocusedTextPollingThrottleSuggestionVisibilityPolicyTests {
         ))
     }
 
+    @Test("Preserves virtual app suggestion when frontmost app is its host")
+    func preservesVirtualAppSuggestionWhenFrontmostAppIsHost() {
+        let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
+
+        #expect(!policy.shouldHideVisibleSuggestion(
+            currentSuggestionBundleIdentifier: "com.anthropic.claude-code",
+            currentSuggestionHostBundleIdentifier: "com.mitchellh.ghostty",
+            currentSuggestionFieldIdentity: fieldIdentity(1, bundleIdentifier: "com.mitchellh.ghostty"),
+            currentFieldIdentity: fieldIdentity(1, bundleIdentifier: "com.mitchellh.ghostty"),
+            frontmostBundleIdentifier: "com.mitchellh.ghostty",
+            isInvalidatedByUserTyping: false,
+            currentSuggestionAgeMilliseconds: 120,
+            maximumPreservedAgeMilliseconds: 750
+        ))
+    }
+
     @Test("Hides suggestion invalidated by typing")
     func hidesSuggestionInvalidatedByTyping() {
         let policy = FocusedTextPollingThrottleSuggestionVisibilityPolicy()
@@ -128,9 +144,12 @@ struct FocusedTextPollingThrottleSuggestionVisibilityPolicyTests {
         ))
     }
 
-    private func fieldIdentity(_ elementIdentifier: Int) -> FocusedFieldIdentity {
+    private func fieldIdentity(
+        _ elementIdentifier: Int,
+        bundleIdentifier: String = "com.apple.Notes"
+    ) -> FocusedFieldIdentity {
         FocusedFieldIdentity(
-            bundleIdentifier: "com.apple.Notes",
+            bundleIdentifier: bundleIdentifier,
             processIdentifier: 123,
             elementIdentifier: elementIdentifier
         )

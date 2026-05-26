@@ -52,4 +52,54 @@ struct SuggestionReplacementVisibilityPolicyTests {
 
         #expect(policy.action(for: decision, hasVisibleSuggestion: false) == .hide)
     }
+
+    @Test("Keeps current suggestion visible when a late model result is suppressed")
+    func keepsCurrentSuggestionVisibleWhenLateModelResultIsSuppressed() {
+        #expect(policy.action(
+            forDisplaySuppressionReason: .tooSlowToDisplay,
+            hasVisibleSuggestion: true,
+            sameFieldAsCurrentSuggestion: true,
+            currentSuggestionAgeMilliseconds: 1_300,
+            maximumPreservedAgeMilliseconds: 5_000
+        ) == .keepCurrentVisible)
+    }
+
+    @Test("Hides late suppressed results when the current suggestion is stale or invalid")
+    func hidesLateSuppressedResultsWhenCurrentSuggestionIsStaleOrInvalid() {
+        #expect(policy.action(
+            forDisplaySuppressionReason: .tooSlowToDisplay,
+            hasVisibleSuggestion: true,
+            sameFieldAsCurrentSuggestion: true,
+            currentSuggestionAgeMilliseconds: 5_001,
+            maximumPreservedAgeMilliseconds: 5_000
+        ) == .hide)
+
+        #expect(policy.action(
+            forDisplaySuppressionReason: .tooSlowToDisplay,
+            hasVisibleSuggestion: true,
+            currentSuggestionInvalidatedByUserTyping: true,
+            sameFieldAsCurrentSuggestion: true,
+            currentSuggestionAgeMilliseconds: 100,
+            maximumPreservedAgeMilliseconds: 5_000
+        ) == .hide)
+
+        #expect(policy.action(
+            forDisplaySuppressionReason: .tooSlowToDisplay,
+            hasVisibleSuggestion: true,
+            sameFieldAsCurrentSuggestion: false,
+            currentSuggestionAgeMilliseconds: 100,
+            maximumPreservedAgeMilliseconds: 5_000
+        ) == .hide)
+    }
+
+    @Test("Only too-slow display suppression can preserve the current suggestion")
+    func onlyTooSlowDisplaySuppressionCanPreserveCurrentSuggestion() {
+        #expect(policy.action(
+            forDisplaySuppressionReason: .lowConfidence,
+            hasVisibleSuggestion: true,
+            sameFieldAsCurrentSuggestion: true,
+            currentSuggestionAgeMilliseconds: 100,
+            maximumPreservedAgeMilliseconds: 5_000
+        ) == .hide)
+    }
 }
