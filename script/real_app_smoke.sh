@@ -1902,17 +1902,25 @@ try_wait_for_frontmost_app() {
     local frontmost
     frontmost="$(run_osascript_with_timeout 1 "frontmost app wait probe" \
       -e 'tell application "System Events"' \
-      -e 'set frontProcess to first application process whose frontmost is true' \
+      -e 'set frontIdentities to {}' \
+      -e 'set frontProcesses to application processes whose frontmost is true' \
+      -e 'repeat with frontProcess in frontProcesses' \
       -e 'set frontName to name of frontProcess' \
       -e 'set frontBundle to ""' \
       -e 'try' \
       -e 'set frontBundle to bundle identifier of frontProcess' \
       -e 'end try' \
-      -e 'return frontName & (ASCII character 9) & frontBundle' \
+      -e 'copy (frontName & (ASCII character 9) & frontBundle) to end of frontIdentities' \
+      -e 'end repeat' \
+      -e 'set AppleScript'\''s text item delimiters to (ASCII character 10)' \
+      -e 'return frontIdentities as text' \
       -e 'end tell' 2>/dev/null || true)"
-    if frontmost_app_identity_matches "$frontmost" "$expected"; then
-      return 0
-    fi
+    while IFS= read -r frontmost_identity; do
+      [[ -z "$frontmost_identity" ]] && continue
+      if frontmost_app_identity_matches "$frontmost_identity" "$expected"; then
+        return 0
+      fi
+    done <<<"$frontmost"
     sleep 0.2
   done
 
@@ -4541,20 +4549,30 @@ Thread.sleep(forTimeInterval: 0.35)
 let appElement = AXUIElementCreateApplication(pid)
 AXUIElementSetMessagingTimeout(appElement, 0.5)
 
-guard let windowValue = copyAttribute(appElement, kAXFocusedWindowAttribute),
-      let source = CGEventSource(stateID: .hidSystemState) else {
+guard let source = CGEventSource(stateID: .hidSystemState) else {
+    fputs("Chrome smoke focus failed: could not create a CGEvent source for pid \(pid).\n", stderr)
     exit(1)
 }
 
-let focusedWindow = windowValue as! AXUIElement
+let focusedWindow: AXUIElement?
+if let focusedWindowValue = copyAttribute(appElement, kAXFocusedWindowAttribute) {
+    focusedWindow = (focusedWindowValue as! AXUIElement)
+} else {
+    focusedWindow = nil
+}
 let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
 let smokeWindow = windows.first {
     (copyAttribute($0, "AXDocument") as? String ?? "").contains("autocomplete-lab-chrome-")
 }
-let windowElement = smokeWindow ?? focusedWindow
+let firstWindow = windows.first
+guard let windowElement = smokeWindow ?? focusedWindow ?? firstWindow else {
+    fputs("Chrome smoke focus failed: no accessible Chrome window for pid \(pid).\n", stderr)
+    exit(1)
+}
 AXUIElementPerformAction(windowElement, kAXRaiseAction as CFString)
 
 guard let windowBounds = bounds(for: windowElement) else {
+    fputs("Chrome smoke focus failed: target Chrome window has no AX bounds for pid \(pid).\n", stderr)
     exit(1)
 }
 
@@ -4566,6 +4584,7 @@ for eventType in [CGEventType.leftMouseDown, .leftMouseUp] {
         mouseCursorPosition: point,
         mouseButton: .left
     ) else {
+        fputs("Chrome smoke focus failed: could not create click event for pid \(pid).\n", stderr)
         exit(1)
     }
     event.post(tap: .cghidEventTap)
@@ -7517,6 +7536,8 @@ assert_chrome_ready_for_input() {
   local label="$4"
 
   if [[ -n "$chrome_pid" ]]; then
+    focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$expected_url"
+    wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture $label"
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"
     assert_chrome_expected_tab "$fixture" "$expected_url" "$label" "$chrome_pid"
     assert_chrome_focused_editable_ax "$fixture" "$chrome_pid" "$label"
@@ -9897,14 +9918,10 @@ command_matches_steadytype_binary() {
 current_steadytype_app_bundle_pids() {
   local app_binary
   app_binary="$(steadytype_app_binary)"
-  local current_pgid
-  current_pgid="$(ps -o pgid= -p "$$" 2>/dev/null || true)"
-  current_pgid="${current_pgid//[[:space:]]/}"
 
   while IFS=$'\t' read -r pid pgid command; do
     [[ -z "$pid" ]] && continue
     [[ "$pid" == "$$" ]] && continue
-    [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
     command_matches_steadytype_binary "$command" "$app_binary" || continue
     printf '%s\n' "$pid"
   done < <(steadytype_app_process_rows)
@@ -9924,6 +9941,17 @@ stop_current_steadytype_app_bundle() {
     fi
     sleep 0.1
   done
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill -9 "$pid" >/dev/null 2>&1 || true
+  done < <(current_steadytype_app_bundle_pids)
+
+  sleep 0.1
+  if [[ -n "$(current_steadytype_app_bundle_pids)" ]]; then
+    echo "Timed out stopping current SteadyType app bundle before smoke setup." >&2
+    exit 1
+  fi
 }
 
 stale_steadytype_app_bundle_pids() {
@@ -11549,6 +11577,7 @@ open_obsidian_smoke_note_if_configured() {
   if [[ -f "$proof_vault/Proof/placement-proof.md" ]]; then
     open "obsidian://open?vault=ObsidianProofVault&file=Proof%2Fplacement-proof"
     sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
+    activate_obsidian_for_smoke
     return 0
   fi
 
@@ -12617,6 +12646,13 @@ APPLESCRIPT
     second_fragment=" and stays dicta"
   fi
   second_fragments=("$second_fragment")
+  if [[ "$fixture" == "textarea" ]]; then
+    second_fragments=(
+      "$second_fragment"
+      " while the textarea keeps inst"
+      " and the browser proof stays inst"
+    )
+  fi
   if [[ "$fixture" == "contenteditable" ]]; then
     second_fragments=(
       "$second_fragment"
@@ -12644,6 +12680,12 @@ APPLESCRIPT
   fi
   local before_one_word_accept_text
   before_one_word_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  if [[ -n "$chrome_pid" ]]; then
+    wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"
+  else
+    wait_for_frontmost_app "Google Chrome" 5
+  fi
   press_key_code 48
   wait_for_log_fields "$start_line" "Chrome $fixture Tab acceptance" 12 \
     "keyboard-action" \
@@ -12736,6 +12778,13 @@ APPLESCRIPT
       echo "Chrome $fixture second suggestion attempt $second_attempt returned empty; retrying with another disposable fragment." >&2
       continue
     fi
+    if wait_for_log_fields_optional "$second_start_line" 1 \
+      "suggestion-blocked" \
+      "app=com.google.Chrome" \
+      "reason=too-slow-to-display"; then
+      echo "Chrome $fixture second suggestion attempt $second_attempt was too slow to display; retrying with another disposable fragment." >&2
+      continue
+    fi
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion" 1
   done
   if ((second_suggestion_found == 0)); then
@@ -12753,6 +12802,12 @@ APPLESCRIPT
   fi
   local before_full_accept_text
   before_full_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
+  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
+  if [[ -n "$chrome_pid" ]]; then
+    wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"
+  else
+    wait_for_frontmost_app "Google Chrome" 5
+  fi
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "Chrome $fixture full acceptance" 12 \
