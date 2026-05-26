@@ -397,8 +397,8 @@ header tails unless screen recovery finds the real prompt line. The policy can
 now recover a proof marker from Ghostty's terminal header/screen only when the
 current AX fragment still matches the recovered prompt row, and it allows
 Claude prompt box chrome after that row without treating the chrome as input.
-The next diagnostic pass also emits redacted shape counters for screen suffix
-candidates, header-scoped markers, prompt-segment presence, and recovery
+The follow-up diagnostic pass now emits redacted shape counters for screen
+suffix candidates, header-scoped markers, prompt-segment presence, and recovery
 match/mismatch counts, so the next Ghostty run can be debugged without logging
 the prompt text.
 `swift test --filter ClaudeCodeTerminalHostProofPolicyTests --jobs 1` passed
@@ -406,10 +406,16 @@ with 75 tests for those safe-recovery and rejection cases. The latest live
 `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 claude-code-ghostty --manual-gate` run still timed out after 7 disposable
 contexts with no visible suggestion; archive proof SHA
-`26bb28faeabf43b2c21a99155d7a61b87b6a2567ea30ae9adc6183cc6ff6f1ed`.
+`fa7575e4b639f33fb26c2f8425e0f2aecffd7f0f0d65120258108b3a18dfb40c`.
+Diagnostics lines `584845`, `584850`, `584873`, `584877`, `585311`, and
+`585315` show the useful shape: the Ghostty screen often has the proof marker,
+the header-scoped marker, and a recoverable screen segment, but
+`terminalProofHeaderScopedCurrentMatch=false`. The current AX suffix side is
+either empty after filtering or has one 11-word candidate that mismatches the
+screen prompt.
 That is not support yet, but it is the right trust direction: no stale
 top-window suggestion, no unverifiable insertion claim, and the next gap is
-more diagnostic specificity plus a true live prompt-fragment match.
+true current-suffix extraction/matching against the live Ghostty prompt.
 
 ## Scorecard
 
