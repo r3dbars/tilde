@@ -522,7 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
     private var isModelInstallCancelRequested = false
-    private let focusedTextPollInterval: TimeInterval = 0.05
+    private let focusedTextPollInterval: TimeInterval = 0.08
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60

@@ -8,7 +8,7 @@ struct FocusPollingCadencePolicyTests {
     func usesBoundedActivePollingOnlyWhileSuggestionIsVisible() {
         let policy = FocusPollingCadencePolicy()
 
-        #expect(policy.activeSuggestionIntervalSeconds == 0.05)
+        #expect(policy.activeSuggestionIntervalSeconds == 0.08)
         #expect(policy.interval(
             isTrustedForAccessibility: true,
             hasSupportedProfile: true,
@@ -149,27 +149,35 @@ struct FocusPollingCadencePolicyTests {
         ))
     }
 
-    @Test("Visible suggestions keep the poll loop responsive")
-    func visibleSuggestionsKeepThePollLoopResponsive() {
-        let policy = FocusPollingCadencePolicy(
-            activeSuggestionIntervalSeconds: 0.05,
-            supportedTypingWatchIntervalSeconds: 0.2
-        )
+    @Test("Visible suggestions keep the poll loop responsive without 50ms AX reads")
+    func visibleSuggestionsKeepThePollLoopResponsiveWithoutHotPolling() {
+        let policy = FocusPollingCadencePolicy(supportedTypingWatchIntervalSeconds: 0.2)
         let start = Date(timeIntervalSince1970: 1_000)
 
         #expect(policy.shouldPoll(
-            now: start.addingTimeInterval(0.051),
+            now: start.addingTimeInterval(0.081),
             lastPollAt: start,
             isTrustedForAccessibility: true,
             hasSupportedProfile: true,
             hasVisibleSuggestion: true
         ))
         #expect(!policy.shouldPoll(
-            now: start.addingTimeInterval(0.049),
+            now: start.addingTimeInterval(0.079),
             lastPollAt: start,
             isTrustedForAccessibility: true,
             hasSupportedProfile: true,
             hasVisibleSuggestion: true
         ))
+    }
+
+    @Test("Poll cadence has an 80ms floor")
+    func pollCadenceHasEightyMillisecondFloor() {
+        let policy = FocusPollingCadencePolicy(
+            activeSuggestionIntervalSeconds: 0.01,
+            supportedTypingWatchIntervalSeconds: 0.02
+        )
+
+        #expect(policy.activeSuggestionIntervalSeconds == 0.08)
+        #expect(policy.supportedTypingWatchIntervalSeconds == 0.08)
     }
 }
