@@ -9915,14 +9915,14 @@ build_if_needed() {
   SMOKE_PHASE="build/relaunch current SteadyType"
   if [[ "$SKIP_BUILD" != "1" ]]; then
     local build_run_env=(
-      AUTOCOMPLETE_LAB_DIRECT_LAUNCH=1
       AUTOCOMPLETE_LAB_BUILD_RUN_OWNED_BY_SMOKE=1
       AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES=1
     )
     if [[ "${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SKIP_STALE_APP_SCAN:-}" =~ ^(1|true|yes|on)$ ]]; then
       build_run_env+=(AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN=1)
     fi
-    env "${build_run_env[@]}" ./script/build_and_run.sh run
+    env "${build_run_env[@]}" ./script/build_and_run.sh bundle-only
+    launch_current_steadytype_with_smoke_env
   fi
 
   wait_for_current_autocomplete_lab_process
@@ -10060,12 +10060,7 @@ pause_steadytype_for_chrome_setup() {
   stop_current_steadytype_app_bundle
 }
 
-launch_steadytype_after_chrome_setup() {
-  local fixture="$1"
-  local start_line="$2"
-  local chrome_pid="${3:-}"
-  local chrome_url="${4:-}"
-
+launch_current_steadytype_with_smoke_env() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     return 0
   fi
@@ -10108,6 +10103,20 @@ launch_steadytype_after_chrome_setup() {
   disown "$!" 2>/dev/null || true
 
   wait_for_current_autocomplete_lab_process
+}
+
+launch_steadytype_after_chrome_setup() {
+  local fixture="$1"
+  local start_line="$2"
+  local chrome_pid="${3:-}"
+  local chrome_url="${4:-}"
+
+  launch_current_steadytype_with_smoke_env
+
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    return 0
+  fi
+
   if [[ -n "$chrome_url" ]]; then
     focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   fi

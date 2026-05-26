@@ -77,12 +77,12 @@ import sys
 
 Path(sys.argv[1]).write_text(
     "Insertion proof status: docs/product/manual-smoke-runs.md\n"
-    "30 target app pass(es) still need real manual smoke proof.\n",
+    "10 target app pass(es) still need real manual smoke proof.\n",
     encoding="utf-8",
 )
 Path(sys.argv[2]).write_text(
     "Proof manifest gaps:\n"
-    "Proof manifest check failed with 6 issue(s).\n",
+    "Proof manifest verified.\n",
     encoding="utf-8",
 )
 PY
@@ -269,7 +269,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "manual smoke stale/pending count claim is 29, live output reports 30" "$TMP_DIR/manual-drift.txt" >/dev/null; then
+if ! grep -F "manual smoke stale/pending count claim is 29, live output reports 10" "$TMP_DIR/manual-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live manual count drift failure" >&2
   cat "$TMP_DIR/manual-drift.txt" >&2
   exit 1
@@ -299,7 +299,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "proof manifest issue count claim is 7, live output reports 6" "$TMP_DIR/proof-drift.txt" >/dev/null; then
+if ! grep -F "proof manifest issue count claim is 7, live output reports 0" "$TMP_DIR/proof-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live proof manifest count drift failure" >&2
   cat "$TMP_DIR/proof-drift.txt" >&2
   exit 1
@@ -325,8 +325,8 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("| Placement | 82/100 |", "| Placement | 90/100 |", 1)
-source = source.replace("The beta-safe writing lanes are current", "The beta-safe writing lanes are stale", 1)
+source = source.replace("| Placement | 89/100 |", "| Placement | 90/100 |", 1)
+source = source.replace("The 10 beta-safe writing lanes plus", "The stale 10 beta-safe writing lanes plus", 1)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -347,8 +347,8 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("| Tab safety | 80/100 |", "| Tab safety | 90/100 |", 1)
-source = source.replace("Normal writing Tab acceptance is current", "Normal writing Tab acceptance is pending", 1)
+source = source.replace("| Tab safety | 86/100 |", "| Tab safety | 90/100 |", 1)
+source = source.replace("Prompt/chat apps are not normal beta writing surfaces.", "Pending prompt/chat apps are not normal beta writing surfaces.", 1)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -358,7 +358,7 @@ if python3 script/check_steadytype_scorecard.py --scorecard "$PENDING_ROUND_UP" 
 fi
 
 if ! grep -F "Tab safety: contains 'pending', so score must stay <= 75/100" "$TMP_DIR/pending.txt" >/dev/null; then
-  echo "scorecard self-test missing pending proof failure" >&2
+  echo "scorecard self-test missing stale Tab safety proof failure" >&2
   cat "$TMP_DIR/pending.txt" >&2
   exit 1
 fi
@@ -437,8 +437,8 @@ PY
 done
 
 PERFECT_UNRESOLVED="$TMP_DIR/perfect-unresolved.md"
-sed -e 's#Overall score: 78/100\.#Overall score: 79/100.#' \
-  -e 's#| Diagnostics | 90/100 |#| Diagnostics | 100/100 |#' \
+sed -e 's#Overall score: 87/100\.#Overall score: 88/100.#' \
+  -e 's#| Diagnostics | 92/100 |#| Diagnostics | 100/100 |#' \
   "$SCORECARD" >"$PERFECT_UNRESOLVED"
 
 if python3 script/check_steadytype_scorecard.py --scorecard "$PERFECT_UNRESOLVED" >"$TMP_DIR/perfect.txt" 2>&1; then

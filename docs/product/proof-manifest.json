@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "042f9b46818803f95d5f0258ae51c29b4204e190",
+  "sourceCommit": "8485054dc731bdffb1342c5969db05b7f35b310f",
   "proofFingerprint": {
     "traceProofVersion": "2026-05-07.1",
     "placementProofVersion": "placement-v4",
@@ -180,7 +180,7 @@
             "reference": "Codex/default"
           }
         ],
-        "notes": "Proof-only prompt support has same-slice screenshot, one-word accept, and no-submit proof refreshed at 2026-05-24T11:28:11Z with trace lines 18824-18828. It is not beta-safe normal writing support, and full accept stays disabled until separate no-submit proof exists."
+        "notes": "Proof-only prompt support has same-slice screenshot, one-word accept, and no-submit proof refreshed at 2026-05-26T02:06:11Z with trace lines 28053-28056. It is not beta-safe normal writing support, and full accept stays disabled until separate no-submit proof exists."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -565,7 +565,7 @@
         "more prompt layouts before raising beyond word-only",
         "separate full-accept no-submit proof before enabling full accept"
       ],
-      "notes": "Default Codex proof has one-word Tab accept, insertion verification, no submit, and screenshot-backed trace proof refreshed at 2026-05-24T11:28:11Z for proof mode only; normal beta use remains blocked."
+      "notes": "Default Codex proof has one-word Tab accept, insertion verification, no submit, and screenshot-backed trace proof refreshed at 2026-05-26T02:06:11Z for proof mode only; normal beta use remains blocked."
     },
     {
       "surface": "Obsidian long notes",
@@ -777,7 +777,7 @@
         {
           "id": "codex-default-one-word-no-submit",
           "status": "complete",
-          "summary": "Default Codex prompt proof passed with strict screenshot evidence, one-word Tab accept, insertion verification, and zero prompt-submit safety counters on 2026-05-24.",
+          "summary": "Default Codex prompt proof passed with strict screenshot evidence, one-word Tab accept, insertion verification, and zero prompt-submit safety counters on 2026-05-26.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
         }
       ]

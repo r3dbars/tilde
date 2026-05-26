@@ -6,15 +6,15 @@ cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
-EXPECTED_CURRENT_SCORE=56
+EXPECTED_CURRENT_SCORE=98
 
 script/check_graduation_score.sh --min-score "$EXPECTED_CURRENT_SCORE" >"$TMP_DIR/current.txt"
 if ! grep -F "Graduation score: $EXPECTED_CURRENT_SCORE/100" "$TMP_DIR/current.txt" >/dev/null; then
   echo "graduation score self-test did not report the expected current score" >&2
   exit 1
 fi
-if ! grep -F "Proof manifest validator passes with current source-compatible evidence" "$TMP_DIR/current.txt" >/dev/null; then
-  echo "graduation score self-test did not keep the pending proof blocker visible" >&2
+if ! grep -F "[FAIL]  2 - Proof manifest validator passes with current source-compatible evidence" "$TMP_DIR/current.txt" >/dev/null; then
+  echo "graduation score self-test did not keep the pending current-source proof gate visible" >&2
   exit 1
 fi
 
@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if payload.get("score") != 56 or payload.get("status") != "pass" or payload.get("threshold") != 56:
+if payload.get("score") != 98 or payload.get("status") != "pass" or payload.get("threshold") != 98:
     raise SystemExit("unexpected graduation score JSON payload")
 if "Proof manifest validator passes with current source-compatible evidence" not in payload.get("hardGateBlockers", []):
     raise SystemExit("current payload should keep pending proof blockers visible")
