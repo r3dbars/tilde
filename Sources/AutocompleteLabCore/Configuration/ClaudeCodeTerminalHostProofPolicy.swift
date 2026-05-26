@@ -477,6 +477,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let recovery = recoveredMarkedTerminalScreenInputAnalysis(for: context)
         let recoveredInput = recovery.inputText
         let titleScopedScreenInput = titleScopedTerminalScreenInputText(for: context)
+        let screenRecoveryShape = terminalScreenRecoveryDiagnosticShape(for: context)
         let markerTailFragments = lastProofMarkerRange(in: context.rawTextBeforeCursor).map { markerRange in
             lineFragments(String(context.rawTextBeforeCursor[markerRange.lowerBound...]))
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -484,7 +485,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         } ?? []
         let recoveredPartialWordShape = recoveredInput.flatMap(PartialWordShape.from(textBeforeCursor:))
 
-        return [
+        var metadata: [String: String] = [
             "terminalProofFocusedLineChars": String(focusedLine.count),
             "terminalProofFocusedLineHasMarker": String(containsProofMarker(focusedLine)),
             "terminalProofFocusedLineKind": diagnosticLineKind(focusedLine, windowTitle: context.windowTitle),
@@ -508,11 +509,121 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             "terminalProofRecoveryRejectionReason": recovery.rejectionReason,
             "terminalProofTitleScopedScreenRecoverable": String(titleScopedScreenInput != nil),
             "terminalProofTitleScopedScreenBeforeChars": String(titleScopedScreenInput?.count ?? 0),
+            "terminalProofTitleScopedScreenCurrentContextMatched": String(
+                screenRecoveryShape.headerScopedMarker && titleScopedScreenInput != nil
+            ),
             "terminalProofRecoveredBeforeChars": String(recoveredInput?.count ?? 0),
             "terminalProofRecoveredWordCount": String(recoveredInput?.split(whereSeparator: \.isWhitespace).count ?? 0),
             "terminalProofRecoveredPartialWordCharacters": String(recoveredPartialWordShape?.characterCount ?? 0),
             "terminalProofRecoveredPartialWordCasing": recoveredPartialWordShape?.casing.rawValue ?? PartialWordCasing.none.rawValue
         ]
+        metadata.merge(screenRecoveryShape.metadata) { _, newValue in newValue }
+        return metadata
+    }
+
+    private struct TerminalScreenRecoveryDiagnosticShape {
+        let currentSuffixCandidateCount: Int
+        let currentSuffixMaxWordCount: Int
+        let currentSuffixHasShellCommand: Bool
+        let headerScopedMarker: Bool
+        let promptSegmentPresent: Bool
+        let recoveryTriedCandidates: Int
+        let recoveryWouldRecover: Bool
+        let recoveryMatchedCandidateIndex: Int
+        let mismatchCount: Int
+        let tooShortCount: Int
+        let missingScopedMarkerCount: Int
+        let afterCursorCount: Int
+        let unsafeTailCount: Int
+        let otherCount: Int
+
+        var metadata: [String: String] {
+            [
+                "terminalProofScreenCurrentSuffixCandidateCount": String(currentSuffixCandidateCount),
+                "terminalProofScreenCurrentSuffixMaxWords": String(currentSuffixMaxWordCount),
+                "terminalProofScreenCurrentSuffixHasShellCommand": String(currentSuffixHasShellCommand),
+                "terminalProofScreenHeaderScopedMarker": String(headerScopedMarker),
+                "terminalProofScreenPromptSegmentPresent": String(promptSegmentPresent),
+                "terminalProofScreenRecoveryTriedCandidates": String(recoveryTriedCandidates),
+                "terminalProofScreenRecoveryWouldRecover": String(recoveryWouldRecover),
+                "terminalProofScreenRecoveryMatchedCandidateIndex": String(recoveryMatchedCandidateIndex),
+                "terminalProofScreenRecoveryMismatchCount": String(mismatchCount),
+                "terminalProofScreenRecoveryTooShortCount": String(tooShortCount),
+                "terminalProofScreenRecoveryMissingScopedMarkerCount": String(missingScopedMarkerCount),
+                "terminalProofScreenRecoveryAfterCursorCount": String(afterCursorCount),
+                "terminalProofScreenRecoveryUnsafeTailCount": String(unsafeTailCount),
+                "terminalProofScreenRecoveryOtherCount": String(otherCount)
+            ]
+        }
+    }
+
+    private static func terminalScreenRecoveryDiagnosticShape(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> TerminalScreenRecoveryDiagnosticShape {
+        let candidates = terminalScreenCurrentInputSuffixCandidates(for: context)
+        var triedCandidates = 0
+        var wouldRecover = false
+        var matchedCandidateIndex = -1
+        var mismatchCount = 0
+        var tooShortCount = 0
+        var missingScopedMarkerCount = 0
+        var afterCursorCount = 0
+        var unsafeTailCount = 0
+        var otherCount = 0
+
+        for (index, candidate) in candidates.enumerated() {
+            triedCandidates += 1
+            let analysis = recoveredMarkedTerminalScreenInputAnalysis(
+                hostBundleIdentifier: context.hostBundleIdentifier,
+                proofModeEnabled: context.proofModeEnabled,
+                windowTitle: context.windowTitle,
+                textBeforeCursor: context.terminalScreenText,
+                textAfterCursor: "",
+                currentInputSuffix: candidate
+            )
+            if analysis.inputText != nil {
+                wouldRecover = true
+                matchedCandidateIndex = index
+                break
+            }
+
+            switch analysis.rejectionReason {
+            case "screenCurrentInputMismatch":
+                mismatchCount += 1
+            case "screenRecoveredInputTooShort":
+                tooShortCount += 1
+            case "missingScopedMarker", "missingRawMarker", "missingMarkerTail":
+                missingScopedMarkerCount += 1
+            case "afterCursorText":
+                afterCursorCount += 1
+            case "unsafeMarkerTail":
+                unsafeTailCount += 1
+            default:
+                otherCount += 1
+            }
+        }
+
+        return TerminalScreenRecoveryDiagnosticShape(
+            currentSuffixCandidateCount: candidates.count,
+            currentSuffixMaxWordCount: candidates
+                .map { $0.split(whereSeparator: \.isWhitespace).count }
+                .max() ?? 0,
+            currentSuffixHasShellCommand: candidates.contains { candidate in
+                looksLikeShellCommandInput(candidate)
+                    || looksLikeTerminalShellCommandLine(candidate)
+            },
+            headerScopedMarker: terminalScreenHasScopedProofHeaderMarker(context.terminalScreenText),
+            promptSegmentPresent: recoveredMarkedTerminalScreenPromptSegment(in: context.terminalScreenText) != nil,
+            recoveryTriedCandidates: triedCandidates,
+            recoveryWouldRecover: wouldRecover,
+            recoveryMatchedCandidateIndex: matchedCandidateIndex,
+            mismatchCount: mismatchCount,
+            tooShortCount: tooShortCount,
+            missingScopedMarkerCount: missingScopedMarkerCount,
+            afterCursorCount: afterCursorCount,
+            unsafeTailCount: unsafeTailCount,
+            otherCount: otherCount
+        )
     }
 
     private static func proofInputTextBeforeCursorOnly(

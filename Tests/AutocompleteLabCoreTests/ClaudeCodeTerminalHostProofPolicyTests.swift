@@ -1267,6 +1267,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(effective == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
         #expect(metadata["terminalProofRecoverableInput"] == "true")
         #expect(metadata["terminalProofRecoveryRejectionReason"] == "none")
+        #expect(metadata["terminalProofScreenPromptSegmentPresent"] == "true")
+        #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "true")
+        #expect(metadata["terminalProofScreenRecoveryMatchedCandidateIndex"] == "0")
+        #expect(metadata["terminalProofScreenRecoveryMismatchCount"] == "0")
+        #expect(metadata["terminalProofScreenCurrentSuffixMaxWords"] == "6")
     }
 
     @Test("Ghostty proof recovers header-scoped screen prompt from whole-screen AX after cursor")
@@ -1311,6 +1316,9 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
         #expect(effective == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
         #expect(metadata["terminalProofTitleScopedScreenRecoverable"] == "true")
+        #expect(metadata["terminalProofScreenHeaderScopedMarker"] == "true")
+        #expect(metadata["terminalProofTitleScopedScreenCurrentContextMatched"] == "true")
+        #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "false")
     }
 
     @Test("Ghostty proof rejects header-scoped screen prompt without current AX match")
@@ -1378,6 +1386,9 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
         #expect(effective == raw)
         #expect(metadata["terminalProofRecoveryRejectionReason"]?.contains("screenCurrentInputMismatch") == true)
+        #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "false")
+        #expect(metadata["terminalProofScreenRecoveryMismatchCount"] == "1")
+        #expect(metadata["terminalProofScreenRecoveryMatchedCandidateIndex"] == "-1")
     }
 
     @Test("Ghostty proof rejects header after-cursor text even when screen has marker")
@@ -1404,10 +1415,15 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             raw: raw,
             for: context
         )
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
 
         #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
         #expect(effective == raw)
+        #expect(metadata["terminalProofScreenPromptSegmentPresent"] == "true")
+        #expect(metadata["terminalProofScreenCurrentSuffixCandidateCount"] == "0")
+        #expect(metadata["terminalProofScreenRecoveryTriedCandidates"] == "0")
+        #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "false")
     }
 
     @Test("Ghostty title-scoped screen recovery keeps shell commands blocked")
