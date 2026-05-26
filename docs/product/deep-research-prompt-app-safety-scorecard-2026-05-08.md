@@ -77,8 +77,8 @@ reports the six prompt-app safety counters, and exits nonzero when any counter
 is nonzero or when no prompt-app proof events are present. It is wired into the
 score loop, strict score target gates, beta readiness, and smoke self-tests.
 Codex and Claude desktop now have same-slice one-word no-submit proof. The
-Codex row was refreshed on 2026-05-24 with strict screenshot-backed evidence
-and a bounded prompt-proof slice at trace lines 18824-18828. Strict manual proof
+Codex row was refreshed on 2026-05-26 with strict screenshot-backed evidence
+and a bounded prompt-proof slice at trace lines 28053-28056. Strict manual proof
 remains stale or missing for some other real target apps, so this does not
 claim beta-ready prompt-app support.
 
@@ -196,8 +196,8 @@ prompt-app proof is still missing for other required hosts.
   new prompt-app proof gate has pass/fail fixtures for the exact hard metrics.
   Codex now has fresh same-slice proof for this implementation branch:
   `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex
-  --manual-gate` passed at 2026-05-24T11:28:11Z, and
-  `./script/check_prompt_app_proof.sh --start-line 18824 --end-line 18828
+  --manual-gate` passed at 2026-05-26T02:06:11Z, and
+  `./script/check_prompt_app_proof.sh --start-line 28053 --end-line 28056
   --bundle com.openai.codex` passed with all six prompt-app safety counters at
   zero. The required target apps still do not all have fresh proof.
 - Evidence found in repo:

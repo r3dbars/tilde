@@ -427,6 +427,111 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast phrase selection can opt into prompt-app proof prediction")
+    func fastPhraseSelectionPromptAppProofPrediction() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let blockedSelection = orchestrator.fastPhraseSelection(
+            for: "Please make this",
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true
+        )
+        let proofSelection = orchestrator.fastPhraseSelection(
+            for: "Please make this",
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true,
+            allowPromptAppPrediction: true
+        )
+
+        #expect(blockedSelection.suppressionReason == "unsupported-profile")
+        #expect(proofSelection.suggestion?.visibleText == " clearer")
+        #expect(proofSelection.traceMetadata["predictivePhraseMatch"] == "please make this")
+    }
+
+    @MainActor
+    @Test("Fast phrase fallback uses accepted-kept learning restraint")
+    func fastPhraseFallbackUsesAcceptedKeptLearningRestraint() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let request = CompletionRequest(
+            textBeforeCursor: "I think what matters is",
+            textAfterCursor: "",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: .multilineCompose,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "fast-phrase-learning"
+        )
+        let key = acceptedAndKeptKey(
+            request: request,
+            fieldKind: .multilineCompose,
+            profile: profile
+        )
+
+        var rejectedStore = AcceptedAndKeptLearningStore(priorWeight: 1)
+        var rejectedSignal = rejectedStore.signal(for: key)
+        for offset in 0..<6 {
+            rejectedSignal = rejectedStore.record(
+                .rejected,
+                key: key,
+                now: Date(timeIntervalSince1970: Double(offset))
+            )
+        }
+
+        let rejectedDecision = orchestrator.fastPhraseFallbackLearningDecision(
+            acceptedAndKeptSignal: rejectedSignal,
+            probabilityThreshold: rejectedStore.probabilityThreshold(for: .phraseContinuation)
+        )
+
+        #expect(rejectedDecision.shouldSuppress)
+        #expect(rejectedDecision.reason == "fast-phrase-learning-restraint")
+        #expect(rejectedDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "true")
+        #expect(rejectedDecision.metadata["fastPhraseFallbackLearningThreshold"] == "0.300")
+        #expect(rejectedDecision.metadata["acceptedAndKeptSamples"] == "6")
+        #expect(rejectedDecision.metadata["acceptedAndKeptRejected"] == "6")
+
+        var earlyStore = AcceptedAndKeptLearningStore(priorWeight: 1)
+        var earlySignal = earlyStore.signal(for: key)
+        for offset in 0..<5 {
+            earlySignal = earlyStore.record(
+                .rejected,
+                key: key,
+                now: Date(timeIntervalSince1970: Double(offset))
+            )
+        }
+
+        let earlyDecision = orchestrator.fastPhraseFallbackLearningDecision(
+            acceptedAndKeptSignal: earlySignal,
+            probabilityThreshold: earlyStore.probabilityThreshold(for: .phraseContinuation)
+        )
+
+        #expect(!earlyDecision.shouldSuppress)
+        #expect(earlyDecision.reason == nil)
+        #expect(earlyDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "false")
+
+        var keptStore = AcceptedAndKeptLearningStore(priorWeight: 1)
+        var keptSignal = keptStore.signal(for: key)
+        for offset in 0..<6 {
+            keptSignal = keptStore.record(
+                .kept,
+                key: key,
+                now: Date(timeIntervalSince1970: Double(offset))
+            )
+        }
+
+        let keptDecision = orchestrator.fastPhraseFallbackLearningDecision(
+            acceptedAndKeptSignal: keptSignal,
+            probabilityThreshold: keptStore.probabilityThreshold(for: .phraseContinuation)
+        )
+
+        #expect(!keptDecision.shouldSuppress)
+        #expect(keptDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "false")
+    }
+
+    @MainActor
     @Test("App model result metadata is trace safe")
     func appModelResultMetadataIsTraceSafe() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -478,7 +583,7 @@ struct SuggestionOrchestratorTests {
             isRepeatedMiss: false
         )
 
-        #expect(abs(score.utility - 0.70) < 0.001)
+        #expect(abs(score.utility - 0.74) < 0.001)
         #expect(abs(score.styleFit - 0.48) < 0.001)
         #expect(abs(score.contextFit - 0.50) < 0.001)
         #expect(abs(score.userAffinity - 0.15) < 0.001)
@@ -581,6 +686,53 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Codex no-submit proof candidates bypass final latency suppression")
+    func codexNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "\(CodexProofFocusedTargetPolicy.marker) Can we make this dicta",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "codex-proof-late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_100,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "codex-proof-no-submit")
+    }
+
+    @MainActor
     @Test("Late streaming partials are not hard suppressed by the final latency cutoff")
     func lateStreamingPartialsAreNotHardSuppressedByFinalLatencyCutoff() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -623,6 +775,53 @@ struct SuggestionOrchestratorTests {
         )
 
         #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+    }
+
+    @MainActor
+    @Test("Daily driver phrase results can display under the subsecond repair budget")
+    func dailyDriverPhraseResultsCanDisplayUnderSubsecondRepairBudget() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Autocomplete Lab Obsidian proof Smoke proof feels",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "daily-driver-repair"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " instant without getting in the way today now", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 900,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") != true)
     }
 
     @MainActor

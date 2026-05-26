@@ -109,6 +109,28 @@ EXPECTED_SURFACES: tuple[ExpectedSurface, ...] = (
         ),
     ),
     ExpectedSurface(
+        surface="Browser webmail",
+        decision="blocked",
+        proof_state="blocked",
+        smoke_command="script/real_app_smoke.sh chrome --fixture browser-webmail",
+        profile_bundles=(
+            "com.google.Chrome",
+            "com.apple.Safari",
+            "com.brave.Browser",
+            "org.mozilla.firefox",
+        ),
+        required_proof=(
+            "compose-body-only placement",
+            "safe one-word Tab",
+            "no send",
+            "no recipient/subject/search/account-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "latency proof",
+            "screenshot-backed current-head evidence",
+        ),
+    ),
+    ExpectedSurface(
         surface="Browser ChatGPT",
         decision="blocked",
         proof_state="blocked",
@@ -131,8 +153,24 @@ EXPECTED_SURFACES: tuple[ExpectedSurface, ...] = (
         ),
     ),
     ExpectedSurface(
+        surface="Chrome production text fields",
+        decision="blocked",
+        proof_state="blocked",
+        smoke_command="script/real_app_smoke.sh chrome --fixture production-text-fields",
+        profile_bundles=("com.google.Chrome",),
+        required_proof=(
+            "local fixture proof is not enough",
+            "disposable production-page proof",
+            "correct placement",
+            "safe Tab",
+            "verified insertion",
+            "undo/recovery",
+            "screenshot-backed current-head evidence",
+        ),
+    ),
+    ExpectedSurface(
         surface="Claude desktop layouts",
-        decision="word-only",
+        decision="proof-only",
         proof_state="partial",
         smoke_command="script/real_app_smoke.sh claude-empty --manual-gate",
         profile_bundles=("com.anthropic.claudefordesktop",),
@@ -148,8 +186,8 @@ EXPECTED_SURFACES: tuple[ExpectedSurface, ...] = (
     ),
     ExpectedSurface(
         surface="Codex layouts",
-        decision="word-only",
-        proof_state="complete",
+        decision="proof-only",
+        proof_state="partial",
         smoke_command="script/real_app_smoke.sh codex --manual-gate",
         profile_bundles=("com.openai.codex",),
         required_proof=(
@@ -159,7 +197,7 @@ EXPECTED_SURFACES: tuple[ExpectedSurface, ...] = (
     ),
     ExpectedSurface(
         surface="Obsidian long notes",
-        decision="word-only",
+        decision="supported",
         proof_state="complete",
         smoke_command="script/real_app_smoke.sh obsidian-long-note --manual-gate",
         profile_bundles=("md.obsidian",),
@@ -352,6 +390,7 @@ def profile_checks() -> list[Check]:
     compatibility = text("Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift")
     app_profiles = text("Sources/AutocompleteLabCore/Compatibility/AppCompatibilityProfile.swift")
     app_delegate = text("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+    app_proof_mode = text("Sources/AutocompleteLabApp/App/AppProofModeCoordinator.swift")
     browser_policy = text("Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift")
     proof_mode_policy = text("Sources/AutocompleteLabCore/Configuration/ProofModeScopePolicy.swift")
     compatibility_tests = text("Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift")
@@ -407,6 +446,7 @@ def profile_checks() -> list[Check]:
             contains_all(
                 app_profiles
                 + app_delegate
+                + app_proof_mode
                 + app_profile_tests
                 + browser_policy
                 + browser_policy_tests
@@ -422,7 +462,7 @@ def profile_checks() -> list[Check]:
                     "blockedSurfaceTextRedacted",
                     "Chrome sensitive pages outrank service fingerprints",
                     "ProofModeScopePolicy",
-                    "environmentProofModeScopePolicy.allows",
+                    "scopePolicy.allows(",
                     "suggestionBundleIdentifier: profile.bundleIdentifier",
                     "Active proof mode blocks apps outside the requested proof target",
                     "Active proof mode can allow a virtual proof profile through its suggestion bundle",
@@ -436,7 +476,14 @@ def profile_checks() -> list[Check]:
 def smoke_checks() -> list[Check]:
     smoke = text("script/real_app_smoke.sh")
     smoke_self_test = text("script/real_app_smoke_self_test.sh")
-    fixtures = ("google-docs", "notion", "browser-chatgpt", "browser-slack", "browser-discord")
+    fixtures = (
+        "google-docs",
+        "notion",
+        "browser-webmail",
+        "browser-chatgpt",
+        "browser-slack",
+        "browser-discord",
+    )
     return [
         Check(
             4,
@@ -533,10 +580,12 @@ def status_and_test_checks() -> list[Check]:
         "Slack browser/desktop: blocked",
         "Discord browser/desktop: blocked",
         "Mail compose: diagnostics-only",
+        "Browser webmail: blocked",
         "Browser ChatGPT: blocked",
-        "Claude desktop layouts: word-only",
-        "Codex layouts: word-only",
-        "Obsidian long notes: word-only",
+        "Chrome production text fields: blocked",
+        "Claude desktop layouts: proof-only",
+        "Codex layouts: proof-only",
+        "Obsidian long notes: supported",
         "Real Monaco and CodeMirror editors: blocked",
     )
     return [
@@ -554,7 +603,10 @@ def status_and_test_checks() -> list[Check]:
                     "Focused graduation decisions:",
                     "Google Docs browser: blocked",
                     "Mail compose: diagnostics-only",
-                    "Claude desktop layouts: word-only",
+                    "Browser webmail: blocked",
+                    "Chrome production text fields: blocked",
+                    "Claude desktop layouts: proof-only",
+                    "Codex layouts: proof-only",
                 ),
             ),
         ),
