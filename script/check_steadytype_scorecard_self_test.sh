@@ -26,12 +26,12 @@ import sys
 
 Path(sys.argv[1]).write_text(
     "Insertion proof status: docs/product/manual-smoke-runs.md\n"
-    "30 target app pass(es) still need real manual smoke proof.\n",
+    "10 target app pass(es) still need real manual smoke proof.\n",
     encoding="utf-8",
 )
 Path(sys.argv[2]).write_text(
     "Proof manifest gaps:\n"
-    "Proof manifest check failed with 6 issue(s).\n",
+    "Proof manifest verified.\n",
     encoding="utf-8",
 )
 PY
@@ -168,8 +168,8 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 source = source.replace(
-    "30 target app passes are stale or pending",
-    "29 target app passes are stale or pending",
+    "failed with 10 stale or pending rows",
+    "failed with 9 stale or pending rows",
     1,
 )
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
@@ -185,7 +185,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "manual smoke stale/pending count claim is 29, live output reports 30" "$TMP_DIR/manual-drift.txt" >/dev/null; then
+if ! grep -F "manual smoke stale/pending count claim is 9, live output reports 10" "$TMP_DIR/manual-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live manual count drift failure" >&2
   cat "$TMP_DIR/manual-drift.txt" >&2
   exit 1
@@ -197,7 +197,7 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("6 manifest issues", "7 manifest issues", 1)
+source = source.replace("0 manifest issues", "1 manifest issues", 1)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -211,7 +211,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "proof manifest issue count claim is 7, live output reports 6" "$TMP_DIR/proof-drift.txt" >/dev/null; then
+if ! grep -F "proof manifest issue count claim is 1, live output reports 0" "$TMP_DIR/proof-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live proof manifest count drift failure" >&2
   cat "$TMP_DIR/proof-drift.txt" >&2
   exit 1
@@ -253,8 +253,8 @@ if python3 script/check_steadytype_scorecard.py --scorecard "$PENDING_ROUND_UP" 
   exit 1
 fi
 
-if ! grep -F "Tab safety: contains 'pending', so score must stay <= 75/100" "$TMP_DIR/pending.txt" >/dev/null; then
-  echo "scorecard self-test missing pending proof failure" >&2
+if ! grep -F "Tab safety: contains 'stale', so score must stay <= 75/100" "$TMP_DIR/pending.txt" >/dev/null; then
+  echo "scorecard self-test missing stale Tab safety proof failure" >&2
   cat "$TMP_DIR/pending.txt" >&2
   exit 1
 fi
