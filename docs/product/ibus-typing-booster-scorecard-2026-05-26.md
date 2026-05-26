@@ -40,4 +40,3 @@ Full:
 ```bash
 swift test --jobs 1
 ```
-

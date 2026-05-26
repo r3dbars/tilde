@@ -28,4 +28,3 @@ Held:
 
 - On-demand summon mode: useful, but SteadyType must preserve Tab as next-word accept. A future shortcut could be "Show once" without taking over Tab.
 - Learned suggestion removal: good, but needs a focused design around local Personal Capture and accepted-kept data.
-

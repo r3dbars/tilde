@@ -8,7 +8,7 @@ struct SuggestionAggressivenessTests {
         let tuning = SuggestionTuning()
 
         #expect(tuning.aggressivenessLevel == 4)
-        #expect(tuning.maxVisibleWords == 8)
+        #expect(tuning.maxVisibleWords == 3)
         #expect(tuning.wordStartCharacters == 2)
         #expect(tuning.phraseStartWords == 2)
         #expect(tuning.responseSpeedLevel == 5)
