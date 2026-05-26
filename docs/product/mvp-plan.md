@@ -45,7 +45,7 @@ The first prototype should feel like a quiet writing assist, not a chatbot.
 - use MLX as the app-owned runtime
 - keep the model warm while the app is active
 - disable thinking/reasoning
-- keep output to 2-8 words
+- keep output to 1-3 words by default
 - cap generation around 8-16 tokens
 - keep normal typing passthrough immediate
 - debounce or delay only suggestion requests and floating presentation

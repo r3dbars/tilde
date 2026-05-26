@@ -5863,6 +5863,126 @@ textedit_smoke_allows_ax_proof_typing() {
   [[ "${AUTOCOMPLETE_LAB_TEXTEDIT_SMOKE_AX_INSERTION:-0}" =~ ^(1|true|yes|on)$ ]]
 }
 
+insert_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+
+  swift - "$window_title" "$fragment" <<'SWIFT'
+import AppKit
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 3 else {
+    exit(2)
+}
+
+let targetTitle = CommandLine.arguments[1]
+let insertionText = CommandLine.arguments[2]
+
+func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else {
+        return nil
+    }
+    return value
+}
+
+func textEditTitleMatches(_ title: String?) -> Bool {
+    guard let title else {
+        return false
+    }
+    if title == targetTitle {
+        return true
+    }
+
+    let stem = (targetTitle as NSString).deletingPathExtension
+    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
+    return candidates.contains { candidate in
+        title == candidate ||
+            title.hasPrefix(candidate + " ") ||
+            title.hasPrefix(candidate + " -")
+    }
+}
+
+func children(of element: AXUIElement) -> [AXUIElement] {
+    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+}
+
+func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth <= 8 else {
+        return nil
+    }
+
+    let role = copyAttribute(element, kAXRoleAttribute) as? String
+    if role == kAXTextAreaRole as String || role == kAXTextFieldRole as String {
+        return element
+    }
+
+    for child in children(of: element) {
+        if let found = firstTextInput(in: child, depth: depth + 1) {
+            return found
+        }
+    }
+
+    return nil
+}
+
+func selectedTextRange(in element: AXUIElement) -> CFRange? {
+    guard let value = copyAttribute(element, kAXSelectedTextRangeAttribute) else {
+        return nil
+    }
+    var range = CFRange(location: 0, length: 0)
+    guard AXValueGetValue(value as! AXValue, .cfRange, &range) else {
+        return nil
+    }
+    return range
+}
+
+func setSelectedTextRange(_ range: CFRange, in element: AXUIElement) -> Bool {
+    var mutableRange = range
+    guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else {
+        return false
+    }
+    return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue) == .success
+}
+
+for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
+    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
+        continue
+    }
+
+    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
+        guard let textInput = firstTextInput(in: window) else {
+            exit(1)
+        }
+
+        app.activate(options: [.activateAllWindows])
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+
+        let currentValue = copyAttribute(textInput, kAXValueAttribute) as? String ?? ""
+        let insertionRange = selectedTextRange(in: textInput) ?? CFRange(location: currentValue.utf16.count, length: 0)
+        guard setSelectedTextRange(insertionRange, in: textInput) else {
+            exit(1)
+        }
+        guard AXUIElementSetAttributeValue(textInput, kAXSelectedTextAttribute as CFString, insertionText as CFString) == .success else {
+            exit(1)
+        }
+        let caretRange = CFRange(location: insertionRange.location + insertionText.utf16.count, length: 0)
+        guard setSelectedTextRange(caretRange, in: textInput) else {
+            exit(1)
+        }
+        exit(0)
+    }
+}
+
+exit(1)
+SWIFT
+}
+
 type_textedit_smoke_fragment() {
   local window_title="$1"
   local fragment="$2"
