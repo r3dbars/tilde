@@ -49,6 +49,9 @@ manual proof pass.
 - Watch `~/Library/Logs/SteadyType/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
 - Watch `~/Library/Logs/SteadyType/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
 - Prefer a real hardware key press for Tab and the configured full-accept shortcut. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
+- Use `Control-Backtick` for the on-demand "Suggest Now" lane. It may request
+  one suggestion, but it must not insert text and it must not change Tab's
+  one-word-only behavior.
 - If a recorder fails, read its layer summary. `suggestion-presented` with `Tab autocomplete action: 0` means rendering worked but key routing did not.
 - Recovered insertion fallbacks are allowed when the same suggestion later verifies.
   Unrecovered insertion failures fail the recorder.
@@ -86,6 +89,8 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit-narrow
 ```
 
 - Type `Smoke proof feels inst`.
+- Press `Control-Backtick` before waiting for normal cadence and confirm the
+  trace records `manual-summon`.
 - Confirm a suggestion appears.
 - Press Tab and expect `instant`.
 - Type ` and stays inst`.

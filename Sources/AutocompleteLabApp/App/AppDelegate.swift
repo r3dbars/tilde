@@ -453,6 +453,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pollTimer: Timer?
     private var resourceDiagnosticsTimer: Timer?
     private let resourceDiagnosticsSampler = ProcessResourceDiagnosticsSampler()
+    private lazy var suggestionSummonHotKey = SuggestionSummonHotKey { [weak self] in
+        self?.requestSuggestionNow(source: "hotkey")
+    }
     private var keyboardEventTap: KeyboardEventTap?
     private var keyboardEventTapStopTask: Task<Void, Never>?
     private var prefixCooldownRetryTask: Task<Void, Never>?
@@ -470,6 +473,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var personalCaptureLastSnapshot: FocusedTextSnapshot?
     private var lastFocusedTextChangeAt: Date?
     private var lastRequestedTextBeforeCursor: String?
+    private var manualSuggestionRequestPending = false
+    private var manualSuggestionRetryTask: Task<Void, Never>?
     private var suppressedFieldIdentities: Set<FocusedFieldIdentity> = []
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
@@ -557,6 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             accessibilityClient.requestPermissionIfNeeded()
         }
         warmModelRuntime()
+        startSuggestionSummonHotKey()
         if shouldShowSettingsForCurrentReadiness {
             showSettings()
         }
@@ -585,6 +591,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntime.cancel()
         pollTimer?.invalidate()
         resourceDiagnosticsTimer?.invalidate()
+        suggestionSummonHotKey.stop()
+        manualSuggestionRetryTask?.cancel()
         stopWorkspaceFocusObservers()
         stopScreenGeometryObserver()
         stopKeyboardEventTapNow(reason: "terminate")
@@ -822,6 +830,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
+        let suggestNowItem = NSMenuItem(
+            title: "Suggest Now",
+            action: #selector(suggestNowFromMenu),
+            keyEquivalent: "`"
+        )
+        suggestNowItem.keyEquivalentModifierMask = [.control]
+        suggestNowItem.toolTip = "\(SuggestionSummonHotKeyDescriptor.controlBacktick.displayName) asks for one suggestion without changing Tab."
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
         let pause15Item = NSMenuItem(title: "Pause for 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: "")
         let pause1HourItem = NSMenuItem(title: "Pause for 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: "")
@@ -843,6 +858,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(statusMenu)
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(suggestNowItem)
         menu.addItem(pauseItem)
         menu.addItem(pause15Item)
         menu.addItem(pause1HourItem)
@@ -926,6 +942,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timer.tolerance = 1
         RunLoop.main.add(timer, forMode: .common)
         resourceDiagnosticsTimer = timer
+    }
+
+    private func startSuggestionSummonHotKey() {
+        let didStart = suggestionSummonHotKey.start()
+        DiagnosticsLog.shared.record(
+            didStart ? "suggestion-summon-hotkey-started" : "suggestion-summon-hotkey-start-failed",
+            metadata: [
+                "shortcut": suggestionSummonHotKey.descriptor.diagnosticName,
+                "safetyFailure": String(!didStart)
+            ]
+        )
     }
 
     private func recordResourceDiagnostics(reason: String) {
@@ -1538,7 +1565,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         startedAt: UInt64
     ) async {
+        let pollStartedWithManualSuggestionRequest = manualSuggestionRequestPending
         defer {
+            if pollStartedWithManualSuggestionRequest && manualSuggestionRequestPending {
+                manualSuggestionRequestPending = false
+            }
             finishFocusedTextPoll(startedAt: startedAt)
         }
 
@@ -2359,8 +2390,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             behaviorProfileID: triggerBehaviorProfile.id,
             requestMode: requestMode
         )
+        let isManualSuggestionRequest = manualSuggestionRequestPending
+        if isManualSuggestionRequest {
+            manualSuggestionRequestPending = false
+        }
 
-        guard case let .request(delayMilliseconds) = triggerDecision else {
+        let delayMilliseconds: Int
+        if isManualSuggestionRequest {
+            delayMilliseconds = 0
+        } else if case let .request(policyDelayMilliseconds) = triggerDecision {
+            delayMilliseconds = policyDelayMilliseconds
+        } else {
             if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: waiting for cadence")
                 showFieldStatusIndicator(.shown, context: context)
@@ -2382,7 +2422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        setSuggestionDecision("Queued: \(requestMode.rawValue)")
+        setSuggestionDecision(isManualSuggestionRequest ? "Queued: asked once" : "Queued: \(requestMode.rawValue)")
         showFieldStatusIndicator(.thinking, context: context)
         scheduleSuggestion(
             context: context,
@@ -2396,7 +2436,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             visiblePageContext: cachedVisiblePageContext(
                 context: context,
                 appBundleIdentifier: frontmostApp.bundleIdentifier
-            )
+            ),
+            triggerReason: isManualSuggestionRequest ? "manual-summon" : "poll"
         )
     }
 
@@ -3416,6 +3457,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive()
         )
 
+        if action == .requestSuggestionNow {
+            requestSuggestionNow(source: "key-tap")
+            suppressKey(key)
+            recordKeyboardAction(
+                key: key,
+                action: action,
+                handled: true,
+                reason: "requested"
+            )
+            return .handled
+        }
+
         if action == .undoAcceptedInsertion {
             let handled = undoAcceptedInsertion()
             if handled {
@@ -3489,6 +3542,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         switch action {
+        case .requestSuggestionNow:
+            return .replayOriginalKey(.passThroughAction)
+
         case .undoAcceptedInsertion:
             return .replayOriginalKey(.undoUnavailable)
 
@@ -5722,7 +5778,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
         requestMode: CompletionRequestMode,
-        visiblePageContext: VisiblePageContext?
+        visiblePageContext: VisiblePageContext?,
+        triggerReason: String = "poll"
     ) {
         cancelPrefixCooldownRetry()
         cancelPendingSuggestionTask(reason: "new-request")
@@ -5765,7 +5822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentityDescription,
             requestMode: request.mode.rawValue,
-            triggerReason: "poll",
+            triggerReason: triggerReason,
             textBeforeCursor: request.textBeforeCursor,
             textAfterCursor: request.textAfterCursor,
             metadata: [
@@ -6082,6 +6139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             metadata: [
                 "requestMode": request.mode.rawValue,
+                "triggerReason": triggerReason,
                 "traceID": String(suggestionID.prefix(8)),
                 "suggestionID": suggestionID
             ]
@@ -10404,6 +10462,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastSuggestionDecision: lastSuggestionDecision
         )
         DiagnosticsLog.shared.record("request-accessibility")
+    }
+
+    @objc
+    private func suggestNowFromMenu() {
+        requestSuggestionNow(source: "menu")
+    }
+
+    private func requestSuggestionNow(source: String) {
+        guard accessibilityClient.isTrusted else {
+            setSuggestionDecision("Blocked: Accessibility permission missing")
+            showSettings()
+            DiagnosticsLog.shared.record(
+                "suggestion-summon-blocked",
+                metadata: [
+                    "source": source,
+                    "reason": "accessibility-permission-missing"
+                ]
+            )
+            return
+        }
+
+        guard !suggestionsPaused else {
+            setSuggestionDecision("Paused")
+            DiagnosticsLog.shared.record(
+                "suggestion-summon-blocked",
+                metadata: [
+                    "source": source,
+                    "reason": "global-pause"
+                ]
+            )
+            return
+        }
+
+        manualSuggestionRequestPending = true
+        lastRequestedTextBeforeCursor = nil
+        focusedTextPollingPause = FocusedTextPollingPause()
+        setSuggestionDecision("Queued: asked once")
+        DiagnosticsLog.shared.record(
+            "suggestion-summon-requested",
+            metadata: [
+                "source": source,
+                "shortcut": suggestionSummonHotKey.descriptor.diagnosticName
+            ]
+        )
+        pollFocusedTextForManualSuggestion()
+    }
+
+    private func pollFocusedTextForManualSuggestion() {
+        let now = Date()
+        guard !isFocusedTextPollInFlight else {
+            lastFocusedTextPollAttemptAt = now
+            setSuggestionDecision("Waiting: checking field")
+            scheduleManualSuggestionRetry()
+            return
+        }
+
+        lastFocusedTextPollAttemptAt = now
+        isFocusedTextPollInFlight = true
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        var completesAsync = false
+        pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
+        if !completesAsync {
+            manualSuggestionRequestPending = false
+            finishFocusedTextPoll(startedAt: startedAt)
+        }
+    }
+
+    private func scheduleManualSuggestionRetry() {
+        manualSuggestionRetryTask?.cancel()
+        manualSuggestionRetryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard let self, self.manualSuggestionRequestPending else {
+                return
+            }
+            self.pollFocusedTextForManualSuggestion()
+        }
     }
 
     @objc
