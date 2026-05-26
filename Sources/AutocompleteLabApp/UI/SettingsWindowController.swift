@@ -555,12 +555,15 @@ struct SettingsPrivacyState: Equatable {
 struct SettingsKeyboardShortcutState: Equatable {
     let acceptAllShortcut: AcceptAllShortcut
     let conflict: KeyboardShortcutConflictEvaluation
+    let summonShortcut: SuggestionSummonHotKeyDescriptor
 
     init(
         acceptAllShortcut: AcceptAllShortcut,
-        currentApp: SettingsCurrentAppState? = nil
+        currentApp: SettingsCurrentAppState? = nil,
+        summonShortcut: SuggestionSummonHotKeyDescriptor = .controlBacktick
     ) {
         self.acceptAllShortcut = acceptAllShortcut
+        self.summonShortcut = summonShortcut
         let context = currentApp.map { app -> KeyboardShortcutConflictContext in
             let canPresentSuggestions: Bool
             let supportsFullAcceptance: Bool
@@ -586,7 +589,11 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var statusText: String {
-        "Shortcuts: Tab accepts one word + space | \(acceptAllShortcut.displayName) accepts whole suggestion"
+        "Shortcuts: Tab accepts one word + space | \(summonShortcut.displayName) asks once"
+    }
+
+    var acceptAllStatusText: String {
+        "\(acceptAllShortcut.displayName) accepts whole suggestion"
     }
 
     var cycleButtonTitle: String {
@@ -612,6 +619,47 @@ struct SettingsKeyboardShortcutState: Equatable {
 
     var perAppProfileText: String {
         conflict.perAppProfileText
+    }
+}
+
+struct SettingsTrustState: Equatable {
+    let isTrusted: Bool
+    let suggestionsPaused: Bool
+    let runtimeReport: RuntimeReadinessReport
+    let currentApp: SettingsCurrentAppState
+    let privacy: SettingsPrivacyState
+    let lastSuggestionDecision: String
+
+    var statusText: String {
+        if !isTrusted {
+            return "Trust: waiting for Accessibility"
+        }
+
+        if suggestionsPaused {
+            return "Trust: suggestions are paused"
+        }
+
+        return "Trust: local and quiet"
+    }
+
+    var localModeText: String {
+        "Local mode: app-owned model, \(runtimeReport.summary.lowercased())."
+    }
+
+    var typedTextText: String {
+        if privacy.rawContentTracingEnabled || privacy.personalCaptureEnabled {
+            return "Typed text storage: local opt-in capture is on."
+        }
+
+        return "Typed text storage: off by default."
+    }
+
+    var currentSurfaceText: String {
+        currentApp.statusText
+    }
+
+    var whyText: String {
+        "Why now: \(lastSuggestionDecision)"
     }
 }
 
@@ -953,6 +1001,11 @@ final class SettingsWindowController: NSObject {
     private let firstRunTrustAppsLabel = NSTextField(labelWithString: "")
     private let permissionLabel = NSTextField(labelWithString: "")
     private let permissionDetailLabel = NSTextField(labelWithString: "")
+    private let trustLabel = NSTextField(labelWithString: "")
+    private let trustLocalModeLabel = NSTextField(labelWithString: "")
+    private let trustTypedTextLabel = NSTextField(labelWithString: "")
+    private let trustCurrentSurfaceLabel = NSTextField(labelWithString: "")
+    private let trustWhyLabel = NSTextField(labelWithString: "")
     private let runtimeLabel = NSTextField(labelWithString: "")
     private let runtimeDetailLabel = NSTextField(labelWithString: "")
     private let runtimeActionLabel = NSTextField(labelWithString: "")
@@ -1038,6 +1091,7 @@ final class SettingsWindowController: NSObject {
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let clearLearningDataButton = NSButton(title: "Clear Learned Suggestions", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
+    private let shortcutAcceptAllLabel = NSTextField(labelWithString: "")
     private let shortcutConflictLabel = NSTextField(labelWithString: "")
     private let shortcutConflictDetailLabel = NSTextField(labelWithString: "")
     private let shortcutPerAppProfileLabel = NSTextField(labelWithString: "")
@@ -1279,6 +1333,14 @@ final class SettingsWindowController: NSObject {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         let permission = SettingsPermissionState(isTrusted: isTrusted)
         let firstRunTrust = SettingsFirstRunTrustState()
+        let trust = SettingsTrustState(
+            isTrusted: isTrusted,
+            suggestionsPaused: suggestionsPaused,
+            runtimeReport: runtimeReport,
+            currentApp: currentApp,
+            privacy: privacy,
+            lastSuggestionDecision: lastSuggestionDecision
+        )
         let pauseControl = ControlPauseState(
             isPaused: suggestionsPaused,
             pausedUntil: suggestionsPausedUntil,
@@ -1289,6 +1351,11 @@ final class SettingsWindowController: NSObject {
         firstRunTrustAppsLabel.stringValue = firstRunTrust.appsText
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
+        trustLabel.stringValue = trust.statusText
+        trustLocalModeLabel.stringValue = trust.localModeText
+        trustTypedTextLabel.stringValue = trust.typedTextText
+        trustCurrentSurfaceLabel.stringValue = trust.currentSurfaceText
+        trustWhyLabel.stringValue = trust.whyText
         controlLabel.stringValue = pauseControl.settingsSummaryText
         controlDetailLabel.stringValue = pauseControl.settingsDetailText
         suggestionDecisionLabel.stringValue = SuggestionDecisionPresentation(lastSuggestionDecision).settingsText
@@ -1378,6 +1445,7 @@ final class SettingsWindowController: NSObject {
         toggleVisiblePageContextButton.state = privacy.visiblePageContextEnabled ? .on : .off
         togglePersonalCaptureButton.state = privacy.personalCaptureEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
+        shortcutAcceptAllLabel.stringValue = keyboardShortcuts.acceptAllStatusText
         shortcutConflictLabel.stringValue = keyboardShortcuts.conflictText
         shortcutConflictDetailLabel.stringValue = keyboardShortcuts.conflictDetailText
         shortcutPerAppProfileLabel.stringValue = keyboardShortcuts.perAppProfileText
@@ -1462,6 +1530,11 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(firstRunTrustAppsLabel)
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(permissionDetailLabel)
+        trustLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(trustLocalModeLabel)
+        configureSecondaryLabel(trustTypedTextLabel)
+        configureSecondaryLabel(trustCurrentSurfaceLabel)
+        configureSecondaryLabel(trustWhyLabel)
         runtimeLabel.lineBreakMode = .byWordWrapping
         runtimeLabel.maximumNumberOfLines = 0
         runtimeLabel.preferredMaxLayoutWidth = 470
@@ -1511,6 +1584,7 @@ final class SettingsWindowController: NSObject {
         feedbackLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(feedbackDetailLabel)
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(shortcutAcceptAllLabel)
         configureSecondaryLabel(shortcutConflictLabel)
         configureSecondaryLabel(shortcutConflictDetailLabel)
         configureSecondaryLabel(shortcutPerAppProfileLabel)
@@ -1691,6 +1765,16 @@ final class SettingsWindowController: NSObject {
                 ]
             ),
             makeSection(
+                title: "Trust",
+                views: [
+                    trustLabel,
+                    trustLocalModeLabel,
+                    trustTypedTextLabel,
+                    trustCurrentSurfaceLabel,
+                    trustWhyLabel
+                ]
+            ),
+            makeSection(
                 title: "Local Model",
                 views: [
                     runtimeLabel,
@@ -1770,6 +1854,7 @@ final class SettingsWindowController: NSObject {
                 title: "Keyboard",
                 views: [
                     shortcutLabel,
+                    shortcutAcceptAllLabel,
                     shortcutConflictLabel,
                     shortcutConflictDetailLabel,
                     shortcutPerAppProfileLabel,

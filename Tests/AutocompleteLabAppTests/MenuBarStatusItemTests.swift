@@ -11,4 +11,13 @@ struct MenuBarStatusItemTests {
         #expect(configuration.fallbackTitle == "SteadyType")
         #expect(configuration.accessibilityLabel == "SteadyType")
     }
+
+    @Test("Suggestion summon shortcut is separate from Tab")
+    func suggestionSummonShortcutIsSeparateFromTab() {
+        let descriptor = SuggestionSummonHotKeyDescriptor.controlBacktick
+
+        #expect(descriptor.displayName == "Control-Backtick")
+        #expect(descriptor.diagnosticName == "control-backtick")
+        #expect(descriptor.keyCode != 48)
+    }
 }

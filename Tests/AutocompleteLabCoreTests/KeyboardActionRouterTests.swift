@@ -34,6 +34,14 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .other, hasVisibleSuggestion: true) == .passThrough)
     }
 
+    @Test("Control Backtick requests a suggestion without accepting text")
+    func controlBacktickRequestsSuggestionWithoutAcceptingText() {
+        let router = KeyboardActionRouter()
+
+        #expect(router.action(for: .controlBacktick, hasVisibleSuggestion: false) == .requestSuggestionNow)
+        #expect(router.action(for: .controlBacktick, hasVisibleSuggestion: true) == .requestSuggestionNow)
+    }
+
     @Test("Backtick accepts all visible text when a suggestion is visible")
     func backtickAcceptsAllVisibleText() {
         let router = KeyboardActionRouter()
@@ -64,7 +72,9 @@ struct KeyboardActionRouterTests {
     func keyboardDiagnosticsUseStableNames() {
         #expect(AutocompleteKey.tab.diagnosticName == "tab")
         #expect(AutocompleteKey.backtick.diagnosticName == "backtick")
+        #expect(AutocompleteKey.controlBacktick.diagnosticName == "controlBacktick")
         #expect(AutocompleteKey.commandZ.diagnosticName == "commandZ")
+        #expect(KeyboardAction.requestSuggestionNow.diagnosticName == "requestSuggestionNow")
         #expect(KeyboardAction.acceptNextWord.diagnosticName == "acceptNextWord")
         #expect(KeyboardAction.acceptAllVisible.diagnosticName == "acceptAllVisible")
         #expect(KeyboardAction.undoAcceptedInsertion.diagnosticName == "undoAcceptedInsertion")
@@ -74,6 +84,7 @@ struct KeyboardActionRouterTests {
     func onlyAcceptanceActionsInsertSuggestionText() {
         #expect(KeyboardAction.acceptNextWord.insertsSuggestionText)
         #expect(KeyboardAction.acceptAllVisible.insertsSuggestionText)
+        #expect(!KeyboardAction.requestSuggestionNow.insertsSuggestionText)
         #expect(!KeyboardAction.dismiss.insertsSuggestionText)
         #expect(!KeyboardAction.passThrough.insertsSuggestionText)
         #expect(!KeyboardAction.undoAcceptedInsertion.insertsSuggestionText)
@@ -88,6 +99,7 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .backtick, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .escape, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .commandZ, hasVisibleSuggestion: false) == .passThrough)
+        #expect(router.action(for: .controlBacktick, hasVisibleSuggestion: false) == .requestSuggestionNow)
     }
 
     @Test("Command Z undoes a pending accepted insertion")

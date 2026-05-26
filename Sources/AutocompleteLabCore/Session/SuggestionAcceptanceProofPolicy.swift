@@ -88,7 +88,7 @@ public struct AcceptanceSafetyPolicy: Equatable, Sendable {
             guard profile.supportsFullAcceptance else {
                 return .blocked(.profileDisallowsFullAcceptance)
             }
-        case .dismiss, .passThrough, .undoAcceptedInsertion:
+        case .requestSuggestionNow, .dismiss, .passThrough, .undoAcceptedInsertion:
             return .blocked(.unsupportedAction)
         }
 
@@ -199,7 +199,7 @@ public struct SuggestionAcceptanceProofPolicy: Equatable, Sendable {
                 visibleCharacterCount: visibleText.count
             ))
 
-        case .dismiss, .passThrough, .undoAcceptedInsertion:
+        case .requestSuggestionNow, .dismiss, .passThrough, .undoAcceptedInsertion:
             return .blocked(.unsupportedAction)
         }
     }
