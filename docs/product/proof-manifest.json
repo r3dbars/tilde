@@ -8,7 +8,7 @@
     "runtimeProofVersion": "runtime-v2"
   },
   "hostPolicy": {
-    "policyVersion": "2026-05-22.1",
+    "policyVersion": "2026-05-23.1",
     "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
     "entries": [
       {
@@ -472,6 +472,39 @@
         "screenshot-backed current-head evidence"
       ],
       "notes": "Mail compose can be diagnosed, but suggestions and insertion remain disabled."
+    },
+    {
+      "surface": "Browser webmail",
+      "decision": "blocked",
+      "profileBundles": [
+        "com.google.Chrome",
+        "com.apple.Safari",
+        "com.brave.Browser",
+        "org.mozilla.firefox"
+      ],
+      "policySource": "Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift",
+      "proofState": "blocked",
+      "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-webmail",
+      "requiredProof": [
+        "compose-body-only placement",
+        "safe one-word Tab",
+        "no send",
+        "no recipient/subject/search/account-field leak",
+        "verified insertion",
+        "undo/recovery",
+        "latency proof",
+        "screenshot-backed current-head evidence"
+      ],
+      "scoreCap": {
+        "localFixtureProofCounts": false,
+        "browserChatHarnessCounts": false,
+        "requiresDisposableRealService": true,
+        "requiresScreenshot": true,
+        "requiresVerifiedInsertion": true,
+        "requiresNoSubmitOrPublish": true,
+        "allowsFullAccept": false
+      },
+      "notes": "Gmail, Outlook, Fastmail, iCloud, Yahoo, and other browser email compose surfaces stay blocked until disposable compose-body proof exists. Local fixtures do not graduate this row."
     },
     {
       "surface": "Browser ChatGPT",

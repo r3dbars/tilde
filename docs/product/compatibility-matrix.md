@@ -21,6 +21,7 @@ For screenshot-backed app-by-app grades and gaps, use
 | Notes | supported target; split proof required | inline, mirror fallback | verified AX first, delayed read-only recheck, key fallback | degraded until title/body/checklist undo proof graduates beyond app rollback | title, body, and checklist proof recorded as separate labels |
 | Obsidian | supported target when current proof is green | synthetic caret mirror, no detached fallback | AX then key events, key fallback | degraded until CodeMirror undo proof is native single-edit | several lanes are stale or pending; detached whole-editor anchors stay suppressed |
 | Chrome | supported target for local textarea/contenteditable fixtures only; public pages and production browser apps are blocked until proof | synthetic inline, mirror fallback | key events, AX value fallback | native single-edit proof lane for local fixtures; hosted surfaces blocked | local textarea/contenteditable fixture commands have screenshot-backed labels; public/editor/chat/browser rows remain proof-only or blocked |
+| Browser webmail | blocked; needs explicit proof | disabled | disabled | unavailable | Gmail, Outlook, Fastmail, iCloud, Yahoo, and other browser email compose surfaces are production browser surfaces; local fixtures do not count |
 | Codex | proof-only prompt target | synthetic inline caret, no detached fallback | AX value replacement, key fallback | degraded one-word only until no-submit undo proof exists | recorded strict visual one-word no-submit proof; normal beta use and full accept stay blocked until separate current proof exists |
 | Claude Code | proof-only terminal-host target | synthetic inline caret, no detached fallback | terminal host Paste menu through AX | unavailable for direct bundle; terminal-host proof needed | recorded strict visual one-word no-submit proof; current-head refresh needed after the latest app-code change; direct `com.anthropic.claude-code` bundle remains diagnostics-only because real typing happens in a terminal host |
 | Claude desktop | proof-only prompt target | synthetic inline caret, no detached fallback | AX value replacement | degraded one-word only until no-submit undo proof exists | current same-baseline screenshot-backed one-word no-submit proof recorded; normal beta use and more prompt layouts remain blocked |
@@ -41,6 +42,7 @@ insertion, and undo/recovery proof.
 | Slack browser or desktop | blocked | Browser Slack and `com.tinyspeck.slackmacgap` stay disabled. | Disposable channel proof for one-word Tab, no send, insertion verification, undo/recovery, and sensitive-field suppression. |
 | Discord browser or desktop | blocked | Browser Discord and Discord app variants stay disabled. | Disposable server/channel proof for one-word Tab, no send, insertion verification, undo/recovery, and sensitive-field suppression. |
 | Mail compose | diagnostics-only | `com.apple.mail` has a diagnostics-only profile and disabled insertion. | Compose-body-only adapter proof that avoids recipients/search/account fields, verifies insertion, and proves undo/recovery. |
+| Browser webmail | blocked | Gmail, Outlook, Fastmail, iCloud, Yahoo, and other browser webmail stay blocked by hosted-surface policy. | Disposable test account proof for compose body only, no recipient/subject/search/account-field suggestion, one-word Tab no-send, verified insertion, undo/recovery, latency, and screenshot-backed current-head evidence. |
 | Browser ChatGPT | blocked | Browser ChatGPT is blocked by hosted-surface policy; ChatGPT app/Atlas profiles are disabled. | Disposable prompt proof for one-word Tab, no submit/tool/context side effect, insertion verification, undo/recovery, and screenshot-backed placement. |
 | Chrome production text fields | blocked | Public proof pages and production browser apps no longer count as beta-safe. | Disposable production-page proof before any public or production page is treated as safe. |
 | Claude desktop layouts | proof-only | Default Claude desktop proof exists; layout variants are pending. | Empty, long, wrapped, narrow, context, light, and dark prompt layout rows with one-word no-submit proof. |
@@ -69,8 +71,8 @@ are not plainly marked `Pending`.
 
 Chrome's yellow profile is not a blanket browser promise. The runtime only
 allows local textarea/contenteditable fixtures. Hosted Google Docs, Notion,
-Slack, Discord, ChatGPT, public pages, production browser apps, and developer
-editors stay blocked with the trace reason `unsupported-browser-surface` until
+browser webmail, Slack, Discord, ChatGPT, public pages, production browser apps,
+and developer editors stay blocked with the trace reason `unsupported-browser-surface` until
 those surfaces have their own screenshot and no-submit proof.
 
 Run `./script/check_visual_placement_evidence.sh --require-all` when every row

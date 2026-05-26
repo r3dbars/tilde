@@ -39,6 +39,7 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 | Slack browser or desktop | blocked | Message composers need exact no-send proof before suggestions can run. |
 | Discord browser or desktop | blocked | Message composers need exact no-send proof before suggestions can run. |
 | Mail compose | diagnostics-only | Compose content is sensitive and insertion is unproven; suggestions stay off. |
+| Browser webmail | blocked | Email composers can send messages and expose private recipients/subjects; no disposable real-service proof exists. |
 | Browser ChatGPT | blocked | Real ChatGPT prompt surfaces need one-word no-submit proof; the local browser-chat harness does not count. |
 | Prompt-app full accept | blocked | Full accept needs its own exact prompt-app no-submit screenshot and insertion proof. One-word proof does not count. |
 | Chrome production text fields | blocked | Public proof pages and production browser apps do not count as beta-safe local fixture proof. |
@@ -72,8 +73,8 @@ A- rows as `partial`, even when they have a passing live smoke slice.
    These rows can collect proof, but they do not count as beta-safe support.
    The smoke harness still fails honestly when a verified editor cannot be
    reached.
-3. Add real production proof paths for Google Docs, Notion, browser ChatGPT,
-   browser Slack, and browser Discord before removing their
+3. Add real production proof paths for Google Docs, Notion, browser webmail,
+   browser ChatGPT, browser Slack, and browser Discord before removing their
    `unsupported-browser-surface` block. Local fixtures, local harnesses, and
    public non-auth editor fixtures do not count for these real-service rows.
 
@@ -85,8 +86,8 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 - Prompt apps must prove one-word accept without submit before they can run in proof mode; they do not graduate into beta-safe normal use from that alone.
 - Terminal-hosted Claude Code must first prove the terminal adapter cannot submit shell input, and host-labeled proof must not stand in for untested terminal hosts.
 - Prompt-app full accept needs its own separate full-accept no-submit proof.
-- Real ChatGPT, Slack, Discord, Google Docs, and Notion require exact disposable
-  real-service proof with screenshot-backed placement and verified insertion.
+- Real ChatGPT, Slack, Discord, browser webmail, Google Docs, and Notion require
+  exact disposable real-service proof with screenshot-backed placement and verified insertion.
   Local fixtures, forced renderer fixtures, and browser-chat harness proof do
   not count for those production rows.
 - Claude desktop full accept has no safe proof command yet; keep the product

@@ -100,6 +100,21 @@ EXPECTED_GRADUATION_DECISIONS = {
             "screenshot-backed current-head evidence",
         },
     },
+    "Browser webmail": {
+        "decision": "blocked",
+        "proofState": "blocked",
+        "smokeCommand": "script/real_app_smoke.sh chrome --fixture browser-webmail",
+        "requiredProof": {
+            "compose-body-only placement",
+            "safe one-word Tab",
+            "no send",
+            "no recipient/subject/search/account-field leak",
+            "verified insertion",
+            "undo/recovery",
+            "latency proof",
+            "screenshot-backed current-head evidence",
+        },
+    },
     "Browser ChatGPT": {
         "decision": "blocked",
         "proofState": "blocked",
