@@ -16,15 +16,20 @@ public struct VisiblePageContext: Equatable, Sendable {
     public let source: VisiblePageContextSource
     public let captureScope: VisiblePageContextCaptureScope
     public let activeApplicationName: String?
+    public let activeTextLineFiltered: Bool
     public let text: String
 
     public init?(
         source: VisiblePageContextSource = .screenOCR,
         captureScope: VisiblePageContextCaptureScope = .visibleScreen,
         activeApplicationName: String? = nil,
+        excludingActiveTextLine activeTextLine: String? = nil,
         text: String
     ) {
-        let sanitized = Self.sanitizedText(text)
+        let sanitized = Self.sanitizedTextResult(
+            text,
+            excludingActiveTextLine: activeTextLine
+        )
         guard !sanitized.isEmpty else {
             return nil
         }
@@ -32,7 +37,8 @@ public struct VisiblePageContext: Equatable, Sendable {
         self.source = source
         self.captureScope = captureScope
         self.activeApplicationName = Self.sanitizedAppName(activeApplicationName)
-        self.text = sanitized
+        self.activeTextLineFiltered = sanitized.activeTextLineFiltered
+        self.text = sanitized.text
     }
 
     public var promptGuidance: String {
@@ -66,11 +72,25 @@ public struct VisiblePageContext: Equatable, Sendable {
             "visiblePageContextCaptureScope": captureScope.rawValue,
             "visiblePageContextChars": String(text.count),
             "visiblePageContextLines": String(text.split(whereSeparator: \.isNewline).count),
-            "visiblePageContextCompletionCandidateWords": String(completionCandidateWords.count)
+            "visiblePageContextCompletionCandidateWords": String(completionCandidateWords.count),
+            "visiblePageContextActiveLineFiltered": String(activeTextLineFiltered)
         ]
     }
 
     public static func sanitizedText(_ text: String) -> String {
+        sanitizedTextResult(text, excludingActiveTextLine: nil).text
+    }
+
+    public static func sanitizedText(_ text: String, excludingActiveTextLine activeTextLine: String?) -> String {
+        sanitizedTextResult(text, excludingActiveTextLine: activeTextLine).text
+    }
+
+    private static func sanitizedTextResult(
+        _ text: String,
+        excludingActiveTextLine activeTextLine: String?
+    ) -> SanitizedTextResult {
+        let normalizedActiveLine = normalizedActiveLine(activeTextLine)
+        var activeTextLineFiltered = false
         let lines = text
             .replacingOccurrences(of: "\u{00a0}", with: " ")
             .components(separatedBy: .newlines)
@@ -79,6 +99,14 @@ public struct VisiblePageContext: Equatable, Sendable {
                     .split(whereSeparator: { $0.isWhitespace })
                     .joined(separator: " ")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { line in
+                if Self.shouldFilterActiveTextLine(line, normalizedActiveLine: normalizedActiveLine) {
+                    activeTextLineFiltered = true
+                    return false
+                }
+
+                return true
             }
             .filter(Self.isUsefulLine)
             .filter { !Self.looksLikeOCRChromeLine($0) }
@@ -95,7 +123,19 @@ public struct VisiblePageContext: Equatable, Sendable {
             uniqueLines.append(line)
         }
 
-        return truncatedForPrompt(uniqueLines.joined(separator: "\n"))
+        return SanitizedTextResult(
+            text: truncatedForPrompt(uniqueLines.joined(separator: "\n")),
+            activeTextLineFiltered: activeTextLineFiltered
+        )
+    }
+
+    private struct SanitizedTextResult {
+        let text: String
+        let activeTextLineFiltered: Bool
+
+        var isEmpty: Bool {
+            text.isEmpty
+        }
     }
 
     private static func isUsefulLine(_ line: String) -> Bool {
@@ -149,6 +189,71 @@ public struct VisiblePageContext: Equatable, Sendable {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .map { $0.lowercased() }
             .filter { !$0.isEmpty }
+    }
+
+    private static func normalizedActiveLine(_ activeTextLine: String?) -> String? {
+        guard let activeTextLine else {
+            return nil
+        }
+
+        let normalized = normalizedForActiveLineFilter(activeTextLine)
+        guard normalized.count >= 6 else {
+            return nil
+        }
+
+        return normalized
+    }
+
+    private static func shouldFilterActiveTextLine(
+        _ line: String,
+        normalizedActiveLine: String?
+    ) -> Bool {
+        guard let normalizedActiveLine else {
+            return false
+        }
+
+        let normalizedLine = normalizedForActiveLineFilter(line)
+        guard normalizedLine.count >= 4 else {
+            return false
+        }
+
+        if normalizedLine == normalizedActiveLine {
+            return true
+        }
+        if normalizedLine.contains(normalizedActiveLine) {
+            return true
+        }
+        if normalizedLine.count >= 6, normalizedActiveLine.contains(normalizedLine) {
+            return true
+        }
+
+        let prefixLength = min(24, normalizedActiveLine.count)
+        if prefixLength >= 8 {
+            let prefix = String(normalizedActiveLine.prefix(prefixLength))
+            return normalizedLine.contains(prefix)
+        }
+
+        return false
+    }
+
+    private static func normalizedForActiveLineFilter(_ text: String) -> String {
+        let transformed = text.applyingTransform(.toLatin, reverse: false) ?? text
+        let folded = transformed.folding(
+            options: [.diacriticInsensitive, .widthInsensitive],
+            locale: .current
+        )
+        let lowered = folded.lowercased()
+        let filtered = lowered.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.alphanumerics.contains(scalar) {
+                return Character(scalar)
+            }
+
+            return " "
+        }
+
+        return String(filtered)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func sanitizedAppName(_ appName: String?) -> String? {
