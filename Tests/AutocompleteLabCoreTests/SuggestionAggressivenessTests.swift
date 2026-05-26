@@ -3,12 +3,12 @@ import Testing
 
 @Suite("Suggestion aggressiveness")
 struct SuggestionAggressivenessTests {
-    @Test("default tuning starts proactive enough for first run")
-    func defaultTuningStartsProactiveEnoughForFirstRun() {
+    @Test("default tuning stays short and calm for first run")
+    func defaultTuningStaysShortAndCalmForFirstRun() {
         let tuning = SuggestionTuning()
 
         #expect(tuning.aggressivenessLevel == 3)
-        #expect(tuning.maxVisibleWords == 8)
+        #expect(tuning.maxVisibleWords == 3)
         #expect(tuning.wordStartCharacters == 2)
         #expect(tuning.phraseStartWords == 3)
         #expect(tuning.responseSpeedLevel == 3)

@@ -475,6 +475,10 @@ struct SettingsPrivacyState: Equatable {
         return "Nothing leaves automatically. Privacy Bundles exclude raw text and screenshots."
     }
 
+    var localOnlyProofText: String {
+        "Proof: autocomplete uses the app-owned local model. No model server. Raw text is off by default. Privacy Bundles stay redacted."
+    }
+
     var learningStatusText: String {
         "Learning: local usefulness scores only"
     }
@@ -958,6 +962,7 @@ final class SettingsWindowController: NSObject {
     private let personalCaptureStatusLabel = NSTextField(labelWithString: "")
     private let personalCaptureDetailLabel = NSTextField(labelWithString: "")
     private let privacySharingStatusLabel = NSTextField(labelWithString: "")
+    private let localOnlyProofLabel = NSTextField(labelWithString: "")
     private let learningStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
     private let privacyPathLabel = NSTextField(labelWithString: "")
@@ -1319,6 +1324,7 @@ final class SettingsWindowController: NSObject {
         personalCaptureStatusLabel.stringValue = privacy.personalCaptureStatusText
         personalCaptureDetailLabel.stringValue = privacy.personalCaptureDetailText
         privacySharingStatusLabel.stringValue = privacy.sharingStatusText
+        localOnlyProofLabel.stringValue = privacy.localOnlyProofText
         learningStatusLabel.stringValue = privacy.learningStatusText
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
@@ -1457,6 +1463,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(personalCaptureStatusLabel)
         configureSecondaryLabel(personalCaptureDetailLabel)
         configureSecondaryLabel(privacySharingStatusLabel)
+        configureSecondaryLabel(localOnlyProofLabel)
         configureSecondaryLabel(learningStatusLabel)
         configureSecondaryLabel(screenRecordingPermissionLabel)
         privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
@@ -1708,6 +1715,7 @@ final class SettingsWindowController: NSObject {
                     personalCaptureStatusLabel,
                     personalCaptureDetailLabel,
                     privacySharingStatusLabel,
+                    localOnlyProofLabel,
                     screenRecordingPermissionLabel,
                     toggleTracingButton,
                     toggleRawTraceButton,
