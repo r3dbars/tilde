@@ -13,6 +13,8 @@ struct AXFieldClassifierTests {
         #expect(classifier.classify(AXFieldClassifierInput(placeholder: "Passkey")) == .secure)
         #expect(classifier.classify(AXFieldClassifierInput(help: "Paste recovery key")) == .secure)
         #expect(classifier.classify(AXFieldClassifierInput(title: "SSH private key")) == .secure)
+        #expect(classifier.classify(AXFieldClassifierInput(windowTitle: "KeePassXC")) == .secure)
+        #expect(classifier.classify(AXFieldClassifierInput(windowTitle: "Proton Pass")) == .secure)
         #expect(AXFieldKind.secure.suppressesSuggestionsByDefault)
     }
 

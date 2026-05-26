@@ -97,7 +97,7 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
 public struct SuggestionTuning: Equatable, Sendable {
     public static let minimumAggressivenessLevel = 1
     public static let maximumAggressivenessLevel = 5
-    public static let defaultAggressivenessLevel = 3
+    public static let defaultAggressivenessLevel = 2
     public static let defaultMaxVisibleWords = 8
     public static let minimumWordStartCharacters = 1
     public static let maximumWordStartCharacters = 5

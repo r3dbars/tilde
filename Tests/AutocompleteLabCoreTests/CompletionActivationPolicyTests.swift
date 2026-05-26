@@ -183,6 +183,13 @@ struct CompletionActivationPolicyTests {
             fieldKind: .multilineCompose
         ) == .block(.sensitiveContent))
         #expect(policy.decision(
+            textBeforeCursor: "KeePassXC entry ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.sensitiveContent))
+        #expect(policy.decision(
             textBeforeCursor: "Verification code: 123456",
             textAfterCursor: "",
             isSecure: false,
