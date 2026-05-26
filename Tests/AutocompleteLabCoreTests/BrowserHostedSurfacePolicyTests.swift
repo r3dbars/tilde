@@ -108,6 +108,8 @@ struct BrowserHostedSurfacePolicyTests {
             (FocusedElementFingerprint(windowTitle: "Inbox - Gmail"), .webmail),
             (FocusedElementFingerprint(windowTitle: "Outlook - Mail"), .webmail),
             (FocusedElementFingerprint(windowTitle: "outlook.office.com/mail/inbox"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "outlook.office365.com/owa"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "office.com/mail"), .webmail),
             (FocusedElementFingerprint(windowTitle: "Yahoo Mail"), .webmail),
             (FocusedElementFingerprint(windowTitle: "Fastmail"), .webmail),
             (FocusedElementFingerprint(windowTitle: "Proton Mail"), .webmail),
@@ -376,9 +378,14 @@ struct BrowserHostedSurfacePolicyTests {
             bundleIdentifier: "com.google.Chrome",
             fingerprint: FocusedElementFingerprint(windowTitle: "Checkout - Google Docs")
         )
+        let outlookLogin = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Sign in - Outlook Mail")
+        )
 
         #expect(try #require(blockedSurface(from: slackLogin)).surface == .login)
         #expect(try #require(blockedSurface(from: docsCheckout)).surface == .payment)
+        #expect(try #require(blockedSurface(from: outlookLogin)).surface == .login)
     }
 
     @Test("Chrome login, sign-in, and passkey surfaces are sensitive")

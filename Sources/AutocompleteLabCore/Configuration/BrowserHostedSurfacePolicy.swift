@@ -283,6 +283,8 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
     private func matchesWebmail(_ searchableText: String) -> Bool {
         searchableText.contains("outlook.office.com")
             || searchableText.contains("outlook.live.com")
+            || searchableText.contains("outlook.office365.com")
+            || searchableText.contains("office.com/mail")
             || searchableText.contains("mail.google.com")
             || searchableText.contains("gmail.com")
             || searchableText.contains("mail.yahoo.com")
@@ -301,6 +303,10 @@ public struct BrowserHostedSurfacePolicy: Equatable, Sendable {
             || searchableText.contains("- outlook")
             || searchableText.contains("microsoft outlook")
             || searchableText.contains("office 365 mail")
+            || searchableText.contains("outlook web access")
+            || searchableText.contains("owa.")
+            || searchableText.contains("/owa")
+            || searchableText.contains("owa/")
             || searchableText.contains("new message")
             || searchableText.contains("email reply")
     }

@@ -100,6 +100,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         }
 
         let key = cacheKey(for: focusedContext, appBundleIdentifier: app.bundleIdentifier)
+        let activeTextLine = Self.activeTextLine(from: focusedContext.textBeforeCursor)
         guard reserveRefreshIfNeeded(
             key: key,
             allowsFreshCacheRefresh: allowsFreshCacheRefresh,
@@ -113,7 +114,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
                 plan: capturePlan,
                 key: key,
                 app: app,
-                activeTextLine: Self.currentTextLine(from: focusedContext.textBeforeCursor),
+                activeTextLine: activeTextLine,
                 startedAt: now
             )
         }
@@ -204,8 +205,8 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         guard let pageContext = VisiblePageContext(
             captureScope: plan.scope,
             activeApplicationName: app.localizedName,
-            text: recognizedText,
-            excludingActiveTextLine: activeTextLine
+            excludingActiveTextLine: activeTextLine,
+            text: recognizedText
         ) else {
             DiagnosticsLog.shared.record(
                 "visible-page-context-empty",
@@ -232,6 +233,7 @@ final class VisiblePageContextProvider: @unchecked Sendable {
                 "captureScope": plan.scope.rawValue,
                 "chars": String(pageContext.text.count),
                 "lines": pageContext.traceMetadata["visiblePageContextLines"] ?? "0",
+                "activeLineFiltered": String(pageContext.activeTextLineFiltered),
                 "durationMilliseconds": String(Self.milliseconds(from: startedAt, to: Date()))
             ]
         )
@@ -553,20 +555,24 @@ final class VisiblePageContextProvider: @unchecked Sendable {
         ].joined(separator: ":")
     }
 
-    private static func milliseconds(from start: Date, to end: Date) -> Int {
-        max(0, Int(end.timeIntervalSince(start) * 1_000))
-    }
-
-    private static func currentTextLine(from textBeforeCursor: String) -> String? {
+    private static func activeTextLine(from textBeforeCursor: String) -> String? {
         let line = textBeforeCursor
-            .components(separatedBy: .newlines)
-            .last?
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .last
+            .map(String.init) ?? textBeforeCursor
+        let trimmed = line
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard let line, line.count >= 6 else {
+        guard trimmed.count >= 4 else {
             return nil
         }
 
-        return line
+        return trimmed
+    }
+
+    private static func milliseconds(from start: Date, to end: Date) -> Int {
+        max(0, Int(end.timeIntervalSince(start) * 1_000))
     }
 }

@@ -267,7 +267,10 @@ public struct AutocompleteKeyMapper: Equatable, Sendable {
                 return .tab
             }
 
-            if modifiers == .option {
+            if modifiers.contains(.option),
+               !modifiers.contains(.shift),
+               !modifiers.contains(.control),
+               !modifiers.contains(.command) {
                 return .optionTab
             }
 
@@ -278,7 +281,10 @@ public struct AutocompleteKeyMapper: Equatable, Sendable {
                 return .controlBacktick
             }
 
-            if modifiers.isEmpty || modifiers == .shift {
+            if modifiers.isEmpty
+                || modifiers == .shift
+                || modifiers == .function
+                || modifiers == [.shift, .function] {
                 return .backtick
             }
 

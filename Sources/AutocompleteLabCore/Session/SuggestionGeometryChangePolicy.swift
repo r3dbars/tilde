@@ -140,6 +140,30 @@ public struct SuggestionGeometryChangePolicy: Equatable, Sendable {
         return .keep
     }
 
+    public func shouldPreservePendingRequestWhenVisibleSuggestionInvalidates(
+        hasVisibleSuggestion: Bool,
+        hasPendingSuggestionRequest: Bool,
+        pendingRequestTextBeforeCursor: String?,
+        pendingRequestTextAfterCursor: String?,
+        pendingRequestFieldIdentityDescription: String?,
+        currentTextBeforeCursor: String,
+        currentTextAfterCursor: String,
+        currentFieldIdentityDescription: String?
+    ) -> Bool {
+        guard hasVisibleSuggestion,
+              hasPendingSuggestionRequest,
+              let pendingRequestTextBeforeCursor,
+              let pendingRequestTextAfterCursor,
+              let pendingRequestFieldIdentityDescription = normalizedDescription(pendingRequestFieldIdentityDescription),
+              let currentFieldIdentityDescription = normalizedDescription(currentFieldIdentityDescription) else {
+            return false
+        }
+
+        return pendingRequestTextBeforeCursor == currentTextBeforeCursor
+            && pendingRequestTextAfterCursor == currentTextAfterCursor
+            && pendingRequestFieldIdentityDescription == currentFieldIdentityDescription
+    }
+
     private func normalizedFingerprint(_ fingerprint: String?) -> String? {
         guard let fingerprint = fingerprint?.trimmingCharacters(in: .whitespacesAndNewlines),
               !fingerprint.isEmpty else {
@@ -147,6 +171,15 @@ public struct SuggestionGeometryChangePolicy: Equatable, Sendable {
         }
 
         return fingerprint
+    }
+
+    private func normalizedDescription(_ description: String?) -> String? {
+        guard let description = description?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !description.isEmpty else {
+            return nil
+        }
+
+        return description
     }
 
     private func normalizedRect(_ rect: CGRect?) -> GeometryFingerprint? {

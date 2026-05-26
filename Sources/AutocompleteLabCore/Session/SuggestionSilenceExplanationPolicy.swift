@@ -3,24 +3,13 @@ import Foundation
 public struct SuggestionSilenceExplanationPolicy: Equatable, Sendable {
     public init() {}
 
-    public func activationBlockReason(
-        for decision: CompletionActivationDecision,
-        fieldClassification: AXFieldClassification
-    ) -> String {
-        switch decision {
-        case .allow:
-            return "allowed"
-        case let .block(reason):
-            return activationBlockReason(
-                reason,
-                fieldClassification: fieldClassification
-            )
-        }
+    public func focusedTextUnavailable(isSecure: Bool) -> String {
+        isSecure ? "secure field" : "no editable text field"
     }
 
     public func activationBlockReason(
         _ reason: CompletionActivationBlockReason,
-        fieldClassification: AXFieldClassification
+        fieldKind: AXFieldKind
     ) -> String {
         switch reason {
         case .secureField:
@@ -28,26 +17,26 @@ public struct SuggestionSilenceExplanationPolicy: Equatable, Sendable {
         case .suppressedField:
             return "field silenced"
         case .blockedFieldKind:
-            return fieldKindReason(fieldClassification)
+            return blockedFieldKindReason(fieldKind)
         case .sensitiveContent:
-            return "sensitive text detected"
+            return "sensitive content stays quiet"
         case .markdownCodeContext:
-            return "code context"
+            return "code blocks stay quiet"
         case .selectedText:
-            return "selected text active"
+            return "selected text stays quiet"
         case .terminalSentenceBoundary:
-            return "sentence ended"
+            return "sentence already ended"
         case .tooLittleContext:
             return "waiting for more context"
         case .middleOfLine:
-            return "middle of line"
+            return "middle of line stays quiet"
         case .unfinishedWord:
             return "word still forming"
         }
     }
 
-    private func fieldKindReason(_ fieldClassification: AXFieldClassification) -> String {
-        switch fieldClassification.kind {
+    private func blockedFieldKindReason(_ fieldKind: AXFieldKind) -> String {
+        switch fieldKind {
         case .search:
             return "search fields stay quiet"
         case .url:
@@ -61,7 +50,7 @@ public struct SuggestionSilenceExplanationPolicy: Equatable, Sendable {
         case .unknown:
             return "unknown field needs proof first"
         case .multilineCompose, .singlelineCompose:
-            return "field blocked by policy"
+            return "field needs proof first"
         }
     }
 }

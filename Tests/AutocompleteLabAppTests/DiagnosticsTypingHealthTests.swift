@@ -29,7 +29,8 @@ struct DiagnosticsTypingHealthTests {
             state.summaryText
                 == """
                 Status:
-                  Suggestions: Blocked: field quieted
+                  Suggestions: quiet
+                  Why quiet now: field quieted
                   Next action: Resume this app if you want suggestions here
                   Accessibility: allowed
                   Suggestion pause: off
