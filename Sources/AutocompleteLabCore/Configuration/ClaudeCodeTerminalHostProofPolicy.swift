@@ -224,6 +224,9 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         if let line = nonEmptyLines.last,
            looksLikeShellPrompt(line, windowTitle: context.windowTitle) {
+            if recoveredMarkedTerminalScreenInputText(for: context) != nil {
+                return .eligible
+            }
             return .blocked(.shellPromptDetected)
         }
 
@@ -360,11 +363,12 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         if !containsProofMarker(directInputText) {
-            if containsProofMarker(context.terminalScreenText)
-                || titleHasScopedProofMarker(context.windowTitle) {
+            if titleHasScopedProofMarker(context.windowTitle) {
                 guard titleScopedInputLooksCompleteEnough(for: context) else {
                     return nil
                 }
+            } else if containsProofMarker(context.terminalScreenText) {
+                return nil
             }
         }
 
@@ -863,7 +867,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             let trailingLines = fragments[(index + 1)...]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            if trailingLines.allSatisfy(isAllowedTrailingClaudePromptHint) {
+            if trailingLines.allSatisfy(isAllowedTrailingClaudePromptTrailer) {
                 return line
             }
         }
@@ -876,6 +880,11 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             || lowered.hasSuffix(" for shortcuts")
             || lowered.contains("shortcuts")
             || lowered.contains("shift+tab")
+    }
+
+    private static func isAllowedTrailingClaudePromptTrailer(_ line: String) -> Bool {
+        isAllowedTrailingClaudePromptHint(line)
+            || looksLikeClaudePromptChromeLine(line)
     }
 
     private static func wrappedMarkedPromptInputLine(
@@ -969,22 +978,89 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return rawAnalysis
         }
 
-        let screenAnalysis = recoveredMarkedTerminalScreenInputAnalysis(
-            hostBundleIdentifier: context.hostBundleIdentifier,
-            proofModeEnabled: context.proofModeEnabled,
-            windowTitle: context.windowTitle,
-            textBeforeCursor: context.terminalScreenText,
-            textAfterCursor: "",
-            currentInputSuffix: context.rawTextBeforeCursor
-        )
-        if screenAnalysis.inputText != nil {
-            return screenAnalysis
+        var screenRejectionReasons: [String] = []
+        for currentInputSuffix in terminalScreenCurrentInputSuffixCandidates(for: context) {
+            let screenAnalysis = recoveredMarkedTerminalScreenInputAnalysis(
+                hostBundleIdentifier: context.hostBundleIdentifier,
+                proofModeEnabled: context.proofModeEnabled,
+                windowTitle: context.windowTitle,
+                textBeforeCursor: context.terminalScreenText,
+                textAfterCursor: "",
+                currentInputSuffix: currentInputSuffix
+            )
+            if screenAnalysis.inputText != nil {
+                return screenAnalysis
+            }
+            screenRejectionReasons.append(screenAnalysis.rejectionReason)
         }
 
         return (
             nil,
-            "\(rawAnalysis.rejectionReason);screen:\(screenAnalysis.rejectionReason)"
+            "\(rawAnalysis.rejectionReason);screen:\(screenRejectionReasons.joined(separator: ","))"
         )
+    }
+
+    private static func terminalScreenCurrentInputSuffixCandidates(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> [String] {
+        terminalScreenCurrentInputSuffixCandidates(
+            focusedText: context.focusedText,
+            rawTextBeforeCursor: context.rawTextBeforeCursor,
+            rawTextAfterCursor: context.rawTextAfterCursor,
+            includeRawAfterFragments: true
+        )
+    }
+
+    private static func terminalScreenCurrentInputSuffixCandidates(
+        focusedText: String,
+        rawTextBeforeCursor: String,
+        rawTextAfterCursor: String,
+        includeRawAfterFragments: Bool = false
+    ) -> [String] {
+        var candidates: [String] = []
+
+        appendSanitizedCurrentInputSuffix(rawTextBeforeCursor, to: &candidates)
+        if rawTextBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let rawAfterFragments = includeRawAfterFragments
+                ? lineFragments(rawTextAfterCursor)
+                : [lineFragments(rawTextAfterCursor).first ?? ""]
+            for fragment in rawAfterFragments {
+                appendSanitizedCurrentInputSuffix(fragment, to: &candidates)
+            }
+        }
+        appendSanitizedCurrentInputSuffix(focusedText, to: &candidates)
+
+        return candidates
+    }
+
+    private static func appendSanitizedCurrentInputSuffix(
+        _ candidate: String,
+        to candidates: inout [String]
+    ) {
+        guard let sanitized = sanitizedCurrentInputSuffix(candidate),
+              !candidates.contains(sanitized) else {
+            return
+        }
+        candidates.append(sanitized)
+    }
+
+    private static func sanitizedCurrentInputSuffix(_ candidate: String) -> String? {
+        let fragment = lineFragments(candidate).first ?? ""
+        let stripped = fragment.strippingLeadingPromptResidue()
+        guard let sanitized = sanitizedProofInputLine(stripped) else {
+            return nil
+        }
+
+        let trimmed = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !containsIncompleteProofMarkerFragment(trimmed),
+              !looksLikeClaudePromptChromeLine(trimmed),
+              !looksLikeActiveAgentOutput(trimmed),
+              !looksLikeTitleScopedTerminalChromeOrStaleHeader(trimmed) else {
+            return nil
+        }
+
+        return sanitized
     }
 
     private static func recoveredMarkedTerminalScreenInputLine(
@@ -1123,7 +1199,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             let trailingLines = fragments[(index + 1)...]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            guard trailingLines.allSatisfy(isAllowedTrailingClaudePromptHint) else {
+            guard trailingLines.allSatisfy(isAllowedTrailingClaudePromptTrailer) else {
                 continue
             }
 
@@ -1151,7 +1227,9 @@ public enum ClaudeCodeTerminalHostProofPolicy {
     private static func titleScopedTerminalScreenInputText(
         for context: ClaudeCodeTerminalHostProofContext
     ) -> String? {
-        guard titleHasScopedProofMarker(context.windowTitle),
+        let hasTitleMarker = titleHasScopedProofMarker(context.windowTitle)
+        let hasScreenHeaderMarker = terminalScreenHasScopedProofHeaderMarker(context.terminalScreenText)
+        guard hasTitleMarker || hasScreenHeaderMarker,
               !context.terminalScreenText.isEmpty else {
             return nil
         }
@@ -1177,7 +1255,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
                 endingAt: offset,
                 fragments: fragments
                ),
-               let inputText = safeTitleScopedPromptInputLine(currentLine) {
+               let inputText = safeTitleScopedPromptInputLine(currentLine),
+               hasTitleMarker || terminalScreenInputMatchesCurrentContext(inputText, for: context) {
                 return inputText
             }
 
@@ -1185,6 +1264,23 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return nil
+    }
+
+    private static func terminalScreenHasScopedProofHeaderMarker(_ terminalScreenText: String) -> Bool {
+        lineFragments(terminalScreenText).contains { line in
+            let lowered = line.lowercased()
+            return lowered.contains("claude code")
+                && containsProofMarker(line)
+        }
+    }
+
+    private static func terminalScreenInputMatchesCurrentContext(
+        _ inputText: String,
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> Bool {
+        terminalScreenCurrentInputSuffixCandidates(for: context).contains { candidate in
+            terminalScreenInput(inputText, matchesCurrentSuffix: candidate)
+        }
     }
 
     private static func titleScopedTerminalScreenPromptLine(

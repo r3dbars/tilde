@@ -1234,6 +1234,182 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(metadata["terminalProofTitleScopedScreenBeforeChars"] == "29")
     }
 
+    @Test("Ghostty proof recovers marked screen prompt when AX exposes current input after cursor")
+    func ghosttyProofRecoversMarkedScreenPromptWhenAXExposesCurrentInputAfterCursor() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:terminal"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code",
+            focusedText: "❯ Make this setting the feature con",
+            rawTextBeforeCursor: "",
+            rawTextAfterCursor: "❯ Make this setting the feature con\n? for shortcuts",
+            terminalScreenText: """
+            Claude Code
+            ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
+        #expect(effective == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
+        #expect(metadata["terminalProofRecoverableInput"] == "true")
+        #expect(metadata["terminalProofRecoveryRejectionReason"] == "none")
+    }
+
+    @Test("Ghostty proof recovers header-scoped screen prompt from whole-screen AX after cursor")
+    func ghosttyProofRecoversHeaderScopedScreenPromptFromWholeScreenAXAfterCursor() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:terminal"
+        )
+        let screenText = """
+        Claude Code STEADYTYPECLAUDECODEPROOF
+        Some older output
+        ❯ Make this setting the feature con
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let rawAXText = """
+        Claude Code
+        Some older output
+        ❯ Make this setting the feature con
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code",
+            focusedText: "Claude Code",
+            rawTextBeforeCursor: "",
+            rawTextAfterCursor: rawAXText,
+            terminalScreenText: screenText,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
+        #expect(effective == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
+        #expect(metadata["terminalProofTitleScopedScreenRecoverable"] == "true")
+    }
+
+    @Test("Ghostty proof rejects header-scoped screen prompt without current AX match")
+    func ghosttyProofRejectsHeaderScopedScreenPromptWithoutCurrentAXMatch() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:terminal"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code",
+            focusedText: "Claude Code",
+            rawTextBeforeCursor: "",
+            rawTextAfterCursor: """
+            Claude Code
+            Some older output
+            """,
+            terminalScreenText: """
+            Claude Code STEADYTYPECLAUDECODEPROOF
+            ❯ Make this setting the feature con
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(effective == raw)
+    }
+
+    @Test("Ghostty proof rejects marked screen prompt when after-cursor input mismatches")
+    func ghosttyProofRejectsMarkedScreenPromptWhenAfterCursorInputMismatches() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:terminal"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code",
+            focusedText: "Please ignore this",
+            rawTextBeforeCursor: "",
+            rawTextAfterCursor: "Please ignore this\n? for shortcuts",
+            terminalScreenText: """
+            Claude Code
+            ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+            ? for shortcuts
+            """,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(effective == raw)
+        #expect(metadata["terminalProofRecoveryRejectionReason"]?.contains("screenCurrentInputMismatch") == true)
+    }
+
+    @Test("Ghostty proof rejects header after-cursor text even when screen has marker")
+    func ghosttyProofRejectsHeaderAfterCursorTextEvenWhenScreenHasMarker() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:terminal"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code",
+            focusedText: "Claude Code v2.1.150",
+            rawTextBeforeCursor: "",
+            rawTextAfterCursor: "Claude Code v2.1.150\n? for shortcuts",
+            terminalScreenText: """
+            Claude Code
+            ❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con
+            ? for shortcuts
+            """,
+            proofModeEnabled: true
+        )
+
+        let effective = ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(effective == raw)
+    }
+
     @Test("Ghostty title-scoped screen recovery keeps shell commands blocked")
     func ghosttyTitleScopedScreenRecoveryKeepsShellCommandsBlocked() {
         let context = ClaudeCodeTerminalHostProofContext(
