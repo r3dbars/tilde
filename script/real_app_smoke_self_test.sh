@@ -379,12 +379,18 @@ if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must fail closed if pid paste mutates the prompt unexpectedly")
 if "guard targetedPasteOutcome.safeToContinue else" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must not continue to global paste after unsafe pid insertion")
-if '"ghosttySystemEventsKeystrokeShellAsync"' not in terminal_insert_block or "/usr/bin/osascript" not in terminal_insert_block or "keystroke" not in terminal_insert_block:
-    raise SystemExit("Claude Code Ghostty proof must schedule shell osascript System Events keystroke insertion after the consumed Tab event returns")
-if '"ghosttyPerformActionTextAsync"' not in terminal_insert_block or "DispatchQueue.main.asyncAfter" not in terminal_insert_block:
-    raise SystemExit("Claude Code Ghostty proof must keep raw text action as an async fallback after the consumed Tab event returns")
-if "windowName does not contain" not in terminal_insert_block or "compactProofMarker" not in terminal_insert_block:
-    raise SystemExit("Claude Code Ghostty async insertion must remain title-marker scoped")
+if '"ghosttySystemEventsKeystrokeShell"' not in terminal_insert_block or "/usr/bin/osascript" not in terminal_insert_block or "keystroke" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must keep a verified System Events keystroke fallback")
+if "ghosttySystemEventsKeystrokeShellBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events proof must verify the prompt stayed unchanged after unverified keystrokes")
+if "ghostty-system-events-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events proof must fail closed if keystrokes mutate the prompt unexpectedly")
+if "ghosttySystemEventsKeystrokeShellAsync" in terminal_insert_block or "ghosttyPerformActionTextAsync" in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must not report success from unverified async insertion")
+if "DispatchQueue.main.asyncAfter" in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must not schedule post-accept async insertion")
+if terminal_insert_block.count("windowName does not contain") < 3 or "compactProofMarker" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty insertion fallbacks must remain title-marker scoped")
 if '"ghosttyPerformActionText"' not in terminal_insert_block or "perform action" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native text action command")
 if "ghosttyPerformActionTextBaseline" not in terminal_insert_block:
@@ -402,19 +408,16 @@ if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
 terminal_main_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofText(")
 terminal_main_insert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", terminal_main_insert_start)
 terminal_main_insert_block = app_delegate[terminal_main_insert_start:terminal_main_insert_end]
-ghostty_system_events_source = terminal_main_insert_block.index("scheduleGhosttyTerminalHostProofSystemEventsKeystroke")
-ghostty_async_source = terminal_main_insert_block.index("scheduleGhosttyTerminalHostProofActionText")
 ghostty_action_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofActionText")
 ghostty_script_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofAppleScriptText")
+ghostty_system_events_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke")
 hardware_source = terminal_main_insert_block.index("Self.postHardwareTextKeyEvents")
-if ghostty_system_events_source > ghostty_async_source:
-    raise SystemExit("Claude Code Ghostty proof must try async System Events keystrokes before async raw text actions")
-if ghostty_async_source > ghostty_action_source:
-    raise SystemExit("Claude Code Ghostty proof must schedule async raw text action before synchronous Ghostty fallbacks")
 if ghostty_action_source > ghostty_script_source:
     raise SystemExit("Claude Code Ghostty proof must try raw Ghostty text actions before paste-like scripting input")
-if ghostty_script_source > hardware_source:
-    raise SystemExit("Claude Code Ghostty proof must try native scripting input before slow CG key-event fallbacks")
+if ghostty_script_source > ghostty_system_events_source:
+    raise SystemExit("Claude Code Ghostty proof must try native scripting input before System Events keystrokes")
+if ghostty_system_events_source > hardware_source:
+    raise SystemExit("Claude Code Ghostty proof must try verified System Events keystrokes before slow CG key-event fallbacks")
 if "cgHardwareKeyEventsGlobal" not in terminal_main_insert_block or "cgUnicodeKeyEventsGlobal" not in terminal_main_insert_block:
     raise SystemExit("Claude Code terminal-host insertion must try verified global text key events before paste fallback")
 if terminal_main_insert_block.count("keyboardEventTap?.suppressPassthroughObservation(for: 0.5)") < 2:
@@ -1804,8 +1807,14 @@ if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_cla
   echo "real app smoke self-test expected Claude Code prompt readiness to wait for the launched claude process" >&2
   exit 1
 fi
-if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /iterm2\|ghostty/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected iTerm2 and Ghostty prompt readiness to rely on process proof before typed marker checks" >&2
+if ! awk '
+  /wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1; saw_hosts = 0 }
+  /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 }
+  in_wait && /terminal\|iterm2\|ghostty/ { saw_hosts = 1 }
+  in_wait && saw_hosts && /swift script\/terminal_prompt_ax_proof_helper.swift wait/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Terminal, iTerm2, and Ghostty prompt readiness to use the AX proof helper" >&2
   exit 1
 fi
 if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null; then
@@ -1851,10 +1860,39 @@ if ! awk '
   in_smoke && /wait_for_claude_code_terminal_prompt/ { saw_wait = 1 }
   in_smoke && saw_wait && /wait_for_frontmost_claude_code_terminal_proof_process/ { saw_refocus = 1 }
   in_smoke && saw_refocus && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 }
-  in_smoke && saw_clear && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
+  in_smoke && saw_clear && /type_claude_code_terminal_smoke_text/ { saw_type = 1 }
   END { exit found ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code terminal-host proof to clear stale prompt text before bulk typing" >&2
+  echo "real app smoke self-test expected Claude Code terminal-host proof to clear stale prompt text before typed proof input" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_type = 0; saw_assert = 0 }
+  /^}/ && in_smoke {
+    if (saw_type && saw_assert) { found = 1 }
+    in_smoke = 0
+  }
+  in_smoke && /type_claude_code_terminal_smoke_text "\$proof_text"/ { saw_type = 1 }
+  in_smoke && saw_type && /assert_claude_code_terminal_prompt_ready "\$proof_text"/ { saw_assert = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected every Claude Code terminal proof sample to prove typed prompt readiness before waiting for suggestions" >&2
+  exit 1
+fi
+if ! awk '
+  /type_claude_code_terminal_smoke_text\(\)/ { in_type = 1; saw_mode = 0; saw_ghostty_key_events = 0; saw_terminal_bulk = 0 }
+  /^}/ && in_type {
+    if (saw_mode && saw_ghostty_key_events && saw_terminal_bulk) { found = 1 }
+    in_type = 0
+  }
+  in_type && /AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TYPING_MODE/ { saw_mode = 1 }
+  in_type && /terminal\)/ { terminal_branch = 1 }
+  in_type && terminal_branch && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text/ { saw_terminal_bulk = 1; terminal_branch = 0 }
+  in_type && /iterm2\|ghostty\)/ { ghostty_branch = 1 }
+  in_type && ghostty_branch && /type_claude_code_terminal_raw_smoke_text "\$text"/ { saw_ghostty_key_events = 1; ghostty_branch = 0 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty/iTerm2 proof typing to default to real key events while Terminal keeps bulk typing" >&2
   exit 1
 fi
 if ! awk '

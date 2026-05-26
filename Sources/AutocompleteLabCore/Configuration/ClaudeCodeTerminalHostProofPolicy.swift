@@ -404,11 +404,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         .compactMap { $0 }
         .contains { inputText in
             let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.split(whereSeparator: \.isWhitespace).count >= 3
-                && !containsIncompleteProofMarkerFragment(trimmed)
-                && !looksLikeShellCommandInput(trimmed)
-                && !looksLikeTerminalShellCommandLine(trimmed)
-                && !looksLikeActiveAgentOutput(trimmed)
+            return safeTitleScopedPromptInputLine(trimmed) != nil
+                && !looksLikeTitleScopedTerminalChromeOrStaleHeader(trimmed)
         }
     }
 
@@ -1258,6 +1255,59 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return inputText
+    }
+
+    private static func looksLikeTitleScopedTerminalChromeOrStaleHeader(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return false
+        }
+
+        let lowered = trimmed.lowercased()
+        if lowered == "claude code" {
+            return true
+        }
+
+        if lowered.hasPrefix("claude code "),
+           containsVersionNumber(trimmed) || containsDateStamp(trimmed) {
+            return true
+        }
+
+        if lowered.hasPrefix("build "),
+           containsVersionNumber(trimmed) || containsDateStamp(trimmed) {
+            return true
+        }
+
+        if lowered.contains("/.codex/")
+            || lowered.contains("~/.codex")
+            || lowered.contains("last login")
+            || lowered.contains(" tty") {
+            return true
+        }
+
+        if let partialWordShape = PartialWordShape.from(textBeforeCursor: trimmed),
+           partialWordShape.characterCount >= 4,
+           partialWordShape.digitCount >= 3,
+           partialWordShape.letterCount <= 1,
+           partialWordShape.digitCount > partialWordShape.letterCount {
+            return true
+        }
+
+        return false
+    }
+
+    private static func containsDateStamp(_ text: String) -> Bool {
+        text.range(
+            of: #"\b\d{4}[-/]\d{2}[-/]\d{2}\b"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private static func containsVersionNumber(_ text: String) -> Bool {
+        text.range(
+            of: #"\bv?\d+\.\d+(?:\.\d+)?\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     private static func isSafeTerminalScreenPromptPrefixFragment(_ fragment: String) -> Bool {

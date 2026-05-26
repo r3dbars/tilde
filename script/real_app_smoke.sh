@@ -8344,14 +8344,12 @@ wait_for_claude_code_terminal_prompt() {
   wait_for_claude_code_terminal_process
 
   case "$CLAUDE_CODE_HOST_VARIANT" in
-    terminal)
+    terminal|iterm2|ghostty)
       swift script/terminal_prompt_ax_proof_helper.swift wait \
         --bundle "$(claude_code_host_bundle_id)" \
         --display "$(claude_code_host_display_name)" \
         --marker "$(claude_code_proof_marker)" \
         --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
-      ;;
-    iterm2|ghostty)
       ;;
     *)
       echo "Claude Code $(claude_code_host_display_name) prompt readiness is not automated for this host." >&2
@@ -8373,6 +8371,37 @@ assert_claude_code_terminal_prompt_ready() {
 
 assert_claude_code_terminal_prompt_retains_marker() {
   claude_code_terminal_ax_helper contains-marker
+}
+
+type_claude_code_terminal_smoke_text() {
+  local text="$1"
+  local typing_mode="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TYPING_MODE:-auto}"
+
+  case "$typing_mode" in
+    bulk)
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
+      ;;
+    key-events)
+      type_claude_code_terminal_raw_smoke_text "$text"
+      ;;
+    auto)
+      case "$CLAUDE_CODE_HOST_VARIANT" in
+        terminal)
+          AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
+          ;;
+        iterm2|ghostty)
+          type_claude_code_terminal_raw_smoke_text "$text"
+          ;;
+        *)
+          AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
+          ;;
+      esac
+      ;;
+    *)
+      echo "Unknown Claude Code terminal typing mode: $typing_mode" >&2
+      exit 2
+      ;;
+  esac
 }
 
 type_claude_code_terminal_raw_smoke_text() {
@@ -10531,14 +10560,8 @@ run_claude_code_terminal_host_smoke() {
     trace_start_line="$(line_count "$TRACE_PATH")"
     accept_start_line="$(line_count "$LOG_PATH")"
 
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$proof_text"
-    case "$CLAUDE_CODE_HOST_VARIANT" in
-      terminal)
-        assert_claude_code_terminal_prompt_ready "$proof_text"
-        ;;
-      iterm2|ghostty)
-        ;;
-    esac
+    type_claude_code_terminal_smoke_text "$proof_text"
+    assert_claude_code_terminal_prompt_ready "$proof_text"
     if wait_for_log_line_number_optional \
       "$accept_start_line" \
       "suggestion-presented .*app=com.anthropic.claude-code" \

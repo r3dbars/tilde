@@ -1158,6 +1158,52 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ) == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
     }
 
+    @Test("Ghostty title-scoped proof rejects stale Claude header AX text")
+    func ghosttyTitleScopedProofRejectsStaleClaudeHeaderAXText() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:terminal"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Claude Code v2.1.150",
+            rawTextBeforeCursor: "Claude Code v2.1.150",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        ) == raw)
+    }
+
+    @Test("Ghostty title-scoped proof rejects stale date build AX text")
+    func ghosttyTitleScopedProofRejectsStaleDateBuildAXText() {
+        let raw = AXFieldClassification(
+            kind: .unprovenSurface,
+            reason: "unprovenSurface:terminal"
+        )
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "build 2026-05-25 proof",
+            rawTextBeforeCursor: "build 2026-05-25 proof",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
+        #expect(ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: raw,
+            for: context
+        ) == raw)
+    }
+
     @Test("Ghostty proof prefers title-scoped screen prompt over stale AX text")
     func ghosttyProofPrefersTitleScopedScreenPromptOverStaleAXText() {
         let context = ClaudeCodeTerminalHostProofContext(
