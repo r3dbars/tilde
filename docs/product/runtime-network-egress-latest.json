@@ -1,23 +1,23 @@
 {
-  "activity_note": "String(53 chars)",
-  "activity_note_chars": 53,
+  "activity_note": "",
+  "activity_note_chars": 0,
   "allowed_model_endpoint_count": 0,
   "allowed_model_endpoints": [],
-  "generated_at": "2026-05-13T11:10:27+00:00",
+  "generated_at": "2026-05-26T01:07:17+00:00",
   "network_assertion": "No non-loopback remote endpoints during autocomplete.",
   "phase": "autocomplete",
   "pids": [
-    80653
+    92606
   ],
   "privacy_note": "No typed text, prompts, model output, screenshots, URLs, document names, or trace lines are captured.",
   "process_name": "SteadyType",
   "processes": [
     {
       "command_redacted": true,
-      "command_summary": "String(45 chars)",
+      "command_summary": "String(112 chars)",
       "executable_name": "SteadyType",
-      "executable_sha256": "7fe83131b51ed0cb15efff74c8c7bffc9388679c632b058898207d31e7090464",
-      "pid": 80653
+      "executable_sha256": "b20d1b8c57b8ba84b41dde7551a5c2dc5ed88dcc64593f881d392b975e88b04a",
+      "pid": 92606
     }
   ],
   "proof_artifact": "runtime-network-egress-latest.md",

@@ -9,15 +9,15 @@ public struct FocusPollingCadencePolicy: Equatable, Sendable {
     public let untrustedIntervalSeconds: TimeInterval
 
     public init(
-        activeSuggestionIntervalSeconds: TimeInterval = 0.05,
-        supportedTypingWatchIntervalSeconds: TimeInterval = 0.12,
-        recentTextChangeIntervalSeconds: TimeInterval = 0.20,
+        activeSuggestionIntervalSeconds: TimeInterval = 0.08,
+        supportedTypingWatchIntervalSeconds: TimeInterval = 0.16,
+        recentTextChangeIntervalSeconds: TimeInterval = 0.24,
         recentTextChangeWindowSeconds: TimeInterval = 0.75,
         idleIntervalSeconds: TimeInterval = 0.25,
         untrustedIntervalSeconds: TimeInterval = 0.5
     ) {
-        self.activeSuggestionIntervalSeconds = max(0.016, activeSuggestionIntervalSeconds)
-        let supportedTypingWatchIntervalSeconds = max(0.05, supportedTypingWatchIntervalSeconds)
+        self.activeSuggestionIntervalSeconds = max(0.08, activeSuggestionIntervalSeconds)
+        let supportedTypingWatchIntervalSeconds = max(0.08, supportedTypingWatchIntervalSeconds)
         self.supportedTypingWatchIntervalSeconds = supportedTypingWatchIntervalSeconds
         self.recentTextChangeIntervalSeconds = max(
             supportedTypingWatchIntervalSeconds,

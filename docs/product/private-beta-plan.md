@@ -68,6 +68,39 @@ Do not ask testers to run shell or Python commands.
 
 ## Test Shape
 
+Start with a 2-3 tester pilot before the full beta:
+
+- Tester 1: TextEdit plus Notes title/body.
+- Tester 2: Obsidian disposable vault plus TextEdit baseline.
+- Tester 3: Chrome local textarea/contenteditable fixtures only, and only if
+  the first two testers hit zero stop conditions.
+- Each tester gets one 15-minute day-zero onboarding call.
+- Each tester runs 2-3 short sessions over 3 days.
+- Do not use Mail, Claude, Codex, production browser apps, browser webmail,
+  search/login/payment/address/URL/private fields, or real prompt/chat apps as
+  normal pilot writing surfaces.
+
+Pilot session questions:
+
+- What app did you use?
+- How many minutes?
+- Did `Tab` feel predictable?
+- Did the suggestion appear in a sane place?
+- Did it finish words you were already typing?
+- One magic moment? Use labels only.
+- One annoying moment? Use labels only.
+- Did you pause or disable anything? Why?
+- Did text ever insert somewhere surprising?
+- Did anything appear in search, login, payment, address, URL, secure, or
+  private fields?
+- Did you export the redacted Privacy Bundle?
+
+Pilot evidence stays narrow: one feedback-log row, one redacted Privacy Bundle,
+marked trace slice, trace eval/replay result, p95 first-visible latency,
+placement anchor/confidence, accepted-and-kept/deleted-fast counts,
+pause/disable reason, and suppression reasons. Do not collect raw text,
+prompts, URLs, recipients, subject lines, screenshots, or broad telemetry.
+
 - 4 users.
 - 10 days.
 - Each user gets one day-zero onboarding call.

@@ -256,6 +256,15 @@ final class KeyboardEventTap: @unchecked Sendable {
                 physicalKey: physicalKey,
                 modifiers: modifiers
             ) else {
+                DiagnosticsLog.shared.record(
+                    "keyboard-event-tap-non-typing-chord",
+                    metadata: [
+                        "keyCode": "\(keyCode)",
+                        "physicalKey": physicalKey.diagnosticName,
+                        "modifiers": modifiers.diagnosticName,
+                        "flagsRawValue": "\(event.flags.rawValue)"
+                    ]
+                )
                 return finish(
                     Unmanaged.passUnretained(event),
                     key: key,
@@ -765,6 +774,43 @@ private extension AutocompleteKeyModifiers {
         }
 
         self = modifiers
+    }
+
+    var diagnosticName: String {
+        var names: [String] = []
+        if contains(.shift) {
+            names.append("shift")
+        }
+        if contains(.control) {
+            names.append("control")
+        }
+        if contains(.option) {
+            names.append("option")
+        }
+        if contains(.command) {
+            names.append("command")
+        }
+        if contains(.function) {
+            names.append("function")
+        }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
+    }
+}
+
+private extension AutocompletePhysicalKey {
+    var diagnosticName: String {
+        switch self {
+        case .tab:
+            "tab"
+        case .backtick:
+            "backtick"
+        case .z:
+            "z"
+        case .escape:
+            "escape"
+        case .other:
+            "other"
+        }
     }
 }
 

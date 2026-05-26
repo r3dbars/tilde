@@ -24,9 +24,11 @@ struct DiagnosticsInspectorState: Equatable {
     let compatibilityLearningProfile: CompatibilityLearningProfile?
 
     var summaryText: String {
-        """
+        let decision = SuggestionDecisionPresentation(lastSuggestionDecision)
+        return """
         Status:
-          Suggestions: \(lastSuggestionDecision)
+          Suggestions: \(decision.diagnosticsKind)
+          Why quiet now: \(decision.diagnosticsText)
           Next action: \(nextActionText)
           Accessibility: \(appTrusted ? "allowed" : "needed")
           \(pauseControl.statusText)
@@ -499,6 +501,7 @@ struct DiagnosticsOverviewState: Equatable {
     let pauseText: String
     let currentAppText: String
     let tracingText: String
+    let whyQuietText: String
 
     init(
         appTrusted: Bool,
@@ -514,7 +517,9 @@ struct DiagnosticsOverviewState: Equatable {
         screenshotTracingEnabled: Bool
     ) {
         accessibilityText = appTrusted ? "On" : "Needs permission"
-        suggestionText = Self.suggestionSummary(lastSuggestionDecision)
+        let decision = SuggestionDecisionPresentation(lastSuggestionDecision)
+        suggestionText = decision.diagnosticsKind
+        whyQuietText = decision.diagnosticsText
         nextActionText = Self.nextActionText(
             appTrusted: appTrusted,
             appEnabled: appEnabled,
@@ -542,6 +547,7 @@ struct DiagnosticsOverviewState: Equatable {
         [
             "Status",
             "Suggestions: \(suggestionText)",
+            "Why quiet now: \(whyQuietText)",
             "Next action: \(nextActionText)",
             "Accessibility: \(accessibilityText)",
             "Suggestion pause: \(pauseText)",
@@ -583,23 +589,6 @@ struct DiagnosticsOverviewState: Equatable {
 
     private static func pauseSummary(_ text: String) -> String {
         text.replacingOccurrences(of: "Suggestion pause: ", with: "")
-    }
-
-    private static func suggestionSummary(_ decision: String) -> String {
-        let trimmed = oneLine(decision, maxLength: 100)
-        guard !trimmed.isEmpty else {
-            return "No suggestion yet"
-        }
-
-        if trimmed.localizedCaseInsensitiveContains("shown") {
-            return "Shown"
-        }
-
-        for prefix in ["Blocked:", "Waiting:", "Ready:", "Paused", "Starting"] where trimmed.hasPrefix(prefix) {
-            return trimmed
-        }
-
-        return trimmed
     }
 
     private static func oneLine(_ text: String, maxLength: Int) -> String {

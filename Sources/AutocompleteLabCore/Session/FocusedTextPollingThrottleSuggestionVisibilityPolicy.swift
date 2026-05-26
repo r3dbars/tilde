@@ -5,6 +5,7 @@ public struct FocusedTextPollingThrottleSuggestionVisibilityPolicy: Equatable, S
 
     public func shouldHideVisibleSuggestion(
         currentSuggestionBundleIdentifier: String?,
+        currentSuggestionHostBundleIdentifier: String? = nil,
         currentSuggestionFieldIdentity: FocusedFieldIdentity?,
         currentFieldIdentity: FocusedFieldIdentity?,
         frontmostBundleIdentifier: String?,
@@ -30,7 +31,9 @@ public struct FocusedTextPollingThrottleSuggestionVisibilityPolicy: Equatable, S
             return true
         }
 
-        guard currentSuggestionBundleIdentifier == frontmostBundleIdentifier else {
+        let suggestionOwnsFrontmostApp = currentSuggestionBundleIdentifier == frontmostBundleIdentifier
+            || currentSuggestionHostBundleIdentifier == frontmostBundleIdentifier
+        guard suggestionOwnsFrontmostApp else {
             return true
         }
 
