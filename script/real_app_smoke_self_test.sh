@@ -689,6 +689,26 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+current_start = source.index("current_steadytype_app_bundle_pids()")
+current_end = source.index("\nstop_current_steadytype_app_bundle()", current_start)
+current_block = source[current_start:current_end]
+if "current_pgid" in current_block:
+    raise SystemExit(
+        "real app smoke self-test expected current app stop to include smoke-launched apps in the same process group"
+    )
+
+stop_start = source.index("stop_current_steadytype_app_bundle()")
+stop_end = source.index("\nstale_steadytype_app_bundle_pids()", stop_start)
+stop_block = source[stop_start:stop_end]
+if 'kill -9 "$pid"' not in stop_block or "Timed out stopping current SteadyType app bundle before smoke setup." not in stop_block:
+    raise SystemExit(
+        "real app smoke self-test expected current app stop to fail closed if the old app survives TERM"
+    )
+PY
 if ! grep -F 'steadytype_dist_dir()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_DIST_DIR:-$ROOT_DIR/dist' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadytype_app_binary' script/real_app_smoke.sh >/dev/null ||
@@ -799,6 +819,46 @@ if "Archive proof failed after 3 attempts." not in source:
     raise SystemExit("archive proof must retry transient ditto failures before failing the smoke")
 if "SteadyType smoke launch did not settle on this checkout" not in source:
     raise SystemExit("stale process failure message is missing")
+
+chrome_window_start = source.index("focus_chrome_process_window()")
+chrome_window_end = source.index("\nchrome_fixture_click_offsets()", chrome_window_start)
+chrome_window_focus = source[chrome_window_start:chrome_window_end]
+if (
+    "let focusedWindow: AXUIElement?" not in chrome_window_focus
+    or "let firstWindow = windows.first" not in chrome_window_focus
+    or "smokeWindow ?? focusedWindow ?? firstWindow" not in chrome_window_focus
+    or "Chrome smoke focus failed: no accessible Chrome window" not in chrome_window_focus
+):
+    raise SystemExit("Chrome process focus must tolerate a temporarily missing AXFocusedWindow and report real window failures")
+if "guard let windowValue = copyAttribute(appElement, kAXFocusedWindowAttribute)" in chrome_window_focus:
+    raise SystemExit("Chrome process focus must not require AXFocusedWindow before using the smoke window fallback")
+
+chrome_ready = function_body("assert_chrome_ready_for_input")
+focus = chrome_ready.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$expected_url"')
+wait = chrome_ready.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture $label"', focus)
+assert_front = chrome_ready.index('assert_frontmost_process_id "$chrome_pid" "Chrome $fixture $label"', wait)
+assert_tab = chrome_ready.index('assert_chrome_expected_tab "$fixture" "$expected_url" "$label" "$chrome_pid"', assert_front)
+assert_ax = chrome_ready.index('assert_chrome_focused_editable_ax "$fixture" "$chrome_pid" "$label"', assert_tab)
+if not focus < wait < assert_front < assert_tab < assert_ax:
+    raise SystemExit("Chrome input guard must refocus the isolated fixture before asserting frontmost/editable state")
+
+chrome_fixture = function_body("run_chrome_fixture")
+before_tab = chrome_fixture.index('before_one_word_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"')
+focus_tab = chrome_fixture.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"', before_tab)
+wait_tab_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"', focus_tab)
+wait_tab_app = chrome_fixture.index('wait_for_frontmost_app "Google Chrome" 5', wait_tab_pid)
+press_tab = chrome_fixture.index('press_key_code 48', wait_tab_app)
+if not before_tab < focus_tab < wait_tab_pid < wait_tab_app < press_tab:
+    raise SystemExit("Chrome proof must refocus the editor immediately before Tab acceptance")
+
+before_full = chrome_fixture.index('before_full_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"')
+focus_full = chrome_fixture.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"', before_full)
+wait_full_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"', focus_full)
+wait_full_app = chrome_fixture.index('wait_for_frontmost_app "Google Chrome" 5', wait_full_pid)
+full_start = chrome_fixture.index('full_start_line="$(line_count "$LOG_PATH")"', wait_full_app)
+press_full = chrome_fixture.index('press_accept_all_shortcut', full_start)
+if not before_full < focus_full < wait_full_pid < wait_full_app < full_start < press_full:
+    raise SystemExit("Chrome proof must refocus the editor immediately before full acceptance")
 PY
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then
@@ -811,9 +871,11 @@ if ! grep -F "disposable Chrome contenteditable fixture" "$TMP_DIR/chrome-conten
   echo "real app smoke self-test did not print the Chrome contenteditable dry-run plan" >&2
   exit 1
 fi
-if ! grep -F '" while the editor keeps inst"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Chrome $fixture second suggestion attempt $second_attempt returned empty; retrying with another disposable fragment.' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Chrome contenteditable proof to retry empty second suggestions" >&2
+if ! grep -F '" while the textarea keeps inst"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '" while the editor keeps inst"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Chrome $fixture second suggestion attempt $second_attempt returned empty; retrying with another disposable fragment.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Chrome $fixture second suggestion attempt $second_attempt was too slow to display; retrying with another disposable fragment.' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Chrome textarea/contenteditable proof to retry fragile second suggestions" >&2
   exit 1
 fi
 
@@ -1212,6 +1274,29 @@ if ! grep -F 'wait_for_frontmost_app "Obsidian" "${AUTOCOMPLETE_LAB_OBSIDIAN_ACT
   echo "real app smoke self-test expected Obsidian activation to wait for frontmost focus before proof actions" >&2
   exit 1
 fi
+if ! grep -F 'application processes whose frontmost is true' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'while IFS= read -r frontmost_identity' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected frontmost checks to handle multiple frontmost System Events processes" >&2
+  exit 1
+fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("open_obsidian_smoke_note_if_configured()")
+end = source.index("\nrun_obsidian()", start)
+block = source[start:end]
+custom_open = block.index('open "$smoke_uri"')
+custom_activate = block.index("activate_obsidian_for_smoke", custom_open)
+custom_return = block.index("return 0", custom_activate)
+vault_open = block.index("obsidian://open?vault=ObsidianProofVault", custom_return)
+vault_activate = block.index("activate_obsidian_for_smoke", vault_open)
+vault_return = block.index("return 0", vault_activate)
+if not custom_open < custom_activate < custom_return < vault_open < vault_activate < vault_return:
+    raise SystemExit(
+        "real app smoke self-test expected both Obsidian URI open paths to reactivate Obsidian before returning"
+    )
+PY
 
 if ! grep -F 'AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-optionTab}"' script/obsidian_deep_sweep.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.4}"' script/obsidian_deep_sweep.sh >/dev/null; then
