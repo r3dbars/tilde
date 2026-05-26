@@ -4,15 +4,18 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
     public let maximumTransientEmptyContextAgeMilliseconds: Int
     public let maximumSameTextMiddleSplitAgeMilliseconds: Int
     public let maximumObsidianDocumentStartTeleportAgeMilliseconds: Int
+    public let maximumPromptProofTargetGeometryChurnAgeMilliseconds: Int
 
     public init(
         maximumTransientEmptyContextAgeMilliseconds: Int = 1_200,
         maximumSameTextMiddleSplitAgeMilliseconds: Int = 5_000,
-        maximumObsidianDocumentStartTeleportAgeMilliseconds: Int = 2_500
+        maximumObsidianDocumentStartTeleportAgeMilliseconds: Int = 2_500,
+        maximumPromptProofTargetGeometryChurnAgeMilliseconds: Int = 5_000
     ) {
         self.maximumTransientEmptyContextAgeMilliseconds = maximumTransientEmptyContextAgeMilliseconds
         self.maximumSameTextMiddleSplitAgeMilliseconds = maximumSameTextMiddleSplitAgeMilliseconds
         self.maximumObsidianDocumentStartTeleportAgeMilliseconds = maximumObsidianDocumentStartTeleportAgeMilliseconds
+        self.maximumPromptProofTargetGeometryChurnAgeMilliseconds = maximumPromptProofTargetGeometryChurnAgeMilliseconds
     }
 
     public func shouldPreserveAfterActivationBlock(
@@ -81,7 +84,10 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         currentSuggestionAgeMilliseconds: Int?,
         isInvalidatedByUserTyping: Bool,
         textBeforeCursor: String,
-        textAfterCursor: String
+        textAfterCursor: String,
+        promptProofModeEnabled: Bool = false,
+        promptProofBundleIdentifier: String = "",
+        promptProofMarker: String = ""
     ) -> Bool {
         guard invalidationReason == .caretChanged || invalidationReason == .textLineChanged else {
             return false
@@ -89,8 +95,26 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
 
         guard !isInvalidatedByUserTyping,
               currentSuggestionBundleIdentifier == appBundleIdentifier,
-              currentSuggestionFieldIdentity == fieldIdentity,
               let currentSuggestionAgeMilliseconds else {
+            return false
+        }
+
+        if shouldPreservePromptProofTargetGeometryChurn(
+            proofModeEnabled: promptProofModeEnabled,
+            proofBundleIdentifier: promptProofBundleIdentifier,
+            proofMarker: promptProofMarker,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            currentSuggestionFieldIdentity: currentSuggestionFieldIdentity,
+            currentSuggestionTextBeforeCursor: currentSuggestionTextBeforeCursor,
+            currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds,
+            textBeforeCursor: textBeforeCursor,
+            textAfterCursor: textAfterCursor
+        ) {
+            return true
+        }
+
+        guard currentSuggestionFieldIdentity == fieldIdentity else {
             return false
         }
 
@@ -130,6 +154,40 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         }
 
         return textAfterCursor.hasPrefix(currentSuggestionTextBeforeCursor)
+    }
+
+    private func shouldPreservePromptProofTargetGeometryChurn(
+        proofModeEnabled: Bool,
+        proofBundleIdentifier: String,
+        proofMarker: String,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        currentSuggestionFieldIdentity: FocusedFieldIdentity?,
+        currentSuggestionTextBeforeCursor: String?,
+        currentSuggestionAgeMilliseconds: Int,
+        textBeforeCursor: String,
+        textAfterCursor: String
+    ) -> Bool {
+        let marker = proofMarker.trimmingCharacters(in: .whitespacesAndNewlines)
+        let proofBundleIdentifier = proofBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard proofModeEnabled,
+              !marker.isEmpty,
+              !proofBundleIdentifier.isEmpty,
+              appBundleIdentifier == proofBundleIdentifier,
+              fieldIdentity.bundleIdentifier == proofBundleIdentifier,
+              let currentSuggestionFieldIdentity,
+              currentSuggestionFieldIdentity.bundleIdentifier == proofBundleIdentifier,
+              currentSuggestionFieldIdentity.processIdentifier == fieldIdentity.processIdentifier,
+              currentSuggestionAgeMilliseconds <= maximumPromptProofTargetGeometryChurnAgeMilliseconds,
+              let currentSuggestionTextBeforeCursor,
+              currentSuggestionTextBeforeCursor.contains(marker),
+              currentSuggestionTextBeforeCursor == textBeforeCursor,
+              textAfterCursor.isEmpty else {
+            return false
+        }
+
+        return true
     }
 
     private func isSameTextMiddleSplit(

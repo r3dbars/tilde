@@ -349,6 +349,10 @@ if 'restore_claude_draft_if_needed' not in source or 'prompt_app_ax_proof_helper
 prompt_helper = Path("script/prompt_app_ax_proof_helper.swift").read_text()
 if "seedWithSelectedTextFallback" not in prompt_helper or "seedWithPasteFallback" not in prompt_helper:
     raise SystemExit("Prompt app AX helper must fall back when direct AX value seeding does not stick")
+if "waitForStableTreeExactValue" not in prompt_helper or "exactValueInput" not in prompt_helper:
+    raise SystemExit("Prompt app AX helper must verify seeded text stays in the live app tree")
+if "prefersEventBackedSeeding" not in prompt_helper or 'options.bundleIdentifier == "com.openai.codex"' not in prompt_helper:
+    raise SystemExit("Codex prompt helper must use event-backed seeding so React state keeps the proof text")
 if "clonePasteboardItems" not in prompt_helper or "$0.copy() as? NSPasteboardItem" in prompt_helper:
     raise SystemExit("Prompt app AX helper must clone pasteboard data without crashing on NSPasteboardItem.copy()")
 if 'let acceptedLabels = ["new chat"]' not in prompt_helper:
@@ -1529,8 +1533,13 @@ if ! grep -F "seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text" "$TMP_DIR/code
   echo "real app smoke self-test did not explain the Codex targeted proof seed" >&2
   exit 1
 fi
-if ! grep -F "backs it up privately and restores it after the no-submit proof" "$TMP_DIR/codex.txt" >/dev/null; then
+if ! grep -F "backs it up privately and restores it after the no-submit proof; empty proof composers are cleared" "$TMP_DIR/codex.txt" >/dev/null; then
   echo "real app smoke self-test did not explain the Codex draft restore guard" >&2
+  exit 1
+fi
+if ! grep -F '[[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -f "$CODEX_DRAFT_BACKUP_PATH" ]]' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Cleared Codex proof composer after proof." script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected empty Codex proof composers to be cleared during cleanup" >&2
   exit 1
 fi
 if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev/null; then
@@ -1539,6 +1548,12 @@ if ! grep -F "Proof mode bundle(s): com.openai.codex" "$TMP_DIR/codex.txt" >/dev
 fi
 if ! grep -F "assert_codex_proof_prompt_ready" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Codex proof to read-verify the focused marker composer before Tab" >&2
+  exit 1
+fi
+if ! grep -F "codex_ax_helper seed" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "prompt_app_ax_proof_helper.swift" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CODEX_COMPOSER_DISCOVERY_TIMEOUT_SECONDS" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Codex proof to use the shared hardened prompt AX helper" >&2
   exit 1
 fi
 if ! grep -F "maxDepth: 12" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
@@ -1553,6 +1568,30 @@ if ! grep -F "codex-proof-insert-verification-fast-path" Sources/AutocompleteLab
   echo "real app smoke self-test expected proof-only Codex insertion verification fast path diagnostics" >&2
   exit 1
 fi
+if ! awk '/run_codex\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex proof to press Tab through CGEvent session events" >&2
+  exit 1
+fi
+if ! grep -F 'ensure_cgevent_keypress_helper()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'cgevent_keypress_helper_path()' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/run_codex\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /ensure_cgevent_keypress_helper/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex proof to warm the CGEvent keypress helper before showing a suggestion" >&2
+  exit 1
+fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("run_codex()")
+end = source.index("run_claude_code_terminal_host_smoke()", start)
+block = source[start:end]
+if block.index("focus_codex_proof_prompt") > block.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"'):
+    raise SystemExit("Codex proof must focus the marker composer before waiting for the visible suggestion")
+after_visible = block.split('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"', 1)[1]
+before_tab = after_visible.split("press_key_code_cgevent 48", 1)[0]
+if "focus_codex_proof_prompt" in before_tab or "assert_codex_proof_prompt_ready" in before_tab:
+    raise SystemExit("Codex proof must not refocus the composer after the suggestion is visible")
+PY
 
 script/real_app_smoke.sh claude-code --dry-run >"$TMP_DIR/claude-code.txt"
 if ! grep -F "one-word Tab accept without submit" "$TMP_DIR/claude-code.txt" >/dev/null; then

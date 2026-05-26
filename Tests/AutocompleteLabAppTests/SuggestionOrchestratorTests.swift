@@ -686,6 +686,53 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Codex no-submit proof candidates bypass final latency suppression")
+    func codexNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "\(CodexProofFocusedTargetPolicy.marker) Can we make this dicta",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "codex-proof-late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_100,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "codex-proof-no-submit")
+    }
+
+    @MainActor
     @Test("Late streaming partials are not hard suppressed by the final latency cutoff")
     func lateStreamingPartialsAreNotHardSuppressedByFinalLatencyCutoff() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

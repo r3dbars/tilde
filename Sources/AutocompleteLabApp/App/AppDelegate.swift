@@ -18,6 +18,10 @@ struct CodexProofFocusedTargetPolicy {
     static let bundleIdentifier = "com.openai.codex"
     static let marker = "AUTOCOMPLETE_LAB_CODEX_PROOF"
 
+    static func allowsOneWordProofRequestMode(_ requestMode: CompletionRequestMode?) -> Bool {
+        requestMode == .wordCompletion || requestMode == .phraseContinuation
+    }
+
     func matches(
         app: RunningApplicationInfo,
         profile: CompatibilityProfile,
@@ -32,7 +36,7 @@ struct CodexProofFocusedTargetPolicy {
         shownTargetFingerprint: FocusedTargetFingerprint? = nil
     ) -> Bool {
         guard suggestionBundleIdentifier == Self.bundleIdentifier,
-              requestMode == .wordCompletion,
+              Self.allowsOneWordProofRequestMode(requestMode),
               profile.bundleIdentifier == Self.bundleIdentifier,
               profile.supportsOneWordAcceptance,
               !profile.supportsFullAcceptance,
@@ -4345,7 +4349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
         let marker = CodexProofFocusedTargetPolicy.marker
         guard currentSuggestionAppBundleIdentifier == bundleIdentifier,
-              currentSuggestionRequestMode == .wordCompletion,
+              CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode),
               let currentProfile,
               currentProfile.bundleIdentifier == bundleIdentifier,
               currentProfile.supportsOneWordAcceptance,
@@ -5358,7 +5362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let replacementText = baseline.previousTextBeforeCursor + acceptedText + baseline.previousTextAfterCursor
         guard !acceptedText.isEmpty,
               baseline.profile.bundleIdentifier == bundleIdentifier,
-              baseline.requestMode == .wordCompletion,
+              CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(baseline.requestMode),
               baseline.profile.supportsOneWordAcceptance,
               !baseline.profile.supportsFullAcceptance,
               baseline.profile.requiresNoSubmitAcceptanceProof,
@@ -8388,7 +8392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldUseCodexProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
         currentSuggestionAppBundleIdentifier == "com.openai.codex"
             && profile.bundleIdentifier == "com.openai.codex"
-            && currentSuggestionRequestMode == .wordCompletion
+            && CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode)
             && profile.insertionMode == .axValueReplacement
             && profile.requiresNoSubmitAcceptanceProof
             && activeAppProofBundleIdentifiers.contains("com.openai.codex")
@@ -10606,7 +10610,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSuggestionAgeMilliseconds: currentSuggestionAgeMilliseconds(),
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
             textBeforeCursor: context.textBeforeCursor,
-            textAfterCursor: context.textAfterCursor
+            textAfterCursor: context.textAfterCursor,
+            promptProofModeEnabled: activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier),
+            promptProofBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            promptProofMarker: CodexProofFocusedTargetPolicy.marker
         )
     }
 
@@ -10616,6 +10623,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> String {
         if profile.bundleIdentifier == "md.obsidian" {
             return "obsidian-document-start-geometry-teleport"
+        }
+
+        if profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier,
+           activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier) {
+            return "codex-proof-target-geometry-churn"
         }
 
         if currentSuggestionTextBeforeCursor.map({ context.textBeforeCursor + context.textAfterCursor == $0 }) == true {
