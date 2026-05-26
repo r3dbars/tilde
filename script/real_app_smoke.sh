@@ -11758,7 +11758,7 @@ run_obsidian() {
     fi
     if [[ "$manual_app" == "obsidian-pane" ]]; then
       move_obsidian_caret_to_line_end
-    elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+    elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
       move_obsidian_caret_to_document_end
     elif [[ "$manual_app" == "obsidian-multiline" ]]; then
       set_obsidian_caret_to_value_end
@@ -11774,7 +11774,7 @@ run_obsidian() {
     if [[ "$manual_app" == "obsidian-pane" ]]; then
       set_obsidian_caret_to_value_end
       move_obsidian_caret_to_line_end
-    elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then
+    elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" ]]; then
       set_obsidian_caret_to_value_end
       move_obsidian_caret_to_document_end
     elif [[ "$manual_app" == "obsidian" || "$manual_app" == "obsidian-theme" ]]; then

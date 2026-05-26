@@ -1353,9 +1353,10 @@ normal_branch = normal_branch[:normal_branch.index('fi', normal_branch.index('ty
 normal_required = [
     'settle_obsidian_focus_for_smoke "Obsidian post-accept setup"',
     'assert_obsidian_smoke_target "$first_expected_suffix"',
+    'elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then\n      move_obsidian_caret_to_document_end',
     'second_start_line="$(line_count "$LOG_PATH")"',
     'type_obsidian_raw_smoke_text "$second_fragment"',
-    'elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then\n      set_obsidian_caret_to_value_end\n      move_obsidian_caret_to_document_end',
+    'elif [[ "$manual_app" == "obsidian-markdown-bold" || "$manual_app" == "obsidian-markdown-list" ]]; then\n      set_obsidian_caret_to_value_end\n      move_obsidian_caret_to_document_end',
 ]
 normal_positions = [normal_branch.find(text) for text in normal_required]
 if any(position < 0 for position in normal_positions) or normal_positions != sorted(normal_positions):
