@@ -13,8 +13,8 @@ if ! grep -F "Graduation score: $EXPECTED_CURRENT_SCORE/100" "$TMP_DIR/current.t
   echo "graduation score self-test did not report the expected current score" >&2
   exit 1
 fi
-if ! grep -F "Proof manifest validator passes with current source-compatible evidence" "$TMP_DIR/current.txt" >/dev/null; then
-  echo "graduation score self-test did not keep the pending proof blocker visible" >&2
+if ! grep -F "[FAIL]  2 - Proof manifest validator passes with current source-compatible evidence" "$TMP_DIR/current.txt" >/dev/null; then
+  echo "graduation score self-test did not keep the pending current-source proof gate visible" >&2
   exit 1
 fi
 

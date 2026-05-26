@@ -17,6 +17,18 @@ struct KeyboardEventTapConsumptionPolicyTests {
         }
     }
 
+    @Test("Control Backtick is consumed for suggest now even without a visible suggestion")
+    func controlBacktickConsumesForSuggestNow() {
+        #expect(policy.shouldConsume(input(
+            key: .controlBacktick,
+            hasVisibleSuggestion: false
+        )))
+        #expect(policy.shouldConsume(input(
+            key: .controlBacktick,
+            isInvalidatedByUserTyping: true
+        )))
+    }
+
     @Test("Passes through all keys after user typing invalidates the suggestion")
     func passesThroughAfterUserTypingInvalidatesSuggestion() {
         for key in [AutocompleteKey.tab, .backtick, .optionTab, .escape, .commandZ, .other] {
@@ -105,6 +117,7 @@ struct KeyboardEventTapConsumptionPolicyTests {
     func unhandledConsumedAcceptKeysAreDropped() {
         #expect(!policy.shouldReplayUnhandledConsumedKey(.tab))
         #expect(!policy.shouldReplayUnhandledConsumedKey(.backtick))
+        #expect(!policy.shouldReplayUnhandledConsumedKey(.controlBacktick))
         #expect(!policy.shouldReplayUnhandledConsumedKey(.optionTab))
         #expect(!policy.shouldReplayUnhandledConsumedKey(.escape))
         #expect(policy.shouldReplayUnhandledConsumedKey(.other))

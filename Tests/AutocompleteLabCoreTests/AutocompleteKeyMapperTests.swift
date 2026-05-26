@@ -15,6 +15,8 @@ struct AutocompleteKeyMapperTests {
         let mapper = AutocompleteKeyMapper()
 
         #expect(mapper.key(physicalKey: .tab, modifiers: [.option]) == .optionTab)
+        #expect(mapper.key(physicalKey: .tab, modifiers: [.option, .function]) == .optionTab)
+        #expect(mapper.key(physicalKey: .tab, modifiers: [.option, .control]) == .other)
         #expect(AcceptAllShortcut.optionTab.autocompleteKey == .optionTab)
     }
 
@@ -34,6 +36,8 @@ struct AutocompleteKeyMapperTests {
 
         #expect(mapper.key(physicalKey: .backtick, modifiers: []) == .backtick)
         #expect(mapper.key(physicalKey: .backtick, modifiers: [.shift]) == .backtick)
+        #expect(mapper.key(physicalKey: .backtick, modifiers: [.function]) == .backtick)
+        #expect(mapper.key(physicalKey: .backtick, modifiers: [.shift, .function]) == .backtick)
     }
 
     @Test("Window switching shortcuts pass through")
@@ -42,6 +46,13 @@ struct AutocompleteKeyMapperTests {
 
         #expect(mapper.key(physicalKey: .backtick, modifiers: [.command]) == .other)
         #expect(mapper.key(physicalKey: .backtick, modifiers: [.command, .shift]) == .other)
+    }
+
+    @Test("Control Backtick maps to suggest now")
+    func controlBacktickMapsToSuggestNow() {
+        let mapper = AutocompleteKeyMapper()
+
+        #expect(mapper.key(physicalKey: .backtick, modifiers: [.control]) == .controlBacktick)
     }
 
     @Test("IME and dead-key modifier chords pass through")

@@ -70,6 +70,20 @@ require_latest_launch_line() {
   fi
 }
 
+require_latest_launch_status_or_heartbeat() {
+  if grep -F "status accessibility=" <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
+    return
+  fi
+
+  if grep -F "runtime-resource-sample" <<<"$LATEST_LAUNCH_LINES" >/dev/null; then
+    return
+  fi
+
+  echo "missing latest-launch diagnostics pattern: status accessibility= or runtime-resource-sample" >&2
+  echo "log: $LOG_PATH" >&2
+  exit 1
+}
+
 reject_recent_pattern() {
   local pattern="$1"
   if grep -E "$pattern" <<<"$RECENT_LINES" >/dev/null; then
@@ -129,7 +143,7 @@ fi
 require_latest_launch_line "launch accessibility="
 require_latest_launch_line "runtime-bootstrap"
 require_latest_launch_line "readinessStage="
-require_latest_launch_line "status accessibility="
+require_latest_launch_status_or_heartbeat
 
 if [[ -n "${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-}" ]]; then
   require_latest_launch_line "asset=${AUTOCOMPLETE_LAB_EXPECTED_ASSET}"

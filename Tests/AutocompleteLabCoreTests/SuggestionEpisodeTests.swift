@@ -110,7 +110,9 @@ struct SuggestionEpisodeTests {
         #expect(scorecard.ignored == 1)
         #expect(scorecard.deletedFast == 1)
         #expect(scorecard.averageLatencyMilliseconds == 200)
-        #expect(scorecard.modelPromptRows.contains("Qwen3.5 4B / screen-aware-continuation-v9: shown 3, kept 1"))
+        #expect(scorecard.modelPromptRows.contains(
+            "Qwen3.5 4B / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
+        ))
         #expect(scorecard.markdown.contains("Score:"))
     }
 

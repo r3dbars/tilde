@@ -104,6 +104,63 @@ struct TextContextRepairPolicyTests {
         #expect(!result.wasRepaired)
     }
 
+    @Test("Repairs TextEdit native inline completion tails after end-of-document proof")
+    func repairsTextEditNativeInlineCompletionTail() {
+        let policy = TextContextRepairPolicy()
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "antly",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Smoke proof feels inst",
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == "Smoke proof feels inst")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .textEditNativeInlineCompletionTail)
+    }
+
+    @Test("Does not repair TextEdit middle text without previous end-of-document proof")
+    func doesNotRepairTextEditMiddleTextWithoutEndProof() {
+        let policy = TextContextRepairPolicy()
+
+        let middleText = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels ",
+            textAfterCursor: "instant",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Smoke proof feels ",
+            previousTextAfterCursor: "instant"
+        ))
+        #expect(!middleText.wasRepaired)
+
+        let selectedText = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "antly",
+            selectedTextLength: 1,
+            previousTextBeforeCursor: "Smoke proof feels inst",
+            previousTextAfterCursor: ""
+        ))
+        #expect(!selectedText.wasRepaired)
+
+        let changedBefore = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "com.apple.TextEdit",
+            role: "AXTextArea",
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "antly",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: "Smoke proof feels in",
+            previousTextAfterCursor: ""
+        ))
+        #expect(!changedBefore.wasRepaired)
+    }
+
     @Test("Repairs Obsidian CodeMirror trailing character cursor drift")
     func repairsObsidianCodeMirrorTrailingCharacter() {
         let policy = TextContextRepairPolicy()
@@ -554,6 +611,45 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorHiddenSpacerLine)
     }
 
+    @Test("Repairs Obsidian split-pane document coordinate drift at visual line end")
+    func repairsObsidianCodeMirrorDocumentCoordinateDrift() {
+        let policy = TextContextRepairPolicy()
+        let hiddenPrefix = "\u{200B}\n\u{200B}\n\n"
+        let previousBefore = hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm "
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and ",
+            textAfterCursor: "stays",
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previousBefore,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and stays")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorDocumentCoordinateDrift)
+    }
+
+    @Test("Repairs Obsidian split-pane coordinate drift from hidden document spacers")
+    func repairsObsidianCodeMirrorDocumentCoordinateDriftFromHiddenPrefix() {
+        let policy = TextContextRepairPolicy()
+        let hiddenPrefix = "\u{200B}\n\u{200B}\n\n"
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and ",
+            textAfterCursor: "stays",
+            selectedTextLength: 0
+        ))
+
+        #expect(result.textBeforeCursor == hiddenPrefix + "Autocomplete Lab Obsidian proof.\nSmoke proof feels calm and stays")
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorDocumentCoordinateDrift)
+    }
+
     @Test("Repairs Obsidian CodeMirror stale previous line before the active typed line")
     func repairsObsidianCodeMirrorStalePreviousLine() {
         let policy = TextContextRepairPolicy()
@@ -807,6 +903,31 @@ struct TextContextRepairPolicyTests {
         #expect(result.reason == .obsidianCodeMirrorEndOfDocumentGrowth)
     }
 
+    @Test("Repairs Obsidian bounded viewport growth after an end-of-document accept")
+    func repairsObsidianBoundedViewportGrowthAfterEndOfDocumentAccept() {
+        let policy = TextContextRepairPolicy()
+        let previous = (1...90)
+            .map { "Autocomplete Lab Obsidian scroll filler line \($0)" }
+            .joined(separator: "\n") + "\nAutocomplete Lab Obsidian proof\nSmoke proof feels instant"
+        let currentViewport = String(previous.suffix(997)) + " and stays"
+        let staleAfter = String(currentViewport.suffix(30))
+        let staleBefore = String(currentViewport.dropLast(staleAfter.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == currentViewport)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorViewportEndOfDocumentGrowth)
+    }
+
     @Test("Repairs Obsidian CodeMirror viewport cursor drift at the document end")
     func repairsObsidianCodeMirrorViewportEndOfDocumentDrift() {
         let policy = TextContextRepairPolicy()
@@ -853,6 +974,52 @@ struct TextContextRepairPolicyTests {
             textBeforeCursor: textBefore,
             textAfterCursor: textAfter,
             selectedTextLength: 0
+        ))
+
+        #expect(!result.wasRepaired)
+    }
+
+    @Test("Repairs Obsidian bounded viewport when a stable split follows an end-of-document accept")
+    func repairsObsidianBoundedViewportStableSplitAfterEndOfDocumentAccept() {
+        let policy = TextContextRepairPolicy()
+        let previous = String(repeating: "Autocomplete Lab Obsidian scroll filler ", count: 36)
+            + "Smoke proof feels instant"
+        let currentViewport = String(previous.suffix(997))
+        let staleAfter = String(currentViewport.suffix(30))
+        let staleBefore = String(currentViewport.dropLast(staleAfter.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: ""
+        ))
+
+        #expect(result.textBeforeCursor == previous)
+        #expect(result.textAfterCursor == "")
+        #expect(result.reason == .obsidianCodeMirrorViewportEndOfDocumentStable)
+    }
+
+    @Test("Does not repair Obsidian bounded viewport when prior snapshot was not at document end")
+    func doesNotRepairObsidianBoundedViewportWhenPriorSnapshotWasNotAtDocumentEnd() {
+        let policy = TextContextRepairPolicy()
+        let previous = String(repeating: "Autocomplete Lab Obsidian scroll filler ", count: 36)
+            + "Smoke proof feels instant"
+        let currentViewport = String(previous.suffix(997))
+        let staleAfter = String(currentViewport.suffix(30))
+        let staleBefore = String(currentViewport.dropLast(staleAfter.count))
+
+        let result = policy.repair(TextContextRepairInput(
+            bundleIdentifier: "md.obsidian",
+            role: "AXTextArea",
+            textBeforeCursor: staleBefore,
+            textAfterCursor: staleAfter,
+            selectedTextLength: 0,
+            previousTextBeforeCursor: previous,
+            previousTextAfterCursor: " later note text"
         ))
 
         #expect(!result.wasRepaired)

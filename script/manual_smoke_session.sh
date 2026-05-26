@@ -565,7 +565,7 @@ case "$APP" in
         OBSIDIAN_VARIANT="long-note"
         PROOF_LABEL="obsidian-long-note"
         SESSION_NAME="Obsidian long-note variant"
-        STEPS=$'- Use a disposable proof vault with a note that visibly scrolls.\n- Scroll so the target writing line is not near the top of the note.\n- Put the caret on a visible scrolled line and type `Smoke proof feels inst`.\n- Confirm the ghost anchors to the visible scrolled caret, not the unscrolled editor origin.\n- Press Tab once and expect `instant` on that visible line.\n- Type ` and stays inst`.\n- Press the configured full-accept shortcut and confirm insertion lands on the visible scrolled line.'
+        STEPS=$'- Use a disposable proof vault with a note that visibly scrolls.\n- Scroll so the target writing line is not near the top of the note.\n- Put the caret on a visible scrolled line and type `Smoke proof feels inst`.\n- Confirm the ghost anchors to the visible scrolled caret, not the unscrolled editor origin.\n- Press Tab once and expect `instant` on that visible line.\n- Type ` and stays`.\n- Press the configured full-accept shortcut and confirm insertion lands on the visible scrolled line.'
         ;;
       font-zoom|zoom|font)
         OBSIDIAN_VARIANT="font-zoom"

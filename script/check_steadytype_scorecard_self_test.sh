@@ -17,6 +17,57 @@ if ! grep -F "SteadyType scorecard verified" "$TMP_DIR/pass.txt" >/dev/null; the
   exit 1
 fi
 
+if ! grep -F -- "--expected-executable-sha256" script/check_steadytype_scorecard.py >/dev/null; then
+  echo "scorecard self-test expected live latency selector to pin the app executable hash" >&2
+  exit 1
+fi
+
+if ! grep -F -- "claude-code-model-latency" script/check_steadytype_scorecard.py >/dev/null; then
+  echo "scorecard self-test expected live latency selector to understand Claude Code latency claims" >&2
+  exit 1
+fi
+
+if ! grep -F -- "textedit-model-latency" script/check_steadytype_scorecard.py >/dev/null; then
+  echo "scorecard self-test expected live latency selector to understand TextEdit latency claims" >&2
+  exit 1
+fi
+
+STALE_SUGGESTION_QUALITY="$TMP_DIR/stale-suggestion-quality.md"
+python3 - "$SCORECARD" "$STALE_SUGGESTION_QUALITY" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace(
+    "`./script/check_daily_driver_local_quality_audit_report.sh`: passed for `docs/evals/daily-driver-local-quality-audit-2026-05-25.md` with 45 disposable rows, 36 display-eligible rows, 9 expected suppression rows, 100/100 overall, 100/100 relevance, and no raw output persisted.",
+    "`./script/check_quality_eval.sh`: passed.",
+    1,
+)
+source = source.replace(
+    "Run a real writing dogfood session, fill the Manual Trust Row, then gate it with `./script/daily_driver_dogfood_session.sh review --report <report>`.",
+    "Add a short `AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 ./script/local_quality_audit.py` report without durable raw prompt text.",
+    1,
+)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_SUGGESTION_QUALITY" >"$TMP_DIR/stale-suggestion-quality.txt" 2>&1; then
+  echo "scorecard self-test expected stale suggestion-quality proof to fail" >&2
+  exit 1
+fi
+
+for expected in \
+  "Suggestion quality: evidence must name ./script/check_daily_driver_local_quality_audit_report.sh" \
+  "Suggestion quality: evidence must name docs/evals/daily-driver-local-quality-audit-2026-05-25.md" \
+  "Suggestion quality: next proof must move past the checked local audit"
+do
+  if ! grep -F "$expected" "$TMP_DIR/stale-suggestion-quality.txt" >/dev/null; then
+    echo "scorecard self-test missing stale suggestion-quality failure: $expected" >&2
+    cat "$TMP_DIR/stale-suggestion-quality.txt" >&2
+    exit 1
+  fi
+done
+
 MANUAL_LIVE="$TMP_DIR/manual-live.txt"
 PROOF_LIVE="$TMP_DIR/proof-live.txt"
 LATENCY_SELECTOR_LIVE="$TMP_DIR/latency-selector-live.txt"
@@ -26,12 +77,12 @@ import sys
 
 Path(sys.argv[1]).write_text(
     "Insertion proof status: docs/product/manual-smoke-runs.md\n"
-    "30 target app pass(es) still need real manual smoke proof.\n",
+    "10 target app pass(es) still need real manual smoke proof.\n",
     encoding="utf-8",
 )
 Path(sys.argv[2]).write_text(
     "Proof manifest gaps:\n"
-    "Proof manifest check failed with 6 issue(s).\n",
+    "Proof manifest verified.\n",
     encoding="utf-8",
 )
 PY
@@ -43,43 +94,76 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 latency_line = next(line for line in source.splitlines() if line.startswith("| Latency |"))
-green = re.search(
+green = re.compile(
     r"select_latency_window[.]py\b[^|]*?: selected "
     r"diagnosticsLine=([0-9]+), traceStartLine=([0-9]+), "
     r"firstVisibleSamples=([0-9]+), modelSamples=([0-9]+), "
     r"fastWordVisibleSamples=([0-9]+)",
-    latency_line,
 )
-red = re.search(
+red = re.compile(
     r"select_latency_window[.]py\b[^|]*?: failed red because "
     r"(.+?), with diagnosticsLine=([0-9]+), traceStartLine=([0-9]+), "
     r"firstVisibleSamples=([0-9]+), modelSamples=([0-9]+), "
     r"fastWordVisibleSamples=([0-9]+)",
-    latency_line,
 )
-if green:
-    diagnostics, trace, first_visible, model, fast_word = green.groups()
-    output = (
+
+outputs = []
+for green_match in green.finditer(latency_line):
+    diagnostics, trace, first_visible, model, fast_word = green_match.groups()
+    outputs.append((
+        green_match.start(),
         f"AUTOCOMPLETE_LAB_LOG_START_LINE={int(diagnostics) - 1}\n"
         f"AUTOCOMPLETE_LAB_TRACE_START_LINE={trace}\n"
         "Latency window: selected latest sampled default runtime launch; "
         f"diagnosticsLine={diagnostics}; traceStartLine={trace}; diagnosticsEndLine=none; "
         f"traceEndLine=none; firstVisibleSamples={first_visible}; modelSamples={model}; "
-        f"fastWordVisibleSamples={fast_word}\n"
-    )
-elif red:
-    reason, diagnostics, trace, first_visible, model, fast_word = red.groups()
-    output = (
+        f"fastWordVisibleSamples={fast_word}\n",
+    ))
+for red_match in red.finditer(latency_line):
+    reason, diagnostics, trace, first_visible, model, fast_word = red_match.groups()
+    outputs.append((
+        red_match.start(),
         f"Latency window: {reason}; diagnosticsLine={diagnostics}; traceStartLine={trace}; "
         "diagnosticsEndLine=none; traceEndLine=none; "
         f"firstVisibleSamples={first_visible}; modelSamples={model}; "
-        f"fastWordVisibleSamples={fast_word}\n"
-    )
-else:
+        f"fastWordVisibleSamples={fast_word}\n",
+    ))
+
+if not outputs:
     raise SystemExit("could not parse scorecard latency selector claim")
 
-Path(sys.argv[2]).write_text(output, encoding="utf-8")
+fixture = "".join(output for _, output in sorted(outputs))
+Path(sys.argv[2]).write_text(fixture, encoding="utf-8")
 PY
+
+python3 - "$SCORECARD" "$TMP_DIR/latency-selector-claim-count.txt" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+latency_line = next(line for line in source.splitlines() if line.startswith("| Latency |"))
+count = len(list(re.finditer(r"select_latency_window[.]py\b", latency_line)))
+Path(sys.argv[2]).write_text(str(count), encoding="utf-8")
+PY
+
+if [[ "$(cat "$TMP_DIR/latency-selector-claim-count.txt")" -lt 1 ]]; then
+  echo "scorecard self-test expected the real scorecard to include a latency selector claim" >&2
+  exit 1
+fi
+
+python3 - "$LATENCY_SELECTOR_LIVE" "$TMP_DIR/latency-selector-live-count.txt" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+Path(sys.argv[2]).write_text(str(source.count("Latency window:")), encoding="utf-8")
+PY
+
+if [[ "$(cat "$TMP_DIR/latency-selector-live-count.txt")" -lt 1 ]]; then
+  echo "scorecard self-test expected the latency selector fixture to cover a live window" >&2
+  exit 1
+fi
 
 python3 script/check_steadytype_scorecard.py \
   --scorecard "$SCORECARD" \
@@ -168,8 +252,8 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 source = source.replace(
-    "30 target app passes are stale or pending",
-    "29 target app passes are stale or pending",
+    "`./script/check_proof_manifest.sh --require-all`: passed",
+    "`manual_smoke_status.sh --strict`: failed with 29 stale or pending rows. `./script/check_proof_manifest.sh --require-all`: passed",
     1,
 )
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
@@ -185,7 +269,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "manual smoke stale/pending count claim is 29, live output reports 30" "$TMP_DIR/manual-drift.txt" >/dev/null; then
+if ! grep -F "manual smoke stale/pending count claim is 29, live output reports 10" "$TMP_DIR/manual-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live manual count drift failure" >&2
   cat "$TMP_DIR/manual-drift.txt" >&2
   exit 1
@@ -197,7 +281,11 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("6 manifest issues", "7 manifest issues", 1)
+source = source.replace(
+    "`./script/check_proof_manifest.sh --require-all`: passed",
+    "`check_proof_manifest.sh --require-all`: failed with 7 manifest issues",
+    1,
+)
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -211,7 +299,7 @@ if python3 script/check_steadytype_scorecard.py \
   exit 1
 fi
 
-if ! grep -F "proof manifest issue count claim is 7, live output reports 6" "$TMP_DIR/proof-drift.txt" >/dev/null; then
+if ! grep -F "proof manifest issue count claim is 7, live output reports 0" "$TMP_DIR/proof-drift.txt" >/dev/null; then
   echo "scorecard self-test missing live proof manifest count drift failure" >&2
   cat "$TMP_DIR/proof-drift.txt" >&2
   exit 1
@@ -232,7 +320,15 @@ if ! grep -F "Latency: score must be between 0 and 100" "$TMP_DIR/bad-score.txt"
 fi
 
 STALE_ROUND_UP="$TMP_DIR/stale-round-up.md"
-sed 's#| Placement | 70/100 |#| Placement | 90/100 |#' "$SCORECARD" >"$STALE_ROUND_UP"
+python3 - "$SCORECARD" "$STALE_ROUND_UP" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("| Placement | 89/100 |", "| Placement | 90/100 |", 1)
+source = source.replace("The 10 beta-safe writing lanes plus", "The stale 10 beta-safe writing lanes plus", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
 
 if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_ROUND_UP" >"$TMP_DIR/stale.txt" 2>&1; then
   echo "scorecard self-test expected stale rounded-up proof to fail" >&2
@@ -246,7 +342,15 @@ if ! grep -F "Placement: contains 'stale', so score must stay <= 75/100" "$TMP_D
 fi
 
 PENDING_ROUND_UP="$TMP_DIR/pending-round-up.md"
-sed 's#| Tab safety | 74/100 |#| Tab safety | 90/100 |#' "$SCORECARD" >"$PENDING_ROUND_UP"
+python3 - "$SCORECARD" "$PENDING_ROUND_UP" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("| Tab safety | 86/100 |", "| Tab safety | 90/100 |", 1)
+source = source.replace("Prompt/chat apps are not normal beta writing surfaces.", "Pending prompt/chat apps are not normal beta writing surfaces.", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
 
 if python3 script/check_steadytype_scorecard.py --scorecard "$PENDING_ROUND_UP" >"$TMP_DIR/pending.txt" 2>&1; then
   echo "scorecard self-test expected pending rounded-up proof to fail" >&2
@@ -254,7 +358,7 @@ if python3 script/check_steadytype_scorecard.py --scorecard "$PENDING_ROUND_UP" 
 fi
 
 if ! grep -F "Tab safety: contains 'pending', so score must stay <= 75/100" "$TMP_DIR/pending.txt" >/dev/null; then
-  echo "scorecard self-test missing pending proof failure" >&2
+  echo "scorecard self-test missing stale Tab safety proof failure" >&2
   cat "$TMP_DIR/pending.txt" >&2
   exit 1
 fi
@@ -333,8 +437,8 @@ PY
 done
 
 PERFECT_UNRESOLVED="$TMP_DIR/perfect-unresolved.md"
-sed -e 's#Overall score: 78/100\.#Overall score: 79/100.#' \
-  -e 's#| Diagnostics | 90/100 |#| Diagnostics | 100/100 |#' \
+sed -e 's#Overall score: 87/100\.#Overall score: 88/100.#' \
+  -e 's#| Diagnostics | 92/100 |#| Diagnostics | 100/100 |#' \
   "$SCORECARD" >"$PERFECT_UNRESOLVED"
 
 if python3 script/check_steadytype_scorecard.py --scorecard "$PERFECT_UNRESOLVED" >"$TMP_DIR/perfect.txt" 2>&1; then

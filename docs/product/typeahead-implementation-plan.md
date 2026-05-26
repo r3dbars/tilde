@@ -1,43 +1,112 @@
-# TypeAhead-Informed Implementation Plan
+# TypeAhead-Inspired Implementation Plan
 
-Reviewed: 2026-05-26
+Date: 2026-05-26
 
-## Product Bet
+Goal: adapt useful public TypeAhead lessons without copying UI, copy,
+branding, trade dress, code, assets, or broad claims.
 
-Do not chase "works everywhere." Win on trust.
+## Product Bets
 
-TypeAhead's public positioning shows the appeal of a native-feeling Mac autocomplete loop. The safer SteadyType move is a smaller loop with stronger proof:
+1. Make silence understandable.
+2. Keep `Tab` safe: one word only.
+3. Keep full accept separate.
+4. Keep support proof-gated.
+5. Keep privacy proof local and visible.
 
-- short suggestions,
-- one-word `Tab`,
-- clear dismiss/pause,
-- local-first runtime,
-- visible reasons when SteadyType stays quiet,
-- narrow app support until proof says otherwise.
+## Shipped This Pass
 
-## Shipped In This Pass
+### Plain Silence Explanations
 
-1. Added a pure policy for human silence explanations.
-2. Wired activation-policy blocks to show plain user-facing reasons in Settings/menu status.
-3. Kept raw trace `reason` stable while adding separate `silenceExplanation` metadata.
-4. Split "no editable text field" from "secure field" in app status.
-5. Changed default visible suggestion length from 8 words to 3 words.
-6. Updated product docs to say 1-3 words by default.
-7. Added a Settings privacy proof line for app-owned local model use, raw-text default-off, and redacted Privacy Bundles.
-8. Fixed the TextEdit real-app smoke helper path so AX-based synthetic proof seeding no longer calls a missing function.
+Problem:
 
-## Next Best Follow-Ups
+Internal block reasons like `blockedFieldKind` are useful for traces, but bad
+for a beta tester. TypeAhead's public docs show the need for clear failure
+states, but I did not find an in-app "why no suggestion?" proof surface.
 
-1. Show the silence explanation as a tooltip on the field status indicator.
-2. Add a bounded real TextEdit trace proving default suggestions are 1-3 words.
-3. Refresh the stale TextEdit model-latency proof; the live proof still failed on app focus / missing model timing.
-4. Refresh scorecards after a current build/smoke pass.
-5. Leave browser production fields, prompt apps, and chat apps blocked or proof-only.
+Change:
 
-## Do Not Do Yet
+- Add `SuggestionSilenceExplanationPolicy`.
+- Map activation blocks to calm user-facing reasons:
+  - search fields stay quiet,
+  - URL and address fields stay quiet,
+  - forms stay quiet,
+  - secure field,
+  - surface needs proof first,
+  - unknown field needs proof first,
+  - waiting for more context,
+  - word still forming,
+  - sensitive text detected.
+- Use the plain reason in the app decision text.
+- Keep raw trace reason codes unchanged.
 
-- Do not add broad browser support.
-- Do not build true inline ghost text.
+Files:
+
+- `Sources/AutocompleteLabCore/Session/SuggestionSilenceExplanationPolicy.swift`
+- `Tests/AutocompleteLabCoreTests/SuggestionSilenceExplanationPolicyTests.swift`
+- `Sources/AutocompleteLabApp/App/AppDelegate.swift`
+
+## Next Small Pass
+
+### Field Status Reason Tooltip
+
+Show the same silence explanation in the field badge tooltip, not just the
+diagnostics text.
+
+Candidate files:
+
+- `Sources/AutocompleteLabApp/UI/FieldStatusIndicatorController.swift`
+- `Sources/AutocompleteLabApp/App/AppDelegate.swift`
+- `Tests/AutocompleteLabAppTests/FieldStatusIndicator...`
+
+Proof:
+
+- app tests for tooltip/accessibility label state,
+- manual TextEdit and Chrome fixture pass.
+
+### Runtime/Privacy Proof Card
+
+TypeAhead's strongest wedge is "local." SteadyType should show current proof
+without broad claims:
+
+- runtime: local MLX ready/missing/repairing,
+- model revision/checksum receipt state,
+- redacted trace mode,
+- raw trace off/on,
+- network proof command reference.
+
+Candidate files:
+
+- `Sources/AutocompleteLabApp/UI/SettingsWindowController.swift`
+- `Sources/AutocompleteLabApp/UI/DiagnosticsWindowController.swift`
+- `docs/product/privacy-and-controls.md`
+
+Proof:
+
+- settings snapshot tests,
+- `./script/check_current_build_privacy_export.sh`,
+- `./script/check_runtime_network_egress.py`.
+
+### Non-Annoyance Persistence
+
+Keep a suggestion stable long enough for a human to accept, but hide fast when
+typing clearly moves on.
+
+Candidate files:
+
+- `Sources/AutocompleteLabCore/Session/VisibleSuggestionPersistencePolicy.swift`
+- `Sources/AutocompleteLabCore/Session/SuggestionTypingProgressPolicy.swift`
+- `Sources/AutocompleteLabCore/Session/TypingBurstPolicy.swift`
+
+Proof:
+
+- unit tests for stale-vs-stable suggestions,
+- trace replay with typed-over and accepted-kept slices.
+
+## Explicit Avoids
+
+- Do not switch `Tab` to full accept.
+- Do not claim broad browser or Google Docs support.
 - Do not add cloud fallback.
-- Do not market personalization.
-- Do not raise beta readiness without current proof gates.
+- Do not add default personalization.
+- Do not add TypeAhead-like landing-page copy or visuals.
+- Do not make speed, legal, medical, or compliance claims without current proof.

@@ -1,6 +1,7 @@
 import Foundation
 
 public enum KeyboardAction: Equatable, Sendable {
+    case requestSuggestionNow
     case acceptNextWord
     case acceptAllVisible
     case undoAcceptedInsertion
@@ -9,6 +10,8 @@ public enum KeyboardAction: Equatable, Sendable {
 
     public var diagnosticName: String {
         switch self {
+        case .requestSuggestionNow:
+            "requestSuggestionNow"
         case .acceptNextWord:
             "acceptNextWord"
         case .acceptAllVisible:
@@ -26,7 +29,7 @@ public enum KeyboardAction: Equatable, Sendable {
         switch self {
         case .acceptNextWord, .acceptAllVisible:
             true
-        case .undoAcceptedInsertion, .dismiss, .passThrough:
+        case .requestSuggestionNow, .undoAcceptedInsertion, .dismiss, .passThrough:
             false
         }
     }
@@ -36,6 +39,7 @@ public enum AutocompleteKey: Equatable, Sendable {
     case tab
     case optionTab
     case backtick
+    case controlBacktick
     case commandZ
     case escape
     case other
@@ -48,6 +52,8 @@ public enum AutocompleteKey: Equatable, Sendable {
             "optionTab"
         case .backtick:
             "backtick"
+        case .controlBacktick:
+            "controlBacktick"
         case .commandZ:
             "commandZ"
         case .escape:
@@ -261,14 +267,24 @@ public struct AutocompleteKeyMapper: Equatable, Sendable {
                 return .tab
             }
 
-            if modifiers == .option {
+            if modifiers.contains(.option),
+               !modifiers.contains(.shift),
+               !modifiers.contains(.control),
+               !modifiers.contains(.command) {
                 return .optionTab
             }
 
             return .other
 
         case .backtick:
-            if modifiers.isEmpty || modifiers == .shift {
+            if modifiers == .control {
+                return .controlBacktick
+            }
+
+            if modifiers.isEmpty
+                || modifiers == .shift
+                || modifiers == .function
+                || modifiers == [.shift, .function] {
                 return .backtick
             }
 
@@ -298,6 +314,10 @@ public struct KeyboardActionRouter: Equatable, Sendable {
         hasVisibleSuggestion: Bool,
         hasPendingAcceptedInsertionUndo: Bool = false
     ) -> KeyboardAction {
+        if key == .controlBacktick {
+            return .requestSuggestionNow
+        }
+
         if key == .commandZ, hasPendingAcceptedInsertionUndo {
             return .undoAcceptedInsertion
         }
@@ -313,6 +333,8 @@ public struct KeyboardActionRouter: Equatable, Sendable {
             return shortcutConfiguration.acceptAllShortcut == .optionTab ? .acceptAllVisible : .passThrough
         case .backtick:
             return shortcutConfiguration.acceptAllShortcut == .backtick ? .acceptAllVisible : .passThrough
+        case .controlBacktick:
+            return .requestSuggestionNow
         case .commandZ:
             return .passThrough
         case .escape:

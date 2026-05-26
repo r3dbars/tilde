@@ -3,55 +3,48 @@ import Foundation
 public struct SuggestionSilenceExplanationPolicy: Equatable, Sendable {
     public init() {}
 
-    public func explanation(
-        for decision: CompletionActivationDecision,
-        fieldKind: AXFieldKind
-    ) -> String? {
-        guard case let .block(reason) = decision else {
-            return nil
-        }
-
-        return explanation(for: reason, fieldKind: fieldKind)
+    public func focusedTextUnavailable(isSecure: Bool) -> String {
+        isSecure ? "secure field" : "no editable text field"
     }
 
-    public func explanation(
-        for reason: CompletionActivationBlockReason,
+    public func activationBlockReason(
+        _ reason: CompletionActivationBlockReason,
         fieldKind: AXFieldKind
     ) -> String {
         switch reason {
         case .secureField:
-            return "secure fields stay quiet"
+            return "secure field"
         case .suppressedField:
-            return "silenced until focus changes"
+            return "field silenced"
         case .blockedFieldKind:
-            return blockedFieldKindExplanation(fieldKind)
+            return blockedFieldKindReason(fieldKind)
         case .sensitiveContent:
-            return "sensitive text detected"
+            return "sensitive content stays quiet"
         case .markdownCodeContext:
-            return "code context"
+            return "code blocks stay quiet"
         case .selectedText:
-            return "selected text is protected"
+            return "selected text stays quiet"
         case .terminalSentenceBoundary:
-            return "waiting for a new thought"
+            return "sentence already ended"
         case .tooLittleContext:
             return "waiting for more context"
         case .middleOfLine:
-            return "cursor is in existing text"
+            return "middle of line stays quiet"
         case .unfinishedWord:
             return "word still forming"
         }
     }
 
-    private func blockedFieldKindExplanation(_ fieldKind: AXFieldKind) -> String {
+    private func blockedFieldKindReason(_ fieldKind: AXFieldKind) -> String {
         switch fieldKind {
         case .search:
             return "search fields stay quiet"
+        case .url:
+            return "URL and address fields stay quiet"
         case .form:
             return "forms stay quiet"
         case .secure:
-            return "secure fields stay quiet"
-        case .url:
-            return "URL and address fields stay quiet"
+            return "secure field"
         case .unprovenSurface:
             return "surface needs proof first"
         case .unknown:

@@ -33,6 +33,22 @@ struct FocusedTextPollLatencyStatsTests {
         #expect(stats.record(30)?.count == 2)
     }
 
+    @Test("Excluded samples do not fill or skew the summary window")
+    func excludedSamplesDoNotFillOrSkewSummaryWindow() {
+        var stats = FocusedTextPollLatencyStats(sampleWindow: 3)
+
+        #expect(stats.record(121, includeInSummary: false) == nil)
+        #expect(stats.record(1) == nil)
+        #expect(stats.record(2) == nil)
+        let summary = stats.record(3)
+
+        #expect(summary?.count == 3)
+        #expect(summary?.p50Milliseconds == 2)
+        #expect(summary?.p95Milliseconds == 3)
+        #expect(summary?.p99Milliseconds == 3)
+        #expect(summary?.maxMilliseconds == 3)
+    }
+
     @Test("Negative durations are clamped")
     func negativeDurationsAreClamped() {
         var stats = FocusedTextPollLatencyStats(sampleWindow: 1)

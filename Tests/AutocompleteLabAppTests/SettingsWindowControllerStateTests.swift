@@ -211,6 +211,40 @@ struct SettingsWindowControllerStateTests {
         #expect(claudeCode.proofCommandText == nil)
         #expect(!claudeCode.canToggle)
 
+        let terminalHost = SettingsCurrentAppState(
+            displayName: "iTerm2",
+            bundleIdentifier: "com.googlecode.iterm2",
+            supportStatus: store.supportStatus(for: "com.googlecode.iterm2"),
+            isEnabled: false,
+            disabledAppCount: 0
+        )
+
+        #expect(terminalHost.statusText == "Current app: iTerm2 is blocked outside Claude Code proof")
+        #expect(
+            terminalHost.detailText
+                == "iTerm2 stays blocked for normal typing. Only an explicit Claude Code host proof check can use this terminal."
+        )
+        #expect(terminalHost.modeText == "Mode: Claude Code terminal-host proof only")
+        #expect(terminalHost.acceptanceText == "Keys: off except one-word Tab during an explicit proof check.")
+        #expect(terminalHost.fallbackText == "Fallback: unavailable outside the manual Claude Code proof lane.")
+        #expect(terminalHost.proofButtonTitle == "Manual Check Only")
+        #expect(!terminalHost.canStartProof)
+        #expect(!terminalHost.canToggle)
+        #expect(terminalHost.shouldShowCheckControls)
+        #expect(
+            terminalHost.proofText
+                == "Check: run the iTerm2 Claude Code proof, press Tab once, and do not press Enter."
+        )
+        #expect(
+            terminalHost.proofCommandText
+                == "Manual check: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate"
+        )
+        #expect(
+            terminalHost.proofCommandClipboardText
+                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --host iterm2 --manual-gate"
+        )
+        #expect(terminalHost.canCopyProofCommand)
+
         let unsupported = SettingsCurrentAppState(
             displayName: "Unknown",
             bundleIdentifier: "com.example.UnknownEditor",
@@ -790,7 +824,8 @@ struct SettingsWindowControllerStateTests {
     func keyboardShortcutCopySupportsDirectAcceptAllEditing() {
         let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
 
-        #expect(backtick.statusText == "Shortcuts: Tab accepts one word + space | Backtick accepts whole suggestion")
+        #expect(backtick.statusText == "Shortcuts: Tab accepts one word + space | Control-Backtick asks once")
+        #expect(backtick.acceptAllStatusText == "Backtick accepts whole suggestion")
         #expect(backtick.conflictText == "Conflict check: choose an app")
         #expect(backtick.perAppProfileText == "Per-app profile: choose an app to check whole-suggestion accept.")
         #expect(backtick.acceptAllPickerLabel == "Whole suggestion:")
@@ -798,7 +833,8 @@ struct SettingsWindowControllerStateTests {
 
         let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
 
-        #expect(optionTab.statusText == "Shortcuts: Tab accepts one word + space | Option-Tab accepts whole suggestion")
+        #expect(optionTab.statusText == "Shortcuts: Tab accepts one word + space | Control-Backtick asks once")
+        #expect(optionTab.acceptAllStatusText == "Option-Tab accepts whole suggestion")
         #expect(optionTab.conflictDetailText == "Open a writing app to check the shortcut against that app profile.")
         #expect(optionTab.acceptAllPickerLabel == "Whole suggestion:")
         #expect(optionTab.cycleButtonTitle == "Use Backtick")
@@ -829,6 +865,65 @@ struct SettingsWindowControllerStateTests {
         )
         #expect(codex.conflictText == "Conflict check: whole-suggestion accept is off in Codex")
         #expect(codex.perAppProfileText == "Per-app profile: Codex allows Tab one-word accept only.")
+    }
+
+    @Test("Trust state gathers local privacy current surface and why copy")
+    func trustStateGathersLocalPrivacyCurrentSurfaceAndWhyCopy() {
+        let currentApp = SettingsCurrentAppState(
+            displayName: "TextEdit",
+            bundleIdentifier: "com.apple.TextEdit",
+            supportStatus: CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.TextEdit"),
+            isEnabled: true,
+            disabledAppCount: 0
+        )
+        let privacy = SettingsPrivacyState(
+            tracingPaused: false,
+            rawContentTracingEnabled: false,
+            rawContentTracingExpiresAt: nil,
+            screenshotTracingEnabled: false,
+            screenshotTracingExpiresAt: nil,
+            visiblePageContextEnabled: false,
+            screenCaptureAccessGranted: false,
+            diagnosticsPath: "/tmp/diagnostics.log",
+            tracePath: "/tmp/traces.jsonl"
+        )
+        let trust = SettingsTrustState(
+            isTrusted: true,
+            suggestionsPaused: false,
+            runtimeReport: readyRuntimeReport,
+            currentApp: currentApp,
+            privacy: privacy,
+            lastSuggestionDecision: "Waiting: cadence policy"
+        )
+
+        #expect(trust.statusText == "Trust: local and quiet")
+        #expect(trust.localModeText == "Local mode: app-owned model, ready.")
+        #expect(trust.typedTextText == "Typed text storage: off by default.")
+        #expect(trust.currentSurfaceText == "Current app: TextEdit is green and on")
+        #expect(trust.whyText == "Why now: Waiting: cadence policy")
+
+        let rawCapture = SettingsTrustState(
+            isTrusted: true,
+            suggestionsPaused: true,
+            runtimeReport: readyRuntimeReport,
+            currentApp: currentApp,
+            privacy: SettingsPrivacyState(
+                tracingPaused: false,
+                rawContentTracingEnabled: true,
+                rawContentTracingExpiresAt: nil,
+                screenshotTracingEnabled: false,
+                screenshotTracingExpiresAt: nil,
+                visiblePageContextEnabled: false,
+                personalCaptureEnabled: true,
+                screenCaptureAccessGranted: false,
+                diagnosticsPath: "/tmp/diagnostics.log",
+                tracePath: "/tmp/traces.jsonl"
+            ),
+            lastSuggestionDecision: "Paused"
+        )
+
+        #expect(rawCapture.statusText == "Trust: suggestions are paused")
+        #expect(rawCapture.typedTextText == "Typed text storage: local opt-in capture is on.")
     }
 
     @Test("Pause state copy stays shared across surfaces")
@@ -892,21 +987,21 @@ struct SettingsWindowControllerStateTests {
         #expect(max.maxWordsDetailText == "Aims for 12-20 words when the sentence has enough context.")
         #expect(max.wordStartText == "Word help starts after: 2 letters")
         #expect(max.wordStartDetailText == "Lower means word suggestions show sooner.")
-        #expect(max.phraseStartText == "Phrase help starts after: 3 words")
+        #expect(max.phraseStartText == "Phrase help starts after: 2 words")
         #expect(max.phraseStartDetailText == "Lower means phrase suggestions need less context.")
-        #expect(max.responseSpeedText == "Wait after typing: Normal")
+        #expect(max.responseSpeedText == "Wait after typing: Instant")
         #expect(max.responseSpeedDetailText == "Higher feels faster. Lower waits for a clearer pause.")
-        #expect(max.confidenceText == "Guess strength: Normal")
+        #expect(max.confidenceText == "Guess strength: Loose")
         #expect(max.confidenceDetailText == "Loose shows more guesses. Strict hides more.")
-        #expect(max.learningRestraintText == "Learned caution: Normal")
+        #expect(max.learningRestraintText == "Learned caution: Low")
         #expect(max.learningRestraintDetailText == "Lower lets ignored old suggestions matter less.")
         #expect(max.aggressivenessSliderValue == 5)
         #expect(max.maxWordsSliderValue == 20)
         #expect(max.wordStartSliderValue == 2)
-        #expect(max.phraseStartSliderValue == 3)
-        #expect(max.responseSpeedSliderValue == 3)
-        #expect(max.confidenceSliderValue == 3)
-        #expect(max.learningRestraintSliderValue == 2)
+        #expect(max.phraseStartSliderValue == 2)
+        #expect(max.responseSpeedSliderValue == 5)
+        #expect(max.confidenceSliderValue == 4)
+        #expect(max.learningRestraintSliderValue == 1)
     }
 
     @MainActor

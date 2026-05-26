@@ -63,6 +63,14 @@ struct SettingsCurrentAppState: Equatable {
         bundleIdentifier != nil && supportStatus.canToggleSuggestions
     }
 
+    private var claudeCodeTerminalHostVariant: ClaudeCodeTerminalHostVariant? {
+        guard let bundleIdentifier else {
+            return nil
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.hostVariant(for: bundleIdentifier)
+    }
+
     var canOverrideMode: Bool {
         guard bundleIdentifier != nil,
               case let .supported(profile) = supportStatus,
@@ -90,6 +98,10 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var shouldShowCheckControls: Bool {
+        if claudeCodeTerminalHostVariant != nil {
+            return true
+        }
+
         guard bundleIdentifier != nil,
               case let .supported(profile) = supportStatus,
               profile.canPresentSuggestions,
@@ -103,6 +115,10 @@ struct SettingsCurrentAppState: Equatable {
     var statusText: String {
         guard bundleIdentifier != nil else {
             return "Current app: no app selected"
+        }
+
+        if claudeCodeTerminalHostVariant != nil {
+            return "Current app: \(displayName) is blocked outside Claude Code proof"
         }
 
         if isProofModeOnly {
@@ -119,6 +135,10 @@ struct SettingsCurrentAppState: Equatable {
     var detailText: String {
         guard bundleIdentifier != nil else {
             return "Open a writing app to see whether suggestions are supported."
+        }
+
+        if claudeCodeTerminalHostVariant != nil {
+            return "\(displayName) stays blocked for normal typing. Only an explicit Claude Code host proof check can use this terminal."
         }
 
         if isProofModeOnly {
@@ -145,6 +165,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Mode: choose a writing app"
         }
 
+        if claudeCodeTerminalHostVariant != nil {
+            return "Mode: Claude Code terminal-host proof only"
+        }
+
         guard case let .supported(profile) = supportStatus else {
             return "Mode: not set up here"
         }
@@ -168,6 +192,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Acceptance: off until an app is selected"
         }
 
+        if claudeCodeTerminalHostVariant != nil {
+            return "Keys: off except one-word Tab during an explicit proof check."
+        }
+
         guard case let .supported(profile) = supportStatus,
               profile.canPresentSuggestions,
               !profile.isSensitive else {
@@ -187,7 +215,11 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var fallbackText: String {
-        CommandFallbackPolicy().decision(
+        if claudeCodeTerminalHostVariant != nil {
+            return "Fallback: unavailable outside the manual Claude Code proof lane."
+        }
+
+        return CommandFallbackPolicy().decision(
             supportStatus: supportStatus,
             isEnabled: isEnabled,
             hasCurrentApp: bundleIdentifier != nil
@@ -223,6 +255,10 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var proofButtonTitle: String {
+        if claudeCodeTerminalHostVariant != nil {
+            return "Manual Check Only"
+        }
+
         if bundleIdentifier == "com.apple.TextEdit", isEnabled {
             return "Check TextEdit"
         }
@@ -249,6 +285,10 @@ struct SettingsCurrentAppState: Equatable {
     var proofText: String {
         guard bundleIdentifier != nil else {
             return "Check: choose a writing app first."
+        }
+
+        if let hostVariant = claudeCodeTerminalHostVariant {
+            return "Check: run the \(hostVariant.displayName) Claude Code proof, press Tab once, and do not press Enter."
         }
 
         guard case let .supported(profile) = supportStatus,
@@ -289,7 +329,7 @@ struct SettingsCurrentAppState: Equatable {
             return "Manual checks: \(command.replacingOccurrences(of: "\n", with: "; "))"
         }
 
-        if supportStatus.supportLevel == .yellow {
+        if supportStatus.supportLevel == .yellow || claudeCodeTerminalHostVariant != nil {
             return "Manual check: \(command)"
         }
 
@@ -297,6 +337,10 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var proofCommandClipboardText: String? {
+        if let hostVariant = claudeCodeTerminalHostVariant {
+            return hostVariant.manualProofCommand
+        }
+
         guard let bundleIdentifier,
               isEnabled,
               case let .supported(profile) = supportStatus,
@@ -515,12 +559,15 @@ struct SettingsPrivacyState: Equatable {
 struct SettingsKeyboardShortcutState: Equatable {
     let acceptAllShortcut: AcceptAllShortcut
     let conflict: KeyboardShortcutConflictEvaluation
+    let summonShortcut: SuggestionSummonHotKeyDescriptor
 
     init(
         acceptAllShortcut: AcceptAllShortcut,
-        currentApp: SettingsCurrentAppState? = nil
+        currentApp: SettingsCurrentAppState? = nil,
+        summonShortcut: SuggestionSummonHotKeyDescriptor = .controlBacktick
     ) {
         self.acceptAllShortcut = acceptAllShortcut
+        self.summonShortcut = summonShortcut
         let context = currentApp.map { app -> KeyboardShortcutConflictContext in
             let canPresentSuggestions: Bool
             let supportsFullAcceptance: Bool
@@ -546,7 +593,11 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var statusText: String {
-        "Shortcuts: Tab accepts one word + space | \(acceptAllShortcut.displayName) accepts whole suggestion"
+        "Shortcuts: Tab accepts one word + space | \(summonShortcut.displayName) asks once"
+    }
+
+    var acceptAllStatusText: String {
+        "\(acceptAllShortcut.displayName) accepts whole suggestion"
     }
 
     var cycleButtonTitle: String {
@@ -572,6 +623,47 @@ struct SettingsKeyboardShortcutState: Equatable {
 
     var perAppProfileText: String {
         conflict.perAppProfileText
+    }
+}
+
+struct SettingsTrustState: Equatable {
+    let isTrusted: Bool
+    let suggestionsPaused: Bool
+    let runtimeReport: RuntimeReadinessReport
+    let currentApp: SettingsCurrentAppState
+    let privacy: SettingsPrivacyState
+    let lastSuggestionDecision: String
+
+    var statusText: String {
+        if !isTrusted {
+            return "Trust: waiting for Accessibility"
+        }
+
+        if suggestionsPaused {
+            return "Trust: suggestions are paused"
+        }
+
+        return "Trust: local and quiet"
+    }
+
+    var localModeText: String {
+        "Local mode: app-owned model, \(runtimeReport.summary.lowercased())."
+    }
+
+    var typedTextText: String {
+        if privacy.rawContentTracingEnabled || privacy.personalCaptureEnabled {
+            return "Typed text storage: local opt-in capture is on."
+        }
+
+        return "Typed text storage: off by default."
+    }
+
+    var currentSurfaceText: String {
+        currentApp.statusText
+    }
+
+    var whyText: String {
+        "Why now: \(lastSuggestionDecision)"
     }
 }
 
@@ -913,6 +1005,11 @@ final class SettingsWindowController: NSObject {
     private let firstRunTrustAppsLabel = NSTextField(labelWithString: "")
     private let permissionLabel = NSTextField(labelWithString: "")
     private let permissionDetailLabel = NSTextField(labelWithString: "")
+    private let trustLabel = NSTextField(labelWithString: "")
+    private let trustLocalModeLabel = NSTextField(labelWithString: "")
+    private let trustTypedTextLabel = NSTextField(labelWithString: "")
+    private let trustCurrentSurfaceLabel = NSTextField(labelWithString: "")
+    private let trustWhyLabel = NSTextField(labelWithString: "")
     private let runtimeLabel = NSTextField(labelWithString: "")
     private let runtimeDetailLabel = NSTextField(labelWithString: "")
     private let runtimeActionLabel = NSTextField(labelWithString: "")
@@ -999,6 +1096,7 @@ final class SettingsWindowController: NSObject {
     private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
     private let clearLearningDataButton = NSButton(title: "Clear Learned Suggestions", target: nil, action: nil)
     private let shortcutLabel = NSTextField(labelWithString: "")
+    private let shortcutAcceptAllLabel = NSTextField(labelWithString: "")
     private let shortcutConflictLabel = NSTextField(labelWithString: "")
     private let shortcutConflictDetailLabel = NSTextField(labelWithString: "")
     private let shortcutPerAppProfileLabel = NSTextField(labelWithString: "")
@@ -1240,6 +1338,14 @@ final class SettingsWindowController: NSObject {
         let guidance = RuntimeReadinessGuidance(report: runtimeReport)
         let permission = SettingsPermissionState(isTrusted: isTrusted)
         let firstRunTrust = SettingsFirstRunTrustState()
+        let trust = SettingsTrustState(
+            isTrusted: isTrusted,
+            suggestionsPaused: suggestionsPaused,
+            runtimeReport: runtimeReport,
+            currentApp: currentApp,
+            privacy: privacy,
+            lastSuggestionDecision: lastSuggestionDecision
+        )
         let pauseControl = ControlPauseState(
             isPaused: suggestionsPaused,
             pausedUntil: suggestionsPausedUntil,
@@ -1250,9 +1356,14 @@ final class SettingsWindowController: NSObject {
         firstRunTrustAppsLabel.stringValue = firstRunTrust.appsText
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
+        trustLabel.stringValue = trust.statusText
+        trustLocalModeLabel.stringValue = trust.localModeText
+        trustTypedTextLabel.stringValue = trust.typedTextText
+        trustCurrentSurfaceLabel.stringValue = trust.currentSurfaceText
+        trustWhyLabel.stringValue = trust.whyText
         controlLabel.stringValue = pauseControl.settingsSummaryText
         controlDetailLabel.stringValue = pauseControl.settingsDetailText
-        suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
+        suggestionDecisionLabel.stringValue = SuggestionDecisionPresentation(lastSuggestionDecision).settingsText
         togglePauseButton.state = suggestionsPaused ? .off : .on
         togglePauseButton.title = pauseControl.toggleTitle
         pause15MinutesButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
@@ -1340,6 +1451,7 @@ final class SettingsWindowController: NSObject {
         toggleVisiblePageContextButton.state = privacy.visiblePageContextEnabled ? .on : .off
         togglePersonalCaptureButton.state = privacy.personalCaptureEnabled ? .on : .off
         shortcutLabel.stringValue = keyboardShortcuts.statusText
+        shortcutAcceptAllLabel.stringValue = keyboardShortcuts.acceptAllStatusText
         shortcutConflictLabel.stringValue = keyboardShortcuts.conflictText
         shortcutConflictDetailLabel.stringValue = keyboardShortcuts.conflictDetailText
         shortcutPerAppProfileLabel.stringValue = keyboardShortcuts.perAppProfileText
@@ -1424,6 +1536,11 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(firstRunTrustAppsLabel)
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(permissionDetailLabel)
+        trustLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(trustLocalModeLabel)
+        configureSecondaryLabel(trustTypedTextLabel)
+        configureSecondaryLabel(trustCurrentSurfaceLabel)
+        configureSecondaryLabel(trustWhyLabel)
         runtimeLabel.lineBreakMode = .byWordWrapping
         runtimeLabel.maximumNumberOfLines = 0
         runtimeLabel.preferredMaxLayoutWidth = 470
@@ -1474,6 +1591,7 @@ final class SettingsWindowController: NSObject {
         feedbackLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(feedbackDetailLabel)
         shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(shortcutAcceptAllLabel)
         configureSecondaryLabel(shortcutConflictLabel)
         configureSecondaryLabel(shortcutConflictDetailLabel)
         configureSecondaryLabel(shortcutPerAppProfileLabel)
@@ -1654,6 +1772,16 @@ final class SettingsWindowController: NSObject {
                 ]
             ),
             makeSection(
+                title: "Trust",
+                views: [
+                    trustLabel,
+                    trustLocalModeLabel,
+                    trustTypedTextLabel,
+                    trustCurrentSurfaceLabel,
+                    trustWhyLabel
+                ]
+            ),
+            makeSection(
                 title: "Local Model",
                 views: [
                     runtimeLabel,
@@ -1734,6 +1862,7 @@ final class SettingsWindowController: NSObject {
                 title: "Keyboard",
                 views: [
                     shortcutLabel,
+                    shortcutAcceptAllLabel,
                     shortcutConflictLabel,
                     shortcutConflictDetailLabel,
                     shortcutPerAppProfileLabel,
