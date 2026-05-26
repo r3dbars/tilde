@@ -163,6 +163,34 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts first-person daily-driver trust and feeling shapes")
+    func predictsFirstPersonDailyDriverTrustAndFeelingShapes() {
+        let cases: [(String, String, String)] = [
+            ("This app feels wrong", " when placement breaks trust", "intent-daily-driver-feels-wrong"),
+            ("The suggestions fall short", " when suggestions feel generic", "intent-daily-driver-falls-short"),
+            ("SteadyType is not quite there", " because trust still breaks", "intent-daily-driver-not-there-yet"),
+            ("I would use this every day", " if it predicts my next thought", "intent-daily-driver-use-every-day"),
+            ("What would make me use this", " is trusting the next phrase", "intent-daily-driver-make-me-use-this"),
+            ("I keep reaching for it when", " it predicts my next thought", "intent-daily-driver-reach-for-it-when"),
+            ("As a daily driver", " it has to feel effortless", "intent-daily-driver-as-daily-driver"),
+            ("The typing flow feels heavy", " enough to break flow", "intent-daily-driver-feels-slow")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Predicts reusable writing intent patterns instantly")
     func predictsReusableWritingIntentPatternsInstantly() {
         let cases: [(String, String, String)] = [
@@ -284,6 +312,14 @@ struct CommonPhraseContinuationPredictorTests {
         #expect(predictor.selection(
             for: "Can you",
             behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "This app feels wrong",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "The suggestions fall short",
+            behaviorProfileID: .search
         ).suppressionReason == "unsupported-profile")
     }
 

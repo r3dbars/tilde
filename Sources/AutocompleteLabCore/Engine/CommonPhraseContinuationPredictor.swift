@@ -261,6 +261,10 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return markdownCandidate
         }
 
+        if let dailyDriverFeelingCandidate = dailyDriverFeelingCandidate(for: words) {
+            return dailyDriverFeelingCandidate
+        }
+
         return intentPatternCandidate(for: words)
     }
 
@@ -331,6 +335,65 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
         if hasSuffix(["we", "should", "prove"], in: words), containsDailyDriverTopic(words) {
             return intentCandidate("daily-driver-prove", "it works while writing")
+        }
+
+        return nil
+    }
+
+    private func dailyDriverFeelingCandidate(for words: [String]) -> CommonPhraseContinuationCandidate? {
+        guard words.count >= 3,
+              containsDailyDriverTopic(words) || containsWritingMotionTopic(words) || containsFeelingTopic(words) else {
+            return nil
+        }
+
+        if hasAnySuffix([
+            ["feels", "wrong"],
+            ["feels", "off"],
+            ["feels", "weird"]
+        ], in: words) {
+            return intentCandidate("daily-driver-feels-wrong", "when placement breaks trust")
+        }
+        if hasAnySuffix([
+            ["fall", "short"],
+            ["falls", "short"],
+            ["falling", "short"]
+        ], in: words) {
+            return intentCandidate("daily-driver-falls-short", "when suggestions feel generic")
+        }
+        if hasAnySuffix([
+            ["not", "quite", "there"],
+            ["not", "there", "yet"]
+        ], in: words) {
+            return intentCandidate("daily-driver-not-there-yet", "because trust still breaks")
+        }
+        if hasSuffix(["use", "this", "every", "day"], in: words) {
+            return intentCandidate("daily-driver-use-every-day", "if it predicts my next thought")
+        }
+        if hasAnySuffix([
+            ["make", "me", "use", "this"],
+            ["make", "me", "install", "this"],
+            ["make", "me", "keep", "this", "on"]
+        ], in: words) {
+            return intentCandidate("daily-driver-make-me-use-this", "is trusting the next phrase")
+        }
+        if hasAnySuffix([
+            ["keep", "reaching", "for", "it", "when"],
+            ["reach", "for", "it", "when"],
+            ["reaching", "for", "it", "when"]
+        ], in: words) {
+            return intentCandidate("daily-driver-reach-for-it-when", "it predicts my next thought")
+        }
+        if hasAnySuffix([
+            ["as", "a", "daily", "driver"],
+            ["like", "a", "daily", "driver"]
+        ], in: words) {
+            return intentCandidate("daily-driver-as-daily-driver", "it has to feel effortless")
+        }
+        if hasAnySuffix([
+            ["feels", "slow"],
+            ["feels", "heavy"]
+        ], in: words) {
+            return intentCandidate("daily-driver-feels-slow", "enough to break flow")
         }
 
         return nil
@@ -517,6 +580,29 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
                 "words",
                 "write",
                 "writing"
+            ],
+            in: words
+        )
+    }
+
+    private func containsFeelingTopic(_ words: [String]) -> Bool {
+        containsAny(
+            [
+                "daily",
+                "driver",
+                "feel",
+                "feeling",
+                "feels",
+                "flow",
+                "install",
+                "magical",
+                "placement",
+                "reach",
+                "reaching",
+                "reliable",
+                "trust",
+                "use",
+                "useful"
             ],
             in: words
         )
