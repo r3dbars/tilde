@@ -48,12 +48,12 @@ struct CompletionConfidencePolicyTests {
         #expect(decision.reasons.contains("thin-context"))
     }
 
-    @Test("Yellow profiles make long phrase suggestions low confidence")
-    func yellowProfilesMakeLongPhraseSuggestionsLowConfidence() {
+    @Test("Yellow short phrase mode makes long phrase suggestions low confidence")
+    func yellowShortPhraseModeMakesLongPhraseSuggestionsLowConfidence() {
         let decision = policy.decision(
             suggestion: CompletionSuggestion(text: " make this easier today please", maxVisibleWords: 6),
             mode: .phraseContinuation,
-            textBeforeCursor: "Can you please",
+            textBeforeCursor: "Can you please make",
             latencyMilliseconds: 220,
             supportLevel: .yellow
         )
@@ -61,6 +61,22 @@ struct CompletionConfidencePolicyTests {
         #expect(!decision.canDisplay)
         #expect(decision.reasons.contains("yellow-app-profile"))
         #expect(decision.reasons.contains("long-visible-suggestion"))
+    }
+
+    @Test("Yellow profiles allow daily driver subsecond eight-word phrases")
+    func yellowProfilesAllowDailyDriverSubsecondEightWordPhrases() {
+        let decision = policy.decision(
+            suggestion: CompletionSuggestion(text: " instant without getting in the way today now", maxVisibleWords: 8),
+            mode: .phraseContinuation,
+            textBeforeCursor: "Autocomplete Lab Obsidian proof Smoke proof feels",
+            latencyMilliseconds: 900,
+            supportLevel: .yellow
+        )
+
+        #expect(decision.canDisplay)
+        #expect(decision.bucket == .medium)
+        #expect(!decision.reasons.contains("long-visible-suggestion"))
+        #expect(!decision.reasons.contains("too-slow-to-display"))
     }
 
     @Test("Allows long phrase continuations when the slider is high")

@@ -1028,8 +1028,17 @@ for event in presented:
 
 if require_visual_evidence:
     visual_groups = defaultdict(list)
+    presented_id_counts = Counter(
+        event.get("suggestionID")
+        for event in presented
+        if event.get("suggestionID")
+    )
     for event in presented:
-        visual_groups[visual_evidence_key(event)].append(event)
+        suggestion_id = event.get("suggestionID")
+        if suggestion_id and presented_id_counts[suggestion_id] > 1:
+            visual_groups[("suggestionID", suggestion_id)].append(event)
+        else:
+            visual_groups[visual_evidence_key(event)].append(event)
 
     for _visual_key, suggestion_events in sorted(visual_groups.items()):
         issues_by_event = [

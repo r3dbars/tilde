@@ -25,10 +25,11 @@ cat >"$TRACE_FILE" <<'JSONL'
 {"timestamp":"2026-05-21T14:00:45Z","sessionID":"s","suggestionID":"","type":"appPaused","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"timed-pause"}
 {"timestamp":"2026-05-21T14:00:46Z","sessionID":"s","suggestionID":"","type":"fieldPaused","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"manual-field"}
 {"timestamp":"2026-05-21T14:00:47Z","sessionID":"s","suggestionID":"","type":"appDisabled","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","reason":"manual-disable"}
+{"timestamp":"2026-05-21T14:01:00Z","sessionID":"s","suggestionID":"n1","type":"suggestionPresented","appBundleIdentifier":"com.apple.Notes","fieldIdentity":"field","requestMode":"wordCompletion"}
 {"timestamp":"2026-05-21T14:04:00Z","sessionID":"s","suggestionID":"p5","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","displayedText":"last private text"}
 JSONL
 
-"$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" >"$OUTPUT_FILE"
+"$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --app com.apple.TextEdit >"$OUTPUT_FILE"
 
 grep -F "Typing feel score report" "$OUTPUT_FILE" >/dev/null
 grep -F "Privacy: redacted aggregate counts/rates only" "$OUTPUT_FILE" >/dev/null
@@ -49,7 +50,7 @@ if grep -E "secret launch text|private accepted word|raw model private|private-s
   exit 1
 fi
 
-"$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --json >"$JSON_OUTPUT_FILE"
+"$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --app com.apple.TextEdit --json >"$JSON_OUTPUT_FILE"
 python3 - "$JSON_OUTPUT_FILE" <<'PY'
 import json
 import sys
@@ -74,7 +75,7 @@ assert report["caret_failures"] == 1
 assert report["pause_disable_events"] == 3
 PY
 
-"$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --start-line 1 --json >"$JSON_OUTPUT_FILE"
+"$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --app com.apple.TextEdit --start-line 1 --json >"$JSON_OUTPUT_FILE"
 python3 - "$JSON_OUTPUT_FILE" <<'PY'
 import json
 import sys
@@ -85,7 +86,19 @@ with open(sys.argv[1], "r", encoding="utf-8") as handle:
 assert report["shown"] == 4
 PY
 
-if "$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --fail-under 95 >/dev/null 2>&1; then
+"$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --app com.apple.Notes --json >"$JSON_OUTPUT_FILE"
+python3 - "$JSON_OUTPUT_FILE" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    report = json.load(handle)
+
+assert report["shown"] == 1
+assert report["accepted"] == 0
+PY
+
+if "$ROOT_DIR/script/typing_feel_score_report.py" "$TRACE_FILE" --app com.apple.TextEdit --fail-under 95 >/dev/null 2>&1; then
   echo "typing feel report fail-under gate should fail the noisy fixture" >&2
   exit 1
 fi

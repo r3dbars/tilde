@@ -17,7 +17,9 @@ disposable TextEdit and Chrome checks run unattended.
 The Settings app-proof button can run the safe unattended lanes for TextEdit
 and Chrome. Chrome proof is limited to local textarea/contenteditable fixtures;
 prompt apps, private-content apps, production browser apps, chat surfaces, and
-browser editor surfaces stay manual-gated, proof-only, or blocked.
+browser editor surfaces stay manual-gated, proof-only, or blocked. Browser
+webmail is blocked too; use only the dry-run/preflight fixture until a
+disposable reply proof lane exists.
 
 Run broader Chrome proof-only fixtures only when explicitly refreshing evidence:
 
@@ -53,6 +55,8 @@ What this proves:
 - the app can build and relaunch
 - a real target app can receive normal typing
 - a suggestion is shown with the expected render mode
+- `Control-Backtick` can be used as an explicit "Suggest Now" check in manual
+  smoke without inserting text by itself
 - Tab and, where the profile allows it, the full-accept key are handled only
   while a suggestion is visible
 - insertion is verified in diagnostics and traces
@@ -61,7 +65,7 @@ What this proves:
 - Chrome beta support means only local textarea and contenteditable fixtures.
   Editor-like nested contenteditables, Monaco-like editors, ProseMirror-like
   editors, pinned upstream Monaco/ProseMirror fixtures, public pages,
-  production browser apps, and chat-style composers are proof-only or blocked.
+  production browser apps, browser webmail, and chat-style composers are proof-only or blocked.
 
 Notes, Obsidian, Codex, Claude Code, and Claude desktop checks are
 manual-gated. Do not use real notes, vault content, terminal commands, or live

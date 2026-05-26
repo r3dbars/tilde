@@ -10,8 +10,8 @@ struct ModelPolicyTests {
         #expect(policy.model == .qwen35FourB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
-        #expect(policy.maxGeneratedTokens == 11)
-        #expect(policy.maxVisibleWords == 5)
+        #expect(policy.maxGeneratedTokens == 20)
+        #expect(policy.maxVisibleWords == 8)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
@@ -51,9 +51,9 @@ struct ModelPolicyTests {
         #expect(policy.allowsVisibleWordCount(2))
         #expect(policy.allowsVisibleWordCount(3))
         #expect(policy.allowsVisibleWordCount(5))
-        #expect(!policy.allowsVisibleWordCount(6))
-        #expect(!policy.allowsVisibleWordCount(7))
-        #expect(!policy.allowsVisibleWordCount(8))
+        #expect(policy.allowsVisibleWordCount(6))
+        #expect(policy.allowsVisibleWordCount(7))
+        #expect(policy.allowsVisibleWordCount(8))
         #expect(!policy.allowsVisibleWordCount(9))
     }
 
@@ -75,9 +75,9 @@ struct ModelPolicyTests {
             "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "99"
         ])
 
-        #expect(defaultConfiguration.maxVisibleWords == 5)
-        #expect(defaultConfiguration.maxGeneratedTokens == 11)
-        #expect(defaultConfiguration.displaySummary == "5 words / 11 tokens")
+        #expect(defaultConfiguration.maxVisibleWords == 8)
+        #expect(defaultConfiguration.maxGeneratedTokens == 20)
+        #expect(defaultConfiguration.displaySummary == "8 words / 20 tokens")
         #expect(short.maxVisibleWords == 3)
         #expect(short.maxGeneratedTokens == 9)
         #expect(short.displaySummary == "3 words / 9 tokens")
@@ -119,8 +119,8 @@ struct ModelPolicyTests {
         #expect(oneWord.maxVisibleWords == 1)
         #expect(oneWord.maxGeneratedTokens == 4)
         #expect(threeWord.experimentArm == .length3Word)
-        #expect(threeWord.maxVisibleWords == 5)
-        #expect(threeWord.maxGeneratedTokens == 11)
+        #expect(threeWord.maxVisibleWords == 8)
+        #expect(threeWord.maxGeneratedTokens == 20)
         #expect(overridden.experimentArm == .length1Word)
         #expect(overridden.maxVisibleWords == 3)
         #expect(overridden.maxGeneratedTokens == 9)

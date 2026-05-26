@@ -183,6 +183,13 @@ struct CompletionActivationPolicyTests {
             fieldKind: .multilineCompose
         ) == .block(.sensitiveContent))
         #expect(policy.decision(
+            textBeforeCursor: "KeePassXC entry ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .block(.sensitiveContent))
+        #expect(policy.decision(
             textBeforeCursor: "Verification code: 123456",
             textAfterCursor: "",
             isSecure: false,
@@ -203,6 +210,38 @@ struct CompletionActivationPolicyTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .block(.sensitiveContent))
+    }
+
+    @Test("Trusted proof sensitive-content opt-in still keeps safety gates")
+    func trustedProofSensitiveContentOptInStillKeepsSafetyGates() {
+        let policy = CompletionActivationPolicy()
+
+        #expect(policy.decision(
+            textBeforeCursor: "Command line: make this setting con",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose,
+            allowsTrustedProofSensitiveContent: true
+        ) == .allow(.wordCompletion))
+
+        #expect(policy.decision(
+            textBeforeCursor: "Command line: make this setting con",
+            textAfterCursor: "",
+            isSecure: true,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose,
+            allowsTrustedProofSensitiveContent: true
+        ) == .block(.secureField))
+
+        #expect(policy.decision(
+            textBeforeCursor: "Command line: make this setting con",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: true,
+            fieldKind: .multilineCompose,
+            allowsTrustedProofSensitiveContent: true
+        ) == .block(.suppressedField))
     }
 
     @Test("Blocks very short context")
@@ -522,7 +561,7 @@ struct CompletionActivationPolicyTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .block(.terminalSentenceBoundary))
+        ) == .allow(.phraseContinuation))
         #expect(quiet.decision(
             textBeforeCursor: "di",
             textAfterCursor: "",
@@ -539,6 +578,43 @@ struct CompletionActivationPolicyTests {
         ) == .allow(.wordCompletion))
         #expect(eager.decision(
             textBeforeCursor: "reccomen",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
+    }
+
+    @Test("Proactive phrase mode prefers sentence help over partial word completion")
+    func proactivePhraseModePrefersSentenceHelpOverPartialWordCompletion() {
+        let veryProactive = SuggestionTuning(
+            aggressivenessLevel: 4,
+            phraseStartWords: 3
+        )
+            .activationPolicy(supportPace: .eager)
+
+        #expect(veryProactive.decision(
+            textBeforeCursor: "Smoke proof feels inst",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+        #expect(veryProactive.decision(
+            textBeforeCursor: "Smoke proof feels instant ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+
+        let needsMorePhraseContext = SuggestionTuning(
+            aggressivenessLevel: 4,
+            phraseStartWords: 5
+        )
+            .activationPolicy(supportPace: .eager)
+        #expect(needsMorePhraseContext.decision(
+            textBeforeCursor: "Smoke proof feels inst",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false,

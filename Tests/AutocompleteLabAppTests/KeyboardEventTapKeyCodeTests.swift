@@ -53,6 +53,10 @@ struct KeyboardEventTapKeyCodeTests {
         ))
         #expect(!shouldTreatOtherKeyAsTypingPassthrough(
             physicalKey: .tab,
+            modifiers: [.option, .function]
+        ))
+        #expect(!shouldTreatOtherKeyAsTypingPassthrough(
+            physicalKey: .tab,
             modifiers: [.option, .shift]
         ))
         #expect(!shouldTreatOtherKeyAsTypingPassthrough(
@@ -85,5 +89,22 @@ struct KeyboardEventTapKeyCodeTests {
 
         #expect(mappedKey == .commandZ)
         #expect(action == .undoAcceptedInsertion)
+    }
+
+    @Test("Control Backtick can route suggest now while the key tap is active")
+    func controlBacktickCanRouteSuggestNowWhileKeyTapIsActive() {
+        let physicalKey = autocompletePhysicalKey(forMacVirtualKeyCode: 50)
+        let mappedKey = AutocompleteKeyMapper().key(
+            physicalKey: physicalKey,
+            modifiers: [.control]
+        )
+
+        let action = KeyboardActionRouter().action(
+            for: mappedKey,
+            hasVisibleSuggestion: true
+        )
+
+        #expect(mappedKey == .controlBacktick)
+        #expect(action == .requestSuggestionNow)
     }
 }

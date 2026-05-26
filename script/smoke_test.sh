@@ -15,6 +15,7 @@ swift package resolve
 swift test
 ./script/check_test_coverage_manifest.sh
 ./script/check_quality_eval.sh
+./script/check_daily_driver_local_quality_audit_report.sh
 ./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
@@ -27,12 +28,14 @@ swift test
 ./script/check_graduation_score_self_test.sh
 ./script/check_prompt_app_proof_self_test.sh
 ./script/check_prompt_app_manifest_proof_self_test.sh
+./script/check_sensitive_field_proof_self_test.sh
 ./script/check_diagnostics_log_self_test.sh
 ./script/check_proof_manifest_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh
 ./script/visual_calibration_report_self_test.sh
 ./script/non_annoyance_report_self_test.sh
+./script/daily_driver_dogfood_session_self_test.sh
 ./script/typing_feel_score_report_self_test.sh
 ./script/check_trace_eval_self_test.sh
 ./script/autocomplete_trace_replay_self_test.sh
