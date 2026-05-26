@@ -379,6 +379,20 @@ if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must fail closed if pid paste mutates the prompt unexpectedly")
 if "guard targetedPasteOutcome.safeToContinue else" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must not continue to global paste after unsafe pid insertion")
+if '"ghosttySystemEventsKeystrokeShellAsync"' not in terminal_insert_block or "/usr/bin/osascript" not in terminal_insert_block or "keystroke" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must schedule shell osascript System Events keystroke insertion after the consumed Tab event returns")
+if '"ghosttyPerformActionTextAsync"' not in terminal_insert_block or "DispatchQueue.main.asyncAfter" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must keep raw text action as an async fallback after the consumed Tab event returns")
+if "windowName does not contain" not in terminal_insert_block or "compactProofMarker" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty async insertion must remain title-marker scoped")
+if '"ghosttyPerformActionText"' not in terminal_insert_block or "perform action" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must use Ghostty's native text action command")
+if "ghosttyPerformActionTextBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified action text")
+if "ghostty-action-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must fail closed if action text mutates the prompt unexpectedly")
+if "ghosttyTextAction" not in terminal_insert_block or "\\\\x%02x" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must hex-escape non-alphanumeric text action bytes")
 if '"ghosttyAppleScriptInputText"' not in terminal_insert_block or "input text" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native scripting input text command")
 if "ghosttyAppleScriptInputTextBaseline" not in terminal_insert_block:
@@ -388,8 +402,17 @@ if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
 terminal_main_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofText(")
 terminal_main_insert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", terminal_main_insert_start)
 terminal_main_insert_block = app_delegate[terminal_main_insert_start:terminal_main_insert_end]
+ghostty_system_events_source = terminal_main_insert_block.index("scheduleGhosttyTerminalHostProofSystemEventsKeystroke")
+ghostty_async_source = terminal_main_insert_block.index("scheduleGhosttyTerminalHostProofActionText")
+ghostty_action_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofActionText")
 ghostty_script_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofAppleScriptText")
 hardware_source = terminal_main_insert_block.index("Self.postHardwareTextKeyEvents")
+if ghostty_system_events_source > ghostty_async_source:
+    raise SystemExit("Claude Code Ghostty proof must try async System Events keystrokes before async raw text actions")
+if ghostty_async_source > ghostty_action_source:
+    raise SystemExit("Claude Code Ghostty proof must schedule async raw text action before synchronous Ghostty fallbacks")
+if ghostty_action_source > ghostty_script_source:
+    raise SystemExit("Claude Code Ghostty proof must try raw Ghostty text actions before paste-like scripting input")
 if ghostty_script_source > hardware_source:
     raise SystemExit("Claude Code Ghostty proof must try native scripting input before slow CG key-event fallbacks")
 if "cgHardwareKeyEventsGlobal" not in terminal_main_insert_block or "cgUnicodeKeyEventsGlobal" not in terminal_main_insert_block:
@@ -1645,9 +1668,17 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'Make this setting the feature' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Please make this' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'wait_for_log_pattern_optional' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_log_line_number_optional' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'produced no visible suggestion; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts when no suggestion appears" >&2
+  exit 1
+fi
+if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'frontmost_claude_code_terminal_proof_process_is_active' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'reason=focus-changed' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'lost its visible suggestion before Tab; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to recover from focus-changed hidden suggestions before Tab" >&2
   exit 1
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
@@ -1857,7 +1888,7 @@ if ! awk '
   in_smoke && /accept_start_line="\$\(line_count "\$LOG_PATH"\)"/ { saw_accept_window = 1 }
   in_smoke && /type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
   in_smoke && saw_type && !saw_accept_window { saw_late_accept_window = 1 }
-  in_smoke && /wait_for_log_pattern_optional/ { saw_suggestion_wait = 1 }
+  in_smoke && /wait_for_log_line_number_optional/ { saw_suggestion_wait = 1 }
   in_smoke && /wait_for_claude_code_terminal_tab_acceptance/ { saw_accept_wait = 1 }
   END { exit (saw_accept_window && !saw_late_accept_window && saw_suggestion_wait && saw_accept_wait) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
@@ -1877,7 +1908,7 @@ fi
 if awk '
   /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; after_suggestion = 0 }
   /^}/ && in_smoke { in_smoke = 0 }
-  in_smoke && /wait_for_log_pattern_optional/ { after_suggestion = 1 }
+  in_smoke && /wait_for_log_line_number_optional/ { after_suggestion = 1 }
   in_smoke && after_suggestion && /assert_frontmost_app/ { found = 1 }
   in_smoke && after_suggestion && /press_key_code_cgevent 48/ { after_suggestion = 0 }
   END { exit found ? 0 : 1 }

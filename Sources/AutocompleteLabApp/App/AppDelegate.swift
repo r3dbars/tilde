@@ -9493,7 +9493,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return verified
         }
 
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           scheduleGhosttyTerminalHostProofSystemEventsKeystroke(acceptedText) {
+            return true
+        }
+
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           scheduleGhosttyTerminalHostProofActionText(acceptedText) {
+            return true
+        }
+
         if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" {
+            let ghosttyActionOutcome = insertGhosttyTerminalHostProofActionText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyActionOutcome.verified {
+                return true
+            }
+            guard ghosttyActionOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyInputOutcome = insertGhosttyTerminalHostProofAppleScriptText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9887,6 +9911,317 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    private func scheduleGhosttyTerminalHostProofSystemEventsKeystroke(_ acceptedText: String) -> Bool {
+        let source = "ghosttySystemEventsKeystrokeShellAsync"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-async-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return false
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-osascript-missing",
+                    "source": source
+                ]
+            )
+            return false
+        }
+
+        let proofMarker = ClaudeCodeTerminalHostProofPolicy.proofMarker
+        let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        let delayMilliseconds = 80
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "scheduled": "true",
+                "source": source,
+                "delayMilliseconds": String(delayMilliseconds)
+            ]
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delayMilliseconds)) {
+            let scriptSource = """
+            set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
+            set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
+            set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+            tell application "System Events"
+                set frontApp to first application process whose frontmost is true
+                if bundle identifier of frontApp is not "com.mitchellh.ghostty" then error "Ghostty is not frontmost."
+                if not (exists front window of frontApp) then error "Ghostty has no front window."
+                set windowName to name of front window of frontApp as text
+                if windowName does not contain proofMarker and windowName does not contain compactProofMarker then error "Ghostty front window is not the proof window."
+                keystroke acceptedText
+            end tell
+            """
+            let standardError = Pipe()
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-e", scriptSource]
+            var environment = ProcessInfo.processInfo.environment
+            environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
+            environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = proofMarker
+            environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] = compactProofMarker
+            process.environment = environment
+            process.standardError = standardError
+            process.terminationHandler = { process in
+                let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
+                let errorMessage = String(data: errorData, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": String(process.terminationStatus == 0),
+                        "source": source,
+                        "exitStatus": String(process.terminationStatus),
+                        "errorMessage": String(errorMessage.prefix(160))
+                    ]
+                )
+            }
+
+            do {
+                try process.run()
+            } catch {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-system-events-osascript-launch-failed",
+                        "source": source,
+                        "errorMessage": String(String(describing: error).prefix(160))
+                    ]
+                )
+            }
+        }
+        return true
+    }
+
+    private func scheduleGhosttyTerminalHostProofActionText(_ acceptedText: String) -> Bool {
+        let source = "ghosttyPerformActionTextAsync"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-async-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return false
+        }
+
+        let action = Self.ghosttyTextAction(acceptedText)
+        let proofMarker = ClaudeCodeTerminalHostProofPolicy.proofMarker
+        let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        let delayMilliseconds = 80
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "scheduled": "true",
+                "source": source,
+                "delayMilliseconds": String(delayMilliseconds)
+            ]
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delayMilliseconds)) {
+            let scriptSource = """
+            tell application id "com.mitchellh.ghostty"
+                if not frontmost then return false
+                if not (exists front window) then return false
+                set targetWindow to front window
+                set windowName to name of targetWindow as text
+                if windowName does not contain \(Self.appleScriptStringLiteral(proofMarker)) and windowName does not contain \(Self.appleScriptStringLiteral(compactProofMarker)) then return false
+                set targetTab to selected tab of targetWindow
+                set targetTerminal to focused terminal of targetTab
+                perform action \(Self.appleScriptStringLiteral(action)) on targetTerminal
+                return true
+            end tell
+            """
+            guard let script = NSAppleScript(source: scriptSource) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-action-async-script-create-failed",
+                        "source": source
+                    ]
+                )
+                return
+            }
+
+            var errorInfo: NSDictionary?
+            let result = script.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-action-async-script-failed",
+                        "source": source,
+                        "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
+                        "errorMessage": errorInfo["NSAppleScriptErrorMessage"] as? String ?? ""
+                    ]
+                )
+                return
+            }
+
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": String(result.booleanValue),
+                    "source": source
+                ]
+            )
+        }
+        return true
+    }
+
+    private func insertGhosttyTerminalHostProofActionText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyPerformActionText"
+        let baselineSource = "ghosttyPerformActionTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let action = Self.ghosttyTextAction(acceptedText)
+        let scriptSource = """
+        tell application id "com.mitchellh.ghostty"
+            if not frontmost then return false
+            if not (exists front window) then return false
+            set targetWindow to front window
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            perform action \(Self.appleScriptStringLiteral(action)) on targetTerminal
+            return true
+        end tell
+        """
+        guard let script = NSAppleScript(source: scriptSource) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-script-create-failed",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        var errorInfo: NSDictionary?
+        let result = script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-script-failed",
+                    "source": source,
+                    "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
+                    "errorMessage": errorInfo["NSAppleScriptErrorMessage"] as? String ?? ""
+                ]
+            )
+            return (false, true)
+        }
+
+        guard result.booleanValue else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-script-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
     private func insertGhosttyTerminalHostProofAppleScriptText(
         _ acceptedText: String,
         expectedProofInputText: String,
@@ -10020,6 +10355,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (false, false)
         }
         return (false, true)
+    }
+
+    nonisolated private static func ghosttyTextAction(_ text: String) -> String {
+        let encoded = text.utf8.map { byte -> String in
+            switch byte {
+            case 48...57, 65...90, 97...122:
+                return String(UnicodeScalar(byte))
+            default:
+                return String(format: "\\x%02x", byte)
+            }
+        }.joined()
+        return "text:\(encoded)"
     }
 
     nonisolated private static func appleScriptStringLiteral(_ text: String) -> String {

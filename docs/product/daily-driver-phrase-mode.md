@@ -377,6 +377,14 @@ short-phrase continuation instead of going quiet. Prompt surfaces keep the older
 sentence-boundary block, so Codex, Claude, and terminal-host proof lanes do not
 get broader phrase behavior from this change.
 
+Ghostty-hosted Claude Code is still an honest host-specific proof gap as of
+May 26, 2026. The automated lane now recovers from a focus-change race before
+Tab and records delayed Ghostty/System Events insertion attempts, but the live
+`claude-code-ghostty` run still failed verified insertion: the shell
+`osascript` path exited 0, synthetic key events were observed, and the prompt
+remained unchanged at the same 28-character input. Do not claim Ghostty support
+until a verified insertion row lands.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
