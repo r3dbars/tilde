@@ -178,7 +178,8 @@ struct SuggestionAggressivenessTests {
         let obsidianTrigger = tuning.triggerPolicy(
             supportPace: .eager,
             minimumPhraseContinuationWords: 1,
-            allowsPlainLineStartPhraseContinuation: true
+            allowsPlainLineStartPhraseContinuation: true,
+            allowsListLabelPhraseContinuation: true
         )
         let obsidianActivation = tuning.activationPolicy(
             supportPace: .eager,
@@ -193,6 +194,24 @@ struct SuggestionAggressivenessTests {
         #expect(obsidianTrigger.decision(
             previousTextBeforeCursor: "Plan",
             currentTextBeforeCursor: "Plan ",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 80))
+        #expect(defaultTrigger.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO",
+            currentTextBeforeCursor: "Tasks\n- TODO:",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .skip)
+        #expect(obsidianTrigger.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO",
+            currentTextBeforeCursor: "Tasks\n- TODO:",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 180))
+        #expect(obsidianTrigger.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO:",
+            currentTextBeforeCursor: "Tasks\n- TODO: ",
+            lineStartBehavior: .listItem,
             requestMode: .phraseContinuation
         ) == .request(delayMilliseconds: 80))
         #expect(obsidianActivation.decision(

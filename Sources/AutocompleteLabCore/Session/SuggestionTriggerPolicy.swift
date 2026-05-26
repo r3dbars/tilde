@@ -41,6 +41,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
     public let minimumPhraseContinuationWords: Int
     public let allowsPlainLineStartWordCompletion: Bool
     public let allowsPlainLineStartPhraseContinuation: Bool
+    public let allowsListLabelPhraseContinuation: Bool
     public let allowsSentenceBoundaryRequest: Bool
 
     public init(
@@ -58,6 +59,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         minimumPhraseContinuationWords: Int = 4,
         allowsPlainLineStartWordCompletion: Bool = false,
         allowsPlainLineStartPhraseContinuation: Bool = false,
+        allowsListLabelPhraseContinuation: Bool = false,
         allowsSentenceBoundaryRequest: Bool = false
     ) {
         self.charactersBeforePauseRequest = max(1, charactersBeforePauseRequest)
@@ -74,6 +76,7 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         self.minimumPhraseContinuationWords = max(1, minimumPhraseContinuationWords)
         self.allowsPlainLineStartWordCompletion = allowsPlainLineStartWordCompletion
         self.allowsPlainLineStartPhraseContinuation = allowsPlainLineStartPhraseContinuation
+        self.allowsListLabelPhraseContinuation = allowsListLabelPhraseContinuation
         self.allowsSentenceBoundaryRequest = allowsSentenceBoundaryRequest
     }
 
@@ -302,6 +305,12 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
 
             return true
         case .listItem, .email:
+            if behavior == .listItem,
+               allowsListLabelPhraseContinuation,
+               hasListLabelPhraseContinuationContext(in: currentLine) {
+                return false
+            }
+
             return !hasLineStartWordCompletionFragment(in: currentLine)
         }
     }
@@ -371,6 +380,16 @@ public struct SuggestionTriggerPolicy: Equatable, Sendable {
         }
 
         return contentWordCount(in: text) >= 1
+    }
+
+    private func hasListLabelPhraseContinuationContext(in text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix(":") else {
+            return false
+        }
+
+        let words = contentWords(in: trimmed)
+        return (1...4).contains(words.count)
     }
 
     private func isLikelyEmailGreetingLine(_ text: String) -> Bool {

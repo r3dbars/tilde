@@ -255,6 +255,7 @@ struct CommonPhraseContinuationPredictorTests {
         let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
             ("## Next:", .docsProse, " write the smallest concrete action", "intent-markdown-next"),
             ("- [ ] TODO:", .bullets, " make the next step concrete", "intent-markdown-action-items"),
+            ("1. [ ] TODO:", .bullets, " make the next step concrete", "intent-markdown-action-items"),
             ("# Open questions:", .docsProse, " capture what still feels unclear", "intent-markdown-open-questions"),
             ("Meeting notes\nDecisions:", .docsProse, " capture what changed today", "intent-markdown-decisions"),
             ("What matters today", .notes, " is the next clear step", "intent-markdown-what-matters-today"),
