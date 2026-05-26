@@ -89,7 +89,7 @@ public struct KeyboardCaptureSafetyPolicy: Equatable, Sendable {
 
     private func shouldDropConsumedAcceptKey(_ key: AutocompleteKey) -> Bool {
         switch key {
-        case .tab, .backtick, .optionTab:
+        case .tab, .backtick, .controlBacktick, .optionTab:
             true
         case .commandZ, .escape, .other:
             false
