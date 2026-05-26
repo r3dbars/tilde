@@ -405,18 +405,19 @@ test --filter SyntheticCaretEstimatorTests --jobs 1` passed with 13 tests, and
 `swift test --jobs 1` passed with 1,477 tests.
 
 The latest live `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1
-./script/real_app_smoke.sh claude-code-ghostty --manual-gate` run still timed
-out after 7 disposable contexts, but it is no longer a total display failure.
-Diagnostics lines `586777` through `586805` show a recovered Claude Code prompt
-row, a synthetic caret at `x=130,y=862,w=0,h=22` with
-`source=terminal-screen-prompt`, and a `suggestion-presented` row with the panel
-at `x=130,y=862,w=138,h=24`. The old bad top/header anchor was
-`x=268,y=69`. The new blocker is the proof harness/acceptance layer: it did not
-count that visible prompt-row suggestion and later dismissed it with Escape, so
-there is still no verified Ghostty Tab insertion row. That is not support yet,
-but it is much closer to the right trust shape: prompt-row placement is now
-real, while support stays blocked until the smoke can prove one-word no-submit
-acceptance.
+./script/real_app_smoke.sh claude-code-ghostty --manual-gate` run moved the
+Ghostty lane one step closer to real support. Diagnostics line `587984` showed a
+prompt-row suggestion with `anchorRect=x=130,y=862,w=0,h=22`,
+`suggestionPanelRect=x=130,y=862,w=138,h=24`,
+`placementAnchorSource=synthetic-caret`, `traceID=07FC7F01`, and
+`latencyMilliseconds=456`; a later retry also emitted
+`synthetic-caret ... source=terminal-screen-prompt` and `traceID=128BDDCD`.
+The smoke then reached Tab acceptance and the verified insertion ladder, but
+every Ghostty insertion source stayed unverified, so SteadyType refused the
+unsafe insert with `keyboard-action ... handled=false ... reason=insert-failed`.
+That is not support yet, but the trust shape is better: prompt-row placement is
+real and the next proof target is a verified one-word no-submit Ghostty insertion
+source.
 
 ## Scorecard
 

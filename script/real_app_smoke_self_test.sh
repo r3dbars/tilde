@@ -1671,9 +1671,14 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'Make this setting the feature' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Please make this' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'wait_for_log_line_number_optional' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_claude_code_terminal_suggestion_line_optional' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'fieldKindReason=claude-code-terminal-host-proof' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'source=terminal-screen-prompt' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'ghostty_suggestion_line_has_prompt_row_anchor' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'produced no visible suggestion; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts when no suggestion appears" >&2
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts with field-scoped prompt-row suggestion detection" >&2
   exit 1
 fi
 if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/real_app_smoke.sh >/dev/null ||
@@ -1926,7 +1931,7 @@ if ! awk '
   in_smoke && /accept_start_line="\$\(line_count "\$LOG_PATH"\)"/ { saw_accept_window = 1 }
   in_smoke && /type_claude_code_terminal_raw_smoke_text/ { saw_type = 1 }
   in_smoke && saw_type && !saw_accept_window { saw_late_accept_window = 1 }
-  in_smoke && /wait_for_log_line_number_optional/ { saw_suggestion_wait = 1 }
+  in_smoke && /wait_for_claude_code_terminal_suggestion_line_optional/ { saw_suggestion_wait = 1 }
   in_smoke && /wait_for_claude_code_terminal_tab_acceptance/ { saw_accept_wait = 1 }
   END { exit (saw_accept_window && !saw_late_accept_window && saw_suggestion_wait && saw_accept_wait) ? 0 : 1 }
 ' script/real_app_smoke.sh; then

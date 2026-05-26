@@ -1498,6 +1498,79 @@ log_since_has_fields() {
   [[ -n "$lines" ]]
 }
 
+line_has_all_fields() {
+  local line="$1"
+  shift
+  local field
+
+  for field in "$@"; do
+    [[ "$line" == *"$field"* ]] || return 1
+  done
+  return 0
+}
+
+ghostty_suggestion_line_has_prompt_row_anchor() {
+  local line="$1"
+  local min_y="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y:-160}"
+  local anchor_y
+
+  if ! [[ "$min_y" =~ ^[0-9]+$ ]]; then
+    min_y=160
+  fi
+  if ! [[ "$line" =~ anchorRect=x=-?[0-9]+,y=(-?[0-9]+), ]]; then
+    return 1
+  fi
+
+  anchor_y="${BASH_REMATCH[1]}"
+  ((anchor_y >= min_y))
+}
+
+wait_for_claude_code_terminal_suggestion_line_optional() {
+  local start_line="$1"
+  local timeout_seconds="${2:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local relative_line line saw_terminal_screen_prompt
+  MATCHED_LOG_LINE=0
+
+  while ((SECONDS <= deadline)); do
+    if [[ -f "$LOG_PATH" ]]; then
+      relative_line=0
+      saw_terminal_screen_prompt=0
+      while IFS= read -r line; do
+        relative_line=$((relative_line + 1))
+        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+          line_has_all_fields "$line" \
+            "synthetic-caret" \
+            "app=com.anthropic.claude-code" \
+            "source=terminal-screen-prompt"; then
+          saw_terminal_screen_prompt=1
+        fi
+
+        if ! line_has_all_fields "$line" \
+          "suggestion-presented" \
+          "app=com.anthropic.claude-code" \
+          "fieldKindReason=claude-code-terminal-host-proof" \
+          "fieldKindSuppressed=false" \
+          "placementAnchorSource=synthetic-caret"; then
+          continue
+        fi
+
+        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+              "$saw_terminal_screen_prompt" != "1" ]] &&
+          ! ghostty_suggestion_line_has_prompt_row_anchor "$line"; then
+          continue
+        fi
+
+        MATCHED_LOG_LINE=$((start_line + relative_line))
+        return 0
+      done < <(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null)
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
 wait_for_log_fields() {
   local start_line="$1"
   local label="$2"
@@ -10562,9 +10635,8 @@ run_claude_code_terminal_host_smoke() {
 
     type_claude_code_terminal_smoke_text "$proof_text"
     assert_claude_code_terminal_prompt_ready "$proof_text"
-    if wait_for_log_line_number_optional \
+    if wait_for_claude_code_terminal_suggestion_line_optional \
       "$accept_start_line" \
-      "suggestion-presented .*app=com.anthropic.claude-code" \
       "$suggestion_wait_seconds"; then
       suggestion_line="$MATCHED_LOG_LINE"
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
