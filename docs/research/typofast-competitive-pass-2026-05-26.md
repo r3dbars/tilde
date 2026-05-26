@@ -140,15 +140,18 @@ swift test --jobs 1
 ./script/check_trace_eval_self_test.sh
 ./script/check_quality_eval.sh
 ./script/build_and_run_self_test.sh
+AUTOCOMPLETE_LAB_DIRECT_LAUNCH=true AUTOCOMPLETE_LAB_VERIFY_STABILITY_SECONDS=1 ./script/build_and_run.sh --verify
 ./script/check_test_coverage_manifest.sh
 ./script/check_local_only_network_surface_self_test.sh
+AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_WAIT_SECONDS=0 ./script/check_current_build_privacy_export.sh
+./script/check_proof_manifest.sh
 git diff --check -- <changed files>
 ```
 
 Full Swift result: 1333 tests in 179 suites passed.
 
-Blocked or failed for known broader proof reasons:
+Follow-up notes:
 
-- `./script/build_and_run.sh --verify` did not complete. A silent release build child was left running after the tool-side attempt was interrupted, and no `dist/SteadyType.app` was produced in this worktree. A sibling SteadyType proof process was active, so this pass did not kill or relaunch it.
-- `AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_WAIT_SECONDS=0 ./script/check_current_build_privacy_export.sh` was blocked by an active `real_app_smoke.sh codex --manual-gate` proof process.
-- `./script/check_proof_manifest.sh` failed because `hostPolicy.policyVersion` is `2026-05-22.1` while the script expects `2026-05-23.1`.
+- The first `./script/build_and_run.sh --verify` wrapper used a bad zsh variable and did not produce a reliable exit. The direct-launch retry passed and produced `dist/SteadyType.app` with bundle id `bar.r3d.steadytype` and build `1451`.
+- The first privacy export attempt was blocked by an active sibling `real_app_smoke.sh codex --manual-gate`; after the lock cleared, the current build privacy export proof passed.
+- `./script/check_proof_manifest.sh` initially failed because `hostPolicy.policyVersion` was stale. The manifest was updated to `2026-05-23.1`, matching `HostCompatibilityPolicy.currentPolicyVersion`, without changing proof states.
