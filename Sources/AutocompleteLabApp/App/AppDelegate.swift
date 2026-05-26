@@ -260,6 +260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
+    private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
     private let personalCapturePolicy = PersonalCapturePolicy()
     private let personalCaptureJournal = PersonalCaptureJournalWriter.shared
     private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
@@ -450,6 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem?
     private var statusMenuItem: NSMenuItem?
+    private var suggestionDecisionMenuItem: NSMenuItem?
     private var runtimeMenuItem: NSMenuItem?
     private var pauseSuggestionsMenuItem: NSMenuItem?
     private var silenceFieldMenuItem: NSMenuItem?
@@ -529,7 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
     private var isModelInstallCancelRequested = false
-    private let focusedTextPollInterval: TimeInterval = 0.05
+    private let focusedTextPollInterval: TimeInterval = 0.08
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
@@ -829,6 +831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
+        let suggestionDecisionMenu = NSMenuItem(title: "Why: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
         let pause15Item = NSMenuItem(title: "Pause for 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: "")
@@ -849,6 +852,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: ""))
         menu.addItem(statusMenu)
+        menu.addItem(suggestionDecisionMenu)
         menu.addItem(runtimeMenu)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(pauseItem)
@@ -885,6 +889,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.menu = menu
         statusItem = item
         statusMenuItem = statusMenu
+        suggestionDecisionMenuItem = suggestionDecisionMenu
         runtimeMenuItem = runtimeMenu
         pauseSuggestionsMenuItem = pauseItem
         silenceFieldMenuItem = silenceFieldItem
@@ -1622,7 +1627,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let rawContext = result.context, !rawContext.isSecure else {
             clearFocusedFieldState()
             currentProfile = profile
-            setSuggestionDecision("Blocked: no editable text field or secure field")
+            setSuggestionDecision(
+                "Blocked: \(suggestionSilenceExplanationPolicy.focusedTextUnavailable(isSecure: result.context?.isSecure == true))"
+            )
             hideSuggestion()
             return
         }
@@ -2150,7 +2157,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            setSuggestionDecision("Blocked: \(activationDecision.blockReasonDescription)")
+            let userFacingReason: String
+            if let blockReason = activationDecision.blockedReason {
+                userFacingReason = suggestionSilenceExplanationPolicy.activationBlockReason(
+                    blockReason,
+                    fieldKind: fieldClassification.kind
+                )
+            } else {
+                userFacingReason = "field quieted"
+            }
+            setSuggestionDecision("Blocked: \(userFacingReason)")
             showFieldStatusIndicator(.blocked, context: context)
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
@@ -2163,6 +2179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 textAfterCursor: context.textAfterCursor,
                 reason: activationDecision.blockReasonDescription,
                 metadata: suggestionFieldClassification.traceMetadata
+                    .merging(["silenceExplanation": userFacingReason]) { current, _ in current }
             )
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
@@ -2170,7 +2187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 metadata: [
-                    "reason": activationDecision.blockReasonDescription
+                    "reason": activationDecision.blockReasonDescription,
+                    "silenceExplanation": userFacingReason
                 ]
                 .merging(suggestionFieldClassification.traceMetadata) { current, _ in current }
             )
@@ -11266,8 +11284,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldControlState.statusText
         ].joined(separator: "|")
 
+        let decisionPresentation = SuggestionDecisionPresentation(lastSuggestionDecision)
         statusMenuItem?.title = statusLine
         statusMenuItem?.toolTip = lastSuggestionDecision
+        suggestionDecisionMenuItem?.title = decisionPresentation.menuTitle
+        suggestionDecisionMenuItem?.toolTip = lastSuggestionDecision
         pauseSuggestionsMenuItem?.title = pauseSuggestionsTitle
         silenceFieldMenuItem?.title = fieldControlState.buttonTitle
         silenceFieldMenuItem?.isEnabled = fieldControlState.canSilence
@@ -11309,7 +11330,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "profile": profileName,
                 "enabled": enabled,
                 "paused": String(suggestionsPaused),
-                "decision": lastSuggestionDecision
+                "decision": lastSuggestionDecision,
+                "decisionKind": decisionPresentation.diagnosticsKind,
+                "decisionSummary": decisionPresentation.summary
             ]
         )
     }
@@ -11346,19 +11369,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return "Blocked in \(app.localizedName)"
         }
 
-        if lastSuggestionDecision.hasPrefix("Shown") {
+        switch SuggestionDecisionPresentation(lastSuggestionDecision).statusKind {
+        case .shown:
             return "Showing in \(app.localizedName)"
-        }
-
-        if lastSuggestionDecision.hasPrefix("Queued") {
+        case .thinking:
             return "Thinking in \(app.localizedName)"
-        }
-
-        if lastSuggestionDecision.hasPrefix("Waiting") {
+        case .waiting:
             return "Waiting in \(app.localizedName)"
+        case .quiet:
+            return "Quiet in \(app.localizedName)"
+        case .ready:
+            return "Ready in \(app.localizedName)"
         }
-
-        return "Ready in \(app.localizedName)"
     }
 
     private func setSuggestionDecision(_ decision: String) {
@@ -13701,6 +13723,15 @@ private extension FocusedFieldIdentityInput {
 }
 
 private extension CompletionActivationDecision {
+    var blockedReason: CompletionActivationBlockReason? {
+        switch self {
+        case .allow:
+            return nil
+        case let .block(reason):
+            return reason
+        }
+    }
+
     var blockReasonDescription: String {
         switch self {
         case .allow:
