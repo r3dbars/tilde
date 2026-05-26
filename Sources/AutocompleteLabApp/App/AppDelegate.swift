@@ -12884,7 +12884,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportPace: effectiveSuggestionPace(for: profile),
             allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile),
             minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile),
-            allowsPlainLineStartPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile)
+            allowsPlainLineStartPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile),
+            allowsListLabelPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile)
         )
     }
 

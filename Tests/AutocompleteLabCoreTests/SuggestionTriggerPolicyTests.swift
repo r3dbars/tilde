@@ -294,6 +294,52 @@ struct SuggestionTriggerPolicyTests {
         ) == .skip)
     }
 
+    @Test("List label phrase opt-in asks only for short markdown labels")
+    func listLabelPhraseOptInAsksOnlyForShortMarkdownLabels() {
+        let defaultPolicy = SuggestionTriggerPolicy(minimumPhraseContinuationWords: 1)
+        let policy = SuggestionTriggerPolicy(
+            wordBoundaryDelayMilliseconds: 80,
+            sentenceBoundaryDelayMilliseconds: 120,
+            minimumPhraseContinuationWords: 1,
+            allowsListLabelPhraseContinuation: true
+        )
+
+        #expect(defaultPolicy.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO",
+            currentTextBeforeCursor: "Tasks\n- TODO:",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .skip)
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO",
+            currentTextBeforeCursor: "Tasks\n- TODO:",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 120))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Tasks\n- [ ] Next",
+            currentTextBeforeCursor: "Tasks\n- [ ] Next:",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 120))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO:",
+            currentTextBeforeCursor: "Tasks\n- TODO: ",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 80))
+
+        #expect(policy.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO",
+            currentTextBeforeCursor: "Tasks\n- TODO!",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .skip)
+    }
+
     @Test("List line starts allow constrained word completion only")
     func listLineStartsAllowConstrainedWordCompletionOnly() {
         let policy = SuggestionTriggerPolicy()

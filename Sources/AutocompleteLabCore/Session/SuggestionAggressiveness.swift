@@ -321,7 +321,8 @@ public struct SuggestionTuning: Equatable, Sendable {
         supportPace: SuggestionPace,
         allowsSentenceBoundaryContinuation: Bool = true,
         minimumPhraseContinuationWords: Int? = nil,
-        allowsPlainLineStartPhraseContinuation: Bool = false
+        allowsPlainLineStartPhraseContinuation: Bool = false,
+        allowsListLabelPhraseContinuation: Bool = false
     ) -> SuggestionTriggerPolicy {
         guard supportPace == .eager else {
             return SuggestionTriggerPolicy(pace: supportPace)
@@ -349,6 +350,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
+                allowsListLabelPhraseContinuation: allowsListLabelPhraseContinuation,
                 allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         case 5:
@@ -365,6 +367,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
+                allowsListLabelPhraseContinuation: allowsListLabelPhraseContinuation,
                 allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         default:

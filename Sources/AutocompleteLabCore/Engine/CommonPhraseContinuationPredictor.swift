@@ -524,6 +524,7 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             .lowercased()
             .replacingOccurrences(of: #"^\s*(#{1,6}\s*)?([-*+]\s*)?(\[[ xX]\]\s*)?"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"^\s*\d+[\.)]\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^\s*\[[ xX]\]\s*"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ":")))
     }
