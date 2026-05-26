@@ -71,6 +71,7 @@ struct PersonalCapturePolicyTests {
     func blocksBrowserHostedSurfaces() throws {
         let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
             (FocusedElementFingerprint(windowTitle: "ChatGPT"), .chatGPT),
+            (FocusedElementFingerprint(windowTitle: "Inbox - Gmail"), .webmail),
             (FocusedElementFingerprint(windowTitle: "Unknown writing page"), .unproven)
         ]
 

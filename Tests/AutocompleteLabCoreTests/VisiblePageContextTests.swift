@@ -55,37 +55,34 @@ struct VisiblePageContextTests {
         #expect(context.traceMetadata["visiblePageContextCompletionCandidateWords"] != "0")
     }
 
-    @Test("Filters active typed line out of OCR context")
-    func filtersActiveTypedLineOutOfOCRContext() throws {
+    @Test("Filters the active typed line out of visible OCR context")
+    func filtersActiveTypedLineOutOfVisibleOCRContext() throws {
         let context = try #require(VisiblePageContext(
+            excludingActiveTextLine: "The launch note should",
             text: """
             Sam: Can you send the launch note today?
             Draft
-            Yeah I can send the launch
-            Launch notes should stay short
-            """,
-            excludingActiveTextLine: "Yeah I can send the launch"
+            The launch note should
+            """
         ))
 
-        #expect(context.activeTextLineFiltered)
-        #expect(!context.text.contains("Yeah I can send the launch"))
         #expect(context.text.contains("Sam: Can you send the launch note today?"))
-        #expect(context.text.contains("Launch notes should stay short"))
+        #expect(!context.text.contains("The launch note should"))
+        #expect(context.activeTextLineFiltered)
         #expect(context.traceMetadata["visiblePageContextActiveLineFiltered"] == "true")
     }
 
-    @Test("Filters OCR line when active text is only a prefix")
-    func filtersOCRLineWhenActiveTextIsPrefix() throws {
+    @Test("Filters OCR lines that contain the active typed prefix")
+    func filtersOCRLinesThatContainActiveTypedPrefix() throws {
         let context = try #require(VisiblePageContext(
+            excludingActiveTextLine: "We should keep this local",
             text: """
-            Project update
-            The privacy report should stay redacted before it leaves this Mac
-            Useful nearby phrase
-            """,
-            excludingActiveTextLine: "The privacy report should stay redac"
+            Goal: make autocomplete calmer
+            We should keep this local and fast
+            """
         ))
 
-        #expect(!context.text.contains("The privacy report should stay redacted"))
-        #expect(context.text.contains("Useful nearby phrase"))
+        #expect(context.text == "Goal: make autocomplete calmer")
+        #expect(context.activeTextLineFiltered)
     }
 }

@@ -63,6 +63,14 @@ struct SettingsCurrentAppState: Equatable {
         bundleIdentifier != nil && supportStatus.canToggleSuggestions
     }
 
+    private var claudeCodeTerminalHostVariant: ClaudeCodeTerminalHostVariant? {
+        guard let bundleIdentifier else {
+            return nil
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.hostVariant(for: bundleIdentifier)
+    }
+
     var canOverrideMode: Bool {
         guard bundleIdentifier != nil,
               case let .supported(profile) = supportStatus,
@@ -90,6 +98,10 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var shouldShowCheckControls: Bool {
+        if claudeCodeTerminalHostVariant != nil {
+            return true
+        }
+
         guard bundleIdentifier != nil,
               case let .supported(profile) = supportStatus,
               profile.canPresentSuggestions,
@@ -103,6 +115,10 @@ struct SettingsCurrentAppState: Equatable {
     var statusText: String {
         guard bundleIdentifier != nil else {
             return "Current app: no app selected"
+        }
+
+        if claudeCodeTerminalHostVariant != nil {
+            return "Current app: \(displayName) is blocked outside Claude Code proof"
         }
 
         if isProofModeOnly {
@@ -119,6 +135,10 @@ struct SettingsCurrentAppState: Equatable {
     var detailText: String {
         guard bundleIdentifier != nil else {
             return "Open a writing app to see whether suggestions are supported."
+        }
+
+        if claudeCodeTerminalHostVariant != nil {
+            return "\(displayName) stays blocked for normal typing. Only an explicit Claude Code host proof check can use this terminal."
         }
 
         if isProofModeOnly {
@@ -145,6 +165,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Mode: choose a writing app"
         }
 
+        if claudeCodeTerminalHostVariant != nil {
+            return "Mode: Claude Code terminal-host proof only"
+        }
+
         guard case let .supported(profile) = supportStatus else {
             return "Mode: not set up here"
         }
@@ -168,6 +192,10 @@ struct SettingsCurrentAppState: Equatable {
             return "Acceptance: off until an app is selected"
         }
 
+        if claudeCodeTerminalHostVariant != nil {
+            return "Keys: off except one-word Tab during an explicit proof check."
+        }
+
         guard case let .supported(profile) = supportStatus,
               profile.canPresentSuggestions,
               !profile.isSensitive else {
@@ -187,7 +215,11 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var fallbackText: String {
-        CommandFallbackPolicy().decision(
+        if claudeCodeTerminalHostVariant != nil {
+            return "Fallback: unavailable outside the manual Claude Code proof lane."
+        }
+
+        return CommandFallbackPolicy().decision(
             supportStatus: supportStatus,
             isEnabled: isEnabled,
             hasCurrentApp: bundleIdentifier != nil
@@ -223,6 +255,10 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var proofButtonTitle: String {
+        if claudeCodeTerminalHostVariant != nil {
+            return "Manual Check Only"
+        }
+
         if bundleIdentifier == "com.apple.TextEdit", isEnabled {
             return "Check TextEdit"
         }
@@ -249,6 +285,10 @@ struct SettingsCurrentAppState: Equatable {
     var proofText: String {
         guard bundleIdentifier != nil else {
             return "Check: choose a writing app first."
+        }
+
+        if let hostVariant = claudeCodeTerminalHostVariant {
+            return "Check: run the \(hostVariant.displayName) Claude Code proof, press Tab once, and do not press Enter."
         }
 
         guard case let .supported(profile) = supportStatus,
@@ -289,7 +329,7 @@ struct SettingsCurrentAppState: Equatable {
             return "Manual checks: \(command.replacingOccurrences(of: "\n", with: "; "))"
         }
 
-        if supportStatus.supportLevel == .yellow {
+        if supportStatus.supportLevel == .yellow || claudeCodeTerminalHostVariant != nil {
             return "Manual check: \(command)"
         }
 
@@ -297,6 +337,10 @@ struct SettingsCurrentAppState: Equatable {
     }
 
     var proofCommandClipboardText: String? {
+        if let hostVariant = claudeCodeTerminalHostVariant {
+            return hostVariant.manualProofCommand
+        }
+
         guard let bundleIdentifier,
               isEnabled,
               case let .supported(profile) = supportStatus,
@@ -1314,7 +1358,7 @@ final class SettingsWindowController: NSObject {
         trustWhyLabel.stringValue = trust.whyText
         controlLabel.stringValue = pauseControl.settingsSummaryText
         controlDetailLabel.stringValue = pauseControl.settingsDetailText
-        suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
+        suggestionDecisionLabel.stringValue = SuggestionDecisionPresentation(lastSuggestionDecision).settingsText
         togglePauseButton.state = suggestionsPaused ? .off : .on
         togglePauseButton.title = pauseControl.toggleTitle
         pause15MinutesButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons

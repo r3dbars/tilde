@@ -97,23 +97,23 @@ public enum SuggestionAggressiveness: String, Codable, Equatable, Sendable, Case
 public struct SuggestionTuning: Equatable, Sendable {
     public static let minimumAggressivenessLevel = 1
     public static let maximumAggressivenessLevel = 5
-    public static let defaultAggressivenessLevel = 2
+    public static let defaultAggressivenessLevel = 4
     public static let defaultMaxVisibleWords = 8
     public static let minimumWordStartCharacters = 1
     public static let maximumWordStartCharacters = 5
     public static let defaultWordStartCharacters = 2
     public static let minimumPhraseStartWords = 1
     public static let maximumPhraseStartWords = 6
-    public static let defaultPhraseStartWords = 3
+    public static let defaultPhraseStartWords = 2
     public static let minimumResponseSpeedLevel = 1
     public static let maximumResponseSpeedLevel = 5
-    public static let defaultResponseSpeedLevel = 3
+    public static let defaultResponseSpeedLevel = 5
     public static let minimumConfidenceLevel = 1
     public static let maximumConfidenceLevel = 5
-    public static let defaultConfidenceLevel = 3
+    public static let defaultConfidenceLevel = 4
     public static let minimumLearningRestraintLevel = 0
     public static let maximumLearningRestraintLevel = 3
-    public static let defaultLearningRestraintLevel = 2
+    public static let defaultLearningRestraintLevel = 1
     public static let predictiveFallbackWritingApps: Set<String> = [
         "com.apple.TextEdit",
         "com.apple.Notes",
@@ -266,20 +266,30 @@ public struct SuggestionTuning: Equatable, Sendable {
             )
     }
 
-    public func activationPolicy(supportPace: SuggestionPace) -> CompletionActivationPolicy {
+    public func activationPolicy(
+        supportPace: SuggestionPace,
+        allowsSentenceBoundaryContinuation: Bool = true,
+        minimumPhraseContinuationWords: Int? = nil
+    ) -> CompletionActivationPolicy {
         guard supportPace == .eager else {
             return CompletionActivationPolicy(pace: supportPace)
         }
+
+        let allowsTerminalSentenceBoundary = allowsSentenceBoundaryContinuation
+            && aggressivenessLevel >= 4
+        let phraseContinuationWords = minimumPhraseContinuationWords
+            .map(Self.clampedPhraseStartWords) ?? phraseStartWords
 
         if aggressivenessLevel >= 5 {
             return CompletionActivationPolicy(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 18,
-                allowsTerminalSentenceBoundary: false,
-                allowsUnfinishedWordPhraseContinuation: false
+                allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
+                allowsUnfinishedWordPhraseContinuation: true,
+                prefersPhraseContinuationForWordFragments: true
             )
         }
 
@@ -287,18 +297,19 @@ public struct SuggestionTuning: Equatable, Sendable {
             return CompletionActivationPolicy(
                 minimumContextCharacters: 1,
                 minimumContextWords: 1,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 minimumWordCompletionCharacters: wordStartCharacters,
                 maximumWordCompletionCharacters: 16,
-                allowsTerminalSentenceBoundary: false,
-                allowsUnfinishedWordPhraseContinuation: false
+                allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
+                allowsUnfinishedWordPhraseContinuation: true,
+                prefersPhraseContinuationForWordFragments: true
             )
         }
 
         return CompletionActivationPolicy(
             minimumContextCharacters: 1,
             minimumContextWords: 1,
-            minimumPhraseContinuationWords: phraseStartWords,
+            minimumPhraseContinuationWords: phraseContinuationWords,
             minimumWordCompletionCharacters: wordStartCharacters,
             maximumWordCompletionCharacters: 16,
             allowsTerminalSentenceBoundary: false,
@@ -306,10 +317,20 @@ public struct SuggestionTuning: Equatable, Sendable {
         )
     }
 
-    public func triggerPolicy(supportPace: SuggestionPace) -> SuggestionTriggerPolicy {
+    public func triggerPolicy(
+        supportPace: SuggestionPace,
+        allowsSentenceBoundaryContinuation: Bool = true,
+        minimumPhraseContinuationWords: Int? = nil,
+        allowsPlainLineStartPhraseContinuation: Bool = false
+    ) -> SuggestionTriggerPolicy {
         guard supportPace == .eager else {
             return SuggestionTriggerPolicy(pace: supportPace)
         }
+
+        let allowsSentenceBoundaryRequest = allowsSentenceBoundaryContinuation
+            && aggressivenessLevel >= 4
+        let phraseContinuationWords = minimumPhraseContinuationWords
+            .map(Self.clampedPhraseStartWords) ?? phraseStartWords
 
         switch aggressivenessLevel {
         case 3:
@@ -325,10 +346,10 @@ public struct SuggestionTuning: Equatable, Sendable {
                 sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 240),
                 pauseDelayMilliseconds: min(responseSpeedDelays.pause, 100),
                 minimumWordCompletionCharacters: wordStartCharacters,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
-                allowsPlainLineStartPhraseContinuation: false,
-                allowsSentenceBoundaryRequest: false
+                allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
+                allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         case 5:
             return SuggestionTriggerPolicy(
@@ -341,10 +362,10 @@ public struct SuggestionTuning: Equatable, Sendable {
                 sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 200),
                 pauseDelayMilliseconds: min(responseSpeedDelays.pause, 80),
                 minimumWordCompletionCharacters: wordStartCharacters,
-                minimumPhraseContinuationWords: phraseStartWords,
+                minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
-                allowsPlainLineStartPhraseContinuation: false,
-                allowsSentenceBoundaryRequest: false
+                allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
+                allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         default:
             return responseSpeedTriggerPolicy

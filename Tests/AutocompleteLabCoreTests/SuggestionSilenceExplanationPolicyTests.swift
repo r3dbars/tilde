@@ -6,7 +6,7 @@ struct SuggestionSilenceExplanationPolicyTests {
     private let policy = SuggestionSilenceExplanationPolicy()
 
     @Test("Explains blocked field kinds in plain user language")
-    func explainsBlockedFieldKinds() {
+    func explainsBlockedFieldKindsInPlainUserLanguage() {
         let cases: [(AXFieldKind, String)] = [
             (.search, "search fields stay quiet"),
             (.url, "URL and address fields stay quiet"),
@@ -16,54 +16,22 @@ struct SuggestionSilenceExplanationPolicyTests {
             (.unknown, "unknown field needs proof first")
         ]
 
-        for (kind, expectedReason) in cases {
-            let decision = CompletionActivationDecision.block(.blockedFieldKind)
-            let classification = AXFieldClassification(kind: kind, reason: "test")
-
-            #expect(policy.activationBlockReason(
-                for: decision,
-                fieldClassification: classification
-            ) == expectedReason)
+        for (fieldKind, expected) in cases {
+            #expect(policy.activationBlockReason(.blockedFieldKind, fieldKind: fieldKind) == expected)
         }
     }
 
     @Test("Keeps timing and authorship blocks calm")
-    func explainsTimingAndAuthorshipBlocks() {
-        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test")
-
-        #expect(policy.activationBlockReason(
-            .tooLittleContext,
-            fieldClassification: classification
-        ) == "waiting for more context")
-        #expect(policy.activationBlockReason(
-            .unfinishedWord,
-            fieldClassification: classification
-        ) == "word still forming")
-        #expect(policy.activationBlockReason(
-            .middleOfLine,
-            fieldClassification: classification
-        ) == "middle of line")
-        #expect(policy.activationBlockReason(
-            .selectedText,
-            fieldClassification: classification
-        ) == "selected text active")
+    func keepsTimingAndAuthorshipBlocksCalm() {
+        #expect(policy.activationBlockReason(.tooLittleContext, fieldKind: .multilineCompose) == "waiting for more context")
+        #expect(policy.activationBlockReason(.unfinishedWord, fieldKind: .multilineCompose) == "word still forming")
+        #expect(policy.activationBlockReason(.middleOfLine, fieldKind: .multilineCompose) == "middle of line stays quiet")
+        #expect(policy.activationBlockReason(.selectedText, fieldKind: .multilineCompose) == "selected text stays quiet")
     }
 
-    @Test("Separates sensitive and code silence reasons")
-    func separatesSensitiveAndCodeReasons() {
-        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test")
-
-        #expect(policy.activationBlockReason(
-            .secureField,
-            fieldClassification: classification
-        ) == "secure field")
-        #expect(policy.activationBlockReason(
-            .sensitiveContent,
-            fieldClassification: classification
-        ) == "sensitive text detected")
-        #expect(policy.activationBlockReason(
-            .markdownCodeContext,
-            fieldClassification: classification
-        ) == "code context")
+    @Test("Separates secure and missing editable context")
+    func separatesSecureAndMissingEditableContext() {
+        #expect(policy.focusedTextUnavailable(isSecure: true) == "secure field")
+        #expect(policy.focusedTextUnavailable(isSecure: false) == "no editable text field")
     }
 }

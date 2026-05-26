@@ -119,6 +119,8 @@ require_contains "$SCRIPT_TEXT" '"$proof_dir/spctl-installed-app.txt"'
 require_contains "$SCRIPT_TEXT" 'run_artifact_proof_command "$proof_dir/stapler-validate.txt"'
 require_contains "$SCRIPT_TEXT" 'run_artifact_proof_command "$proof_dir/spctl-dmg.txt"'
 require_contains "$SCRIPT_TEXT" 'run_artifact_proof_command "$proof_dir/spctl-installed-app.txt"'
+require_contains "$SCRIPT_TEXT" "current_commit()"
+require_contains "$SCRIPT_TEXT" "git rev-parse HEAD"
 reject_contains "$SCRIPT_TEXT" 'record_proof_command "$proof_dir/stapler-validate.txt"'
 reject_contains "$SCRIPT_TEXT" 'record_proof_command "$proof_dir/spctl-dmg.txt"'
 reject_contains "$SCRIPT_TEXT" 'record_proof_command "$proof_dir/spctl-installed-app.txt"'
@@ -141,11 +143,13 @@ require_contains "$SCRIPT_TEXT" "beta packet checksum references missing SteadyT
 require_contains "$SCRIPT_TEXT" "Developer ID DMG signature blocked"
 require_contains "$SCRIPT_TEXT" "Developer ID archive signature blocked"
 require_contains "$SCRIPT_TEXT" "refresh or remove the secondary ZIP"
+require_contains "$SCRIPT_TEXT" 'ditto -x -k "$ZIP_PATH" "$verify_dir"'
 require_contains "$SCRIPT_TEXT" "This is separate from Apple notarization credentials."
 require_contains "$SCRIPT_TEXT" 'Click `Allow Accessibility` in SteadyType'
 require_contains "$SCRIPT_TEXT" "confirm Accessibility updates without restarting"
 reject_contains "$SCRIPT_TEXT" '1. Unzip `SteadyType.zip`.'
 reject_contains "$SCRIPT_TEXT" "Grant Accessibility when macOS asks"
+reject_contains "$SCRIPT_TEXT" "ARCHIVE_PATH"
 
 for expected_doc in \
   "PRIVACY-BETA.md" \

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import subprocess
 from dataclasses import dataclass
 import math
@@ -27,6 +29,9 @@ REQUIRED_AREAS = [
     "beta readiness",
     "test/proof coverage",
 ]
+
+DAILY_DRIVER_LOCAL_QUALITY_REPORT = "docs/evals/daily-driver-local-quality-audit-2026-05-25.md"
+DAILY_DRIVER_LOCAL_QUALITY_GATE = "./script/check_daily_driver_local_quality_audit_report.sh"
 
 EVIDENCE_MARKERS = (
     "`./script/",
@@ -155,6 +160,11 @@ LATENCY_SELECTOR_LIVE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+LATENCY_SELECTOR_EXECUTABLE_SHA_PATTERN = re.compile(
+    r"\b(?:app|executable)-sha256\b\s*[:=]?\s*`?([0-9a-f]{64})`?",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class CountClaim:
@@ -162,6 +172,14 @@ class CountClaim:
     count: int
     line_number: int
     snippet: str
+
+
+@dataclass(frozen=True)
+class LatencySelectorTarget:
+    proof_app: str
+    proof_scenario: str
+    trace_app: str
+    request_mode: str
 
 
 @dataclass(frozen=True)
@@ -175,6 +193,8 @@ class LatencySelectorClaim:
     fast_word_visible_samples: int
     line_number: int
     snippet: str
+    target: LatencySelectorTarget
+    executable_sha256: str | None
 
 
 @dataclass(frozen=True)
@@ -331,6 +351,66 @@ def extract_count_claims(source: str) -> list[CountClaim]:
     return claims
 
 
+def default_latency_selector_target() -> LatencySelectorTarget:
+    proof_app = os.environ.get(
+        "AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_APP",
+        "com.anthropic.claudefordesktop",
+    )
+    proof_scenario = os.environ.get(
+        "AUTOCOMPLETE_LAB_SCORECARD_LATENCY_PROOF_SCENARIO",
+        "claude-model-latency",
+    )
+    trace_app = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_TRACE_APP", proof_app)
+    request_mode = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_REQUEST_MODE", "wordCompletion")
+    return LatencySelectorTarget(
+        proof_app=proof_app,
+        proof_scenario=proof_scenario,
+        trace_app=trace_app,
+        request_mode=request_mode,
+    )
+
+
+def infer_latency_selector_target(snippet: str, match_start: int) -> LatencySelectorTarget:
+    context = snippet[max(0, match_start - 320):match_start].lower()
+    if "textedit strict selector" in context:
+        return LatencySelectorTarget(
+            proof_app="com.apple.TextEdit",
+            proof_scenario="textedit-model-latency",
+            trace_app="com.apple.TextEdit",
+            request_mode="wordCompletion",
+        )
+    if "claude code strict selector" in context:
+        return LatencySelectorTarget(
+            proof_app="com.anthropic.claude-code",
+            proof_scenario="claude-code-model-latency",
+            trace_app="com.anthropic.claude-code",
+            request_mode="wordCompletion",
+        )
+    if "codex strict selector" in context:
+        return LatencySelectorTarget(
+            proof_app="com.openai.codex",
+            proof_scenario="codex-model-latency",
+            trace_app="com.openai.codex",
+            request_mode="wordCompletion",
+        )
+    if "claude strict selector" in context:
+        return LatencySelectorTarget(
+            proof_app="com.anthropic.claudefordesktop",
+            proof_scenario="claude-model-latency",
+            trace_app="com.anthropic.claudefordesktop",
+            request_mode="wordCompletion",
+        )
+    return default_latency_selector_target()
+
+
+def infer_latency_selector_executable_sha256(snippet: str, match_start: int) -> str | None:
+    context = snippet[max(0, match_start - 240):match_start]
+    matches = list(LATENCY_SELECTOR_EXECUTABLE_SHA_PATTERN.finditer(context))
+    if not matches:
+        return None
+    return matches[-1].group(1).lower()
+
+
 def extract_latency_selector_claims(source: str) -> list[LatencySelectorClaim]:
     claims: list[LatencySelectorClaim] = []
     for line_number, line in enumerate(source.splitlines(), start=1):
@@ -338,6 +418,8 @@ def extract_latency_selector_claims(source: str) -> list[LatencySelectorClaim]:
         if "select_latency_window.py" not in snippet:
             continue
         for match in LATENCY_SELECTOR_SCORECARD_GREEN_PATTERN.finditer(snippet):
+            target = infer_latency_selector_target(snippet, match.start())
+            executable_sha256 = infer_latency_selector_executable_sha256(snippet, match.start())
             claims.append(
                 LatencySelectorClaim(
                     ok=True,
@@ -349,9 +431,13 @@ def extract_latency_selector_claims(source: str) -> list[LatencySelectorClaim]:
                     fast_word_visible_samples=int(match.group(5)),
                     line_number=line_number,
                     snippet=snippet,
+                    target=target,
+                    executable_sha256=executable_sha256,
                 )
             )
         for match in LATENCY_SELECTOR_SCORECARD_RED_PATTERN.finditer(snippet):
+            target = infer_latency_selector_target(snippet, match.start())
+            executable_sha256 = infer_latency_selector_executable_sha256(snippet, match.start())
             claims.append(
                 LatencySelectorClaim(
                     ok=False,
@@ -363,6 +449,8 @@ def extract_latency_selector_claims(source: str) -> list[LatencySelectorClaim]:
                     fast_word_visible_samples=int(match.group(6)),
                     line_number=line_number,
                     snippet=snippet,
+                    target=target,
+                    executable_sha256=executable_sha256,
                 )
             )
     return claims
@@ -382,8 +470,31 @@ def read_or_run_output(fixture_path: Path | None, command: list[str]) -> str:
     return f"{result.stdout}\n{result.stderr}"
 
 
-def strict_latency_selector_command() -> list[str]:
-    return [
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def latency_executable_sha256() -> str:
+    override = os.environ.get("AUTOCOMPLETE_LAB_SCORECARD_LATENCY_EXECUTABLE_SHA256", "").strip()
+    if override:
+        return override
+
+    app_binary = ROOT_DIR / "dist/SteadyType.app/Contents/MacOS/SteadyType"
+    if app_binary.is_file():
+        return sha256_file(app_binary)
+    return ""
+
+
+def strict_latency_selector_command(
+    target: LatencySelectorTarget | None = None,
+    expected_executable_sha256: str | None = None,
+) -> list[str]:
+    target = target or default_latency_selector_target()
+    command = [
         "./script/select_latency_window.py",
         "--diagnostics-log",
         str(Path.home() / "Library/Logs/SteadyType/diagnostics.log"),
@@ -396,16 +507,20 @@ def strict_latency_selector_command() -> list[str]:
         "--min-model-samples",
         "5",
         "--required-proof-app",
-        "com.apple.TextEdit",
+        target.proof_app,
         "--required-proof-scenario",
-        "textedit-model-latency",
+        target.proof_scenario,
         "--required-trace-app",
-        "com.apple.TextEdit",
+        target.trace_app,
         "--required-request-mode",
-        "wordCompletion",
+        target.request_mode,
         "--require-model-backed-visible",
         "--forbid-fast-word-visible",
     ]
+    executable_sha256 = expected_executable_sha256 or latency_executable_sha256()
+    if executable_sha256:
+        command.extend(["--expected-executable-sha256", executable_sha256])
+    return command
 
 
 def parse_manual_smoke_live_count(output: str) -> int | None:
@@ -426,27 +541,35 @@ def parse_proof_manifest_live_count(output: str) -> int | None:
     return None
 
 
-def parse_latency_selector_result(output: str) -> LatencySelectorResult:
+def parse_latency_selector_results(output: str) -> list[LatencySelectorResult]:
     matches = list(LATENCY_SELECTOR_LIVE_PATTERN.finditer(output))
     if not matches:
         reason_match = re.search(r"\bLatency window:\s*([^\n]+)", output)
         reason = reason_match.group(1).strip() if reason_match else "missing Latency window output"
-        return LatencySelectorResult(False, reason)
+        return [LatencySelectorResult(False, reason)]
 
-    match = matches[-1]
     has_start_lines = (
         "AUTOCOMPLETE_LAB_LOG_START_LINE=" in output
         and "AUTOCOMPLETE_LAB_TRACE_START_LINE=" in output
     )
-    return LatencySelectorResult(
-        ok=has_start_lines and match.group(1).strip().startswith("selected"),
-        reason=match.group(1).strip(),
-        diagnostics_line=int(match.group(2)),
-        trace_start_line=int(match.group(3)),
-        first_visible_samples=int(match.group(4)),
-        model_samples=int(match.group(5)),
-        fast_word_visible_samples=int(match.group(6)),
-    )
+    results: list[LatencySelectorResult] = []
+    for match in matches:
+        results.append(
+            LatencySelectorResult(
+                ok=has_start_lines and match.group(1).strip().startswith("selected"),
+                reason=match.group(1).strip(),
+                diagnostics_line=int(match.group(2)),
+                trace_start_line=int(match.group(3)),
+                first_visible_samples=int(match.group(4)),
+                model_samples=int(match.group(5)),
+                fast_word_visible_samples=int(match.group(6)),
+            )
+        )
+    return results
+
+
+def parse_latency_selector_result(output: str) -> LatencySelectorResult:
+    return parse_latency_selector_results(output)[-1]
 
 
 def normalize_latency_reason(value: str) -> str:
@@ -505,6 +628,16 @@ def compare_latency_selector_claim(
     return mismatches
 
 
+def best_latency_selector_result_for_claim(
+    claim: LatencySelectorClaim,
+    live_results: list[LatencySelectorResult],
+) -> LatencySelectorResult:
+    for result in live_results:
+        if not compare_latency_selector_claim(claim, result):
+            return result
+    return live_results[-1]
+
+
 def validate_live_counts(
     source: str,
     manual_smoke_output: Path | None,
@@ -554,15 +687,32 @@ def validate_live_counts(
     if latency_selector_output is not None or require_latency_selector:
         if not latency_selector_claims:
             failures.append("latency selector live check requires a select_latency_window.py scorecard claim")
-        output = read_or_run_output(latency_selector_output, strict_latency_selector_command())
-        live_result = parse_latency_selector_result(output)
-        if not live_result.ok and not any(not claim.ok for claim in latency_selector_claims):
-            failures.append(f"latency selector live output is red: {live_result.reason}")
+            return failures
+        fixture_results: list[LatencySelectorResult] | None = None
+        live_results_by_target: dict[tuple[LatencySelectorTarget, str], LatencySelectorResult] = {}
+        if latency_selector_output is not None:
+            output = read_or_run_output(latency_selector_output, strict_latency_selector_command())
+            fixture_results = parse_latency_selector_results(output)
         for claim in latency_selector_claims:
+            if fixture_results is not None:
+                live_result = best_latency_selector_result_for_claim(claim, fixture_results)
+            else:
+                cache_key = (claim.target, claim.executable_sha256 or "")
+                if cache_key not in live_results_by_target:
+                    output = read_or_run_output(
+                        None,
+                        strict_latency_selector_command(
+                            claim.target,
+                            expected_executable_sha256=claim.executable_sha256,
+                        ),
+                    )
+                    live_results_by_target[cache_key] = parse_latency_selector_result(output)
+                live_result = live_results_by_target[cache_key]
             mismatches = compare_latency_selector_claim(claim, live_result)
             if mismatches:
                 failures.append(
                     f"line {claim.line_number}: latency selector claim is stale: "
+                    f"{claim.target.proof_app}/{claim.target.proof_scenario}: "
                     f"{'; '.join(mismatches)}: {claim.snippet}"
                 )
 
@@ -587,6 +737,7 @@ def validate_scorecard(
     overall = parse_overall(source, failures)
     rows = parse_rows(source, failures)
     seen: dict[str, tuple[int, str]] = {}
+    product_scorecard = "# SteadyType Product Scorecard" in source
 
     for row in rows:
         raw_area = row["area"]
@@ -627,6 +778,22 @@ def validate_scorecard(
             if unresolved_terms:
                 joined = ", ".join(dict.fromkeys(unresolved_terms))
                 failures.append(f"{raw_area}: 100/100 requires resolved row gates; unresolved language found: {joined}")
+
+        if product_scorecard and area == "suggestion quality":
+            if DAILY_DRIVER_LOCAL_QUALITY_GATE not in evidence:
+                failures.append(
+                    f"{raw_area}: evidence must name {DAILY_DRIVER_LOCAL_QUALITY_GATE} now that the "
+                    "daily-driver audit report is checked in"
+                )
+            if DAILY_DRIVER_LOCAL_QUALITY_REPORT not in evidence:
+                failures.append(
+                    f"{raw_area}: evidence must name {DAILY_DRIVER_LOCAL_QUALITY_REPORT} now that the "
+                    "daily-driver audit report is checked in"
+                )
+            if "local_quality_audit.py" in next_proof or "local quality audit" in next_proof.lower():
+                failures.append(
+                    f"{raw_area}: next proof must move past the checked local audit toward real writing dogfood"
+                )
 
     missing = [area for area in REQUIRED_AREAS if area not in seen]
     extra = [raw for key, (_, raw) in seen.items() if key not in REQUIRED_AREAS]

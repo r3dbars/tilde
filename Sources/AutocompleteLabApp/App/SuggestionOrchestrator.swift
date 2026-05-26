@@ -1,6 +1,12 @@
 import Foundation
 import AutocompleteLabCore
 
+struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
+    let shouldSuppress: Bool
+    let reason: String?
+    let metadata: [String: String]
+}
+
 @MainActor
 final class SuggestionOrchestrator {
     private static let maximumFinalModelDisplayLatencyMilliseconds = 750
@@ -444,7 +450,8 @@ final class SuggestionOrchestrator {
         for textBeforeCursor: String,
         behaviorProfileID: AutocompleteBehaviorProfileID?,
         maxVisibleWords: Int,
-        allowPredictiveFallback: Bool = false
+        allowPredictiveFallback: Bool = false,
+        allowPromptAppPrediction: Bool = false
     ) -> CommonPhraseContinuationSelection {
         guard allowPredictiveFallback else {
             return CommonPhraseContinuationSelection(
@@ -458,7 +465,35 @@ final class SuggestionOrchestrator {
         return commonPhrasePredictor.selection(
             for: textBeforeCursor,
             behaviorProfileID: behaviorProfileID,
-            maxVisibleWords: maxVisibleWords
+            maxVisibleWords: maxVisibleWords,
+            allowsPromptAppPrediction: allowPromptAppPrediction
+        )
+    }
+
+    nonisolated func fastPhraseFallbackLearningDecision(
+        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal,
+        probabilityThreshold: Double,
+        minimumSamples: Int = 6,
+        minimumLearningRestraint: Double = 0.35
+    ) -> FastPhraseFallbackLearningDecision {
+        let boundedMinimumSamples = max(0, minimumSamples)
+        let boundedMinimumLearningRestraint = max(0, minimumLearningRestraint)
+        let shouldSuppress = acceptedAndKeptSignal.sampleCount >= boundedMinimumSamples
+            && acceptedAndKeptSignal.probability < probabilityThreshold
+            && acceptedAndKeptSignal.learningRestraint >= boundedMinimumLearningRestraint
+        let reason = shouldSuppress ? "fast-phrase-learning-restraint" : nil
+        var metadata = acceptedAndKeptSignal.traceMetadata
+        metadata["fastPhraseFallbackLearningThreshold"] = Self.traceDecimal(probabilityThreshold)
+        metadata["fastPhraseFallbackLearningMinimumSamples"] = String(boundedMinimumSamples)
+        metadata["fastPhraseFallbackLearningMinimumRestraint"] = Self.traceDecimal(boundedMinimumLearningRestraint)
+        metadata["fastPhraseFallbackLearningSuppressed"] = String(shouldSuppress)
+        if let reason {
+            metadata["fastPhraseFallbackLearningReason"] = reason
+        }
+        return FastPhraseFallbackLearningDecision(
+            shouldSuppress: shouldSuppress,
+            reason: reason,
+            metadata: metadata
         )
     }
 
@@ -568,17 +603,30 @@ final class SuggestionOrchestrator {
             latencyMilliseconds: latencyMilliseconds,
             supportLevel: profile.supportLevel
         )
-        let confidenceMetadata = [
+        let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && profile.requiresNoSubmitAcceptanceProof
+            && request.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)
+            && request.textAfterCursor.isEmpty
+        var confidenceMetadata = [
             "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
             "completionConfidenceScore": String(confidenceDecision.score),
             "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
         ]
+        if promptProofLatencyBypass {
+            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
+        }
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
-            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
+            && !promptProofLatencyBypass
+            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
+                for: request,
+                suggestion: suggestion
+            )
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
+            && !promptProofLatencyBypass
             && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            || (request.mode == .phraseContinuation && confidenceDecision.bucket != .high)
+            && (!promptProofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,
@@ -658,27 +706,31 @@ final class SuggestionOrchestrator {
             }
         case .sentenceContinuation:
             switch visibleWordCount {
-            case 3...5:
+            case 3...8:
                 base = 0.64
-            case 2, 6:
+            case 2:
                 base = 0.52
             default:
                 base = 0.38
             }
         case .phraseContinuation:
             switch visibleWordCount {
-            case 2...4:
-                base = 0.70
-            case 5...7:
+            case 3...8:
+                base = 0.74
+            case 2:
                 base = 0.58
             case 1:
-                base = 0.48
-            default:
                 base = 0.40
+            default:
+                base = 0.34
             }
         }
 
         return displayComponent(base + acceptedAndKeptSignal.utilityAdjustment)
+    }
+
+    nonisolated private static func traceDecimal(_ value: Double) -> String {
+        String(format: "%.3f", value)
     }
 
     nonisolated private static func displayStyleFit(
@@ -783,6 +835,22 @@ final class SuggestionOrchestrator {
             score += 0.15
         }
         return displayComponent(score)
+    }
+
+    private static func maximumFinalModelDisplayLatencyMilliseconds(
+        for request: CompletionRequest,
+        suggestion: CompletionSuggestion
+    ) -> Int {
+        guard request.mode == .phraseContinuation,
+              suggestion.maxVisibleWords >= 8,
+              suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(
+                forVisibleWords: suggestion.maxVisibleWords
+              )
+        else {
+            return maximumFinalModelDisplayLatencyMilliseconds
+        }
+
+        return 1_000
     }
 
     nonisolated private static func displayComponent(_ value: Double) -> Double {

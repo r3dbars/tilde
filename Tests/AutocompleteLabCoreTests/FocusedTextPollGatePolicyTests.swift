@@ -21,7 +21,7 @@ struct FocusedTextPollGatePolicyTests {
     @Test("Waits during cadence window before counting in-flight skip")
     func waitsDuringCadenceWindowBeforeCountingInFlightSkip() {
         let policy = FocusedTextPollGatePolicy(cadencePolicy: FocusPollingCadencePolicy(
-            activeSuggestionIntervalSeconds: 0.05,
+            activeSuggestionIntervalSeconds: 0.08,
             supportedTypingWatchIntervalSeconds: 0.2
         ))
         let startedAt = Date(timeIntervalSince1970: 1_000)
