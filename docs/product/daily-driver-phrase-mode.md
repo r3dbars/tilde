@@ -393,12 +393,19 @@ May 26, 2026. The prior live run exposed the wrong trust shape: SteadyType
 showed a suggestion near Ghostty's top/header AX text while the real prompt was
 lower in the terminal, then no insertion source verified. Title-scoped Ghostty
 proof now rejects stale Claude header text, date/build text, and digit-heavy
-header tails unless screen recovery finds the real prompt line. The live
-`claude-code-ghostty` rerun now fails after 7 disposable contexts with no
-visible suggestion, with diagnostics showing `unsafeInputLine` /
-`missingProofMarker`. That is not support yet, but it is the right trust
-direction: no stale top-window suggestion, no unverifiable insertion claim, and
-the next blocker is true prompt-line extraction plus verified insertion.
+header tails unless screen recovery finds the real prompt line. The policy can
+now recover a proof marker from Ghostty's terminal header/screen only when the
+current AX fragment still matches the recovered prompt row, and it allows
+Claude prompt box chrome after that row without treating the chrome as input.
+`swift test --filter ClaudeCodeTerminalHostProofPolicyTests --jobs 1` passed
+with 75 tests for those safe-recovery and rejection cases. The latest live
+`AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
+claude-code-ghostty --manual-gate` run still timed out after 7 disposable
+contexts with no visible suggestion; archive proof SHA
+`26bb28faeabf43b2c21a99155d7a61b87b6a2567ea30ae9adc6183cc6ff6f1ed`.
+That is not support yet, but it is the right trust direction: no stale
+top-window suggestion, no unverifiable insertion claim, and the next gap is
+more diagnostic specificity plus a true live prompt-fragment match.
 
 ## Scorecard
 
