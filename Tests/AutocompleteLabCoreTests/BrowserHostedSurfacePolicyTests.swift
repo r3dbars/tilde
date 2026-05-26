@@ -46,6 +46,7 @@ struct BrowserHostedSurfacePolicyTests {
             (FocusedElementFingerprint(windowTitle: "ChatGPT"), .chatGPT),
             (FocusedElementFingerprint(windowTitle: "Transcripted | Slack"), .slack),
             (FocusedElementFingerprint(windowTitle: "Discord"), .discord),
+            (FocusedElementFingerprint(windowTitle: "Outlook - Mail"), .webmail),
             (FocusedElementFingerprint(help: "Search Google or type a URL"), .browserSearchOrAddressBar),
             (FocusedElementFingerprint(windowTitle: "github.dev - Visual Studio Code"), .browserDeveloperTool)
         ]
@@ -99,6 +100,35 @@ struct BrowserHostedSurfacePolicyTests {
         #expect(try #require(blockedSurface(from: chatGPTDecision)).surface == .chatGPT)
         #expect(try #require(blockedSurface(from: slackDecision)).surface == .slack)
         #expect(try #require(blockedSurface(from: discordDecision)).surface == .discord)
+    }
+
+    @Test("Browser webmail is blocked until reply-specific latency and undo proof exists")
+    func blocksBrowserWebmailUntilProofExists() throws {
+        let cases: [(FocusedElementFingerprint, BrowserHostedSurface)] = [
+            (FocusedElementFingerprint(windowTitle: "Inbox - Gmail"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "Outlook - Mail"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "outlook.office.com/mail/inbox"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "Yahoo Mail"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "Fastmail"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "Proton Mail"), .webmail),
+            (FocusedElementFingerprint(windowTitle: "iCloud Mail"), .webmail),
+            (FocusedElementFingerprint(title: "Email reply", windowTitle: "Office 365 Mail"), .webmail)
+        ]
+
+        for (fingerprint, expectedSurface) in cases {
+            let decision = policy.decision(
+                bundleIdentifier: "com.google.Chrome",
+                fingerprint: fingerprint
+            )
+
+            let block = try #require(blockedSurface(from: decision))
+            #expect(block.surface == expectedSurface)
+            #expect(block.traceMetadata["browserSurfaceSafetyClass"] == "browser-webmail")
+            #expect(
+                block.traceMetadata["browserSurfaceRequiredProof"]
+                    == "exact-disposable-webmail-reply-safe-tab-screenshot-insertion-undo-latency"
+            )
+        }
     }
 
     @Test("Chrome local textarea and contenteditable fixtures stay eligible")
@@ -280,6 +310,13 @@ struct BrowserHostedSurfacePolicyTests {
                 FocusedElementFingerprint(
                     title: "SteadyType Chrome browser-chat smoke local fixture",
                     windowTitle: "Discord [ready=1]"
+                )
+            ),
+            (
+                .webmail,
+                FocusedElementFingerprint(
+                    title: "SteadyType Chrome smoke local fixture",
+                    windowTitle: "Gmail - Inbox [ready=1]"
                 )
             )
         ]
@@ -550,6 +587,27 @@ struct BrowserHostedSurfacePolicyTests {
         )
         #expect(metadata["localFixtureProofCountsForProduction"] == "false")
         #expect(metadata["promptSafetyMetricSurface"] == "browser-chat")
+    }
+
+    @Test("Browser webmail blocks are tagged separately from chat and unknown pages")
+    func browserWebmailBlocksAreTaggedSeparately() throws {
+        let decision = policy.decision(
+            bundleIdentifier: "com.google.Chrome",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Outlook - Mail")
+        )
+
+        let block = try #require(blockedSurface(from: decision))
+        let metadata = block.traceMetadata
+
+        #expect(block.surface == .webmail)
+        #expect(block.userFacingReason == "Browser email needs proof first")
+        #expect(metadata["browserSurface"] == "webmail")
+        #expect(metadata["browserSurfaceSafetyClass"] == "browser-webmail")
+        #expect(
+            metadata["browserSurfaceRequiredProof"]
+                == "exact-disposable-webmail-reply-safe-tab-screenshot-insertion-undo-latency"
+        )
+        #expect(metadata["promptSafetyMetricSurface"] == "browser-webmail")
     }
 
     @Test("Browser sensitive blocks are tagged separately")

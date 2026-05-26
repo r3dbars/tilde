@@ -48,13 +48,13 @@ struct FocusedTextPollGatePolicyTests {
     @Test("Visible suggestion uses faster cadence")
     func visibleSuggestionUsesFasterCadence() {
         let policy = FocusedTextPollGatePolicy(cadencePolicy: FocusPollingCadencePolicy(
-            activeSuggestionIntervalSeconds: 0.05,
+            activeSuggestionIntervalSeconds: 0.08,
             supportedTypingWatchIntervalSeconds: 0.2
         ))
         let startedAt = Date(timeIntervalSince1970: 1_000)
 
         #expect(policy.decision(
-            now: startedAt.addingTimeInterval(0.051),
+            now: startedAt.addingTimeInterval(0.081),
             lastPollAt: startedAt,
             isPollInFlight: false,
             isTrustedForAccessibility: true,
