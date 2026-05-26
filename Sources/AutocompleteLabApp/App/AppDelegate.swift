@@ -3738,6 +3738,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let verificationBaseline = insertionVerificationBaseline(
                 acceptanceID: acceptanceID,
                 acceptedAt: acceptedAt,
+                action: action,
                 acceptMode: action.diagnosticName
             )
             recordClaudeCodeTerminalHostProofKeyboardProgress(
@@ -3843,6 +3844,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let verificationBaseline = insertionVerificationBaseline(
                 acceptanceID: acceptanceID,
                 acceptedAt: acceptedAt,
+                action: action,
                 acceptMode: action.diagnosticName
             )
             guard let acceptedText = suggestionSession.allVisibleAcceptance() else {
@@ -4783,6 +4785,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func insertionVerificationBaseline(
         acceptanceID: String,
         acceptedAt: Date,
+        action: KeyboardAction?,
         acceptMode: String
     ) -> InsertionVerificationBaseline? {
         guard let currentFieldIdentity,
@@ -4811,6 +4814,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             requestMode: currentSuggestionRequestMode,
             acceptanceID: acceptanceID,
             acceptedAt: acceptedAt,
+            action: action,
             acceptMode: acceptMode,
             fieldKind: fieldKind,
             fieldKindReason: fieldClassification?.reason ?? "unknown",
@@ -4970,7 +4974,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: baseline.profile,
                         retryCount: baseline.retryCount
                     )
-                    if insertAcceptedText(acceptedText, skippingInsertionModes: skippedModes) {
+                    if insertAcceptedText(
+                        acceptedText,
+                        skippingInsertionModes: skippedModes,
+                        action: baseline.action
+                    ) {
                         let retryBaseline = InsertionVerificationBaseline(
                             fieldIdentity: baseline.fieldIdentity,
                             targetFingerprint: baseline.targetFingerprint,
@@ -4981,6 +4989,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             requestMode: baseline.requestMode,
                             acceptanceID: baseline.acceptanceID,
                             acceptedAt: baseline.acceptedAt,
+                            action: baseline.action,
                             acceptMode: baseline.acceptMode,
                             fieldKind: baseline.fieldKind,
                             fieldKindReason: baseline.fieldKindReason,
@@ -8329,11 +8338,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             location: cursorUTF16Offset
         )
         var usedCommandRightFallback = false
+        var usedDocumentEndFallback = false
         if !cursorMatches {
             Self.postCommandRightKey()
             usedCommandRightFallback = true
             Thread.sleep(forTimeInterval: 0.05)
             Self.setAXSelectedTextRange(textArea, location: cursorUTF16Offset, length: 0)
+            Thread.sleep(forTimeInterval: 0.05)
+            cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
+                textArea,
+                location: cursorUTF16Offset
+            )
+        }
+        if !cursorMatches,
+           lastTextSnapshot.textAfterCursor.isEmpty {
+            Self.postCommandDownKey()
+            usedDocumentEndFallback = true
             Thread.sleep(forTimeInterval: 0.05)
             cursorMatches = Self.axObsidianSelectedTextRangeMatchesInsertionPoint(
                 textArea,
@@ -8346,6 +8366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": profile.bundleIdentifier,
                 "success": String(cursorMatches),
                 "commandRightFallback": String(usedCommandRightFallback),
+                "documentEndFallback": String(usedDocumentEndFallback),
                 "beforeChars": String(lastTextSnapshot.textBeforeCursor.count),
                 "cursorUTF16Offset": String(cursorUTF16Offset)
             ]
@@ -8816,6 +8837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let verificationBaseline = insertionVerificationBaseline(
             acceptanceID: acceptanceID,
             acceptedAt: acceptedAt,
+            action: action,
             acceptMode: action.diagnosticName
         )
 
@@ -13399,6 +13421,7 @@ private struct InsertionVerificationBaseline: Equatable {
     let requestMode: CompletionRequestMode?
     let acceptanceID: String
     let acceptedAt: Date
+    let action: KeyboardAction?
     let acceptMode: String
     let fieldKind: AXFieldKind
     let fieldKindReason: String

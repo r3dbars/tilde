@@ -11468,19 +11468,36 @@ assert_obsidian_first_accept_tail_for_variant() {
   local manual_app="$1"
   local current_tail="$2"
 
-  if [[ "$manual_app" == "obsidian-run-on" ]]; then
-    case "$current_tail" in
-      *"Smoke proof feels "*)
-        return 0
-        ;;
-    esac
-  else
-    case "$current_tail" in
-      "Smoke proof feels "*)
-        return 0
-        ;;
-    esac
-  fi
+  case "$manual_app" in
+    obsidian-run-on)
+      case "$current_tail" in
+        *"Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+    obsidian-markdown-bold)
+      case "$current_tail" in
+        "**Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+    obsidian-markdown-list)
+      case "$current_tail" in
+        "- Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+    *)
+      case "$current_tail" in
+        "Smoke proof feels "*)
+          return 0
+          ;;
+      esac
+      ;;
+  esac
 
   echo "Obsidian first accept did not preserve the disposable proof prefix." >&2
   echo "Current tail: $current_tail" >&2
@@ -11582,7 +11599,12 @@ run_obsidian() {
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
-  elif [[ "$manual_app" == "obsidian-markdown-list" || "$manual_app" == "obsidian-run-on" ]]; then
+  elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then
+    export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
+    export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
+    export AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1
+  elif [[ "$manual_app" == "obsidian-run-on" ]]; then
     export AUTOCOMPLETE_LAB_OBSIDIAN_FORCE_KEYSTROKE_TYPE=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_CLICK_VISIBLE_TAIL=1
     export AUTOCOMPLETE_LAB_OBSIDIAN_VISIBLE_TAIL_REQUIRES_LINE_90=0
@@ -11723,6 +11745,9 @@ run_obsidian() {
     if [[ "$manual_app" == "obsidian-pane" ]]; then
       set_obsidian_caret_to_value_end
       move_obsidian_caret_to_line_end
+    elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then
+      set_obsidian_caret_to_value_end
+      move_obsidian_caret_to_document_end
     elif [[ "$manual_app" == "obsidian" || "$manual_app" == "obsidian-theme" ]]; then
       move_obsidian_caret_to_line_end
     fi

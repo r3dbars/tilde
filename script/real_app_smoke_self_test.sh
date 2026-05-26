@@ -1108,6 +1108,10 @@ if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke
    ! grep -F 'local reset_text="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT:-$marker}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "printf '%s' \"\$reset_text\"" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'obsidian|obsidian-theme|obsidian-pane|obsidian-font-zoom|obsidian-multiline)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'obsidian-markdown-bold)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"**Smoke proof feels "*)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'obsidian-markdown-list)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"- Smoke proof feels "*)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focusAtEnd(editor, text: resetText)" script/obsidian_ax_editor.swift >/dev/null ||
    ! grep -F "focusTextForDocumentEnd(currentText:" script/obsidian_ax_editor.swift >/dev/null ||
    ! grep -F "let replacementText = baseText + insertionText" script/obsidian_ax_editor.swift >/dev/null; then
@@ -1165,6 +1169,22 @@ fi
 if ! grep -F "insertObsidianSystemEventsPasteText" Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
    ! grep -F 'keystroke "v" using command down' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
   echo "real app smoke self-test expected Obsidian insertion to use the proven paste path instead of raw CGEvents" >&2
+  exit 1
+fi
+if ! grep -F 'usedDocumentEndFallback' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F '"documentEndFallback": String(usedDocumentEndFallback)' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'Self.postCommandDownKey()' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian full accept repair to try a document-end fallback before key insertion" >&2
+  exit 1
+fi
+if ! grep -F 'let action: KeyboardAction?' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null ||
+   ! grep -F 'action: baseline.action' Sources/AutocompleteLabApp/App/AppDelegate.swift >/dev/null; then
+  echo "real app smoke self-test expected insertion verification retries to preserve the original acceptance action" >&2
+  exit 1
+fi
+if ! grep -F 'elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'export AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian Markdown list proof to use proof-gated direct value insertion" >&2
   exit 1
 fi
 if ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_DIRECT_VALUE_INSERT=1' script/real_app_smoke.sh >/dev/null ||
@@ -1250,6 +1270,7 @@ normal_required = [
     'assert_obsidian_smoke_target "$first_expected_suffix"',
     'second_start_line="$(line_count "$LOG_PATH")"',
     'type_obsidian_raw_smoke_text "$second_fragment"',
+    'elif [[ "$manual_app" == "obsidian-markdown-list" ]]; then\n      set_obsidian_caret_to_value_end\n      move_obsidian_caret_to_document_end',
 ]
 normal_positions = [normal_branch.find(text) for text in normal_required]
 if any(position < 0 for position in normal_positions) or normal_positions != sorted(normal_positions):
