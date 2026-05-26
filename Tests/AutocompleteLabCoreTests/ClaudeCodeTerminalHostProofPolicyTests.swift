@@ -1268,6 +1268,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(metadata["terminalProofRecoverableInput"] == "true")
         #expect(metadata["terminalProofRecoveryRejectionReason"] == "none")
         #expect(metadata["terminalProofScreenPromptSegmentPresent"] == "true")
+        #expect(metadata["terminalProofScreenSegmentPresent"] == "true")
         #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "true")
         #expect(metadata["terminalProofScreenRecoveryMatchedCandidateIndex"] == "0")
         #expect(metadata["terminalProofScreenRecoveryMismatchCount"] == "0")
@@ -1318,6 +1319,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(metadata["terminalProofTitleScopedScreenRecoverable"] == "true")
         #expect(metadata["terminalProofScreenHeaderScopedMarker"] == "true")
         #expect(metadata["terminalProofTitleScopedScreenCurrentContextMatched"] == "true")
+        #expect(metadata["terminalProofHeaderScopedCurrentMatch"] == "true")
         #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "false")
     }
 
@@ -1421,6 +1423,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == nil)
         #expect(effective == raw)
         #expect(metadata["terminalProofScreenPromptSegmentPresent"] == "true")
+        #expect(metadata["terminalProofScreenSegmentPresent"] == "true")
         #expect(metadata["terminalProofScreenCurrentSuffixCandidateCount"] == "0")
         #expect(metadata["terminalProofScreenRecoveryTriedCandidates"] == "0")
         #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "false")

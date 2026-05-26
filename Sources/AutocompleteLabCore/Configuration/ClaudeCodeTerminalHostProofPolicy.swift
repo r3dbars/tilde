@@ -512,6 +512,9 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             "terminalProofTitleScopedScreenCurrentContextMatched": String(
                 screenRecoveryShape.headerScopedMarker && titleScopedScreenInput != nil
             ),
+            "terminalProofHeaderScopedCurrentMatch": String(
+                screenRecoveryShape.headerScopedMarker && titleScopedScreenInput != nil
+            ),
             "terminalProofRecoveredBeforeChars": String(recoveredInput?.count ?? 0),
             "terminalProofRecoveredWordCount": String(recoveredInput?.split(whereSeparator: \.isWhitespace).count ?? 0),
             "terminalProofRecoveredPartialWordCharacters": String(recoveredPartialWordShape?.characterCount ?? 0),
@@ -544,6 +547,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
                 "terminalProofScreenCurrentSuffixHasShellCommand": String(currentSuffixHasShellCommand),
                 "terminalProofScreenHeaderScopedMarker": String(headerScopedMarker),
                 "terminalProofScreenPromptSegmentPresent": String(promptSegmentPresent),
+                "terminalProofScreenSegmentPresent": String(promptSegmentPresent),
                 "terminalProofScreenRecoveryTriedCandidates": String(recoveryTriedCandidates),
                 "terminalProofScreenRecoveryWouldRecover": String(recoveryWouldRecover),
                 "terminalProofScreenRecoveryMatchedCandidateIndex": String(recoveryMatchedCandidateIndex),
