@@ -212,6 +212,82 @@ func waitForExactValue(_ element: AXUIElement, text: String, timeout: TimeInterv
     return stringAttribute(element, kAXValueAttribute) == text
 }
 
+func treeContainsExactValue(
+    in element: AXUIElement,
+    text: String,
+    marker: String,
+    depth: Int = 0
+) -> Bool {
+    guard depth <= 32 else {
+        return false
+    }
+
+    if isTextInput(element) {
+        let value = stringAttribute(element, kAXValueAttribute)
+        if value == text, value.contains(marker) {
+            return true
+        }
+    }
+
+    return children(of: element).contains { child in
+        treeContainsExactValue(in: child, text: text, marker: marker, depth: depth + 1)
+    }
+}
+
+func exactValueInput(
+    in element: AXUIElement,
+    text: String,
+    marker: String,
+    depth: Int = 0
+) -> AXUIElement? {
+    guard depth <= 32 else {
+        return nil
+    }
+
+    if isTextInput(element) {
+        let value = stringAttribute(element, kAXValueAttribute)
+        if value == text, value.contains(marker) {
+            return element
+        }
+    }
+
+    for child in children(of: element) {
+        if let match = exactValueInput(in: child, text: text, marker: marker, depth: depth + 1) {
+            return match
+        }
+    }
+
+    return nil
+}
+
+func waitForStableTreeExactValue(
+    in appElement: AXUIElement,
+    text: String,
+    marker: String,
+    timeout: TimeInterval,
+    stableDuration: TimeInterval = 0.3
+) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    var stableStart: Date?
+    repeat {
+        if treeContainsExactValue(in: appElement, text: text, marker: marker) {
+            let now = Date()
+            if stableStart == nil {
+                stableStart = now
+            }
+            if let start = stableStart,
+               now.timeIntervalSince(start) >= stableDuration {
+                return true
+            }
+        } else {
+            stableStart = nil
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+    } while Date() < deadline
+
+    return false
+}
+
 func selectCurrentText(_ element: AXUIElement, pid: pid_t, destination: KeyEventDestination? = nil) {
     AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     setSelectedRange(element, location: 0, length: stringAttribute(element, kAXValueAttribute).utf16.count)
@@ -283,16 +359,9 @@ func rangeDescription(_ element: AXUIElement) -> String {
 }
 
 func postCommandRight(to pid: pid_t) {
-    guard let source = CGEventSource(stateID: .hidSystemState),
-          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: true),
-          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 124, keyDown: false) else {
-        return
-    }
-
-    keyDown.flags = .maskCommand
-    keyUp.flags = .maskCommand
-    keyDown.postToPid(pid)
-    keyUp.postToPid(pid)
+    _ = postCommandShortcut(virtualKey: 124, to: pid, destination: .pid)
+    Thread.sleep(forTimeInterval: 0.04)
+    _ = postCommandShortcut(virtualKey: 124, to: pid, destination: .eventTap)
 }
 
 func clickInside(_ frame: CGRect) {
@@ -480,14 +549,14 @@ func bestCandidate(in appElement: AXUIElement, options: Options) -> Candidate? {
         if lhs.hasMarker != rhs.hasMarker {
             return lhs.hasMarker
         }
+        if lhs.looksDisposable != rhs.looksDisposable {
+            return lhs.looksDisposable
+        }
         if lhs.focusedDraftCanBeRestored != rhs.focusedDraftCanBeRestored {
             return lhs.focusedDraftCanBeRestored
         }
         if lhs.focused != rhs.focused {
             return lhs.focused
-        }
-        if lhs.looksDisposable != rhs.looksDisposable {
-            return lhs.looksDisposable
         }
         if lhs.score == rhs.score {
             return lhs.frame.maxY > rhs.frame.maxY
@@ -637,36 +706,77 @@ func seed(options: Options) {
         }
     }
 
-    AXUIElementSetAttributeValue(candidate.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-    let result = AXUIElementSetAttributeValue(
-        candidate.element,
-        kAXValueAttribute as CFString,
-        options.text as CFTypeRef
-    )
+    var targetElement = candidate.element
+    let prefersEventBackedSeeding = options.bundleIdentifier == "com.openai.codex"
+    AXUIElementSetAttributeValue(targetElement, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    let result: AXError?
+    if prefersEventBackedSeeding {
+        result = nil
+    } else {
+        result = AXUIElementSetAttributeValue(
+            targetElement,
+            kAXValueAttribute as CFString,
+            options.text as CFTypeRef
+        )
+    }
     var usedFallback = false
-    if result != .success || stringAttribute(candidate.element, kAXValueAttribute) != options.text {
+    let axValueSettled = result == .success
+        && waitForStableTreeExactValue(
+            in: element,
+            text: options.text,
+            marker: options.marker,
+            timeout: 1.2
+        )
+    if !axValueSettled {
         usedFallback = true
-        if !seedWithSelectedTextFallback(candidate.element, text: options.text, pid: app.processIdentifier),
-           !seedWithPasteFallback(candidate.element, text: options.text, pid: app.processIdentifier) {
-            fail("Could not seed the \(options.displayName) proof composer through Accessibility or guarded paste fallback (AX result \(result.rawValue)).")
+        if let refreshedCandidate = discoverBestCandidate(in: element, options: options) {
+            targetElement = refreshedCandidate.element
         }
+        let fallbackSucceeded = prefersEventBackedSeeding
+            ? seedWithPasteFallback(targetElement, text: options.text, pid: app.processIdentifier)
+            : seedWithSelectedTextFallback(targetElement, text: options.text, pid: app.processIdentifier)
+                || seedWithPasteFallback(targetElement, text: options.text, pid: app.processIdentifier)
+        if !fallbackSucceeded {
+            let resultDescription = result.map { String($0.rawValue) } ?? "skipped"
+            fail("Could not seed the \(options.displayName) proof composer through Accessibility or guarded paste fallback (AX result \(resultDescription)).")
+        }
+        guard waitForStableTreeExactValue(
+            in: element,
+            text: options.text,
+            marker: options.marker,
+            timeout: 1.2
+        ) else {
+            fail("\(options.displayName) proof composer did not keep the disposable marker text in the live app tree after fallback seeding.")
+        }
+    }
+    if let liveTarget = exactValueInput(in: element, text: options.text, marker: options.marker) {
+        targetElement = liveTarget
     }
 
     let cursorOffset = options.text.utf16.count
+    if let frame = rect(for: targetElement) {
+        clickInside(frame)
+        Thread.sleep(forTimeInterval: 0.08)
+    }
     for _ in 0..<4 {
-        AXUIElementSetAttributeValue(candidate.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-        setSelectedRange(candidate.element, location: cursorOffset, length: 0)
+        AXUIElementSetAttributeValue(targetElement, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        setSelectedRange(targetElement, location: cursorOffset, length: 0)
         postCommandRight(to: app.processIdentifier)
         Thread.sleep(forTimeInterval: 0.12)
-        if selectedRangeMatches(candidate.element, location: cursorOffset, length: 0) {
+        if selectedRangeMatches(targetElement, location: cursorOffset, length: 0) {
             break
         }
     }
 
-    guard stringAttribute(candidate.element, kAXValueAttribute) == options.text else {
+    guard waitForStableTreeExactValue(
+        in: element,
+        text: options.text,
+        marker: options.marker,
+        timeout: 1.0
+    ) else {
         fail("\(options.displayName) proof composer did not retain the disposable marker text after seeding.")
     }
-    guard selectedRangeMatches(candidate.element, location: cursorOffset, length: 0) else {
+    guard selectedRangeMatches(targetElement, location: cursorOffset, length: 0) else {
         fail("\(options.displayName) proof composer did not place the cursor at the end of the disposable marker text.")
     }
 
@@ -791,7 +901,11 @@ func restore(options: Options) {
     )
     if result == .success {
         setSelectedRange(target, location: restoreText.utf16.count, length: 0)
-        print("Restored \(options.displayName) proof composer: chars=\(restoreText.count)")
+        if restoreText.isEmpty {
+            print("Cleared \(options.displayName) proof composer after proof.")
+        } else {
+            print("Restored \(options.displayName) proof composer: chars=\(restoreText.count)")
+        }
     } else {
         fputs("\(options.displayName) draft restore failed (AX result \(result.rawValue)).\n", stderr)
     }

@@ -603,19 +603,30 @@ final class SuggestionOrchestrator {
             latencyMilliseconds: latencyMilliseconds,
             supportLevel: profile.supportLevel
         )
-        let confidenceMetadata = [
+        let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && profile.requiresNoSubmitAcceptanceProof
+            && request.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)
+            && request.textAfterCursor.isEmpty
+        var confidenceMetadata = [
             "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
             "completionConfidenceScore": String(confidenceDecision.score),
             "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
         ]
+        if promptProofLatencyBypass {
+            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
+        }
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
+            && !promptProofLatencyBypass
             && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
                 for: request,
                 suggestion: suggestion
             )
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
+            && !promptProofLatencyBypass
             && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
+            && (!promptProofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,

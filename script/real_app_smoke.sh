@@ -3016,10 +3016,20 @@ end tell
 APPLESCRIPT
 }
 
-press_key_code_cgevent() {
-  local key_code="$1"
+cgevent_keypress_helper_path() {
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v1}"
+}
 
-  swift - "$key_code" <<'SWIFT'
+ensure_cgevent_keypress_helper() {
+  local helper source
+  helper="$(cgevent_keypress_helper_path)"
+  if [[ -x "$helper" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$helper")"
+  source="${helper}.$$.swift"
+  cat >"$source" <<'SWIFT'
 import ApplicationServices
 import Foundation
 
@@ -3038,6 +3048,22 @@ keyDown.post(tap: .cghidEventTap)
 usleep(20_000)
 keyUp.post(tap: .cghidEventTap)
 SWIFT
+
+  if ! swiftc "$source" -o "$helper"; then
+    rm -f "$source" "$helper" >/dev/null 2>&1 || true
+    return 1
+  fi
+  chmod 700 "$helper" >/dev/null 2>&1 || true
+  rm -f "$source" >/dev/null 2>&1 || true
+}
+
+press_key_code_cgevent() {
+  local key_code="$1"
+  local helper
+
+  ensure_cgevent_keypress_helper
+  helper="$(cgevent_keypress_helper_path)"
+  "$helper" "$key_code"
 }
 
 file_url() {
@@ -8235,9 +8261,29 @@ end tell
 APPLESCRIPT
 }
 
+codex_ax_helper() {
+  local action="$1"
+  shift
+  swift script/prompt_app_ax_proof_helper.swift "$action" \
+    --bundle com.openai.codex \
+    --display Codex \
+    --marker "AUTOCOMPLETE_LAB_CODEX_PROOF" \
+    --hint "Ask Codex anything" \
+    --hint "Ask for follow-up changes" \
+    --hint "Describe a task or ask a question" \
+    "$@"
+}
+
 seed_codex_proof_prompt() {
   local proof_text="$1"
   local backup_path="${2:-}"
+
+  codex_ax_helper seed \
+    --text "$proof_text" \
+    --backup "$backup_path" \
+    --clear-if-no-backup \
+    --discovery-timeout "${AUTOCOMPLETE_LAB_CODEX_COMPOSER_DISCOVERY_TIMEOUT_SECONDS:-10}"
+  return 0
 
   swift - "$proof_text" "$backup_path" <<'SWIFT'
 import AppKit
@@ -8550,9 +8596,15 @@ SWIFT
 }
 
 restore_codex_draft_if_needed() {
-  if [[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+  if [[ -z "$CODEX_DRAFT_BACKUP_PATH" || ! -f "$CODEX_DRAFT_BACKUP_PATH" ]]; then
     return 0
   fi
+
+  codex_ax_helper restore --backup "$CODEX_DRAFT_BACKUP_PATH" --clear-if-no-backup || true
+  rm -f "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+  CODEX_DRAFT_BACKUP_PATH=""
+  CODEX_DRAFT_BACKUP_ACTIVE=0
+  return 0
 
   swift - "$CODEX_DRAFT_BACKUP_PATH" <<'SWIFT' || true
 import AppKit
@@ -8629,7 +8681,11 @@ AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBoolean
 let result = AXUIElementSetAttributeValue(target, kAXValueAttribute as CFString, restoreText as CFTypeRef)
 if result == .success {
     setSelectedRange(target, location: restoreText.utf16.count, length: 0)
-    print("Restored existing Codex draft after proof: chars=\(restoreText.count)")
+    if restoreText.isEmpty {
+        print("Cleared Codex proof composer after proof.")
+    } else {
+        print("Restored existing Codex draft after proof: chars=\(restoreText.count)")
+    }
 } else {
     fputs("Codex draft restore failed (AX result \(result.rawValue)).\n", stderr)
 }
@@ -8641,6 +8697,9 @@ SWIFT
 }
 
 focus_codex_proof_prompt() {
+  codex_ax_helper focus
+  return 0
+
   swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -8837,6 +8896,9 @@ SWIFT
 assert_codex_proof_prompt_ready() {
   local proof_text="$1"
 
+  codex_ax_helper assert --text "$proof_text"
+  return 0
+
   swift - "$proof_text" <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -8934,6 +8996,9 @@ SWIFT
 }
 
 assert_codex_prompt_retains_marker() {
+  codex_ax_helper contains-marker
+  return 0
+
   swift - <<'SWIFT'
 import AppKit
 import ApplicationServices
@@ -9786,11 +9851,11 @@ describe_plan() {
         echo "Safety: Codex model latency proof disables fast word completions and phrase continuations for that launch so local word-completion model timing is required."
         echo "Safety: Codex model latency proof tags the runtime launch with scenario codex-model-latency so generic prompt samples cannot satisfy the strict selector."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; it runs the prompt no-submit gate on the same trace slice."
-        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
       else
         echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
-        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
       fi
       ;;
     claude-code)
@@ -10170,6 +10235,7 @@ run_codex() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "Codex Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Codex runtime readiness" 60 "$SKIP_BUILD"
+  ensure_cgevent_keypress_helper
 
   start_line="$(line_count "$LOG_PATH")"
   trace_start_line="$(line_count "$TRACE_PATH")"
@@ -10182,9 +10248,8 @@ run_codex() {
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
   assert_frontmost_app "Codex" "Codex proof"
-  assert_codex_proof_prompt_ready "$proof_text"
-  sleep 0.2
-  press_key_code 48
+  sleep 0.05
+  press_key_code_cgevent 48
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \
     "keyboard-action" \
     "app=com.openai.codex" \
