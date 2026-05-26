@@ -397,6 +397,10 @@ header tails unless screen recovery finds the real prompt line. The policy can
 now recover a proof marker from Ghostty's terminal header/screen only when the
 current AX fragment still matches the recovered prompt row, and it allows
 Claude prompt box chrome after that row without treating the chrome as input.
+The next diagnostic pass also emits redacted shape counters for screen suffix
+candidates, header-scoped markers, prompt-segment presence, and recovery
+match/mismatch counts, so the next Ghostty run can be debugged without logging
+the prompt text.
 `swift test --filter ClaudeCodeTerminalHostProofPolicyTests --jobs 1` passed
 with 75 tests for those safe-recovery and rejection cases. The latest live
 `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
