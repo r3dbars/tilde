@@ -3009,6 +3009,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordTextContextRepairIfNeeded(repair, context: context, profile: profile)
         }
 
+        let terminalScreenPromptAnchor = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ).flatMap {
+            ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: $0)
+        }
+
         if let proofInputText = claudeCodeTerminalHostProofInputText(
             app: app,
             context: context,
@@ -3040,11 +3048,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               shouldUseSyntheticTextAreaCaret(for: app, profile: profile, context: context),
               let syntheticCaret = syntheticTextAreaCaretRect(
                 for: context,
-                bundleIdentifier: syntheticCaretBundleIdentifier
+                bundleIdentifier: syntheticCaretBundleIdentifier,
+                terminalScreenPromptAnchor: terminalScreenPromptAnchor
               ) else {
             return context
         }
 
+        let syntheticCaretSource = syntheticCaretBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            && terminalScreenPromptAnchor != nil
+            ? "terminal-screen-prompt"
+            : "text-area-estimate"
         let capabilities = FocusedTextCapabilities(
             canReadValue: context.capabilities.canReadValue,
             canReadSelectedTextRange: context.capabilities.canReadSelectedTextRange,
@@ -3053,7 +3066,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             canSetSelectedText: context.capabilities.canSetSelectedText
         )
 
-        recordSyntheticCaretIfNeeded(syntheticCaret, context: context, profile: profile)
+        recordSyntheticCaretIfNeeded(
+            syntheticCaret,
+            context: context,
+            profile: profile,
+            source: syntheticCaretSource
+        )
 
         return FocusedTextContext(
             elementIdentifier: context.elementIdentifier,
@@ -3252,7 +3270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func syntheticTextAreaCaretRect(
         for context: FocusedTextContext,
-        bundleIdentifier: String
+        bundleIdentifier: String,
+        terminalScreenPromptAnchor: ClaudeCodeTerminalScreenPromptAnchor? = nil
     ) -> CGRect? {
         guard context.role == "AXTextArea",
               let elementRect = context.elementRect,
@@ -3264,6 +3283,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let tuning = syntheticTextAreaTuning(for: context, bundleIdentifier: bundleIdentifier)
         let font = tuning.font ?? syntheticTextAreaFont(for: context, bundleIdentifier: bundleIdentifier)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
+
+        if bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+           let terminalScreenPromptAnchor,
+           let terminalScreenCaret = TerminalScreenPromptCaretEstimator.caretRect(
+            promptAnchor: terminalScreenPromptAnchor,
+            elementRect: elementRect,
+            windowRect: context.windowRect,
+            lineHeight: lineHeight,
+            horizontalPadding: tuning.horizontalPadding,
+            inlineGap: tuning.inlineGap,
+            widthOfText: { width(of: $0, font: font) }
+           ) {
+            return terminalScreenCaret
+        }
 
         if let obsidianScrolledCaret = obsidianScrolledCodeMirrorSyntheticCaretRect(
             for: context,
@@ -3475,12 +3508,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func recordSyntheticCaretIfNeeded(
         _ caret: CGRect,
         context: FocusedTextContext,
-        profile: CompatibilityProfile
+        profile: CompatibilityProfile,
+        source: String = "text-area-estimate"
     ) {
         let signature = [
             profile.bundleIdentifier,
             String(context.textBeforeCursor.count),
-            compactRectDescription(caret)
+            compactRectDescription(caret),
+            source
         ].joined(separator: "|")
 
         guard signature != lastSyntheticCaretDiagnosticSignature else {
@@ -3492,7 +3527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "synthetic-caret",
             metadata: [
                 "app": profile.bundleIdentifier,
-                "source": "text-area-estimate",
+                "source": source,
                 "caret": compactRectDescription(caret),
                 "beforeChars": String(context.textBeforeCursor.count)
             ]
