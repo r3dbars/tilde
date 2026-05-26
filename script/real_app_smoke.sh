@@ -60,7 +60,7 @@ SMOKE_PHASE="startup"
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|codex|claude-code|claude-code-terminal|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -105,7 +105,7 @@ to run bounded proof against top-level public demo pages with disposable text.
 Use --fixture browser-chat-harness, or script/real_browser_chat_proof.sh, for a
 bounded HTTP browser-chat no-submit proof harness. That harness proves only the
 disposable harness surface, not Slack, Discord, ChatGPT, or broad chat support.
-The google-docs, notion, browser-chatgpt, browser-slack, and browser-discord
+The google-docs, notion, browser-webmail, browser-gmail, browser-outlook, browser-chatgpt, browser-slack, and browser-discord
 fixtures are blocked preflight labels: they document the next high-value
 surfaces but refuse to type until a safe disposable proof path exists.
 Use
@@ -376,7 +376,7 @@ case "$APP" in
 esac
 
 case "$CHROME_FIXTURE" in
-  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-chatgpt|browser-slack|browser-discord|all)
+  textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all)
     ;;
   *)
     echo "Unknown Chrome fixture: $CHROME_FIXTURE" >&2
@@ -2688,7 +2688,7 @@ chrome_fixture_is_public_text_field_demo() {
 
 chrome_fixture_is_blocked_high_value_surface() {
   case "$1" in
-    google-docs|notion|browser-chatgpt|browser-slack|browser-discord)
+    google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord)
       return 0
       ;;
     *)
@@ -2704,6 +2704,9 @@ chrome_blocked_high_value_surface_reason() {
       ;;
     notion)
       printf 'Notion is blocked until a disposable page proves ProseMirror placement, safe Tab, insertion verification, undo/recovery, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
+      ;;
+    browser-webmail|browser-gmail|browser-outlook)
+      printf 'Browser webmail is blocked until a disposable reply proves safe one-word Tab accept, no send, insertion verification, undo/recovery, latency, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
       ;;
     browser-chatgpt)
       printf 'Browser ChatGPT is blocked until a disposable prompt proves one-word Tab accept, no submit/send, insertion verification, undo/recovery, no sensitive-field leak, and screenshot-backed current-head evidence.\n'
@@ -5857,6 +5860,15 @@ for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == 
 
 exit(1)
 SWIFT
+}
+
+insert_textedit_smoke_fragment() {
+  local window_title="$1"
+  local fragment="$2"
+  local current_text
+
+  current_text="$(textedit_document_text "$window_title")"
+  set_textedit_document_text "$window_title" "${current_text}${fragment}"
 }
 
 textedit_smoke_allows_ax_proof_typing() {

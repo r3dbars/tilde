@@ -67,6 +67,7 @@ Do not write-test these as normal beta apps. Use them only as proof targets:
 These stay off until proof says otherwise:
 
 - Mail
+- Browser webmail, including Gmail and Outlook in a browser
 - Atlas
 - Slack
 - Discord

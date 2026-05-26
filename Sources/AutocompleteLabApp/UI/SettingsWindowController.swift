@@ -1247,7 +1247,7 @@ final class SettingsWindowController: NSObject {
         permissionDetailLabel.stringValue = permission.detailText
         controlLabel.stringValue = pauseControl.settingsSummaryText
         controlDetailLabel.stringValue = pauseControl.settingsDetailText
-        suggestionDecisionLabel.stringValue = "Why: \(lastSuggestionDecision)"
+        suggestionDecisionLabel.stringValue = SuggestionDecisionPresentation(lastSuggestionDecision).settingsText
         togglePauseButton.state = suggestionsPaused ? .off : .on
         togglePauseButton.title = pauseControl.toggleTitle
         pause15MinutesButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
