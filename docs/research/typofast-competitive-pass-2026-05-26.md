@@ -62,7 +62,7 @@ Scale: 1 low, 5 high. For effort/risk, 5 means expensive or risky.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | Filter active typed line out of OCR prompt context | 5 | 4 | 5 | 2 | 2 | 5 | 5 | Shipped in this pass |
 | Add trace/eval assertion for active-line filtering | 4 | 3 | 5 | 1 | 1 | 5 | 5 | Shipped in this pass |
-| Diagnostics line for OCR active-line filtered yes/no | 3 | 2 | 5 | 2 | 1 | 4 | 4 | Next |
+| Diagnostics line for OCR active-line filtered yes/no | 3 | 2 | 5 | 2 | 1 | 4 | 4 | Shipped in follow-up |
 | Pre-read suppression for URL/search/form when AX metadata is enough | 5 | 5 | 5 | 3 | 3 | 5 | 4 | Next |
 | Expand browser/search/payment/webmail fixtures | 5 | 5 | 5 | 3 | 2 | 5 | 5 | Next |
 | Prompt/session cache metrics in UI | 3 | 2 | 4 | 4 | 4 | 3 | 3 | Later, evidence-led |
@@ -74,6 +74,7 @@ Scale: 1 low, 5 high. For effort/risk, 5 means expensive or risky.
 
 - OCR prompt boundary: [Sources/AutocompleteLabCore/Engine/VisiblePageContext.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Sources/AutocompleteLabCore/Engine/VisiblePageContext.swift). Gap was that visible context could carry the same active typed line into model prompt context. Fixed by adding `excludingActiveTextLine` and `visiblePageContextActiveLineFiltered` metadata.
 - OCR provider handoff: [Sources/AutocompleteLabApp/Mac/VisiblePageContextProvider.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Sources/AutocompleteLabApp/Mac/VisiblePageContextProvider.swift). Fixed by deriving the current line from `FocusedTextContext.textBeforeCursor` before background OCR capture.
+- Diagnostics proof: [Sources/AutocompleteLabApp/UI/DiagnosticsWindowController.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Sources/AutocompleteLabApp/UI/DiagnosticsWindowController.swift). Follow-up now shows whether screen context removed the active typed line without showing the line itself.
 - Prompt eval proof: [Tests/AutocompleteLabCoreTests/MagicWritingOCRPromptEvalTests.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Tests/AutocompleteLabCoreTests/MagicWritingOCRPromptEvalTests.swift). Added a focused prompt test that keeps reply context while suppressing active-line echo.
 - OCR sanitizer proof: [Tests/AutocompleteLabCoreTests/VisiblePageContextTests.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Tests/AutocompleteLabCoreTests/VisiblePageContextTests.swift). Added exact and prefix active-line filtering tests.
 - Existing suppression and privacy surfaces that remain the right next targets: [Sources/AutocompleteLabCore/Session/SensitiveTextFieldPolicy.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Sources/AutocompleteLabCore/Session/SensitiveTextFieldPolicy.swift), [Sources/AutocompleteLabCore/Session/AXFieldClassifier.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Sources/AutocompleteLabCore/Session/AXFieldClassifier.swift), [Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Sources/AutocompleteLabCore/Configuration/BrowserHostedSurfacePolicy.swift), [Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift](/Users/redbars/.codex/worktrees/7cb0/transcripted-autocomplete-lab/Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift).
@@ -86,14 +87,14 @@ This pass intentionally picked one small shipped improvement:
 2. Derive the active typed line from the focused text context before OCR capture.
 3. Filter OCR lines that exactly match, contain, or prefix-match the active typed line after normalization.
 4. Expose redacted metadata only: whether active-line filtering happened, not the filtered text.
-5. Prove with focused unit tests and prompt eval tests.
+5. Show that redacted metadata in diagnostics without exposing raw typed text.
+6. Prove with focused unit tests and prompt eval tests.
 
 Next best follow-ups:
 
-1. Add a Diagnostics/Settings proof row: `Screen context filtered current line: yes/no`.
-2. Add pre-read suppression when AX metadata already identifies URL/search/form/unknown risky surfaces.
-3. Expand browser hosted surface fixtures for search, recipient, subject, login, payment, Google Docs, Notion, Slack, Discord, and prompt apps.
-4. Refresh stale proof manifest/manual smoke gates before claiming beta readiness.
+1. Add pre-read suppression when AX metadata already identifies URL/search/form/unknown risky surfaces.
+2. Expand browser hosted surface fixtures for search, recipient, subject, login, payment, Google Docs, Notion, Slack, Discord, and prompt apps.
+3. Refresh stale proof manifest/manual smoke gates before claiming beta readiness.
 
 ## Scorecard
 
@@ -109,8 +110,8 @@ Next best follow-ups:
 | Visual placement | B+ | B+ | Unchanged. |
 | Latency | B | B | Unchanged. |
 | Local-first/privacy | A- | A | OCR prompt boundary is safer. |
-| Onboarding/trust | B | B+ | Research doc plus trace metadata makes the behavior easier to explain. |
-| Diagnostics | B | B+ | Metadata exists; visible UI row remains next. |
+| Onboarding/trust | B | B+ | Research doc, trace metadata, and diagnostics row make the behavior easier to explain. |
+| Diagnostics | B | A- | Diagnostics now shows the redacted active-line filter state. |
 | Beta readiness | C+ | B- | Improved one trust edge; stale global proof gates remain. |
 | Test coverage | B+ | A- | Added OCR sanitizer and prompt eval tests. |
 
