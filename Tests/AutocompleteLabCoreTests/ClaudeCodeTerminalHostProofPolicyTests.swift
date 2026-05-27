@@ -1729,6 +1729,22 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ))
     }
 
+    @Test("Ghostty terminal proof requires a terminal-screen prompt caret")
+    func ghosttyTerminalProofRequiresTerminalScreenPromptCaret() {
+        #expect(ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: "com.mitchellh.ghostty"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: "com.apple.Terminal"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: "com.googlecode.iterm2"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: nil
+        ))
+    }
+
     @Test("Unsafe terminal proof keeps raw suppressed field kind")
     func unsafeTerminalProofKeepsRawSuppressedFieldKind() {
         let raw = AXFieldClassification(
