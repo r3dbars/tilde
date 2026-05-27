@@ -478,15 +478,15 @@ after Ghostty AX identity wobble and preserves one-word key capture for virtual
 Claude Code proof suggestions across host-profile churn.
 
 Live detached runs are still non-green, but the failure has moved again. The
-current branch can produce proof-scoped Ghostty prompt-row suggestions after the
-final trigger: `20260527T115812Z-ghostty` found one at diagnostics line `641163`.
-That proves the suggestion-quality and placement half of the Ghostty lane much
-more cleanly than the earlier pre-trigger failures. The remaining red bar is
-hot-key delivery. The same run saw delayed `key=tab` evidence around diagnostics
-line `641700` as `passthrough-after-typing`, roughly a minute after the prompt-row
-suggestion, with no `keyboard-action ... handled=true`. The next useful proof
-slice is a different immediate accept driver or tighter key-injection path that
-gets Tab to SteadyType while the suggestion is still hot, then proves one-word
+current branch can produce proof-scoped Ghostty prompt-row suggestions after
+the final trigger: `20260527T122057Z-ghostty` found one at diagnostics line
+`645062`. The harness now warms the CGEvent Tab helper before any prompt
+suggestion can appear and refuses to compile that helper on the hot accept path,
+so the remaining red bar is no longer a cold Swift helper compile. The run still
+failed because a later Tab arrived as diagnostics line `645597`
+`passthrough-after-typing`, with no `keyboard-action ... handled=true`. The next
+useful proof slice is an accept driver that gets a clean Tab-equivalent to
+SteadyType while the prompt-row suggestion is still hot, then proves one-word
 no-submit insertion.
 
 ## Scorecard

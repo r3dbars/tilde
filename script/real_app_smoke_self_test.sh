@@ -1711,6 +1711,8 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'accept_start_line="$pre_trigger_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'guard_ghostty_frontmost_bundle_fallback' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'frontmost_bundle_identifier()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$frontmost_bundle" == "$host_bundle"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'frontmost_claude_code_terminal_host_app_is_active "$frontmost_pid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'frontmost_claude_code_terminal_proof_pid_matches "$frontmost_pid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_log_line_number_optional \' script/real_app_smoke.sh >/dev/null ||
@@ -1718,6 +1720,30 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'produced no visible suggestion; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts with Ghostty frontmost fallback and field-scoped prompt-row suggestion detection after typed prompt readiness, including still-visible Ghostty prefix suggestions" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("frontmost_claude_code_terminal_host_app_is_active()")
+end = source.index("\nguard_ghostty_frontmost_bundle_fallback()", start)
+block = source[start:end]
+expected_order = [
+    'host_bundle="$(claude_code_host_bundle_id)"',
+    'frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"',
+    'frontmost_bundle" == "$host_bundle"',
+    'host_process="$(claude_code_host_process_name)"',
+]
+position = -1
+for expected in expected_order:
+    next_position = block.find(expected, position + 1)
+    if next_position == -1:
+        raise SystemExit(1)
+    position = next_position
+PY
+then
+  echo "real app smoke self-test expected Ghostty frontmost fallback to trust bundle id before process-name matching" >&2
   exit 1
 fi
 if ! awk '
@@ -1915,11 +1941,20 @@ if ! grep -F 'claude_code_terminal_suggestion_cancelled_by_screen_geometry()' sc
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadytype-cgevent-keypress-v3' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype-cgevent-keypress-v4' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEventSource(stateID: .hidSystemState)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'let tapArgument = CommandLine.arguments.count == 3 ? CommandLine.arguments[2] : "hid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'tap = .cgSessionEventTap' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'helper is not warm; refusing to compile on the hot accept path.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyDown.flags = []' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyUp.flags = []' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through fresh HID CGEvents" >&2
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through fresh CGEvents with HID and session tap support" >&2
+  exit 1
+fi
+if ! grep -F 'warm_claude_code_terminal_hot_accept_helpers()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof warming CGEvent Tab helper before prompt suggestions.' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /wait_for_runtime_ready/ { saw_runtime = 1 } in_smoke && saw_runtime && /warm_claude_code_terminal_hot_accept_helpers "\$host_name"/ { saw_warm = 1 } in_smoke && saw_warm && /cleanup_stale_claude_code_terminal_proofs/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty proof to precompile the CGEvent Tab helper before any visible suggestion can go stale" >&2
   exit 1
 fi
 if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
@@ -1935,6 +1970,8 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"session"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"warm"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /press_key_code_cgevent_with_timeout/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /wait_for_log_fields_optional/ { saw_probe = 1 } in_fn && saw_probe && /key code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
@@ -2290,9 +2327,11 @@ if ! awk '
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /handled=false/ { saw_fail_closed = 1 }
   in_helper && /Observed handled=false/ { saw_message = 1 }
-  END { exit (saw_fail_closed && saw_message) ? 0 : 1 }
+  in_helper && /decision=passthrough-after-typing/ { saw_stale_tab = 1 }
+  in_helper && /Tab acceptance went stale before the app could accept it/ { saw_stale_message = 1 }
+  END { exit (saw_fail_closed && saw_message && saw_stale_tab && saw_stale_message) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code terminal-host acceptance helper to fail fast on handled=false" >&2
+  echo "real app smoke self-test expected Claude Code terminal-host acceptance helper to fail fast on handled=false and stale after-typing Tab" >&2
   exit 1
 fi
 if awk '
