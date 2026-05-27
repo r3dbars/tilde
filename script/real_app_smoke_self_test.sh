@@ -382,6 +382,16 @@ if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proo
     raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
 if "pollTimer?.fireDate" in app_delegate:
     raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
+placement_gate_start = app_delegate.index("let syntheticCaretBundleIdentifier = syntheticTextAreaCaretBundleIdentifier(")
+placement_gate_end = app_delegate.index("guard supportsSyntheticTextAreaCaret", placement_gate_start)
+placement_gate_block = app_delegate[placement_gate_start:placement_gate_end]
+if "requiresTerminalScreenPromptCaret" not in placement_gate_block or "missing-terminal-screen-prompt" not in placement_gate_block:
+    raise SystemExit("Ghostty Claude Code proof must reject generic top-row synthetic carets without terminal-screen-prompt placement")
+synthetic_record_start = app_delegate.index("private func recordSyntheticCaretIfNeeded(")
+synthetic_record_end = app_delegate.index("private func recordTextContextRepairIfNeeded(", synthetic_record_start)
+synthetic_record_block = app_delegate[synthetic_record_start:synthetic_record_end]
+if 'source != "terminal-screen-prompt"' not in synthetic_record_block:
+    raise SystemExit("Ghostty Claude Code proof must keep recording terminal-screen-prompt caret evidence for the live harness")
 terminal_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(")
 terminal_insert_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_insert_start)
 terminal_insert_block = app_delegate[terminal_insert_start:terminal_insert_end]
@@ -1771,8 +1781,6 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'wait_for_claude_code_terminal_suggestion_line_optional' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fieldKindReason=claude-code-terminal-host-proof' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'source=terminal-screen-prompt' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'ghostty_suggestion_line_has_prompt_row_anchor' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'find_claude_code_terminal_suggestion_line_optional' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'find_recent_claude_code_terminal_suggestion_line_optional' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'awk \' script/real_app_smoke.sh >/dev/null ||
@@ -1784,7 +1792,9 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'suggestion_start_line="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'pre_trigger_suggestion_start_line="$suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'find_recent_claude_code_terminal_suggestion_line_optional "$start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'accept_start_line="$pre_trigger_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'accept_start_line="$start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'guard_ghostty_frontmost_bundle_fallback' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'frontmost_bundle_identifier()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"$frontmost_bundle" == "$host_bundle"' script/real_app_smoke.sh >/dev/null ||
@@ -1795,6 +1805,11 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'produced no visible suggestion; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts with Ghostty frontmost fallback and field-scoped prompt-row suggestion detection after typed prompt readiness, including still-visible Ghostty prefix suggestions" >&2
+  exit 1
+fi
+if grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y' script/real_app_smoke.sh >/dev/null ||
+   grep -F 'ghostty_suggestion_line_has_prompt_row_anchor' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof to require app-proven terminal-screen-prompt evidence instead of low-y prompt-row heuristics" >&2
   exit 1
 fi
 if ! python3 - <<'PY'
@@ -1908,22 +1923,20 @@ then
   exit 1
 fi
 cat >"$TMP_DIR/ghostty-recent-suggestion.log" <<'EOF'
+2026-05-27T00:00:00Z synthetic-caret app=com.anthropic.claude-code beforeChars=84 caret=x=130,y=868,w=0,h=22 source=terminal-screen-prompt
 2026-05-27T00:00:00Z suggestion-presented afterChars=0 anchorRect=x=130,y=868,w=0,h=22 app=com.anthropic.claude-code beforeChars=84 fieldKindReason=claude-code-terminal-host-proof fieldKindSuppressed=false placementAnchorSource=synthetic-caret visibleWords=3
 2026-05-27T00:00:01Z status accessibility=AX ok app=Ghostty decision=Shown
 EOF
-if ! awk -v start="0" -v min_anchor_y="160" '
+if ! awk -v start="0" '
   NR <= start { next }
   {
     is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
   }
+  index($0, "synthetic-caret") && index($0, "app=com.anthropic.claude-code") && index($0, "source=terminal-screen-prompt") {
+    saw_terminal_screen_prompt = 1
+  }
   is_terminal_proof_suggestion != 0 {
-    anchor_y = $0
-    if (anchor_y !~ /anchorRect=x=-?[0-9]+,y=-?[0-9]+,/) {
-      next
-    }
-    sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
-    sub(/,.*/, "", anchor_y)
-    if ((anchor_y + 0) < min_anchor_y && index($0, "partialWordCharacters=") == 0) {
+    if (saw_terminal_screen_prompt == 0) {
       next
     }
     candidate = NR
@@ -1955,7 +1968,7 @@ if ! awk -v start="0" -v min_anchor_y="160" '
       print candidate
     }
   }
-' "$TMP_DIR/ghostty-recent-suggestion.log" | grep -Fx "1" >/dev/null; then
+' "$TMP_DIR/ghostty-recent-suggestion.log" | grep -Fx "2" >/dev/null; then
   echo "real app smoke self-test expected Ghostty recent-suggestion bridge awk to select a live prompt-row suggestion" >&2
   exit 1
 fi
@@ -1963,19 +1976,16 @@ cat >"$TMP_DIR/ghostty-recent-low-y-live-suggestion.log" <<'EOF'
 2026-05-27T00:00:00Z suggestion-presented afterChars=0 anchorRect=x=389,y=74,w=0,h=20 app=com.anthropic.claude-code beforeChars=42 fieldKindReason=claude-code-terminal-host-proof fieldKindSuppressed=false partialWordCharacters=7 placementAnchorSource=synthetic-caret visibleWords=8
 2026-05-27T00:00:01Z status accessibility=AX ok app=Ghostty decision=Shown
 EOF
-if ! awk -v start="0" -v min_anchor_y="160" '
+if awk -v start="0" '
   NR <= start { next }
   {
     is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
   }
+  index($0, "synthetic-caret") && index($0, "app=com.anthropic.claude-code") && index($0, "source=terminal-screen-prompt") {
+    saw_terminal_screen_prompt = 1
+  }
   is_terminal_proof_suggestion != 0 {
-    anchor_y = $0
-    if (anchor_y !~ /anchorRect=x=-?[0-9]+,y=-?[0-9]+,/) {
-      next
-    }
-    sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
-    sub(/,.*/, "", anchor_y)
-    if ((anchor_y + 0) < min_anchor_y && index($0, "partialWordCharacters=") == 0) {
+    if (saw_terminal_screen_prompt == 0) {
       next
     }
     candidate = NR
@@ -1986,8 +1996,8 @@ if ! awk -v start="0" -v min_anchor_y="160" '
       print candidate
     }
   }
-' "$TMP_DIR/ghostty-recent-low-y-live-suggestion.log" | grep -Fx "1" >/dev/null; then
-  echo "real app smoke self-test expected Ghostty recent-suggestion bridge awk to accept low-y live partial-word prompt suggestions" >&2
+' "$TMP_DIR/ghostty-recent-low-y-live-suggestion.log" | grep -q .; then
+  echo "real app smoke self-test expected Ghostty recent-suggestion bridge awk to reject low-y header suggestions without terminal-screen-prompt proof" >&2
   exit 1
 fi
 if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/real_app_smoke.sh >/dev/null ||

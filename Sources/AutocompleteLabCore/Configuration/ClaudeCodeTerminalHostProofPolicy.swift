@@ -134,6 +134,12 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             && requiresNoSubmitAcceptanceProof
     }
 
+    public static func requiresTerminalScreenPromptCaret(
+        hostBundleIdentifier: String?
+    ) -> Bool {
+        hostBundleIdentifier == "com.mitchellh.ghostty"
+    }
+
     public static let supportedHostVariants: [ClaudeCodeTerminalHostVariant] = [
         ClaudeCodeTerminalHostVariant(
             id: "terminal",

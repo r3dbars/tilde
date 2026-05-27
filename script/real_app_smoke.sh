@@ -1519,38 +1519,16 @@ line_has_all_fields() {
   return 0
 }
 
-ghostty_suggestion_line_has_prompt_row_anchor() {
-  local line="$1"
-  local min_y="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y:-160}"
-  local anchor_y
-
-  if ! [[ "$min_y" =~ ^[0-9]+$ ]]; then
-    min_y=160
-  fi
-  if ! [[ "$line" =~ anchorRect=x=-?[0-9]+,y=(-?[0-9]+), ]]; then
-    return 1
-  fi
-
-  anchor_y="${BASH_REMATCH[1]}"
-  ((anchor_y >= min_y))
-}
-
 find_claude_code_terminal_suggestion_line_optional() {
   local start_line="$1"
-  local matched_line min_anchor_y
+  local matched_line
   MATCHED_LOG_LINE=0
 
   [[ -f "$LOG_PATH" ]] || return 1
 
-  min_anchor_y="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y:-160}"
-  if ! [[ "$min_anchor_y" =~ ^[0-9]+$ ]]; then
-    min_anchor_y=160
-  fi
-
   matched_line="$(awk \
     -v start="$start_line" \
-    -v host_variant="$CLAUDE_CODE_HOST_VARIANT" \
-    -v min_anchor_y="$min_anchor_y" '
+    -v host_variant="$CLAUDE_CODE_HOST_VARIANT" '
       NR <= start {
         next
       }
@@ -1569,15 +1547,7 @@ find_claude_code_terminal_suggestion_line_optional() {
       }
 
       (host_variant == "ghostty") && (saw_terminal_screen_prompt == 0) {
-        anchor_y = $0
-        if (anchor_y !~ /anchorRect=x=-?[0-9]+,y=-?[0-9]+,/) {
-          next
-        }
-        sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
-        sub(/,.*/, "", anchor_y)
-        if ((anchor_y + 0) < min_anchor_y && index($0, "partialWordCharacters=") == 0) {
-          next
-        }
+        next
       }
 
       {
@@ -1596,7 +1566,7 @@ find_claude_code_terminal_suggestion_line_optional() {
 
 find_recent_claude_code_terminal_suggestion_line_optional() {
   local preferred_start_line="$1"
-  local current_line recent_window_lines recent_start_line matched_line min_anchor_y
+  local current_line recent_window_lines recent_start_line matched_line
 
   recent_window_lines="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_RECENT_SUGGESTION_SCAN_LINES:-260}"
   [[ "$recent_window_lines" =~ ^[0-9]+$ ]] || recent_window_lines=260
@@ -1607,14 +1577,8 @@ find_recent_claude_code_terminal_suggestion_line_optional() {
     if ((recent_start_line < preferred_start_line)); then
       recent_start_line="$preferred_start_line"
     fi
-    min_anchor_y="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y:-160}"
-    if ! [[ "$min_anchor_y" =~ ^[0-9]+$ ]]; then
-      min_anchor_y=160
-    fi
-
     matched_line="$(awk \
-      -v start="$recent_start_line" \
-      -v min_anchor_y="$min_anchor_y" '
+      -v start="$recent_start_line" '
         NR <= start {
           next
         }
@@ -1623,19 +1587,17 @@ find_recent_claude_code_terminal_suggestion_line_optional() {
           is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
         }
 
-        is_terminal_proof_suggestion != 0 {
-          anchor_y = $0
-          if (anchor_y !~ /anchorRect=x=-?[0-9]+,y=-?[0-9]+,/) {
-            next
-          }
-          sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
-          sub(/,.*/, "", anchor_y)
-          if ((anchor_y + 0) < min_anchor_y && index($0, "partialWordCharacters=") == 0) {
-            next
-          }
-          candidate = NR
+      index($0, "synthetic-caret") && index($0, "app=com.anthropic.claude-code") && index($0, "source=terminal-screen-prompt") {
+        saw_terminal_screen_prompt = 1
+      }
+
+      is_terminal_proof_suggestion != 0 {
+        if (saw_terminal_screen_prompt == 0) {
           next
         }
+        candidate = NR
+        next
+      }
 
         {
           clear_candidate = 0
@@ -11338,6 +11300,14 @@ run_claude_code_terminal_host_smoke() {
           "$pre_trigger_suggestion_start_line" != "$suggestion_start_line" ]]; then
       if find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"; then
         accept_start_line="$pre_trigger_suggestion_start_line"
+        suggestion_ready=1
+      fi
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      if find_recent_claude_code_terminal_suggestion_line_optional "$start_line" ||
+         find_claude_code_terminal_suggestion_line_optional "$start_line"; then
+        accept_start_line="$start_line"
         suggestion_ready=1
       fi
     fi

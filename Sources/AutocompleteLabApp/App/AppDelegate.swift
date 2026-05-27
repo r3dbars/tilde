@@ -3058,6 +3058,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: app,
             profile: profile
         )
+        if syntheticCaretBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+           ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: app.bundleIdentifier
+           ),
+           terminalScreenPromptAnchor == nil {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-placement-blocked",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "reason": "missing-terminal-screen-prompt",
+                    "beforeChars": String(context.textBeforeCursor.count),
+                    "afterChars": String(context.textAfterCursor.count)
+                ]
+            )
+            return context
+        }
         guard supportsSyntheticTextAreaCaret(for: app, profile: profile),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
               shouldUseSyntheticTextAreaCaret(for: app, profile: profile, context: context),
@@ -3533,8 +3550,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             source
         ].joined(separator: "|")
 
-        guard signature != lastSyntheticCaretDiagnosticSignature else {
-            return
+        if source != "terminal-screen-prompt" {
+            guard signature != lastSyntheticCaretDiagnosticSignature else {
+                return
+            }
         }
 
         lastSyntheticCaretDiagnosticSignature = signature
