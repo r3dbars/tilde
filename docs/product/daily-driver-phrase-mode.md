@@ -400,9 +400,9 @@ Claude prompt box chrome after that row without treating the chrome as input.
 The follow-up code now has a proof-only Ghostty screen-prompt anchor and a
 terminal-prompt caret estimator that places from the prompt's distance to the
 terminal bottom, not from stale header rows. `swift test --filter
-ClaudeCodeTerminalHostProofPolicyTests --jobs 1` passed with 77 tests, `swift
+ClaudeCodeTerminalHostProofPolicyTests --jobs 1` passed with 79 tests, `swift
 test --filter SyntheticCaretEstimatorTests --jobs 1` passed with 13 tests, and
-`swift test --jobs 1` passed with 1,477 tests.
+`swift test --jobs 1` passed with 1,479 tests.
 
 The latest live `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1
 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate` run moved the
@@ -469,27 +469,32 @@ prompt.
 The detached runner is now Terminal/nohup-based by default, has a `stop` command,
 and no longer wedges on Ghostty's native `input text` AppleEvent. The proof
 harness now uses HID CGEvent Unicode text for Ghostty setup typing, records the
-diagnostics line immediately before the final trigger character, and refuses to
-count older prompt-row suggestions from before that trigger. Live detached runs
-are still non-green, but the failure is cleaner: `20260527T035120Z-ghostty`
-found a prompt-row suggestion at diagnostics line `624405` and still timed out
-because neither CGEvent Tab nor guarded System Events Tab reached SteadyType as
-`key=tab`; `20260527T035639Z-ghostty` stopped counting those stale suggestions
-and exited after 4 disposable contexts with no post-trigger suggestion; and
-`20260527T040452Z-ghostty` proved the new CGEvent text transport but still ended
-with pre-trigger prompt-row suggestions such as diagnostics line `628165`
-followed by post-trigger `suggestion-blocked ... reason=sensitiveContent` at
-`beforeChars=42`. The next useful proof slice is no longer generic Tab
-injection. It is Ghostty prompt-state isolation: prove the final trigger lands
-in the same prompt row that produced the suggestion, then make the accepted hot
-key arrive as Tab and prove one-word no-submit insertion.
+diagnostics line immediately before the final trigger character, refuses older
+prompt-row suggestions from before that trigger, bounds stale cleanup and
+fallback Tab paths, accepts low-y prompt-row suggestions when the trace proves a
+partial word, and can bridge same-line prompt-prefix suggestions after the final
+trigger. The app side also re-verifies proof-sensitive Claude Code prompt input
+after Ghostty AX identity wobble and preserves one-word key capture for virtual
+Claude Code proof suggestions across host-profile churn.
+
+Live detached runs are still non-green, but the failure has moved again. The
+current branch can produce proof-scoped Ghostty prompt-row suggestions after the
+final trigger: `20260527T115812Z-ghostty` found one at diagnostics line `641163`.
+That proves the suggestion-quality and placement half of the Ghostty lane much
+more cleanly than the earlier pre-trigger failures. The remaining red bar is
+hot-key delivery. The same run saw delayed `key=tab` evidence around diagnostics
+line `641700` as `passthrough-after-typing`, roughly a minute after the prompt-row
+suggestion, with no `keyboard-action ... handled=true`. The next useful proof
+slice is a different immediate accept driver or tighter key-injection path that
+gets Tab to SteadyType while the suggestion is still hot, then proves one-word
+no-submit insertion.
 
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-6 word daily-driver contexts, including punctuation, list-shaped writing, complaint language, finish-my-thought sentence shapes, first-person trust/feeling shapes like feels wrong/falls short/use this every day/reaching for it, reusable writing-intent endings, guarded connector-thought phrases like because/so-that/which-means/the-fix-is, and Obsidian-style markdown labels like Next/TODO/Open questions/Decisions; Obsidian daily-driver triggers now ask after short list/checklist labels such as `- TODO:` and `- [ ] Next:` instead of waiting for generic list-word completion; very-proactive writing profiles now queue next-sentence phrase continuations after sentence boundaries while prompt surfaces stay quiet there; the same instant path now respects accepted-and-kept restraint before showing again after repeated local rejects; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
-| Placement reliability | All beta-safe strict target rows are fresh again on `15a6f895d091`: TextEdit, Notes title/body/checklist, Obsidian default/theme/pane/long-note, and Chrome textarea/contenteditable all pass `./script/manual_smoke_status.sh --strict` with strict visual trace evidence; Ghostty now has a detached proof runner but the launchd run currently fails before prompt placement because Ghostty exposes no AX text nodes to the helper | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app, then repair the detached Ghostty AX prompt-readiness path before rerunning `./script/claude_code_ghostty_detached_proof.sh start` / `wait` |
+| Placement reliability | All beta-safe strict target rows are fresh again on `15a6f895d091`: TextEdit, Notes title/body/checklist, Obsidian default/theme/pane/long-note, and Chrome textarea/contenteditable all pass `./script/manual_smoke_status.sh --strict` with strict visual trace evidence; Ghostty detached proof now finds post-trigger prompt-row suggestions in the Claude Code prompt, but Tab delivery arrives stale as `passthrough-after-typing`, so Ghostty remains unsupported | Correct or honest fallback in normal writing apps | Run `daily_driver_dogfood_session.sh` in a real writing app, then replace or tighten the Ghostty hot-key driver before rerunning `./script/claude_code_ghostty_detached_proof.sh start` / `wait` |
 | Typing speed | Subsecond repaired phrase results can display; MLX word completion has a tested local suffix rescue; TextEdit, Codex, Claude desktop, and terminal-hosted Claude Code now have current model-backed no-submit latency proof; cold TextEdit phrase continuation now has current default-model proof with 13 shown phrase samples and p95 shown latency 619ms; the fresh Claude Code Terminal run showed 10 model-backed visible samples with prompt-submit safety counters at 0; fast typing bursts now leave word completion and instant phrase fallback available while pausing heavier model continuations; dogfood reports and status preflight now require at least one instant phrase fallback with <=1ms recorded latency, expose instant phrase vs model-backed source mix, and include a live redacted typing-feel score | Feels ready during fast typing | Real writing-session report while typing fast |
 | Wrong-field safety | Prompt no-submit and sensitive-field proof self-tests now run in default smoke; dogfood reports now also fail on trust-killer trace signals in the session | Zero sensitive/wrong-field suggestions | Fresh live prompt no-submit and sensitive-field trace slice |
 | Daily-driver feel | Core proof grid is green on the current build and the dogfood report wrapper now requires a real-sized trace sample, at least one real 3+ word phrase suggestion, at least one <=1ms instant phrase fallback, redacted typing-feel score, accepted-kept / shown reach gate, source-mix visibility, no-show reason visibility, trust-killer gate, prompt/sensitive safety snapshot, completed manual-review gate with app/filter match, active-minute match, suggestion quality 4-5, and no placement-trust negatives, plus start/status preflights that expose whether SteadyType was running before and during the dogfood session; reports now fail if SteadyType was not confirmed running at the start; the status line also explains common no-show outcomes, including learned instant restraint, instead of leaving stale queued text, but it still needs a human writing session | User leaves it on and misses it when off | One full writing session with SteadyType enabled, fill the trust row, then run `review --report` |

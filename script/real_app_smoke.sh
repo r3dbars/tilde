@@ -1575,7 +1575,7 @@ find_claude_code_terminal_suggestion_line_optional() {
         }
         sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
         sub(/,.*/, "", anchor_y)
-        if ((anchor_y + 0) < min_anchor_y) {
+        if ((anchor_y + 0) < min_anchor_y && index($0, "partialWordCharacters=") == 0) {
           next
         }
       }
@@ -1630,7 +1630,7 @@ find_recent_claude_code_terminal_suggestion_line_optional() {
           }
           sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
           sub(/,.*/, "", anchor_y)
-          if ((anchor_y + 0) < min_anchor_y) {
+          if ((anchor_y + 0) < min_anchor_y && index($0, "partialWordCharacters=") == 0) {
             next
           }
           candidate = NR
@@ -3316,6 +3316,19 @@ press_key_code_cgevent() {
   ensure_cgevent_keypress_helper
   helper="$(cgevent_keypress_helper_path)"
   "$helper" "$key_code"
+}
+
+press_key_code_cgevent_with_timeout() {
+  local key_code="$1"
+  local timeout_seconds="$2"
+  local label="$3"
+  local helper pid
+
+  ensure_cgevent_keypress_helper
+  helper="$(cgevent_keypress_helper_path)"
+  "$helper" "$key_code" &
+  pid="$!"
+  wait_for_background_process "$pid" "$timeout_seconds" "$label"
 }
 
 cgevent_text_helper_path() {
@@ -8354,6 +8367,45 @@ frontmost_claude_code_terminal_proof_process_is_active() {
     fi
   done
 
+  frontmost_claude_code_terminal_host_app_is_active "$frontmost_pid"
+}
+
+frontmost_claude_code_terminal_host_app_is_active() {
+  local frontmost_pid="${1:-}"
+  local host_process
+
+  guard_ghostty_frontmost_bundle_fallback || return 1
+  host_process="$(claude_code_host_process_name)"
+  process_id_has_name "$frontmost_pid" "$host_process"
+}
+
+guard_ghostty_frontmost_bundle_fallback() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]
+}
+
+frontmost_claude_code_terminal_proof_pid_matches() {
+  local frontmost_pid="$1"
+  local root_pid
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if [[ "$frontmost_pid" == "$root_pid" ]]; then
+      return 0
+    fi
+  done
+
+  frontmost_claude_code_terminal_host_app_is_active "$frontmost_pid"
+}
+
+frontmost_claude_code_terminal_proof_root_pid_matches() {
+  local frontmost_pid="$1"
+  local root_pid
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if [[ "$frontmost_pid" == "$root_pid" ]]; then
+      return 0
+    fi
+  done
+
   return 1
 }
 
@@ -8392,11 +8444,9 @@ try_wait_for_frontmost_claude_code_terminal_proof_process() {
   activation_attempt=0
   while ((SECONDS <= deadline)); do
     frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
-    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
-      if [[ "$frontmost_pid" == "$root_pid" ]]; then
-        return 0
-      fi
-    done
+    if frontmost_claude_code_terminal_proof_pid_matches "$frontmost_pid"; then
+      return 0
+    fi
     activation_attempt=$((activation_attempt + 1))
     if ((activation_attempt % 3 == 0)); then
       for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
@@ -8674,7 +8724,10 @@ cleanup_stale_claude_code_terminal_proofs() {
   local marker stale_pids stale_pid
   marker="$(claude_code_proof_marker)"
   stale_pids="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}" osascript <<'APPLESCRIPT' || true
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_TIMEOUT_SECONDS:-4}" \
+      "Claude Code terminal stale proof cleanup" <<'APPLESCRIPT' || true
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
@@ -8984,7 +9037,10 @@ end tell
 APPLESCRIPT
   probe_start_line="$(line_count "$LOG_PATH")"
   echo "Claude Code $host_name proof pressing CGEvent Tab for hot accept."
-  press_key_code_cgevent 48
+  press_key_code_cgevent_with_timeout \
+    48 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent Tab"
   if wait_for_log_fields_optional \
     "$probe_start_line" \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS:-1}" \
@@ -9001,22 +9057,35 @@ APPLESCRIPT
     return 1
   fi
 
+  if ! settle_claude_code_terminal_proof_focus "fallback Tab hot accept"; then
+    echo "Claude Code terminal host is not frontmost for fallback proof Tab." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
   echo "Claude Code $host_name CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab."
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
-set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+  if ! run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_FALLBACK_TAB_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name fallback Tab" <<'APPLESCRIPT'
 tell application "System Events"
-  set hostIsFrontmost to false
-  repeat with frontApp in (application processes whose frontmost is true)
-    try
-      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
-    end try
-  end repeat
-  if hostIsFrontmost is false then
-    error "Claude Code terminal host is not frontmost for fallback proof Tab."
-  end if
   key code 48
 end tell
 APPLESCRIPT
+  then
+    echo "Claude Code $host_name fallback System Events Tab timed out; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_FALLBACK_TAB_PROBE_SECONDS:-2}" \
+    "keyboard-event-tap-latency" \
+    "key=tab"; then
+    return 0
+  fi
+
+  echo "Claude Code $host_name fallback System Events Tab produced no immediate key=tab diagnostic; refreshing the disposable prompt." >&2
+  return 1
 }
 
 type_claude_raw_smoke_text() {
@@ -11078,7 +11147,7 @@ run_claude_code_terminal_host_smoke() {
 
   require_claude_code_host_if_requested
 
-  local runtime_start_line start_line trace_start_line suggestion_start_line accept_start_line proof_text marker host_name
+  local runtime_start_line start_line trace_start_line suggestion_start_line pre_trigger_suggestion_start_line accept_start_line proof_text marker host_name
   local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
@@ -11121,6 +11190,7 @@ run_claude_code_terminal_host_smoke() {
 
     CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE=0
     suggestion_start_line="$(line_count "$LOG_PATH")"
+    pre_trigger_suggestion_start_line="$suggestion_start_line"
     if ! type_claude_code_terminal_smoke_text "$proof_text"; then
       echo "Claude Code $host_name proof attempt $attempt lost focus while typing; launching a fresh disposable context."
       open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
@@ -11146,6 +11216,14 @@ run_claude_code_terminal_host_smoke() {
         "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
         2; then
       suggestion_ready=1
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+          "$pre_trigger_suggestion_start_line" != "$suggestion_start_line" ]]; then
+      if find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"; then
+        accept_start_line="$pre_trigger_suggestion_start_line"
+        suggestion_ready=1
+      fi
     fi
     if [[ "$suggestion_ready" != "1" &&
           "${CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY:-0}" == "1" ]]; then

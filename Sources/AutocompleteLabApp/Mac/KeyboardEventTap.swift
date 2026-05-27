@@ -31,6 +31,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var latencyStats = KeyboardEventTapLatencyStats()
     private let slowEventTapLatencyMicros = 8_000
     private let replayExpirationNanos: UInt64 = 1_000_000_000
+    private var passthroughObservationAllowsAutocompleteKey = false
 
     init(
         handler: @escaping Handler,
@@ -166,6 +167,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     func resetPassthroughObservation() {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = false
+        passthroughObservationAllowsAutocompleteKey = false
         passthroughObservationSuppressedUntilNanos = nil
         passthroughLock.unlock()
     }
@@ -183,6 +185,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             untilNanos
         )
         hasObservedPassthroughKeyDown = false
+        passthroughObservationAllowsAutocompleteKey = false
         passthroughLock.unlock()
     }
 
@@ -282,7 +285,10 @@ final class KeyboardEventTap: @unchecked Sendable {
                 )
             }
 
-            markPassthroughObserved()
+            markPassthroughObserved(
+                allowingAutocompleteKey: currentSnapshot()
+                    .allowsAutocompleteKeyAfterPassthroughObservation
+            )
             markSnapshotInvalidatedByTyping()
             if let passthroughKeyDownObserver {
                 Task { @MainActor in
@@ -297,9 +303,12 @@ final class KeyboardEventTap: @unchecked Sendable {
             )
         }
 
-        let hadPassthroughKeyDown = consumePassthroughObservation()
-        if hadPassthroughKeyDown {
-            if shouldPassThroughAutocompleteKeyAfterPassthroughObservation(snapshot: currentSnapshot()) {
+        let passthroughObservation = consumePassthroughObservation()
+        if passthroughObservation.observed {
+            if shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
+                snapshot: currentSnapshot(),
+                passthroughObservationAllowsAutocompleteKey: passthroughObservation.allowsAutocompleteKey
+            ) {
                 markSnapshotInvalidatedByTyping()
                 if let passthroughKeyDownObserver {
                     Task { @MainActor in
@@ -325,7 +334,7 @@ final class KeyboardEventTap: @unchecked Sendable {
         }
 
         Task { @MainActor in
-            let result = handler(key, isAutorepeat, hadPassthroughKeyDown)
+            let result = handler(key, isAutorepeat, passthroughObservation.observed)
             switch result {
             case .handled:
                 break
@@ -493,9 +502,11 @@ final class KeyboardEventTap: @unchecked Sendable {
         snapshotLock.unlock()
     }
 
-    private func markPassthroughObserved() {
+    private func markPassthroughObserved(allowingAutocompleteKey: Bool) {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = true
+        passthroughObservationAllowsAutocompleteKey = passthroughObservationAllowsAutocompleteKey
+            || allowingAutocompleteKey
         passthroughLock.unlock()
     }
 
@@ -515,10 +526,17 @@ final class KeyboardEventTap: @unchecked Sendable {
         return false
     }
 
-    private func consumePassthroughObservation() -> Bool {
+    private func consumePassthroughObservation() -> (
+        observed: Bool,
+        allowsAutocompleteKey: Bool
+    ) {
         passthroughLock.lock()
-        let value = hasObservedPassthroughKeyDown
+        let value = (
+            observed: hasObservedPassthroughKeyDown,
+            allowsAutocompleteKey: passthroughObservationAllowsAutocompleteKey
+        )
         hasObservedPassthroughKeyDown = false
+        passthroughObservationAllowsAutocompleteKey = false
         passthroughLock.unlock()
         return value
     }
@@ -591,6 +609,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
     var supportsOneWordAcceptance: Bool
     var supportsFullAcceptance: Bool
     var isInvalidatedByUserTyping: Bool
+    var allowsAutocompleteKeyAfterPassthroughObservation: Bool
     var hasPendingAcceptedInsertionUndo: Bool
     var acceptAllShortcut: AcceptAllShortcut
 
@@ -599,6 +618,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         supportsOneWordAcceptance: Bool = false,
         supportsFullAcceptance: Bool = false,
         isInvalidatedByUserTyping: Bool = false,
+        allowsAutocompleteKeyAfterPassthroughObservation: Bool = false,
         hasPendingAcceptedInsertionUndo: Bool = false,
         acceptAllShortcut: AcceptAllShortcut = .backtick
     ) {
@@ -606,6 +626,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
+        self.allowsAutocompleteKeyAfterPassthroughObservation = allowsAutocompleteKeyAfterPassthroughObservation
         self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
     }
@@ -719,9 +740,12 @@ func isModifierOnlyMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
 }
 
 func shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
-    snapshot: KeyboardEventTapSnapshot
+    snapshot: KeyboardEventTapSnapshot,
+    passthroughObservationAllowsAutocompleteKey: Bool = false
 ) -> Bool {
     snapshot.isInvalidatedByUserTyping
+        && !snapshot.allowsAutocompleteKeyAfterPassthroughObservation
+        && !passthroughObservationAllowsAutocompleteKey
 }
 
 func shouldTreatOtherKeyAsTypingPassthrough(
