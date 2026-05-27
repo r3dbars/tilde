@@ -1877,8 +1877,11 @@ if ! grep -F 'found prompt-row suggestion at diagnostics line' script/real_app_s
   exit 1
 fi
 if ! grep -F 'CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof to start suggestion discovery after the final trigger key boundary" >&2
+   ! grep -F 'wait_for_claude_code_terminal_proof_suggestion_ready_optional()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_claude_code_terminal_log_flush_suggestion_line_optional()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'print_claude_code_terminal_suggestion_diagnostics_tail()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'suggestion_start_line="$pre_trigger_suggestion_start_line"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof to start suggestion discovery from the pre-trigger prompt window and report late diagnostics" >&2
   exit 1
 fi
 if ! python3 - <<'PY'
@@ -1891,9 +1894,13 @@ block = source[start:end]
 expected_order = [
     'pre_trigger_suggestion_start_line="$suggestion_start_line"',
     'type_claude_code_terminal_smoke_text "$proof_text"',
-    'suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"',
+    'suggestion_start_line="$pre_trigger_suggestion_start_line"',
+    'wait_for_claude_code_terminal_proof_suggestion_ready_optional',
+    'primary suggestion wait ended; allowing diagnostics flush grace',
+    'wait_for_claude_code_terminal_log_flush_suggestion_line_optional',
     'find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"',
     'accept_start_line="$pre_trigger_suggestion_start_line"',
+    'print_claude_code_terminal_suggestion_diagnostics_tail "$suggestion_start_line"',
 ]
 position = -1
 for expected in expected_order:
@@ -1903,7 +1910,27 @@ for expected in expected_order:
     position = next_position
 PY
 then
-  echo "real app smoke self-test expected Ghostty proof to fall back to a still-visible same-line suggestion produced before the final trigger boundary" >&2
+  echo "real app smoke self-test expected Ghostty proof to wait from the app-proven pre-trigger prompt window, allow log flush grace, and keep same-line fallback evidence" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("wait_for_claude_code_terminal_proof_suggestion_ready_optional()")
+end = source.index("\nwait_for_log_fields()", start)
+block = source[start:end]
+if '"$CLAUDE_CODE_HOST_VARIANT" == "ghostty"' not in block:
+    raise SystemExit(1)
+if block.index('"$CLAUDE_CODE_HOST_VARIANT" == "ghostty"') > block.index("wait_for_log_line_number_optional"):
+    raise SystemExit(1)
+if 'print lines[i] > "/dev/stderr"' in block:
+    raise SystemExit(1)
+if '\' "$LOG_PATH" >&2 2>/dev/null || true' not in block:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Ghostty proof to avoid the generic suggestion fallback and preserve diagnostics-tail output" >&2
   exit 1
 fi
 if ! python3 - <<'PY'
@@ -2396,7 +2423,7 @@ type_index = block.index('type_claude_code_terminal_smoke_text "$proof_text"')
 assert_index = block.index('assert_claude_code_terminal_prompt_ready "$proof_text"')
 suggestion_window_index = block.index('suggestion_start_line="$(line_count "$LOG_PATH")"')
 accept_window_index = block.index('accept_start_line="$suggestion_start_line"')
-suggestion_wait_index = block.index("wait_for_claude_code_terminal_suggestion_line_optional")
+suggestion_wait_index = block.index("wait_for_claude_code_terminal_proof_suggestion_ready_optional")
 accept_wait_index = block.index("wait_for_claude_code_terminal_tab_acceptance")
 if not (suggestion_window_index < type_index < assert_index < accept_window_index < suggestion_wait_index < accept_wait_index):
     raise SystemExit(1)
