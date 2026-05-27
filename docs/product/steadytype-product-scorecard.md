@@ -45,6 +45,23 @@ frontmost pid mismatch after later global key-event rungs, and the ladder failed
 closed with `ghosttyFastFailClosed` and `keyboard-action handled=false
 reason=insert-failed`. Ghostty remains unsupported until the detached proof
 exits `0` with verified one-word no-submit insertion.
+The next PID-reassertion slice narrowed the helper failure without making the
+host green. `20260527T210539Z-ghostty` found a prompt-row suggestion at
+diagnostics line `763147`, lost the first accept attempt after Tab delivery
+produced no key diagnostic, relaunched a fresh disposable context, then found a
+second prompt-row suggestion at line `764044` and ran the insertion ladder.
+Exact-PID frontmost reassertion returned `verified=true` before hardware,
+bundled-helper, and pasteboard rungs. Hardware, native Ghostty, System Events,
+Unicode, and pasteboard rungs still left the disposable prompt unchanged. The
+bundled helper still refused to post, but the error is now sharper:
+`frontmost pid mismatch actual=39183 expected=82940`, which shows NSWorkspace
+can report Ghostty's root app pid while the proof target is the exact
+title-marked Ghostty process. The helper now has a System Events exact-PID
+frontmost check for that Ghostty root-pid split, but the follow-up detached runs
+`20260527T211020Z-ghostty` and `20260527T211114Z-ghostty` did not reach
+insertion because focus moved away before accept / the proof process did not
+become frontmost. Ghostty is still unsupported until a detached proof exits `0`
+with verified one-word no-submit insertion.
 
 ## Scores
 

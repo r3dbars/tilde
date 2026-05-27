@@ -539,6 +539,20 @@ rungs still left the disposable prompt unchanged, then failed closed with
 reason=insert-failed`. Ghostty stays unsupported until the detached proof exits
 `0` with verified one-word no-submit insertion.
 
+The follow-up exact-PID event-posting slice made the next failure more legible.
+`20260527T210539Z-ghostty` found a prompt-row suggestion at diagnostics line
+`763147`, lost the first accept attempt after Tab produced no key diagnostic,
+relaunched a fresh context, then found another prompt-row suggestion at line
+`764044`. Exact-PID reassertion verified before hardware, bundled-helper, and
+pasteboard rungs; the prompt still stayed unchanged through the insertion
+ladder. The bundled helper now reports the real mismatch shape:
+`frontmost pid mismatch actual=39183 expected=82940`, meaning NSWorkspace can
+see Ghostty's root pid while System Events tracks the exact title-marked proof
+process. The helper now accepts a System Events exact-PID frontmost proof for
+that split, but the next two detached attempts did not reach insertion because
+focus moved away before accept / the proof process did not become frontmost.
+Ghostty remains a proof gap, not a supported host.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
