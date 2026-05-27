@@ -9015,6 +9015,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && url.pathExtension == "md"
     }
 
+    private static func clonePasteboardItems(_ items: [NSPasteboardItem]?) -> [NSPasteboardItem] {
+        (items ?? []).map { item in
+            let clone = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    clone.setData(data, forType: type)
+                } else if let string = item.string(forType: type) {
+                    clone.setString(string, forType: type)
+                }
+            }
+            return clone
+        }
+    }
+
     private func insertObsidianSystemEventsPasteText(_ acceptedText: String) -> Bool {
         let bundleIdentifier = "md.obsidian"
         guard !acceptedText.isEmpty,
@@ -9036,9 +9050,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
         func restoreOriginalPasteboard() {
             pasteboard.clearContents()
             if !originalItems.isEmpty {
@@ -9370,9 +9382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
         func restoreOriginalPasteboard() {
             pasteboard.clearContents()
             if !originalItems.isEmpty {
@@ -10663,9 +10673,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
         func restoreOriginalPasteboard() {
             pasteboard.clearContents()
             if !originalItems.isEmpty {
@@ -10696,7 +10704,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             baselineSource: String,
             failedReason: String,
             mutatedInputReason: String,
-            processIdentifier: pid_t?
+            processIdentifier: pid_t?,
+            restoreSynchronouslyOnMiss: Bool
         ) -> (verified: Bool, safeToContinue: Bool) {
             if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
                !reassertGhosttyTerminalHostProofFrontmostProcess(
@@ -10710,7 +10719,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             guard Self.postCommandVKey(processIdentifier: processIdentifier) else {
-                restoreOriginalPasteboard()
+                if restoreSynchronouslyOnMiss {
+                    restoreOriginalPasteboard()
+                } else {
+                    schedulePasteboardRestore(
+                        insertedText: acceptedText,
+                        fallbackChangeCount: fallbackChangeCount,
+                        originalItems: originalItems,
+                        delaySeconds: 0.05
+                    )
+                }
                 DiagnosticsLog.shared.record(
                     "claude-code-terminal-host-proof-insert",
                     metadata: [
@@ -10748,7 +10766,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return (true, false)
             }
 
-            restoreOriginalPasteboard()
             let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: originalProofInputText,
                 frontmostApp: frontmostApp,
@@ -10763,6 +10780,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "verified": String(promptStayedUnchanged)
                 ]
             )
+            if restoreSynchronouslyOnMiss {
+                restoreOriginalPasteboard()
+            } else {
+                schedulePasteboardRestore(
+                    insertedText: acceptedText,
+                    fallbackChangeCount: fallbackChangeCount,
+                    originalItems: originalItems,
+                    delaySeconds: 0.05
+                )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "\(source)RestoreScheduled",
+                        "verified": String(promptStayedUnchanged)
+                    ]
+                )
+            }
             if !promptStayedUnchanged {
                 DiagnosticsLog.shared.record(
                     "claude-code-terminal-host-proof-insert",
@@ -10782,7 +10817,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             baselineSource: "pasteboardCommandVToPidBaseline",
             failedReason: "pasteboard-command-v-to-pid-failed",
             mutatedInputReason: "pasteboard-to-pid-unverified-mutated-input",
-            processIdentifier: frontmostApp.processIdentifier
+            processIdentifier: frontmostApp.processIdentifier,
+            restoreSynchronouslyOnMiss: true
         )
         if targetedPasteOutcome.verified {
             return (true, false)
@@ -10796,7 +10832,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             baselineSource: "pasteboardCommandVBaseline",
             failedReason: "pasteboard-command-v-failed",
             mutatedInputReason: "pasteboard-unverified-mutated-input",
-            processIdentifier: nil
+            processIdentifier: nil,
+            restoreSynchronouslyOnMiss: false
         )
         if globalPasteOutcome.verified {
             return (true, false)
@@ -10842,9 +10879,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
         func restoreOriginalPasteboard() {
             pasteboard.clearContents()
             if !originalItems.isEmpty {

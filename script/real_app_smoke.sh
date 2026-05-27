@@ -8439,11 +8439,32 @@ print(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "")
 SWIFT
 }
 
+system_events_frontmost_process_id_matches() {
+  local target_pid="$1"
+  local result
+
+  [[ -n "$target_pid" ]] || return 1
+  result="$(AUTOCOMPLETE_LAB_TARGET_PID="$target_pid" \
+    run_osascript_with_timeout 1 "System Events frontmost pid probe" <<'APPLESCRIPT' || true
+set targetPid to (system attribute "AUTOCOMPLETE_LAB_TARGET_PID") as integer
+tell application "System Events"
+  repeat with procRef in (application processes whose frontmost is true)
+    try
+      if unix id of procRef is targetPid then return true
+    end try
+  end repeat
+end tell
+return false
+APPLESCRIPT
+)"
+  [[ "$result" == "true" ]]
+}
+
 activate_process_id() {
   local target_pid="$1"
 
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
-    focus_claude_code_ghostty_proof_window_by_title; then
+    focus_claude_code_ghostty_proof_window_by_title "$target_pid"; then
     return 0
   fi
 
@@ -8477,6 +8498,8 @@ APPLESCRIPT
 }
 
 focus_claude_code_ghostty_proof_window_by_title() {
+  local target_pid="${1:-}"
+
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
   [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
 
@@ -8484,13 +8507,20 @@ focus_claude_code_ghostty_proof_window_by_title() {
   focus_result="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$CLAUDE_CODE_TERMINAL_PROOF_TITLE" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$(claude_code_proof_marker)" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER="$(claude_code_compact_proof_marker)" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID="$target_pid" \
     run_osascript_with_timeout \
       "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_TIMEOUT_SECONDS:-2}" \
       "Claude Code Ghostty title-marked proof focus" <<'APPLESCRIPT' || true
 set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
 set proofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER"
+set targetPidText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID"
+set targetPid to 0
+try
+  if targetPidText is not "" then set targetPid to targetPidText as integer
+end try
 set targetWindow to missing value
+set activatedTitleWindow to false
 tell application id "com.mitchellh.ghostty"
   repeat with candidateWindow in windows
     set windowName to name of candidateWindow as text
@@ -8505,16 +8535,35 @@ tell application id "com.mitchellh.ghostty"
   set targetTerminal to focused terminal of targetTab
   select tab targetTab
   focus targetTerminal
+  set activatedTitleWindow to true
+  activate
 end tell
 delay 0.05
 tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not "com.mitchellh.ghostty" then return false
+  if targetPid is not 0 then
+    repeat with procRef in application processes
+      try
+        if unix id of procRef is targetPid then
+          set frontmost of procRef to true
+          exit repeat
+        end if
+      end try
+    end repeat
+  end if
+  delay 0.05
+  set sawGhostty to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if targetPid is not 0 and unix id of frontApp is targetPid then return "exact"
+      if bundle identifier of frontApp is "com.mitchellh.ghostty" then set sawGhostty to true
+    end try
+  end repeat
+  if sawGhostty and activatedTitleWindow then return "bundle"
 end tell
-return true
+return "false"
 APPLESCRIPT
 )"
-  [[ "$focus_result" == "true" ]]
+  [[ "$focus_result" == "exact" || "$focus_result" == "bundle" || "$focus_result" == "true" ]]
 }
 
 frontmost_claude_code_terminal_proof_process_is_active() {
@@ -8522,13 +8571,7 @@ frontmost_claude_code_terminal_proof_process_is_active() {
 
   [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 1
   frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
-  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
-    if [[ "$frontmost_pid" == "$root_pid" ]]; then
-      return 0
-    fi
-  done
-
-  frontmost_claude_code_terminal_host_app_is_active "$frontmost_pid"
+  frontmost_claude_code_terminal_proof_pid_matches "$frontmost_pid"
 }
 
 frontmost_claude_code_terminal_host_app_is_active() {
@@ -8559,6 +8602,13 @@ frontmost_claude_code_terminal_proof_pid_matches() {
       return 0
     fi
   done
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if system_events_frontmost_process_id_matches "$root_pid"; then
+        return 0
+      fi
+    done
+  fi
 
   frontmost_claude_code_terminal_host_app_is_active "$frontmost_pid"
 }
@@ -8628,6 +8678,8 @@ try_wait_for_frontmost_claude_code_terminal_proof_process() {
 }
 
 wait_for_frontmost_claude_code_terminal_proof_process() {
+  local frontmost_pid frontmost_bundle
+
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
     echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
     exit 1
@@ -8637,7 +8689,9 @@ wait_for_frontmost_claude_code_terminal_proof_process() {
     return 0
   fi
 
-  echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+  frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+  frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"
+  echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS (frontmost pid=${frontmost_pid:-unknown} bundle=${frontmost_bundle:-unknown})" >&2
   exit 1
 }
 
@@ -8986,8 +9040,10 @@ open_fresh_claude_code_terminal_proof_context() {
     return 1
   fi
   wait_for_claude_code_terminal_prompt
-  wait_for_frontmost_claude_code_terminal_proof_process
-  assert_frontmost_app "$host_name" "Claude Code $host_name proof"
+  if ! settle_claude_code_terminal_proof_focus "fresh proof context"; then
+    echo "Claude Code $host_name proof could not keep its disposable host focused for fresh context." >&2
+    return 1
+  fi
 }
 
 wait_for_claude_code_terminal_prompt() {
