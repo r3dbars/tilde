@@ -1745,6 +1745,63 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ))
     }
 
+    @Test("Terminal proof preserves pending request during focused text polling throttle")
+    func terminalProofPreservesPendingRequestDuringFocusedTextPollingThrottle() {
+        let input = "Make this setting easier to use"
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+            pendingRequestAppBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            pendingRequestTextBeforeCursor: input,
+            pendingRequestTextAfterCursor: "",
+            pendingRequestFieldKind: .multilineCompose,
+            pendingRequestMode: .phraseContinuation,
+            currentProfileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            currentTextBeforeCursor: input,
+            currentTextAfterCursor: ""
+        ))
+
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+            pendingRequestAppBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            pendingRequestTextBeforeCursor: input,
+            pendingRequestTextAfterCursor: "",
+            pendingRequestFieldKind: .multilineCompose,
+            pendingRequestMode: .phraseContinuation,
+            currentProfileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            currentTextBeforeCursor: "\(input) now",
+            currentTextAfterCursor: ""
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+            pendingRequestAppBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            pendingRequestTextBeforeCursor: input,
+            pendingRequestTextAfterCursor: "tail",
+            pendingRequestFieldKind: .multilineCompose,
+            pendingRequestMode: .phraseContinuation,
+            currentProfileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            currentTextBeforeCursor: input,
+            currentTextAfterCursor: "tail"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+            pendingRequestAppBundleIdentifier: "com.mitchellh.ghostty",
+            pendingRequestTextBeforeCursor: input,
+            pendingRequestTextAfterCursor: "",
+            pendingRequestFieldKind: .multilineCompose,
+            pendingRequestMode: .phraseContinuation,
+            currentProfileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            currentTextBeforeCursor: input,
+            currentTextAfterCursor: ""
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+            pendingRequestAppBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            pendingRequestTextBeforeCursor: "rm -rf local-fixture",
+            pendingRequestTextAfterCursor: "",
+            pendingRequestFieldKind: .multilineCompose,
+            pendingRequestMode: .phraseContinuation,
+            currentProfileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            currentTextBeforeCursor: "rm -rf local-fixture",
+            currentTextAfterCursor: ""
+        ))
+    }
+
     @Test("Unsafe terminal proof keeps raw suppressed field kind")
     func unsafeTerminalProofKeepsRawSuppressedFieldKind() {
         let raw = AXFieldClassification(
