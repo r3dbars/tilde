@@ -1207,7 +1207,10 @@ public enum ClaudeCodeTerminalHostProofPolicy {
                 if trimmedInput.split(whereSeparator: \.isWhitespace).count >= 3,
                    !hasUnscopedStaleHeaderDirectText(for: context),
                    !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) {
-                    let lineInputText = sanitizedProofInputLine(promptSegment.markedLine) ?? inputText
+                    let lineInputText = visiblePromptLineTextBeforeCursor(
+                        promptSegment.markedLine,
+                        fallbackInputText: inputText
+                    )
                     return ClaudeCodeTerminalScreenPromptAnchor(
                         inputText: inputText,
                         promptLineInputText: lineInputText,
@@ -1637,7 +1640,10 @@ public enum ClaudeCodeTerminalHostProofPolicy {
                terminalScreenInputMatchesCurrentContext(inputText, for: context),
                !hasUnscopedStaleHeaderDirectText(for: context),
                !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) {
-                let currentLineInputText = safeTitleScopedPromptInputLine(trimmed) ?? inputText
+                let currentLineInputText = visiblePromptLineTextBeforeCursor(
+                    currentLine,
+                    fallbackInputText: inputText
+                )
                 return ClaudeCodeTerminalScreenPromptAnchor(
                     inputText: inputText,
                     promptLineInputText: currentLineInputText,
@@ -1678,10 +1684,24 @@ public enum ClaudeCodeTerminalHostProofPolicy {
 
         return ClaudeCodeTerminalScreenPromptAnchor(
             inputText: inputText,
-            promptLineInputText: inputText,
+            promptLineInputText: titleScopedDirectPromptLineInputText(for: inputText),
             lineIndex: 0,
             lineCount: 4
         )
+    }
+
+    public static func titleScopedDirectPromptLineInputText(for inputText: String) -> String {
+        "❯ \(compactProofMarker) \(inputText)"
+    }
+
+    private static func visiblePromptLineTextBeforeCursor(
+        _ line: String,
+        fallbackInputText: String
+    ) -> String {
+        let visibleLine = line
+            .trimmingCharacters(in: .newlines)
+            .trimmingLeadingWhitespace()
+        return visibleLine.isEmpty ? fallbackInputText : visibleLine
     }
 
     private static func titleScopedDirectPromptInputText(

@@ -1371,7 +1371,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
         #expect(anchor.inputText == "Make this setting the feature con")
-        #expect(anchor.promptLineInputText == "Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "❯ Make this setting the feature con")
         #expect(anchor.lineIndex == 2)
         #expect(anchor.lineCount == 6)
     }
@@ -1417,7 +1417,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
 
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
         #expect(anchor.inputText == "Make this setting the feature con")
-        #expect(anchor.promptLineInputText == "Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature con")
         #expect(anchor.lineIndex == 0)
         #expect(anchor.lineCount == 4)
     }
@@ -1443,7 +1443,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         let anchor = try #require(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context))
 
         #expect(anchor.inputText == "Make this setting the feature con")
-        #expect(anchor.promptLineInputText == "Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature con")
         #expect(anchor.lineIndex == 0)
         #expect(anchor.lineCount == 4)
     }
@@ -1502,7 +1502,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
         #expect(effective == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
         #expect(anchor.inputText == "Make this setting the feature con")
-        #expect(anchor.promptLineInputText == "Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "❯ Make this setting the feature STEADYTYPECLAUDECODEPROOF con")
         #expect(anchor.lineIndex == 2)
         #expect(anchor.lineCount == 6)
         #expect(metadata["terminalProofScreenPromptAnchorRecoverable"] == "true")
