@@ -34,6 +34,15 @@ ladder. Direct bulk System Events, shell-launched bulk System Events, and
 per-character System Events all exited `0` and posted, but each verified
 `false`; the bundled helper then reported frontmost PID mismatch, and the ladder
 failed closed with `ghosttyFastFailClosed` and `keyboard-action handled=false
+reason=insert-failed`. The exact-PID follow-up kept the target process honest
+without turning Ghostty green. `20260527T204323Z-ghostty` again found a
+prompt-row suggestion at diagnostics line `756273`, captured Tab, and ran the
+native Ghostty/System Events insertion ladder with the proof Ghostty process
+targeted by Unix pid. Native action text, native input text, native paste,
+send-key, foregrounded System Events, hardware, Unicode, and pasteboard rungs
+still left the disposable prompt unchanged. The bundled helper still reported
+frontmost pid mismatch after later global key-event rungs, and the ladder failed
+closed with `ghosttyFastFailClosed` and `keyboard-action handled=false
 reason=insert-failed`. Ghostty remains unsupported until the detached proof
 exits `0` with verified one-word no-submit insertion.
 

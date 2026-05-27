@@ -529,6 +529,16 @@ three still verified `false`. The app is no longer confused about focus at that
 rung; it still cannot make Ghostty/Claude mutate the proof prompt from an
 app-owned insertion transport.
 
+The exact-PID follow-up keeps that failure narrow. `20260527T204323Z-ghostty`
+again found a prompt-row suggestion at diagnostics line `756273`, captured Tab,
+and ran the native Ghostty/System Events ladder while targeting the proof
+Ghostty process by Unix pid. Native action text, native input text, native
+paste, send-key, foregrounded System Events, hardware, Unicode, and pasteboard
+rungs still left the disposable prompt unchanged, then failed closed with
+`ghosttyFastFailClosed` and `keyboard-action handled=false
+reason=insert-failed`. Ghostty stays unsupported until the detached proof exits
+`0` with verified one-word no-submit insertion.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |

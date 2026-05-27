@@ -493,6 +493,10 @@ if '"ghosttySystemEventsBulkKeystrokeShell"' not in terminal_insert_block or 'ke
     raise SystemExit("Claude Code Ghostty proof must keep a verified System Events bulk keystroke fallback")
 if "set frontmost of ghosttyProcess to true" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must foreground Ghostty through System Events before typing")
+if "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID" not in terminal_insert_block or "whose unix id is targetProcessId" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty insertion fallbacks must foreground the exact title-scoped Ghostty proof process")
+if "Target Ghostty process is not frontmost" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty insertion fallbacks must fail clearly when the exact proof process is not frontmost")
 if '"ghosttySystemEventsLoginShellBulkKeystroke"' not in terminal_insert_block or 'exec /usr/bin/osascript' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must keep a shell-launched System Events bulk fallback")
 if "ghosttySystemEventsBulkKeystrokeShellBaseline" not in terminal_insert_block:
