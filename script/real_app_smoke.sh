@@ -1667,6 +1667,83 @@ wait_for_claude_code_terminal_suggestion_line_optional() {
   return 1
 }
 
+wait_for_claude_code_terminal_proof_suggestion_ready_optional() {
+  local start_line="$1"
+  local timeout_seconds="$2"
+
+  if wait_for_claude_code_terminal_suggestion_line_optional \
+    "$start_line" \
+    "$timeout_seconds"; then
+    return 0
+  fi
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    return 1
+  fi
+
+  wait_for_log_line_number_optional \
+    "$start_line" \
+    "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
+    2
+}
+
+wait_for_claude_code_terminal_log_flush_suggestion_line_optional() {
+  local start_line="$1"
+  local timeout_seconds="${2:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+  MATCHED_LOG_LINE=0
+
+  while ((SECONDS <= deadline)); do
+    if find_claude_code_terminal_suggestion_line_optional "$start_line"; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  return 1
+}
+
+print_claude_code_terminal_suggestion_diagnostics_tail() {
+  local start_line="$1"
+  local host_name="$2"
+  local attempt="$3"
+
+  [[ -f "$LOG_PATH" ]] || return 0
+
+  echo "Claude Code $host_name proof attempt $attempt recent prompt/suggestion diagnostics since line $start_line:" >&2
+  awk -v start="$start_line" '
+    NR <= start {
+      next
+    }
+
+    /claude-code-terminal-host-proof-input/ ||
+    (/synthetic-caret/ && /app=com.anthropic.claude-code/ && /source=terminal-screen-prompt/) ||
+    (/suggestion-request-scheduled/ && /app=com.anthropic.claude-code/) ||
+    (/mlx-completion/ && /app=com.anthropic.claude-code/) ||
+    (/suggestion-presented/ && /app=com.anthropic.claude-code/) ||
+    (/suggestion-blocked/ && /app=com.anthropic.claude-code/) ||
+    /focused-text-poll-throttled/ ||
+    /keyboard-event-tap-stopped/ {
+      lines[++count] = NR ":" $0
+      if (count > 18) {
+        delete lines[count - 18]
+      }
+    }
+
+    END {
+      first = count - 17
+      if (first < 1) {
+        first = 1
+      }
+      for (i = first; i <= count; i++) {
+        if (i in lines) {
+          print lines[i]
+        }
+      }
+    }
+  ' "$LOG_PATH" >&2 2>/dev/null || true
+}
+
 wait_for_log_fields() {
   local start_line="$1"
   local label="$2"
@@ -11274,8 +11351,9 @@ run_claude_code_terminal_host_smoke() {
       open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
       continue
     fi
-    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
-          "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" =~ ^[0-9]+$ &&
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      suggestion_start_line="$pre_trigger_suggestion_start_line"
+    elif [[ "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" =~ ^[0-9]+$ &&
           "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" != "0" ]]; then
       suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"
     fi
@@ -11286,14 +11364,20 @@ run_claude_code_terminal_host_smoke() {
     fi
     accept_start_line="$suggestion_start_line"
     suggestion_ready=0
-    if wait_for_claude_code_terminal_suggestion_line_optional \
+    if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
       "$suggestion_start_line" \
-      "$suggestion_wait_seconds" ||
-      wait_for_log_line_number_optional \
-        "$suggestion_start_line" \
-        "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
-        2; then
+      "$suggestion_wait_seconds"; then
       suggestion_ready=1
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      echo "Claude Code $host_name proof attempt $attempt primary suggestion wait ended; allowing diagnostics flush grace from line $suggestion_start_line."
+      if wait_for_claude_code_terminal_log_flush_suggestion_line_optional \
+        "$suggestion_start_line" \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_LOG_FLUSH_GRACE_SECONDS:-8}"; then
+        accept_start_line="$suggestion_start_line"
+        suggestion_ready=1
+      fi
     fi
     if [[ "$suggestion_ready" != "1" &&
           "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
@@ -11326,14 +11410,19 @@ run_claude_code_terminal_host_smoke() {
         continue
       fi
       accept_start_line="$suggestion_start_line"
-      if wait_for_claude_code_terminal_suggestion_line_optional \
+      if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
         "$suggestion_start_line" \
-        "$suggestion_wait_seconds" ||
-        wait_for_log_line_number_optional \
-          "$suggestion_start_line" \
-          "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
-          2; then
+        "$suggestion_wait_seconds"; then
         suggestion_ready=1
+      fi
+      if [[ "$suggestion_ready" != "1" &&
+            "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+        echo "Claude Code $host_name proof attempt $attempt geometry nudge wait ended; allowing diagnostics flush grace from line $suggestion_start_line."
+        if wait_for_claude_code_terminal_log_flush_suggestion_line_optional \
+          "$suggestion_start_line" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_LOG_FLUSH_GRACE_SECONDS:-8}"; then
+          suggestion_ready=1
+        fi
       fi
     fi
     if [[ "$suggestion_ready" == "1" ]]; then
@@ -11366,6 +11455,7 @@ run_claude_code_terminal_host_smoke() {
       found_suggestion=1
       break
     fi
+    print_claude_code_terminal_suggestion_diagnostics_tail "$suggestion_start_line" "$host_name" "$attempt"
     echo "Claude Code $host_name proof attempt $attempt produced no visible suggestion; launching a fresh disposable context."
     open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
   done < <(claude_code_terminal_smoke_input_texts)
