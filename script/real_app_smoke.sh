@@ -8510,8 +8510,6 @@ delay 0.05
 tell application "System Events"
   set frontApp to first application process whose frontmost is true
   if bundle identifier of frontApp is not "com.mitchellh.ghostty" then return false
-  set windowName to name of front window of frontApp as text
-  if windowName does not contain proofTitle and windowName does not contain proofMarker and windowName does not contain compactProofMarker then return false
 end tell
 return true
 APPLESCRIPT

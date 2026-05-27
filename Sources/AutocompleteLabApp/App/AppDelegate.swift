@@ -9784,6 +9784,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let ghosttyPasteActionOutcome = insertGhosttyTerminalHostProofPasteAction(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteActionOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteActionOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9981,6 +9995,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             guard ghosttyInputOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyPasteActionOutcome = insertGhosttyTerminalHostProofPasteAction(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteActionOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteActionOutcome.safeToContinue else {
                 return false
             }
 
@@ -10631,6 +10659,280 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (true, false)
         }
         return (false, globalPasteOutcome.safeToContinue)
+    }
+
+    private func insertGhosttyTerminalHostProofPasteAction(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyPerformActionPasteFromClipboard"
+        let baselineSource = "ghosttyPerformActionPasteFromClipboardBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = pasteboard.pasteboardItems?.compactMap {
+            $0.copy() as? NSPasteboardItem
+        } ?? []
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-pasteboard-set-failed",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+        let fallbackChangeCount = pasteboard.changeCount
+
+        let scriptSource = """
+        set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
+        set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetWindow to missing value
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if windowName contains proofMarker or windowName contains compactProofMarker then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then return false
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            activate window targetWindow
+            select tab targetTab
+            focus targetTerminal
+            perform action "paste_from_clipboard" on targetTerminal
+            return true
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.proofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        do {
+            try process.run()
+        } catch {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-script-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            let exitedAfterTerminate = Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            )
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": exitedAfterTerminate
+                        ? "ghostty-paste-action-script-timeout"
+                        : "ghostty-paste-action-script-timeout-still-running",
+                    "source": source
+                ]
+            )
+            guard exitedAfterTerminate else {
+                return (false, false)
+            }
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "ghosttyPerformActionPasteFromClipboardTimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-paste-action-timeout-mutated-input",
+                        "source": "ghosttyPerformActionPasteFromClipboardTimeoutBaseline"
+                    ]
+                )
+                return (false, false)
+            }
+            return (false, true)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-script-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard stdoutText != "false" else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-proof-window-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "exitStatus": String(process.terminationStatus),
+                "errorMessage": String(stderrText.prefix(160))
+            ]
+        )
+        if verified {
+            schedulePasteboardRestore(
+                insertedText: acceptedText,
+                fallbackChangeCount: fallbackChangeCount,
+                originalItems: originalItems,
+                delaySeconds: 0.35
+            )
+            return (true, false)
+        }
+
+        restoreOriginalPasteboard()
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
     }
 
     private func insertGhosttyTerminalHostProofSystemEventsKeystroke(
