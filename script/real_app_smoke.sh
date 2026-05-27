@@ -1774,6 +1774,18 @@ wait_for_claude_code_terminal_tab_acceptance() {
       exit 1
     fi
 
+    if log_since_has_fields "$start_line" \
+      "keyboard-event-tap-latency" \
+      "key=tab" \
+      "decision=passthrough-after-typing"; then
+      echo "Claude Code $host_name Tab acceptance went stale before the app could accept it." >&2
+      echo "Required fields: keyboard-action app=com.anthropic.claude-code key=tab action=acceptNextWord handled=true" >&2
+      echo "Observed keyboard-event-tap-latency key=tab decision=passthrough-after-typing." >&2
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+      exit 1
+    fi
+
     sleep 0.2
   done
 
@@ -3269,7 +3281,7 @@ APPLESCRIPT
 }
 
 cgevent_keypress_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v3}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v4}"
 }
 
 ensure_cgevent_keypress_helper() {
@@ -3285,7 +3297,8 @@ ensure_cgevent_keypress_helper() {
 import ApplicationServices
 import Foundation
 
-guard CommandLine.arguments.count == 2,
+guard CommandLine.arguments.count >= 2,
+      CommandLine.arguments.count <= 3,
       let keyCode = UInt16(CommandLine.arguments[1]),
       let source = CGEventSource(stateID: .hidSystemState),
       let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
@@ -3294,11 +3307,23 @@ guard CommandLine.arguments.count == 2,
     exit(1)
 }
 
+let tapArgument = CommandLine.arguments.count == 3 ? CommandLine.arguments[2] : "hid"
+let tap: CGEventTapLocation
+switch tapArgument {
+case "hid":
+    tap = .cghidEventTap
+case "session":
+    tap = .cgSessionEventTap
+default:
+    FileHandle.standardError.write(Data("unknown CGEvent tap location\n".utf8))
+    exit(2)
+}
+
 keyDown.flags = []
 keyUp.flags = []
-keyDown.post(tap: .cghidEventTap)
+keyDown.post(tap: tap)
 usleep(20_000)
-keyUp.post(tap: .cghidEventTap)
+keyUp.post(tap: tap)
 SWIFT
 
   if ! swiftc "$source" -o "$helper"; then
@@ -3322,11 +3347,17 @@ press_key_code_cgevent_with_timeout() {
   local key_code="$1"
   local timeout_seconds="$2"
   local label="$3"
+  local tap_location="${4:-hid}"
+  local warm_policy="${5:-compile}"
   local helper pid
 
-  ensure_cgevent_keypress_helper
   helper="$(cgevent_keypress_helper_path)"
-  "$helper" "$key_code" &
+  if [[ "$warm_policy" == "warm" && ! -x "$helper" ]]; then
+    echo "$label helper is not warm; refusing to compile on the hot accept path." >&2
+    return 1
+  fi
+  ensure_cgevent_keypress_helper
+  "$helper" "$key_code" "$tap_location" &
   pid="$!"
   wait_for_background_process "$pid" "$timeout_seconds" "$label"
 }
@@ -8324,6 +8355,13 @@ print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)
 SWIFT
 }
 
+frontmost_bundle_identifier() {
+  swift - <<'SWIFT'
+import AppKit
+print(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "")
+SWIFT
+}
+
 activate_process_id() {
   local target_pid="$1"
 
@@ -8372,9 +8410,15 @@ frontmost_claude_code_terminal_proof_process_is_active() {
 
 frontmost_claude_code_terminal_host_app_is_active() {
   local frontmost_pid="${1:-}"
-  local host_process
+  local host_bundle frontmost_bundle host_process
 
   guard_ghostty_frontmost_bundle_fallback || return 1
+  host_bundle="$(claude_code_host_bundle_id)"
+  frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"
+  if [[ -n "$host_bundle" && "$frontmost_bundle" == "$host_bundle" ]]; then
+    return 0
+  fi
+
   host_process="$(claude_code_host_process_name)"
   process_id_has_name "$frontmost_pid" "$host_process"
 }
@@ -8551,6 +8595,17 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
   done
 
   return 1
+}
+
+warm_claude_code_terminal_hot_accept_helpers() {
+  local host_name="$1"
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ]]; then
+    return 0
+  fi
+
+  echo "Claude Code $host_name proof warming CGEvent Tab helper before prompt suggestions."
+  ensure_cgevent_keypress_helper
 }
 
 process_tree_contains_name() {
@@ -9040,7 +9095,9 @@ APPLESCRIPT
   press_key_code_cgevent_with_timeout \
     48 \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
-    "Claude Code $host_name CGEvent Tab"
+    "Claude Code $host_name CGEvent Tab" \
+    "session" \
+    "warm"
   if wait_for_log_fields_optional \
     "$probe_start_line" \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS:-1}" \
@@ -11163,6 +11220,7 @@ run_claude_code_terminal_host_smoke() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "Claude Code Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Claude Code runtime readiness" 60 "$SKIP_BUILD"
+  warm_claude_code_terminal_hot_accept_helpers "$host_name"
 
   cleanup_stale_claude_code_terminal_proofs
   open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
