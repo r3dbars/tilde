@@ -195,6 +195,14 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
+if "focus_claude_code_ghostty_proof_window_by_title()" not in source:
+    raise SystemExit("Ghostty proof harness must have a title-marked focus helper")
+if source.count("focus_claude_code_ghostty_proof_window_by_title") < 3:
+    raise SystemExit("Ghostty proof harness must use title-marked focus before activation and fallback Tab")
+if "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE" not in source or "compactProofMarker" not in source:
+    raise SystemExit("Ghostty proof focus must scope activation to the title-marked disposable window")
+if "Claude Code $host_name fallback could not focus the title-marked proof window" not in source:
+    raise SystemExit("Ghostty fallback Tab must fail clearly when the title-marked proof window cannot be focused")
 start = source.index('run_textedit_model_latency()')
 end = source.index('run_textedit_default_model_latency()', start)
 block = source[start:end]
@@ -441,9 +449,13 @@ if "ghosttySystemEventsKeystrokeShellAsync" in terminal_insert_block or "ghostty
     raise SystemExit("Claude Code Ghostty proof must not report success from unverified async insertion")
 if "DispatchQueue.main.asyncAfter" in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must not schedule post-accept async insertion")
-if terminal_insert_block.count("windowName does not contain") < 3 or "compactProofMarker" not in terminal_insert_block:
+if "compactProofMarker" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must remain title-marker scoped")
-if terminal_insert_block.count("focus targetTerminal") < 3 or terminal_insert_block.count("activate window targetWindow") < 3:
+if terminal_insert_block.count("repeat with candidateWindow in windows") < 4 or terminal_insert_block.count("set targetWindow to candidateWindow") < 4:
+    raise SystemExit("Claude Code Ghostty insertion fallbacks must find the title-marked proof window instead of trusting the front Ghostty window")
+if "ghostty-system-events-proof-window-missing" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events proof must fail closed when no title-marked proof window is found")
+if terminal_insert_block.count("focus targetTerminal") < 4 or terminal_insert_block.count("activate window targetWindow") < 4:
     raise SystemExit("Claude Code Ghostty native insertion fallbacks must re-focus the title-scoped terminal before posting input")
 if '"ghosttyPerformActionText"' not in terminal_insert_block or "perform action" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native text action command")
