@@ -3746,17 +3746,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if shouldPreserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughKeyDown() {
-            keyboardEventTap?.resetPassthroughObservation()
-            updateKeyboardEventTapSnapshot()
-            DiagnosticsLog.shared.record(
-                "claude-code-terminal-host-proof-passthrough-preserved",
-                metadata: [
-                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown",
-                    "fieldKindReason": currentSuggestionFieldClassification?.reason ?? "unknown"
-                ]
-            )
+        if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "observer") {
             return
         }
 
@@ -3766,17 +3756,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateKeyboardEventTapSnapshot()
     }
 
-    private func shouldPreserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughKeyDown() -> Bool {
+    private func preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: String) -> Bool {
+        guard let preserveReason = claudeCodeTerminalHostProofPassthroughPreserveReason() else {
+            return false
+        }
+
+        keyboardEventTap?.resetPassthroughObservation()
+        currentSuggestionInvalidatedByUserKeyDown = false
+        updateKeyboardEventTapSnapshot()
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-passthrough-preserved",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown",
+                "fieldKindReason": currentSuggestionFieldClassification?.reason ?? "unknown",
+                "preserveReason": preserveReason,
+                "source": source
+            ]
+        )
+        return true
+    }
+
+    private func claudeCodeTerminalHostProofPassthroughPreserveReason() -> String? {
         guard ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
             currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
             profileBundleIdentifier: currentProfile?.bundleIdentifier,
             fieldClassification: currentSuggestionFieldClassification,
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
         ) else {
-            return false
+            return nil
         }
 
-        return terminalHostProofSnapshotMatchesCurrentSuggestion()
+        if terminalHostProofSnapshotMatchesCurrentSuggestion() {
+            return "verified-snapshot"
+        }
+
+        guard let currentProfile,
+              ClaudeCodeTerminalHostProofPolicy.shouldBridgePassthroughAfterVolatileSnapshot(
+                  currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                  profileBundleIdentifier: currentProfile.bundleIdentifier,
+                  fieldClassification: currentSuggestionFieldClassification,
+                  hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                  supportsOneWordAcceptance: currentProfile.supportsOneWordAcceptance,
+                  supportsFullAcceptance: currentProfile.supportsFullAcceptance,
+                  requiresNoSubmitAcceptanceProof: currentProfile.requiresNoSubmitAcceptanceProof,
+                  insertionMode: currentProfile.insertionMode
+              ) else {
+            return nil
+        }
+
+        return "volatile-snapshot-bridge"
     }
 
     private func handleAutocompleteKey(
@@ -3785,9 +3814,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         didObservePassthroughKeyDown: Bool = false
     ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
-            currentSuggestionInvalidatedByUserKeyDown = true
-            preservesResidualSuggestionAfterNextWordAccept = false
-            clearPendingAcceptedInsertionUndo(reason: "typing")
+            if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "handler") {
+                preservesResidualSuggestionAfterNextWordAccept = false
+            } else {
+                currentSuggestionInvalidatedByUserKeyDown = true
+                preservesResidualSuggestionAfterNextWordAccept = false
+                clearPendingAcceptedInsertionUndo(reason: "typing")
+            }
         }
 
         let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
@@ -7392,7 +7425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selectedTextLength: context.selectedTextLength
         )
         currentSuggestionDisplayedText = suggestion.visibleText
-        currentSuggestionFieldClassification = fieldClassification(for: context)
+        currentSuggestionFieldClassification = displayFieldClassification
         currentSuggestionPresentedAt = Date()
         currentSuggestionDisplayScoreFinal = displayScoreTrace.score.finalScore
         currentSuggestionInvalidatedByUserKeyDown = false
@@ -9580,7 +9613,126 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return verified
         }
 
-        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" {
+        let prefersFastGhosttyPasteboardInsertion =
+            ClaudeCodeTerminalHostProofPolicy.shouldPreferFastPasteboardInsertion(
+                hostBundleIdentifier: frontmostApp.bundleIdentifier,
+                insertionMode: currentProfile?.insertionMode,
+                requiresNoSubmitAcceptanceProof: currentProfile?.requiresNoSubmitAcceptanceProof == true
+            )
+        if prefersFastGhosttyPasteboardInsertion {
+            keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+            guard prepareGhosttyTerminalHostProofInsertionTarget(
+                frontmostApp: frontmostApp,
+                originalProofInputText: originalProofInputText,
+                profile: currentProfile
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-fast-target-recheck-failed",
+                        "source": "ghosttyFocusReassertion"
+                    ]
+                )
+                return false
+            }
+
+            let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttySendKeyOutcome.verified {
+                return true
+            }
+            guard ghosttySendKeyOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttySystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                delayMilliseconds: 0
+            )
+            if ghosttySystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttySystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
+            keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+            if Self.postUnicodeTextKeyEventsPerCharacter(acceptedText) {
+                let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                    expectedProofInputText: expectedProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile,
+                    attempts: 24
+                )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "true",
+                        "source": "cgUnicodeKeyEventsPerCharacterGlobal",
+                        "verified": String(verified)
+                    ]
+                )
+                if verified {
+                    return true
+                }
+
+                let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                    expectedProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile,
+                    attempts: 4
+                )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "cgUnicodeKeyEventsPerCharacterGlobalBaseline",
+                        "verified": String(promptStayedUnchanged)
+                    ]
+                )
+                guard promptStayedUnchanged else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "unicode-per-character-global-unverified-mutated-input",
+                            "source": "cgUnicodeKeyEventsPerCharacterGlobalBaseline"
+                        ]
+                    )
+                    return false
+                }
+            }
+
+            let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteboardOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteboardOutcome.safeToContinue else {
+                return false
+            }
+        }
+
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           !prefersFastGhosttyPasteboardInsertion {
             let ghosttyActionOutcome = insertGhosttyTerminalHostProofActionText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9838,14 +9990,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        if insertClaudeCodeTerminalHostProofPasteboardText(
-            acceptedText,
-            expectedProofInputText: expectedProofInputText,
-            originalProofInputText: originalProofInputText,
-            frontmostApp: frontmostApp,
-            profile: currentProfile
-        ) {
+        let pasteboardOutcome = prefersFastGhosttyPasteboardInsertion
+            ? (verified: false, safeToContinue: true)
+            : insertClaudeCodeTerminalHostProofPasteboardText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+        if pasteboardOutcome.verified {
             return true
+        }
+        guard pasteboardOutcome.safeToContinue else {
+            return false
         }
 
         DiagnosticsLog.shared.record(
@@ -9860,13 +10018,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    private func prepareGhosttyTerminalHostProofInsertionTarget(
+        frontmostApp: RunningApplicationInfo,
+        originalProofInputText: String,
+        profile: CompatibilityProfile?
+    ) -> Bool {
+        guard frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return true
+        }
+
+        let activated = NSRunningApplication(processIdentifier: frontmostApp.processIdentifier)?
+            .activate(options: [.activateAllWindows]) ?? false
+        Thread.sleep(forTimeInterval: 0.04)
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 6,
+            delaySeconds: 0.03
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": "ghosttyFocusReassertion",
+                "activated": String(activated),
+                "verified": String(verified)
+            ]
+        )
+        return verified
+    }
+
     private func insertClaudeCodeTerminalHostProofPasteboardText(
         _ acceptedText: String,
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile?
-    ) -> Bool {
+    ) -> (verified: Bool, safeToContinue: Bool) {
         guard !acceptedText.isEmpty,
               !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
@@ -9878,7 +10067,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": "pasteboardCommandV"
                 ]
             )
-            return false
+            return (false, false)
         }
 
         let pasteboard = NSPasteboard.general
@@ -9997,10 +10186,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             processIdentifier: frontmostApp.processIdentifier
         )
         if targetedPasteOutcome.verified {
-            return true
+            return (true, false)
         }
         guard targetedPasteOutcome.safeToContinue else {
-            return false
+            return (false, false)
         }
 
         let globalPasteOutcome = tryPasteboardCommandV(
@@ -10011,9 +10200,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             processIdentifier: nil
         )
         if globalPasteOutcome.verified {
-            return true
+            return (true, false)
         }
-        return false
+        return (false, globalPasteOutcome.safeToContinue)
     }
 
     private func insertGhosttyTerminalHostProofSystemEventsKeystroke(
@@ -10021,7 +10210,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
-        profile: CompatibilityProfile?
+        profile: CompatibilityProfile?,
+        delayMilliseconds: Int = 80
     ) -> (verified: Bool, safeToContinue: Bool) {
         let source = "ghosttySystemEventsKeystrokeShell"
         let baselineSource = "ghosttySystemEventsKeystrokeShellBaseline"
@@ -10055,7 +10245,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let proofMarker = ClaudeCodeTerminalHostProofPolicy.proofMarker
         let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
-        let delayMilliseconds = 80
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
@@ -10474,6 +10663,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "acceptedChars": String(acceptedText.count),
                     "posted": "false",
                     "reason": "ghostty-send-key-text-unsupported",
+                    "unsupportedScalar": Self.firstUnsupportedGhosttySendKeyScalarDescription(acceptedText) ?? "",
                     "source": source
                 ]
             )
@@ -10604,24 +10794,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let modifiers: String?
     }
 
+    nonisolated private static func ghosttySendKeyStep(for scalar: Unicode.Scalar) -> GhosttySendKeyStep? {
+        switch scalar.value {
+        case 32:
+            return GhosttySendKeyStep(keyName: "space", modifiers: nil)
+        case 39:
+            return GhosttySendKeyStep(keyName: "apostrophe", modifiers: nil)
+        case 48...57, 97...122:
+            return GhosttySendKeyStep(keyName: String(scalar), modifiers: nil)
+        case 65...90:
+            guard let lowercase = UnicodeScalar(scalar.value + 32) else {
+                return nil
+            }
+            return GhosttySendKeyStep(keyName: String(lowercase), modifiers: "shift")
+        default:
+            return nil
+        }
+    }
+
     nonisolated private static func ghosttySendKeySteps(_ text: String) -> [GhosttySendKeyStep]? {
         var steps: [GhosttySendKeyStep] = []
         for scalar in text.unicodeScalars {
-            switch scalar.value {
-            case 32:
-                steps.append(GhosttySendKeyStep(keyName: "space", modifiers: nil))
-            case 48...57, 97...122:
-                steps.append(GhosttySendKeyStep(keyName: String(scalar), modifiers: nil))
-            case 65...90:
-                guard let lowercase = UnicodeScalar(scalar.value + 32) else {
-                    return nil
-                }
-                steps.append(GhosttySendKeyStep(keyName: String(lowercase), modifiers: "shift"))
-            default:
+            guard let step = ghosttySendKeyStep(for: scalar) else {
                 return nil
             }
+            steps.append(step)
         }
         return steps.isEmpty ? nil : steps
+    }
+
+    nonisolated private static func firstUnsupportedGhosttySendKeyScalarDescription(_ text: String) -> String? {
+        for scalar in text.unicodeScalars where ghosttySendKeyStep(for: scalar) == nil {
+            return String(format: "U+%04X", scalar.value)
+        }
+        return nil
     }
 
     nonisolated private static func ghosttySendKeyScriptLines(for steps: [GhosttySendKeyStep]) -> String {
@@ -10726,6 +10932,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 keyDown.post(tap: .cghidEventTap)
                 keyUp.post(tap: .cghidEventTap)
+            }
+        }
+
+        return true
+    }
+
+    nonisolated private static func postUnicodeTextKeyEventsPerCharacter(
+        _ text: String,
+        processIdentifier: pid_t? = nil
+    ) -> Bool {
+        guard !text.isEmpty,
+              let source = CGEventSource(stateID: .hidSystemState) else {
+            return false
+        }
+
+        for character in text {
+            var units = Array(String(character).utf16)
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+                return false
+            }
+
+            keyDown.flags = []
+            keyUp.flags = []
+            units.withUnsafeMutableBufferPointer { buffer in
+                keyDown.keyboardSetUnicodeString(
+                    stringLength: buffer.count,
+                    unicodeString: buffer.baseAddress
+                )
+                keyUp.keyboardSetUnicodeString(
+                    stringLength: buffer.count,
+                    unicodeString: buffer.baseAddress
+                )
+            }
+            if let processIdentifier {
+                keyDown.postToPid(processIdentifier)
+                keyUp.postToPid(processIdentifier)
+            } else {
+                keyDown.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
+                keyUp.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
             }
         }
 

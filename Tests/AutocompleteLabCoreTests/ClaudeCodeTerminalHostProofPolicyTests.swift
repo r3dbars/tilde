@@ -1649,6 +1649,86 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ))
     }
 
+    @Test("Terminal proof can bridge passthrough after volatile Ghostty snapshot")
+    func terminalProofCanBridgePassthroughAfterVolatileGhosttySnapshot() {
+        #expect(ClaudeCodeTerminalHostProofPolicy.shouldBridgePassthroughAfterVolatileSnapshot(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: true,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true,
+            insertionMode: .clipboardFallbackOptIn
+        ))
+
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldBridgePassthroughAfterVolatileSnapshot(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: "com.mitchellh.ghostty",
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: true,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true,
+            insertionMode: .clipboardFallbackOptIn
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldBridgePassthroughAfterVolatileSnapshot(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: true,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: true,
+            insertionMode: .clipboardFallbackOptIn
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldBridgePassthroughAfterVolatileSnapshot(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: true,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: false,
+            insertionMode: .clipboardFallbackOptIn
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldBridgePassthroughAfterVolatileSnapshot(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: AXFieldClassification(kind: .unprovenSurface, reason: "unprovenSurface:terminal"),
+            hasVisibleSuggestion: true,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true,
+            insertionMode: .clipboardFallbackOptIn
+        ))
+    }
+
+    @Test("Ghostty terminal proof prefers fast pasteboard insertion")
+    func ghosttyTerminalProofPrefersFastPasteboardInsertion() {
+        #expect(ClaudeCodeTerminalHostProofPolicy.shouldPreferFastPasteboardInsertion(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            insertionMode: .clipboardFallbackOptIn,
+            requiresNoSubmitAcceptanceProof: true
+        ))
+
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreferFastPasteboardInsertion(
+            hostBundleIdentifier: "com.apple.Terminal",
+            insertionMode: .clipboardFallbackOptIn,
+            requiresNoSubmitAcceptanceProof: true
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreferFastPasteboardInsertion(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            insertionMode: .keyEvents,
+            requiresNoSubmitAcceptanceProof: true
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreferFastPasteboardInsertion(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            insertionMode: .clipboardFallbackOptIn,
+            requiresNoSubmitAcceptanceProof: false
+        ))
+    }
+
     @Test("Unsafe terminal proof keeps raw suppressed field kind")
     func unsafeTerminalProofKeepsRawSuppressedFieldKind() {
         let raw = AXFieldClassification(
