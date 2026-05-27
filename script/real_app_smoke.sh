@@ -67,6 +67,7 @@ CLAUDE_DRAFT_BACKUP_PATH=""
 CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
+CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
 SMOKE_PHASE="startup"
 
 allow_model_latency_skip_build() {
@@ -2276,12 +2277,30 @@ run_osascript_with_timeout() {
   local label="$2"
   shift 2
 
-  local run_dir stdout_path stderr_path status
+  local run_dir stdout_path stderr_path osascript_stdin_path status
+  local should_forward_stdin=0 arg
   run_dir="$(make_tmp_dir)"
   stdout_path="$run_dir/osascript-stdout.txt"
   stderr_path="$run_dir/osascript-stderr.txt"
+  osascript_stdin_path="$run_dir/osascript-stdin.applescript"
 
-  osascript "$@" >"$stdout_path" 2>"$stderr_path" &
+  if (($# == 0)); then
+    should_forward_stdin=1
+  else
+    for arg in "$@"; do
+      if [[ "$arg" == "-" ]]; then
+        should_forward_stdin=1
+        break
+      fi
+    done
+  fi
+
+  if [[ "$should_forward_stdin" == "1" ]]; then
+    cat >"$osascript_stdin_path"
+    osascript "$@" <"$osascript_stdin_path" >"$stdout_path" 2>"$stderr_path" &
+  else
+    osascript "$@" >"$stdout_path" 2>"$stderr_path" &
+  fi
   local osascript_pid="$!"
   if wait_for_background_process "$osascript_pid" "$timeout_seconds" "$label"; then
     cat "$stdout_path"
@@ -8826,6 +8845,36 @@ process_id_has_name() {
   [[ "$command_name" == "$expected_name" || "$command_name" == "-$expected_name" ]]
 }
 
+wait_for_claude_code_terminal_pidfile_process_optional() {
+  local timeout="${1:-3}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline proof_pid
+
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ||
+        -z "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" ]]; then
+    return 1
+  fi
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=3
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    if [[ -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+      proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+      if process_id_has_name "$proof_pid" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"; then
+        return 0
+      fi
+    fi
+    sleep 0.1
+  done
+
+  return 1
+}
+
 wait_for_claude_code_terminal_process_name() {
   local expected_name="$1"
   local label="${2:-$expected_name}"
@@ -8869,10 +8918,35 @@ wait_for_claude_code_terminal_process() {
   wait_for_claude_code_terminal_process_name "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
 }
 
+mark_claude_code_ghostty_proof_window_title() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
+
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_MARK_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty proof title mark" \
+    - "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" <<'APPLESCRIPT' >/dev/null
+on run argv
+set proofTitle to item 1 of argv
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  perform action ("set_surface_title:" & proofTitle) on targetTerminal
+  perform action ("set_tab_title:" & proofTitle) on targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
+}
+
 open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
+  local ghostty_pid ghostty_launch_command ghostty_shell_ready_delay
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -8904,21 +8978,114 @@ open_claude_code_terminal_proof() {
   } >"$launch_script"
   chmod +x "$launch_script"
 
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
   terminal_pids_before="$(terminal_pid_list)"
   case "$CLAUDE_CODE_HOST_VARIANT" in
     terminal|iterm2)
+      CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
       open -na "$host_app" "$launch_script"
+      CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
       ;;
     ghostty)
-      open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"
+      CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
+      ghostty_launch_command="$(printf 'exec %q' "$launch_script")"
+      ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.2}"
+      if ! run_osascript_with_timeout \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-4}" \
+          "Claude Code Ghostty proof launch" \
+          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" <<'APPLESCRIPT' >/dev/null; then
+on run argv
+set launchCommand to item 1 of argv
+set shellReadyDelay to item 2 of argv as real
+tell application id "com.mitchellh.ghostty"
+  set proofWindow to new window
+  activate window proofWindow
+  delay shellReadyDelay
+  set targetTerminal to missing value
+  repeat with readyAttempt from 1 to 30
+    try
+      set targetTab to selected tab of proofWindow
+      set targetTerminal to focused terminal of targetTab
+      set terminalDirectory to working directory of targetTerminal as text
+      if terminalDirectory is not "" then exit repeat
+    end try
+    delay 0.1
+  end repeat
+  if targetTerminal is missing value then error "Ghostty proof terminal was not ready."
+  focus targetTerminal
+  input text launchCommand to targetTerminal
+  send key "enter" to targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
+        echo "Claude Code Ghostty proof could not create a script-owned disposable proof window." >&2
+        return 1
+      fi
+      if ! wait_for_claude_code_terminal_pidfile_process_optional \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_PID_SECONDS:-3}"; then
+        if ! run_osascript_with_timeout \
+            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-4}" \
+            "Claude Code Ghostty proof launch retry" \
+            - "$ghostty_launch_command" "$ghostty_shell_ready_delay" <<'APPLESCRIPT' >/dev/null; then
+on run argv
+set launchCommand to item 1 of argv
+set shellReadyDelay to item 2 of argv as real
+tell application id "com.mitchellh.ghostty"
+  set proofWindow to front window
+  activate window proofWindow
+  delay shellReadyDelay
+  set targetTerminal to missing value
+  repeat with readyAttempt from 1 to 30
+    try
+      set targetTab to selected tab of proofWindow
+      set targetTerminal to focused terminal of targetTab
+      set terminalDirectory to working directory of targetTerminal as text
+      if terminalDirectory is not "" then exit repeat
+    end try
+    delay 0.1
+  end repeat
+  if targetTerminal is missing value then error "Ghostty proof terminal was not ready."
+  focus targetTerminal
+  try
+    send key "u" modifiers "control" to targetTerminal
+  end try
+  input text launchCommand to targetTerminal
+  send key "enter" to targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
+          echo "Claude Code Ghostty proof could not retry the disposable proof command." >&2
+          return 1
+        fi
+        if ! wait_for_claude_code_terminal_pidfile_process_optional \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_PID_SECONDS:-6}"; then
+          echo "Claude Code Ghostty proof shell did not exec the disposable proof command." >&2
+          return 1
+        fi
+      fi
+      mark_claude_code_ghostty_proof_window_title || {
+        echo "Claude Code Ghostty proof could not mark the disposable proof window title." >&2
+        return 1
+      }
+      if ! try_wait_for_frontmost_app "$host_app" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_FRONTMOST_SECONDS:-6}"; then
+        echo "Claude Code Ghostty proof window did not become frontmost after script-owned launch." >&2
+        return 1
+      fi
+      ghostty_pid="$(frontmost_process_id 2>/dev/null || true)"
+      ghostty_pid="$(printf '%s' "$ghostty_pid" | tr -dc '0-9')"
+      if [[ -z "$ghostty_pid" ]]; then
+        echo "Claude Code Ghostty proof could not resolve the script-owned frontmost Ghostty pid." >&2
+        return 1
+      fi
+      CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_pid"
       ;;
     *)
       echo "Claude Code $(claude_code_host_display_name) proof does not have an automated disposable launch path yet." >&2
       exit 1
       ;;
   esac
-  CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
-  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
   if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
     echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
     return 1
@@ -8939,7 +9106,8 @@ cleanup_claude_code_terminal_proof() {
     fi
   fi
 
-  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+  if [[ "$CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS" == "1" &&
+        -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
     kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
     local proof_pid
@@ -8948,6 +9116,9 @@ cleanup_claude_code_terminal_proof() {
         kill -KILL "$proof_pid" >/dev/null 2>&1 || true
       fi
     done
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    close_claude_code_ghostty_proof_window_by_title || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
   elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
     local host_process
@@ -8959,7 +9130,36 @@ cleanup_claude_code_terminal_proof() {
   CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
+  CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
+}
+
+close_claude_code_ghostty_proof_window_by_title() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 0
+
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$CLAUDE_CODE_TERMINAL_PROOF_TITLE" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$(claude_code_proof_marker)" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER="$(claude_code_compact_proof_marker)" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CLOSE_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty proof window close" <<'APPLESCRIPT' >/dev/null || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set proofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER"
+tell application id "com.mitchellh.ghostty"
+  repeat with candidateWindow in windows
+    try
+      set windowName to name of candidateWindow as text
+      if windowName contains proofTitle or windowName contains proofMarker or windowName contains compactProofMarker then
+        close window candidateWindow
+        return true
+      end if
+    end try
+  end repeat
+end tell
+return false
+APPLESCRIPT
 }
 
 cleanup_stale_claude_code_terminal_proofs() {
@@ -9149,13 +9349,37 @@ type_claude_code_terminal_ghostty_paste_then_key_text() {
   drain_seconds="$(claude_code_ghostty_event_drain_seconds)"
 
   if [[ -n "$prefix_text" ]]; then
-    type_text_cgevent "$prefix_text"
+    type_claude_code_terminal_ghostty_native_text "$prefix_text"
     sleep "$drain_seconds"
   fi
 
   settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
   CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
   type_text_cgevent "$final_character"
+}
+
+type_claude_code_terminal_ghostty_native_text() {
+  local text="$1"
+
+  [[ -n "$text" ]] || return 0
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_TYPE_TIMEOUT_SECONDS:-3}" \
+    "Claude Code Ghostty native proof typing" \
+    - "$text" <<'APPLESCRIPT' >/dev/null
+on run argv
+set rawText to item 1 of argv
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  input text rawText to targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
 }
 
 claude_code_ghostty_event_drain_seconds() {

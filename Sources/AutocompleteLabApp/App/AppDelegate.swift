@@ -10908,14 +10908,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
         set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
         set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
                 set windowName to name of candidateWindow as text
-                if windowName contains proofMarker or windowName contains compactProofMarker then
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
                     set targetWindow to candidateWindow
                     exit repeat
                 end if
             end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
             if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
@@ -11215,14 +11237,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set keyDelay to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS") as real
         set keystrokeMode to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEYSTROKE_MODE"
         set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
                 set windowName to name of candidateWindow as text
-                if windowName contains proofMarker or windowName contains compactProofMarker then
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
                     set targetWindow to candidateWindow
                     exit repeat
                 end if
             end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
             if targetWindow is missing value then return false
             activate window targetWindow
             set targetTab to selected tab of targetWindow
@@ -11431,14 +11475,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
         set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
         set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
                 set windowName to name of candidateWindow as text
-                if windowName contains proofMarker or windowName contains compactProofMarker then
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
                     set targetWindow to candidateWindow
                     exit repeat
                 end if
             end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
             if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
@@ -11695,14 +11761,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
         set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
         set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
                 set windowName to name of candidateWindow as text
-                if windowName contains proofMarker or windowName contains compactProofMarker then
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
                     set targetWindow to candidateWindow
                     exit repeat
                 end if
             end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
             if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
@@ -11964,14 +12052,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scriptSource = """
         set targetProcessId to \(frontmostApp.processIdentifier) as integer
         set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains \(Self.appleScriptStringLiteral(proofMarker)) or targetWindowName contains \(Self.appleScriptStringLiteral(compactProofMarker)) then set targetWindowNameIsProof to true
+            end try
+        end tell
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
                 set windowName to name of candidateWindow as text
-                if windowName contains \(Self.appleScriptStringLiteral(proofMarker)) or windowName contains \(Self.appleScriptStringLiteral(compactProofMarker)) then
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
                     set targetWindow to candidateWindow
                     exit repeat
                 end if
             end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains \(Self.appleScriptStringLiteral(proofMarker)) or windowName contains \(Self.appleScriptStringLiteral(compactProofMarker)) then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
             if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab

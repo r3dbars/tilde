@@ -563,6 +563,25 @@ if "compactProofMarker" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must remain title-marker scoped")
 if terminal_insert_block.count("repeat with candidateWindow in windows") < 5 or terminal_insert_block.count("set targetWindow to candidateWindow") < 5:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must find the title-marked proof window instead of trusting the front Ghostty window")
+ghostty_window_target_helpers = [
+    ("paste action", "private func insertGhosttyTerminalHostProofPasteAction(", "private func insertGhosttyTerminalHostProofSystemEventsKeystroke("),
+    ("system events", "private func insertGhosttyTerminalHostProofSystemEventsKeystroke(", "private func insertGhosttyTerminalHostProofActionText("),
+    ("action text", "private func insertGhosttyTerminalHostProofActionText(", "private func insertGhosttyTerminalHostProofAppleScriptText("),
+    ("input text", "private func insertGhosttyTerminalHostProofAppleScriptText(", "nonisolated private static func waitForProcessExit("),
+    ("send key", "private func insertGhosttyTerminalHostProofSendKey(", "nonisolated private static func ghosttySendKeySteps("),
+]
+for name, start_marker, end_marker in ghostty_window_target_helpers:
+    helper_block = app_delegate[app_delegate.index(start_marker):app_delegate.index(end_marker, app_delegate.index(start_marker))]
+    if 'set targetWindowName to ""' not in helper_block or "name of front window of ghosttyProcess as text" not in helper_block:
+        raise SystemExit(f"Claude Code Ghostty {name} proof must capture the exact pid front-window title before native insertion")
+    if "set targetWindowNameIsProof to false" not in helper_block:
+        raise SystemExit(f"Claude Code Ghostty {name} proof must treat unmarked front-window titles as stale")
+    if "targetWindowName contains" not in helper_block:
+        raise SystemExit(f"Claude Code Ghostty {name} proof must only trust exact front-window titles that carry the proof marker")
+    exact_title_source = helper_block.index('targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName')
+    marker_fallback_source = helper_block.index("windowName contains", exact_title_source)
+    if exact_title_source > marker_fallback_source:
+        raise SystemExit(f"Claude Code Ghostty {name} proof must prefer the exact pid front-window title before marker fallback")
 if "ghostty-system-events-proof-window-missing" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must fail closed when no title-marked proof window is found")
 if terminal_insert_block.count("focus targetTerminal") < 5 or terminal_insert_block.count("activate window targetWindow") < 5:
@@ -677,6 +696,11 @@ if ! grep -F 'textedit_document_name_exists' script/real_app_smoke.sh >/dev/null
    ! grep -F 'run_osascript_with_timeout 1 "frontmost app wait probe"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'force_quit_textedit_if_only_smoke_windows' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit document-open diagnostics" >&2
+  exit 1
+fi
+if ! grep -F "osascript_stdin_path" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'osascript "$@" <"$osascript_stdin_path"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected timed osascript helper to preserve heredoc stdin for background AppleScripts" >&2
   exit 1
 fi
 
@@ -2485,14 +2509,35 @@ if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/nu
   echo "real app smoke self-test expected Claude Code Terminal proof cleanup/readiness to track the disposable Claude process" >&2
   exit 1
 fi
-if ! grep -F 'open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof launch to set a title marker and disable window restoration" >&2
+if ! grep -F 'set proofWindow to new window' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'input text launchCommand to targetTerminal' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'send key "enter" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof launch to create a script-owned disposable shell window and exec the proof command without killing the user's Ghostty process" >&2
   exit 1
 fi
 if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open -na "$host_app" "$launch_script"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F "ghostty_launch_command" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code terminal-host launch to use disposable command files" >&2
+  exit 1
+fi
+if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'close window candidateWindow' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof cleanup to close the disposable proof window instead of killing the host app" >&2
+  exit 1
+fi
+if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "working directory of targetTerminal" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Claude Code Ghostty proof shell did not exec the disposable proof command." script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof launch to verify and retry the disposable shell command before prompt discovery" >&2
+  exit 1
+fi
+if ! grep -F "mark_claude_code_ghostty_proof_window_title" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set_surface_title:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set_tab_title:' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof launch to restamp the disposable title marker after Claude starts" >&2
   exit 1
 fi
 if ! grep -F 'process_id_has_name "$proof_pid" "$expected_name"' script/real_app_smoke.sh >/dev/null; then
@@ -2598,16 +2643,17 @@ if ! awk '
   exit 1
 fi
 if ! grep -F 'type_claude_code_terminal_ghostty_paste_then_key_text()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_claude_code_terminal_ghostty_native_text()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_ghostty_event_drain_seconds()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EVENT_DRAIN_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'prefix_text="${text:0:${#text}-1}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'final_character="${text: -1}"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'type_text_cgevent "$prefix_text"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_claude_code_terminal_ghostty_native_text "$prefix_text"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'type_text_cgevent "$final_character"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'sleep "$drain_seconds"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Ghostty proof final trigger typing' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof typing to avoid delayed AppleEvents by posting CGEvent Unicode text, draining setup events, and typing one final trigger character" >&2
+  echo "real app smoke self-test expected Ghostty proof typing to native-paste the marked prefix, drain setup events, and type one final trigger character" >&2
   exit 1
 fi
 if ! awk '
