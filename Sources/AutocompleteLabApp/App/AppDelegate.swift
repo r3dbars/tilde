@@ -9812,6 +9812,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let ghosttyBulkSystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                delayMilliseconds: 0,
+                bulkKeystroke: true
+            )
+            if ghosttyBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyBulkSystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyShellBulkSystemEventsOutcome =
+                insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                    acceptedText,
+                    expectedProofInputText: expectedProofInputText,
+                    originalProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile,
+                    delayMilliseconds: 0,
+                    bulkKeystroke: true,
+                    launchThroughShell: true
+                )
+            if ghosttyShellBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyShellBulkSystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttySystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10023,6 +10057,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             guard ghosttySendKeyOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyBulkSystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                bulkKeystroke: true
+            )
+            if ghosttyBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyBulkSystemEventsOutcome.safeToContinue else {
                 return false
             }
 
@@ -10942,10 +10991,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile?,
         delayMilliseconds: Int = 80,
-        keyDelayMilliseconds: Int = 18
+        keyDelayMilliseconds: Int = 18,
+        bulkKeystroke: Bool = false,
+        launchThroughShell: Bool = false
     ) -> (verified: Bool, safeToContinue: Bool) {
-        let source = "ghosttySystemEventsKeystrokeShell"
-        let baselineSource = "ghosttySystemEventsKeystrokeShellBaseline"
+        let source = launchThroughShell && bulkKeystroke
+            ? "ghosttySystemEventsLoginShellBulkKeystroke"
+            : bulkKeystroke
+            ? "ghosttySystemEventsBulkKeystrokeShell"
+            : "ghosttySystemEventsKeystrokeShell"
+        let baselineSource = launchThroughShell && bulkKeystroke
+            ? "ghosttySystemEventsLoginShellBulkKeystrokeBaseline"
+            : bulkKeystroke
+            ? "ghosttySystemEventsBulkKeystrokeShellBaseline"
+            : "ghosttySystemEventsKeystrokeShellBaseline"
+        let keystrokeMode = bulkKeystroke ? "bulk" : "perCharacter"
+        let mutatedInputReason = bulkKeystroke
+            ? "ghostty-system-events-bulk-unverified-mutated-input"
+            : "ghostty-system-events-unverified-mutated-input"
         guard !acceptedText.isEmpty,
               !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
@@ -10974,6 +11037,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (false, false)
         }
 
+        let shellPath = "/bin/zsh"
+        if launchThroughShell,
+           !FileManager.default.isExecutableFile(atPath: shellPath) {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-shell-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
         let proofMarker = ClaudeCodeTerminalHostProofPolicy.proofMarker
         let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
         DiagnosticsLog.shared.record(
@@ -10991,6 +11069,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
         set keyDelay to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS") as real
+        set keystrokeMode to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEYSTROKE_MODE"
         set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
@@ -11011,30 +11090,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tell application "System Events"
             set frontApp to first application process whose frontmost is true
             if bundle identifier of frontApp is not "com.mitchellh.ghostty" then error "Ghostty is not frontmost."
-            repeat with characterIndex from 1 to count characters of acceptedText
-                keystroke character characterIndex of acceptedText
-                delay keyDelay
-            end repeat
+            if keystrokeMode is "bulk" then
+                keystroke acceptedText
+            else
+                repeat with characterIndex from 1 to count characters of acceptedText
+                    keystroke character characterIndex of acceptedText
+                    delay keyDelay
+                end repeat
+            end if
         end tell
         return true
         """
         let standardOutput = Pipe()
         let standardError = Pipe()
+        let standardInput = Pipe()
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: osascriptPath)
-        process.arguments = ["-e", scriptSource]
+        if launchThroughShell {
+            process.executableURL = URL(fileURLWithPath: shellPath)
+            process.arguments = ["-lc", "exec /usr/bin/osascript"]
+            process.standardInput = standardInput
+        } else {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-e", scriptSource]
+        }
         var environment = ProcessInfo.processInfo.environment
         environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
         environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = proofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] = compactProofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS"] =
             String(format: "%.3f", Double(max(keyDelayMilliseconds, 0)) / 1_000)
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_KEYSTROKE_MODE"] = keystrokeMode
         process.environment = environment
         process.standardOutput = standardOutput
         process.standardError = standardError
 
+        stopKeyboardEventTapNow(
+            reason: bulkKeystroke
+                ? "ghostty-system-events-bulk-insertion"
+                : "ghostty-system-events-insertion"
+        )
+
         do {
             try process.run()
+            if launchThroughShell {
+                standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
+                try? standardInput.fileHandleForWriting.close()
+            }
             process.waitUntilExit()
         } catch {
             DiagnosticsLog.shared.record(
@@ -11099,7 +11200,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "source": source,
                 "verified": String(verified),
                 "frontWindowCheck": "skipped",
-                "keystrokeMode": "perCharacter",
+                "keystrokeMode": keystrokeMode,
+                "launchMode": launchThroughShell ? "shell" : "direct",
                 "keyDelayMilliseconds": String(keyDelayMilliseconds),
                 "exitStatus": String(process.terminationStatus),
                 "errorMessage": String(errorMessage.prefix(160))
@@ -11129,7 +11231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-system-events-unverified-mutated-input",
+                    "reason": mutatedInputReason,
                     "source": baselineSource
                 ]
             )
