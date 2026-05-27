@@ -203,6 +203,11 @@ if "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE" not in source or "compactProofMark
     raise SystemExit("Ghostty proof focus must scope activation to the title-marked disposable window")
 if "Claude Code $host_name fallback could not focus the title-marked proof window" not in source:
     raise SystemExit("Ghostty fallback Tab must fail clearly when the title-marked proof window cannot be focused")
+focus_start = source.index("focus_claude_code_ghostty_proof_window_by_title()")
+focus_end = source.index("frontmost_claude_code_terminal_proof_process_is_active()", focus_start)
+focus_block = source[focus_start:focus_end]
+if "set windowName to name of front window of frontApp" in focus_block:
+    raise SystemExit("Ghostty proof focus must not reject title-scoped activation on lagging System Events front-window metadata")
 start = source.index('run_textedit_model_latency()')
 end = source.index('run_textedit_default_model_latency()', start)
 block = source[start:end]
@@ -412,6 +417,8 @@ if "insertGhosttyTerminalHostProofActionText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native text action before slower key fallbacks")
 if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try timeout-bounded native input text before key fallbacks")
+if "insertGhosttyTerminalHostProofPasteAction" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native paste action before key fallbacks")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
 if "insertClaudeCodeTerminalHostProofHardwareKeyEvents" not in fast_ghostty_block:
@@ -422,8 +429,10 @@ if '"cgHardwareKeyEventsToPid"' not in fast_ghostty_block or '"cgHardwareKeyEven
     raise SystemExit("Claude Code Ghostty fast proof must try targeted and global hardware key-event insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText"):
     raise SystemExit("Claude Code Ghostty fast proof must try native text action before native input text")
-if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
-    raise SystemExit("Claude Code Ghostty fast proof must try native input text before terminal-scoped send key")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
+    raise SystemExit("Claude Code Ghostty fast proof must try native input text before native paste action")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
+    raise SystemExit("Claude Code Ghostty fast proof must try native paste action before terminal-scoped send key")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents"):
@@ -474,11 +483,11 @@ if "DispatchQueue.main.asyncAfter" in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must not schedule post-accept async insertion")
 if "compactProofMarker" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must remain title-marker scoped")
-if terminal_insert_block.count("repeat with candidateWindow in windows") < 4 or terminal_insert_block.count("set targetWindow to candidateWindow") < 4:
+if terminal_insert_block.count("repeat with candidateWindow in windows") < 5 or terminal_insert_block.count("set targetWindow to candidateWindow") < 5:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must find the title-marked proof window instead of trusting the front Ghostty window")
 if "ghostty-system-events-proof-window-missing" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must fail closed when no title-marked proof window is found")
-if terminal_insert_block.count("focus targetTerminal") < 4 or terminal_insert_block.count("activate window targetWindow") < 4:
+if terminal_insert_block.count("focus targetTerminal") < 5 or terminal_insert_block.count("activate window targetWindow") < 5:
     raise SystemExit("Claude Code Ghostty native insertion fallbacks must re-focus the title-scoped terminal before posting input")
 if '"ghosttyPerformActionText"' not in terminal_insert_block or "perform action" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native text action command")
@@ -508,6 +517,16 @@ if "ghosttyAppleScriptInputTextBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified scripting input")
 if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must fail closed if scripting input mutates the prompt unexpectedly")
+if '"ghosttyPerformActionPasteFromClipboard"' not in terminal_insert_block or 'perform action "paste_from_clipboard"' not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must try Ghostty's native paste_from_clipboard action")
+if "ghosttyPerformActionPasteFromClipboardBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native paste action must verify the prompt stayed unchanged after unverified paste")
+if "ghostty-paste-action-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native paste action must fail closed if paste mutates the prompt unexpectedly")
+if "ghostty-paste-action-script-timeout" not in terminal_insert_block or "ghosttyPerformActionPasteFromClipboardTimeoutBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native paste action must be timeout bounded with unchanged-prompt baseline proof")
+if "ghostty-paste-action-timeout-mutated-input" not in terminal_insert_block or "ghostty-paste-action-script-timeout-still-running" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native paste action timeout must fail closed on mutation or a still-running script")
 if '"ghosttySendKey"' not in terminal_insert_block or "send key" not in terminal_insert_block or "action release" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's terminal-scoped send key command before global key events")
 if "ghosttySendKeyBaseline" not in terminal_insert_block:
