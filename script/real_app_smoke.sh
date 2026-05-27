@@ -1604,6 +1604,9 @@ find_recent_claude_code_terminal_suggestion_line_optional() {
   recent_start_line=$((current_line > recent_window_lines ? current_line - recent_window_lines : 0))
 
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if ((recent_start_line < preferred_start_line)); then
+      recent_start_line="$preferred_start_line"
+    fi
     min_anchor_y="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y:-160}"
     if ! [[ "$min_anchor_y" =~ ^[0-9]+$ ]]; then
       min_anchor_y=160
@@ -3266,7 +3269,7 @@ APPLESCRIPT
 }
 
 cgevent_keypress_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v2}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v3}"
 }
 
 ensure_cgevent_keypress_helper() {
@@ -3284,7 +3287,7 @@ import Foundation
 
 guard CommandLine.arguments.count == 2,
       let keyCode = UInt16(CommandLine.arguments[1]),
-      let source = CGEventSource(stateID: .privateState),
+      let source = CGEventSource(stateID: .hidSystemState),
       let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
       let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
     FileHandle.standardError.write(Data("failed to create CGEvent key press\n".utf8))
@@ -3313,6 +3316,69 @@ press_key_code_cgevent() {
   ensure_cgevent_keypress_helper
   helper="$(cgevent_keypress_helper_path)"
   "$helper" "$key_code"
+}
+
+cgevent_text_helper_path() {
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-text-v1}"
+}
+
+ensure_cgevent_text_helper() {
+  local helper source
+  helper="$(cgevent_text_helper_path)"
+  if [[ -x "$helper" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$helper")"
+  source="${helper}.$$.swift"
+  cat >"$source" <<'SWIFT'
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2,
+      let source = CGEventSource(stateID: .hidSystemState) else {
+    FileHandle.standardError.write(Data("failed to create CGEvent text source\n".utf8))
+    exit(1)
+}
+
+let text = CommandLine.arguments[1]
+let delayMicros: useconds_t = 12_000
+
+for character in text {
+    var units = Array(String(character).utf16)
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+        FileHandle.standardError.write(Data("failed to create CGEvent text key\n".utf8))
+        exit(1)
+    }
+
+    keyDown.flags = []
+    keyUp.flags = []
+    keyDown.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+    keyUp.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+    keyDown.post(tap: .cghidEventTap)
+    usleep(delayMicros)
+    keyUp.post(tap: .cghidEventTap)
+    usleep(delayMicros)
+}
+SWIFT
+
+  if ! swiftc "$source" -o "$helper"; then
+    rm -f "$source" "$helper" >/dev/null 2>&1 || true
+    return 1
+  fi
+  chmod 700 "$helper" >/dev/null 2>&1 || true
+  rm -f "$source" >/dev/null 2>&1 || true
+}
+
+type_text_cgevent() {
+  local text="$1"
+  local helper
+
+  [[ -n "$text" ]] || return 0
+  ensure_cgevent_text_helper
+  helper="$(cgevent_text_helper_path)"
+  "$helper" "$text"
 }
 
 file_url() {
@@ -8417,6 +8483,13 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
       return 1
     fi
 
+    if log_since_has_fields "$current_suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+      echo "Claude Code $host_name suggestion is no longer visible before Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
     if ! try_wait_for_frontmost_claude_code_terminal_proof_process 1; then
       echo "Claude Code $host_name proof lost focus before Tab; reactivating the disposable host process for the hot accept." >&2
       if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
@@ -8756,53 +8829,35 @@ type_claude_code_terminal_smoke_text() {
 
 type_claude_code_terminal_ghostty_paste_then_key_text() {
   local text="$1"
+  local prefix_text final_character drain_seconds
 
-  settle_claude_code_terminal_proof_focus "Ghostty proof paste typing" || return 1
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS:-0.18}" osascript <<'APPLESCRIPT'
-set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
-set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
-set pasteSettle to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS") as real
-set previousClipboard to the clipboard
-set textLength to count characters of rawText
-try
-  tell application "System Events"
-    set hostIsFrontmost to false
-    repeat with frontApp in (application processes whose frontmost is true)
-      try
-        if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
-      end try
-    end repeat
-    if hostIsFrontmost is false then
-      error "Claude Code Ghostty host is not frontmost for proof paste typing."
-    end if
-  end tell
-  if textLength > 1 then
-    set prefixText to text 1 thru -2 of rawText
-    set finalCharacter to text -1 thru -1 of rawText
-    set the clipboard to prefixText
-    delay pasteSettle
-    tell application "System Events"
-      keystroke "v" using command down
-      delay pasteSettle
-      keystroke finalCharacter
-    end tell
+  settle_claude_code_terminal_proof_focus "Ghostty proof CGEvent typing" || return 1
+  if (( ${#text} > 1 )); then
+    prefix_text="${text:0:${#text}-1}"
+    final_character="${text: -1}"
   else
-    tell application "System Events"
-      keystroke rawText
-    end tell
-  end if
-on error errorMessage number errorNumber
-  try
-    set the clipboard to previousClipboard
-  end try
-  error errorMessage number errorNumber
-end try
-try
-  set the clipboard to previousClipboard
-end try
-APPLESCRIPT
+    prefix_text=""
+    final_character="$text"
+  fi
+  drain_seconds="$(claude_code_ghostty_event_drain_seconds)"
+
+  if [[ -n "$prefix_text" ]]; then
+    type_text_cgevent "$prefix_text"
+    sleep "$drain_seconds"
+  fi
+
+  settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
+  CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
+  type_text_cgevent "$final_character"
+}
+
+claude_code_ghostty_event_drain_seconds() {
+  local drain_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EVENT_DRAIN_SECONDS:-8}"
+  if [[ "$drain_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$drain_seconds"
+  else
+    printf '%s\n' "8"
+  fi
 }
 
 type_claude_code_terminal_raw_smoke_text() {
@@ -8876,6 +8931,7 @@ tell application "System Events"
   keystroke "u" using control down
 end tell
 APPLESCRIPT
+    sleep "$(claude_code_ghostty_event_drain_seconds)"
     return
   fi
 
@@ -8907,6 +8963,10 @@ APPLESCRIPT
 }
 
 press_claude_code_terminal_host_tab() {
+  local suggestion_line="${1:-0}"
+  local host_name="${2:-$(claude_code_host_display_name)}"
+  local probe_start_line
+
   settle_claude_code_terminal_proof_focus "host Tab hot accept" || return 1
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
@@ -8922,7 +8982,41 @@ tell application "System Events"
   end if
 end tell
 APPLESCRIPT
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name proof pressing CGEvent Tab for hot accept."
   press_key_code_cgevent 48
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=tab"; then
+    return 0
+  fi
+
+  if [[ "$suggestion_line" != "0" ]] &&
+    log_since_has_fields "$suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+    echo "Claude Code $host_name suggestion hid before fallback Tab; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
+  echo "Claude Code $host_name CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab."
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+tell application "System Events"
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
+    error "Claude Code terminal host is not frontmost for fallback proof Tab."
+  end if
+  key code 48
+end tell
+APPLESCRIPT
 }
 
 type_claude_raw_smoke_text() {
@@ -11025,11 +11119,17 @@ run_claude_code_terminal_host_smoke() {
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
 
+    CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE=0
     suggestion_start_line="$(line_count "$LOG_PATH")"
     if ! type_claude_code_terminal_smoke_text "$proof_text"; then
       echo "Claude Code $host_name proof attempt $attempt lost focus while typing; launching a fresh disposable context."
       open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
       continue
+    fi
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+          "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" =~ ^[0-9]+$ &&
+          "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" != "0" ]]; then
+      suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"
     fi
     if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
       echo "Claude Code $host_name proof attempt $attempt could not prove typed prompt readiness; launching a fresh disposable context."
@@ -11087,7 +11187,11 @@ run_claude_code_terminal_host_smoke() {
         continue
       fi
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
-        press_claude_code_terminal_host_tab
+        if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
+          echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion during Tab injection; launching a fresh disposable context."
+          open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+          continue
+        fi
       else
         press_key_code_cgevent 48
       fi
