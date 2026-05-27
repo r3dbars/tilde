@@ -475,9 +475,14 @@ before a macOS frontmost-service focus report interrupted accept, and
 `20260527T025753Z-ghostty` / `20260527T030224Z-ghostty` showed app-side
 prompt-row suggestions in diagnostics (`traceID=4EA79F5A`, `2AD57976`,
 `6F4C7113`) while the harness still exited `1` after reporting no visible
-suggestion. The next useful proof slice is the observer/accept bridge: make the
-detached harness reliably consume those already-visible prompt-row suggestion
-lines and then prove one-word Tab insertion.
+suggestion. The observer bridge now consumes live prompt-row suggestions without
+wedging on future-line log scans: `20260527T032749Z-ghostty` found a prompt-row
+suggestion at diagnostics line `622069` on attempt 3. The run is still
+non-green because Tab acceptance timed out; diagnostics around the hot-accept
+window still record non-tab/other key events instead of
+`keyboard-action ... key=tab ... handled=true`. The next useful proof slice is
+Ghostty Tab injection: make the accepted hot key arrive as Tab, then prove
+one-word no-submit insertion.
 
 ## Scorecard
 

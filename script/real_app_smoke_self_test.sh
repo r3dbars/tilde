@@ -1730,13 +1730,95 @@ source = Path("script/real_app_smoke.sh").read_text()
 start = source.index("find_recent_claude_code_terminal_suggestion_line_optional()")
 end = source.index("\nwait_for_claude_code_terminal_suggestion_line_optional()", start)
 block = source[start:end]
-if '[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]' not in block:
-    raise SystemExit(1)
-if "return 1" not in block:
+for expected in (
+    '[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]',
+    'candidate = NR',
+    'suggestion-hidden',
+    'keyboard-action',
+    'insert ',
+    'screen-geometry-changed',
+    'workspace-focus-changed app=com.apple.Terminal',
+    'MATCHED_LOG_LINE="$matched_line"',
+):
+    if expected not in block:
+        raise SystemExit(1)
+if block.index('[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]') > block.index('recent_start_line >= preferred_start_line'):
     raise SystemExit(1)
 PY
 then
-  echo "real app smoke self-test expected Ghostty suggestion proof to avoid stale recent-window fallback" >&2
+  echo "real app smoke self-test expected Ghostty suggestion proof to bridge only still-visible prompt-row suggestions" >&2
+  exit 1
+fi
+if ! grep -F 'found prompt-row suggestion at diagnostics line' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal proof to print the matched prompt-row suggestion line" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("log_since_has_fields()")
+end = source.index("\nclaude_code_terminal_suggestion_cancelled_by_screen_geometry()", start)
+block = source[start:end]
+if 'awk -v start="$start_line" -v prefix="$prefix"' not in block:
+    raise SystemExit(1)
+if 'tail -n +' in block:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected log field scans to avoid tail future-line hangs" >&2
+  exit 1
+fi
+cat >"$TMP_DIR/ghostty-recent-suggestion.log" <<'EOF'
+2026-05-27T00:00:00Z suggestion-presented afterChars=0 anchorRect=x=130,y=868,w=0,h=22 app=com.anthropic.claude-code beforeChars=84 fieldKindReason=claude-code-terminal-host-proof fieldKindSuppressed=false placementAnchorSource=synthetic-caret visibleWords=3
+2026-05-27T00:00:01Z status accessibility=AX ok app=Ghostty decision=Shown
+EOF
+if ! awk -v start="0" -v min_anchor_y="160" '
+  NR <= start { next }
+  {
+    is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
+  }
+  is_terminal_proof_suggestion != 0 {
+    anchor_y = $0
+    if (anchor_y !~ /anchorRect=x=-?[0-9]+,y=-?[0-9]+,/) {
+      next
+    }
+    sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
+    sub(/,.*/, "", anchor_y)
+    if ((anchor_y + 0) < min_anchor_y) {
+      next
+    }
+    candidate = NR
+    next
+  }
+  {
+    clear_candidate = 0
+    if (index($0, "suggestion-hidden") && index($0, "app=com.anthropic.claude-code")) {
+      clear_candidate = 1
+    }
+    if (index($0, "keyboard-action") && index($0, "app=com.anthropic.claude-code")) {
+      clear_candidate = 1
+    }
+    if (index($0, "insert ") && index($0, "app=com.anthropic.claude-code")) {
+      clear_candidate = 1
+    }
+    if (index($0, "screen-geometry-changed")) {
+      clear_candidate = 1
+    }
+    if (index($0, "workspace-focus-changed app=com.apple.Terminal")) {
+      clear_candidate = 1
+    }
+    if (candidate != "" && clear_candidate) {
+      candidate = ""
+    }
+  }
+  END {
+    if (candidate != "") {
+      print candidate
+    }
+  }
+' "$TMP_DIR/ghostty-recent-suggestion.log" | grep -Fx "1" >/dev/null; then
+  echo "real app smoke self-test expected Ghostty recent-suggestion bridge awk to select a live prompt-row suggestion" >&2
   exit 1
 fi
 if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/real_app_smoke.sh >/dev/null ||
@@ -1772,9 +1854,9 @@ if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
 fi
 if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for proof Tab.' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'key code 48' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /CLAUDE_CODE_HOST_VARIANT.*ghostty/ { saw_ghostty = 1 } in_smoke && saw_ghostty && /press_claude_code_terminal_host_tab/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty-host Claude Code proof to press Tab through the focused terminal host" >&2
+  echo "real app smoke self-test expected Ghostty-host Claude Code proof to verify the focused terminal host before pressing CGEvent Tab" >&2
   exit 1
 fi
 if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then

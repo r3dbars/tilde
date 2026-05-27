@@ -1490,7 +1490,11 @@ log_since_has_fields() {
   local prefix="$2"
   shift 2
   local lines
-  lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
+  lines="$(awk -v start="$start_line" -v prefix="$prefix" '
+    NR > start && index($0, prefix) {
+      print
+    }
+  ' "$LOG_PATH" 2>/dev/null || true)"
   local field
   for field in "$@"; do
     lines="$(grep -F "$field" <<<"$lines" || true)"
@@ -1592,15 +1596,81 @@ find_claude_code_terminal_suggestion_line_optional() {
 
 find_recent_claude_code_terminal_suggestion_line_optional() {
   local preferred_start_line="$1"
-  local current_line recent_window_lines recent_start_line
-  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
-    return 1
-  fi
+  local current_line recent_window_lines recent_start_line matched_line min_anchor_y
 
   recent_window_lines="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_RECENT_SUGGESTION_SCAN_LINES:-260}"
   [[ "$recent_window_lines" =~ ^[0-9]+$ ]] || recent_window_lines=260
   current_line="$(line_count "$LOG_PATH")"
   recent_start_line=$((current_line > recent_window_lines ? current_line - recent_window_lines : 0))
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    min_anchor_y="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y:-160}"
+    if ! [[ "$min_anchor_y" =~ ^[0-9]+$ ]]; then
+      min_anchor_y=160
+    fi
+
+    matched_line="$(awk \
+      -v start="$recent_start_line" \
+      -v min_anchor_y="$min_anchor_y" '
+        NR <= start {
+          next
+        }
+
+        {
+          is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
+        }
+
+        is_terminal_proof_suggestion != 0 {
+          anchor_y = $0
+          if (anchor_y !~ /anchorRect=x=-?[0-9]+,y=-?[0-9]+,/) {
+            next
+          }
+          sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
+          sub(/,.*/, "", anchor_y)
+          if ((anchor_y + 0) < min_anchor_y) {
+            next
+          }
+          candidate = NR
+          next
+        }
+
+        {
+          clear_candidate = 0
+          if (index($0, "suggestion-hidden") && index($0, "app=com.anthropic.claude-code")) {
+            clear_candidate = 1
+          }
+          if (index($0, "keyboard-action") && index($0, "app=com.anthropic.claude-code")) {
+            clear_candidate = 1
+          }
+          if (index($0, "insert ") && index($0, "app=com.anthropic.claude-code")) {
+            clear_candidate = 1
+          }
+          if (index($0, "screen-geometry-changed")) {
+            clear_candidate = 1
+          }
+          if (index($0, "workspace-focus-changed app=com.apple.Terminal")) {
+            clear_candidate = 1
+          }
+          if (candidate != "" && clear_candidate) {
+            candidate = ""
+          }
+        }
+
+        END {
+          if (candidate != "") {
+            print candidate
+          }
+        }
+      ' "$LOG_PATH" 2>/dev/null || true)"
+
+    if [[ -n "$matched_line" ]]; then
+      MATCHED_LOG_LINE="$matched_line"
+      return 0
+    fi
+
+    return 1
+  fi
+
   if ((recent_start_line >= preferred_start_line)); then
     return 1
   fi
@@ -8850,9 +8920,9 @@ tell application "System Events"
   if hostIsFrontmost is false then
     error "Claude Code terminal host is not frontmost for proof Tab."
   end if
-  key code 48
 end tell
 APPLESCRIPT
+  press_key_code_cgevent 48
 }
 
 type_claude_raw_smoke_text() {
@@ -11004,6 +11074,7 @@ run_claude_code_terminal_host_smoke() {
     fi
     if [[ "$suggestion_ready" == "1" ]]; then
       suggestion_line="$MATCHED_LOG_LINE"
+      echo "Claude Code $host_name proof attempt $attempt found prompt-row suggestion at diagnostics line $suggestion_line."
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
         echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion before Tab; launching a fresh disposable context."
         open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
