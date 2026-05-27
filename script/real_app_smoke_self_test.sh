@@ -1709,7 +1709,7 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'wait_for_log_line_number_optional \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'produced no visible suggestion; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'produced no visible suggestion; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts with field-scoped prompt-row suggestion detection from the pre-type window" >&2
   exit 1
 fi
@@ -1726,10 +1726,11 @@ if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/rea
    ! grep -F 'try_wait_for_frontmost_claude_code_terminal_proof_process' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reactivating the disposable host process for the hot accept' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_claude_code_terminal_proof_focus' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reason=focus-changed' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'lost its visible suggestion before Tab; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Terminal-host Claude Code proof to recover the disposable host process from focus-changed hidden suggestions before Tab" >&2
+   ! grep -F 'lost its visible suggestion before Tab; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to recover from focus-changed hidden suggestions by launching a fresh disposable host process before Tab" >&2
   exit 1
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
@@ -1902,23 +1903,46 @@ if ! grep -F 'process_id_has_name "$proof_pid" "$expected_name"' script/real_app
   echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile" >&2
   exit 1
 fi
+if ! grep -F 'open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" || return 1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'try_wait_for_frontmost_claude_code_terminal_proof_process' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Terminal proof process did not become frontmost' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof host app did not become frontmost for fresh context.' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected fresh Claude Code terminal proof launch to fail cleanly when focus activation is blocked" >&2
+  exit 1
+fi
 if ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Claude Code terminal-host Tab proof to press Tab through CGEvent session events" >&2
   exit 1
 fi
 if ! awk '
-  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_wait = 0; saw_refocus = 0; saw_clear = 0; saw_type = 0 }
+  /open_fresh_claude_code_terminal_proof_context\(\)/ { in_fresh = 1; saw_wait = 0; saw_refocus = 0; saw_assert = 0 }
+  /^}/ && in_fresh {
+    if (saw_wait && saw_refocus && saw_assert) { found_fresh = 1 }
+    in_fresh = 0
+  }
+  in_fresh && /wait_for_claude_code_terminal_prompt/ { saw_wait = 1 }
+  in_fresh && saw_wait && /wait_for_frontmost_claude_code_terminal_proof_process/ { saw_refocus = 1 }
+  in_fresh && saw_refocus && /assert_frontmost_app/ { saw_assert = 1 }
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_fresh = 0; saw_clear = 0; saw_type = 0 }
   /^}/ && in_smoke {
-    if (saw_wait && saw_refocus && saw_clear && saw_type) { found = 1 }
+    if (found_fresh && saw_fresh && saw_clear && saw_type) { found = 1 }
     in_smoke = 0
   }
-  in_smoke && /wait_for_claude_code_terminal_prompt/ { saw_wait = 1 }
-  in_smoke && saw_wait && /wait_for_frontmost_claude_code_terminal_proof_process/ { saw_refocus = 1 }
-  in_smoke && saw_refocus && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 }
+  in_smoke && /open_fresh_claude_code_terminal_proof_context "\$host_name" "\$marker"/ { saw_fresh = 1 }
+  in_smoke && saw_fresh && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 }
   in_smoke && saw_clear && /type_claude_code_terminal_smoke_text/ { saw_type = 1 }
   END { exit found ? 0 : 1 }
 ' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Claude Code terminal-host proof to clear stale prompt text before typed proof input" >&2
+  exit 1
+fi
+if ! grep -F 'lost focus while clearing; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'lost focus while typing; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'could not prove typed prompt readiness; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_claude_code_terminal_proof_focus "typed prompt AX check" || return 1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_claude_code_terminal_proof_focus "proof typing" || return 1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_claude_code_terminal_proof_focus "prompt clearing" || return 1' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host prompt clear/type/readiness focus loss to be recoverable" >&2
   exit 1
 fi
 if ! awk '
