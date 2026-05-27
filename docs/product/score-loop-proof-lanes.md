@@ -14,6 +14,14 @@ The output lists the lowest-scoring rows in
 cell. It is read-only. It does not replace `./script/beta_readiness.sh
 --check-only`, `./script/check_steadytype_scorecard.py`, or strict manual proof.
 
+For long-running agent work, use the automation-ready view to skip lanes that
+require a clean-user walkthrough, a manual permission grant, or another human
+gate:
+
+```bash
+./script/scorecard_next_proof_lanes.py --automation-ready
+```
+
 Self-test:
 
 ```bash

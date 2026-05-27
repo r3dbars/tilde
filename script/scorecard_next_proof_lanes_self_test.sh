@@ -14,7 +14,8 @@ cat >"$FIXTURE" <<'EOF'
 | Area | Score | Evidence | Why It Is Not Higher | Next Proof |
 | --- | ---: | --- | --- | --- |
 | Strong lane | 95/100 | Green. | Narrow. | Keep the green gate current. |
-| Lowest lane | 55/100 | Stale rows. | Needs live proof. | Run `./script/manual_smoke_status.sh --strict`. |
+| Manual lane | 55/100 | Stale rows. | Needs live proof. | Run a documented manual gate in Settings. |
+| Automation lane | 60/100 | Prompt-row proof exists. | Needs insertion repair. | Repair Ghostty insertion transport and rerun `./script/claude_code_ghostty_detached_proof.sh wait`. |
 | Middle lane | 70/100 | Partial. | Needs screenshots. | Refresh screenshot evidence. |
 EOF
 
@@ -23,8 +24,8 @@ OUTPUT="$(script/scorecard_next_proof_lanes.py --scorecard "$FIXTURE" --limit 2)
 EXPECTED="$(
   cat <<'EOF'
 Next proof lanes:
-- Lowest lane (55/100): Run ./script/manual_smoke_status.sh --strict.
-- Middle lane (70/100): Refresh screenshot evidence.
+- Manual lane (55/100): Run a documented manual gate in Settings.
+- Automation lane (60/100): Repair Ghostty insertion transport and rerun ./script/claude_code_ghostty_detached_proof.sh wait.
 EOF
 )"
 
@@ -34,6 +35,25 @@ if [[ "$OUTPUT" != "$EXPECTED" ]]; then
   echo "$EXPECTED" >&2
   echo "Actual:" >&2
   echo "$OUTPUT" >&2
+  exit 1
+fi
+
+AUTOMATION_OUTPUT="$(script/scorecard_next_proof_lanes.py --scorecard "$FIXTURE" --limit 2 --automation-ready)"
+
+AUTOMATION_EXPECTED="$(
+  cat <<'EOF'
+Automation-ready proof lanes:
+- Automation lane (60/100): Repair Ghostty insertion transport and rerun ./script/claude_code_ghostty_detached_proof.sh wait.
+- Middle lane (70/100): Refresh screenshot evidence.
+EOF
+)"
+
+if [[ "$AUTOMATION_OUTPUT" != "$AUTOMATION_EXPECTED" ]]; then
+  echo "unexpected automation-ready proof lane summary" >&2
+  echo "Expected:" >&2
+  echo "$AUTOMATION_EXPECTED" >&2
+  echo "Actual:" >&2
+  echo "$AUTOMATION_OUTPUT" >&2
   exit 1
 fi
 
