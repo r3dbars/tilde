@@ -10995,16 +10995,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bulkKeystroke: Bool = false,
         launchThroughShell: Bool = false
     ) -> (verified: Bool, safeToContinue: Bool) {
-        let source = launchThroughShell && bulkKeystroke
-            ? "ghosttySystemEventsLoginShellBulkKeystroke"
-            : bulkKeystroke
-            ? "ghosttySystemEventsBulkKeystrokeShell"
-            : "ghosttySystemEventsKeystrokeShell"
-        let baselineSource = launchThroughShell && bulkKeystroke
-            ? "ghosttySystemEventsLoginShellBulkKeystrokeBaseline"
-            : bulkKeystroke
-            ? "ghosttySystemEventsBulkKeystrokeShellBaseline"
-            : "ghosttySystemEventsKeystrokeShellBaseline"
+        let source: String
+        let baselineSource: String
+        if launchThroughShell && bulkKeystroke {
+            source = "ghosttySystemEventsLoginShellBulkKeystroke"
+            baselineSource = "ghosttySystemEventsLoginShellBulkKeystrokeBaseline"
+        } else if bulkKeystroke {
+            source = "ghosttySystemEventsBulkKeystrokeShell"
+            baselineSource = "ghosttySystemEventsBulkKeystrokeShellBaseline"
+        } else {
+            source = "ghosttySystemEventsKeystrokeShell"
+            baselineSource = "ghosttySystemEventsKeystrokeShellBaseline"
+        }
         let keystrokeMode = bulkKeystroke ? "bulk" : "perCharacter"
         let mutatedInputReason = bulkKeystroke
             ? "ghostty-system-events-bulk-unverified-mutated-input"
@@ -11088,8 +11090,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         end tell
         delay 0.02
         tell application "System Events"
-            set frontApp to first application process whose frontmost is true
-            if bundle identifier of frontApp is not "com.mitchellh.ghostty" then error "Ghostty is not frontmost."
+            set ghosttyProcess to first application process whose bundle identifier is "com.mitchellh.ghostty"
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Ghostty is not frontmost."
             if keystrokeMode is "bulk" then
                 keystroke acceptedText
             else
