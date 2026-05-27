@@ -1097,6 +1097,9 @@ foreign_proof_process_lines() {
       if [[ "$cwd" == "$ROOT_DIR"* ]]; then
         continue
       fi
+      if [[ "$command" == "$ROOT_DIR"/dist/SteadyType.app/Contents/MacOS/SteadyType* ]]; then
+        continue
+      fi
 
       if [[ "$cwd" == */transcripted-autocomplete-lab* ||
             "$cwd" == /private/tmp/steadytype-* ||

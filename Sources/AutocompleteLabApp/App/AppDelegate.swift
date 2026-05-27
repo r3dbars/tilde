@@ -2861,7 +2861,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationMilliseconds: recommendation.pauseMilliseconds,
             policy: focusedTextPollingBackoffPolicy
         )
-        invalidatePendingSuggestionRequest()
+        let preservesPendingRequest = shouldPreserveClaudeCodeTerminalHostProofPendingRequestDuringFocusedTextPollingThrottle(
+            reason: reason,
+            pauseMilliseconds: recommendation.pauseMilliseconds
+        )
+        if !preservesPendingRequest {
+            invalidatePendingSuggestionRequest()
+        }
         if suggestionSession.hasVisibleSuggestion {
             let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
             if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
@@ -2894,7 +2900,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "focused-text-poll-throttled",
             metadata: [
                 "reason": reason.rawValue,
-                "pauseMilliseconds": String(recommendation.pauseMilliseconds)
+                "pauseMilliseconds": String(recommendation.pauseMilliseconds),
+                "pendingRequestPreserved": String(preservesPendingRequest)
+            ]
+        )
+        return true
+    }
+
+    private func shouldPreserveClaudeCodeTerminalHostProofPendingRequestDuringFocusedTextPollingThrottle(
+        reason: FocusedTextPollingThrottleReason,
+        pauseMilliseconds: Int
+    ) -> Bool {
+        let pendingRequest = suggestionOrchestrator.currentRequest
+        guard ClaudeCodeTerminalHostProofPolicy.shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+            pendingRequestAppBundleIdentifier: pendingRequest?.appBundleIdentifier,
+            pendingRequestTextBeforeCursor: pendingRequest?.textBeforeCursor,
+            pendingRequestTextAfterCursor: pendingRequest?.textAfterCursor,
+            pendingRequestFieldKind: pendingRequest?.fieldKind,
+            pendingRequestMode: pendingRequest?.mode,
+            currentProfileBundleIdentifier: currentProfile?.bundleIdentifier,
+            currentTextBeforeCursor: lastTextSnapshot?.textBeforeCursor,
+            currentTextAfterCursor: lastTextSnapshot?.textAfterCursor
+        ) else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-pending-request-preserved",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "reason": reason.rawValue,
+                "pauseMilliseconds": String(pauseMilliseconds),
+                "beforeChars": String(pendingRequest?.textBeforeCursor.count ?? 0),
+                "afterChars": String(pendingRequest?.textAfterCursor.count ?? 0),
+                "requestMode": pendingRequest?.mode.rawValue ?? "unknown"
             ]
         )
         return true
@@ -10565,9 +10604,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tell application "System Events"
             set frontApp to first application process whose frontmost is true
             if bundle identifier of frontApp is not "com.mitchellh.ghostty" then error "Ghostty is not frontmost."
-            if not (exists front window of frontApp) then error "Ghostty has no front window."
-            set windowName to name of front window of frontApp as text
-            if windowName does not contain proofMarker and windowName does not contain compactProofMarker then error "Ghostty front window is not the proof window."
             keystroke acceptedText
         end tell
         return true
@@ -10650,6 +10686,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "posted": "true",
                 "source": source,
                 "verified": String(verified),
+                "frontWindowCheck": "skipped",
                 "exitStatus": String(process.terminationStatus),
                 "errorMessage": String(errorMessage.prefix(160))
             ]

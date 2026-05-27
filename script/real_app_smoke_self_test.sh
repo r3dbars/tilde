@@ -840,6 +840,14 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
+foreign_start = source.index("foreign_proof_process_lines()")
+foreign_end = source.index("\nterminate_foreign_proof_processes_for_exclusive_run()", foreign_start)
+foreign_block = source[foreign_start:foreign_end]
+if '"$command" == "$ROOT_DIR"/dist/SteadyType.app/Contents/MacOS/SteadyType*' not in foreign_block:
+    raise SystemExit(
+        "real app smoke self-test expected exclusive proof cleanup not to terminate the current SteadyType app bundle"
+    )
+
 current_start = source.index("current_steadytype_app_bundle_pids()")
 current_end = source.index("\nstop_current_steadytype_app_bundle()", current_start)
 current_block = source[current_start:current_end]

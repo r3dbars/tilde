@@ -140,6 +140,35 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         hostBundleIdentifier == "com.mitchellh.ghostty"
     }
 
+    public static func shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+        pendingRequestAppBundleIdentifier: String?,
+        pendingRequestTextBeforeCursor: String?,
+        pendingRequestTextAfterCursor: String?,
+        pendingRequestFieldKind: AXFieldKind?,
+        pendingRequestMode: CompletionRequestMode?,
+        currentProfileBundleIdentifier: String?,
+        currentTextBeforeCursor: String?,
+        currentTextAfterCursor: String?
+    ) -> Bool {
+        guard pendingRequestAppBundleIdentifier == virtualBundleIdentifier,
+              currentProfileBundleIdentifier == virtualBundleIdentifier,
+              pendingRequestFieldKind == proofFieldClassification.kind,
+              pendingRequestMode == .phraseContinuation,
+              let pendingRequestTextBeforeCursor,
+              let pendingRequestTextAfterCursor,
+              let currentTextBeforeCursor,
+              let currentTextAfterCursor,
+              pendingRequestTextBeforeCursor == currentTextBeforeCursor,
+              pendingRequestTextAfterCursor == currentTextAfterCursor,
+              pendingRequestTextAfterCursor.isEmpty else {
+            return false
+        }
+
+        return allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: pendingRequestTextBeforeCursor
+        )
+    }
+
     public static let supportedHostVariants: [ClaudeCodeTerminalHostVariant] = [
         ClaudeCodeTerminalHostVariant(
             id: "terminal",
