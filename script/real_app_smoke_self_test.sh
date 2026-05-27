@@ -1689,8 +1689,9 @@ if ! grep -F 'claude_code_terminal_smoke_input_text()' script/real_app_smoke.sh 
 fi
 if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Make this setting the feature' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Please make this' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '$marker Make this setting the feature' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '$marker Please make this' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_claude_code_terminal_suggestion_line_optional' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'fieldKindReason=claude-code-terminal-host-proof' script/real_app_smoke.sh >/dev/null ||
@@ -1705,12 +1706,12 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'saw_terminal_screen_prompt == 0' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'print NR' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_RECENT_SUGGESTION_SCAN_LINES' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'suggestion_start_line="$start_line"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'suggestion_start_line="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_log_line_number_optional \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'produced no visible suggestion; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts with field-scoped prompt-row suggestion detection from the pre-type window" >&2
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts with field-scoped prompt-row suggestion detection after typed prompt readiness" >&2
   exit 1
 fi
 if ! awk '
@@ -1722,15 +1723,43 @@ if ! awk '
   echo "real app smoke self-test expected Claude Code terminal-host suggestion wait to use indexed historical log scanning" >&2
   exit 1
 fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("find_recent_claude_code_terminal_suggestion_line_optional()")
+end = source.index("\nwait_for_claude_code_terminal_suggestion_line_optional()", start)
+block = source[start:end]
+if '[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]' not in block:
+    raise SystemExit(1)
+if "return 1" not in block:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Ghostty suggestion proof to avoid stale recent-window fallback" >&2
+  exit 1
+fi
 if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'try_wait_for_frontmost_claude_code_terminal_proof_process' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reactivating the disposable host process for the hot accept' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_claude_code_terminal_proof_focus' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reason=focus-changed' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key=escape' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'reason=escape' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'lost its visible suggestion before Tab; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'lost its visible suggestion before Tab; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'lost its visible suggestion during Tab refocus; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to recover from focus-changed hidden suggestions by launching a fresh disposable host process before Tab" >&2
+  exit 1
+fi
+if ! grep -F 'claude_code_terminal_suggestion_cancelled_by_screen_geometry()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'suggestion-request-cancelled" "reason=invalidate"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'screen-geometry-changed" "geometryInvalidationReason=screen-layout-changed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'pending suggestion invalidated by screen geometry; nudging the same prompt' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_claude_code_terminal_smoke_text " "' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to recover from screen-geometry cancellation with one safe prompt nudge" >&2
   exit 1
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
@@ -1739,6 +1768,13 @@ if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyDown.flags = []' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyUp.flags = []' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through CGEvent session events" >&2
+  exit 1
+fi
+if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for proof Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key code 48' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /CLAUDE_CODE_HOST_VARIANT.*ghostty/ { saw_ghostty = 1 } in_smoke && saw_ghostty && /press_claude_code_terminal_host_tab/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty-host Claude Code proof to press Tab through the focused terminal host" >&2
   exit 1
 fi
 if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
@@ -1829,20 +1865,35 @@ if ! grep -F "cleanup_stale_claude_code_terminal_proofs" script/real_app_smoke.s
   echo "real app smoke self-test expected Claude Code model latency to clean up stale proof Terminal windows" >&2
   exit 1
 fi
-if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /keystroke "k" using command down/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to clear Terminal scrollback" >&2
-  exit 1
-fi
-if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /keystroke "l" using control down/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to clear the visible screen" >&2
-  exit 1
-fi
-if ! awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /key code 53/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code Terminal prompt clearing to dismiss stale visible suggestions with Esc" >&2
-  exit 1
-fi
-if awk '/clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 } in_clear && /^APPLESCRIPT$/ { in_clear = 0 } in_clear && /(key code 36|key code 48|keystroke return|keystroke tab)/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code Terminal prompt clearing not to press Enter or Tab" >&2
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("clear_claude_code_terminal_prompt_line()")
+end = source.index("\npress_claude_code_terminal_host_tab()", start)
+block = source[start:end]
+for expected in (
+    'keystroke "k" using command down',
+    'keystroke "l" using control down',
+    'key code 53',
+):
+    if expected not in block:
+        raise SystemExit(1)
+ghostty_start = block.index('if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]')
+ghostty_end = block.index("\n  fi\n\n  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE", ghostty_start)
+ghostty_block = block[ghostty_start:ghostty_end]
+if 'keystroke "u" using control down' not in ghostty_block:
+    raise SystemExit(1)
+if "key code 53" in ghostty_block:
+    raise SystemExit(1)
+if 'send key "u" action press modifiers "control"' in ghostty_block:
+    raise SystemExit(1)
+for forbidden in ("key code 36", "key code 48", "keystroke return", "keystroke tab"):
+    if forbidden in block:
+        raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Claude Code prompt clearing to keep Terminal clear keys while avoiding Escape for Ghostty and never pressing Enter or Tab" >&2
   exit 1
 fi
 if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint "❯"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
@@ -1959,19 +2010,31 @@ if ! awk '
   exit 1
 fi
 if ! awk '
-  /type_claude_code_terminal_smoke_text\(\)/ { in_type = 1; saw_mode = 0; saw_ghostty_key_events = 0; saw_terminal_bulk = 0 }
+  /type_claude_code_terminal_smoke_text\(\)/ { in_type = 1; saw_mode = 0; saw_iterm_key_events = 0; saw_ghostty_paste = 0; saw_terminal_bulk = 0 }
   /^}/ && in_type {
-    if (saw_mode && saw_ghostty_key_events && saw_terminal_bulk) { found = 1 }
+    if (saw_mode && saw_iterm_key_events && saw_ghostty_paste && saw_terminal_bulk) { found = 1 }
     in_type = 0
   }
   in_type && /AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TYPING_MODE/ { saw_mode = 1 }
   in_type && /terminal\)/ { terminal_branch = 1 }
   in_type && terminal_branch && /AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text/ { saw_terminal_bulk = 1; terminal_branch = 0 }
-  in_type && /iterm2\|ghostty\)/ { ghostty_branch = 1 }
-  in_type && ghostty_branch && /type_claude_code_terminal_raw_smoke_text "\$text"/ { saw_ghostty_key_events = 1; ghostty_branch = 0 }
+  in_type && /iterm2\)/ { iterm_branch = 1 }
+  in_type && iterm_branch && /type_claude_code_terminal_raw_smoke_text "\$text"/ { saw_iterm_key_events = 1; iterm_branch = 0 }
+  in_type && /ghostty\)/ { ghostty_branch = 1 }
+  in_type && ghostty_branch && /type_claude_code_terminal_ghostty_paste_then_key_text "\$text"/ { saw_ghostty_paste = 1; ghostty_branch = 0 }
   END { exit found ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty/iTerm2 proof typing to default to real key events while Terminal keeps bulk typing" >&2
+  echo "real app smoke self-test expected Ghostty proof typing to paste the prefix then press one real final key while iTerm2 keeps real key events and Terminal keeps bulk typing" >&2
+  exit 1
+fi
+if ! grep -F 'type_claude_code_terminal_ghostty_paste_then_key_text()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set previousClipboard to the clipboard' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set prefixText to text 1 thru -2 of rawText' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keystroke "v" using command down' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keystroke finalCharacter' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty host is not frontmost for proof paste typing.' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof typing to avoid the hanging native input-text AppleEvent by pasting the prefix and typing one final key" >&2
   exit 1
 fi
 if ! awk '
@@ -2027,19 +2090,26 @@ if ! awk '
   echo "real app smoke self-test expected Claude Code terminal-host Tab proof to reactivate the disposable process immediately before Tab" >&2
   exit 1
 fi
-if ! awk '
-  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_accept_window = 0; saw_type = 0; saw_suggestion_window = 0; saw_suggestion_wait = 0; saw_suggestion_wait_window = 0; saw_accept_wait = 0; in_suggestion_wait = 0 }
-  /^}/ && in_smoke { in_smoke = 0 }
-  in_smoke && /accept_start_line="\$\(line_count "\$LOG_PATH"\)"/ { saw_accept_window = 1 }
-  in_smoke && /suggestion_start_line="\$start_line"/ { saw_suggestion_window = 1 }
-  in_smoke && /type_claude_code_terminal_smoke_text/ { saw_type = 1 }
-  in_smoke && saw_type && !saw_accept_window { saw_late_accept_window = 1 }
-  in_smoke && /wait_for_claude_code_terminal_suggestion_line_optional/ { saw_suggestion_wait = 1; in_suggestion_wait = 1; next }
-  in_smoke && in_suggestion_wait && /"\$suggestion_start_line"/ { saw_suggestion_wait_window = 1; in_suggestion_wait = 0 }
-  in_smoke && /wait_for_claude_code_terminal_tab_acceptance/ { saw_accept_wait = 1 }
-  END { exit (saw_accept_window && saw_suggestion_window && !saw_late_accept_window && saw_suggestion_wait && saw_suggestion_wait_window && saw_accept_wait) ? 0 : 1 }
-' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code terminal-host suggestion and acceptance waits to start before typing can race the proof" >&2
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("run_claude_code_terminal_host_smoke()")
+end = source.index("\nrun_codex_model_latency()", start)
+block = source[start:end]
+type_index = block.index('type_claude_code_terminal_smoke_text "$proof_text"')
+assert_index = block.index('assert_claude_code_terminal_prompt_ready "$proof_text"')
+suggestion_window_index = block.index('suggestion_start_line="$(line_count "$LOG_PATH")"')
+accept_window_index = block.index('accept_start_line="$suggestion_start_line"')
+suggestion_wait_index = block.index("wait_for_claude_code_terminal_suggestion_line_optional")
+accept_wait_index = block.index("wait_for_claude_code_terminal_tab_acceptance")
+if not (suggestion_window_index < type_index < assert_index < accept_window_index < suggestion_wait_index < accept_wait_index):
+    raise SystemExit(1)
+if '"$suggestion_start_line"' not in block[suggestion_wait_index:accept_wait_index]:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Claude Code terminal-host suggestion slices to capture fast suggestions while waits still happen after typed prompt readiness" >&2
   exit 1
 fi
 if ! awk '
@@ -2079,6 +2149,46 @@ if ! grep -F "claude_code_host_process_name" script/real_app_smoke.sh >/dev/null
    ! grep -F "wait_for_new_terminal_pids" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "wait_for_frontmost_claude_code_terminal_proof_process" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code terminal-host launch to activate the disposable host process before typing" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+first = source.index("activate_process_id()")
+second = source.index("activate_process_id()", first + 1)
+end = source.index("frontmost_claude_code_terminal_proof_process_is_active()", second)
+block = source[second:end]
+for expected in (
+    'swift - "$target_pid"',
+    'wait_for_appkit_activation_frontmost "$target_pid"',
+    'set frontmost of first application process whose unix id is targetPid to true',
+):
+    if expected not in block:
+        raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Claude Code terminal-host process activation to use AppKit before System Events" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("try_wait_for_frontmost_claude_code_terminal_proof_process()")
+end = source.index("\nwait_for_frontmost_claude_code_terminal_proof_process()", start)
+block = source[start:end]
+loop_start = block.index("while ((SECONDS <= deadline)); do")
+loop_block = block[loop_start:]
+if block.count('activate_process_id "$root_pid"') < 2:
+    raise SystemExit(1)
+if "activation_attempt=$((activation_attempt + 1))" not in loop_block:
+    raise SystemExit(1)
+if 'activate_process_id "$root_pid"' not in loop_block:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Claude Code terminal-host focus wait to reassert activation while waiting" >&2
   exit 1
 fi
 if ! grep -F "open_claude_code_terminal_proof" script/real_app_smoke.sh >/dev/null ||
