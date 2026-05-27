@@ -10777,6 +10777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scriptSource = """
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
         set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
@@ -10792,6 +10793,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
             perform action "paste_from_clipboard" on targetTerminal
             return true
         end tell
@@ -10807,6 +10818,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ClaudeCodeTerminalHostProofPolicy.proofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
             ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
         process.environment = environment
         process.standardOutput = standardOutput
         process.standardError = standardError
@@ -11070,6 +11082,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
         set keyDelay to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS") as real
         set keystrokeMode to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEYSTROKE_MODE"
         set targetWindow to missing value
@@ -11090,10 +11103,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         end tell
         delay 0.02
         tell application "System Events"
-            set ghosttyProcess to first application process whose bundle identifier is "com.mitchellh.ghostty"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
             set frontmost of ghosttyProcess to true
             delay 0.04
-            if frontmost of ghosttyProcess is false then error "Ghostty is not frontmost."
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
             if keystrokeMode is "bulk" then
                 keystroke acceptedText
             else
@@ -11121,6 +11135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
         environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = proofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] = compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
         environment["AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS"] =
             String(format: "%.3f", Double(max(keyDelayMilliseconds, 0)) / 1_000)
         environment["AUTOCOMPLETE_LAB_GHOSTTY_KEYSTROKE_MODE"] = keystrokeMode
@@ -11285,6 +11300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set actionText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
         set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
@@ -11300,6 +11316,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
             perform action actionText on targetTerminal
             return true
         end tell
@@ -11316,6 +11342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ClaudeCodeTerminalHostProofPolicy.proofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
             ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
         process.environment = environment
         process.standardOutput = standardOutput
         process.standardError = standardError
@@ -11537,6 +11564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
         set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
@@ -11552,6 +11580,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
             input text acceptedText to targetTerminal
             return true
         end tell
@@ -11567,6 +11605,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = ClaudeCodeTerminalHostProofPolicy.proofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
             ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
         process.environment = environment
         process.standardOutput = standardOutput
         process.standardError = standardError
@@ -11794,6 +11833,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
         let keyScriptLines = Self.ghosttySendKeyScriptLines(for: keySteps)
         let scriptSource = """
+        set targetProcessId to \(frontmostApp.processIdentifier) as integer
         set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
@@ -11809,6 +11849,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
             \(keyScriptLines)
             return true
         end tell
