@@ -9813,6 +9813,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let ghosttyTargetedHardwareOutcome = insertClaudeCodeTerminalHostProofHardwareKeyEvents(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                processIdentifier: frontmostApp.processIdentifier,
+                source: "cgHardwareKeyEventsToPid",
+                baselineSource: "cgHardwareKeyEventsToPidBaseline",
+                mutatedInputReason: "hardware-to-pid-unverified-mutated-input"
+            )
+            if ghosttyTargetedHardwareOutcome.verified {
+                return true
+            }
+            guard ghosttyTargetedHardwareOutcome.safeToContinue else {
+                return false
+            }
+
+            keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+            let ghosttyGlobalHardwareOutcome = insertClaudeCodeTerminalHostProofHardwareKeyEvents(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                processIdentifier: nil,
+                source: "cgHardwareKeyEventsGlobal",
+                baselineSource: "cgHardwareKeyEventsGlobalBaseline",
+                mutatedInputReason: "hardware-global-unverified-mutated-input"
+            )
+            if ghosttyGlobalHardwareOutcome.verified {
+                return true
+            }
+            guard ghosttyGlobalHardwareOutcome.safeToContinue else {
+                return false
+            }
+
             let bundledHelperOutcome = insertClaudeCodeTerminalHostProofBundledTextEventHelper(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10204,6 +10241,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    private func insertClaudeCodeTerminalHostProofHardwareKeyEvents(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        processIdentifier: pid_t?,
+        source: String,
+        baselineSource: String,
+        mutatedInputReason: String
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        guard Self.postHardwareTextKeyEvents(
+            acceptedText,
+            processIdentifier: processIdentifier
+        ) else {
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": mutatedInputReason,
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
     private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(
         _ acceptedText: String,
         expectedProofInputText: String,
@@ -10536,7 +10639,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile?,
-        delayMilliseconds: Int = 80
+        delayMilliseconds: Int = 80,
+        keyDelayMilliseconds: Int = 18
     ) -> (verified: Bool, safeToContinue: Bool) {
         let source = "ghosttySystemEventsKeystrokeShell"
         let baselineSource = "ghosttySystemEventsKeystrokeShellBaseline"
@@ -10584,6 +10688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set keyDelay to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS") as real
         set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
             repeat with candidateWindow in windows
@@ -10604,7 +10709,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tell application "System Events"
             set frontApp to first application process whose frontmost is true
             if bundle identifier of frontApp is not "com.mitchellh.ghostty" then error "Ghostty is not frontmost."
-            keystroke acceptedText
+            repeat with characterIndex from 1 to count characters of acceptedText
+                keystroke character characterIndex of acceptedText
+                delay keyDelay
+            end repeat
         end tell
         return true
         """
@@ -10617,6 +10725,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
         environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = proofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] = compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS"] =
+            String(format: "%.3f", Double(max(keyDelayMilliseconds, 0)) / 1_000)
         process.environment = environment
         process.standardOutput = standardOutput
         process.standardError = standardError
@@ -10687,6 +10797,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "source": source,
                 "verified": String(verified),
                 "frontWindowCheck": "skipped",
+                "keystrokeMode": "perCharacter",
+                "keyDelayMilliseconds": String(keyDelayMilliseconds),
                 "exitStatus": String(process.terminationStatus),
                 "errorMessage": String(errorMessage.prefix(160))
             ]

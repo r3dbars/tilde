@@ -395,6 +395,9 @@ if 'source != "terminal-screen-prompt"' not in synthetic_record_block:
 terminal_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(")
 terminal_insert_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_insert_start)
 terminal_insert_block = app_delegate[terminal_insert_start:terminal_insert_end]
+hardware_helper_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofHardwareKeyEvents(")
+hardware_helper_end = app_delegate.index("\n    private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(", hardware_helper_start)
+hardware_helper_block = app_delegate[hardware_helper_start:hardware_helper_end]
 bundled_helper_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(")
 bundled_helper_end = app_delegate.index("private func prepareGhosttyTerminalHostProofInsertionTarget(", bundled_helper_start)
 bundled_helper_block = app_delegate[bundled_helper_start:bundled_helper_end]
@@ -411,22 +414,32 @@ if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try timeout-bounded native input text before key fallbacks")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+if "insertClaudeCodeTerminalHostProofHardwareKeyEvents" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before bundled Unicode helpers")
 if "insertClaudeCodeTerminalHostProofBundledTextEventHelper" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled app-owned CGEvent text helper")
+if '"cgHardwareKeyEventsToPid"' not in fast_ghostty_block or '"cgHardwareKeyEventsGlobal"' not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try targeted and global hardware key-event insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText"):
     raise SystemExit("Claude Code Ghostty fast proof must try native text action before native input text")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
     raise SystemExit("Claude Code Ghostty fast proof must try native input text before terminal-scoped send key")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
-if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
-    raise SystemExit("Claude Code Ghostty fast proof must try System Events before the bundled text helper")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents"):
+    raise SystemExit("Claude Code Ghostty fast proof must try System Events before hardware key events")
+if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
+    raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before the bundled text helper")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper") > fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter"):
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled text helper before in-process Unicode events")
 if fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
     raise SystemExit("Claude Code Ghostty fast proof must try in-process Unicode events before pasteboard fallback")
 if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must fail closed before generic insertion fallbacks")
+if "postHardwareTextKeyEvents" not in hardware_helper_block or "mutatedInputReason" not in hardware_helper_block:
+    raise SystemExit("Claude Code Ghostty hardware key proof must be verified and fail closed on unexpected mutation")
+if "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS" not in terminal_insert_block or "repeat with characterIndex" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events proof must type accepted text as paced characters")
 if "bundledCGEventTextHelper" not in bundled_helper_block or "bundled-helper-unverified-mutated-input" not in bundled_helper_block:
     raise SystemExit("Claude Code Ghostty bundled helper proof must be verified and fail closed on unexpected mutation")
 if "bundledCGEventTextHelperHID" not in bundled_helper_block or "bundledCGEventTextHelperSession" not in bundled_helper_block:
