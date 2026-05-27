@@ -359,6 +359,16 @@ if "clonePasteboardItems" not in prompt_helper or "$0.copy() as? NSPasteboardIte
 if 'let acceptedLabels = ["new chat"]' not in prompt_helper:
     raise SystemExit("Claude prompt helper must not press task/start buttons that can submit proof text")
 
+terminal_prompt_helper = Path("script/terminal_prompt_ax_proof_helper.swift").read_text()
+if '"--pid"' not in terminal_prompt_helper or "processIdentifier" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must accept the disposable terminal process pid")
+if "activateIfNeeded" not in terminal_prompt_helper or ".activateAllWindows" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must reactivate the exact disposable terminal process while waiting")
+if "activateWithSystemEvents" not in terminal_prompt_helper or '"/usr/bin/osascript"' not in terminal_prompt_helper or "set frontmost of procRef to true" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must fall back to System Events pid activation when AppKit activation loses focus")
+if "frontmostPid=" not in terminal_prompt_helper or "targetPid=" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper failures must include focus ownership pids")
+
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proof-field-identity-refresh-relaxed" not in app_delegate:
     raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
@@ -1713,17 +1723,18 @@ if ! awk '
   exit 1
 fi
 if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'activate_app_by_process_name "$(claude_code_host_open_app_name)"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'open -a "$(claude_code_host_open_app_name)"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'reactivating the host app for the hot accept' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'try_wait_for_frontmost_claude_code_terminal_proof_process' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'reactivating the disposable host process for the hot accept' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_claude_code_terminal_proof_focus' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reason=focus-changed' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'lost its visible suggestion before Tab; trying the next disposable context' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Terminal-host Claude Code proof to recover from focus-changed hidden suggestions before Tab" >&2
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to recover the disposable host process from focus-changed hidden suggestions before Tab" >&2
   exit 1
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEventSource(stateID: .privateState)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyDown.flags = []' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyUp.flags = []' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through CGEvent session events" >&2
@@ -1859,6 +1870,12 @@ if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" scrip
   echo "real app smoke self-test expected Claude Code prompt readiness to settle before typing samples" >&2
   exit 1
 fi
+if ! grep -F 'claude_code_terminal_proof_primary_pid' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'proof_pid_args=(--pid "$proof_pid")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"${proof_pid_args[@]}"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code prompt AX helper calls to target the disposable terminal pid" >&2
+  exit 1
+fi
 if awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /assert_claude_code_terminal_prompt_retains_marker\(\)/ { in_assert = 0 } in_assert && /claude_code_terminal_ax_helper wait/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected typed Claude Code prompt text checks not to require placeholder hints" >&2
   exit 1
@@ -1944,6 +1961,24 @@ if ! awk '
   exit 1
 fi
 if ! awk '
+  /type_claude_code_terminal_raw_smoke_text\(\)/ { in_type = 1 }
+  /^}/ && in_type { in_type = 0 }
+  in_type && /settle_claude_code_terminal_proof_focus "proof typing"/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host proof typing to reactivate the disposable process immediately before key events" >&2
+  exit 1
+fi
+if ! awk '
+  /clear_claude_code_terminal_prompt_line\(\)/ { in_clear = 1 }
+  /^}/ && in_clear { in_clear = 0 }
+  in_clear && /settle_claude_code_terminal_proof_focus "prompt clearing"/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host prompt clearing to reactivate the disposable process immediately before key events" >&2
+  exit 1
+fi
+if ! awk '
   /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_press = 0; saw_screenshot = 0 }
   /^}/ && in_smoke {
     if (saw_press && saw_screenshot) { found = 1 }
@@ -1956,6 +1991,16 @@ if ! awk '
   END { exit found ? 0 : 1 }
 ' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Claude Code terminal-host Tab acceptance before screenshot waiting" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_settle = 0 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /settle_claude_code_terminal_proof_focus "Tab hot accept"/ { saw_settle = 1 }
+  in_smoke && saw_settle && /press_key_code_cgevent 48/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host Tab proof to reactivate the disposable process immediately before Tab" >&2
   exit 1
 fi
 if ! awk '

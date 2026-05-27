@@ -430,6 +430,19 @@ runner problem is focus ownership between Codex/Atlas and the disposable
 Ghostty window before Tab, so the next useful step is a reliable host activation
 or in-app Ghostty accept path that reaches the new send-key rung.
 
+The follow-up focus hardening now targets the disposable Ghostty process by PID
+inside the terminal AX helper, reactivates that exact process before prompt
+clearing, proof typing, prompt-readiness checks, and Tab hot accept, and uses a
+private-state CGEvent keypress helper so the harness does not intentionally
+inherit modifier state. That moved the live proof farther again: current
+diagnostics show Ghostty prompt-row suggestions at lines `596949` and `596952`
+with `traceID=599076D1`, then later prompt-row suggestions with
+`traceID=B2C3B98D`. The run is still not green because the Codex desktop runner
+can inject a real Command-Tab before the scripted accept, hiding the visible
+suggestion before SteadyType can handle Tab. The next proof needs either a
+runner-isolated live pass or an accept driver that cannot be preempted by the
+Codex app regaining focus.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
