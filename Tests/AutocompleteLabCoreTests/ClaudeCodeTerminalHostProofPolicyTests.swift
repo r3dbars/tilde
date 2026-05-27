@@ -1347,6 +1347,123 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(metadata["terminalProofScreenRecoveryWouldRecover"] == "false")
     }
 
+    @Test("Ghostty proof recovers title-scoped screen prompt anchor when direct input matches")
+    func ghosttyProofRecoversTitleScopedScreenPromptAnchorWhenDirectInputMatches() throws {
+        let screenText = """
+        Claude Code STEADYTYPECLAUDECODEPROOF
+        Some older output
+        ❯ Make this setting the feature con
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Make this setting the feature con",
+            rawTextBeforeCursor: "Make this setting the feature con",
+            rawTextAfterCursor: "",
+            terminalScreenText: screenText,
+            proofModeEnabled: true
+        )
+
+        let anchor = try #require(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context))
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
+        #expect(anchor.inputText == "Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "Make this setting the feature con")
+        #expect(anchor.lineIndex == 2)
+        #expect(anchor.lineCount == 6)
+    }
+
+    @Test("Ghostty proof rejects title-scoped screen prompt anchor without direct input match")
+    func ghosttyProofRejectsTitleScopedScreenPromptAnchorWithoutDirectInputMatch() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Claude Code",
+            rawTextBeforeCursor: "",
+            rawTextAfterCursor: """
+            Claude Code
+            Some older output
+            """,
+            terminalScreenText: """
+            Claude Code STEADYTYPECLAUDECODEPROOF
+            Some older output
+            ❯ Make this setting the feature con
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context) == nil)
+    }
+
+    @Test("Ghostty proof creates title-scoped direct prompt anchor before screen text arrives")
+    func ghosttyProofCreatesTitleScopedDirectPromptAnchorBeforeScreenTextArrives() throws {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Make this setting the feature con",
+            rawTextBeforeCursor: "Make this setting the feature con",
+            rawTextAfterCursor: "",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        let anchor = try #require(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context))
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature con")
+        #expect(anchor.inputText == "Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "Make this setting the feature con")
+        #expect(anchor.lineIndex == 0)
+        #expect(anchor.lineCount == 4)
+    }
+
+    @Test("Ghostty proof falls back to title-scoped direct anchor when marked screen prompt is stale")
+    func ghosttyProofFallsBackToTitleScopedDirectAnchorWhenMarkedScreenPromptIsStale() throws {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Make this setting the feature con",
+            rawTextBeforeCursor: "Make this setting the feature con",
+            rawTextAfterCursor: "",
+            terminalScreenText: """
+            Claude Code
+            ❯ STEADYTYPECLAUDECODEPROOF
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        let anchor = try #require(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context))
+
+        #expect(anchor.inputText == "Make this setting the feature con")
+        #expect(anchor.promptLineInputText == "Make this setting the feature con")
+        #expect(anchor.lineIndex == 0)
+        #expect(anchor.lineCount == 4)
+    }
+
+    @Test("Ghostty proof rejects title-scoped direct prompt anchor for shell commands")
+    func ghosttyProofRejectsTitleScopedDirectPromptAnchorForShellCommands() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "git status",
+            rawTextBeforeCursor: "git status",
+            rawTextAfterCursor: "",
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellCommandDetected))
+        #expect(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context) == nil)
+    }
+
     @Test("Ghostty proof recovers proof-marked screen prompt anchor without AX suffix")
     func ghosttyProofRecoversProofMarkedScreenPromptAnchorWithoutAXSuffix() throws {
         let raw = AXFieldClassification(
