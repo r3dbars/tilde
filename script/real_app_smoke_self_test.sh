@@ -201,6 +201,8 @@ if source.count("focus_claude_code_ghostty_proof_window_by_title") < 3:
     raise SystemExit("Ghostty proof harness must use title-marked focus before activation and fallback Tab")
 if "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE" not in source or "compactProofMarker" not in source:
     raise SystemExit("Ghostty proof focus must scope activation to the title-marked disposable window")
+if "system_events_frontmost_process_id_matches()" not in source or "System Events frontmost pid probe" not in source:
+    raise SystemExit("Ghostty proof harness must be able to verify exact frontmost ownership through System Events")
 if "Claude Code $host_name fallback could not focus the title-marked proof window" not in source:
     raise SystemExit("Ghostty fallback Tab must fail clearly when the title-marked proof window cannot be focused")
 focus_start = source.index("focus_claude_code_ghostty_proof_window_by_title()")
@@ -208,6 +210,24 @@ focus_end = source.index("frontmost_claude_code_terminal_proof_process_is_active
 focus_block = source[focus_start:focus_end]
 if "set windowName to name of front window of frontApp" in focus_block:
     raise SystemExit("Ghostty proof focus must not reject title-scoped activation on lagging System Events front-window metadata")
+if "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID" not in focus_block:
+    raise SystemExit("Ghostty proof focus must carry the disposable host pid into the title-scoped focus helper")
+if "set frontmost of procRef to true" not in focus_block or 'return "exact"' not in focus_block:
+    raise SystemExit("Ghostty proof focus must reassert exact-pid frontmost ownership through System Events")
+if 'focus_claude_code_ghostty_proof_window_by_title "$target_pid"' not in source:
+    raise SystemExit("Ghostty proof activation must pass the exact disposable pid into title-scoped focus")
+frontmost_match_start = source.index("frontmost_claude_code_terminal_proof_pid_matches()")
+frontmost_match_end = source.index("frontmost_claude_code_terminal_proof_root_pid_matches()", frontmost_match_start)
+frontmost_match_block = source[frontmost_match_start:frontmost_match_end]
+if "system_events_frontmost_process_id_matches" not in frontmost_match_block:
+    raise SystemExit("Ghostty proof frontmost matching must accept exact System Events pid proof when NSWorkspace reports a root pid")
+fresh_context_start = source.index("open_fresh_claude_code_terminal_proof_context()")
+fresh_context_end = source.index("wait_for_claude_code_terminal_prompt()", fresh_context_start)
+fresh_context_block = source[fresh_context_start:fresh_context_end]
+if 'settle_claude_code_terminal_proof_focus "fresh proof context"' not in fresh_context_block:
+    raise SystemExit("Ghostty fresh-context setup must repair exact proof focus before failing")
+if 'assert_frontmost_app "$host_name" "Claude Code $host_name proof"' in fresh_context_block:
+    raise SystemExit("Ghostty fresh-context setup must not use a plain host-app assertion after exact proof focus repair")
 start = source.index('run_textedit_model_latency()')
 end = source.index('run_textedit_default_model_latency()', start)
 block = source[start:end]
@@ -393,6 +413,8 @@ if "readDataToEndOfFile" not in text_event_helper or "multiline text refused" no
     raise SystemExit("Bundled text-event helper must keep stdin-only single-line text input")
 
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
+if "clonePasteboardItems" not in app_delegate or "$0.copy() as? NSPasteboardItem" in app_delegate:
+    raise SystemExit("App pasteboard fallbacks must clone pasteboard data without NSPasteboardItem.copy() exceptions")
 if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proof-field-identity-refresh-relaxed" not in app_delegate:
     raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
 if "pollTimer?.fireDate" in app_delegate:
@@ -497,6 +519,18 @@ if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must fail closed if pid paste mutates the prompt unexpectedly")
 if "guard targetedPasteOutcome.safeToContinue else" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must not continue to global paste after unsafe pid insertion")
+if "restoreSynchronouslyOnMiss: true" not in terminal_insert_block or "restoreSynchronouslyOnMiss: false" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must keep synchronous pid cleanup but async final global cleanup")
+paste_verified_record = terminal_insert_block.index('"verified": String(verified)')
+paste_miss_baseline = terminal_insert_block.index("let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion", paste_verified_record)
+paste_miss_restore = terminal_insert_block.index("if restoreSynchronouslyOnMiss", paste_miss_baseline)
+if paste_miss_baseline > paste_miss_restore:
+    raise SystemExit("Claude Code terminal-host paste proof must record unchanged-prompt baseline before pasteboard cleanup")
+if '"source": "\\(source)RestoreScheduled"' not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must log async cleanup on final global paste miss")
+global_paste_call = terminal_insert_block[terminal_insert_block.index("let globalPasteOutcome = tryPasteboardCommandV("):]
+if "restoreSynchronouslyOnMiss: false" not in global_paste_call:
+    raise SystemExit("Claude Code terminal-host global paste miss must not block the keyboard callback on synchronous pasteboard restore")
 if '"ghosttySystemEventsKeystrokeShell"' not in terminal_insert_block or "/usr/bin/osascript" not in terminal_insert_block or "keystroke" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must keep a verified System Events keystroke fallback")
 if "ghosttySystemEventsKeystrokeShellBaseline" not in terminal_insert_block:
@@ -2499,14 +2533,13 @@ then
   exit 1
 fi
 if ! awk '
-  /open_fresh_claude_code_terminal_proof_context\(\)/ { in_fresh = 1; saw_wait = 0; saw_refocus = 0; saw_assert = 0 }
+  /open_fresh_claude_code_terminal_proof_context\(\)/ { in_fresh = 1; saw_wait = 0; saw_exact_refocus = 0 }
   /^}/ && in_fresh {
-    if (saw_wait && saw_refocus && saw_assert) { found_fresh = 1 }
+    if (saw_wait && saw_exact_refocus) { found_fresh = 1 }
     in_fresh = 0
   }
   in_fresh && /wait_for_claude_code_terminal_prompt/ { saw_wait = 1 }
-  in_fresh && saw_wait && /wait_for_frontmost_claude_code_terminal_proof_process/ { saw_refocus = 1 }
-  in_fresh && saw_refocus && /assert_frontmost_app/ { saw_assert = 1 }
+  in_fresh && saw_wait && /settle_claude_code_terminal_proof_focus "fresh proof context"/ { saw_exact_refocus = 1 }
   /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_fresh = 0; saw_clear = 0; saw_type = 0 }
   /^}/ && in_smoke {
     if (found_fresh && saw_fresh && saw_clear && saw_type) { found = 1 }
