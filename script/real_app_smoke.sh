@@ -1547,6 +1547,28 @@ find_claude_code_terminal_suggestion_line_optional() {
         saw_terminal_screen_prompt = 1
       }
 
+      {
+        clear_candidate = 0
+        if (index($0, "suggestion-hidden") && index($0, "app=com.anthropic.claude-code")) {
+          clear_candidate = 1
+        }
+        if (index($0, "keyboard-action") && index($0, "app=com.anthropic.claude-code")) {
+          clear_candidate = 1
+        }
+        if (index($0, "insert ") && index($0, "app=com.anthropic.claude-code")) {
+          clear_candidate = 1
+        }
+        if (index($0, "screen-geometry-changed")) {
+          clear_candidate = 1
+        }
+        if (index($0, "workspace-focus-changed app=com.apple.Terminal")) {
+          clear_candidate = 1
+        }
+        if (candidate != "" && clear_candidate) {
+          candidate = ""
+        }
+      }
+
       is_terminal_proof_suggestion == 0 {
         next
       }
@@ -1556,8 +1578,14 @@ find_claude_code_terminal_suggestion_line_optional() {
       }
 
       {
-        print absolute_line
-        exit
+        candidate = absolute_line
+        next
+      }
+
+      END {
+        if (candidate != "") {
+          print candidate
+        }
       }
     ' 2>/dev/null || true)"
 
@@ -8632,6 +8660,7 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
   local max_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_ATTEMPTS:-3}"
   local attempt=1
   local current_suggestion_line="$suggestion_line"
+  CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE="$suggestion_line"
 
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
     max_attempts=1
@@ -8655,16 +8684,20 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
     if log_since_has_fields "$current_suggestion_line" \
       "suggestion-hidden" \
       "app=com.anthropic.claude-code" \
-      "reason=focus-changed"; then
-      echo "Claude Code $host_name suggestion hid after focus changed before Tab; refocusing for a fresh suggestion." >&2
+      "reason=focus-changed" ||
+      log_since_has_fields "$current_suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code" \
+        "reason=focus-lost"; then
+      echo "Claude Code $host_name suggestion hid after focus moved before Tab; refocusing for a fresh suggestion." >&2
       if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
         return 1
       fi
-      if wait_for_log_line_number_optional \
+      if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
         "$current_suggestion_line" \
-        "suggestion-presented .*app=com.anthropic.claude-code" \
         "$refresh_wait_seconds"; then
         current_suggestion_line="$MATCHED_LOG_LINE"
+        CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE="$current_suggestion_line"
         attempt=$((attempt + 1))
         continue
       fi
@@ -8683,8 +8716,13 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
       if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
         return 1
       fi
+      sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SETTLE_SECONDS:-0.4}"
+      attempt=$((attempt + 1))
+      continue
     fi
 
+    CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE="$current_suggestion_line"
+    MATCHED_LOG_LINE="$current_suggestion_line"
     return 0
   done
 
@@ -8870,14 +8908,22 @@ cleanup_claude_code_terminal_proof() {
 }
 
 cleanup_stale_claude_code_terminal_proofs() {
-  local marker stale_pids stale_pid
+  local marker stale_pids stale_pid cleanup_host_bundle cleanup_legacy_tmp_windows
   marker="$(claude_code_proof_marker)"
+  cleanup_host_bundle="$(claude_code_host_bundle_id)"
+  cleanup_legacy_tmp_windows="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}"
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+        -z "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS+x}" ]]; then
+    cleanup_legacy_tmp_windows=0
+  fi
   stale_pids="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_HOST_BUNDLE="$cleanup_host_bundle" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="$cleanup_legacy_tmp_windows" \
     run_osascript_with_timeout \
       "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_TIMEOUT_SECONDS:-4}" \
       "Claude Code terminal stale proof cleanup" <<'APPLESCRIPT' || true
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set targetHostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_HOST_BUNDLE"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
 set stalePids to ""
@@ -8886,19 +8932,21 @@ tell application "System Events"
     try
       set terminalBundle to bundle identifier of terminalProcess
       if terminalBundle is "com.apple.Terminal" or terminalBundle is "com.googlecode.iterm2" or terminalBundle is "com.mitchellh.ghostty" then
-        set hasProofWindow to false
-        repeat with terminalWindow in windows of terminalProcess
-          try
-            set windowName to name of terminalWindow as text
-            if windowName contains markerText or windowName contains proofDirectoryMarker then
-              set hasProofWindow to true
-            else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
-              set hasProofWindow to true
-            end if
-          end try
-        end repeat
-        if hasProofWindow then
-          set stalePids to stalePids & ((unix id of terminalProcess) as text) & linefeed
+        if targetHostBundle is "auto" or terminalBundle is targetHostBundle then
+          set hasProofWindow to false
+          repeat with terminalWindow in windows of terminalProcess
+            try
+              set windowName to name of terminalWindow as text
+              if windowName contains markerText or windowName contains proofDirectoryMarker then
+                set hasProofWindow to true
+              else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
+                set hasProofWindow to true
+              end if
+            end try
+          end repeat
+          if hasProofWindow then
+            set stalePids to stalePids & ((unix id of terminalProcess) as text) & linefeed
+          end if
         end if
       end if
     end try
@@ -11436,12 +11484,14 @@ run_claude_code_terminal_host_smoke() {
         open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
         continue
       fi
+      suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
       settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
         echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion during Tab refocus; launching a fresh disposable context."
         open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
         continue
       fi
+      suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
         if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
           echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion during Tab injection; launching a fresh disposable context."

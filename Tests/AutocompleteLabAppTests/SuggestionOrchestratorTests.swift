@@ -733,6 +733,54 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Claude Code terminal host proof candidates bypass final latency suppression")
+    func claudeCodeTerminalHostProofCandidatesBypassFinalLatencySuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = ClaudeCodeTerminalHostProofPolicy.proofProfile
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+        let request = CompletionRequest(
+            textBeforeCursor: "Make this setting the feature configurable",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "claude-code-terminal-proof-late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_600,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") == true)
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "claude-code-terminal-host-proof")
+    }
+
+    @MainActor
     @Test("Late streaming partials are not hard suppressed by the final latency cutoff")
     func lateStreamingPartialsAreNotHardSuppressedByFinalLatencyCutoff() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

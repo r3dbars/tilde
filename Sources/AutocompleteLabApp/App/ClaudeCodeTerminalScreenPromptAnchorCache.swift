@@ -6,7 +6,7 @@ struct ClaudeCodeTerminalScreenPromptAnchorCache {
         let hostBundleIdentifier: String
         let inputText: String
         let anchor: ClaudeCodeTerminalScreenPromptAnchor
-        let recordedAt: Date
+        var recordedAt: Date
     }
 
     private var entry: Entry?
@@ -43,6 +43,7 @@ struct ClaudeCodeTerminalScreenPromptAnchorCache {
             return nil
         }
 
+        touch(now: now)
         return entry.anchor
     }
 
@@ -61,6 +62,7 @@ struct ClaudeCodeTerminalScreenPromptAnchorCache {
             return nil
         }
 
+        touch(now: now)
         return entry.anchor
     }
 
@@ -115,6 +117,10 @@ struct ClaudeCodeTerminalScreenPromptAnchorCache {
         }
 
         return entry
+    }
+
+    private mutating func touch(now: Date) {
+        entry?.recordedAt = now
     }
 
     private static func inputTextMatches(entry: Entry, requestedInputText: String) -> Bool {

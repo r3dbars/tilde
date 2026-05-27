@@ -608,6 +608,12 @@ final class SuggestionOrchestrator {
             && profile.requiresNoSubmitAcceptanceProof
             && request.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)
             && request.textAfterCursor.isEmpty
+        let claudeCodeTerminalHostProofLatencyBypass =
+            request.appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+                && request.textAfterCursor.isEmpty
+        let proofLatencyBypass = promptProofLatencyBypass || claudeCodeTerminalHostProofLatencyBypass
         var confidenceMetadata = [
             "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
             "completionConfidenceScore": String(confidenceDecision.score),
@@ -616,17 +622,20 @@ final class SuggestionOrchestrator {
         if promptProofLatencyBypass {
             confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
         }
+        if claudeCodeTerminalHostProofLatencyBypass {
+            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
+        }
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
-            && !promptProofLatencyBypass
+            && !proofLatencyBypass
             && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
                 for: request,
                 suggestion: suggestion
             )
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
-            && !promptProofLatencyBypass
+            && !proofLatencyBypass
             && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && (!promptProofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
+            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,
