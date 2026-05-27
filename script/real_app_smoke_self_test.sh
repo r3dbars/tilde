@@ -451,6 +451,8 @@ if "focusGhosttyTerminalHostProofPromptByClickIfAvailable" not in fast_ghostty_b
     raise SystemExit("Claude Code Ghostty fast proof must click the proven prompt-row caret before app-owned insertion")
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
+if "insertGhosttyTerminalHostProofInProcessInputText" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try app-owned in-process native input text before subprocess input fallbacks")
 if "insertGhosttyTerminalHostProofFrontWindowInputText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the smoke-equivalent front-window input text rung")
 if "launchThroughShell: true" not in fast_ghostty_block:
@@ -479,6 +481,8 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_g
     raise SystemExit("Claude Code Ghostty fast proof must try native text action before native input text")
 if fast_ghostty_block.index("focusGhosttyTerminalHostProofPromptByClickIfAvailable") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
     raise SystemExit("Claude Code Ghostty fast proof must focus-click the prompt before native text insertion")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try in-process native input before subprocess front-window input")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
     raise SystemExit("Claude Code Ghostty fast proof must try front-window input text before marker-scanned native text action")
 if fast_ghostty_block.index("launchThroughShell: true") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
@@ -598,6 +602,7 @@ if "compactProofMarker" not in terminal_insert_block:
 if terminal_insert_block.count("repeat with candidateWindow in windows") < 5 or terminal_insert_block.count("set targetWindow to candidateWindow") < 5:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must find the title-marked proof window instead of trusting the front Ghostty window")
 ghostty_window_target_helpers = [
+    ("in-process input text", "private func insertGhosttyTerminalHostProofInProcessInputText(", "private func insertGhosttyTerminalHostProofFrontWindowInputText("),
     ("paste action", "private func insertGhosttyTerminalHostProofPasteAction(", "private func insertGhosttyTerminalHostProofSystemEventsKeystroke("),
     ("system events", "private func insertGhosttyTerminalHostProofSystemEventsKeystroke(", "private func insertGhosttyTerminalHostProofActionText("),
     ("action text", "private func insertGhosttyTerminalHostProofActionText(", "private func insertGhosttyTerminalHostProofAppleScriptText("),
@@ -652,6 +657,10 @@ if "ghosttyAppleScriptInputTextBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified scripting input")
 if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must fail closed if scripting input mutates the prompt unexpectedly")
+if '"ghosttyInProcessInputText"' not in app_delegate or "ghosttyInProcessInputTextBaseline" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty proof must include in-process native input text with unchanged-prompt baseline proof")
+if "ghostty-in-process-input-unverified-mutated-input" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty in-process native input must fail closed if it mutates the prompt unexpectedly")
 if '"ghosttyPerformActionPasteFromClipboard"' not in terminal_insert_block or 'perform action "paste_from_clipboard"' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must try Ghostty's native paste_from_clipboard action")
 if "ghosttyPerformActionPasteFromClipboardBaseline" not in terminal_insert_block:
