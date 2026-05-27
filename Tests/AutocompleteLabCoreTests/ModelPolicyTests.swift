@@ -96,7 +96,8 @@ struct ModelPolicyTests {
 
     @Test("Preferred minimum grows when the word slider is high")
     func preferredMinimumGrowsWhenWordSliderIsHigh() {
-        #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 5) == 1)
+        #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 3) == 1)
+        #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 5) == 3)
         #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 8) == 3)
         #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 12) == 8)
         #expect(CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: 20) == 12)

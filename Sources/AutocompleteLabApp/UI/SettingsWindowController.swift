@@ -813,8 +813,8 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var maxWordsDetailText: String {
-        if tuning.maxVisibleWords >= 12 {
-            let minimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: tuning.maxVisibleWords)
+        let minimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: tuning.maxVisibleWords)
+        if minimum > 1 {
             return "Aims for \(minimum)-\(tuning.maxVisibleWords) words when the sentence has enough context."
         }
 

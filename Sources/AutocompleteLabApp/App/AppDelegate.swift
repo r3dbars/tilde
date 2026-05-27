@@ -15558,7 +15558,7 @@ private extension AppDelegate {
     }
 
     static var currentSuggestionTuningDefaultsVersion: Int {
-        4
+        5
     }
 
     static var previousDefaultSuggestionAggressivenessLevel: Int {
@@ -15799,7 +15799,7 @@ private extension AppDelegate {
             level = SuggestionTuning.defaultAggressivenessLevel
         }
 
-        let maxVisibleWords: Int
+        var maxVisibleWords: Int
         if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
             maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
         } else {
@@ -15823,6 +15823,9 @@ private extension AppDelegate {
             : SuggestionTuning.defaultLearningRestraintLevel
 
         if shouldMigrateDailyDriverDefaults {
+            if maxVisibleWords == 3 {
+                maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
+            }
             if phraseStartWords == 3 {
                 phraseStartWords = SuggestionTuning.defaultPhraseStartWords
             }
