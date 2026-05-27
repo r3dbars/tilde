@@ -9,6 +9,7 @@ Sources/AutocompleteLabCore/Engine/MockCompletionEngine.swift|unit|Tests/Autocom
 Sources/AutocompleteLabCore/Engine/RuntimeBackedCompletionEngine.swift|unit|Tests/AutocompleteLabCoreTests/MockModelRuntimeTests.swift|Runtime-backed engine is covered with a mock runtime.
 Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|unit|Tests/AutocompleteLabCoreTests/ExperimentPlanTests.swift|Experiment planner outcomes are covered directly.
 Sources/AutocompleteLabCore/Geometry/VisualPlacementCorrectionPolicy.swift|unit|Tests/AutocompleteLabCoreTests/VisualPlacementGeometryCorrectionPolicyTests.swift|Visual correction is covered by geometry correction tests.
+Sources/AutocompleteLabCore/Geometry/TerminalScreenPromptCaretEstimator.swift|unit|Tests/AutocompleteLabCoreTests/SyntheticCaretEstimatorTests.swift|Terminal prompt-row caret placement is covered with Ghostty-style prompt anchor fixtures.
 Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift|unit|Tests/AutocompleteLabCoreTests/RuntimeBenchmarkReportTests.swift,Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift|Runtime benchmark pass/fail reporting is covered.
 Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift|unit|Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift|Runtime bootstrap states are covered in runtime policy tests.
 Sources/AutocompleteLabCore/Runtime/RuntimeReadinessGuidance.swift|unit|Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift|Runtime readiness copy and stages are covered in runtime policy tests.
