@@ -556,6 +556,18 @@ that split, but the next two detached attempts did not reach insertion because
 focus moved away before accept / the proof process did not become frontmost.
 Ghostty remains a proof gap, not a supported host.
 
+The latest harness pass removed several runner-level false negatives without
+calling Ghostty supported. The timed AppleScript wrapper now preserves heredoc
+stdin for background `osascript` calls, the Ghostty launcher verifies/retries
+the disposable proof command, restamps the proof title with Ghostty's native
+`set_surface_title`/`set_tab_title` actions after Claude starts, and uses native
+Ghostty text input for the marked setup text before a final CGEvent trigger.
+A direct `claude-code-ghostty` smoke now gets past launch and prompt typing, but
+diagnostics line `789456` still reports no visible suggestion because placement
+requires a terminal-screen prompt anchor. That is the next honest red bar:
+Ghostty can now be launched and marked by the harness, but SteadyType still
+refuses to place a suggestion without a proven prompt-row screen anchor.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
