@@ -1855,7 +1855,8 @@ block = source[start:end]
 for expected in (
     '[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]',
     'recent_start_line="$preferred_start_line"',
-    'candidate = NR',
+    'absolute_line = NR + start',
+    'candidate = absolute_line',
     'suggestion-hidden',
     'keyboard-action',
     'insert ',
@@ -1866,6 +1867,8 @@ for expected in (
     if expected not in block:
         raise SystemExit(1)
 if block.index('[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]') > block.index('recent_start_line >= preferred_start_line'):
+    raise SystemExit(1)
+if "\n      ' \"$LOG_PATH\"" in block:
     raise SystemExit(1)
 PY
 then
@@ -1940,13 +1943,17 @@ source = Path("script/real_app_smoke.sh").read_text()
 start = source.index("log_since_has_fields()")
 end = source.index("\nclaude_code_terminal_suggestion_cancelled_by_screen_geometry()", start)
 block = source[start:end]
-if 'awk -v start="$start_line" -v prefix="$prefix"' not in block:
+if 'sed -n "$((start_line + 1)),\\$p" "$LOG_PATH"' not in block:
+    raise SystemExit(1)
+if 'awk -v prefix="$prefix"' not in block:
     raise SystemExit(1)
 if 'tail -n +' in block:
     raise SystemExit(1)
+if 'NR > start' in block:
+    raise SystemExit(1)
 PY
 then
-  echo "real app smoke self-test expected log field scans to avoid tail future-line hangs" >&2
+  echo "real app smoke self-test expected log field scans to use fast bounded log slices instead of full-file or future-line scans" >&2
   exit 1
 fi
 cat >"$TMP_DIR/ghostty-recent-suggestion.log" <<'EOF'

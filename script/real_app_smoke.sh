@@ -1490,11 +1490,15 @@ log_since_has_fields() {
   local prefix="$2"
   shift 2
   local lines
-  lines="$(awk -v start="$start_line" -v prefix="$prefix" '
-    NR > start && index($0, prefix) {
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+  lines="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk -v prefix="$prefix" '
+    index($0, prefix) {
       print
     }
-  ' "$LOG_PATH" 2>/dev/null || true)"
+  ' 2>/dev/null || true)"
   local field
   for field in "$@"; do
     lines="$(grep -F "$field" <<<"$lines" || true)"
@@ -1525,15 +1529,16 @@ find_claude_code_terminal_suggestion_line_optional() {
   MATCHED_LOG_LINE=0
 
   [[ -f "$LOG_PATH" ]] || return 1
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
 
-  matched_line="$(awk \
+  matched_line="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk \
     -v start="$start_line" \
     -v host_variant="$CLAUDE_CODE_HOST_VARIANT" '
-      NR <= start {
-        next
-      }
-
       {
+        absolute_line = NR + start
         is_prompt_caret = index($0, "synthetic-caret") && index($0, "app=com.anthropic.claude-code") && index($0, "source=terminal-screen-prompt")
         is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
       }
@@ -1551,10 +1556,10 @@ find_claude_code_terminal_suggestion_line_optional() {
       }
 
       {
-        print NR
+        print absolute_line
         exit
       }
-    ' "$LOG_PATH" 2>/dev/null || true)"
+    ' 2>/dev/null || true)"
 
   if [[ -n "$matched_line" ]]; then
     MATCHED_LOG_LINE="$matched_line"
@@ -1577,13 +1582,11 @@ find_recent_claude_code_terminal_suggestion_line_optional() {
     if ((recent_start_line < preferred_start_line)); then
       recent_start_line="$preferred_start_line"
     fi
-    matched_line="$(awk \
+    matched_line="$(sed -n "$((recent_start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+      awk \
       -v start="$recent_start_line" '
-        NR <= start {
-          next
-        }
-
         {
+          absolute_line = NR + start
           is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
         }
 
@@ -1595,7 +1598,7 @@ find_recent_claude_code_terminal_suggestion_line_optional() {
         if (saw_terminal_screen_prompt == 0) {
           next
         }
-        candidate = NR
+        candidate = absolute_line
         next
       }
 
@@ -1626,7 +1629,7 @@ find_recent_claude_code_terminal_suggestion_line_optional() {
             print candidate
           }
         }
-      ' "$LOG_PATH" 2>/dev/null || true)"
+      ' 2>/dev/null || true)"
 
     if [[ -n "$matched_line" ]]; then
       MATCHED_LOG_LINE="$matched_line"
