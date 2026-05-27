@@ -491,6 +491,8 @@ if "DispatchQueue.main.asyncAfter" in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must not schedule post-accept async insertion")
 if '"ghosttySystemEventsBulkKeystrokeShell"' not in terminal_insert_block or 'keystrokeMode is "bulk"' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must keep a verified System Events bulk keystroke fallback")
+if "set frontmost of ghosttyProcess to true" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events proof must foreground Ghostty through System Events before typing")
 if '"ghosttySystemEventsLoginShellBulkKeystroke"' not in terminal_insert_block or 'exec /usr/bin/osascript' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must keep a shell-launched System Events bulk fallback")
 if "ghosttySystemEventsBulkKeystrokeShellBaseline" not in terminal_insert_block:
