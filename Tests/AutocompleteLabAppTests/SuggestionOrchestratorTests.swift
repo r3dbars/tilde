@@ -85,7 +85,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["fieldKindReason"] == "test-compose")
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
         #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
-        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "5")
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
         #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
         #expect(orchestration.requestMetadata["visiblePageContextCaptureScope"] == "visible_screen")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
