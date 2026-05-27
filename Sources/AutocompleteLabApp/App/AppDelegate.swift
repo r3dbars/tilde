@@ -3142,6 +3142,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
                     hostBundleIdentifier: app.bundleIdentifier
                   ),
+                  let repairedProofInputText,
+                  ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+                    proofInputText: repairedProofInputText
+                  ) {
+            terminalScreenPromptAnchor = ClaudeCodeTerminalScreenPromptAnchor(
+                inputText: repairedProofInputText,
+                promptLineInputText: repairedProofInputText,
+                lineIndex: 0,
+                lineCount: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-direct-prompt-anchor-used",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "beforeChars": String(context.textBeforeCursor.count),
+                    "promptLineInputChars": String(repairedProofInputText.count),
+                    "lineIndex": "0",
+                    "lineCount": "4"
+                ]
+            )
+        } else if terminalScreenPromptAnchor == nil,
+                  ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+                    hostBundleIdentifier: app.bundleIdentifier
+                  ),
                   let repairedProofInputText {
             var metadata = claudeCodeTerminalScreenPromptAnchorCache.diagnosticMetadata(
                 hostBundleIdentifier: app.bundleIdentifier,

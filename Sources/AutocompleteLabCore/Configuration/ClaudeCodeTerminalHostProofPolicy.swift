@@ -1192,38 +1192,34 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         for context: ClaudeCodeTerminalHostProofContext
     ) -> ClaudeCodeTerminalScreenPromptAnchor? {
         guard context.hostBundleIdentifier == "com.mitchellh.ghostty",
-              context.proofModeEnabled,
-              !context.terminalScreenText.isEmpty,
-              containsProofMarker(context.terminalScreenText),
-              let promptSegment = recoveredMarkedTerminalScreenPromptSegmentLocation(
-                in: context.terminalScreenText
-              ) else {
+              context.proofModeEnabled else {
             return nil
         }
 
-        let recovery = recoveredMarkedTerminalPromptInputAnalysis(from: promptSegment.text)
-        guard let inputText = recovery.inputText else {
-            return nil
+        if !context.terminalScreenText.isEmpty,
+           containsProofMarker(context.terminalScreenText),
+           let promptSegment = recoveredMarkedTerminalScreenPromptSegmentLocation(
+            in: context.terminalScreenText
+           ) {
+            let recovery = recoveredMarkedTerminalPromptInputAnalysis(from: promptSegment.text)
+            if let inputText = recovery.inputText {
+                let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmedInput.split(whereSeparator: \.isWhitespace).count >= 3,
+                   !hasUnscopedStaleHeaderDirectText(for: context),
+                   !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) {
+                    let lineInputText = sanitizedProofInputLine(promptSegment.markedLine) ?? inputText
+                    return ClaudeCodeTerminalScreenPromptAnchor(
+                        inputText: inputText,
+                        promptLineInputText: lineInputText,
+                        lineIndex: promptSegment.lineIndex,
+                        lineCount: promptSegment.lineCount
+                    )
+                }
+            }
         }
 
-        let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedInput.split(whereSeparator: \.isWhitespace).count >= 3 else {
-            return nil
-        }
-        guard !hasUnscopedStaleHeaderDirectText(for: context) else {
-            return nil
-        }
-        guard !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) else {
-            return nil
-        }
-
-        let lineInputText = sanitizedProofInputLine(promptSegment.markedLine) ?? inputText
-        return ClaudeCodeTerminalScreenPromptAnchor(
-            inputText: inputText,
-            promptLineInputText: lineInputText,
-            lineIndex: promptSegment.lineIndex,
-            lineCount: promptSegment.lineCount
-        )
+        return titleScopedTerminalScreenPromptAnchor(for: context)
+            ?? titleScopedDirectPromptAnchor(for: context)
     }
 
     private static func hasUnscopedStaleHeaderDirectText(
@@ -1601,6 +1597,138 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             }
 
             trailingRowsArePromptChromeOnly = false
+        }
+
+        return nil
+    }
+
+    private static func titleScopedTerminalScreenPromptAnchor(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> ClaudeCodeTerminalScreenPromptAnchor? {
+        let hasTitleMarker = titleHasScopedProofMarker(context.windowTitle)
+        let hasScreenHeaderMarker = terminalScreenHasScopedProofHeaderMarker(context.terminalScreenText)
+        guard hasTitleMarker || hasScreenHeaderMarker,
+              !context.terminalScreenText.isEmpty else {
+            return nil
+        }
+
+        let fragments = lineFragments(context.terminalScreenText)
+        guard !fragments.isEmpty else {
+            return nil
+        }
+
+        var trailingRowsArePromptChromeOnly = true
+        for offset in fragments.indices.reversed() {
+            let trimmed = fragments[offset].trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                continue
+            }
+
+            if isAllowedTrailingClaudePromptHint(trimmed) || looksLikeClaudePromptChromeLine(trimmed) {
+                continue
+            }
+
+            if trailingRowsArePromptChromeOnly,
+               let currentLine = titleScopedTerminalScreenPromptLine(
+                endingAt: offset,
+                fragments: fragments
+               ),
+               let inputText = safeTitleScopedPromptInputLine(currentLine),
+               terminalScreenInputMatchesCurrentContext(inputText, for: context),
+               !hasUnscopedStaleHeaderDirectText(for: context),
+               !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) {
+                let currentLineInputText = safeTitleScopedPromptInputLine(trimmed) ?? inputText
+                return ClaudeCodeTerminalScreenPromptAnchor(
+                    inputText: inputText,
+                    promptLineInputText: currentLineInputText,
+                    lineIndex: offset,
+                    lineCount: fragments.count
+                )
+            }
+
+            trailingRowsArePromptChromeOnly = false
+        }
+
+        return nil
+    }
+
+    private static func titleScopedDirectPromptAnchor(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> ClaudeCodeTerminalScreenPromptAnchor? {
+        let hasTitleMarker = titleHasScopedProofMarker(context.windowTitle)
+        let hasScreenHeaderMarker = terminalScreenHasScopedProofHeaderMarker(context.terminalScreenText)
+        guard hasTitleMarker || hasScreenHeaderMarker,
+              !hasUnsafeTerminalRowsAfterCursor(context.rawTextAfterCursor),
+              let inputText = titleScopedDirectPromptInputText(for: context),
+              !hasUnscopedStaleHeaderDirectText(for: context),
+              !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) else {
+            return nil
+        }
+
+        if let screenLineAnchor = titleScopedDirectPromptScreenLineAnchor(
+            inputText: inputText,
+            terminalScreenText: context.terminalScreenText
+        ) {
+            return screenLineAnchor
+        }
+
+        guard hasTitleMarker else {
+            return nil
+        }
+
+        return ClaudeCodeTerminalScreenPromptAnchor(
+            inputText: inputText,
+            promptLineInputText: inputText,
+            lineIndex: 0,
+            lineCount: 4
+        )
+    }
+
+    private static func titleScopedDirectPromptInputText(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> String? {
+        let focusedLine = effectiveFocusedInputLine(
+            focusedText: context.focusedText,
+            rawTextBeforeCursor: context.rawTextBeforeCursor,
+            rawTextAfterCursor: context.rawTextAfterCursor,
+            terminalScreenText: context.terminalScreenText
+        )
+        let candidates = [
+            proofInputTextBeforeCursorOnly(
+                textBeforeCursor: context.rawTextBeforeCursor,
+                textAfterCursor: context.rawTextAfterCursor
+            ),
+            sanitizedProofInputLine(focusedLine),
+            sanitizedProofInputLine(context.focusedText)
+        ]
+        return candidates.compactMap { $0 }.first { candidate in
+            safeTitleScopedPromptInputLine(candidate) != nil
+                && !looksLikeTitleScopedTerminalChromeOrStaleHeader(candidate)
+        }
+    }
+
+    private static func titleScopedDirectPromptScreenLineAnchor(
+        inputText: String,
+        terminalScreenText: String
+    ) -> ClaudeCodeTerminalScreenPromptAnchor? {
+        let fragments = lineFragments(terminalScreenText)
+        guard !fragments.isEmpty else {
+            return nil
+        }
+
+        for offset in fragments.indices.reversed() {
+            let trimmed = fragments[offset].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let lineInputText = safeTitleScopedPromptInputLine(trimmed),
+                  terminalScreenInput(inputText, matchesCurrentSuffix: lineInputText) else {
+                continue
+            }
+
+            return ClaudeCodeTerminalScreenPromptAnchor(
+                inputText: inputText,
+                promptLineInputText: lineInputText,
+                lineIndex: offset,
+                lineCount: fragments.count
+            )
         }
 
         return nil
