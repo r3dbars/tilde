@@ -9813,6 +9813,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+            let ghosttyInProcessInputTextOutcome = insertGhosttyTerminalHostProofInProcessInputText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyInProcessInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyInProcessInputTextOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10646,6 +10660,186 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
                     "reason": "bundled-helper-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofInProcessInputText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyInProcessInputText"
+        let baselineSource = "ghosttyInProcessInputTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-in-process-input-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let scriptSource = """
+        set acceptedText to \(Self.appleScriptStringLiteral(acceptedText))
+        set proofMarker to \(Self.appleScriptStringLiteral(ClaudeCodeTerminalHostProofPolicy.proofMarker))
+        set compactProofMarker to \(Self.appleScriptStringLiteral(ClaudeCodeTerminalHostProofPolicy.compactProofMarker))
+        set targetProcessId to \(frontmostApp.processIdentifier) as integer
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return false
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            activate window targetWindow
+            select tab targetTab
+            focus targetTerminal
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            input text acceptedText to targetTerminal
+            return true
+        end tell
+        """
+
+        guard let script = NSAppleScript(source: scriptSource) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-in-process-input-script-create-failed",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "acceptedChars": String(acceptedText.count),
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": source,
+                "stage": "start"
+            ]
+        )
+        var errorInfo: NSDictionary?
+        let result = script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-in-process-input-script-failed",
+                    "source": source,
+                    "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
+                    "errorMessage": String((errorInfo["NSAppleScriptErrorMessage"] as? String ?? "").prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard result.booleanValue else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-in-process-input-proof-window-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-in-process-input-unverified-mutated-input",
                     "source": baselineSource
                 ]
             )
