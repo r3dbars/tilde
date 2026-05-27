@@ -387,10 +387,14 @@ if "prepareGhosttyTerminalHostProofInsertionTarget" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must reassert and verify the target before inserting")
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
+if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try timeout-bounded native input text before key fallbacks")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
 if "insertClaudeCodeTerminalHostProofBundledTextEventHelper" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled app-owned CGEvent text helper")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
+    raise SystemExit("Claude Code Ghostty fast proof must try native input text before terminal-scoped send key")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
@@ -445,6 +449,14 @@ if "ghosttyTextAction" not in terminal_insert_block or "\\\\x%02x" not in termin
     raise SystemExit("Claude Code Ghostty proof must hex-escape non-alphanumeric text action bytes")
 if '"ghosttyAppleScriptInputText"' not in terminal_insert_block or "input text" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native scripting input text command")
+if "ghostty-apple-script-timeout" not in terminal_insert_block or "waitForProcessExit" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native input text must be timeout bounded")
+if "ghosttyAppleScriptInputTextTimeoutBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native input text timeout must verify the prompt stayed unchanged")
+if "ghostty-apple-script-timeout-mutated-input" not in terminal_insert_block or "ghostty-apple-script-timeout-still-running" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native input text timeout must fail closed on mutation or a still-running script")
+if "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT" not in terminal_insert_block or "system attribute" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native input text must avoid putting accepted text in osascript argv")
 if "ghosttyAppleScriptInputTextBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified scripting input")
 if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
