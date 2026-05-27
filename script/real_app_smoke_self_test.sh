@@ -382,6 +382,16 @@ if "activateWithSystemEvents" not in terminal_prompt_helper or '"/usr/bin/osascr
 if "frontmostPid=" not in terminal_prompt_helper or "targetPid=" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper failures must include focus ownership pids")
 
+text_event_helper = Path("Sources/SteadyTypeTextEventHelper/main.swift").read_text()
+if "waitForExpectedFrontmostApplication" not in text_event_helper or ".activate(options: [.activateAllWindows])" not in text_event_helper:
+    raise SystemExit("Bundled text-event helper must activate and poll the expected pid before failing frontmost checks")
+if "systemEventsReportsExpectedProcessFrontmost" not in text_event_helper or "first application process whose unix id is targetProcessId" not in text_event_helper:
+    raise SystemExit("Bundled text-event helper must accept System Events exact-pid frontmost proof when NSWorkspace reports Ghostty's root pid")
+if "frontmost pid mismatch actual=" not in text_event_helper or "expected=" not in text_event_helper:
+    raise SystemExit("Bundled text-event helper frontmost failures must include actual and expected pids")
+if "readDataToEndOfFile" not in text_event_helper or "multiline text refused" not in text_event_helper:
+    raise SystemExit("Bundled text-event helper must keep stdin-only single-line text input")
+
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proof-field-identity-refresh-relaxed" not in app_delegate:
     raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
@@ -455,24 +465,32 @@ if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-i
     raise SystemExit("Claude Code Ghostty fast proof must fail closed before generic insertion fallbacks")
 if "postHardwareTextKeyEvents" not in hardware_helper_block or "mutatedInputReason" not in hardware_helper_block:
     raise SystemExit("Claude Code Ghostty hardware key proof must be verified and fail closed on unexpected mutation")
+if "FrontmostPidReassertion" not in hardware_helper_block:
+    raise SystemExit("Claude Code Ghostty hardware key proof must reassert the exact Ghostty proof pid before posting events")
 if "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS" not in terminal_insert_block or "repeat with characterIndex" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must type accepted text as paced characters")
 if "bundledCGEventTextHelper" not in bundled_helper_block or "bundled-helper-unverified-mutated-input" not in bundled_helper_block:
     raise SystemExit("Claude Code Ghostty bundled helper proof must be verified and fail closed on unexpected mutation")
 if "bundledCGEventTextHelperHID" not in bundled_helper_block or "bundledCGEventTextHelperSession" not in bundled_helper_block:
     raise SystemExit("Claude Code Ghostty bundled helper proof must try both HID and session text taps")
+if "FrontmostPidReassertion" not in bundled_helper_block or "FrontmostPidReassertionBaseline" not in bundled_helper_block:
+    raise SystemExit("Claude Code Ghostty bundled helper proof must reassert and baseline-check the exact Ghostty proof pid before posting events")
 if 'tapName: "hid"' not in fast_ghostty_block or 'tapName: "session"' not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must run bundled helper HID and session tap attempts")
 if "process.arguments" not in bundled_helper_block or "acceptedText" in bundled_helper_block.split("process.arguments", 1)[1].split("]", 1)[0]:
     raise SystemExit("Claude Code Ghostty bundled helper must not put accepted text in process arguments")
 if "inputPipe.fileHandleForWriting.write(Data(acceptedText.utf8))" not in bundled_helper_block:
     raise SystemExit("Claude Code Ghostty bundled helper must pass accepted text over stdin")
+if "ghosttyFocusPidReassertion" not in app_delegate or "reassertGhosttyTerminalHostProofFrontmostProcess" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty proof must keep a reusable exact-pid frontmost reassertion before fragile event-posting rungs")
 targeted_source = terminal_insert_block.index('source: "pasteboardCommandVToPid"')
 global_source = terminal_insert_block.index('source: "pasteboardCommandV"', targeted_source)
 if targeted_source > global_source:
     raise SystemExit("Claude Code terminal-host paste proof must try pid-targeted Command-V before global Command-V")
 if "processIdentifier: frontmostApp.processIdentifier" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must post Command-V to the verified frontmost terminal pid")
+if "reassertGhosttyTerminalHostProofFrontmostProcess" not in terminal_insert_block or "FrontmostPidReassertion" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty pid paste proof must reassert the exact proof pid before Command-V")
 if "pasteboardCommandVToPidBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must verify the prompt stayed unchanged after an unverified pid paste")
 if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:

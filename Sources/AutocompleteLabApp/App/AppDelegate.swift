@@ -10329,6 +10329,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         baselineSource: String,
         mutatedInputReason: String
     ) -> (verified: Bool, safeToContinue: Bool) {
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           !reassertGhosttyTerminalHostProofFrontmostProcess(
+               frontmostApp: frontmostApp,
+               source: "\(source)FrontmostPidReassertion"
+           ) {
+            return (false, true)
+        }
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+
         guard Self.postHardwareTextKeyEvents(
             acceptedText,
             processIdentifier: processIdentifier
@@ -10435,6 +10444,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         process.standardInput = inputPipe
         process.standardError = errorPipe
         keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           !reassertGhosttyTerminalHostProofFrontmostProcess(
+               frontmostApp: frontmostApp,
+               source: "\(source)FrontmostPidReassertion"
+           ) {
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "\(source)FrontmostPidReassertionBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            return (false, promptStayedUnchanged)
+        }
 
         do {
             try process.run()
@@ -10534,22 +10564,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let activated = NSRunningApplication(processIdentifier: frontmostApp.processIdentifier)?
             .activate(options: [.activateAllWindows]) ?? false
-        Thread.sleep(forTimeInterval: 0.04)
-        let verified = verifyClaudeCodeTerminalHostProofInsertion(
-            expectedProofInputText: originalProofInputText,
+        let pidReasserted = reassertGhosttyTerminalHostProofFrontmostProcess(
             frontmostApp: frontmostApp,
-            profile: profile,
-            attempts: 6,
-            delaySeconds: 0.03
+            source: "ghosttyFocusPidReassertion"
         )
+        Thread.sleep(forTimeInterval: 0.04)
+        let verified = pidReasserted
+            && verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 6,
+                delaySeconds: 0.03
+            )
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "source": "ghosttyFocusReassertion",
                 "activated": String(activated),
+                "pidReasserted": String(pidReasserted),
                 "verified": String(verified)
             ]
+        )
+        return verified
+    }
+
+    private func reassertGhosttyTerminalHostProofFrontmostProcess(
+        frontmostApp: RunningApplicationInfo,
+        source: String
+    ) -> Bool {
+        guard frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return true
+        }
+
+        let scriptSource = """
+        set targetProcessId to \(frontmostApp.processIdentifier) as integer
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            return frontmost of ghosttyProcess
+        end tell
+        """
+        guard let script = NSAppleScript(source: scriptSource) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-frontmost-pid-reassertion-script-create-failed",
+                    "source": source
+                ]
+            )
+            return false
+        }
+
+        var errorInfo: NSDictionary?
+        let result = script.executeAndReturnError(&errorInfo)
+        let verified = errorInfo == nil && result.booleanValue
+        var metadata: [String: String] = [
+            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            "pid": String(frontmostApp.processIdentifier),
+            "source": source,
+            "verified": String(verified)
+        ]
+        if let errorInfo {
+            metadata["errorNumber"] = (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? ""
+            metadata["errorMessage"] = String((errorInfo["NSAppleScriptErrorMessage"] as? String ?? "").prefix(160))
+        }
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: metadata
         )
         return verified
     }
@@ -10611,6 +10698,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mutatedInputReason: String,
             processIdentifier: pid_t?
         ) -> (verified: Bool, safeToContinue: Bool) {
+            if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+               !reassertGhosttyTerminalHostProofFrontmostProcess(
+                   frontmostApp: frontmostApp,
+                   source: "\(source)FrontmostPidReassertion"
+               ) {
+                return (false, true)
+            }
             guard let fallbackChangeCount = setPasteboardString(for: source) else {
                 return (false, false)
             }
