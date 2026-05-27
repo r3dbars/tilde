@@ -12,25 +12,20 @@ Stale proof can explain progress, but it cannot make a row green.
 Current Ghostty terminal-host evidence is sharper but still red. Local probes
 showed Ghostty `input text` can return success without mutating a fresh shell,
 while Ghostty `perform action "text:..."` can type into a fresh shell. The
-latest useful prompt-row suggestion evidence, `20260527T151920Z-ghostty`, proves
-the lane now fails more honestly: Ghostty Claude Code proof refuses top/header
-synthetic carets unless the app has recovered a terminal-screen prompt
-(`terminal-screen-prompt-unavailable` at diagnostics lines `698298`-`698331`),
-then records
-`synthetic-caret ... source=terminal-screen-prompt`, schedules the model at line
-`698351`, and shows a real prompt-row suggestion at line `698366` with
-`anchorRect=x=130,y=867,w=0,h=22`, `traceID=7B529D5D`, and
-`latencyMilliseconds=538`. The run still exits red because diagnostics reach the
-proof harness after the hot accept window; slow polling starts at line `698344`
-and key capture goes idle at line `698474`. The current harness patch replaces
-full-log suggestion scans with bounded `sed` slices; local replay of current
-diagnostics finds line `698366` from start line `697705` in about 0.1s instead
-of about 2.7-3.0s. A newer one-attempt detached run,
-`20260527T153304Z-ghostty`, failed before this scanner path because the
-disposable Ghostty host process could not be reactivated for proof typing, so it
-does not replace the prompt-row evidence. The latest insertion-transport red
-proof remains `20260527T141658Z-ghostty`, where Tab reached the verified
-insertion ladder but every Ghostty insertion route left the prompt unchanged.
+latest useful prompt-row suggestion evidence, `20260527T161343Z-ghostty`, proves
+the app-side placement blocker moved forward: after proof input repair trimmed
+the recovered prompt to `beforeChars=42`, SteadyType reused the cached
+terminal-screen prompt anchor (`claude-code-terminal-host-proof-prompt-anchor-cache-used`,
+`promptLineInputChars=12`, `lineIndex=40`, `lineCount=41`), recorded
+`synthetic-caret ... source=terminal-screen-prompt` with
+`anchorRect=x=130,y=867,w=0,h=22`, scheduled the model from the repaired prompt
+row, and showed a real prompt-row suggestion at diagnostics line `717840` with
+`traceID=AFF2D945`, `latencyMilliseconds=939`, and 8 visible words. The run
+still exits red because that suggestion was no longer visible before Tab, so the
+next blocker is hot-accept visibility timing, not prompt-row placement. The
+latest insertion-transport red proof remains `20260527T141658Z-ghostty`, where
+Tab reached the verified insertion ladder but every Ghostty insertion route left
+the prompt unchanged.
 
 ## Scores
 

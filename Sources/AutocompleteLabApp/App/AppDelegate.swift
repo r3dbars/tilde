@@ -526,6 +526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var lastClaudeCodeTerminalProofInputSignature: String?
+    private var claudeCodeTerminalScreenPromptAnchorCache = ClaudeCodeTerminalScreenPromptAnchorCache()
     private var lastTextContextRepairDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
@@ -3024,19 +3025,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordTextContextRepairIfNeeded(repair, context: context, profile: profile)
         }
 
-        let terminalScreenPromptAnchor = claudeCodeTerminalHostProofContext(
+        var terminalScreenPromptAnchor = claudeCodeTerminalHostProofContext(
             app: app,
             context: context,
             profile: profile
         ).flatMap {
             ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: $0)
         }
+        if let terminalScreenPromptAnchor {
+            claudeCodeTerminalScreenPromptAnchorCache.remember(
+                terminalScreenPromptAnchor,
+                hostBundleIdentifier: app.bundleIdentifier
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-prompt-anchor-cache-remembered",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "inputChars": String(terminalScreenPromptAnchor.inputText.count),
+                    "promptLineInputChars": String(terminalScreenPromptAnchor.promptLineInputText.count),
+                    "lineIndex": String(terminalScreenPromptAnchor.lineIndex),
+                    "lineCount": String(terminalScreenPromptAnchor.lineCount)
+                ]
+            )
+        }
 
+        var repairedProofInputText: String?
         if let proofInputText = claudeCodeTerminalHostProofInputText(
             app: app,
             context: context,
             profile: profile
         ) {
+            repairedProofInputText = proofInputText
             context = contextReplacingText(
                 context,
                 textBeforeCursor: proofInputText,
@@ -3058,6 +3078,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: app,
             profile: profile
         )
+        if terminalScreenPromptAnchor == nil,
+           ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: app.bundleIdentifier
+           ),
+           let repairedProofInputText,
+           let cachedAnchor = claudeCodeTerminalScreenPromptAnchorCache.anchorForRepairedInput(
+            hostBundleIdentifier: app.bundleIdentifier,
+            inputText: repairedProofInputText
+           ) {
+            terminalScreenPromptAnchor = cachedAnchor
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-prompt-anchor-cache-used",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "beforeChars": String(context.textBeforeCursor.count),
+                    "promptLineInputChars": String(cachedAnchor.promptLineInputText.count),
+                    "lineIndex": String(cachedAnchor.lineIndex),
+                    "lineCount": String(cachedAnchor.lineCount)
+                ]
+            )
+        } else if terminalScreenPromptAnchor == nil,
+                  ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+                    hostBundleIdentifier: app.bundleIdentifier
+                  ),
+                  let repairedProofInputText {
+            var metadata = claudeCodeTerminalScreenPromptAnchorCache.diagnosticMetadata(
+                hostBundleIdentifier: app.bundleIdentifier,
+                inputText: repairedProofInputText
+            )
+            metadata.merge([
+                "app": profile.bundleIdentifier,
+                "host": app.bundleIdentifier,
+                "beforeChars": String(context.textBeforeCursor.count)
+            ]) { _, newValue in newValue }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-prompt-anchor-cache-missed",
+                metadata: metadata
+            )
+        }
         if syntheticCaretBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
            ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
             hostBundleIdentifier: app.bundleIdentifier
