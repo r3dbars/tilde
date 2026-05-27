@@ -8408,7 +8408,10 @@ open_claude_code_terminal_proof() {
   esac
   CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
-  wait_for_frontmost_claude_code_terminal_proof_process
+  if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+    return 1
+  fi
 }
 
 cleanup_claude_code_terminal_proof() {
@@ -8499,6 +8502,24 @@ APPLESCRIPT
   fi
 }
 
+open_fresh_claude_code_terminal_proof_context() {
+  local host_name="$1"
+  local marker="$2"
+  local proof_dir
+
+  cleanup_claude_code_terminal_proof
+  proof_dir="$(make_claude_code_terminal_proof_dir)"
+  CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+  open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" || return 1
+  if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
+    echo "Claude Code $host_name proof host app did not become frontmost for fresh context." >&2
+    return 1
+  fi
+  wait_for_claude_code_terminal_prompt
+  wait_for_frontmost_claude_code_terminal_proof_process
+  assert_frontmost_app "$host_name" "Claude Code $host_name proof"
+}
+
 wait_for_claude_code_terminal_prompt() {
   local proof_pid
   local -a proof_pid_args
@@ -8533,7 +8554,7 @@ assert_claude_code_terminal_prompt_ready() {
   local proof_pid
   local -a proof_pid_args
 
-  settle_claude_code_terminal_proof_focus "typed prompt AX check" || exit 1
+  settle_claude_code_terminal_proof_focus "typed prompt AX check" || return 1
   proof_pid="$(claude_code_terminal_proof_primary_pid)"
   proof_pid_args=()
   if [[ -n "$proof_pid" ]]; then
@@ -8549,7 +8570,7 @@ assert_claude_code_terminal_prompt_ready() {
 }
 
 assert_claude_code_terminal_prompt_retains_marker() {
-  settle_claude_code_terminal_proof_focus "marker retention AX check" || exit 1
+  settle_claude_code_terminal_proof_focus "marker retention AX check" || return 1
   claude_code_terminal_ax_helper contains-marker
 }
 
@@ -8587,7 +8608,7 @@ type_claude_code_terminal_smoke_text() {
 type_claude_code_terminal_raw_smoke_text() {
   local text="$1"
 
-  settle_claude_code_terminal_proof_focus "proof typing" || exit 1
+  settle_claude_code_terminal_proof_focus "proof typing" || return 1
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE:-0}" == "1" ]]; then
     AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
@@ -8624,7 +8645,7 @@ APPLESCRIPT
 }
 
 clear_claude_code_terminal_prompt_line() {
-  settle_claude_code_terminal_proof_focus "prompt clearing" || exit 1
+  settle_claude_code_terminal_proof_focus "prompt clearing" || return 1
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
@@ -10706,13 +10727,11 @@ run_claude_code_terminal_host_smoke() {
 
   require_claude_code_host_if_requested
 
-  local runtime_start_line start_line trace_start_line suggestion_start_line accept_start_line proof_text marker proof_dir host_name
+  local runtime_start_line start_line trace_start_line suggestion_start_line accept_start_line proof_text marker host_name
   local attempt suggestion_wait_seconds found_suggestion suggestion_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
-  proof_dir="$(make_claude_code_terminal_proof_dir)"
   host_name="$(claude_code_host_display_name)"
-  CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
   suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS:-20}"
 
   prepare_temporary_app_enablement
@@ -10721,11 +10740,7 @@ run_claude_code_terminal_host_smoke() {
   wait_for_runtime_ready "$runtime_start_line" "Claude Code runtime readiness" 60 "$SKIP_BUILD"
 
   cleanup_stale_claude_code_terminal_proofs
-  open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
-  wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
-  wait_for_claude_code_terminal_prompt
-  wait_for_frontmost_claude_code_terminal_proof_process
-  assert_frontmost_app "$host_name" "Claude Code $host_name proof"
+  open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
   attempt=0
   found_suggestion=0
   accept_start_line="$(line_count "$LOG_PATH")"
@@ -10735,7 +10750,11 @@ run_claude_code_terminal_host_smoke() {
     validate_claude_code_terminal_smoke_input_text "$proof_text"
 
     wait_for_frontmost_claude_code_terminal_proof_process
-    clear_claude_code_terminal_prompt_line
+    if ! clear_claude_code_terminal_prompt_line; then
+      echo "Claude Code $host_name proof attempt $attempt lost focus while clearing; launching a fresh disposable context."
+      open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+      continue
+    fi
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
 
     start_line="$(line_count "$LOG_PATH")"
@@ -10743,8 +10762,16 @@ run_claude_code_terminal_host_smoke() {
     suggestion_start_line="$start_line"
     accept_start_line="$(line_count "$LOG_PATH")"
 
-    type_claude_code_terminal_smoke_text "$proof_text"
-    assert_claude_code_terminal_prompt_ready "$proof_text"
+    if ! type_claude_code_terminal_smoke_text "$proof_text"; then
+      echo "Claude Code $host_name proof attempt $attempt lost focus while typing; launching a fresh disposable context."
+      open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+      continue
+    fi
+    if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
+      echo "Claude Code $host_name proof attempt $attempt could not prove typed prompt readiness; launching a fresh disposable context."
+      open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+      continue
+    fi
     if wait_for_claude_code_terminal_suggestion_line_optional \
       "$suggestion_start_line" \
       "$suggestion_wait_seconds" ||
@@ -10754,13 +10781,15 @@ run_claude_code_terminal_host_smoke() {
         2; then
       suggestion_line="$MATCHED_LOG_LINE"
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
-        echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion before Tab; trying the next disposable context."
+        echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion before Tab; launching a fresh disposable context."
+        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
         continue
       fi
       found_suggestion=1
       break
     fi
-    echo "Claude Code $host_name proof attempt $attempt produced no visible suggestion; trying the next disposable context."
+    echo "Claude Code $host_name proof attempt $attempt produced no visible suggestion; launching a fresh disposable context."
+    open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
   done < <(claude_code_terminal_smoke_input_texts)
 
   if [[ "$found_suggestion" != "1" ]]; then

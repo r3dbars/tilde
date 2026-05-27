@@ -443,6 +443,16 @@ suggestion before SteadyType can handle Tab. The next proof needs either a
 runner-isolated live pass or an accept driver that cannot be preempted by the
 Codex app regaining focus.
 
+The harness now treats those focus steals as disposable-context failures instead
+of letting stale Ghostty state poison the next sample. If focus is lost while
+clearing, typing, proving prompt readiness, or refreshing a hidden suggestion,
+the smoke launches a fresh title-marked Ghostty/Claude Code process before the
+next proof text. Fresh process activation failures now fail with a focused
+runner error instead of continuing against a dead PID. This still does not make
+Ghostty supported, but it narrows the remaining proof gap to runner-isolated
+Tab acceptance or an accept driver that SteadyType can observe without Codex
+preempting the target window.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
