@@ -10466,6 +10466,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetWindow to missing value
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if windowName contains proofMarker or windowName contains compactProofMarker then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then return false
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            select tab targetTab
+            focus targetTerminal
+        end tell
+        delay 0.02
         tell application "System Events"
             set frontApp to first application process whose frontmost is true
             if bundle identifier of frontApp is not "com.mitchellh.ghostty" then error "Ghostty is not frontmost."
@@ -10474,7 +10491,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if windowName does not contain proofMarker and windowName does not contain compactProofMarker then error "Ghostty front window is not the proof window."
             keystroke acceptedText
         end tell
+        return true
         """
+        let standardOutput = Pipe()
         let standardError = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: osascriptPath)
@@ -10484,6 +10503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = proofMarker
         environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] = compactProofMarker
         process.environment = environment
+        process.standardOutput = standardOutput
         process.standardError = standardError
 
         do {
@@ -10503,6 +10523,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (false, true)
         }
 
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
         let errorMessage = String(data: errorData, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -10516,6 +10541,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source,
                     "exitStatus": String(process.terminationStatus),
                     "errorMessage": String(errorMessage.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-proof-window-missing",
+                    "source": source
                 ]
             )
             return (false, true)
@@ -10612,12 +10649,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set actionText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
-            if not frontmost then return false
-            if not (exists front window) then return false
-            set targetWindow to front window
-            set windowName to name of targetWindow as text
-            if windowName does not contain proofMarker and windowName does not contain compactProofMarker then return false
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if windowName contains proofMarker or windowName contains compactProofMarker then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
             activate window targetWindow
@@ -10860,12 +10901,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
         set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
         set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
-            if not frontmost then return false
-            if not (exists front window) then return false
-            set targetWindow to front window
-            set windowName to name of targetWindow as text
-            if windowName does not contain proofMarker and windowName does not contain compactProofMarker then return false
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if windowName contains proofMarker or windowName contains compactProofMarker then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
             activate window targetWindow
@@ -11113,12 +11158,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
         let keyScriptLines = Self.ghosttySendKeyScriptLines(for: keySteps)
         let scriptSource = """
+        set targetWindow to missing value
         tell application id "com.mitchellh.ghostty"
-            if not frontmost then return false
-            if not (exists front window) then return false
-            set targetWindow to front window
-            set windowName to name of targetWindow as text
-            if windowName does not contain \(Self.appleScriptStringLiteral(proofMarker)) and windowName does not contain \(Self.appleScriptStringLiteral(compactProofMarker)) then return false
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if windowName contains \(Self.appleScriptStringLiteral(proofMarker)) or windowName contains \(Self.appleScriptStringLiteral(compactProofMarker)) then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
             activate window targetWindow

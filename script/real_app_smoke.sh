@@ -8089,6 +8089,10 @@ claude_code_proof_marker() {
   printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-STEADYTYPECLAUDECODEPROOF}"
 }
 
+claude_code_compact_proof_marker() {
+  claude_code_proof_marker | tr -d '[:space:]'
+}
+
 claude_code_model_latency_proof_texts() {
   if [[ -n "${AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TEXTS:-}" ]]; then
     printf '%s\n' "$AUTOCOMPLETE_LAB_CLAUDE_CODE_MODEL_LATENCY_TEXTS"
@@ -8365,6 +8369,11 @@ SWIFT
 activate_process_id() {
   local target_pid="$1"
 
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+    focus_claude_code_ghostty_proof_window_by_title; then
+    return 0
+  fi
+
   local swift_activation_pid
   {
     swift - "$target_pid" <<'SWIFT' >/dev/null
@@ -8392,6 +8401,49 @@ tell application "System Events"
   set frontmost of first application process whose unix id is targetPid to true
 end tell
 APPLESCRIPT
+}
+
+focus_claude_code_ghostty_proof_window_by_title() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
+
+  local focus_result
+  focus_result="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$CLAUDE_CODE_TERMINAL_PROOF_TITLE" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$(claude_code_proof_marker)" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER="$(claude_code_compact_proof_marker)" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty title-marked proof focus" <<'APPLESCRIPT' || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set proofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER"
+set targetWindow to missing value
+tell application id "com.mitchellh.ghostty"
+  repeat with candidateWindow in windows
+    set windowName to name of candidateWindow as text
+    if windowName contains proofTitle or windowName contains proofMarker or windowName contains compactProofMarker then
+      set targetWindow to candidateWindow
+      exit repeat
+    end if
+  end repeat
+  if targetWindow is missing value then return false
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  select tab targetTab
+  focus targetTerminal
+end tell
+delay 0.05
+tell application "System Events"
+  set frontApp to first application process whose frontmost is true
+  if bundle identifier of frontApp is not "com.mitchellh.ghostty" then return false
+  set windowName to name of front window of frontApp as text
+  if windowName does not contain proofTitle and windowName does not contain proofMarker and windowName does not contain compactProofMarker then return false
+end tell
+return true
+APPLESCRIPT
+)"
+  [[ "$focus_result" == "true" ]]
 }
 
 frontmost_claude_code_terminal_proof_process_is_active() {
@@ -9121,6 +9173,12 @@ APPLESCRIPT
 
   probe_start_line="$(line_count "$LOG_PATH")"
   echo "Claude Code $host_name CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab."
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if ! focus_claude_code_ghostty_proof_window_by_title; then
+      echo "Claude Code $host_name fallback could not focus the title-marked proof window." >&2
+      return 1
+    fi
+  fi
   if ! run_osascript_with_timeout \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_FALLBACK_TAB_TIMEOUT_SECONDS:-2}" \
     "Claude Code $host_name fallback Tab" <<'APPLESCRIPT'
