@@ -9557,6 +9557,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttySendKeyOutcome.verified {
+                return true
+            }
+            guard ghosttySendKeyOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttySystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10378,6 +10392,149 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return (false, true)
     }
 
+    private func insertGhosttyTerminalHostProofSendKey(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttySendKey"
+        let baselineSource = "ghosttySendKeyBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+        guard let keySteps = Self.ghosttySendKeySteps(acceptedText) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "acceptedChars": String(acceptedText.count),
+                    "posted": "false",
+                    "reason": "ghostty-send-key-text-unsupported",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let proofMarker = ClaudeCodeTerminalHostProofPolicy.proofMarker
+        let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        let keyScriptLines = Self.ghosttySendKeyScriptLines(for: keySteps)
+        let scriptSource = """
+        tell application id "com.mitchellh.ghostty"
+            if not frontmost then return false
+            if not (exists front window) then return false
+            set targetWindow to front window
+            set windowName to name of targetWindow as text
+            if windowName does not contain \(Self.appleScriptStringLiteral(proofMarker)) and windowName does not contain \(Self.appleScriptStringLiteral(compactProofMarker)) then return false
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            \(keyScriptLines)
+            return true
+        end tell
+        """
+        guard let script = NSAppleScript(source: scriptSource) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-create-failed",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        var errorInfo: NSDictionary?
+        let result = script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-failed",
+                    "source": source,
+                    "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
+                    "errorMessage": errorInfo["NSAppleScriptErrorMessage"] as? String ?? ""
+                ]
+            )
+            return (false, true)
+        }
+
+        guard result.booleanValue else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
     nonisolated private static func ghosttyTextAction(_ text: String) -> String {
         let encoded = text.utf8.map { byte -> String in
             switch byte {
@@ -10388,6 +10545,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }.joined()
         return "text:\(encoded)"
+    }
+
+    private struct GhosttySendKeyStep {
+        let keyName: String
+        let modifiers: String?
+    }
+
+    nonisolated private static func ghosttySendKeySteps(_ text: String) -> [GhosttySendKeyStep]? {
+        var steps: [GhosttySendKeyStep] = []
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 32:
+                steps.append(GhosttySendKeyStep(keyName: "space", modifiers: nil))
+            case 48...57, 97...122:
+                steps.append(GhosttySendKeyStep(keyName: String(scalar), modifiers: nil))
+            case 65...90:
+                guard let lowercase = UnicodeScalar(scalar.value + 32) else {
+                    return nil
+                }
+                steps.append(GhosttySendKeyStep(keyName: String(lowercase), modifiers: "shift"))
+            default:
+                return nil
+            }
+        }
+        return steps.isEmpty ? nil : steps
+    }
+
+    nonisolated private static func ghosttySendKeyScriptLines(for steps: [GhosttySendKeyStep]) -> String {
+        steps.map { step in
+            let modifiers = step.modifiers.map {
+                " modifiers \(appleScriptStringLiteral($0))"
+            } ?? ""
+            let key = appleScriptStringLiteral(step.keyName)
+            return """
+            send key \(key) action press\(modifiers) to targetTerminal
+            send key \(key) action release\(modifiers) to targetTerminal
+"""
+        }.joined(separator: "\n")
     }
 
     nonisolated private static func appleScriptStringLiteral(_ text: String) -> String {

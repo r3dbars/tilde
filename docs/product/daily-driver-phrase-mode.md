@@ -419,6 +419,17 @@ That is not support yet, but the trust shape is better: prompt-row placement is
 real and the next proof target is a verified one-word no-submit Ghostty insertion
 source.
 
+The next harness pass made that diagnosis sharper. Ghostty insertion now tries a
+terminal-scoped `send key` AppleScript rung before global System Events and CG
+key-event fallbacks, with baseline checks that stop if the prompt mutates
+without verification. The smoke harness also now scans actual diagnostics line
+numbers for prompt-row virtual Claude Code suggestions instead of reporting
+`no visible suggestion` after the app already showed one. Fresh live attempts
+proved the detector can find the prompt-row suggestion; the remaining live
+runner problem is focus ownership between Codex/Atlas and the disposable
+Ghostty window before Tab, so the next useful step is a reliable host activation
+or in-app Ghostty accept path that reaches the new send-key rung.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |

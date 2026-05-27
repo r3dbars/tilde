@@ -1525,45 +1525,91 @@ ghostty_suggestion_line_has_prompt_row_anchor() {
   ((anchor_y >= min_y))
 }
 
+find_claude_code_terminal_suggestion_line_optional() {
+  local start_line="$1"
+  local matched_line min_anchor_y
+  MATCHED_LOG_LINE=0
+
+  [[ -f "$LOG_PATH" ]] || return 1
+
+  min_anchor_y="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MIN_PROMPT_ANCHOR_Y:-160}"
+  if ! [[ "$min_anchor_y" =~ ^[0-9]+$ ]]; then
+    min_anchor_y=160
+  fi
+
+  matched_line="$(awk \
+    -v start="$start_line" \
+    -v host_variant="$CLAUDE_CODE_HOST_VARIANT" \
+    -v min_anchor_y="$min_anchor_y" '
+      NR <= start {
+        next
+      }
+
+      {
+        is_prompt_caret = index($0, "synthetic-caret") && index($0, "app=com.anthropic.claude-code") && index($0, "source=terminal-screen-prompt")
+        is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
+      }
+
+      is_prompt_caret != 0 {
+        saw_terminal_screen_prompt = 1
+      }
+
+      is_terminal_proof_suggestion == 0 {
+        next
+      }
+
+      (host_variant == "ghostty") && (saw_terminal_screen_prompt == 0) {
+        anchor_y = $0
+        if (anchor_y !~ /anchorRect=x=-?[0-9]+,y=-?[0-9]+,/) {
+          next
+        }
+        sub(/^.*anchorRect=x=-?[0-9]+,y=/, "", anchor_y)
+        sub(/,.*/, "", anchor_y)
+        if ((anchor_y + 0) < min_anchor_y) {
+          next
+        }
+      }
+
+      {
+        print NR
+        exit
+      }
+    ' "$LOG_PATH" 2>/dev/null || true)"
+
+  if [[ -n "$matched_line" ]]; then
+    MATCHED_LOG_LINE="$matched_line"
+    return 0
+  fi
+
+  return 1
+}
+
+find_recent_claude_code_terminal_suggestion_line_optional() {
+  local preferred_start_line="$1"
+  local current_line recent_window_lines recent_start_line
+  recent_window_lines="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_RECENT_SUGGESTION_SCAN_LINES:-260}"
+  [[ "$recent_window_lines" =~ ^[0-9]+$ ]] || recent_window_lines=260
+  current_line="$(line_count "$LOG_PATH")"
+  recent_start_line=$((current_line > recent_window_lines ? current_line - recent_window_lines : 0))
+  if ((recent_start_line >= preferred_start_line)); then
+    return 1
+  fi
+
+  find_claude_code_terminal_suggestion_line_optional "$recent_start_line"
+}
+
 wait_for_claude_code_terminal_suggestion_line_optional() {
   local start_line="$1"
   local timeout_seconds="${2:-12}"
   local deadline=$((SECONDS + timeout_seconds))
-  local relative_line line saw_terminal_screen_prompt
   MATCHED_LOG_LINE=0
 
   while ((SECONDS <= deadline)); do
-    if [[ -f "$LOG_PATH" ]]; then
-      relative_line=0
-      saw_terminal_screen_prompt=0
-      while IFS= read -r line; do
-        relative_line=$((relative_line + 1))
-        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
-          line_has_all_fields "$line" \
-            "synthetic-caret" \
-            "app=com.anthropic.claude-code" \
-            "source=terminal-screen-prompt"; then
-          saw_terminal_screen_prompt=1
-        fi
-
-        if ! line_has_all_fields "$line" \
-          "suggestion-presented" \
-          "app=com.anthropic.claude-code" \
-          "fieldKindReason=claude-code-terminal-host-proof" \
-          "fieldKindSuppressed=false" \
-          "placementAnchorSource=synthetic-caret"; then
-          continue
-        fi
-
-        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
-              "$saw_terminal_screen_prompt" != "1" ]] &&
-          ! ghostty_suggestion_line_has_prompt_row_anchor "$line"; then
-          continue
-        fi
-
-        MATCHED_LOG_LINE=$((start_line + relative_line))
-        return 0
-      done < <(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null)
+    if find_claude_code_terminal_suggestion_line_optional "$start_line"; then
+      return 0
+    fi
+    if find_recent_claude_code_terminal_suggestion_line_optional "$start_line"; then
+      return 0
     fi
     sleep 0.2
   done
@@ -8165,7 +8211,11 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
       "app=com.anthropic.claude-code" \
       "reason=focus-changed"; then
       echo "Claude Code $host_name suggestion hid after focus changed before Tab; refocusing for a fresh suggestion." >&2
-      wait_for_frontmost_claude_code_terminal_proof_process
+      activate_app_by_process_name "$(claude_code_host_open_app_name)"
+      open -a "$(claude_code_host_open_app_name)" >/dev/null 2>&1 || true
+      if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
+        return 1
+      fi
       if wait_for_log_line_number_optional \
         "$current_suggestion_line" \
         "suggestion-presented .*app=com.anthropic.claude-code" \
@@ -8177,18 +8227,13 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
       return 1
     fi
 
-    if ! frontmost_claude_code_terminal_proof_process_is_active; then
-      echo "Claude Code $host_name proof lost focus before Tab; refocusing for a fresh suggestion." >&2
-      wait_for_frontmost_claude_code_terminal_proof_process
-      if wait_for_log_line_number_optional \
-        "$current_suggestion_line" \
-        "suggestion-presented .*app=com.anthropic.claude-code" \
-        "$refresh_wait_seconds"; then
-        current_suggestion_line="$MATCHED_LOG_LINE"
-        attempt=$((attempt + 1))
-        continue
+    if ! try_wait_for_frontmost_app "$host_name" 1; then
+      echo "Claude Code $host_name proof lost focus before Tab; reactivating the host app for the hot accept." >&2
+      activate_app_by_process_name "$(claude_code_host_open_app_name)"
+      open -a "$(claude_code_host_open_app_name)" >/dev/null 2>&1 || true
+      if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
+        return 1
       fi
-      return 1
     fi
 
     return 0
@@ -10597,7 +10642,7 @@ run_claude_code_terminal_host_smoke() {
 
   require_claude_code_host_if_requested
 
-  local runtime_start_line start_line trace_start_line accept_start_line proof_text marker proof_dir host_name
+  local runtime_start_line start_line trace_start_line suggestion_start_line accept_start_line proof_text marker proof_dir host_name
   local attempt suggestion_wait_seconds found_suggestion suggestion_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
@@ -10631,13 +10676,18 @@ run_claude_code_terminal_host_smoke() {
 
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
+    suggestion_start_line="$start_line"
     accept_start_line="$(line_count "$LOG_PATH")"
 
     type_claude_code_terminal_smoke_text "$proof_text"
     assert_claude_code_terminal_prompt_ready "$proof_text"
     if wait_for_claude_code_terminal_suggestion_line_optional \
-      "$accept_start_line" \
-      "$suggestion_wait_seconds"; then
+      "$suggestion_start_line" \
+      "$suggestion_wait_seconds" ||
+      wait_for_log_line_number_optional \
+        "$suggestion_start_line" \
+        "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
+        2; then
       suggestion_line="$MATCHED_LOG_LINE"
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
         echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion before Tab; trying the next disposable context."
@@ -10653,7 +10703,7 @@ run_claude_code_terminal_host_smoke() {
     echo "Timed out waiting for Claude Code $host_name proof suggestion after $attempt disposable context(s)." >&2
     echo "Pattern: suggestion-presented .*app=com.anthropic.claude-code" >&2
     echo "Log: $LOG_PATH" >&2
-    tail -n +"$((accept_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    tail -n +"$((suggestion_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
     exit 1
   fi
 
