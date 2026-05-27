@@ -9827,6 +9827,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let ghosttyLoginShellFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                launchThroughShell: true
+            )
+            if ghosttyLoginShellFrontWindowInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyLoginShellFrontWindowInputTextOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyActionTextOutcome = insertGhosttyTerminalHostProofActionText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9852,6 +9867,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             guard ghosttyInputTextOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyLoginShellInputTextOutcome = insertGhosttyTerminalHostProofAppleScriptText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                launchThroughShell: true
+            )
+            if ghosttyLoginShellInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyLoginShellInputTextOutcome.safeToContinue else {
                 return false
             }
 
@@ -10629,10 +10659,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
-        profile: CompatibilityProfile?
+        profile: CompatibilityProfile?,
+        launchThroughShell: Bool = false
     ) -> (verified: Bool, safeToContinue: Bool) {
-        let source = "ghosttyFrontWindowInputText"
-        let baselineSource = "ghosttyFrontWindowInputTextBaseline"
+        let source = launchThroughShell
+            ? "ghosttyLoginShellFrontWindowInputText"
+            : "ghosttyFrontWindowInputText"
+        let baselineSource = launchThroughShell
+            ? "ghosttyLoginShellFrontWindowInputTextBaseline"
+            : "ghosttyFrontWindowInputTextBaseline"
         guard !acceptedText.isEmpty,
               !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
@@ -10661,6 +10696,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (false, false)
         }
 
+        let shellPath = "/bin/zsh"
+        if launchThroughShell,
+           !FileManager.default.isExecutableFile(atPath: shellPath) {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-shell-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
         let scriptSource = """
         set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
         tell application id "com.mitchellh.ghostty"
@@ -10677,9 +10727,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let standardOutput = Pipe()
         let standardError = Pipe()
+        let standardInput = Pipe()
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: osascriptPath)
-        process.arguments = ["-e", scriptSource]
+        if launchThroughShell {
+            process.executableURL = URL(fileURLWithPath: shellPath)
+            process.arguments = ["-lc", "exec /usr/bin/osascript"]
+            process.standardInput = standardInput
+        } else {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-e", scriptSource]
+        }
         var environment = ProcessInfo.processInfo.environment
         environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
         process.environment = environment
@@ -10688,6 +10745,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try process.run()
+            if launchThroughShell {
+                standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
+                try? standardInput.fileHandleForWriting.close()
+            }
         } catch {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
@@ -10804,7 +10865,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "posted": "true",
                 "source": source,
-                "verified": String(verified)
+                "verified": String(verified),
+                "launchMode": launchThroughShell ? "shell" : "direct"
             ]
         )
         if verified {
@@ -12059,10 +12121,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
-        profile: CompatibilityProfile?
+        profile: CompatibilityProfile?,
+        launchThroughShell: Bool = false
     ) -> (verified: Bool, safeToContinue: Bool) {
-        let source = "ghosttyAppleScriptInputText"
-        let baselineSource = "ghosttyAppleScriptInputTextBaseline"
+        let source = launchThroughShell
+            ? "ghosttyAppleScriptLoginShellInputText"
+            : "ghosttyAppleScriptInputText"
+        let baselineSource = launchThroughShell
+            ? "ghosttyAppleScriptLoginShellInputTextBaseline"
+            : "ghosttyAppleScriptInputTextBaseline"
         guard !acceptedText.isEmpty,
               !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
@@ -12099,6 +12166,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             return (false, false)
+        }
+
+        let shellPath = "/bin/zsh"
+        if launchThroughShell,
+           !FileManager.default.isExecutableFile(atPath: shellPath) {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-shell-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
         }
 
         let scriptSource = """
@@ -12160,9 +12242,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let standardOutput = Pipe()
         let standardError = Pipe()
+        let standardInput = Pipe()
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: osascriptPath)
-        process.arguments = ["-e", scriptSource]
+        if launchThroughShell {
+            process.executableURL = URL(fileURLWithPath: shellPath)
+            process.arguments = ["-lc", "exec /usr/bin/osascript"]
+            process.standardInput = standardInput
+        } else {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-e", scriptSource]
+        }
         var environment = ProcessInfo.processInfo.environment
         environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
         environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = ClaudeCodeTerminalHostProofPolicy.proofMarker
@@ -12175,6 +12264,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try process.run()
+            if launchThroughShell {
+                standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
+                try? standardInput.fileHandleForWriting.close()
+            }
         } catch {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
@@ -12303,7 +12396,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "posted": "true",
                 "source": source,
-                "verified": String(verified)
+                "verified": String(verified),
+                "launchMode": launchThroughShell ? "shell" : "direct"
             ]
         )
         if verified {

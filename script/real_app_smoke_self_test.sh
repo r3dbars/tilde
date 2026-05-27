@@ -453,10 +453,14 @@ if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_blo
     raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
 if "insertGhosttyTerminalHostProofFrontWindowInputText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the smoke-equivalent front-window input text rung")
+if "launchThroughShell: true" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try the shell-launched front-window input text rung")
 if "insertGhosttyTerminalHostProofActionText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native text action before slower key fallbacks")
 if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try timeout-bounded native input text before key fallbacks")
+if "ghosttyAppleScriptLoginShellInputText" not in app_delegate or "ghosttyLoginShellInputTextOutcome" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must include shell-launched marker-scanned native input text")
 if "insertGhosttyTerminalHostProofPasteAction" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native paste action before key fallbacks")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
@@ -477,8 +481,12 @@ if fast_ghostty_block.index("focusGhosttyTerminalHostProofPromptByClickIfAvailab
     raise SystemExit("Claude Code Ghostty fast proof must focus-click the prompt before native text insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
     raise SystemExit("Claude Code Ghostty fast proof must try front-window input text before marker-scanned native text action")
+if fast_ghostty_block.index("launchThroughShell: true") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try shell-launched front-window input text before marker-scanned native text action")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
     raise SystemExit("Claude Code Ghostty fast proof must try native input text before native paste action")
+if fast_ghostty_block.index("ghosttyLoginShellInputTextOutcome") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
+    raise SystemExit("Claude Code Ghostty fast proof must try shell-launched marker-scanned native input before native paste action")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
     raise SystemExit("Claude Code Ghostty fast proof must try native paste action before terminal-scoped send key")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
@@ -515,6 +523,10 @@ if "set targetWindow to front window" not in front_window_input_block or "input 
     raise SystemExit("Claude Code Ghostty front-window input rung must mirror the live smoke native typing path")
 if "ghosttyFrontWindowInputTextBaseline" not in front_window_input_block or "ghostty-front-window-input-unverified-mutated-input" not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty front-window input rung must verify unchanged baseline and fail closed on mutation")
+if "ghosttyLoginShellFrontWindowInputText" not in front_window_input_block or 'process.arguments = ["-lc", "exec /usr/bin/osascript"]' not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty front-window input rung must support the login-shell native input proof path")
+if "standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))" not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty shell-launched front-window input must pass AppleScript through stdin")
 if "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS" not in terminal_insert_block or "repeat with characterIndex" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must type accepted text as paced characters")
 if "bundledCGEventTextHelper" not in bundled_helper_block or "bundled-helper-unverified-mutated-input" not in bundled_helper_block:
@@ -598,6 +610,10 @@ for name, start_marker, end_marker in ghostty_window_target_helpers:
         raise SystemExit(f"Claude Code Ghostty {name} proof must capture the exact pid front-window title before native insertion")
     if "set targetWindowNameIsProof to false" not in helper_block:
         raise SystemExit(f"Claude Code Ghostty {name} proof must treat unmarked front-window titles as stale")
+    if name == "input text" and ("ghosttyAppleScriptLoginShellInputText" not in helper_block or 'process.arguments = ["-lc", "exec /usr/bin/osascript"]' not in helper_block):
+        raise SystemExit("Claude Code Ghostty native input text must support a shell-launched marker-scanned proof path")
+    if name == "input text" and "standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))" not in helper_block:
+        raise SystemExit("Claude Code Ghostty shell-launched native input text must pass AppleScript through stdin")
     if "targetWindowName contains" not in helper_block:
         raise SystemExit(f"Claude Code Ghostty {name} proof must only trust exact front-window titles that carry the proof marker")
     exact_title_source = helper_block.index('targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName')
