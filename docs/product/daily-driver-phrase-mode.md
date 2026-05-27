@@ -433,7 +433,7 @@ or in-app Ghostty accept path that reaches the new send-key rung.
 The follow-up focus hardening now targets the disposable Ghostty process by PID
 inside the terminal AX helper, reactivates that exact process before prompt
 clearing, proof typing, prompt-readiness checks, and Tab hot accept, and uses a
-private-state CGEvent keypress helper so the harness does not intentionally
+fresh HID CGEvent keypress helper so the harness does not intentionally
 inherit modifier state. That moved the live proof farther again: current
 diagnostics show Ghostty prompt-row suggestions at lines `596949` and `596952`
 with `traceID=599076D1`, then later prompt-row suggestions with
@@ -467,22 +467,22 @@ prompt-row placement and verified one-word insertion without submitting the
 prompt.
 
 The detached runner is now Terminal/nohup-based by default, has a `stop` command,
-and no longer wedges on Ghostty's native `input text` AppleEvent. Ghostty proof
-typing uses a clipboard paste for the prefix plus one real final keypress, then
-restores the clipboard. Live detached runs are still non-green, but the failure
-has moved: `20260527T025020Z-ghostty` presented a valid prompt-row suggestion
-before a macOS frontmost-service focus report interrupted accept, and
-`20260527T025753Z-ghostty` / `20260527T030224Z-ghostty` showed app-side
-prompt-row suggestions in diagnostics (`traceID=4EA79F5A`, `2AD57976`,
-`6F4C7113`) while the harness still exited `1` after reporting no visible
-suggestion. The observer bridge now consumes live prompt-row suggestions without
-wedging on future-line log scans: `20260527T032749Z-ghostty` found a prompt-row
-suggestion at diagnostics line `622069` on attempt 3. The run is still
-non-green because Tab acceptance timed out; diagnostics around the hot-accept
-window still record non-tab/other key events instead of
-`keyboard-action ... key=tab ... handled=true`. The next useful proof slice is
-Ghostty Tab injection: make the accepted hot key arrive as Tab, then prove
-one-word no-submit insertion.
+and no longer wedges on Ghostty's native `input text` AppleEvent. The proof
+harness now uses HID CGEvent Unicode text for Ghostty setup typing, records the
+diagnostics line immediately before the final trigger character, and refuses to
+count older prompt-row suggestions from before that trigger. Live detached runs
+are still non-green, but the failure is cleaner: `20260527T035120Z-ghostty`
+found a prompt-row suggestion at diagnostics line `624405` and still timed out
+because neither CGEvent Tab nor guarded System Events Tab reached SteadyType as
+`key=tab`; `20260527T035639Z-ghostty` stopped counting those stale suggestions
+and exited after 4 disposable contexts with no post-trigger suggestion; and
+`20260527T040452Z-ghostty` proved the new CGEvent text transport but still ended
+with pre-trigger prompt-row suggestions such as diagnostics line `628165`
+followed by post-trigger `suggestion-blocked ... reason=sensitiveContent` at
+`beforeChars=42`. The next useful proof slice is no longer generic Tab
+injection. It is Ghostty prompt-state isolation: prove the final trigger lands
+in the same prompt row that produced the suggestion, then make the accepted hot
+key arrive as Tab and prove one-word no-submit insertion.
 
 ## Scorecard
 

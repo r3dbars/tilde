@@ -1732,6 +1732,7 @@ end = source.index("\nwait_for_claude_code_terminal_suggestion_line_optional()",
 block = source[start:end]
 for expected in (
     '[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]',
+    'recent_start_line="$preferred_start_line"',
     'candidate = NR',
     'suggestion-hidden',
     'keyboard-action',
@@ -1751,6 +1752,11 @@ then
 fi
 if ! grep -F 'found prompt-row suggestion at diagnostics line' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code terminal proof to print the matched prompt-row suggestion line" >&2
+  exit 1
+fi
+if ! grep -F 'CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof to start suggestion discovery after the final trigger key boundary" >&2
   exit 1
 fi
 if ! python3 - <<'PY'
@@ -1829,6 +1835,7 @@ if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/rea
    ! grep -F 'reason=focus-changed' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key=escape' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'reason=escape' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'suggestion is no longer visible before Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'lost its visible suggestion before Tab; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'lost its visible suggestion during Tab refocus; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
@@ -1846,17 +1853,30 @@ if ! grep -F 'claude_code_terminal_suggestion_cancelled_by_screen_geometry()' sc
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'CGEventSource(stateID: .privateState)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype-cgevent-keypress-v3' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEventSource(stateID: .hidSystemState)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyDown.flags = []' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyUp.flags = []' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through CGEvent session events" >&2
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through fresh HID CGEvents" >&2
+  exit 1
+fi
+if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype-cgevent-text-v1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyboardSetUnicodeString' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEventSource(stateID: .hidSystemState)' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof typing to post Unicode text through fresh HID CGEvents" >&2
   exit 1
 fi
 if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for proof Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for fallback proof Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /wait_for_log_fields_optional/ { saw_probe = 1 } in_fn && saw_probe && /key code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /CLAUDE_CODE_HOST_VARIANT.*ghostty/ { saw_ghostty = 1 } in_smoke && saw_ghostty && /press_claude_code_terminal_host_tab/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty-host Claude Code proof to verify the focused terminal host before pressing CGEvent Tab" >&2
+  echo "real app smoke self-test expected Ghostty-host Claude Code proof to verify the focused terminal host before pressing CGEvent Tab, then fall back to guarded System Events Tab only when no key=tab diagnostic appears" >&2
   exit 1
 fi
 if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
@@ -1965,6 +1985,8 @@ ghostty_start = block.index('if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]')
 ghostty_end = block.index("\n  fi\n\n  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE", ghostty_start)
 ghostty_block = block[ghostty_start:ghostty_end]
 if 'keystroke "u" using control down' not in ghostty_block:
+    raise SystemExit(1)
+if 'sleep "$(claude_code_ghostty_event_drain_seconds)"' not in ghostty_block:
     raise SystemExit(1)
 if "key code 53" in ghostty_block:
     raise SystemExit(1)
@@ -2092,9 +2114,9 @@ if ! awk '
   exit 1
 fi
 if ! awk '
-  /type_claude_code_terminal_smoke_text\(\)/ { in_type = 1; saw_mode = 0; saw_iterm_key_events = 0; saw_ghostty_paste = 0; saw_terminal_bulk = 0 }
+  /type_claude_code_terminal_smoke_text\(\)/ { in_type = 1; saw_mode = 0; saw_iterm_key_events = 0; saw_ghostty_cgevent = 0; saw_terminal_bulk = 0 }
   /^}/ && in_type {
-    if (saw_mode && saw_iterm_key_events && saw_ghostty_paste && saw_terminal_bulk) { found = 1 }
+    if (saw_mode && saw_iterm_key_events && saw_ghostty_cgevent && saw_terminal_bulk) { found = 1 }
     in_type = 0
   }
   in_type && /AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TYPING_MODE/ { saw_mode = 1 }
@@ -2103,20 +2125,23 @@ if ! awk '
   in_type && /iterm2\)/ { iterm_branch = 1 }
   in_type && iterm_branch && /type_claude_code_terminal_raw_smoke_text "\$text"/ { saw_iterm_key_events = 1; iterm_branch = 0 }
   in_type && /ghostty\)/ { ghostty_branch = 1 }
-  in_type && ghostty_branch && /type_claude_code_terminal_ghostty_paste_then_key_text "\$text"/ { saw_ghostty_paste = 1; ghostty_branch = 0 }
+  in_type && ghostty_branch && /type_claude_code_terminal_ghostty_paste_then_key_text "\$text"/ { saw_ghostty_cgevent = 1; ghostty_branch = 0 }
   END { exit found ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty proof typing to paste the prefix then press one real final key while iTerm2 keeps real key events and Terminal keeps bulk typing" >&2
+  echo "real app smoke self-test expected Ghostty proof typing to use CGEvent text while iTerm2 keeps real key events and Terminal keeps bulk typing" >&2
   exit 1
 fi
 if ! grep -F 'type_claude_code_terminal_ghostty_paste_then_key_text()' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'set previousClipboard to the clipboard' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'set prefixText to text 1 thru -2 of rawText' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'keystroke "v" using command down' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'keystroke finalCharacter' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Claude Code Ghostty host is not frontmost for proof paste typing.' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof typing to avoid the hanging native input-text AppleEvent by pasting the prefix and typing one final key" >&2
+   ! grep -F 'claude_code_ghostty_event_drain_seconds()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EVENT_DRAIN_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'prefix_text="${text:0:${#text}-1}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'final_character="${text: -1}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_text_cgevent "$prefix_text"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_text_cgevent "$final_character"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'sleep "$drain_seconds"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Ghostty proof final trigger typing' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof typing to avoid delayed AppleEvents by posting CGEvent Unicode text, draining setup events, and typing one final trigger character" >&2
   exit 1
 fi
 if ! awk '
