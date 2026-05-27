@@ -43,6 +43,28 @@ struct KeyboardEventTapKeyCodeTests {
                 acceptAllShortcut: .optionTab
             )
         ))
+
+        #expect(!shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
+            snapshot: KeyboardEventTapSnapshot(
+                hasVisibleSuggestion: true,
+                supportsOneWordAcceptance: true,
+                supportsFullAcceptance: true,
+                isInvalidatedByUserTyping: true,
+                allowsAutocompleteKeyAfterPassthroughObservation: true,
+                acceptAllShortcut: .optionTab
+            )
+        ))
+
+        #expect(!shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
+            snapshot: KeyboardEventTapSnapshot(
+                hasVisibleSuggestion: true,
+                supportsOneWordAcceptance: true,
+                supportsFullAcceptance: true,
+                isInvalidatedByUserTyping: true,
+                acceptAllShortcut: .optionTab
+            ),
+            passthroughObservationAllowsAutocompleteKey: true
+        ))
     }
 
     @Test("Shortcut chords do not count as text typing passthrough")

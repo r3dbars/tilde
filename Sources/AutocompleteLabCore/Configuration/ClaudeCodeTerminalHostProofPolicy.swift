@@ -89,6 +89,18 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         reason: "claude-code-terminal-host-proof"
     )
 
+    public static func shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+        currentSuggestionBundleIdentifier: String?,
+        profileBundleIdentifier: String?,
+        fieldClassification: AXFieldClassification?,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
+        _ = profileBundleIdentifier
+        return hasVisibleSuggestion
+            && currentSuggestionBundleIdentifier == virtualBundleIdentifier
+            && fieldClassification == proofFieldClassification
+    }
+
     public static let supportedHostVariants: [ClaudeCodeTerminalHostVariant] = [
         ClaudeCodeTerminalHostVariant(
             id: "terminal",
@@ -476,7 +488,6 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         let normalizedCurrentInput = normalizedComparableProofInput(currentProofInputText)
         guard !normalizedCurrentInput.isEmpty,
               normalizedCurrentInput.split(whereSeparator: \.isWhitespace).count >= 3,
-              looksLikeNaturalLanguageCommandPhrase(normalizedCurrentInput),
               !containsIncompleteProofMarkerFragment(currentProofInputText),
               !looksLikeShellCommandInput(currentProofInputText),
               !looksLikeTerminalShellCommandLine(currentProofInputText),
@@ -484,7 +495,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return false
         }
 
-        return true
+        return looksLikeNaturalLanguageCommandPhrase(normalizedCurrentInput)
+            || safeTitleScopedPromptInputLine(currentProofInputText) != nil
     }
 
     public static func diagnosticMetadata(

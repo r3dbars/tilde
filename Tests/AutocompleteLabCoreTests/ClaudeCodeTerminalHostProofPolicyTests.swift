@@ -1139,6 +1139,30 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ))
     }
 
+    @Test("Ghostty proof can reverify natural prompt text that contains a sensitive hint")
+    func ghosttyProofCanReverifyNaturalPromptTextThatContainsSensitiveHint() {
+        let promptText = "Make this command line setting configurable"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: promptText,
+            rawTextBeforeCursor: promptText,
+            terminalScreenText: "",
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == promptText)
+        #expect(ClaudeCodeTerminalHostProofPolicy.effectiveFieldClassification(
+            raw: AXFieldClassification(kind: .unprovenSurface, reason: "unprovenSurface:terminal"),
+            for: context
+        ) == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification)
+        #expect(ClaudeCodeTerminalHostProofPolicy.allowsSensitiveActivationBypass(
+            for: context,
+            proofInputText: promptText
+        ))
+    }
+
     @Test("Ghostty proof accepts title-scoped natural prompt text")
     func ghosttyProofAcceptsTitleScopedNaturalPromptText() {
         let context = ClaudeCodeTerminalHostProofContext(
@@ -1566,15 +1590,62 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
             proofInputText: "Make this setting the feature configurable"
         ))
+        #expect(ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "Make this command line setting configurable"
+        ))
+        #expect(ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "The next command line setting should improve"
+        ))
 
         #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
             proofInputText: "rm -rf local-fixture con"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "Command line: rm -rf local-fixture"
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: "sudo make this command line setting configurable"
         ))
         #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
             proofInputText: "Make this setting STEADYTYPECLAUDECODE"
         ))
         #expect(!ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
             proofInputText: "Make this"
+        ))
+    }
+
+    @Test("Terminal proof can preserve visible suggestion after Ghostty passthrough noise")
+    func terminalProofCanPreserveVisibleSuggestionAfterGhosttyPassthroughNoise() {
+        #expect(ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: true
+        ))
+        #expect(ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: "com.mitchellh.ghostty",
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: true
+        ))
+
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: AXFieldClassification(kind: .unprovenSurface, reason: "unprovenSurface:terminal"),
+            hasVisibleSuggestion: true
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: "com.mitchellh.ghostty",
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            profileBundleIdentifier: ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            fieldClassification: ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
+            hasVisibleSuggestion: false
         ))
     }
 

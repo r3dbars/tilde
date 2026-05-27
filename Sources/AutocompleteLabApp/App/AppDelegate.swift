@@ -2568,18 +2568,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
               !context.isSecure,
               context.selectedTextLength == 0,
-              !suppressedFieldIdentities.contains(fieldIdentity),
-              claudeCodeTerminalHostProofInputSignature(
-                context: context,
-                hostBundleIdentifier: app.bundleIdentifier
-              ) == lastClaudeCodeTerminalProofInputSignature,
-              ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
-                proofInputText: context.textBeforeCursor
-              ) else {
+              !suppressedFieldIdentities.contains(fieldIdentity) else {
             return false
         }
 
-        return true
+        let inputSignature = claudeCodeTerminalHostProofInputSignature(
+            context: context,
+            hostBundleIdentifier: app.bundleIdentifier
+        )
+        if inputSignature == lastClaudeCodeTerminalProofInputSignature,
+           ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: context.textBeforeCursor
+           ) {
+            return true
+        }
+
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ) else {
+            return false
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.allowsSensitiveActivationBypass(
+            for: proofContext,
+            proofInputText: context.textBeforeCursor
+        )
     }
 
     private func recordClaudeCodeTerminalHostProofSensitiveActivationBypass(
@@ -3633,11 +3648,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func keyboardEventTapSnapshot() -> KeyboardEventTapSnapshot {
-        KeyboardEventTapSnapshot(
+        let isClaudeCodeTerminalHostProofSuggestion =
+            ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+                currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                profileBundleIdentifier: currentProfile?.bundleIdentifier,
+                fieldClassification: currentSuggestionFieldClassification,
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            )
+        return KeyboardEventTapSnapshot(
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
-            supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
+            supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true
+                || isClaudeCodeTerminalHostProofSuggestion,
+            supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true
+                && !isClaudeCodeTerminalHostProofSuggestion,
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            allowsAutocompleteKeyAfterPassthroughObservation: isClaudeCodeTerminalHostProofSuggestion,
             hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
             acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
@@ -3721,10 +3746,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if shouldPreserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughKeyDown() {
+            keyboardEventTap?.resetPassthroughObservation()
+            updateKeyboardEventTapSnapshot()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-passthrough-preserved",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown",
+                    "fieldKindReason": currentSuggestionFieldClassification?.reason ?? "unknown"
+                ]
+            )
+            return
+        }
+
         currentSuggestionInvalidatedByUserKeyDown = true
         invalidatePendingSuggestionRequest()
         setSuggestionDecision("Shown: tracking typing")
         updateKeyboardEventTapSnapshot()
+    }
+
+    private func shouldPreserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughKeyDown() -> Bool {
+        guard ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            profileBundleIdentifier: currentProfile?.bundleIdentifier,
+            fieldClassification: currentSuggestionFieldClassification,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        ) else {
+            return false
+        }
+
+        return terminalHostProofSnapshotMatchesCurrentSuggestion()
     }
 
     private func handleAutocompleteKey(
