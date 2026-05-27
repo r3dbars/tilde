@@ -8,12 +8,15 @@ struct Options {
     var displayName = "Terminal"
     var marker = ""
     var text = ""
+    var processIdentifier: pid_t?
     var discoveryTimeoutSeconds: TimeInterval = 0
     var hints: [String] = []
 }
 
 struct Snapshot {
     let frontmostBundleIdentifier: String?
+    let frontmostProcessIdentifier: pid_t?
+    let targetProcessIdentifier: pid_t?
     let textCount: Int
     let titleCount: Int
     let markerWindowCount: Int
@@ -45,7 +48,7 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
 }
 
 func usage() -> Never {
-    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS]")
+    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS]")
     exit(0)
 }
 
@@ -80,6 +83,12 @@ func parseOptions() -> Options {
             options.marker = value()
         case "--text":
             options.text = value()
+        case "--pid":
+            let rawValue = value()
+            guard let pid = Int32(rawValue), pid > 0 else {
+                fail("--pid must be a positive process identifier", code: 2)
+            }
+            options.processIdentifier = pid_t(pid)
         case "--hint":
             options.hints.append(value())
         case "--discovery-timeout":
@@ -162,7 +171,19 @@ func frontmostBundleIdentifier() -> String? {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
 
+func frontmostProcessIdentifier() -> pid_t? {
+    NSWorkspace.shared.frontmostApplication?.processIdentifier
+}
+
 func targetRunningApplication(options: Options) -> NSRunningApplication? {
+    if let processIdentifier = options.processIdentifier {
+        guard let app = NSRunningApplication(processIdentifier: processIdentifier),
+              app.bundleIdentifier == options.bundleIdentifier else {
+            return nil
+        }
+        return app
+    }
+
     if let frontmostApplication = NSWorkspace.shared.frontmostApplication,
        frontmostApplication.bundleIdentifier == options.bundleIdentifier {
         return frontmostApplication
@@ -170,6 +191,58 @@ func targetRunningApplication(options: Options) -> NSRunningApplication? {
 
     return NSWorkspace.shared.runningApplications.first {
         $0.bundleIdentifier == options.bundleIdentifier
+    }
+}
+
+func activateIfNeeded(_ app: NSRunningApplication, options: Options) {
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    if frontmost?.processIdentifier == app.processIdentifier {
+        return
+    }
+
+    app.activate(options: [.activateAllWindows])
+    Thread.sleep(forTimeInterval: 0.08)
+    if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
+        return
+    }
+
+    activateWithSystemEvents(processIdentifier: app.processIdentifier)
+    Thread.sleep(forTimeInterval: 0.08)
+}
+
+func activateWithSystemEvents(processIdentifier: pid_t) {
+    let script = """
+    on run argv
+      set targetPID to (item 1 of argv) as integer
+      tell application "System Events"
+        repeat with procRef in application processes
+          try
+            if unix id of procRef is targetPID then
+              set frontmost of procRef to true
+              return
+            end if
+          end try
+        end repeat
+      end tell
+    end run
+    """
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    process.arguments = ["-", String(processIdentifier)]
+    let input = Pipe()
+    process.standardInput = input
+    process.standardOutput = Pipe()
+    process.standardError = Pipe()
+
+    do {
+        try process.run()
+        if let data = script.data(using: .utf8) {
+            input.fileHandleForWriting.write(data)
+        }
+        input.fileHandleForWriting.closeFile()
+        process.waitUntilExit()
+    } catch {
+        input.fileHandleForWriting.closeFile()
     }
 }
 
@@ -221,11 +294,32 @@ func searchState(in searchable: [String], options: Options) -> SearchState {
 }
 
 func snapshot(options: Options) -> Snapshot {
-    let frontmost = frontmostBundleIdentifier()
-    guard frontmost == options.bundleIdentifier,
-          let app = targetRunningApplication(options: options) else {
+    guard let app = targetRunningApplication(options: options) else {
+        let frontmost = frontmostBundleIdentifier()
         return Snapshot(
             frontmostBundleIdentifier: frontmost,
+            frontmostProcessIdentifier: frontmostProcessIdentifier(),
+            targetProcessIdentifier: options.processIdentifier,
+            textCount: 0,
+            titleCount: 0,
+            markerWindowCount: 0,
+            hasMarker: false,
+            hasText: false,
+            hasHint: false,
+            expectedTokenCount: 0,
+            expectedTokenMatches: 0
+        )
+    }
+    activateIfNeeded(app, options: options)
+
+    let frontmost = frontmostBundleIdentifier()
+    let frontmostPID = frontmostProcessIdentifier()
+    guard frontmost == options.bundleIdentifier,
+          options.processIdentifier == nil || frontmostPID == app.processIdentifier else {
+        return Snapshot(
+            frontmostBundleIdentifier: frontmost,
+            frontmostProcessIdentifier: frontmostPID,
+            targetProcessIdentifier: app.processIdentifier,
             textCount: 0,
             titleCount: 0,
             markerWindowCount: 0,
@@ -278,6 +372,8 @@ func snapshot(options: Options) -> Snapshot {
 
     return Snapshot(
         frontmostBundleIdentifier: frontmost,
+        frontmostProcessIdentifier: frontmostPID,
+        targetProcessIdentifier: app.processIdentifier,
         textCount: texts.count,
         titleCount: titles.count,
         markerWindowCount: markerWindows.count,
@@ -291,7 +387,9 @@ func snapshot(options: Options) -> Snapshot {
 
 func describeFailure(_ snapshot: Snapshot, options: Options) -> String {
     let frontmost = snapshot.frontmostBundleIdentifier ?? "none"
-    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), markerWindows=\(snapshot.markerWindowCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
+    let frontmostPID = snapshot.frontmostProcessIdentifier.map(String.init) ?? "none"
+    let targetPID = snapshot.targetProcessIdentifier.map(String.init) ?? "none"
+    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), frontmostPid=\(frontmostPID), targetPid=\(targetPID), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), markerWindows=\(snapshot.markerWindowCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
 }
 
 let options = parseOptions()

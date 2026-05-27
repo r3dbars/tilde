@@ -3163,7 +3163,7 @@ APPLESCRIPT
 }
 
 cgevent_keypress_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v1}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v2}"
 }
 
 ensure_cgevent_keypress_helper() {
@@ -3181,7 +3181,7 @@ import Foundation
 
 guard CommandLine.arguments.count == 2,
       let keyCode = UInt16(CommandLine.arguments[1]),
-      let source = CGEventSource(stateID: .hidSystemState),
+      let source = CGEventSource(stateID: .privateState),
       let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
       let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
     FileHandle.standardError.write(Data("failed to create CGEvent key press\n".utf8))
@@ -8030,11 +8030,21 @@ assert_claude_prompt_retains_marker() {
 
 claude_code_terminal_ax_helper() {
   local action="$1"
+  local proof_pid
+  local -a proof_pid_args
   shift
+
+  proof_pid="$(claude_code_terminal_proof_primary_pid)"
+  proof_pid_args=()
+  if [[ -n "$proof_pid" ]]; then
+    proof_pid_args=(--pid "$proof_pid")
+  fi
+
   swift script/terminal_prompt_ax_proof_helper.swift "$action" \
     --bundle "$(claude_code_host_bundle_id)" \
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
+    "${proof_pid_args[@]}" \
     --hint "Claude Code" \
     --hint "Try \"fix lint errors\"" \
     --hint "for shortcuts" \
@@ -8157,14 +8167,24 @@ frontmost_claude_code_terminal_proof_process_is_active() {
   return 1
 }
 
-wait_for_frontmost_claude_code_terminal_proof_process() {
-  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+claude_code_terminal_proof_primary_pid() {
+  local root_pid
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    printf '%s\n' "$root_pid"
+    return 0
+  done
+
+  return 0
+}
+
+try_wait_for_frontmost_claude_code_terminal_proof_process() {
+  local timeout="${1:-${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}}"
   local timeout_seconds="${timeout%%.*}"
   local deadline root_pid frontmost_pid
 
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
-    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
-    exit 1
+    return 1
   fi
   if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
     timeout_seconds=12
@@ -8189,8 +8209,34 @@ wait_for_frontmost_claude_code_terminal_proof_process() {
     sleep 0.2
   done
 
+  return 1
+}
+
+wait_for_frontmost_claude_code_terminal_proof_process() {
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
+    exit 1
+  fi
+
+  if try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    return 0
+  fi
+
   echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
   exit 1
+}
+
+settle_claude_code_terminal_proof_focus() {
+  local label="$1"
+  local host_name
+  host_name="$(claude_code_host_display_name)"
+
+  if try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    return 0
+  fi
+
+  echo "Claude Code $host_name proof could not reactivate its disposable host process for $label." >&2
+  return 1
 }
 
 prepare_claude_code_terminal_suggestion_for_hot_accept() {
@@ -8211,9 +8257,7 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
       "app=com.anthropic.claude-code" \
       "reason=focus-changed"; then
       echo "Claude Code $host_name suggestion hid after focus changed before Tab; refocusing for a fresh suggestion." >&2
-      activate_app_by_process_name "$(claude_code_host_open_app_name)"
-      open -a "$(claude_code_host_open_app_name)" >/dev/null 2>&1 || true
-      if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
+      if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
         return 1
       fi
       if wait_for_log_line_number_optional \
@@ -8227,11 +8271,9 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
       return 1
     fi
 
-    if ! try_wait_for_frontmost_app "$host_name" 1; then
-      echo "Claude Code $host_name proof lost focus before Tab; reactivating the host app for the hot accept." >&2
-      activate_app_by_process_name "$(claude_code_host_open_app_name)"
-      open -a "$(claude_code_host_open_app_name)" >/dev/null 2>&1 || true
-      if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
+    if ! try_wait_for_frontmost_claude_code_terminal_proof_process 1; then
+      echo "Claude Code $host_name proof lost focus before Tab; reactivating the disposable host process for the hot accept." >&2
+      if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
         return 1
       fi
     fi
@@ -8458,8 +8500,16 @@ APPLESCRIPT
 }
 
 wait_for_claude_code_terminal_prompt() {
+  local proof_pid
+  local -a proof_pid_args
+
   wait_for_frontmost_claude_code_terminal_proof_process
   wait_for_claude_code_terminal_process
+  proof_pid="$(claude_code_terminal_proof_primary_pid)"
+  proof_pid_args=()
+  if [[ -n "$proof_pid" ]]; then
+    proof_pid_args=(--pid "$proof_pid")
+  fi
 
   case "$CLAUDE_CODE_HOST_VARIANT" in
     terminal|iterm2|ghostty)
@@ -8467,6 +8517,7 @@ wait_for_claude_code_terminal_prompt() {
         --bundle "$(claude_code_host_bundle_id)" \
         --display "$(claude_code_host_display_name)" \
         --marker "$(claude_code_proof_marker)" \
+        "${proof_pid_args[@]}" \
         --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
       ;;
     *)
@@ -8479,15 +8530,26 @@ wait_for_claude_code_terminal_prompt() {
 
 assert_claude_code_terminal_prompt_ready() {
   local proof_text="$1"
+  local proof_pid
+  local -a proof_pid_args
+
+  settle_claude_code_terminal_proof_focus "typed prompt AX check" || exit 1
+  proof_pid="$(claude_code_terminal_proof_primary_pid)"
+  proof_pid_args=()
+  if [[ -n "$proof_pid" ]]; then
+    proof_pid_args=(--pid "$proof_pid")
+  fi
   swift script/terminal_prompt_ax_proof_helper.swift wait \
     --bundle "$(claude_code_host_bundle_id)" \
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
     --text "$proof_text" \
+    "${proof_pid_args[@]}" \
     --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS:-4}"
 }
 
 assert_claude_code_terminal_prompt_retains_marker() {
+  settle_claude_code_terminal_proof_focus "marker retention AX check" || exit 1
   claude_code_terminal_ax_helper contains-marker
 }
 
@@ -8525,6 +8587,7 @@ type_claude_code_terminal_smoke_text() {
 type_claude_code_terminal_raw_smoke_text() {
   local text="$1"
 
+  settle_claude_code_terminal_proof_focus "proof typing" || exit 1
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE:-0}" == "1" ]]; then
     AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
@@ -8561,6 +8624,7 @@ APPLESCRIPT
 }
 
 clear_claude_code_terminal_prompt_line() {
+  settle_claude_code_terminal_proof_focus "prompt clearing" || exit 1
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
@@ -10707,6 +10771,7 @@ run_claude_code_terminal_host_smoke() {
     exit 1
   fi
 
+  settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
   press_key_code_cgevent 48
   wait_for_claude_code_terminal_tab_acceptance \
     "$accept_start_line" \
