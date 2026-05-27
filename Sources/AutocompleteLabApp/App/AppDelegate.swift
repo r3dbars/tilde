@@ -16302,7 +16302,7 @@ private extension AppDelegate {
     }
 
     static var currentSuggestionTuningDefaultsVersion: Int {
-        5
+        6
     }
 
     static var previousDefaultSuggestionAggressivenessLevel: Int {
@@ -16567,7 +16567,7 @@ private extension AppDelegate {
             : SuggestionTuning.defaultLearningRestraintLevel
 
         if shouldMigrateDailyDriverDefaults {
-            if maxVisibleWords == 3 {
+            if maxVisibleWords == 3 || maxVisibleWords == 5 {
                 maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
             }
             if phraseStartWords == 3 {
