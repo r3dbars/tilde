@@ -415,6 +415,10 @@ if "readDataToEndOfFile" not in text_event_helper or "multiline text refused" no
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "clonePasteboardItems" not in app_delegate or "$0.copy() as? NSPasteboardItem" in app_delegate:
     raise SystemExit("App pasteboard fallbacks must clone pasteboard data without NSPasteboardItem.copy() exceptions")
+if "static var currentSuggestionTuningDefaultsVersion: Int {\n        5\n    }" not in app_delegate:
+    raise SystemExit("Daily-driver tuning defaults version must bump when visible phrase length changes")
+if "if maxVisibleWords == 3" not in app_delegate or "maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords" not in app_delegate:
+    raise SystemExit("Daily-driver tuning migration must lift old 3-word defaults to the current short-phrase length")
 if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proof-field-identity-refresh-relaxed" not in app_delegate:
     raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
 if "pollTimer?.fireDate" in app_delegate:
