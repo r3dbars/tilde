@@ -466,6 +466,19 @@ not Ghostty support; support only starts after that detached run proves
 prompt-row placement and verified one-word insertion without submitting the
 prompt.
 
+The detached runner is now Terminal/nohup-based by default, has a `stop` command,
+and no longer wedges on Ghostty's native `input text` AppleEvent. Ghostty proof
+typing uses a clipboard paste for the prefix plus one real final keypress, then
+restores the clipboard. Live detached runs are still non-green, but the failure
+has moved: `20260527T025020Z-ghostty` presented a valid prompt-row suggestion
+before a macOS frontmost-service focus report interrupted accept, and
+`20260527T025753Z-ghostty` / `20260527T030224Z-ghostty` showed app-side
+prompt-row suggestions in diagnostics (`traceID=4EA79F5A`, `2AD57976`,
+`6F4C7113`) while the harness still exited `1` after reporting no visible
+suggestion. The next useful proof slice is the observer/accept bridge: make the
+detached harness reliably consume those already-visible prompt-row suggestion
+lines and then prove one-word Tab insertion.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |

@@ -1498,6 +1498,12 @@ log_since_has_fields() {
   [[ -n "$lines" ]]
 }
 
+claude_code_terminal_suggestion_cancelled_by_screen_geometry() {
+  local start_line="$1"
+  log_since_has_fields "$start_line" "suggestion-request-cancelled" "reason=invalidate" &&
+    log_since_has_fields "$start_line" "screen-geometry-changed" "geometryInvalidationReason=screen-layout-changed"
+}
+
 line_has_all_fields() {
   local line="$1"
   shift
@@ -1587,6 +1593,10 @@ find_claude_code_terminal_suggestion_line_optional() {
 find_recent_claude_code_terminal_suggestion_line_optional() {
   local preferred_start_line="$1"
   local current_line recent_window_lines recent_start_line
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    return 1
+  fi
+
   recent_window_lines="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_RECENT_SUGGESTION_SCAN_LINES:-260}"
   [[ "$recent_window_lines" =~ ^[0-9]+$ ]] || recent_window_lines=260
   current_line="$(line_count "$LOG_PATH")"
@@ -1603,6 +1613,7 @@ wait_for_claude_code_terminal_suggestion_line_optional() {
   local timeout_seconds="${2:-12}"
   local deadline=$((SECONDS + timeout_seconds))
   MATCHED_LOG_LINE=0
+  CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY=0
 
   while ((SECONDS <= deadline)); do
     if find_claude_code_terminal_suggestion_line_optional "$start_line"; then
@@ -1610,6 +1621,10 @@ wait_for_claude_code_terminal_suggestion_line_optional() {
     fi
     if find_recent_claude_code_terminal_suggestion_line_optional "$start_line"; then
       return 0
+    fi
+    if claude_code_terminal_suggestion_cancelled_by_screen_geometry "$start_line"; then
+      CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY=1
+      return 1
     fi
     sleep 0.2
   done
@@ -2194,6 +2209,9 @@ assert_frontmost_app() {
   local expected="$1"
   local label="$2"
   local frontmost
+  if try_wait_for_frontmost_app "$expected" 2; then
+    return 0
+  fi
   frontmost="$(run_osascript_with_timeout 2 "frontmost app assertion probe" \
     -e 'tell application "System Events"' \
     -e 'set frontProcess to first application process whose frontmost is true' \
@@ -2500,6 +2518,7 @@ prepare_temporary_app_enablement() {
   echo "Temporary app enablement for smoke: $bundle_ids"
   echo "Temporary proof mode for smoke: $bundle_ids"
   prepare_accept_all_shortcut_default
+  prepare_proof_annoyance_learning_suppression
 
   if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ ]]; then
     if [[ "$UNDO_RECOVERY_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
@@ -2514,6 +2533,20 @@ prepare_temporary_app_enablement() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so temporary enablement/proof mode only applies if the app was launched with this environment." >&2
   fi
+}
+
+prepare_proof_annoyance_learning_suppression() {
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Proof smoke suppresses annoyance learning for synthetic proof keys."
 }
 
 prepare_accept_all_shortcut_default() {
@@ -7928,13 +7961,13 @@ claude_code_terminal_smoke_input_texts() {
   local marker
   marker="$(claude_code_proof_marker)"
   cat <<EOF
-Make this setting the feature
-Please make this
-This should feel
-What I want is
-It should almost always
-When I hit Tab it should
-The next suggestion should be a
+$marker Make this setting the feature
+$marker Please make this
+$marker This should feel
+$marker What I want is
+$marker It should almost always
+$marker When I hit Tab it should
+$marker The next suggestion should be a
 EOF
 }
 
@@ -8136,15 +8169,36 @@ wait_for_new_terminal_pids() {
 }
 
 frontmost_process_id() {
-  osascript <<'APPLESCRIPT'
-tell application "System Events"
-  get unix id of first application process whose frontmost is true
-end tell
-APPLESCRIPT
+  swift - <<'SWIFT'
+import AppKit
+print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)
+SWIFT
 }
 
 activate_process_id() {
   local target_pid="$1"
+
+  local swift_activation_pid
+  {
+    swift - "$target_pid" <<'SWIFT' >/dev/null
+import AppKit
+
+guard CommandLine.arguments.count == 2,
+      let rawPID = Int32(CommandLine.arguments[1]),
+      let app = NSRunningApplication(processIdentifier: pid_t(rawPID)) else {
+    exit(1)
+}
+
+app.activate(options: [.activateAllWindows])
+SWIFT
+  } &
+  swift_activation_pid="$!"
+  wait_for_background_process "$swift_activation_pid" 2 "Swift activation for pid $target_pid" >/dev/null 2>&1 || true
+
+  if wait_for_appkit_activation_frontmost "$target_pid"; then
+    return 0
+  fi
+
   AUTOCOMPLETE_LAB_TARGET_PID="$target_pid" osascript <<'APPLESCRIPT'
 set targetPid to (system attribute "AUTOCOMPLETE_LAB_TARGET_PID") as integer
 tell application "System Events"
@@ -8181,7 +8235,7 @@ claude_code_terminal_proof_primary_pid() {
 try_wait_for_frontmost_claude_code_terminal_proof_process() {
   local timeout="${1:-${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}}"
   local timeout_seconds="${timeout%%.*}"
-  local deadline root_pid frontmost_pid
+  local deadline root_pid frontmost_pid activation_attempt
 
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
     return 1
@@ -8199,6 +8253,7 @@ try_wait_for_frontmost_claude_code_terminal_proof_process() {
   done
 
   deadline=$((SECONDS + timeout_seconds))
+  activation_attempt=0
   while ((SECONDS <= deadline)); do
     frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
     for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
@@ -8206,6 +8261,13 @@ try_wait_for_frontmost_claude_code_terminal_proof_process() {
         return 0
       fi
     done
+    activation_attempt=$((activation_attempt + 1))
+    if ((activation_attempt % 3 == 0)); then
+      for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+        activate_process_id "$root_pid" >/dev/null 2>&1 || true
+        break
+      done
+    fi
     sleep 0.2
   done
 
@@ -8252,6 +8314,20 @@ prepare_claude_code_terminal_suggestion_for_hot_accept() {
   fi
 
   while ((attempt <= max_attempts)); do
+    if log_since_has_fields "$suggestion_line" \
+      "keyboard-action" \
+      "app=com.anthropic.claude-code" \
+      "key=escape" \
+      "action=dismiss" \
+      "handled=true" ||
+      log_since_has_fields "$suggestion_line" \
+        "field-suppressed" \
+        "app=com.anthropic.claude-code" \
+        "reason=escape"; then
+      echo "Claude Code $host_name suggestion was dismissed before Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
     if log_since_has_fields "$current_suggestion_line" \
       "suggestion-hidden" \
       "app=com.anthropic.claude-code" \
@@ -8590,8 +8666,11 @@ type_claude_code_terminal_smoke_text() {
         terminal)
           AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
           ;;
-        iterm2|ghostty)
+        iterm2)
           type_claude_code_terminal_raw_smoke_text "$text"
+          ;;
+        ghostty)
+          type_claude_code_terminal_ghostty_paste_then_key_text "$text"
           ;;
         *)
           AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
@@ -8605,6 +8684,57 @@ type_claude_code_terminal_smoke_text() {
   esac
 }
 
+type_claude_code_terminal_ghostty_paste_then_key_text() {
+  local text="$1"
+
+  settle_claude_code_terminal_proof_focus "Ghostty proof paste typing" || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS:-0.18}" osascript <<'APPLESCRIPT'
+set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+set pasteSettle to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PASTE_SETTLE_SECONDS") as real
+set previousClipboard to the clipboard
+set textLength to count characters of rawText
+try
+  tell application "System Events"
+    set hostIsFrontmost to false
+    repeat with frontApp in (application processes whose frontmost is true)
+      try
+        if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+      end try
+    end repeat
+    if hostIsFrontmost is false then
+      error "Claude Code Ghostty host is not frontmost for proof paste typing."
+    end if
+  end tell
+  if textLength > 1 then
+    set prefixText to text 1 thru -2 of rawText
+    set finalCharacter to text -1 thru -1 of rawText
+    set the clipboard to prefixText
+    delay pasteSettle
+    tell application "System Events"
+      keystroke "v" using command down
+      delay pasteSettle
+      keystroke finalCharacter
+    end tell
+  else
+    tell application "System Events"
+      keystroke rawText
+    end tell
+  end if
+on error errorMessage number errorNumber
+  try
+    set the clipboard to previousClipboard
+  end try
+  error errorMessage number errorNumber
+end try
+try
+  set the clipboard to previousClipboard
+end try
+APPLESCRIPT
+}
+
 type_claude_code_terminal_raw_smoke_text() {
   local text="$1"
 
@@ -8615,8 +8745,13 @@ type_claude_code_terminal_raw_smoke_text() {
 set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not hostBundle then
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
     error "Claude Code terminal host is not frontmost for proof typing."
   end if
   keystroke rawText
@@ -8632,8 +8767,13 @@ set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 set keyDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY") as real
 tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not hostBundle then
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
     error "Claude Code terminal host is not frontmost for proof typing."
   end if
   repeat with characterIndex from 1 to count characters of rawText
@@ -8646,13 +8786,41 @@ APPLESCRIPT
 
 clear_claude_code_terminal_prompt_line() {
   settle_claude_code_terminal_proof_focus "prompt clearing" || return 1
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
+tell application "System Events"
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
+    error "Claude Code terminal host is not frontmost for proof line clearing."
+  end if
+  keystroke "u" using control down
+  delay clearDelay
+  keystroke "u" using control down
+end tell
+APPLESCRIPT
+    return
+  fi
+
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
 tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not hostBundle then
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
     error "Claude Code terminal host is not frontmost for proof line clearing."
   end if
   key code 53
@@ -8664,6 +8832,25 @@ tell application "System Events"
   keystroke "l" using control down
   delay clearDelay
   keystroke "u" using control down
+end tell
+APPLESCRIPT
+}
+
+press_claude_code_terminal_host_tab() {
+  settle_claude_code_terminal_proof_focus "host Tab hot accept" || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+tell application "System Events"
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
+    error "Claude Code terminal host is not frontmost for proof Tab."
+  end if
+  key code 48
 end tell
 APPLESCRIPT
 }
@@ -10728,11 +10915,16 @@ run_claude_code_terminal_host_smoke() {
   require_claude_code_host_if_requested
 
   local runtime_start_line start_line trace_start_line suggestion_start_line accept_start_line proof_text marker host_name
-  local attempt suggestion_wait_seconds found_suggestion suggestion_line
+  local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
   host_name="$(claude_code_host_display_name)"
+  max_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS:-0}"
   suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS:-20}"
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS must be a non-negative integer." >&2
+    exit 2
+  fi
 
   prepare_temporary_app_enablement
   build_if_needed
@@ -10746,6 +10938,9 @@ run_claude_code_terminal_host_smoke() {
   accept_start_line="$(line_count "$LOG_PATH")"
   while IFS= read -r proof_text; do
     [[ -n "$proof_text" ]] || continue
+    if ((max_attempts > 0 && attempt >= max_attempts)); then
+      break
+    fi
     attempt=$((attempt + 1))
     validate_claude_code_terminal_smoke_input_text "$proof_text"
 
@@ -10759,9 +10954,8 @@ run_claude_code_terminal_host_smoke() {
 
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
-    suggestion_start_line="$start_line"
-    accept_start_line="$(line_count "$LOG_PATH")"
 
+    suggestion_start_line="$(line_count "$LOG_PATH")"
     if ! type_claude_code_terminal_smoke_text "$proof_text"; then
       echo "Claude Code $host_name proof attempt $attempt lost focus while typing; launching a fresh disposable context."
       open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
@@ -10772,6 +10966,8 @@ run_claude_code_terminal_host_smoke() {
       open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
       continue
     fi
+    accept_start_line="$suggestion_start_line"
+    suggestion_ready=0
     if wait_for_claude_code_terminal_suggestion_line_optional \
       "$suggestion_start_line" \
       "$suggestion_wait_seconds" ||
@@ -10779,12 +10975,55 @@ run_claude_code_terminal_host_smoke() {
         "$suggestion_start_line" \
         "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
         2; then
+      suggestion_ready=1
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "${CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY:-0}" == "1" ]]; then
+      echo "Claude Code $host_name proof attempt $attempt had its pending suggestion invalidated by screen geometry; nudging the same prompt."
+      suggestion_start_line="$(line_count "$LOG_PATH")"
+      if ! type_claude_code_terminal_smoke_text " "; then
+        echo "Claude Code $host_name proof attempt $attempt lost focus while nudging after geometry invalidation; launching a fresh disposable context."
+        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+        continue
+      fi
+      if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
+        echo "Claude Code $host_name proof attempt $attempt could not prove prompt readiness after geometry invalidation; launching a fresh disposable context."
+        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+        continue
+      fi
+      accept_start_line="$suggestion_start_line"
+      if wait_for_claude_code_terminal_suggestion_line_optional \
+        "$suggestion_start_line" \
+        "$suggestion_wait_seconds" ||
+        wait_for_log_line_number_optional \
+          "$suggestion_start_line" \
+          "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
+          2; then
+        suggestion_ready=1
+      fi
+    fi
+    if [[ "$suggestion_ready" == "1" ]]; then
       suggestion_line="$MATCHED_LOG_LINE"
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
         echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion before Tab; launching a fresh disposable context."
         open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
         continue
       fi
+      settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
+      if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
+        echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion during Tab refocus; launching a fresh disposable context."
+        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+        continue
+      fi
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+        press_claude_code_terminal_host_tab
+      else
+        press_key_code_cgevent 48
+      fi
+      wait_for_claude_code_terminal_tab_acceptance \
+        "$accept_start_line" \
+        "$host_name" \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}"
       found_suggestion=1
       break
     fi
@@ -10800,12 +11039,6 @@ run_claude_code_terminal_host_smoke() {
     exit 1
   fi
 
-  settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
-  press_key_code_cgevent 48
-  wait_for_claude_code_terminal_tab_acceptance \
-    "$accept_start_line" \
-    "$host_name" \
-    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}"
   wait_for_log_pattern "$accept_start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code $host_name successful insertion" 12
   wait_for_log_pattern "$accept_start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code $host_name verified insertion" 12
   wait_for_screenshot_capture_if_enabled "$accept_start_line" "com.anthropic.claude-code" "Claude Code $host_name proof"
