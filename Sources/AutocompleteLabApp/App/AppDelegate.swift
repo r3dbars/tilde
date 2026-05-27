@@ -9667,6 +9667,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            let bundledHelperOutcome = insertClaudeCodeTerminalHostProofBundledTextEventHelper(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                tapName: "hid"
+            )
+            if bundledHelperOutcome.verified {
+                return true
+            }
+            guard bundledHelperOutcome.safeToContinue else {
+                return false
+            }
+
+            let bundledSessionHelperOutcome = insertClaudeCodeTerminalHostProofBundledTextEventHelper(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                tapName: "session"
+            )
+            if bundledSessionHelperOutcome.verified {
+                return true
+            }
+            guard bundledSessionHelperOutcome.safeToContinue else {
+                return false
+            }
+
             keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
             if Self.postUnicodeTextKeyEventsPerCharacter(acceptedText) {
                 let verified = verifyClaudeCodeTerminalHostProofInsertion(
@@ -9729,6 +9759,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard ghosttyPasteboardOutcome.safeToContinue else {
                 return false
             }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-fast-verified-insertion-failed",
+                    "source": "ghosttyFastFailClosed"
+                ]
+            )
+            return false
         }
 
         if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
@@ -10016,6 +10056,145 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return false
+    }
+
+    private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        tapName: String
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let safeTapName = tapName == "session" ? "session" : "hid"
+        let source = safeTapName == "session"
+            ? "bundledCGEventTextHelperSession"
+            : "bundledCGEventTextHelperHID"
+        let baselineSource = "\(source)Baseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-helper-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+        guard let helperURL = Self.bundledTextEventHelperURL() else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-helper-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let process = Process()
+        process.executableURL = helperURL
+        process.arguments = [
+            "--tap", safeTapName,
+            "--frontmost-bundle", frontmostApp.bundleIdentifier,
+            "--pid", String(frontmostApp.processIdentifier)
+        ]
+        let inputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardError = errorPipe
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+
+        do {
+            try process.run()
+            inputPipe.fileHandleForWriting.write(Data(acceptedText.utf8))
+            try? inputPipe.fileHandleForWriting.close()
+            process.waitUntilExit()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-helper-launch-failed",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let helperErrorText = String(
+            data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderr = String(helperErrorText.prefix(120))
+        let helperExitedSuccessfully = process.terminationStatus == 0
+        if helperExitedSuccessfully {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": source,
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                return (true, true)
+            }
+        } else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "exitStatus": String(process.terminationStatus),
+                    "helperError": String(stderr),
+                    "posted": "false",
+                    "reason": "bundled-helper-exited-nonzero",
+                    "source": source
+                ]
+            )
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-helper-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
     }
 
     private func prepareGhosttyTerminalHostProofInsertionTarget(
@@ -10936,6 +11115,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return true
+    }
+
+    nonisolated private static func bundledTextEventHelperURL() -> URL? {
+        let helperName = "SteadyTypeTextEventHelper"
+        let fileManager = FileManager.default
+        if let auxiliaryURL = Bundle.main.url(forAuxiliaryExecutable: helperName),
+           fileManager.isExecutableFile(atPath: auxiliaryURL.path) {
+            return auxiliaryURL
+        }
+
+        let bundleCandidate = Bundle.main.bundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("MacOS", isDirectory: true)
+            .appendingPathComponent(helperName)
+        if fileManager.isExecutableFile(atPath: bundleCandidate.path) {
+            return bundleCandidate
+        }
+
+        guard let executablePath = CommandLine.arguments.first, !executablePath.isEmpty else {
+            return nil
+        }
+        let siblingURL = URL(fileURLWithPath: executablePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent(helperName)
+        if fileManager.isExecutableFile(atPath: siblingURL.path) {
+            return siblingURL
+        }
+        return nil
     }
 
     nonisolated private static func postUnicodeTextKeyEventsPerCharacter(

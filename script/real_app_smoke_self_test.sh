@@ -377,6 +377,9 @@ if "pollTimer?.fireDate" in app_delegate:
 terminal_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(")
 terminal_insert_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_insert_start)
 terminal_insert_block = app_delegate[terminal_insert_start:terminal_insert_end]
+bundled_helper_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(")
+bundled_helper_end = app_delegate.index("private func prepareGhosttyTerminalHostProofInsertionTarget(", bundled_helper_start)
+bundled_helper_block = app_delegate[bundled_helper_start:bundled_helper_end]
 fast_ghostty_start = app_delegate.index("if prefersFastGhosttyPasteboardInsertion {")
 fast_ghostty_end = app_delegate.index('\n        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",', fast_ghostty_start)
 fast_ghostty_block = app_delegate[fast_ghostty_start:fast_ghostty_end]
@@ -386,10 +389,28 @@ if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_blo
     raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+if "insertClaudeCodeTerminalHostProofBundledTextEventHelper" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try the bundled app-owned CGEvent text helper")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
-if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
-    raise SystemExit("Claude Code Ghostty fast proof must try System Events before pasteboard fallback")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
+    raise SystemExit("Claude Code Ghostty fast proof must try System Events before the bundled text helper")
+if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper") > fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter"):
+    raise SystemExit("Claude Code Ghostty fast proof must try the bundled text helper before in-process Unicode events")
+if fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try in-process Unicode events before pasteboard fallback")
+if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must fail closed before generic insertion fallbacks")
+if "bundledCGEventTextHelper" not in bundled_helper_block or "bundled-helper-unverified-mutated-input" not in bundled_helper_block:
+    raise SystemExit("Claude Code Ghostty bundled helper proof must be verified and fail closed on unexpected mutation")
+if "bundledCGEventTextHelperHID" not in bundled_helper_block or "bundledCGEventTextHelperSession" not in bundled_helper_block:
+    raise SystemExit("Claude Code Ghostty bundled helper proof must try both HID and session text taps")
+if 'tapName: "hid"' not in fast_ghostty_block or 'tapName: "session"' not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must run bundled helper HID and session tap attempts")
+if "process.arguments" not in bundled_helper_block or "acceptedText" in bundled_helper_block.split("process.arguments", 1)[1].split("]", 1)[0]:
+    raise SystemExit("Claude Code Ghostty bundled helper must not put accepted text in process arguments")
+if "inputPipe.fileHandleForWriting.write(Data(acceptedText.utf8))" not in bundled_helper_block:
+    raise SystemExit("Claude Code Ghostty bundled helper must pass accepted text over stdin")
 targeted_source = terminal_insert_block.index('source: "pasteboardCommandVToPid"')
 global_source = terminal_insert_block.index('source: "pasteboardCommandV"', targeted_source)
 if targeted_source > global_source:
