@@ -101,6 +101,39 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             && fieldClassification == proofFieldClassification
     }
 
+    public static func shouldBridgePassthroughAfterVolatileSnapshot(
+        currentSuggestionBundleIdentifier: String?,
+        profileBundleIdentifier: String?,
+        fieldClassification: AXFieldClassification?,
+        hasVisibleSuggestion: Bool,
+        supportsOneWordAcceptance: Bool,
+        supportsFullAcceptance: Bool,
+        requiresNoSubmitAcceptanceProof: Bool,
+        insertionMode: InsertionMode?
+    ) -> Bool {
+        shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: currentSuggestionBundleIdentifier,
+            profileBundleIdentifier: profileBundleIdentifier,
+            fieldClassification: fieldClassification,
+            hasVisibleSuggestion: hasVisibleSuggestion
+        )
+            && profileBundleIdentifier == virtualBundleIdentifier
+            && supportsOneWordAcceptance
+            && !supportsFullAcceptance
+            && requiresNoSubmitAcceptanceProof
+            && insertionMode == .clipboardFallbackOptIn
+    }
+
+    public static func shouldPreferFastPasteboardInsertion(
+        hostBundleIdentifier: String?,
+        insertionMode: InsertionMode?,
+        requiresNoSubmitAcceptanceProof: Bool
+    ) -> Bool {
+        hostBundleIdentifier == "com.mitchellh.ghostty"
+            && insertionMode == .clipboardFallbackOptIn
+            && requiresNoSubmitAcceptanceProof
+    }
+
     public static let supportedHostVariants: [ClaudeCodeTerminalHostVariant] = [
         ClaudeCodeTerminalHostVariant(
             id: "terminal",

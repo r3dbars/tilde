@@ -377,6 +377,19 @@ if "pollTimer?.fireDate" in app_delegate:
 terminal_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(")
 terminal_insert_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_insert_start)
 terminal_insert_block = app_delegate[terminal_insert_start:terminal_insert_end]
+fast_ghostty_start = app_delegate.index("if prefersFastGhosttyPasteboardInsertion {")
+fast_ghostty_end = app_delegate.index('\n        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",', fast_ghostty_start)
+fast_ghostty_block = app_delegate[fast_ghostty_start:fast_ghostty_end]
+if "prepareGhosttyTerminalHostProofInsertionTarget" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must reassert and verify the target before inserting")
+if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
+if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
+    raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try System Events before pasteboard fallback")
 targeted_source = terminal_insert_block.index('source: "pasteboardCommandVToPid"')
 global_source = terminal_insert_block.index('source: "pasteboardCommandV"', targeted_source)
 if targeted_source > global_source:
@@ -423,13 +436,18 @@ if "ghostty-send-key-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty send key proof must fail closed if terminal-scoped key events mutate the prompt unexpectedly")
 if "ghosttySendKeySteps" not in terminal_insert_block or "ghostty-send-key-text-unsupported" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty send key proof must gate unsupported accepted text before falling back")
+if '"apostrophe"' not in terminal_insert_block or "unsupportedScalar" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty send key proof must support safe apostrophes and log unsupported scalars")
 terminal_main_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofText(")
 terminal_main_insert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", terminal_main_insert_start)
 terminal_main_insert_block = app_delegate[terminal_main_insert_start:terminal_main_insert_end]
-ghostty_action_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofActionText")
-ghostty_script_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofAppleScriptText")
-ghostty_send_key_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofSendKey")
-ghostty_system_events_source = terminal_main_insert_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke")
+ghostty_slow_start = terminal_main_insert_block.index('if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",')
+ghostty_slow_end = terminal_main_insert_block.index("\n        if Self.postHardwareTextKeyEvents", ghostty_slow_start)
+ghostty_slow_block = terminal_main_insert_block[ghostty_slow_start:ghostty_slow_end]
+ghostty_action_source = ghostty_slow_block.index("insertGhosttyTerminalHostProofActionText")
+ghostty_script_source = ghostty_slow_block.index("insertGhosttyTerminalHostProofAppleScriptText")
+ghostty_send_key_source = ghostty_slow_block.index("insertGhosttyTerminalHostProofSendKey")
+ghostty_system_events_source = ghostty_slow_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke")
 hardware_source = terminal_main_insert_block.index("Self.postHardwareTextKeyEvents")
 if ghostty_action_source > ghostty_script_source:
     raise SystemExit("Claude Code Ghostty proof must try raw Ghostty text actions before paste-like scripting input")
@@ -2438,7 +2456,7 @@ if ! grep -F 'schedulePasteboardRestore' Sources/AutocompleteLabApp/App/AppDeleg
   echo "real app smoke self-test expected proof-only paste fallback to restore the pasteboard after verified insertion attempts" >&2
   exit 1
 fi
-if awk '/if Self\.postUnicodeTextKeyEvents/ { in_unicode = 1 } /if insertClaudeCodeTerminalHostProofPasteboardText/ { in_unicode = 0 } in_unicode && /return verified/ { found = 1 } END { exit found ? 0 : 1 }' Sources/AutocompleteLabApp/App/AppDelegate.swift; then
+if awk '/if Self\.postUnicodeTextKeyEvents/ { in_unicode = 1 } /insertClaudeCodeTerminalHostProofPasteboardText/ { in_unicode = 0 } in_unicode && /return verified/ { found = 1 } END { exit found ? 0 : 1 }' Sources/AutocompleteLabApp/App/AppDelegate.swift; then
   echo "real app smoke self-test expected unverified Claude Code Terminal Unicode insertion not to skip verified paste fallback" >&2
   exit 1
 fi
