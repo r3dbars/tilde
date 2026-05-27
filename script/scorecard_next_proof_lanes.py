@@ -20,6 +20,20 @@ class ProofLane:
     next_proof: str
 
 
+MANUAL_BLOCKER_PATTERNS = (
+    r"\brecord\b.*\bproof\b",
+    r"\brecord\b.*\brun\b",
+    r"\bcomplete\b.*\bchecklist\b",
+    r"\bclean-user\b",
+    r"\bclean user\b",
+    r"\bguided\b.*\bwalkthrough\b",
+    r"\bgrant accessibility\b",
+    r"\bdocumented manual gate\b",
+    r"\bmanual gate\b",
+    r"\bhuman\b",
+)
+
+
 def strip_markdown(text: str) -> str:
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"\s+", " ", text)
@@ -69,12 +83,30 @@ def load_lanes(scorecard_path: Path) -> list[ProofLane]:
     return lanes
 
 
-def format_lanes(lanes: list[ProofLane], limit: int) -> str:
+def is_automation_ready(lane: ProofLane) -> bool:
+    proof = lane.next_proof.lower()
+    return not any(re.search(pattern, proof) for pattern in MANUAL_BLOCKER_PATTERNS)
+
+
+def format_lanes(
+    lanes: list[ProofLane],
+    limit: int,
+    *,
+    automation_ready_only: bool = False,
+) -> str:
+    if automation_ready_only:
+        lanes = [lane for lane in lanes if is_automation_ready(lane)]
+
     ranked = sorted(lanes, key=lambda lane: (lane.score, lane.area.lower()))[:limit]
     if not ranked:
+        if automation_ready_only:
+            return "No automation-ready proof lanes found."
         return "No proof lanes found."
 
-    lines = ["Next proof lanes:"]
+    if automation_ready_only:
+        lines = ["Automation-ready proof lanes:"]
+    else:
+        lines = ["Next proof lanes:"]
     for lane in ranked:
         lines.append(f"- {lane.area} ({lane.score}/100): {lane.next_proof}")
     return "\n".join(lines)
@@ -96,6 +128,11 @@ def main() -> int:
         default=5,
         help="Number of lanes to print. Default: 5",
     )
+    parser.add_argument(
+        "--automation-ready",
+        action="store_true",
+        help="Skip lanes whose next proof requires a clean-user/manual-permission run.",
+    )
     args = parser.parse_args()
 
     if args.limit < 1:
@@ -111,7 +148,7 @@ def main() -> int:
         print(f"no score rows found in: {args.scorecard}", file=sys.stderr)
         return 1
 
-    print(format_lanes(lanes, args.limit))
+    print(format_lanes(lanes, args.limit, automation_ready_only=args.automation_ready))
     return 0
 
 

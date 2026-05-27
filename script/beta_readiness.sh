@@ -475,6 +475,10 @@ print_next_beta_readiness_lanes() {
   echo "== Next proof lanes =="
   ./script/scorecard_next_proof_lanes.py --limit 5 || echo "Next proof lane listing failed."
 
+  echo
+  echo "== Automation-ready proof lanes =="
+  ./script/scorecard_next_proof_lanes.py --limit 5 --automation-ready || echo "Automation-ready proof lane listing failed."
+
   if [[ "$onboarding_failed" == "1" ]]; then
     echo
     echo "== Onboarding walkthrough row template =="
