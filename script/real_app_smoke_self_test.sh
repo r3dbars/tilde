@@ -425,6 +425,10 @@ if "insertClaudeCodeTerminalHostProofHardwareKeyEvents" not in fast_ghostty_bloc
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before bundled Unicode helpers")
 if "insertClaudeCodeTerminalHostProofBundledTextEventHelper" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled app-owned CGEvent text helper")
+if "bulkKeystroke: true" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try System Events bulk keystroke before per-character fallback")
+if "launchThroughShell: true" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try a shell-launched System Events bulk keystroke")
 if '"cgHardwareKeyEventsToPid"' not in fast_ghostty_block or '"cgHardwareKeyEventsGlobal"' not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try targeted and global hardware key-event insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText"):
@@ -435,6 +439,10 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction") > fast_
     raise SystemExit("Claude Code Ghostty fast proof must try native paste action before terminal-scoped send key")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+bulk_system_events_source = fast_ghostty_block.index("bulkKeystroke: true")
+per_character_system_events_source = fast_ghostty_block.index("delayMilliseconds: 0", bulk_system_events_source + 1)
+if bulk_system_events_source > per_character_system_events_source:
+    raise SystemExit("Claude Code Ghostty fast proof must try bulk System Events before per-character System Events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents"):
     raise SystemExit("Claude Code Ghostty fast proof must try System Events before hardware key events")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
@@ -481,6 +489,14 @@ if "ghosttySystemEventsKeystrokeShellAsync" in terminal_insert_block or "ghostty
     raise SystemExit("Claude Code Ghostty proof must not report success from unverified async insertion")
 if "DispatchQueue.main.asyncAfter" in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must not schedule post-accept async insertion")
+if '"ghosttySystemEventsBulkKeystrokeShell"' not in terminal_insert_block or 'keystrokeMode is "bulk"' not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must keep a verified System Events bulk keystroke fallback")
+if '"ghosttySystemEventsLoginShellBulkKeystroke"' not in terminal_insert_block or 'exec /usr/bin/osascript' not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty proof must keep a shell-launched System Events bulk fallback")
+if "ghosttySystemEventsBulkKeystrokeShellBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events bulk proof must verify the prompt stayed unchanged after unverified keystrokes")
+if "ghostty-system-events-bulk-unverified-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events bulk proof must fail closed if keystrokes mutate the prompt unexpectedly")
 if "compactProofMarker" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must remain title-marker scoped")
 if terminal_insert_block.count("repeat with candidateWindow in windows") < 5 or terminal_insert_block.count("set targetWindow to candidateWindow") < 5:
