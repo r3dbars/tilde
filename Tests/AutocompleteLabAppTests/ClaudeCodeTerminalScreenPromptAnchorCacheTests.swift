@@ -175,6 +175,43 @@ struct ClaudeCodeTerminalScreenPromptAnchorCacheTests {
         #expect(metadata["promptAnchorCachePlausibleRepairedInput"] == "true")
     }
 
+    @Test("Keeps actively reused repaired prompt anchor fresh")
+    func keepsActivelyReusedRepairedPromptAnchorFresh() {
+        let anchor = ClaudeCodeTerminalScreenPromptAnchor(
+            inputText: "A recovered prompt row with wrapped terminal text",
+            promptLineInputText: "terminal text",
+            lineIndex: 18,
+            lineCount: 20
+        )
+        let now = Date(timeIntervalSince1970: 100)
+        var cache = ClaudeCodeTerminalScreenPromptAnchorCache(maxAgeSeconds: 8.0)
+
+        cache.remember(
+            anchor,
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            now: now
+        )
+
+        #expect(cache.anchorForRepairedInput(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            inputText: "Make this setting the feature configurable",
+            now: now.addingTimeInterval(7)
+        ) == anchor)
+        #expect(cache.anchorForRepairedInput(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            inputText: "Make this setting the feature configurable",
+            now: now.addingTimeInterval(14)
+        ) == anchor)
+
+        let metadata = cache.diagnosticMetadata(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            inputText: "Make this setting the feature configurable",
+            now: now.addingTimeInterval(14)
+        )
+        #expect(metadata["promptAnchorCacheExpired"] == "false")
+        #expect(metadata["promptAnchorCacheAgeMilliseconds"] == "0")
+    }
+
     @Test("Rejects stale or mismatched prompt-row anchor")
     func rejectsStaleOrMismatchedPromptRowAnchor() {
         let anchor = ClaudeCodeTerminalScreenPromptAnchor(

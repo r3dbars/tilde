@@ -11,21 +11,20 @@ Stale proof can explain progress, but it cannot make a row green.
 
 Current Ghostty terminal-host evidence is sharper but still red. Local probes
 showed Ghostty `input text` can return success without mutating a fresh shell,
-while Ghostty `perform action "text:..."` can type into a fresh shell. The
-latest useful prompt-row suggestion evidence, `20260527T161343Z-ghostty`, proves
-the app-side placement blocker moved forward: after proof input repair trimmed
-the recovered prompt to `beforeChars=42`, SteadyType reused the cached
-terminal-screen prompt anchor (`claude-code-terminal-host-proof-prompt-anchor-cache-used`,
-`promptLineInputChars=12`, `lineIndex=40`, `lineCount=41`), recorded
-`synthetic-caret ... source=terminal-screen-prompt` with
-`anchorRect=x=130,y=867,w=0,h=22`, scheduled the model from the repaired prompt
-row, and showed a real prompt-row suggestion at diagnostics line `717840` with
-`traceID=AFF2D945`, `latencyMilliseconds=939`, and 8 visible words. The run
-still exits red because that suggestion was no longer visible before Tab, so the
-next blocker is hot-accept visibility timing, not prompt-row placement. The
-latest insertion-transport red proof remains `20260527T141658Z-ghostty`, where
-Tab reached the verified insertion ladder but every Ghostty insertion route left
-the prompt unchanged.
+while Ghostty `perform action "text:..."` can type into a fresh shell. This pass
+fixed three earlier proof blockers: actively reused prompt-row anchors now stay
+fresh, hidden suggestions no longer satisfy the primary scanner, and Claude Code
+terminal-host proof candidates can bypass final-result latency suppression
+without broadening normal app latency behavior. `20260527T162920Z-ghostty`
+proved the app presented an 8-word prompt-row suggestion with
+`displayScoreLatencySuppressionBypassed=claude-code-terminal-host-proof`.
+`20260527T163354Z-ghostty` then got the detached harness to diagnostics line
+`722374` and found the prompt-row suggestion, but it failed red because Ghostty
+focus churn hid the suggestion before Tab. `20260527T163805Z-ghostty` is the
+latest run after focus-loss refresh handling; it stayed red because no visible
+suggestion arrived in that one-attempt disposable context. Ghostty remains
+unsupported until the detached proof exits `0` with verified one-word no-submit
+insertion.
 
 ## Scores
 
