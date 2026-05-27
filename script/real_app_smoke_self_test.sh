@@ -447,8 +447,12 @@ fast_ghostty_end = app_delegate.index('\n        if frontmostApp.bundleIdentifie
 fast_ghostty_block = app_delegate[fast_ghostty_start:fast_ghostty_end]
 if "prepareGhosttyTerminalHostProofInsertionTarget" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must reassert and verify the target before inserting")
+if "focusGhosttyTerminalHostProofPromptByClickIfAvailable" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must click the proven prompt-row caret before app-owned insertion")
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
+if "insertGhosttyTerminalHostProofFrontWindowInputText" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try the smoke-equivalent front-window input text rung")
 if "insertGhosttyTerminalHostProofActionText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native text action before slower key fallbacks")
 if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
@@ -469,6 +473,10 @@ if '"cgHardwareKeyEventsToPid"' not in fast_ghostty_block or '"cgHardwareKeyEven
     raise SystemExit("Claude Code Ghostty fast proof must try targeted and global hardware key-event insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText"):
     raise SystemExit("Claude Code Ghostty fast proof must try native text action before native input text")
+if fast_ghostty_block.index("focusGhosttyTerminalHostProofPromptByClickIfAvailable") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
+    raise SystemExit("Claude Code Ghostty fast proof must focus-click the prompt before native text insertion")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try front-window input text before marker-scanned native text action")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
     raise SystemExit("Claude Code Ghostty fast proof must try native input text before native paste action")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
@@ -493,6 +501,20 @@ if "postHardwareTextKeyEvents" not in hardware_helper_block or "mutatedInputReas
     raise SystemExit("Claude Code Ghostty hardware key proof must be verified and fail closed on unexpected mutation")
 if "FrontmostPidReassertion" not in hardware_helper_block:
     raise SystemExit("Claude Code Ghostty hardware key proof must reassert the exact Ghostty proof pid before posting events")
+prompt_focus_start = app_delegate.index("private func focusGhosttyTerminalHostProofPromptByClickIfAvailable(")
+prompt_focus_end = app_delegate.index("private func prepareGhosttyTerminalHostProofInsertionTarget(", prompt_focus_start)
+prompt_focus_block = app_delegate[prompt_focus_start:prompt_focus_end]
+if "targetFingerprint.caretBounds" not in prompt_focus_block or "CGEvent(" not in prompt_focus_block:
+    raise SystemExit("Claude Code Ghostty prompt focus must click the shown caret, not a generic window point")
+if "ghostty-prompt-focus-click-missing-caret" not in prompt_focus_block:
+    raise SystemExit("Claude Code Ghostty prompt focus click must fail closed when the shown caret is missing")
+front_window_input_start = app_delegate.index("private func insertGhosttyTerminalHostProofFrontWindowInputText(")
+front_window_input_end = app_delegate.index("private func focusGhosttyTerminalHostProofPromptByClickIfAvailable(", front_window_input_start)
+front_window_input_block = app_delegate[front_window_input_start:front_window_input_end]
+if "set targetWindow to front window" not in front_window_input_block or "input text acceptedText to targetTerminal" not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty front-window input rung must mirror the live smoke native typing path")
+if "ghosttyFrontWindowInputTextBaseline" not in front_window_input_block or "ghostty-front-window-input-unverified-mutated-input" not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty front-window input rung must verify unchanged baseline and fail closed on mutation")
 if "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS" not in terminal_insert_block or "repeat with characterIndex" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must type accepted text as paced characters")
 if "bundledCGEventTextHelper" not in bundled_helper_block or "bundled-helper-unverified-mutated-input" not in bundled_helper_block:
