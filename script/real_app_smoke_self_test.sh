@@ -387,12 +387,16 @@ if "prepareGhosttyTerminalHostProofInsertionTarget" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must reassert and verify the target before inserting")
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
+if "insertGhosttyTerminalHostProofActionText" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native text action before slower key fallbacks")
 if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try timeout-bounded native input text before key fallbacks")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
 if "insertClaudeCodeTerminalHostProofBundledTextEventHelper" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled app-owned CGEvent text helper")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try native text action before native input text")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
     raise SystemExit("Claude Code Ghostty fast proof must try native input text before terminal-scoped send key")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
@@ -439,12 +443,20 @@ if "DispatchQueue.main.asyncAfter" in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must not schedule post-accept async insertion")
 if terminal_insert_block.count("windowName does not contain") < 3 or "compactProofMarker" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must remain title-marker scoped")
+if terminal_insert_block.count("focus targetTerminal") < 3 or terminal_insert_block.count("activate window targetWindow") < 3:
+    raise SystemExit("Claude Code Ghostty native insertion fallbacks must re-focus the title-scoped terminal before posting input")
 if '"ghosttyPerformActionText"' not in terminal_insert_block or "perform action" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native text action command")
 if "ghosttyPerformActionTextBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified action text")
 if "ghostty-action-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must fail closed if action text mutates the prompt unexpectedly")
+if "ghostty-action-script-timeout" not in terminal_insert_block or "ghosttyPerformActionTextTimeoutBaseline" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native action text must be timeout bounded with unchanged-prompt baseline proof")
+if "ghostty-action-script-timeout-mutated-input" not in terminal_insert_block or "ghostty-action-script-timeout-still-running" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native action text timeout must fail closed on mutation or a still-running script")
+if "AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native action text must pass the escaped action through osascript environment")
 if "ghosttyTextAction" not in terminal_insert_block or "\\\\x%02x" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must hex-escape non-alphanumeric text action bytes")
 if '"ghosttyAppleScriptInputText"' not in terminal_insert_block or "input text" not in terminal_insert_block:
