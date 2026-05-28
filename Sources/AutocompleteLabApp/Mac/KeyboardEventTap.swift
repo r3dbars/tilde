@@ -32,15 +32,18 @@ final class KeyboardEventTap: @unchecked Sendable {
     private let slowEventTapLatencyMicros = 8_000
     private let replayExpirationNanos: UInt64 = 1_000_000_000
     private var passthroughObservationAllowsAutocompleteKey = false
+    let tapPlacement: KeyboardEventTapPlacement
 
     init(
         handler: @escaping Handler,
         passthroughKeyDownObserver: PassthroughKeyDownObserver? = nil,
-        disabledObserver: DisabledObserver? = nil
+        disabledObserver: DisabledObserver? = nil,
+        tapPlacement: KeyboardEventTapPlacement = .fromEnvironment()
     ) {
         self.handler = handler
         self.passthroughKeyDownObserver = passthroughKeyDownObserver
         self.disabledObserver = disabledObserver
+        self.tapPlacement = tapPlacement
     }
 
     deinit {
@@ -83,7 +86,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             let runLoop = CFRunLoopGetCurrent()
             let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
             guard let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap,
+                tap: self.tapPlacement.cgEventTapLocation,
                 place: .headInsertEventTap,
                 options: .defaultTap,
                 eventsOfInterest: eventMask,
@@ -612,6 +615,38 @@ final class KeyboardEventTap: @unchecked Sendable {
             expiresAtNanos: nowNanos + replayExpirationNanos
         )
         replayLock.unlock()
+    }
+}
+
+enum KeyboardEventTapPlacement: String, Sendable {
+    static let environmentKey = "AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION"
+
+    case session
+    case hid
+
+    var cgEventTapLocation: CGEventTapLocation {
+        switch self {
+        case .session:
+            return .cgSessionEventTap
+        case .hid:
+            return .cghidEventTap
+        }
+    }
+
+    static func fromEnvironment(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> Self {
+        guard let rawValue = environment[environmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return .session
+        }
+
+        switch rawValue.lowercased() {
+        case "session", "cgsession", "cgsessioneventtap":
+            return .session
+        case "hid", "cghid", "cghideventtap":
+            return .hid
+        default:
+            return .session
+        }
     }
 }
 

@@ -1174,6 +1174,15 @@ and private-source session/HID Shift. System Events Shift stayed opt-in because
 it can trigger the macOS permission UI. Ghostty is still unsupported, but the
 next blocker is now clear: find a key source or accept driver the event tap can
 actually observe in Ghostty.
+The follow-up HID-tap experiment made that red bar sharper without changing the
+support claim. SteadyType now records the tap location at startup and can be
+launched with `AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION=hid` for proof
+runs, while normal launches still default to the session tap. Live proof
+`20260528T230217Z-ghostty` reached prompt-row suggestion line `1071450` with
+the HID proof env active, but the same default-safe key-capture probes missed
+the event tap. The next Ghostty attempt should not be another tap-location
+shuffle; it should test an actually observable key source or the separate
+proof-only accept-command path.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh

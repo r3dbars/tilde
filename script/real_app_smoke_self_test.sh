@@ -1004,6 +1004,7 @@ drain_source = native_prefix_final_key_block.index("Thread.sleep(forTimeInterval
 if drain_source > prefix_verify_source:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must drain native text before prefix verification")
 for env_key in [
+    "AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION",
     "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS",
     "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE",
