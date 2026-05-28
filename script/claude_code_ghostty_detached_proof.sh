@@ -13,6 +13,7 @@ RUN_DIR=""
 TAIL_LINES=80
 WAIT_POLL_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_POLL_SECONDS:-2}"
 WAIT_TIMEOUT_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_TIMEOUT_SECONDS:-900}"
+STARTUP_GRACE_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS:-45}"
 LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-terminal}"
 GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS
@@ -140,6 +141,11 @@ if ! [[ "$WAIT_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || ((WAIT_TIMEOUT_SECONDS < 1)); 
   exit 2
 fi
 
+if ! [[ "$STARTUP_GRACE_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS must be a non-negative integer." >&2
+  exit 2
+fi
+
 case "$LAUNCHER" in
   terminal|launchd|nohup)
     ;;
@@ -206,6 +212,20 @@ process_group_for_pid() {
   local pid="$1"
   [[ -n "$pid" ]] || return 1
   ps -p "$pid" -o pgid= 2>/dev/null | tr -d '[:space:]'
+}
+
+file_mtime_seconds() {
+  local path="$1"
+  stat -f %m "$path" 2>/dev/null || stat -c %Y "$path" 2>/dev/null
+}
+
+status_file_age_seconds() {
+  local status_file="$1"
+  local mtime now
+  mtime="$(file_mtime_seconds "$status_file" || true)"
+  [[ -n "$mtime" ]] || return 1
+  now="$(date +%s)"
+  printf '%s\n' "$((now - mtime))"
 }
 
 run_is_active() {
@@ -489,11 +509,18 @@ write_parent_final_status() {
 
 repair_dead_runner_status_if_needed() {
   local run_dir="$1"
-  local status_file state pid
+  local status_file state pid age
   status_file="$(status_file_for_run "$run_dir")"
   [[ -f "$status_file" ]] || return 0
   state="$(status_value "$status_file" state)"
   pid="$(status_value "$status_file" pid)"
+  if [[ "$state" == "starting" && -z "$pid" ]]; then
+    age="$(status_file_age_seconds "$status_file" || true)"
+    if [[ -n "$age" ]] && ((age >= STARTUP_GRACE_SECONDS)); then
+      write_parent_final_status "$run_dir" failed 1 "Detached proof runner did not start before startup grace expired."
+    fi
+    return 0
+  fi
   if [[ "$state" == "starting" || "$state" == "running" ]] &&
      [[ -n "$pid" ]] &&
      ! process_is_alive "$pid"; then
@@ -661,6 +688,7 @@ wait_for_run() {
       echo "No detached Ghostty proof status file found: $status_file" >&2
       return 1
     fi
+    repair_dead_runner_status_if_needed "$run_dir"
     state="$(status_value "$status_file" state)"
     pid="$(status_value "$status_file" pid)"
     case "$state" in

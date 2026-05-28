@@ -261,6 +261,12 @@ Tab insertion at diagnostics lines `857001` and `857003`, and stopping on
 `ghostty-fast-insertion-budget-exceeded` plus `insert ... success=false` at
 diagnostics lines `857069` and `857071` before deferred `stage=insert-failed`
 at line `857072`.
+The follow-up current-head 45s detached attempt `20260528T052125Z-ghostty`
+exposed a harness-only failure: Terminal did not start the worker, so the run
+stayed `state=starting` with no `pid`. The detached proof wrapper now repairs
+stale no-pid `starting` runs after the startup grace window; `status` marks that
+run failed with a clear startup-grace-expired note, and `wait` returns instead
+of hanging.
 
 ## Scores
 

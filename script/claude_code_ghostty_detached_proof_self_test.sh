@@ -104,6 +104,26 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh status --run-dir "$PENDING_RUN" >"$TMP_DIR/pending-status.txt"
 require_contains "$TMP_DIR/pending-status.txt" "runner_process=pending"
 
+STALE_START_RUN="$TMP_DIR/proofs/stale-start-run"
+mkdir -p "$STALE_START_RUN"
+cat >"$STALE_START_RUN/status.env" <<EOF
+state=starting
+pid=
+started_at=2026-05-27T00:00:04Z
+run_dir=$STALE_START_RUN
+launcher=terminal
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'stale start detached log\n' >"$STALE_START_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS=0 \
+  script/claude_code_ghostty_detached_proof.sh status --run-dir "$STALE_START_RUN" >"$TMP_DIR/stale-start-status.txt"
+require_contains "$TMP_DIR/stale-start-status.txt" "state=failed"
+require_contains "$TMP_DIR/stale-start-status.txt" "exit_status=1"
+require_contains "$TMP_DIR/stale-start-status.txt" "Detached proof runner did not start before startup grace expired."
+require_contains "$TMP_DIR/stale-start-status.txt" "runner_process=not-running"
+
 DEAD_RUN="$TMP_DIR/proofs/dead-run"
 mkdir -p "$DEAD_RUN"
 cat >"$DEAD_RUN/status.env" <<EOF
@@ -154,6 +174,9 @@ require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_
 require_contains "$SCRIPT_TEXT" "write_passthrough_env_exports"
 require_contains "$SCRIPT_TEXT" "repair_dead_runner_status_if_needed"
 require_contains "$SCRIPT_TEXT" "Detached proof runner exited before writing a final status."
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS"
+require_contains "$SCRIPT_TEXT" "status_file_age_seconds"
+require_contains "$SCRIPT_TEXT" "Detached proof runner did not start before startup grace expired."
 require_contains "$SCRIPT_TEXT" 'printf '\''export %s=%q\n'\'' "$key" "$value"'
 require_contains "$SCRIPT_TEXT" 'printf '\''command=%s\n'\'' "$SMOKE_COMMAND_SUMMARY"'
 require_contains "$SCRIPT_TEXT" 'nohup "$runner_script"'
