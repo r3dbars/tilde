@@ -379,7 +379,15 @@ struct CommonPhraseContinuationPredictorTests {
             ("What I need next is", .docsProse, " a clearer path forward", "intent-writing-flow-what-i-need-next"),
             ("The part that matters is", .docsProse, " where the user gets stuck", "intent-writing-flow-part-that-matters"),
             ("A better way to say this is", .notes, " keep it simple and direct", "intent-writing-flow-better-way-to-say-this"),
-            ("The tradeoff is", .docsProse, " speed without losing trust", "intent-writing-flow-tradeoff-is")
+            ("The tradeoff is", .docsProse, " speed without losing trust", "intent-writing-flow-tradeoff-is"),
+            ("Daily note\nI am thinking about", .notes, " what needs to happen next", "intent-writing-flow-thinking-about"),
+            ("What I actually want is", .docsProse, " the simplest version that works", "intent-writing-flow-actually-want"),
+            ("The thing I am worried about is", .notes, " where this breaks trust", "intent-writing-flow-worried-about"),
+            ("This is hard because", .docsProse, " the tradeoff is not obvious", "intent-writing-flow-hard-because"),
+            ("The simplest version is", .docsProse, " to make one small change", "intent-writing-flow-simplest-version"),
+            ("The next obvious move is", .notes, " to test it in context", "intent-writing-flow-next-obvious-move"),
+            ("What this unlocks is", .docsProse, " moving faster without losing trust", "intent-writing-flow-unlocks"),
+            ("The important detail is", .notes, " what happens after accept", "intent-writing-flow-important-detail")
         ]
 
         for (context, profile, expected, match) in cases {
