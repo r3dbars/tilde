@@ -293,6 +293,67 @@ smoke_pid_for_run() {
   printf '%s\n' "$smoke_pid"
 }
 
+proof_artifact_dir_for_run() {
+  local run_dir="$1"
+  local status_file proof_artifact_dir
+  status_file="$(status_file_for_run "$run_dir")"
+  proof_artifact_dir="$(status_value "$status_file" proof_artifact_dir)"
+  [[ -n "$proof_artifact_dir" ]] || proof_artifact_dir="$run_dir/proof-artifacts"
+  printf '%s\n' "$proof_artifact_dir"
+}
+
+detached_proof_context_pids_for_run() {
+  local run_dir="$1"
+  local log_file proof_artifact_dir
+  log_file="$(log_file_for_run "$run_dir")"
+  proof_artifact_dir="$(proof_artifact_dir_for_run "$run_dir")"
+
+  if [[ -d "$proof_artifact_dir" ]]; then
+    find "$proof_artifact_dir" -name claude.pid -type f -print 2>/dev/null |
+      while IFS= read -r pid_file; do
+        tr -dc '0-9\n' <"$pid_file" 2>/dev/null || true
+      done
+  fi
+
+  if [[ -f "$log_file" ]]; then
+    awk '
+      /owns no-restore host pid\(s\):/ {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^[0-9]+$/) print $i
+        }
+      }
+      /^root_pid=[0-9]+$/ {
+        sub(/^root_pid=/, "")
+        print
+      }
+    ' "$log_file" 2>/dev/null || true
+  fi
+}
+
+terminate_detached_proof_context_processes() {
+  local run_dir="$1"
+  local log_file pid deadline stopped_any=0
+  log_file="$(log_file_for_run "$run_dir")"
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" && "$pid" != "$$" ]] || continue
+    process_is_alive "$pid" || continue
+    stopped_any=1
+    signal_process_or_group "$pid" TERM
+    deadline=$((SECONDS + 5))
+    while process_is_alive "$pid" && ((SECONDS <= deadline)); do
+      sleep 0.2
+    done
+    if process_is_alive "$pid"; then
+      signal_process_or_group "$pid" KILL
+      sleep 0.5
+    fi
+    printf 'Stopped detached Ghostty proof context pid=%s after wrapper stop.\n' "$pid" >>"$log_file"
+  done < <(detached_proof_context_pids_for_run "$run_dir" | awk 'NF && !seen[$1]++')
+
+  ((stopped_any == 1))
+}
+
 terminate_orphaned_detached_smoke_processes() {
   local run_dir="$1"
   local log_file smoke_pid pid args deadline
@@ -1135,7 +1196,13 @@ stop_run() {
   if [[ -z "$pid" ]]; then
     if process_is_alive "$smoke_pid"; then
       terminate_orphaned_detached_smoke_processes "$run_dir"
+      terminate_detached_proof_context_processes "$run_dir" || true
       write_parent_final_status "$run_dir" failed 143 "Detached proof smoke child was stopped by wrapper without a runner pid."
+      print_run_status "$run_dir"
+      return 0
+    fi
+    if terminate_detached_proof_context_processes "$run_dir"; then
+      write_parent_final_status "$run_dir" failed 143 "Detached proof context was stopped by wrapper after runner exit."
       print_run_status "$run_dir"
       return 0
     fi
@@ -1147,7 +1214,12 @@ stop_run() {
   if ! process_is_alive "$pid"; then
     if process_is_alive "$smoke_pid"; then
       terminate_orphaned_detached_smoke_processes "$run_dir"
+      terminate_detached_proof_context_processes "$run_dir" || true
       write_parent_final_status "$run_dir" failed 143 "Detached proof smoke child was stopped after runner exit."
+    else
+      if terminate_detached_proof_context_processes "$run_dir"; then
+        write_parent_final_status "$run_dir" failed 143 "Detached proof context was stopped by wrapper after runner exit."
+      fi
     fi
     echo "Detached Ghostty proof is not running."
     print_run_status "$run_dir"
@@ -1186,6 +1258,7 @@ stop_run() {
   if process_is_alive "$smoke_pid"; then
     terminate_orphaned_detached_smoke_processes "$run_dir"
   fi
+  terminate_detached_proof_context_processes "$run_dir" || true
 
   sleep 0.5
   state="$(status_value "$status_file" state)"
