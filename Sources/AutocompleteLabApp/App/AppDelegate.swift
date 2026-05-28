@@ -10063,47 +10063,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 hostBundleIdentifier: frontmostApp.bundleIdentifier,
                 insertionMode: currentProfile?.insertionMode,
                 requiresNoSubmitAcceptanceProof: currentProfile?.requiresNoSubmitAcceptanceProof == true
-            )
+        )
         if prefersFastGhosttyPasteboardInsertion {
             keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
-            guard prepareGhosttyTerminalHostProofInsertionTarget(
-                frontmostApp: frontmostApp,
-                originalProofInputText: originalProofInputText,
-                profile: currentProfile
-            ) else {
-                DiagnosticsLog.shared.record(
-                    "claude-code-terminal-host-proof-insert",
-                    metadata: [
-                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                        "posted": "false",
-                        "reason": "ghostty-fast-target-recheck-failed",
-                        "source": "ghosttyFocusReassertion"
-                    ]
-                )
-                return false
-            }
-            stopKeyboardEventTapNow(reason: "ghostty-fast-insertion-prompt-focus")
-            if focusGhosttyTerminalHostProofPromptByClickIfAvailable(
-                source: "ghosttyPromptFocusClick"
-            ) {
-                guard prepareGhosttyTerminalHostProofInsertionTarget(
-                    frontmostApp: frontmostApp,
-                    originalProofInputText: originalProofInputText,
-                    profile: currentProfile
-                ) else {
-                    DiagnosticsLog.shared.record(
-                        "claude-code-terminal-host-proof-insert",
-                        metadata: [
-                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                            "posted": "false",
-                            "reason": "ghostty-fast-post-click-target-recheck-failed",
-                            "source": "ghosttyPromptFocusClick"
-                        ]
-                    )
-                    return false
-                }
-            }
-
             let runsExtendedGhosttyInsertionProbes =
                 ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES"] == "1"
             let configuredGhosttyFastInsertionBudgetSeconds =
@@ -10150,6 +10112,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return false
                 }
                 return true
+            }
+
+            if ProcessInfo.processInfo.environment[
+                "AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE"
+            ] == "1" {
+                guard shouldContinueGhosttyFastInsertion(
+                    before: "ghosttyPrePromptFocusBundleSystemEventsRawKeystroke"
+                ) else {
+                    return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+                }
+                let ghosttyPrePromptFocusRawOutcome =
+                    insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke(
+                        acceptedText,
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: currentProfile,
+                        source: "ghosttyPrePromptFocusBundleSystemEventsRawKeystroke",
+                        baselineSource: "ghosttyPrePromptFocusBundleSystemEventsRawKeystrokeBaseline",
+                        stopReason: nil
+                    )
+                if ghosttyPrePromptFocusRawOutcome.verified {
+                    return true
+                }
+                guard ghosttyPrePromptFocusRawOutcome.safeToContinue else {
+                    return false
+                }
+            }
+
+            guard prepareGhosttyTerminalHostProofInsertionTarget(
+                frontmostApp: frontmostApp,
+                originalProofInputText: originalProofInputText,
+                profile: currentProfile
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-fast-target-recheck-failed",
+                        "source": "ghosttyFocusReassertion"
+                    ]
+                )
+                return false
+            }
+
+            stopKeyboardEventTapNow(reason: "ghostty-fast-insertion-prompt-focus")
+            if focusGhosttyTerminalHostProofPromptByClickIfAvailable(
+                source: "ghosttyPromptFocusClick"
+            ) {
+                guard prepareGhosttyTerminalHostProofInsertionTarget(
+                    frontmostApp: frontmostApp,
+                    originalProofInputText: originalProofInputText,
+                    profile: currentProfile
+                ) else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "ghostty-fast-post-click-target-recheck-failed",
+                            "source": "ghosttyPromptFocusClick"
+                        ]
+                    )
+                    return false
+                }
             }
 
             if ProcessInfo.processInfo.environment[
@@ -12886,10 +12914,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
-        profile: CompatibilityProfile?
+        profile: CompatibilityProfile?,
+        source: String = "ghosttyBundleSystemEventsRawKeystroke",
+        baselineSource: String = "ghosttyBundleSystemEventsRawKeystrokeBaseline",
+        stopReason: String? = "ghostty-bundle-system-events-raw-insertion"
     ) -> (verified: Bool, safeToContinue: Bool) {
-        let source = "ghosttyBundleSystemEventsRawKeystroke"
-        let baselineSource = "ghosttyBundleSystemEventsRawKeystrokeBaseline"
         guard !acceptedText.isEmpty,
               !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
@@ -12946,7 +12975,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["AUTOCOMPLETE_LAB_GHOSTTY_HOST_BUNDLE"] = frontmostApp.bundleIdentifier
         process.environment = environment
 
-        stopKeyboardEventTapNow(reason: "ghostty-bundle-system-events-raw-insertion")
+        let stoppedKeyboardTap = stopReason != nil
+        if let stopReason {
+            stopKeyboardEventTapNow(reason: stopReason)
+        }
 
         do {
             try process.run()
@@ -13070,6 +13102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "keystrokeMode": "bulk",
                 "launchMode": "direct",
                 "textTransport": "environment",
+                "keyboardTapStopped": String(stoppedKeyboardTap),
                 "exitStatus": String(process.terminationStatus),
                 "errorMessage": String(stderrText.prefix(160))
             ]

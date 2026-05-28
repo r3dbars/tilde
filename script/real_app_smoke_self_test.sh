@@ -673,6 +673,10 @@ if "insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke" not in fast_gh
     raise SystemExit("Claude Code Ghostty fast proof must keep the smoke-equivalent raw System Events bundle probe")
 if "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty raw System Events proof must stay behind an explicit opt-in probe flag")
+if "AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty pre-prompt-focus raw System Events proof must stay behind an explicit opt-in probe flag")
+if "ghosttyPrePromptFocusBundleSystemEventsRawKeystroke" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try the raw System Events comparator before the prompt focus click")
 if "insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the focused System Events bulk rung before the heavier terminal-scanning script")
 if "insertGhosttyTerminalHostProofInProcessInputText" not in fast_ghostty_block:
@@ -709,6 +713,10 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_g
     raise SystemExit("Claude Code Ghostty fast proof must try native text action before native input text")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") < fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
     raise SystemExit("Claude Code Ghostty fast proof must try send key before native text action")
+if fast_ghostty_block.index("ghosttyPrePromptFocusBundleSystemEventsRawKeystroke") > fast_ghostty_block.index("focusGhosttyTerminalHostProofPromptByClickIfAvailable"):
+    raise SystemExit("Claude Code Ghostty fast proof must try raw System Events before the prompt focus click comparator")
+if fast_ghostty_block.index("ghosttyPrePromptFocusBundleSystemEventsRawKeystroke") > fast_ghostty_block.index("prepareGhosttyTerminalHostProofInsertionTarget"):
+    raise SystemExit("Claude Code Ghostty pre-prompt-focus raw proof must run before focus reassertion")
 if fast_ghostty_block.index("focusGhosttyTerminalHostProofPromptByClickIfAvailable") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
     raise SystemExit("Claude Code Ghostty fast proof must focus-click the prompt before native text insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText"):
@@ -807,6 +815,8 @@ if "ghosttyFocusedSystemEventsBulkKeystrokeBaseline" not in app_delegate or '"fo
     raise SystemExit("Claude Code Ghostty focused System Events proof must verify the unchanged baseline and diagnose the simpler frontmost-process mode")
 if "ghosttyBundleSystemEventsRawKeystrokeBaseline" not in app_delegate or '"focusMode": "frontmostBundleOnly"' not in app_delegate:
     raise SystemExit("Claude Code Ghostty raw System Events proof must verify the unchanged baseline and diagnose the frontmost-bundle mode")
+if "ghosttyPrePromptFocusBundleSystemEventsRawKeystrokeBaseline" not in app_delegate or "stopReason: nil" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty pre-prompt-focus raw proof must verify baseline and avoid stopping the event tap")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before the bundled text helper")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper") > fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter"):
@@ -989,6 +999,7 @@ for env_key in [
     "AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES",
     "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS",
+    "AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS",
     "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE",
@@ -1161,6 +1172,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE \' script/real_a
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE \' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Ghostty proof env overrides to reach relaunched SteadyType" >&2

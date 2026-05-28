@@ -891,6 +891,21 @@ Events probes again could not mutate the prompt after caret refocus. Ghostty
 remains unsupported; raw bundle System Events is now ruled out as a proof-lane
 default insertion fix.
 
+The follow-up pre-focus comparator ruled out the prompt-click theory too.
+`20260528T185553Z-ghostty` enabled
+`AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE=1`
+and reached the deferred Tab-accept path on attempt 2. Before any prompt-row
+click, SteadyType reasserted the Ghostty proof pid, stopped the keyboard tap for
+`ghostty-pre-prompt-focus-bundle-system-events-raw-insertion`, then posted
+`ghosttyPrePromptFocusBundleSystemEventsRawKeystroke` at diagnostics line
+`999928`. It exited `0` but verified `false`; the original-prompt baseline
+verified `true` at line `999929`. The later prompt-click, raw bundle System
+Events, focused System Events, send-key, pasteboard, and native Ghostty paths all
+kept the same unchanged prompt and the proof failed closed at lines
+`999973`-`999976`. Ghostty remains unsupported; the next transport idea needs to
+avoid the app-owned post-accept event/input-text no-op state rather than merely
+changing focus timing.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit
