@@ -3490,6 +3490,8 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'Claude Code Ghostty native line clear' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'waiting for disposable prompt focus' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SKIP_FRESH_PROMPT_CLEAR:-1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'typed-prompt readiness will catch dirty prompt state' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'clearing disposable prompt line' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'prompt line cleared' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
