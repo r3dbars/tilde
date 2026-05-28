@@ -191,6 +191,11 @@ received SIGTERM during `claude-code Ghostty open fresh disposable context`
 after the stale-only host check and before prompt readiness. Ghostty is still
 red, but the next blocker is now the disposable open lifecycle or external TERM
 source, not detached wrapper ambiguity.
+The TERM handler now prints the smoke pid, parent, process group, session,
+guard pids, tracked Claude Code terminal proof pids, lock owner, process-group
+members, and proof-related process rows before cleanup. The next red run should
+name whether the signal is coming from proof cleanup, wrapper/session teardown,
+or a separate watcher.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced

@@ -884,10 +884,52 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
+smoke_signal_pid_list() {
+  local pid
+  for pid in "$@"; do
+    [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] || continue
+    printf '%s\n' "$pid"
+  done | awk '!seen[$0]++' | paste -sd, -
+}
+
 diagnose_smoke_signal() {
   local signal_name="$1"
+  local self_pid self_ppid self_pgid self_sess tracked_pids snapshot_pids lock_owner
+  self_pid="${SMOKE_SCRIPT_PID:-${BASHPID:-$$}}"
+  self_ppid="$(ps -o ppid= -p "$self_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  self_pgid="$(ps -o pgid= -p "$self_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  self_sess="$(ps -o sess= -p "$self_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  lock_owner=""
+  if [[ -f "$SMOKE_LOCK_DIR/pid" ]]; then
+    lock_owner="$(head -n 1 "$SMOKE_LOCK_DIR/pid" 2>/dev/null | tr -dc '0-9' || true)"
+  fi
+  tracked_pids="$(smoke_signal_pid_list \
+    "$self_pid" \
+    "$self_ppid" \
+    "$SMOKE_INTERFERENCE_GUARD_PID" \
+    "$SMOKE_QUARANTINE_GUARD_PID" \
+    "$lock_owner" \
+    ${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-})"
   echo "real_app_smoke received $signal_name during phase: $SMOKE_PHASE" >&2
+  echo "Smoke signal self pid=${self_pid:-unknown} ppid=${self_ppid:-unknown} pgid=${self_pgid:-unknown} session=${self_sess:-unknown}" >&2
+  echo "Smoke guard pids: interference=${SMOKE_INTERFERENCE_GUARD_PID:-none} quarantine=${SMOKE_QUARANTINE_GUARD_PID:-none}" >&2
+  echo "Tracked Claude Code terminal proof pids: ${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-none}" >&2
+  echo "Smoke lock owner pid: ${lock_owner:-none}" >&2
   echo "Smoke lock: $SMOKE_LOCK_DIR" >&2
+  snapshot_pids="$tracked_pids"
+  if [[ -n "$snapshot_pids" ]]; then
+    echo "Signal process snapshot:" >&2
+    ps -o pid=,ppid=,pgid=,sess=,stat=,etime=,command= -p "$snapshot_pids" >&2 || true
+  fi
+  if [[ -n "$self_pgid" ]]; then
+    echo "Smoke process group members:" >&2
+    ps ax -o pid=,ppid=,pgid=,sess=,stat=,etime=,command= 2>/dev/null |
+      awk -v pgid="$self_pgid" '$3 == pgid { print }' >&2 || true
+  fi
+  echo "Proof-related process snapshot:" >&2
+  ps ax -o pid=,ppid=,pgid=,sess=,stat=,etime=,command= 2>/dev/null |
+    awk '$0 ~ /(claude_code_ghostty_detached_proof|real_app_smoke|terminal_prompt_ax_proof_helper|Ghostty|ghostty|osascript|SteadyType)/ { print }' |
+    head -n 60 >&2 || true
   echo "Running SteadyType processes:" >&2
   ps ax -o pid=,ppid=,pgid=,etime=,command= 2>/dev/null |
     awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' >&2
