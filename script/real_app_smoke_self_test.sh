@@ -746,6 +746,14 @@ if "postUnicodeTextKeyEventsPerCharacter(finalText)" not in native_prefix_final_
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must use a real final key event after native input")
 if "ghostty-native-prefix-final-key-unverified-mutated-input" not in native_prefix_final_key_block:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must fail closed if only part of the transport mutates the prompt")
+if "prefixExpectedProofInputText" not in native_prefix_final_key_block or '"stage": "prefix-verified"' not in native_prefix_final_key_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must verify the native prefix before sending the final key")
+if "ghostty-native-prefix-final-key-prefix-unverified-noop" not in native_prefix_final_key_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must distinguish a no-op prefix from a final-key miss")
+prefix_verify_source = native_prefix_final_key_block.index("expectedProofInputText: prefixExpectedProofInputText")
+final_key_source = native_prefix_final_key_block.index("postUnicodeTextKeyEventsPerCharacter(finalText)")
+if prefix_verify_source > final_key_source:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must verify the prefix before posting the final key event")
 for env_key in [
     "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES",
     "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS",
