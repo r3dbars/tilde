@@ -449,10 +449,24 @@ readiness, avoiding brittle placeholder dependence after process/pid proof.
 direct-open context, cleared the prompt, typed the proof text, showed a prompt-row
 phrase suggestion, and delivered Tab with `keyboard-action handled=true`, then
 failed closed at verified insertion because every app-owned Ghostty transport
-left the prompt unchanged. The current Ghostty red bar is again the actual
-one-word insertion transport, not prompt launch or suggestion presentation.
-Ghostty remains unsupported until a
-detached run reaches verified one-word no-submit insertion and exits `0`.
+left the prompt unchanged. `20260528T111744Z-ghostty` repeated the important
+part of that red bar after live AX inspection: Ghostty's focused `AXTextArea`
+was readable but not settable, shell-driven System Events typing could work
+outside the app, and the app-owned send-key, bulk System Events, pasteboard,
+native, helper, hardware, and Unicode transports still left the disposable
+prompt unchanged. The app now classifies that initial send-key / bulk System
+Events / pasteboard unchanged-prompt cluster as a known Ghostty no-op and fails
+fast unless `AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES=1` is set.
+Ghostty remains unsupported until a detached run reaches verified one-word
+no-submit insertion and exits `0`. The follow-up proofs
+`20260528T112642Z-ghostty`, `20260528T112856Z-ghostty`, and
+`20260528T113115Z-ghostty` did not reach the new insertion classifier: the first
+two failed typed-prompt readiness after native final-trigger failure and CGEvent
+fallback, and the third got past Ghostty's command-execution approval sheet but
+failed both direct-open attempts because the prompt still contained launch-command
+shell text. The current red bar is stable clean Ghostty prompt readiness again;
+once insertion is reached, normal proof runs should fail fast on the known
+initial no-op cluster instead of spending the whole long ladder.
 
 ## Scores
 

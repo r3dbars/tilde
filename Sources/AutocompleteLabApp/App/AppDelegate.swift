@@ -10176,6 +10176,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            if !runsExtendedGhosttyInsertionProbes {
+                let promptStayedUnchangedAfterInitialNoopCluster =
+                    verifyClaudeCodeTerminalHostProofInsertion(
+                        expectedProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: currentProfile,
+                        attempts: 4
+                    )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "ghosttyInitialNoopClusterBaseline",
+                        "verified": String(promptStayedUnchangedAfterInitialNoopCluster)
+                    ]
+                )
+                guard promptStayedUnchangedAfterInitialNoopCluster else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "ghostty-initial-noop-cluster-mutated-input",
+                            "source": "ghosttyInitialNoopClusterBaseline"
+                        ]
+                    )
+                    return false
+                }
+
+                let initialNoopCluster = GhosttyInitialInsertionNoopInput(
+                    hostBundleIdentifier: frontmostApp.bundleIdentifier,
+                    proofProfileBundleIdentifier: currentProfile?.bundleIdentifier,
+                    sendKeyVerified: ghosttySendKeyOutcome.verified,
+                    systemEventsBulkVerified: ghosttyBulkSystemEventsOutcome.verified,
+                    systemEventsBulkSafeToContinue: ghosttyBulkSystemEventsOutcome.safeToContinue,
+                    pasteboardVerified: ghosttyPasteboardOutcome.verified,
+                    pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
+                    promptStayedUnchanged: promptStayedUnchangedAfterInitialNoopCluster,
+                    runsExtendedProbes: runsExtendedGhosttyInsertionProbes
+                )
+                if GhosttyInsertionNoopPolicy().shouldFailFastAfterInitialNoopCluster(initialNoopCluster) {
+                    return recordGhosttyFastFailClosed(
+                        reason: GhosttyInsertionNoopPolicy.initialNoopClusterReason
+                    )
+                }
+            }
+
             if ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE"] == "1" {
                 guard shouldContinueGhosttyFastInsertion(before: "ghosttyNativePrefixFinalKeyText") else {
                     return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
@@ -11553,19 +11600,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (false, true)
         }
 
-        let scriptSource = """
-        set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
-        tell application id "com.mitchellh.ghostty"
-            set targetWindow to front window
-            activate window targetWindow
-            set targetTab to selected tab of targetWindow
-            set targetTerminal to focused terminal of targetTab
-            focus targetTerminal
-            input text acceptedText to targetTerminal
-            activate
-            return true
-        end tell
-        """
+        let usesArgumentText = !launchThroughShell
+        let scriptSource = usesArgumentText
+            ? """
+            on run argv
+                set acceptedText to item 1 of argv
+                tell application id "com.mitchellh.ghostty"
+                    set targetWindow to front window
+                    activate window targetWindow
+                    set targetTab to selected tab of targetWindow
+                    set targetTerminal to focused terminal of targetTab
+                    focus targetTerminal
+                    input text acceptedText to targetTerminal
+                    activate
+                    return true
+                end tell
+            end run
+            """
+            : """
+            set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
+            tell application id "com.mitchellh.ghostty"
+                set targetWindow to front window
+                activate window targetWindow
+                set targetTab to selected tab of targetWindow
+                set targetTerminal to focused terminal of targetTab
+                focus targetTerminal
+                input text acceptedText to targetTerminal
+                activate
+                return true
+            end tell
+            """
 
         let standardOutput = Pipe()
         let standardError = Pipe()
@@ -11574,6 +11638,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if launchThroughShell {
             process.executableURL = URL(fileURLWithPath: shellPath)
             process.arguments = ["-lc", "exec /usr/bin/osascript"]
+            process.standardInput = standardInput
+        } else if usesArgumentText {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-", acceptedText]
             process.standardInput = standardInput
         } else {
             process.executableURL = URL(fileURLWithPath: osascriptPath)
@@ -11587,7 +11655,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try process.run()
-            if launchThroughShell {
+            if launchThroughShell || usesArgumentText {
                 standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
                 try? standardInput.fileHandleForWriting.close()
             }
@@ -11708,7 +11776,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "posted": "true",
                 "source": source,
                 "verified": String(verified),
-                "launchMode": launchThroughShell ? "shell" : "direct"
+                "launchMode": launchThroughShell ? "shell" : "direct",
+                "textTransport": usesArgumentText ? "argv" : "environment"
             ]
         )
         if verified {
