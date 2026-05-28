@@ -4355,7 +4355,7 @@ APPLESCRIPT
   fi
 
   if wait_for_claude_code_terminal_key_capture_permission_ui_since "$key_capture_start_line" \
-    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-1}"; then
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-2}"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"
     echo "Claude Code $host_name key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap." >&2
     return 1
@@ -14282,6 +14282,12 @@ run_claude_code_terminal_host_smoke() {
 
   if [[ "$found_suggestion" != "1" ]]; then
     if [[ -n "$post_suggestion_failure_reason" ]]; then
+      if [[ "$post_suggestion_failure_reason" == "key capture probe did not reach event tap" ]] &&
+        wait_for_claude_code_terminal_key_capture_permission_ui_since \
+          "${post_suggestion_failure_start_line:-0}" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-2}"; then
+        post_suggestion_failure_reason="key capture probe lost focus to macOS permission UI"
+      fi
       echo "Claude Code $host_name proof failed after a visible prompt-row suggestion: $post_suggestion_failure_reason." >&2
       echo "Required fields: keyboard-event-tap-latency app=com.anthropic.claude-code key=tab or key=other." >&2
       echo "Suggestion diagnostics line: ${post_suggestion_failure_start_line:-unknown}" >&2
