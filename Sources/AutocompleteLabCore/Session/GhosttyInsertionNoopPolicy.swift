@@ -8,6 +8,7 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
     public let systemEventsBulkSafeToContinue: Bool
     public let focusedActionTextVerified: Bool
     public let focusedActionTextSafeToContinue: Bool
+    public let focusedActionTextNativeNoopClassified: Bool
     public let pasteboardVerified: Bool
     public let pasteboardSafeToContinue: Bool
     public let inProcessInputTextVerified: Bool
@@ -23,6 +24,7 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         systemEventsBulkSafeToContinue: Bool,
         focusedActionTextVerified: Bool,
         focusedActionTextSafeToContinue: Bool,
+        focusedActionTextNativeNoopClassified: Bool,
         pasteboardVerified: Bool,
         pasteboardSafeToContinue: Bool,
         inProcessInputTextVerified: Bool,
@@ -37,6 +39,7 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         self.systemEventsBulkSafeToContinue = systemEventsBulkSafeToContinue
         self.focusedActionTextVerified = focusedActionTextVerified
         self.focusedActionTextSafeToContinue = focusedActionTextSafeToContinue
+        self.focusedActionTextNativeNoopClassified = focusedActionTextNativeNoopClassified
         self.pasteboardVerified = pasteboardVerified
         self.pasteboardSafeToContinue = pasteboardSafeToContinue
         self.inProcessInputTextVerified = inProcessInputTextVerified
@@ -62,6 +65,7 @@ public struct GhosttyInsertionNoopPolicy: Equatable, Sendable {
             && input.systemEventsBulkSafeToContinue
             && !input.focusedActionTextVerified
             && input.focusedActionTextSafeToContinue
+            && input.focusedActionTextNativeNoopClassified
             && !input.pasteboardVerified
             && input.pasteboardSafeToContinue
             && !input.inProcessInputTextVerified

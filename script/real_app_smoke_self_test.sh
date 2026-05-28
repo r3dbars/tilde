@@ -743,6 +743,15 @@ if "Self.clonePasteboardItems(pasteboard.pasteboardItems)" not in app_delegate o
     raise SystemExit("Claude Code Ghostty screen-copy verifier must restore the user's pasteboard after native screen copy")
 if "focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include focused native action verification")
+if "focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativeNoopClassified" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty initial no-op classifier must require focused native screen-copy no-op classification")
+focused_action_start = app_delegate.index("private func insertGhosttyTerminalHostProofFocusedActionText(")
+focused_action_end = app_delegate.index("private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(", focused_action_start)
+focused_action_block = app_delegate[focused_action_start:focused_action_end]
+if ") -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool)" not in focused_action_block:
+    raise SystemExit("Claude Code Ghostty focused native action proof must report native no-op classification")
+if "screenCopyOutcome.promptStayedUnchanged == true" not in focused_action_block:
+    raise SystemExit("Claude Code Ghostty focused native action proof must classify no-op only from native screen-copy original-prompt proof")
 if "ghosttyFocusedSystemEventsBulkKeystrokeBaseline" not in app_delegate or '"focusMode": "frontmostProcessOnly"' not in app_delegate:
     raise SystemExit("Claude Code Ghostty focused System Events proof must verify the unchanged baseline and diagnose the simpler frontmost-process mode")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):

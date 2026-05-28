@@ -523,6 +523,22 @@ verifier at lines `919006`-`919007`, classified the copy as
 `ghostty-screen-copy-no-proof-context`, continued through the AX baseline only as
 inconclusive, and still failed closed through the unchanged-prompt no-op cluster
 at lines `919023`-`919026`.
+The current follow-up makes that classifier stricter before it can shorten the
+default Ghostty ladder: the initial no-op fail-fast now requires the focused
+native action's screen-copy verifier to classify an original-prompt native
+no-op, not merely an AX unchanged baseline. `20260528T124841Z-ghostty` rebuilt
+the app, reached a prompt-row suggestion at diagnostics line `919640`, consumed
+Tab, and scheduled deferred insertion at lines `920533`-`920535`.
+`ghosttyFocusedActionText` posted at line `920559`,
+`ghosttyFocusedActionTextScreenCopy` at lines `920560`-`920561` again reported
+`ghostty-screen-copy-no-proof-context`, and the app therefore continued past the
+initial no-op cluster instead of treating that inconclusive native copy as
+classified no-op evidence. The run then proved the same app-owned insertion
+miss across front-window native input, marker-scanned native input,
+paste-from-clipboard action, System Events, hardware, and bundled helper rungs,
+before failing closed on the explicit 45s budget at diagnostics lines
+`920618`-`920620`. Ghostty remains unsupported until a detached run exits `0`
+with verified one-word no-submit insertion.
 
 ## Scores
 
