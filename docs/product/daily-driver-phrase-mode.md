@@ -806,6 +806,22 @@ is kept behind
 fast path does not pay for a proven no-op. Ghostty remains unsupported, but
 separate bundled-helper AppleScript identity is no longer an unknown.
 
+The follow-up fail-fast pass moved Ghostty's native paste action into the
+initial no-op cluster before generic Command-V and in-process native-input
+fallbacks. `20260528T172019Z-ghostty` first proved that ordering on the patched
+build; a later clean rerun, `20260528T172507Z-ghostty`, rebuilt the app, reached
+a prompt-row suggestion at diagnostics line `960450`, handled Tab, proved
+`ghosttyFocusedActionText` left the exact title-marked prompt unchanged at lines
+`961342`-`961344`, then ran `ghosttyPerformActionPasteFromClipboard` at lines
+`961346`-`961347` before generic pasteboard probes. The native paste action
+verified `false`, its unchanged baseline verified `true`, and the prompt stayed
+at 42 chars through `ghosttyInProcessInputText` and `ghosttyFrontWindowInputText`
+before fail-closing at `ghostty-initial-insertion-noop-cluster` on lines
+`961365`-`961367`. The intervening `20260528T172055Z-ghostty` record exited
+during startup with a lock/TERM and is not insertion evidence. Ghostty remains
+unsupported until the detached proof exits `0` with verified one-word no-submit
+insertion.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

@@ -638,6 +638,22 @@ exact Ghostty PID at line `952563`, ran `bundledGhosttyInputTextHelper` at line
 path does not spend extra time on it. Ghostty remains unsupported until a
 different app-owned insertion architecture mutates and verifies the disposable
 Claude prompt.
+The current fail-fast follow-up moved Ghostty's native paste action into the
+initial no-op cluster before generic Command-V and in-process native-input
+fallbacks. `20260528T172019Z-ghostty` first proved that ordering on the patched
+build; the cleaner follow-up `20260528T172507Z-ghostty` rebuilt the app, reached
+a prompt-row suggestion at diagnostics line `960450`, handled Tab, recorded
+`ghosttyFocusedActionText` as `verified=false` with
+`nativeNoopClassified=true` at lines `961342`-`961344`, then ran
+`ghosttyPerformActionPasteFromClipboard` before generic pasteboard probes at
+lines `961346`-`961347`. The prompt stayed unchanged through
+`ghosttyInProcessInputText` at lines `961358`-`961361` and
+`ghosttyFrontWindowInputText` at lines `961363`-`961364`, then failed closed at
+`ghostty-initial-insertion-noop-cluster` on lines `961365`-`961367`. The
+intervening `20260528T172055Z-ghostty` record was startup-only lock/TERM
+evidence with exit `143`, so it does not count as insertion proof. Ghostty
+remains unsupported until a detached proof exits `0` with verified one-word
+no-submit insertion.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

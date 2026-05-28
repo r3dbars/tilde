@@ -713,10 +713,10 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") < fast_g
     raise SystemExit("Claude Code Ghostty fast proof must try front-window input text before native text action")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") < fast_ghostty_block.index("ghosttyLoginShellFrontWindowInputTextOutcome"):
     raise SystemExit("Claude Code Ghostty fast proof must try shell-launched front-window input text before native text action")
-if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
-    raise SystemExit("Claude Code Ghostty fast proof must try native input text before native paste action")
-if fast_ghostty_block.index("ghosttyLoginShellInputTextOutcome") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
-    raise SystemExit("Claude Code Ghostty fast proof must try shell-launched marker-scanned native input before native paste action")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofFocusedActionText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
+    raise SystemExit("Claude Code Ghostty fast proof must try focused native action text before native paste action")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native paste action before generic Command-V pasteboard probes")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before slow native text fallbacks")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
@@ -772,8 +772,12 @@ if "focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified" not in 
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include focused native action verification")
 if "focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativeNoopClassified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must require focused native screen-copy no-op classification")
+if "pasteActionVerified: ghosttyPasteActionOutcome.verified" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty initial no-op classifier must include native paste action verification")
 if "bundledGhosttyInputTextHelperVerified: ghosttyBundledInputTextHelperOutcome.verified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include bundled native input helper verification")
+if "frontWindowInputTextVerified: ghosttyFrontWindowInputTextOutcome.verified" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty initial no-op classifier must include front-window native input verification")
 focused_action_start = app_delegate.index("private func insertGhosttyTerminalHostProofFocusedActionText(")
 focused_action_end = app_delegate.index("private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(", focused_action_start)
 focused_action_block = app_delegate[focused_action_start:focused_action_end]

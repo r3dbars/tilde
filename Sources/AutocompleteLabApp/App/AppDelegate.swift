@@ -10222,6 +10222,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyPasteAction") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyPasteActionOutcome = insertGhosttyTerminalHostProofPasteAction(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteActionOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteActionOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10302,6 +10319,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyFrontWindowInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyFrontWindowInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyFrontWindowInputTextOutcome.safeToContinue else {
+                return false
+            }
+
             if !runsExtendedGhosttyInsertionProbes {
                 let promptStayedUnchangedAfterInitialNoopCluster =
                     verifyClaudeCodeTerminalHostProofInsertion(
@@ -10342,12 +10376,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified,
                     focusedActionTextSafeToContinue: ghosttyFocusedActionTextOutcome.safeToContinue,
                     focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativeNoopClassified,
+                    pasteActionVerified: ghosttyPasteActionOutcome.verified,
+                    pasteActionSafeToContinue: ghosttyPasteActionOutcome.safeToContinue,
                     pasteboardVerified: ghosttyPasteboardOutcome.verified,
                     pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
                     bundledGhosttyInputTextHelperVerified: ghosttyBundledInputTextHelperOutcome.verified,
                     bundledGhosttyInputTextHelperSafeToContinue: ghosttyBundledInputTextHelperOutcome.safeToContinue,
                     inProcessInputTextVerified: ghosttyInProcessInputTextOutcome.verified,
                     inProcessInputTextSafeToContinue: ghosttyInProcessInputTextOutcome.safeToContinue,
+                    frontWindowInputTextVerified: ghosttyFrontWindowInputTextOutcome.verified,
+                    frontWindowInputTextSafeToContinue: ghosttyFrontWindowInputTextOutcome.safeToContinue,
                     promptStayedUnchanged: promptStayedUnchangedAfterInitialNoopCluster,
                     runsExtendedProbes: runsExtendedGhosttyInsertionProbes
                 )
@@ -10356,23 +10394,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         reason: GhosttyInsertionNoopPolicy.initialNoopClusterReason
                     )
                 }
-            }
-
-            guard shouldContinueGhosttyFastInsertion(before: "ghosttyFrontWindowInputText") else {
-                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
-            }
-            let ghosttyFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
-                acceptedText,
-                expectedProofInputText: expectedProofInputText,
-                originalProofInputText: originalProofInputText,
-                frontmostApp: frontmostApp,
-                profile: currentProfile
-            )
-            if ghosttyFrontWindowInputTextOutcome.verified {
-                return true
-            }
-            guard ghosttyFrontWindowInputTextOutcome.safeToContinue else {
-                return false
             }
 
             guard shouldContinueGhosttyFastInsertion(before: "ghosttyLoginShellFrontWindowInputText") else {
@@ -10442,23 +10463,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             guard ghosttyLoginShellInputTextOutcome.safeToContinue else {
-                return false
-            }
-
-            guard shouldContinueGhosttyFastInsertion(before: "ghosttyPasteAction") else {
-                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
-            }
-            let ghosttyPasteActionOutcome = insertGhosttyTerminalHostProofPasteAction(
-                acceptedText,
-                expectedProofInputText: expectedProofInputText,
-                originalProofInputText: originalProofInputText,
-                frontmostApp: frontmostApp,
-                profile: currentProfile
-            )
-            if ghosttyPasteActionOutcome.verified {
-                return true
-            }
-            guard ghosttyPasteActionOutcome.safeToContinue else {
                 return false
             }
 
