@@ -261,6 +261,22 @@ if ! grep -F "# status: pending - missing prompt no-submit confirmation" "$OUTPU
   exit 1
 fi
 
+write_report_header "$PROMPT_REPORT"
+cat >>"$PROMPT_REPORT" <<EOF
+| 2026-05-09T00:00:00Z | Codex | \`com.openai.codex\` | \`full-accept\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 1-2 in \`/tmp/diagnostics.log\` | lines 1-2 in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$CURRENT_COMMIT\` |
+EOF
+
+if AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$PROMPT_REPORT" \
+  script/manual_proof_refresh.sh --verify-target codex-full-accept >"$OUTPUT" 2>&1; then
+  echo "manual proof refresh self-test expected prompt full-accept proof without no-submit confirmation to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "missing prompt full-accept no-submit confirmation" "$OUTPUT" >/dev/null; then
+  echo "manual proof refresh self-test did not explain missing full-accept no-submit prompt proof" >&2
+  exit 1
+fi
+
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$NO_FINGERPRINT_REPORT" \
   script/manual_proof_refresh.sh --print >"$OUTPUT"
 for expected in \
@@ -283,6 +299,7 @@ done
 for unexpected in \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate" \
+  "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"; do
   if grep -F "$unexpected" "$OUTPUT" >/dev/null; then
     echo "manual proof refresh default print included proof-only target: $unexpected" >&2
@@ -296,6 +313,7 @@ for expected in \
   "All proof target status:" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea-public" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate" \
+  "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate" \
   "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-dark --manual-gate"; do
   if ! grep -F "$expected" "$OUTPUT" >/dev/null; then
     echo "manual proof refresh --all print output missed: $expected" >&2

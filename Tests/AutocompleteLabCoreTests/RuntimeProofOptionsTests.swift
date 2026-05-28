@@ -46,6 +46,19 @@ struct RuntimeProofOptionsTests {
         ]).proofScenario == nil)
     }
 
+    @Test("Recognizes Codex full accept no-submit proof scenario")
+    func recognizesCodexFullAcceptNoSubmitProofScenario() {
+        let options = RuntimeProofOptions(environment: [
+            RuntimeProofOptions.proofScenarioEnvironmentKey:
+                " \(RuntimeProofOptions.codexPromptFullAcceptNoSubmitScenario) "
+        ])
+
+        #expect(options.allowsCodexPromptFullAcceptNoSubmitProof)
+        #expect(!RuntimeProofOptions(proofScenario: "codex-model-latency")
+            .allowsCodexPromptFullAcceptNoSubmitProof)
+        #expect(!RuntimeProofOptions().allowsCodexPromptFullAcceptNoSubmitProof)
+    }
+
     @Test("Disables fast word completion only inside active proof scope")
     func disablesFastWordCompletionOnlyInsideActiveProofScope() {
         let options = RuntimeProofOptions(disablesFastWordCompletion: true)

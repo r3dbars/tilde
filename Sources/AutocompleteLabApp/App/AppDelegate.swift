@@ -22,6 +22,16 @@ struct CodexProofFocusedTargetPolicy {
         requestMode == .wordCompletion || requestMode == .phraseContinuation
     }
 
+    static func allowsPromptProofProfile(_ profile: CompatibilityProfile) -> Bool {
+        profile.bundleIdentifier == bundleIdentifier
+            && profile.supportsOneWordAcceptance
+            && profile.insertionMode == .axValueReplacement
+            && (
+                (!profile.supportsFullAcceptance && profile.requiresNoSubmitAcceptanceProof)
+                    || (profile.supportsFullAcceptance && !profile.requiresNoSubmitAcceptanceProof)
+            )
+    }
+
     func matches(
         app: RunningApplicationInfo,
         profile: CompatibilityProfile,
@@ -38,10 +48,7 @@ struct CodexProofFocusedTargetPolicy {
         guard suggestionBundleIdentifier == Self.bundleIdentifier,
               Self.allowsOneWordProofRequestMode(requestMode),
               profile.bundleIdentifier == Self.bundleIdentifier,
-              profile.supportsOneWordAcceptance,
-              !profile.supportsFullAcceptance,
-              profile.requiresNoSubmitAcceptanceProof,
-              profile.insertionMode == .axValueReplacement,
+              Self.allowsPromptProofProfile(profile),
               proofModeEnabled,
               app.bundleIdentifier == Self.bundleIdentifier,
               app.processIdentifier == expectedFieldIdentity.processIdentifier,
@@ -1401,7 +1408,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return terminalProofProfile
         }
 
-        return profileStore.profile(for: app.bundleIdentifier)
+        guard let profile = profileStore.profile(for: app.bundleIdentifier) else {
+            return nil
+        }
+
+        if shouldUseCodexFullAcceptNoSubmitProofProfile(
+            appBundleIdentifier: app.bundleIdentifier,
+            profile: profile
+        ) {
+            return profile.replacingAcceptanceProofMode(
+                supportsFullAcceptance: true,
+                requiresNoSubmitAcceptanceProof: false,
+                notes: "\(profile.notes) Proof-only Codex full-accept no-submit scenario is active."
+            )
+        }
+
+        return profile
+    }
+
+    private func shouldUseCodexFullAcceptNoSubmitProofProfile(
+        appBundleIdentifier: String,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && runtimeProofOptions.allowsCodexPromptFullAcceptNoSubmitProof
+            && activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier)
+    }
+
+    private func isCodexFullAcceptNoSubmitProofProfile(_ profile: CompatibilityProfile) -> Bool {
+        shouldUseCodexFullAcceptNoSubmitProofProfile(
+            appBundleIdentifier: profile.bundleIdentifier,
+            profile: profile
+        )
+            && profile.supportsFullAcceptance
+            && !profile.requiresNoSubmitAcceptanceProof
+    }
+
+    private func allowsCodexProofInsertion(profile: CompatibilityProfile) -> Bool {
+        CodexProofFocusedTargetPolicy.allowsPromptProofProfile(profile)
+            && activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier)
+            && (
+                profile.requiresNoSubmitAcceptanceProof
+                    || isCodexFullAcceptNoSubmitProofProfile(profile)
+            )
     }
 
     private func isSuggestionEnabled(
@@ -4700,11 +4750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode),
               let currentProfile,
               currentProfile.bundleIdentifier == bundleIdentifier,
-              currentProfile.supportsOneWordAcceptance,
-              !currentProfile.supportsFullAcceptance,
-              currentProfile.requiresNoSubmitAcceptanceProof,
-              currentProfile.insertionMode == .axValueReplacement,
-              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              allowsCodexProofInsertion(profile: currentProfile),
               let currentSuggestionFieldIdentity,
               let lastTextSnapshot,
               lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
@@ -5711,11 +5757,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !acceptedText.isEmpty,
               baseline.profile.bundleIdentifier == bundleIdentifier,
               CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(baseline.requestMode),
-              baseline.profile.supportsOneWordAcceptance,
-              !baseline.profile.supportsFullAcceptance,
-              baseline.profile.requiresNoSubmitAcceptanceProof,
-              baseline.profile.insertionMode == .axValueReplacement,
-              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              allowsCodexProofInsertion(profile: baseline.profile),
               frontmostAppMatchesSuggestion(
                   frontmostApp,
                   expectedBundleIdentifier: bundleIdentifier,
@@ -5936,9 +5978,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
         let marker = CodexProofFocusedTargetPolicy.marker
         guard baseline.profile.bundleIdentifier == bundleIdentifier,
-              baseline.profile.requiresNoSubmitAcceptanceProof,
-              baseline.profile.insertionMode == .axValueReplacement,
-              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              allowsCodexProofInsertion(profile: baseline.profile),
               baseline.previousTextBeforeCursor.contains(marker),
               baseline.previousTextAfterCursor.isEmpty,
               !acceptedText.isEmpty else {
@@ -8743,9 +8783,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionAppBundleIdentifier == "com.openai.codex"
             && profile.bundleIdentifier == "com.openai.codex"
             && CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode)
-            && profile.insertionMode == .axValueReplacement
-            && profile.requiresNoSubmitAcceptanceProof
-            && activeAppProofBundleIdentifiers.contains("com.openai.codex")
+            && allowsCodexProofInsertion(profile: profile)
     }
 
     private func shouldUseClaudeDesktopProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
