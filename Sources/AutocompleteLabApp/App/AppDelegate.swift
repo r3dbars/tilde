@@ -13364,6 +13364,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (true, false)
         }
 
+        let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+            source: "ghosttyFocusedActionTextScreenCopy",
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp
+        )
+        if screenCopyOutcome.verified {
+            return (true, false)
+        }
+        guard screenCopyOutcome.safeToContinue else {
+            return (false, false)
+        }
+
         let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
             expectedProofInputText: originalProofInputText,
             frontmostApp: frontmostApp,
@@ -13391,6 +13404,235 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (false, false)
         }
         return (false, true)
+    }
+
+    private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+        source: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo
+    ) -> (verified: Bool, promptStayedUnchanged: Bool?, safeToContinue: Bool) {
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, nil, true)
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+        pasteboard.clearContents()
+        let clearedChangeCount = pasteboard.changeCount
+        defer {
+            restoreOriginalPasteboard()
+        }
+
+        let scriptSource = """
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set targetWindow to front window
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            perform action "write_screen_file:copy,plain" on targetTerminal
+            return true
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, nil, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.5,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            let exitedAfterTerminate = Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": exitedAfterTerminate
+                        ? "ghostty-screen-copy-timeout"
+                        : "ghostty-screen-copy-timeout-still-running",
+                    "source": source
+                ]
+            )
+            return (false, nil, exitedAfterTerminate)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, nil, true)
+        }
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, nil, true)
+        }
+
+        let deadline = Date().addingTimeInterval(1.0)
+        var screenText = pasteboard.string(forType: .string) ?? ""
+        while screenText.isEmpty,
+              Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+            screenText = pasteboard.string(forType: .string) ?? ""
+        }
+        guard !screenText.isEmpty else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-empty",
+                    "source": source,
+                    "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount)
+                ]
+            )
+            return (false, nil, true)
+        }
+
+        let compactScreenText = screenText
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+        let containsProofMarker = screenText.contains(ClaudeCodeTerminalHostProofPolicy.proofMarker)
+            || compactScreenText.contains(ClaudeCodeTerminalHostProofPolicy.proofMarker)
+        let containsCompactProofMarker = screenText.contains(ClaudeCodeTerminalHostProofPolicy.compactProofMarker)
+            || compactScreenText.contains(ClaudeCodeTerminalHostProofPolicy.compactProofMarker)
+        let containsExpected = screenText.contains(expectedProofInputText)
+            || compactScreenText.contains(expectedProofInputText)
+        let containsOriginal = screenText.contains(originalProofInputText)
+            || compactScreenText.contains(originalProofInputText)
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "containsCompactProofMarker": String(containsCompactProofMarker),
+                "containsExpected": String(containsExpected),
+                "containsOriginal": String(containsOriginal),
+                "containsProofMarker": String(containsProofMarker),
+                "compactScreenChars": String(compactScreenText.count),
+                "expectedChars": String(expectedProofInputText.count),
+                "exitStatus": String(process.terminationStatus),
+                "originalChars": String(originalProofInputText.count),
+                "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount),
+                "posted": "true",
+                "screenChars": String(screenText.count),
+                "source": source,
+                "verified": String(containsExpected),
+                "verificationSource": "ghosttyScreenCopy"
+            ]
+        )
+        guard containsExpected || containsOriginal else {
+            let hasProofContext = containsProofMarker || containsCompactProofMarker
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": hasProofContext
+                        ? "ghostty-screen-copy-proof-context-mismatch"
+                        : "ghostty-screen-copy-no-proof-context",
+                    "source": source
+                ]
+            )
+            return hasProofContext ? (false, false, false) : (false, nil, true)
+        }
+        return (containsExpected, containsOriginal, true)
     }
 
     private func insertGhosttyTerminalHostProofActionText(
