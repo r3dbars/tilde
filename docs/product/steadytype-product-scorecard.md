@@ -287,9 +287,9 @@ focused terminal while reporting an empty working directory, so the harness now
 treats focused terminal availability as readiness and keeps the working
 directory signal diagnostic-only.
 The current harness-hardening pass widened the proof-only Ghostty launch waits,
-made the detached wrapper default to the `nohup` runner instead of the flaky
-Terminal launcher, invokes generated runners through `/bin/bash`, added an EXIT
-status trap, records the child `real_app_smoke` pid in `status.env` and
+made the detached wrapper default to the `launchd` runner with terminal/nohup
+as explicit fallback launchers, invokes generated runners through `/bin/bash`,
+added an EXIT status trap, records the child `real_app_smoke` pid in `status.env` and
 `smoke.pid`, reports `smoke_process=alive|not-running`, preserves an alive
 smoke child after runner exit so its evidence can keep flowing, protects the
 wrapper process group from exclusive proof cleanup, isolates the child through
@@ -313,7 +313,7 @@ diagnostic run, `20260528T065031Z-ghostty`, proved the child shell itself
 starts: it logged protected process group `65768`, spawned smoke pid `65791`,
 and printed `Detached Ghostty smoke child shell pid 65785 pgid 65768 entering
 real_app_smoke`, but still died before `real_app_smoke.sh` printed its plan or
-returned a status. The job-control follow-up, `20260528T065530Z-ghostty`, moved
+returned a status. The job-control follow-up, `20260528T065942Z-ghostty`, moved
 past that handoff failure: the child printed the smoke plan, built SteadyType,
 warmed CGEvent helpers, wrote startup phases through `after-interference-guard`,
 and exited cleanly with status `1` after two fresh Ghostty disposable contexts

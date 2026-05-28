@@ -697,6 +697,7 @@ start_run() {
     echo "Status: $status_file"
     echo "Smoke startup: $startup_log"
     echo "Launcher: $LAUNCHER"
+    echo "Runner: $runner_script"
     if [[ "$LAUNCHER" == "launchd" ]]; then
       echo "LaunchAgent: $plist_file"
       echo "Command: launchctl bootstrap $launch_domain $plist_file"
