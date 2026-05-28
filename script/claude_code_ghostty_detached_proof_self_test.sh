@@ -41,6 +41,11 @@ require_contains "$TMP_DIR/help.txt" "custom proof text"
 require_contains "$TMP_DIR/help.txt" "LaunchAgent"
 require_contains "$TMP_DIR/help.txt" "terminal or nohup"
 require_contains "$TMP_DIR/help.txt" "launchd runner by default"
+require_contains script/claude_code_ghostty_detached_proof.sh "reset_stale_only_ghostty_host_before_start"
+require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType AppleScript Probe"
+require_contains script/claude_code_ghostty_detached_proof.sh "unsafeWindowCount"
+require_contains script/claude_code_ghostty_detached_proof.sh "Detached Ghostty proof resetting stale-only Ghostty host before launch"
+require_contains script/claude_code_ghostty_detached_proof.sh 'reset_stale_only_ghostty_host_before_start "$log_file"'
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/dry-run.txt"
@@ -53,6 +58,7 @@ require_contains "$TMP_DIR/dry-run.txt" "script/real_app_smoke.sh claude-code-gh
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.12"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=45"
+require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1"
 require_contains "$TMP_DIR/dry-run.txt" "proof.log"
@@ -64,11 +70,13 @@ AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1 \
 AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.18 \
 AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE=1 \
 AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=2 \
+AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED=0 \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/passthrough-dry-run.txt"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.18"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE=1"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=2"
+require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED=0"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "script/real_app_smoke.sh claude-code-ghostty --manual-gate"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \

@@ -26,6 +26,7 @@ GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
   AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS
   AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE
   AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED
   AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE
 )
@@ -33,6 +34,7 @@ GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
 : "${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS:=0.12}"
 : "${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE:=1}"
 : "${AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS:=45}"
+: "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED:=1}"
 : "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED:=1}"
 : "${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:=1}"
 
@@ -690,6 +692,89 @@ repair_dead_runner_status_if_needed() {
   fi
 }
 
+reset_stale_only_ghostty_host_before_start() {
+  local log_file="$1"
+  local marker ghostty_pids timeout_seconds ax_tmp ax_pid deadline ax_state ax_window_count unsafe_window_count proof_pid reset_reason
+
+  if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+  ghostty_pids="$(pgrep -x ghostty 2>/dev/null || true)"
+  [[ -n "$ghostty_pids" ]] || return 0
+
+  marker="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-STEADYTYPECLAUDECODEPROOF}"
+  timeout_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_CHECK_TIMEOUT_SECONDS:-3}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
+    timeout_seconds=3
+  fi
+  ax_tmp="$(mktemp "${TMPDIR:-/tmp}/steadytype-ghostty-ax-reset.XXXXXX")"
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" /usr/bin/osascript >"$ax_tmp" 2>/dev/null <<'APPLESCRIPT' &
+set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set proofDirectoryMarker to "steadytype-claude-code-proof"
+set appleScriptProbePrefix to "SteadyType AppleScript Probe"
+set windowCount to 0
+set unsafeWindowCount to 0
+tell application "System Events"
+  if not (exists application process "Ghostty") then return "windows=0 unsafe=0"
+  tell application process "Ghostty"
+    set windowCount to count windows
+    repeat with candidateWindow in windows
+      set windowName to ""
+      try
+        set windowName to name of candidateWindow as text
+      end try
+      set isProofWindow to false
+      if markerText is not "" and windowName contains markerText then set isProofWindow to true
+      if windowName contains proofDirectoryMarker then set isProofWindow to true
+      if windowName starts with appleScriptProbePrefix then set isProofWindow to true
+      if isProofWindow is false then set unsafeWindowCount to unsafeWindowCount + 1
+    end repeat
+  end tell
+end tell
+return "windows=" & (windowCount as text) & " unsafe=" & (unsafeWindowCount as text)
+APPLESCRIPT
+  ax_pid="$!"
+  deadline=$((SECONDS + timeout_seconds))
+  while kill -0 "$ax_pid" >/dev/null 2>&1; do
+    if ((SECONDS >= deadline)); then
+      kill "$ax_pid" >/dev/null 2>&1 || true
+      wait "$ax_pid" 2>/dev/null || true
+      rm -f "$ax_tmp"
+      printf 'Detached Ghostty proof stale-only reset check timed out before launch.\n' >>"$log_file"
+      return 0
+    fi
+    sleep 0.1
+  done
+  wait "$ax_pid" 2>/dev/null || true
+  ax_state="$(cat "$ax_tmp" 2>/dev/null || true)"
+  rm -f "$ax_tmp"
+  ax_window_count="$(printf '%s' "$ax_state" | sed -n 's/.*windows=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  unsafe_window_count="$(printf '%s' "$ax_state" | sed -n 's/.*unsafe=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  if [[ ! "$ax_window_count" =~ ^[1-9][0-9]*$ || "$unsafe_window_count" != "0" ]]; then
+    if [[ "$ax_window_count" =~ ^[0-9]+$ && "$unsafe_window_count" =~ ^[0-9]+$ ]]; then
+      printf 'Detached Ghostty proof not resetting stale-only host before launch: AX windows=%s unsafe=%s\n' "$ax_window_count" "$unsafe_window_count" >>"$log_file"
+    else
+      printf 'Detached Ghostty proof stale-only reset check was unavailable before launch.\n' >>"$log_file"
+    fi
+    return 0
+  fi
+
+  reset_reason="System Events reported only SteadyType proof/probe Ghostty AX windows (${ax_window_count})"
+  printf 'Detached Ghostty proof resetting stale-only Ghostty host before launch: %s(%s)\n' "$(printf '%s' "$ghostty_pids" | tr '\n' ' ')" "$reset_reason" >>"$log_file"
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    kill "$proof_pid" >/dev/null 2>&1 || true
+  done <<<"$ghostty_pids"
+  sleep 0.4
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    if kill -0 "$proof_pid" >/dev/null 2>&1; then
+      kill -KILL "$proof_pid" >/dev/null 2>&1 || true
+    fi
+  done <<<"$ghostty_pids"
+  sleep 0.4
+}
+
 start_run() {
   mkdir -p "$PROOF_ROOT"
 
@@ -742,6 +827,7 @@ start_run() {
 
   mkdir -p "$run_dir"
   : >"$log_file"
+  reset_stale_only_ghostty_host_before_start "$log_file"
   create_runner_script "$worker_script" "$run_dir" "$status_file" "$log_file" "$LAUNCHER" "$launch_label" "$plist_file"
   if [[ "$LAUNCHER" == "terminal" ]]; then
     create_terminal_launcher_script "$runner_script" "$worker_script" "$log_file"

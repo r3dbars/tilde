@@ -9416,7 +9416,7 @@ open_claude_code_terminal_proof() {
       ghostty_launch_command="$(printf 'exec %q' "$launch_script")"
       ghostty_launch_action=""
       if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
-        ghostty_launch_action="$(ghostty_text_action "$ghostty_launch_command"$'\r')"
+        ghostty_launch_action="$(ghostty_text_action "$ghostty_launch_command")"
       fi
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
@@ -9429,6 +9429,7 @@ open_claude_code_terminal_proof() {
       if ((ghostty_preflight_status != 0)); then
         return "$ghostty_preflight_status"
       fi
+      reset_stale_only_claude_code_ghostty_proof_host
       reset_zero_window_claude_code_ghostty_proof_host
       if ! run_osascript_with_timeout \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
@@ -9496,6 +9497,8 @@ tell application id "com.mitchellh.ghostty"
     my recordStage(launchStageFile, "launch-action-start")
     perform action launchAction on targetTerminal
     my recordStage(launchStageFile, "launch-action-finished")
+    send key "enter" to targetTerminal
+    my recordStage(launchStageFile, "launch-action-enter-sent")
     delay launchActionDrain
   else
     my recordStage(launchStageFile, "input-text-start")
@@ -9592,6 +9595,8 @@ tell application id "com.mitchellh.ghostty"
     my recordStage(launchStageFile, "retry-launch-action-start")
     perform action launchAction on targetTerminal
     my recordStage(launchStageFile, "retry-launch-action-finished")
+    send key "enter" to targetTerminal
+    my recordStage(launchStageFile, "retry-launch-action-enter-sent")
     delay launchActionDrain
   else
     my recordStage(launchStageFile, "retry-input-text-start")
@@ -9683,6 +9688,7 @@ cleanup_claude_code_terminal_proof() {
   elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
     close_claude_code_ghostty_proof_window_by_title || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    reset_stale_only_claude_code_ghostty_proof_host
     reset_zero_window_claude_code_ghostty_proof_host
   elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
     local host_process
@@ -9781,11 +9787,79 @@ return false
 APPLESCRIPT
 }
 
+reset_stale_only_claude_code_ghostty_proof_host() {
+  local marker ghostty_pids ax_state ax_window_count unsafe_window_count proof_pid reset_reason
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+
+  ghostty_pids="$(pgrep -x ghostty 2>/dev/null || true)"
+  [[ -n "$ghostty_pids" ]] || return 0
+
+  marker="$(claude_code_proof_marker)"
+  ax_state="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_CHECK_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty stale-only host check" <<'APPLESCRIPT' 2>/dev/null || true
+set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set proofDirectoryMarker to "steadytype-claude-code-proof"
+set appleScriptProbePrefix to "SteadyType AppleScript Probe"
+set windowCount to 0
+set unsafeWindowCount to 0
+tell application "System Events"
+  if not (exists application process "Ghostty") then return "windows=0 unsafe=0"
+  tell application process "Ghostty"
+    set windowCount to count windows
+    repeat with candidateWindow in windows
+      set windowName to ""
+      try
+        set windowName to name of candidateWindow as text
+      end try
+      set isProofWindow to false
+      if markerText is not "" and windowName contains markerText then set isProofWindow to true
+      if windowName contains proofDirectoryMarker then set isProofWindow to true
+      if windowName starts with appleScriptProbePrefix then set isProofWindow to true
+      if isProofWindow is false then set unsafeWindowCount to unsafeWindowCount + 1
+    end repeat
+  end tell
+end tell
+return "windows=" & (windowCount as text) & " unsafe=" & (unsafeWindowCount as text)
+APPLESCRIPT
+)"
+  ax_window_count="$(printf '%s' "$ax_state" | sed -n 's/.*windows=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  unsafe_window_count="$(printf '%s' "$ax_state" | sed -n 's/.*unsafe=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  if [[ ! "$ax_window_count" =~ ^[1-9][0-9]*$ || "$unsafe_window_count" != "0" ]]; then
+    if [[ "$ax_window_count" =~ ^[0-9]+$ && "$unsafe_window_count" =~ ^[0-9]+$ ]]; then
+      echo "Claude Code Ghostty proof not resetting stale-only host: AX windows=$ax_window_count unsafe=$unsafe_window_count" >&2
+    fi
+    return 0
+  fi
+
+  reset_reason="System Events reported only SteadyType proof/probe Ghostty AX windows (${ax_window_count})"
+  echo "Claude Code Ghostty proof resetting stale-only Ghostty host pid(s): $(printf '%s' "$ghostty_pids" | tr '\n' ' ') ($reset_reason)" >&2
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    kill "$proof_pid" >/dev/null 2>&1 || true
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    if kill -0 "$proof_pid" >/dev/null 2>&1; then
+      kill -KILL "$proof_pid" >/dev/null 2>&1 || true
+    fi
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+}
+
 cleanup_stale_claude_code_ghostty_proofs() {
   local marker cleanup_legacy_tmp_windows closed_count
   marker="$(claude_code_proof_marker)"
   cleanup_legacy_tmp_windows="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-0}"
 
+  pgrep -x ghostty >/dev/null 2>&1 || return 0
+  reset_stale_only_claude_code_ghostty_proof_host
   pgrep -x ghostty >/dev/null 2>&1 || return 0
 
   closed_count="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
@@ -9818,6 +9892,7 @@ APPLESCRIPT
   if [[ "$closed_count" =~ ^[1-9][0-9]*$ ]]; then
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
   fi
+  reset_stale_only_claude_code_ghostty_proof_host
   reset_zero_window_claude_code_ghostty_proof_host
 }
 
