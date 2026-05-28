@@ -622,6 +622,14 @@ do not contaminate the next compatibility sample. The follow-up harness patch
 also wraps the Ghostty pre-accept comparator's quiet prompt-readiness checks in
 an outer timeout guard, so a no-op System Events probe cannot wedge the detached
 run while it is checking whether the prompt stayed unchanged.
+The next launchd pass, `20260528T210138Z-ghostty`, stayed bounded and sharpened
+the red bar: native Ghostty text could mutate and restore the proof prompt,
+System Events still could not, a prompt-row suggestion appeared, and every
+non-mutating key-capture sentinel missed SteadyType's event tap. Diagnostics
+also showed macOS Accessibility/System Settings taking focus during that key
+probe window. The harness now classifies that permission-UI focus steal
+explicitly when it happens, instead of falling through to a misleading generic
+suggestion timeout.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

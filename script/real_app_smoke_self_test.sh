@@ -2984,6 +2984,10 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CGEvent session key capture probe produced no diagnostic; retrying with HID Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with System Events Shift.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'claude_code_terminal_key_capture_permission_ui_since()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'com.apple.accessibility.universalAccessAuthWarn' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'frontmostApp=com.apple.systempreferences' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for key capture probe.' script/real_app_smoke.sh >/dev/null ||
@@ -3007,6 +3011,7 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent combined-session key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="System Events key capture probe timed out"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
@@ -3031,6 +3036,19 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
 fi
 if ! grep -F '${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Ghostty-host Claude Code proof to preserve the real Tab failure reason when retrying the disposable context" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /post_suggestion_failure_reason=/ { saw_reason = 1 }
+  in_smoke && /post_suggestion_failure_start_line="\$suggestion_line"/ { saw_line = 1 }
+  in_smoke && /failed after a visible prompt-row suggestion/ { saw_message = 1 }
+  in_smoke && /keyboard-event-tap-latency app=com.anthropic.claude-code key=tab or key=other/ { saw_required = 1 }
+  in_smoke && /tail -n \+"\$\(\(post_suggestion_failure_start_line \+ 1\)\)"/ { saw_tail = 1 }
+  END { exit (saw_reason && saw_line && saw_message && saw_required && saw_tail) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty proof to fail on the post-suggestion key-capture miss with the real reason and suggestion-line diagnostics" >&2
   exit 1
 fi
 if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
