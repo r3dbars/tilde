@@ -130,6 +130,9 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-g
 
 - Use a disposable vault note only.
 - Do not point the proof pass at real vault content.
+- The harness starts a fresh Obsidian proof launch with Electron renderer
+  accessibility forced when Obsidian is not already running; default Obsidian
+  launches can expose only window chrome through AX on 1.12.7.
 - Type a partial word like `dicta`.
 - Confirm the mirror suggestion is anchored to the caret, not the whole editor.
 - Accept one word, then full visible text.
