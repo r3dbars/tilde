@@ -89,6 +89,31 @@ Validation from the cycle so far:
   current for the app build, with TextEdit, Notes, Obsidian long note, and Chrome
   fixture rows still stale.
 
+Cycle 2 follow-up keeps instant fallbacks trustworthy while the model refines:
+
+- a visible fast phrase suggestion now survives soft model suppression such as
+  low-confidence or below-threshold final results, as long as it is still young,
+  in the same field, and not invalidated by user typing,
+- risky model suppression still hides the current suggestion instead of
+  preserving something unsafe,
+- Notes proof accepts now wait briefly for a fresh keyboard event tap marker
+  before sending `Tab` or the full-accept shortcut, which makes proof races
+  easier to separate from real insertion failures.
+
+Validation from the follow-up:
+
+- `swift test --jobs 1 --filter SuggestionReplacementVisibilityPolicyTests`
+  passed.
+- `swift test --jobs 1 --filter SuggestionOrchestratorTests/replacementDecisionUsesVisibleAgeAndScoreMargin`
+  passed.
+- `./script/real_app_smoke_self_test.sh` passed.
+- Notes title passed with 2 accepted insertions and strict visual trace
+  evidence at diagnostics lines `933752`-`933823` and trace lines
+  `30935`-`30953`.
+- `./script/manual_smoke_status.sh --strict` still fails with 9 stale rows:
+  TextEdit, Notes body/checklist, Obsidian default/theme/panes/long note, Chrome
+  textarea, and Chrome contenteditable.
+
 Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
 
 - Claude Code Terminal model-latency proof now scopes its AX readiness check to
