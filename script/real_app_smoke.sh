@@ -4080,7 +4080,7 @@ APPLESCRIPT
 }
 
 cgevent_keypress_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v5}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v6}"
 }
 
 ensure_cgevent_keypress_helper() {
@@ -4099,20 +4099,32 @@ import Foundation
 guard CommandLine.arguments.count >= 2,
       CommandLine.arguments.count <= 4,
       let keyCode = UInt16(CommandLine.arguments[1]) else {
-    FileHandle.standardError.write(Data("usage: cgevent-keypress <keyCode> [hid|session] [hidSystem|combinedSession|private]\n".utf8))
+    FileHandle.standardError.write(Data("usage: cgevent-keypress <keyCode> [hid|session|pid:<pid>] [hidSystem|combinedSession|private]\n".utf8))
     exit(1)
 }
 
 let tapArgument = CommandLine.arguments.count >= 3 ? CommandLine.arguments[2] : "hid"
-let tap: CGEventTapLocation
-switch tapArgument {
-case "hid":
-    tap = .cghidEventTap
-case "session":
-    tap = .cgSessionEventTap
-default:
-    FileHandle.standardError.write(Data("unknown CGEvent tap location\n".utf8))
-    exit(2)
+let targetPid: pid_t?
+let tap: CGEventTapLocation?
+if tapArgument.hasPrefix("pid:") {
+    let pidString = String(tapArgument.dropFirst("pid:".count))
+    guard let pid = Int32(pidString), pid > 0 else {
+        FileHandle.standardError.write(Data("invalid target pid\n".utf8))
+        exit(2)
+    }
+    targetPid = pid_t(pid)
+    tap = nil
+} else {
+    targetPid = nil
+    switch tapArgument {
+    case "hid":
+        tap = .cghidEventTap
+    case "session":
+        tap = .cgSessionEventTap
+    default:
+        FileHandle.standardError.write(Data("unknown CGEvent tap location\n".utf8))
+        exit(2)
+    }
 }
 
 let sourceArgument = CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : "hidSystem"
@@ -4138,9 +4150,17 @@ guard let source = CGEventSource(stateID: sourceState),
 
 keyDown.flags = []
 keyUp.flags = []
-keyDown.post(tap: tap)
+if let targetPid {
+    keyDown.postToPid(targetPid)
+} else if let tap {
+    keyDown.post(tap: tap)
+}
 usleep(20_000)
-keyUp.post(tap: tap)
+if let targetPid {
+    keyUp.postToPid(targetPid)
+} else if let tap {
+    keyUp.post(tap: tap)
+}
 SWIFT
 
   build_timeout_seconds="${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER_BUILD_TIMEOUT_SECONDS:-8}"
@@ -4248,7 +4268,7 @@ wait_for_claude_code_terminal_key_capture_permission_ui_since() {
 
 probe_claude_code_terminal_host_key_capture() {
   local host_name="${1:-$(claude_code_host_display_name)}"
-  local key_capture_start_line probe_start_line
+  local key_capture_start_line probe_start_line proof_pid
 
   if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ||
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE:-1}" == "0" ]]; then
@@ -4331,9 +4351,39 @@ probe_claude_code_terminal_host_key_capture() {
     return 0
   fi
 
+  proof_pid="$(claude_code_ghostty_frontmost_proof_process_id_by_title 2>/dev/null || true)"
+  proof_pid="$(printf '%s' "$proof_pid" | tr -dc '0-9')"
+  if [[ -z "$proof_pid" ]]; then
+    proof_pid="$(printf '%s\n' ${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-} 2>/dev/null | head -n 1 | tr -dc '0-9')"
+  fi
+  if [[ -n "$proof_pid" ]]; then
+    if ! settle_claude_code_terminal_proof_focus "PID-targeted key-capture probe"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before PID-targeted key capture probe"
+      echo "Claude Code terminal host is not frontmost for PID-targeted key capture probe." >&2
+      return 1
+    fi
+
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; retrying with PID-targeted Shift for Ghostty pid $proof_pid."
+    if ! press_key_code_cgevent_with_timeout \
+      56 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent PID-targeted key-capture probe" \
+      "pid:$proof_pid" \
+      "warm"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent PID-targeted key capture probe helper failed"
+      return 1
+    fi
+    if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+      return 0
+    fi
+  else
+    echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; could not resolve a Ghostty proof pid for PID-targeted Shift." >&2
+  fi
+
   if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
-    echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI. Set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1 to opt in." >&2
+    echo "Claude Code $host_name key capture probes produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI. Set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1 to opt in." >&2
     echo "Claude Code $host_name key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt." >&2
     return 1
   fi
@@ -14056,14 +14106,21 @@ run_claude_code_terminal_host_smoke() {
 
   local runtime_start_line start_line trace_start_line suggestion_start_line pre_trigger_suggestion_start_line accept_start_line proof_text marker host_name
   local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready stale_blocker_line stale_blocker_reason
+  local ghostty_key_capture_miss_count ghostty_max_key_capture_misses
   local post_suggestion_failure_reason post_suggestion_failure_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
   host_name="$(claude_code_host_display_name)"
   max_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS:-0}"
+  ghostty_key_capture_miss_count=0
+  ghostty_max_key_capture_misses="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MAX_KEY_CAPTURE_MISSES:-2}"
   suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS:-20}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]]; then
     echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS must be a non-negative integer." >&2
+    exit 2
+  fi
+  if ! [[ "$ghostty_max_key_capture_misses" =~ ^[0-9]+$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MAX_KEY_CAPTURE_MISSES must be a non-negative integer." >&2
     exit 2
   fi
   post_suggestion_failure_reason=""
@@ -14259,6 +14316,15 @@ run_claude_code_terminal_host_smoke() {
         if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
           post_suggestion_failure_reason="${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}"
           post_suggestion_failure_start_line="$suggestion_line"
+          if [[ "$post_suggestion_failure_reason" == "key capture probe did not reach event tap" ]]; then
+            ghostty_key_capture_miss_count=$((ghostty_key_capture_miss_count + 1))
+            if ((ghostty_max_key_capture_misses > 0 &&
+                 ghostty_key_capture_miss_count >= ghostty_max_key_capture_misses)); then
+              post_suggestion_failure_reason="key capture probe did not reach event tap after ${ghostty_key_capture_miss_count} prompt-row suggestion(s)"
+              echo "Claude Code $host_name proof reached $ghostty_key_capture_miss_count key capture miss(es); failing closed before launching another disposable context." >&2
+              break
+            fi
+          fi
           retry_claude_code_terminal_proof_context \
             "$host_name" \
             "$marker" \
@@ -14289,7 +14355,7 @@ run_claude_code_terminal_host_smoke() {
 
   if [[ "$found_suggestion" != "1" ]]; then
     if [[ -n "$post_suggestion_failure_reason" ]]; then
-      if [[ "$post_suggestion_failure_reason" == "key capture probe did not reach event tap" ]] &&
+      if [[ "$post_suggestion_failure_reason" == key\ capture\ probe\ did\ not\ reach\ event\ tap* ]] &&
         wait_for_claude_code_terminal_key_capture_permission_ui_since \
           "${post_suggestion_failure_start_line:-0}" \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-2}"; then
