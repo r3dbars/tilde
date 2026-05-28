@@ -552,6 +552,21 @@ failed closed on the explicit 45s budget at lines `922125`-`922127`. The
 remaining Ghostty red bar is no longer just front-window targeting; Ghostty's
 native copied screen can still be detached from the proof prompt even after a
 title-marked target window is selected.
+The newest diagnostic slice keeps that evidence red but more legible. The
+screen-copy verifier now returns sanitized target-selection metadata instead of
+only a boolean success: `targetSelection`, `frontWindowProofMatch`, and
+`windowCount`. `20260528T130343Z-ghostty` rebuilt the app, reached prompt-row
+suggestion diagnostics, handled Tab, and recorded
+`ghosttyFocusedActionTextScreenCopy` at diagnostics lines `923632`-`923633`.
+The native copy selected `targetSelection=frontProofTitle` with `windowCount=1`,
+but still copied a 90-character screen with no proof marker, no expected prompt,
+and no original prompt, so the app continued past the inconclusive native copy,
+proved the prompt stayed unchanged across the rest of the app-owned ladder, and
+failed closed on the 45s budget at lines `923690`-`923693`. A follow-up after
+renaming the title-match key, `20260528T130816Z-ghostty`, reached a prompt-row
+suggestion at diagnostics line `924218` and pressed CGEvent Tab, but was stopped
+with exit `143` after no insertion diagnostics, so it is treated as
+post-accept flake evidence rather than screen-copy proof.
 
 ## Scores
 
