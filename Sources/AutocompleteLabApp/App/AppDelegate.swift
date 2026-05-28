@@ -4247,6 +4247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision(
+                allowCodexProofSnapshotFastPath: true,
                 allowObsidianSnapshotFastPath: true
             ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
