@@ -8642,7 +8642,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let acceptedTextDecision = acceptedTextSafetyPolicy.decision(
             acceptedText: acceptedText,
-            profile: profile
+            profile: profile,
+            allowsPromptActionWords: shouldUseClaudeCodeTerminalHostProofDirectInsertion(
+                profile: profile,
+                action: action
+            )
         )
         if let blockReason = acceptedTextDecision.blockReason {
             setSuggestionDecision("Blocked: unsafe accepted text")
@@ -8927,12 +8931,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         action: KeyboardAction?
     ) -> Bool {
-        currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             && action == .acceptNextWord
-            && currentSuggestionRequestMode != nil
+            && (
+                currentSuggestionRequestMode == .wordCompletion
+                    || currentSuggestionRequestMode == .phraseContinuation
+            )
             && profile.insertionMode == .clipboardFallbackOptIn
             && profile.requiresNoSubmitAcceptanceProof
+            && profile.promptAppSafetyMode == .wordOnly
     }
 
     private func shouldUseCodexProofDirectInsertion(profile: CompatibilityProfile) -> Bool {

@@ -47,6 +47,9 @@ Expected absent bundle contents:
 
 - `NSAccessibilityUsageDescription`: needed to inspect the focused text field,
   caret bounds, and insert only accepted suggestions.
+- `NSAppleEventsUsageDescription`: needed only for opted-in terminal host
+  adapters that use macOS Automation to insert accepted suggestion text into a
+  supported prompt without submitting it.
 
 `Info.plist` should not contain:
 

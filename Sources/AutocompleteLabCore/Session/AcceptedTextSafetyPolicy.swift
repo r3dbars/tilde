@@ -22,7 +22,8 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
 
     public func decision(
         acceptedText: String,
-        profile: CompatibilityProfile
+        profile: CompatibilityProfile,
+        allowsPromptActionWords: Bool = false
     ) -> AcceptedTextSafetyDecision {
         let trimmedAcceptedText = acceptedText.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -63,7 +64,8 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
            let reason = promptAppBlockReason(
                trimmedAcceptedText,
                allowsWhitespace: profile.supportsFullAcceptance
-                   && !profile.requiresNoSubmitAcceptanceProof
+                   && !profile.requiresNoSubmitAcceptanceProof,
+               allowsPromptActionWords: allowsPromptActionWords
            ) {
             return .blocked(reason: reason)
         }
@@ -73,7 +75,8 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
 
     private func promptAppBlockReason(
         _ text: String,
-        allowsWhitespace: Bool = false
+        allowsWhitespace: Bool = false,
+        allowsPromptActionWords: Bool = false
     ) -> String? {
         let normalized = text.lowercased()
 
@@ -95,7 +98,8 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
             return "accepted-text-prompt-unsafe-token"
         }
 
-        if Self.promptActionWords.contains(normalized) {
+        if !allowsPromptActionWords,
+           Self.promptActionWords.contains(normalized) {
             return "accepted-text-prompt-action-word"
         }
 

@@ -75,6 +75,9 @@ done
 
 ACCESSIBILITY_REASON="$(plist_value NSAccessibilityUsageDescription)"
 [[ "$ACCESSIBILITY_REASON" == *"Accessibility permission"* ]] || fail "missing Accessibility usage description"
+APPLE_EVENTS_REASON="$(plist_value NSAppleEventsUsageDescription)"
+[[ "$APPLE_EVENTS_REASON" == *"Automation only for opted-in terminal hosts"* ]] \
+  || fail "missing Apple Events usage description"
 
 codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null 2>&1 || fail "codesign verification failed"
 

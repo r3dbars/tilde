@@ -553,6 +553,18 @@ if deferred_accept_block.index("insertAcceptedText(acceptedText, action: action)
     raise SystemExit("Ghostty deferred insertion must verify insertion before committing next-word acceptance")
 if "ghostty-deferred-insert-failed" not in deferred_accept_block:
     raise SystemExit("Ghostty deferred insertion must fail closed and hide stale suggestions on insertion failure")
+insert_accepted_start = app_delegate.index("private func insertAcceptedText(")
+insert_accepted_end = app_delegate.index("private func repairObsidianFullAcceptCaretIfNeeded(", insert_accepted_start)
+insert_accepted_block = app_delegate[insert_accepted_start:insert_accepted_end]
+if "allowsPromptActionWords: shouldUseClaudeCodeTerminalHostProofDirectInsertion" not in insert_accepted_block:
+    raise SystemExit("Claude Code terminal proof insertion must allow validated one-word prompt action words without weakening other prompt gates")
+direct_insert_start = app_delegate.index("private func shouldUseClaudeCodeTerminalHostProofDirectInsertion(")
+direct_insert_end = app_delegate.index("private func shouldUseCodexProofDirectInsertion(", direct_insert_start)
+direct_insert_block = app_delegate[direct_insert_start:direct_insert_end]
+if "currentSuggestionAppBundleIdentifier ==" in direct_insert_block:
+    raise SystemExit("Claude Code terminal direct insertion must not depend on volatile suggestion bundle state during deferred accept")
+if "currentSuggestionRequestMode == .wordCompletion" not in direct_insert_block or "currentSuggestionRequestMode == .phraseContinuation" not in direct_insert_block:
+    raise SystemExit("Claude Code terminal direct insertion must remain limited to one-word proof request modes")
 verification_start = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(")
 verification_end = app_delegate.index("private func schedulePasteboardRestore(", verification_start)
 verification_block = app_delegate[verification_start:verification_end]

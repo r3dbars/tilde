@@ -155,6 +155,27 @@ struct AcceptedTextSafetyPolicyTests {
                 == .blocked(reason: "accepted-text-prompt-action-word")
         )
         #expect(
+            policy.decision(
+                acceptedText: " deploy",
+                profile: promptSafe,
+                allowsPromptActionWords: true
+            ) == .allowed
+        )
+        #expect(
+            policy.decision(
+                acceptedText: " /review",
+                profile: promptSafe,
+                allowsPromptActionWords: true
+            ) == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(
+                acceptedText: " keep|send",
+                profile: promptSafe,
+                allowsPromptActionWords: true
+            ) == .blocked(reason: "accepted-text-prompt-shell-metacharacter")
+        )
+        #expect(
             policy.decision(acceptedText: " keep|send", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-shell-metacharacter")
         )
