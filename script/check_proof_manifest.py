@@ -163,8 +163,7 @@ EXPECTED_GRADUATION_DECISIONS = {
         "proofState": "partial",
         "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
         "requiredProof": {
-            "more prompt layouts before raising beyond word-only",
-            "separate full-accept no-submit proof before enabling full accept",
+            "more prompt layouts before raising beyond the default Codex composer",
         },
     },
     "Obsidian long notes": {
