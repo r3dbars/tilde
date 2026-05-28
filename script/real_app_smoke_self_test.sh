@@ -2975,17 +2975,32 @@ if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
 fi
 if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for proof Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for HID CGEvent proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for fallback proof Tab.' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEvent session Tab produced no key=tab diagnostic; retrying with CGEvent HID Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEvent Tab attempts produced no key=tab diagnostic; retrying with System Events Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"session"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"hid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"warm"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'suggestion hid after CGEvent HID Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /press_key_code_cgevent_with_timeout/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /"session"/ { saw_session = 1 } in_fn && saw_session && /"hid"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /wait_for_log_fields_optional/ { saw_probe = 1 } in_fn && saw_probe && /key code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /CLAUDE_CODE_HOST_VARIANT.*ghostty/ { saw_ghostty = 1 } in_smoke && saw_ghostty && /press_claude_code_terminal_host_tab/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty-host Claude Code proof to verify the focused terminal host before pressing CGEvent Tab, then fall back to guarded System Events Tab only when no key=tab diagnostic appears" >&2
+  echo "real app smoke self-test expected Ghostty-host Claude Code proof to verify the focused terminal host before pressing CGEvent Tab, retry HID CGEvent Tab, then fall back to guarded System Events Tab only when no key=tab diagnostic appears" >&2
+  exit 1
+fi
+if ! grep -F '${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty-host Claude Code proof to preserve the real Tab failure reason when retrying the disposable context" >&2
   exit 1
 fi
 if ! grep -F "automated Terminal-host Claude Code proof" "$TMP_DIR/claude-code-terminal.txt" >/dev/null; then
@@ -3524,6 +3539,13 @@ if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/rea
    ! grep -F "proofTitleWindows=" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Claude Code Ghostty proof shell did not exec the disposable proof command." script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Ghostty proof launch to verify, retry, and diagnose the disposable shell command before prompt discovery" >&2
+  exit 1
+fi
+if ! grep -F 'SMOKE_PHASE="claude-code $host_name pre-accept external mutation probe attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'SMOKE_PHASE="claude-code $host_name press Tab attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'SMOKE_PHASE="claude-code $host_name post-Tab external mutation probe attempt $attempt"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'SMOKE_PHASE="claude-code $host_name wait for insertion result"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal proof SIGTERM diagnostics to report the active prompt/Tab/insertion phase" >&2
   exit 1
 fi
 if ! grep -F "mark_claude_code_ghostty_proof_window_title" script/real_app_smoke.sh >/dev/null ||

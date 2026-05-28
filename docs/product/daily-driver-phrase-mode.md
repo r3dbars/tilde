@@ -560,6 +560,22 @@ It still failed before Tab with `textNodes=0`, `titles=0`, `markerWindows=0`,
 and `marker=false`, so the next Ghostty lane stays prompt AX discovery after
 clean configured-window command launch.
 
+The latest detached launchd runs moved past that AX discovery blocker without
+calling Ghostty supported. `20260528T200606Z-ghostty` and
+`20260528T201412Z-ghostty` both accepted native Ghostty
+`write_screen_file:copy,plain` readiness after the AX helper reported
+`textNodes=0`, proved exact typed prompt readiness with the same title-scoped
+screen-copy fallback, and verified that native Ghostty input can mutate and
+restore the proof prompt before SteadyType insertion. Both runs then found a
+prompt-row suggestion, but CGEvent Tab produced no `key=tab` diagnostic, the
+System Events fallback also failed to produce an immediate Tab diagnostic, and
+the visible suggestion disappeared before the app-owned insertion ladder could
+run. The third run received SIGTERM during the second native pre-accept probe,
+so the harness now records the active Claude Code prompt/Tab/insertion phase on
+SIGTERM. The next red bar is no longer configured-window launch or AX prompt
+discovery; it is an accept driver that SteadyType can observe in Ghostty without
+losing the visible prompt-row suggestion.
+
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
 and fallback Tab, the app-side Ghostty insertion ladder searches the title-marked
