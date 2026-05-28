@@ -423,6 +423,30 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         if hasSuffix(["the", "tradeoff", "is"], in: words) {
             return intentCandidate("writing-flow-tradeoff-is", "speed without losing trust")
         }
+        if hasSuffix(["i", "am", "thinking", "about"], in: words) {
+            return intentCandidate("writing-flow-thinking-about", "what needs to happen next")
+        }
+        if hasSuffix(["what", "i", "actually", "want", "is"], in: words) {
+            return intentCandidate("writing-flow-actually-want", "the simplest version that works")
+        }
+        if hasSuffix(["the", "thing", "i", "am", "worried", "about", "is"], in: words) {
+            return intentCandidate("writing-flow-worried-about", "where this breaks trust")
+        }
+        if hasSuffix(["this", "is", "hard", "because"], in: words) {
+            return intentCandidate("writing-flow-hard-because", "the tradeoff is not obvious")
+        }
+        if hasSuffix(["the", "simplest", "version", "is"], in: words) {
+            return intentCandidate("writing-flow-simplest-version", "to make one small change")
+        }
+        if hasSuffix(["the", "next", "obvious", "move", "is"], in: words) {
+            return intentCandidate("writing-flow-next-obvious-move", "to test it in context")
+        }
+        if hasSuffix(["what", "this", "unlocks", "is"], in: words) {
+            return intentCandidate("writing-flow-unlocks", "moving faster without losing trust")
+        }
+        if hasSuffix(["the", "important", "detail", "is"], in: words) {
+            return intentCandidate("writing-flow-important-detail", "what happens after accept")
+        }
 
         return nil
     }
