@@ -70,6 +70,7 @@ CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
 CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
 CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
 SMOKE_PHASE="startup"
 
@@ -9355,7 +9356,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -9426,6 +9427,14 @@ open_claude_code_terminal_proof() {
         echo "Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight."
         open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true >/dev/null 2>&1 || true
         sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_SETTLE_SECONDS:-1}"
+        ghostty_preflight_pids="$(terminal_pid_list | tr '\n' ' ')"
+        ghostty_preflight_pids="${ghostty_preflight_pids% }"
+        if [[ -n "$ghostty_preflight_pids" ]]; then
+          CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+          CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_preflight_pids"
+          CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1
+          echo "Claude Code Ghostty proof owns no-restore host pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS"
+        fi
       fi
       if check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"; then
         ghostty_preflight_status=0
@@ -9688,6 +9697,9 @@ cleanup_claude_code_terminal_proof() {
 
   if [[ "$CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS" == "1" &&
         -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    if [[ "$CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO" == "1" ]]; then
+      echo "Claude Code Ghostty proof cleaning no-restore host pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+    fi
     kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
     local proof_pid
@@ -9714,6 +9726,7 @@ cleanup_claude_code_terminal_proof() {
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
   CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+  CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
   CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 }
