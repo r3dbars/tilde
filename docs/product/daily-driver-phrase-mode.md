@@ -665,6 +665,12 @@ event tap, and skipped System Events with
 run was stopped after it continued into extra disposable contexts, and the
 detached wrapper now defaults `AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=1`
 so future key-source proofs stay bounded unless explicitly overridden.
+The next app-side diagnostic slice adds `eventSourcePID` and `eventTargetPID`
+to `keyboard-event-tap-latency` rows when macOS exposes those fields. That does
+not change Ghostty support status because the current synthetic Ghostty key
+sources still miss the event tap, but it gives the next successful key-capture
+sample enough process context to separate helper-origin, target-process, and
+real-user key paths without recording typed text.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

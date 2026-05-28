@@ -235,12 +235,14 @@ final class KeyboardEventTap: @unchecked Sendable {
         )
         let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         let replay = KeyboardEventReplay(keyCode: keyCode, flagsRawValue: event.flags.rawValue)
+        let eventMetadata = keyboardEventTapDiagnosticMetadata(event: event)
 
         if consumePendingReplay(replay) {
             return finish(
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "replay-passthrough",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
@@ -250,6 +252,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "passthrough-modifier",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
@@ -272,6 +275,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                     Unmanaged.passUnretained(event),
                     key: key,
                     decision: "passthrough-non-typing-chord",
+                    eventMetadata: eventMetadata,
                     startedAt: startedAt
                 )
             }
@@ -281,6 +285,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                     Unmanaged.passUnretained(event),
                     key: key,
                     decision: "passthrough-synthetic-insert",
+                    eventMetadata: eventMetadata,
                     startedAt: startedAt
                 )
             }
@@ -299,6 +304,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "passthrough-other",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
@@ -319,6 +325,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                     Unmanaged.passUnretained(event),
                     key: key,
                     decision: "passthrough-after-typing",
+                    eventMetadata: eventMetadata,
                     startedAt: startedAt
                 )
             }
@@ -329,6 +336,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "passthrough-unsupported",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
@@ -361,22 +369,29 @@ final class KeyboardEventTap: @unchecked Sendable {
                 )
             }
         }
-        return finish(nil, key: key, decision: "consume", startedAt: startedAt)
+        return finish(nil, key: key, decision: "consume", eventMetadata: eventMetadata, startedAt: startedAt)
     }
 
     private func finish(
         _ result: Unmanaged<CGEvent>?,
         key: AutocompleteKey,
         decision: String,
+        eventMetadata: [String: String],
         startedAt: UInt64
     ) -> Unmanaged<CGEvent>? {
-        recordEventTapLatency(key: key, decision: decision, startedAt: startedAt)
+        recordEventTapLatency(
+            key: key,
+            decision: decision,
+            eventMetadata: eventMetadata,
+            startedAt: startedAt
+        )
         return result
     }
 
     private func recordEventTapLatency(
         key: AutocompleteKey,
         decision: String,
+        eventMetadata: [String: String],
         startedAt: UInt64
     ) {
         let elapsedMicros = Int((DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000)
@@ -384,23 +399,19 @@ final class KeyboardEventTap: @unchecked Sendable {
         let summary = latencyStats.record(elapsedMicros)
         latencyLock.unlock()
 
+        var metadata = eventMetadata
+        metadata["key"] = key.diagnosticName
+        metadata["decision"] = decision
+        metadata["durationMicros"] = String(elapsedMicros)
         DiagnosticsLog.shared.record(
             "keyboard-event-tap-latency",
-            metadata: [
-                "key": key.diagnosticName,
-                "decision": decision,
-                "durationMicros": String(elapsedMicros)
-            ]
+            metadata: metadata
         )
 
         if elapsedMicros >= slowEventTapLatencyMicros {
             DiagnosticsLog.shared.record(
                 "keyboard-event-tap-latency-slow",
-                metadata: [
-                    "key": key.diagnosticName,
-                    "decision": decision,
-                    "durationMicros": String(elapsedMicros)
-                ]
+                metadata: metadata
             )
         }
 
@@ -765,6 +776,21 @@ func shouldTreatOtherKeyAsTypingPassthrough(
     case .backtick, .z, .other:
         return true
     }
+}
+
+func keyboardEventTapDiagnosticMetadata(event: CGEvent) -> [String: String] {
+    var metadata: [String: String] = [:]
+    let eventSourcePID = event.getIntegerValueField(.eventSourceUnixProcessID)
+    let eventTargetPID = event.getIntegerValueField(.eventTargetUnixProcessID)
+
+    if eventSourcePID > 0 {
+        metadata["eventSourcePID"] = String(eventSourcePID)
+    }
+    if eventTargetPID > 0 {
+        metadata["eventTargetPID"] = String(eventTargetPID)
+    }
+
+    return metadata
 }
 
 private extension AutocompletePhysicalKey {
