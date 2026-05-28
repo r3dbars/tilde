@@ -650,9 +650,11 @@ just after the generic key-capture miss is printed. `20260528T211636Z-ghostty`
 confirmed the same bounded path and late focus-change timing, so the final
 post-suggestion failure aggregator now also waits briefly and rewrites the final
 reason when permission UI is the real focus thief.
-The next default proof pass should keep that lane permission-safe: if CGEvent
-Shift still misses the event tap, the harness reports a plain key-source miss
-and only runs System Events Shift when explicitly opted in.
+The next default proof pass kept that lane permission-safe:
+`20260528T213048Z-ghostty` reached a prompt-row suggestion, tried session HID,
+HID-tap, and combined-session CGEvent Shift probes, skipped System Events Shift
+with `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=0`,
+and failed cleanly with `key capture probe did not reach event tap`.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

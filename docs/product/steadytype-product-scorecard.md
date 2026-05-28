@@ -130,6 +130,10 @@ The default detached probe now skips System Events Shift because it can trigger
 macOS permission UI and steal focus; use
 `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1` only
 for an explicit permission-risk key-source experiment.
+Live run `20260528T213048Z-ghostty` proved the new default path: it reached a
+prompt-row suggestion, tried session HID, HID-tap, and combined-session CGEvent
+Shift probes, skipped System Events Shift with the default opt-out env, and
+failed cleanly with `key capture probe did not reach event tap`.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
