@@ -181,6 +181,12 @@ prompt unchanged before the budget fail-closed at lines `832488` / `832489` and
 the handled-false Tab result at line `832491`. Treat the probe as unproven until
 a detached run reaches `ghosttyNativePrefixFinalKeyText` and verifies one-word
 no-submit insertion.
+The latest detached follow-up, `20260528T043409Z-ghostty`, stalled before prompt
+suggestions while warming the CGEvent Tab helper and was stopped with exit
+status `143`; that is harness failure evidence, not insertion evidence. The
+harness now builds both CGEvent keypress and text helpers behind
+timeout-bounded `swiftc` waits so the next detached proof fails fast instead of
+silently hanging before the real Ghostty insertion red bar.
 
 ## Scores
 
