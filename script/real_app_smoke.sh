@@ -2182,6 +2182,7 @@ wait_for_claude_code_terminal_insertion_result() {
 run_claude_code_ghostty_post_fail_external_insertion_probe() {
   local proof_text="$1"
   local probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_TEXT:-x}"
+  local system_events_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_TEXT:-z}"
 
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
   [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
@@ -2203,8 +2204,34 @@ run_claude_code_ghostty_post_fail_external_insertion_probe() {
     "$proof_text$probe_text" \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_VERIFY_SECONDS:-3}"; then
     echo "Claude Code Ghostty post-fail external native insertion probe verified prompt mutation after app-owned insertion failed." >&2
+    return 0
   else
     echo "Claude Code Ghostty post-fail external native insertion probe did not verify prompt mutation." >&2
+  fi
+
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$system_events_probe_text" ]] || return 0
+  if [[ "$system_events_probe_text" == *$'\n'* || "$system_events_probe_text" == *$'\r'* ]]; then
+    echo "Claude Code Ghostty post-fail external System Events insertion probe refused multiline text." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty post-fail external System Events insertion probe typing one suffix without Enter." >&2
+  if ! type_claude_code_terminal_raw_smoke_text "$system_events_probe_text"; then
+    echo "Claude Code Ghostty post-fail external System Events insertion probe could not post input." >&2
+    return 0
+  fi
+  sleep "$(claude_code_ghostty_typing_drain_seconds)"
+
+  if try_claude_code_terminal_prompt_ready_quiet \
+    "$proof_text$system_events_probe_text" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_VERIFY_SECONDS:-3}" ||
+    try_claude_code_terminal_prompt_ready_quiet \
+      "$proof_text$probe_text$system_events_probe_text" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_VERIFY_SECONDS:-3}"; then
+    echo "Claude Code Ghostty post-fail external System Events insertion probe verified prompt mutation after app-owned insertion failed." >&2
+  else
+    echo "Claude Code Ghostty post-fail external System Events insertion probe did not verify prompt mutation." >&2
   fi
 }
 
