@@ -408,6 +408,13 @@ the typed proof text before retry, and the second context received SIGTERM
 before insertion could start. Ghostty's next blocker is now stable prompt text
 readiness/retry handling after direct command-open, not configured-window shell
 creation.
+`20260528T103308Z-ghostty` proved the direct command-open path still creates
+fresh proof-owned Ghostty contexts and writes `claude.pid`, but it failed before
+verified insertion because the AX/readiness path kept treating shell-command
+text as prompt context. The run then timed out with
+`suggestion-blocked` diagnostics for shell-command and unsafe-input-line
+reasons, so Ghostty's red bar is now making the direct-open prompt truly
+Claude-ready and AX-readable before typing or retrying.
 Ghostty remains unsupported until a
 detached run reaches verified one-word no-submit insertion and exits `0`.
 
