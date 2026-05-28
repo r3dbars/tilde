@@ -58,6 +58,7 @@ require_contains "$TMP_DIR/dry-run.txt" "script/real_app_smoke.sh claude-code-gh
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.12"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=45"
+require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED=0"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1"
@@ -88,6 +89,11 @@ require_contains "$TMP_DIR/terminal-dry-run.txt" "Launcher: terminal"
 require_contains "$TMP_DIR/terminal-dry-run.txt" "open -g -na Terminal"
 require_contains "$TMP_DIR/terminal-dry-run.txt" "run-detached-proof.command"
 require_contains "$TMP_DIR/terminal-dry-run.txt" "run-detached-proof-worker.sh"
+
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED=1 \
+  script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/command-open-dry-run.txt"
+require_contains "$TMP_DIR/command-open-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED=1"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=launchd \
@@ -385,6 +391,8 @@ require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEM
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE="${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE:-1}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS:-0.12}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS:-45}"'
+require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED:-0}"'
+require_contains "$SCRIPT_TEXT" ': "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED:=0}"'
 require_contains "$SCRIPT_TEXT" ': "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED:=1}"'
 require_contains "$SCRIPT_TEXT" "./script/real_app_smoke.sh claude-code-ghostty --manual-gate"
 require_contains "$SCRIPT_TEXT" "custom proof text is not persisted here"

@@ -3045,6 +3045,8 @@ open_fresh = source[
 ]
 if "CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=1" not in open_fresh:
     raise SystemExit(1)
+if "max_launch_attempts=$((max_launch_attempts + 1))" not in open_fresh:
+    raise SystemExit(1)
 prompt_wait = source[
     source.index("try_wait_for_claude_code_terminal_prompt()"):
     source.index("\nwait_for_claude_code_terminal_prompt()", source.index("try_wait_for_claude_code_terminal_prompt()"))
