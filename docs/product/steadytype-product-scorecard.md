@@ -430,6 +430,19 @@ retryable Ghostty misses through a max-attempt guard so one-attempt proofs stop
 at the real red bar instead of opening an extra disposable context; the
 follow-up `20260528T104706Z-ghostty` failed earlier in launch readiness, before
 the typed-prompt path, and left no running proof process.
+The newest prompt-policy pass keeps Ghostty's focused-window screen text
+available even when direct AX text has a proof marker, trusts title-scoped
+visible prompt rows when stale AX header text is the only mismatch, and makes
+initial Ghostty prompt readiness tolerate launch-command scrollback only after
+Claude prompt chrome is visible. `20260528T110025Z-ghostty` still failed red:
+the first direct-open context did not become frontmost, the second context hit
+launch-command scrollback, the clear-and-retry path removed the prompt hint, and
+AX readiness still rejected shell-command text. The next Ghostty red bar is now
+preserving or rediscovering Claude prompt chrome after clearing launch scrollback
+so typed prompt proof can start consistently. A follow-up
+`20260528T110231Z-ghostty` failed even earlier because both direct-open contexts
+could not become frontmost and zero-window Ghostty hosts had to be reset, so
+frontmost launch readiness is still flaky around the same prompt-preflight lane.
 Ghostty remains unsupported until a
 detached run reaches verified one-word no-submit insertion and exits `0`.
 

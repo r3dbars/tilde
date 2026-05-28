@@ -452,6 +452,11 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             context.rawTextBeforeCursor,
             context.rawTextAfterCursor
         ].joined(separator: "\n")
+        if context.hostBundleIdentifier == "com.mitchellh.ghostty",
+           let screenPromptAnchor = terminalScreenBackedPromptAnchor(for: context) {
+            return screenPromptAnchor.inputText
+        }
+
         if !containsProofMarker(directInputText),
            let screenInputText = titleScopedTerminalScreenInputText(for: context) {
             return screenInputText
@@ -1267,6 +1272,18 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return nil
         }
 
+        return terminalScreenBackedPromptAnchor(for: context)
+            ?? titleScopedDirectPromptAnchor(for: context)
+    }
+
+    private static func terminalScreenBackedPromptAnchor(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> ClaudeCodeTerminalScreenPromptAnchor? {
+        guard context.hostBundleIdentifier == "com.mitchellh.ghostty",
+              context.proofModeEnabled else {
+            return nil
+        }
+
         if !context.terminalScreenText.isEmpty,
            containsProofMarker(context.terminalScreenText),
            let promptSegment = recoveredMarkedTerminalScreenPromptSegmentLocation(
@@ -1293,7 +1310,6 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return titleScopedTerminalScreenPromptAnchor(for: context)
-            ?? titleScopedDirectPromptAnchor(for: context)
     }
 
     private static func hasUnscopedStaleHeaderDirectText(
@@ -1707,10 +1723,23 @@ public enum ClaudeCodeTerminalHostProofPolicy {
                 endingAt: offset,
                 fragments: fragments
                ),
-               let inputText = safeTitleScopedPromptInputLine(currentLine),
-               terminalScreenInputMatchesCurrentContext(inputText, for: context),
-               !hasUnscopedStaleHeaderDirectText(for: context),
-               !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) {
+               let inputText = safeTitleScopedPromptInputLine(currentLine) {
+                let trustsVisiblePromptLine = canTrustTitleScopedVisiblePromptLine(
+                    currentLine,
+                    inputText: inputText,
+                    for: context
+                )
+                guard terminalScreenInputMatchesCurrentContext(inputText, for: context)
+                    || trustsVisiblePromptLine else {
+                    trailingRowsArePromptChromeOnly = false
+                    continue
+                }
+                guard !hasUnscopedStaleHeaderDirectText(for: context),
+                      trustsVisiblePromptLine
+                        || !hasConflictingDirectCurrentPromptCandidate(inputText, for: context) else {
+                    trailingRowsArePromptChromeOnly = false
+                    continue
+                }
                 let currentLineInputText = visiblePromptLineTextBeforeCursor(
                     currentLine,
                     fallbackInputText: inputText
@@ -1727,6 +1756,22 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         }
 
         return nil
+    }
+
+    private static func canTrustTitleScopedVisiblePromptLine(
+        _ line: String,
+        inputText: String,
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> Bool {
+        guard titleHasScopedProofMarker(context.windowTitle),
+              !hasUnsafeTerminalRowsAfterCursor(context.rawTextAfterCursor),
+              let sanitizedLine = safeTitleScopedPromptInputLine(line),
+              terminalScreenInput(sanitizedLine, matchesCurrentSuffix: inputText) else {
+            return false
+        }
+
+        let trimmedLine = line.trimmingLeadingWhitespace()
+        return line.strippingLeadingPromptResidue() != trimmedLine
     }
 
     private static func titleScopedDirectPromptAnchor(
@@ -2029,11 +2074,26 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             return true
         }
 
+        if input.hasPrefix(suffix),
+           suffix.split(whereSeparator: \.isWhitespace).count >= 3,
+           input.count > suffix.count,
+           input.count - suffix.count <= 2 {
+            return true
+        }
+
         let compactInput = input.filter { !$0.isWhitespace }
         let compactSuffix = suffix.filter { !$0.isWhitespace }
         return !compactInput.isEmpty
             && !compactSuffix.isEmpty
-            && compactInput.hasSuffix(compactSuffix)
+            && (
+                compactInput.hasSuffix(compactSuffix)
+                || (
+                    compactInput.hasPrefix(compactSuffix)
+                    && compactSuffix.count >= 8
+                    && compactInput.count > compactSuffix.count
+                    && compactInput.count - compactSuffix.count <= 2
+                )
+            )
     }
 
     private static func repairingKnownDroppedProofSpaces(in text: String) -> String {

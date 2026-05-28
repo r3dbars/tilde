@@ -530,8 +530,8 @@ if "activateWithSystemEvents" not in terminal_prompt_helper or '"/usr/bin/osascr
     raise SystemExit("Terminal prompt AX helper must fall back to System Events pid activation when AppKit activation loses focus")
 if "frontmostPid=" not in terminal_prompt_helper or "targetPid=" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper failures must include focus ownership pids")
-if "--reject-shell-command-text" not in terminal_prompt_helper or "rejectsShellCommandText" not in terminal_prompt_helper:
-    raise SystemExit("Terminal prompt AX helper must reject shell-command-shaped launch text during Ghostty readiness")
+if "--reject-shell-command-text" not in terminal_prompt_helper or "rejectsShellCommandText" not in terminal_prompt_helper or "options.text.isEmpty" not in terminal_prompt_helper or "options.hints.contains" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must reject shell-command-shaped launch text during Ghostty readiness until the prompt hint is visible")
 if "looksLikeSteadyTypeProofShellCommand" not in terminal_prompt_helper or "rejectedShellCommand=" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper must diagnose rejected SteadyType proof shell command text")
 if "func focusedWindow(in appElement" not in terminal_prompt_helper or "kAXFocusedWindowAttribute" not in terminal_prompt_helper:
@@ -611,6 +611,16 @@ if "commonPrefixChars" not in verification_block or "commonSuffixChars" not in v
     raise SystemExit("Ghostty proof mismatch diagnostics must include redacted prefix/suffix distance")
 if "currentHasExpectedPrefix" not in verification_block or "expectedHasCurrentPrefix" not in verification_block:
     raise SystemExit("Ghostty proof mismatch diagnostics must distinguish partial insertion from unchanged prompt state")
+proof_context_start = app_delegate.index("private func claudeCodeTerminalHostProofContext(")
+proof_context_end = app_delegate.index("private func claudeCodeTerminalHostProofBlockReason(", proof_context_start)
+proof_context_block = app_delegate[proof_context_start:proof_context_end]
+if (
+    "let proofModeEnabled = activeAppProofBundleIdentifiers.contains" not in proof_context_block
+    or 'app.bundleIdentifier == "com.mitchellh.ghostty"' not in proof_context_block
+    or "focusedWindowText(for: app)" not in proof_context_block
+    or "|| !ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText)" not in proof_context_block
+):
+    raise SystemExit("Ghostty proof context must read terminal screen text even when focused AX text contains a possibly stale marker")
 placement_gate_start = app_delegate.index("let syntheticCaretBundleIdentifier = syntheticTextAreaCaretBundleIdentifier(")
 placement_gate_end = app_delegate.index("guard supportsSyntheticTextAreaCaret", placement_gate_start)
 placement_gate_block = app_delegate[placement_gate_start:placement_gate_end]
@@ -2840,8 +2850,8 @@ if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claud
   echo "real app smoke self-test expected Claude Code prompt readiness to require Claude-specific chrome, not a generic prompt glyph" >&2
   exit 1
 fi
-if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint / { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code prompt readiness to use process proof instead of brittle placeholder hints" >&2
+if awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--hint / && !/--hint "shortcuts"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code prompt readiness to avoid brittle placeholder hints except Ghostty prompt chrome" >&2
   exit 1
 fi
 if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /wait_for_claude_code_terminal_process/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
@@ -2864,6 +2874,10 @@ if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_cla
 fi
 if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--reject-shell-command-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Ghostty empty-prompt readiness to reject shell-command-shaped launch text" >&2
+  exit 1
+fi
+if ! awk '/^try_wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /^wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 0 } in_wait && /rejectedShellCommand=true/ { saw_reject = 1 } in_wait && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 } in_wait && /clearing before readiness retry/ { saw_log = 1 } END { exit saw_reject && saw_clear && saw_log ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty prompt readiness to clear launch-command text once before failing the fresh context" >&2
   exit 1
 fi
 if ! awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /^}/ && in_assert { in_assert = 0 } in_assert && /--require-exact-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
@@ -2920,6 +2934,11 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'no-restore-command-open-start' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'no-restore-command-open-pidfile-present' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'no-restore-command-open-not-frontmost' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'ghostty_window_api_reports_visible_window' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty visible-window check' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_FRONTMOST_SECONDS:-5' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'did not expose a frontmost window; falling back to script-owned window launch.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open -na "$host_app" --args \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F -- '--working-directory="$ROOT_DIR"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F ' -e "$launch_script"' script/real_app_smoke.sh >/dev/null ||

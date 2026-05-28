@@ -1376,6 +1376,60 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         #expect(anchor.lineCount == 6)
     }
 
+    @Test("Ghostty proof prefers screen prompt when direct marked AX input lags")
+    func ghosttyProofPrefersScreenPromptWhenDirectMarkedAXInputLags() throws {
+        let screenText = """
+        Claude Code STEADYTYPECLAUDECODEPROOF
+        Some older output
+        ❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature
+        ╭────────────────────────────────────╮
+        │ ? for shortcuts                    │
+        ╰────────────────────────────────────╯
+        """
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "STEADYTYPECLAUDECODEPROOF Make this setting the featur",
+            rawTextBeforeCursor: "STEADYTYPECLAUDECODEPROOF Make this setting the featur",
+            rawTextAfterCursor: "",
+            terminalScreenText: screenText,
+            proofModeEnabled: true
+        )
+
+        let anchor = try #require(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context))
+        let metadata = ClaudeCodeTerminalHostProofPolicy.diagnosticMetadata(for: context)
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the feature")
+        #expect(anchor.inputText == "Make this setting the feature")
+        #expect(anchor.promptLineInputText == "❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature")
+        #expect(metadata["terminalProofScreenPromptAnchorInputChars"] == "29")
+        #expect(metadata["terminalProofScreenPromptAnchorLineInputChars"] == "57")
+    }
+
+    @Test("Ghostty proof keeps mismatched direct marked AX text from taking screen prompt")
+    func ghosttyProofKeepsMismatchedDirectMarkedAXTextFromTakingScreenPrompt() {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "STEADYTYPECLAUDECODEPROOF Make this setting the featurx",
+            rawTextBeforeCursor: "STEADYTYPECLAUDECODEPROOF Make this setting the featurx",
+            rawTextAfterCursor: "",
+            terminalScreenText: """
+            Claude Code STEADYTYPECLAUDECODEPROOF
+            Some older output
+            ❯ STEADYTYPECLAUDECODEPROOF Make this setting the feature
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Make this setting the featurx")
+    }
+
     @Test("Ghostty proof rejects title-scoped screen prompt anchor without direct input match")
     func ghosttyProofRejectsTitleScopedScreenPromptAnchorWithoutDirectInputMatch() {
         let context = ClaudeCodeTerminalHostProofContext(
@@ -1399,6 +1453,37 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         )
 
         #expect(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context) == nil)
+    }
+
+    @Test("Ghostty proof trusts title-scoped visible prompt row when AX current text is stale")
+    func ghosttyProofTrustsTitleScopedVisiblePromptRowWhenAXCurrentTextIsStale() throws {
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code STEADYTYPECLAUDECODEPROOF",
+            focusedText: "Claude Code",
+            rawTextBeforeCursor: "",
+            rawTextAfterCursor: """
+            Claude Code
+            ? for shortcuts
+            """,
+            terminalScreenText: """
+            Claude Code STEADYTYPECLAUDECODEPROOF
+            Some older output
+            ❯ Please make this
+            ╭────────────────────────────────────╮
+            │ ? for shortcuts                    │
+            ╰────────────────────────────────────╯
+            """,
+            proofModeEnabled: true
+        )
+
+        let anchor = try #require(ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: context))
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == "Please make this")
+        #expect(anchor.inputText == "Please make this")
+        #expect(anchor.promptLineInputText == "❯ Please make this")
+        #expect(anchor.lineIndex == 2)
+        #expect(anchor.lineCount == 6)
     }
 
     @Test("Ghostty proof creates title-scoped direct prompt anchor before screen text arrives")

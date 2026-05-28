@@ -2553,9 +2553,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context.textBeforeCursor,
             context.textAfterCursor
         ].joined(separator: "\n")
-        let terminalScreenText = ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText)
-            ? ""
-            : (accessibilityClient.focusedWindowText(for: app) ?? "")
+        let proofModeEnabled = activeAppProofBundleIdentifiers.contains(
+            ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        )
+        let shouldReadTerminalScreenText = proofModeEnabled
+            && (app.bundleIdentifier == "com.mitchellh.ghostty"
+                || !ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText))
+        let terminalScreenText = shouldReadTerminalScreenText
+            ? (accessibilityClient.focusedWindowText(for: app) ?? "")
+            : ""
         return ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: app.bundleIdentifier,
             windowTitle: context.fingerprint.windowTitle ?? "",
@@ -2563,9 +2569,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rawTextBeforeCursor: context.textBeforeCursor,
             rawTextAfterCursor: context.textAfterCursor,
             terminalScreenText: terminalScreenText,
-            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
-                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            )
+            proofModeEnabled: proofModeEnabled
         )
     }
 
