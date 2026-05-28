@@ -683,6 +683,10 @@ attempt-1 suggestion. Cleanup stopped the proof Ghostty process and proof
 command process. The detached wrapper now prints periodic wait progress, and
 the key-capture refocus path has a timeout knob so the next long run exposes its
 phase instead of looking idle.
+The optional nohup launcher is also less entangled with Codex now: it starts the
+runner in a new session through Python's `start_new_session=True`, so nohup
+comparison runs should not inherit the app-server process group. That is not
+Ghostty support, but it makes future nohup-vs-launchd red evidence cleaner.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

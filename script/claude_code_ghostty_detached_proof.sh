@@ -851,6 +851,31 @@ create_launch_agent_plist() {
 EOF
 }
 
+start_nohup_runner() {
+  local runner_script="$1"
+  local log_file="$2"
+
+  /usr/bin/python3 - "$runner_script" "$log_file" <<'PY'
+import os
+import subprocess
+import sys
+
+runner_script = sys.argv[1]
+log_file = sys.argv[2]
+with open(log_file, "ab", buffering=0) as log:
+    process = subprocess.Popen(
+        ["/bin/bash", runner_script],
+        stdin=subprocess.DEVNULL,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        close_fds=True,
+        env=os.environ.copy(),
+        start_new_session=True,
+    )
+print(process.pid)
+PY
+}
+
 cleanup_launchd_job_if_terminal() {
   local run_dir="$1"
   local status_file launcher launch_label
@@ -1075,7 +1100,7 @@ start_run() {
       echo "Command: open -g -na Terminal $runner_script"
       echo "Worker: $worker_script"
     else
-      echo "Command: nohup /bin/bash $runner_script"
+      echo "Command: /usr/bin/python3 start_new_session /bin/bash $runner_script"
     fi
     echo "Child smoke: $smoke_command_summary"
     return 0
@@ -1147,12 +1172,11 @@ start_run() {
     fi
     pid=""
   else
-    nohup /bin/bash "$runner_script" >>"$log_file" 2>&1 &
-    pid=$!
+    pid="$(start_nohup_runner "$runner_script" "$log_file")"
   fi
 
   if [[ "$LAUNCHER" == "nohup" ]]; then
-    printf 'Detached Ghostty proof nohup starter pid %s launched; runner will publish worker pid.\n' "$pid" >>"$log_file"
+    printf 'Detached Ghostty proof nohup detached runner pid %s launched in a new session; runner will publish worker pid.\n' "$pid" >>"$log_file"
   else
     {
       printf 'state=starting\n'
