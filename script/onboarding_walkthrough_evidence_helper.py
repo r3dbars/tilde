@@ -94,6 +94,9 @@ def diagnostics_matches(path: Path) -> list[MatchedLine]:
     latest: dict[str, MatchedLine] = {}
     label_order = (
         "TextEdit practice started",
+        "Local model ready at practice start",
+        "TextEdit enabled at practice start",
+        "Suggestions unpaused at practice start",
         "TextEdit Tab accepted one word",
         "TextEdit Esc dismissed suggestion",
         "Pause Suggestions turned on",
@@ -103,6 +106,21 @@ def diagnostics_matches(path: Path) -> list[MatchedLine]:
     for number, line in enumerate(read_text_lines(path), start=1):
         if "textedit-practice-started" in line:
             latest["TextEdit practice started"] = MatchedLine(number, "TextEdit practice started")
+            if "model=ready" in line:
+                latest["Local model ready at practice start"] = MatchedLine(
+                    number,
+                    "Local model ready at practice start",
+                )
+            if "textEditEnabled=true" in line:
+                latest["TextEdit enabled at practice start"] = MatchedLine(
+                    number,
+                    "TextEdit enabled at practice start",
+                )
+            if "globalPaused=false" in line:
+                latest["Suggestions unpaused at practice start"] = MatchedLine(
+                    number,
+                    "Suggestions unpaused at practice start",
+                )
         if (
             "keyboard-action" in line
             and "action=acceptNextWord" in line
@@ -200,6 +218,9 @@ def before_delete_report(diagnostics_log: Path, trace_log: Path, require_ready: 
     missing: list[str] = []
     for label in (
         "TextEdit practice started",
+        "Local model ready at practice start",
+        "TextEdit enabled at practice start",
+        "Suggestions unpaused at practice start",
         "TextEdit Tab accepted one word",
         "TextEdit Esc dismissed suggestion",
         "Pause Suggestions turned on",
