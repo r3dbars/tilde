@@ -9824,7 +9824,7 @@ claude_code_ghostty_configured_window_shell_not_ready() {
 
   grep -Fxq "configured-window-created" "$stage_file" 2>/dev/null &&
     grep -Fxq "shell-delay-finished" "$stage_file" 2>/dev/null &&
-    ! grep -Fxq "terminal-working-directory-present" "$stage_file" 2>/dev/null
+    ! grep -Fxq "terminal-ready" "$stage_file" 2>/dev/null
 }
 
 claude_code_ghostty_retry_window_shell_not_ready() {
@@ -9834,7 +9834,7 @@ claude_code_ghostty_retry_window_shell_not_ready() {
   [[ -n "$stage_file" && -s "$stage_file" ]] || return 1
 
   grep -Fxq "retry-shell-delay-finished" "$stage_file" 2>/dev/null &&
-    ! grep -Fxq "retry-terminal-working-directory-present" "$stage_file" 2>/dev/null
+    ! grep -Fxq "retry-terminal-ready" "$stage_file" 2>/dev/null
 }
 
 wait_for_claude_code_terminal_pidfile_process_optional() {
@@ -10189,6 +10189,7 @@ set launchStageFile to item 6 of argv
 set rootDirectory to item 7 of argv
 set launchScriptPath to item 8 of argv
 set configuredWindowFirst to item 9 of argv
+set commandAlreadyLaunched to false
 recordStage(launchStageFile, "launch-begin")
 tell application id "com.mitchellh.ghostty"
   my recordStage(launchStageFile, "new-window-start")
@@ -10196,6 +10197,7 @@ tell application id "com.mitchellh.ghostty"
     my recordStage(launchStageFile, "configured-window-start")
     set proofConfig to new surface configuration from {initial working directory:rootDirectory, command:launchScriptPath, wait after command:true}
     set proofWindow to new window with configuration proofConfig
+    set commandAlreadyLaunched to true
     my recordStage(launchStageFile, "configured-window-created")
     my recordStage(launchStageFile, "new-window-created")
   else
@@ -10206,6 +10208,7 @@ tell application id "com.mitchellh.ghostty"
       my recordStage(launchStageFile, "configured-window-start")
       set proofConfig to new surface configuration from {initial working directory:rootDirectory, command:launchScriptPath, wait after command:true}
       set proofWindow to new window with configuration proofConfig
+      set commandAlreadyLaunched to true
       my recordStage(launchStageFile, "configured-window-created")
       my recordStage(launchStageFile, "new-window-created")
     else
@@ -10237,13 +10240,8 @@ tell application id "com.mitchellh.ghostty"
         set sourceTab to selected tab of sourceWindow
         my recordStage(launchStageFile, "new-window-selected-tab-resolved")
         set sourceTerminal to focused terminal of sourceTab
-        try
-          set sourceTerminalDirectory to working directory of sourceTerminal as text
-          if sourceTerminalDirectory is not "" then
-            set sourceTerminalReady to true
-            exit repeat
-          end if
-        end try
+        set sourceTerminalReady to true
+        exit repeat
       end try
       delay 0.1
     end repeat
@@ -10253,6 +10251,16 @@ tell application id "com.mitchellh.ghostty"
     end if
     my recordStage(launchStageFile, "new-window-focused-terminal-resolved")
     my recordStage(launchStageFile, "new-window-source-terminal-ready")
+    try
+      set sourceTerminalDirectory to working directory of sourceTerminal as text
+      if sourceTerminalDirectory is not "" then
+        my recordStage(launchStageFile, "new-window-source-terminal-working-directory-present")
+      else
+        my recordStage(launchStageFile, "new-window-source-terminal-working-directory-empty")
+      end if
+    on error
+      my recordStage(launchStageFile, "new-window-source-terminal-working-directory-unavailable")
+    end try
     my recordStage(launchStageFile, "new-window-action-ready")
     perform action "new_window" on sourceTerminal
     my recordStage(launchStageFile, "new-window-action-finished")
@@ -10271,25 +10279,31 @@ tell application id "com.mitchellh.ghostty"
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
-      try
-        set terminalDirectory to working directory of targetTerminal as text
-        if terminalDirectory is not "" then
-          set terminalReady to true
-          exit repeat
-        end if
-      end try
+      set terminalReady to true
+      exit repeat
     end try
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
   my recordStage(launchStageFile, "terminal-ready")
-  my recordStage(launchStageFile, "terminal-working-directory-present")
+  try
+    set terminalDirectory to working directory of targetTerminal as text
+    if terminalDirectory is not "" then
+      my recordStage(launchStageFile, "terminal-working-directory-present")
+    else
+      my recordStage(launchStageFile, "terminal-working-directory-empty")
+    end if
+  on error
+    my recordStage(launchStageFile, "terminal-working-directory-unavailable")
+  end try
   focus targetTerminal
   my recordStage(launchStageFile, "terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
   my recordStage(launchStageFile, "title-marked")
-  if launchAction is not "" then
+  if commandAlreadyLaunched is true then
+    my recordStage(launchStageFile, "configured-window-command-owned-launch")
+  else if launchAction is not "" then
     my recordStage(launchStageFile, "launch-action-start")
     perform action launchAction on targetTerminal
     my recordStage(launchStageFile, "launch-action-finished")
@@ -10398,19 +10412,23 @@ tell application id "com.mitchellh.ghostty"
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
-      try
-        set terminalDirectory to working directory of targetTerminal as text
-        if terminalDirectory is not "" then
-          set terminalReady to true
-          exit repeat
-        end if
-      end try
+      set terminalReady to true
+      exit repeat
     end try
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
   my recordStage(launchStageFile, "retry-terminal-ready")
-  my recordStage(launchStageFile, "retry-terminal-working-directory-present")
+  try
+    set terminalDirectory to working directory of targetTerminal as text
+    if terminalDirectory is not "" then
+      my recordStage(launchStageFile, "retry-terminal-working-directory-present")
+    else
+      my recordStage(launchStageFile, "retry-terminal-working-directory-empty")
+    end if
+  on error
+    my recordStage(launchStageFile, "retry-terminal-working-directory-unavailable")
+  end try
   focus targetTerminal
   my recordStage(launchStageFile, "retry-terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
