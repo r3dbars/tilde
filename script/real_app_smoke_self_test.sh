@@ -2565,9 +2565,9 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'suggestion_start_line="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'pre_trigger_suggestion_start_line="$suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'find_recent_claude_code_terminal_suggestion_line_optional "$start_line"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'find_recent_claude_code_terminal_suggestion_line_optional "$relaxed_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'accept_start_line="$pre_trigger_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'accept_start_line="$start_line"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'accept_start_line="$relaxed_suggestion_start_line"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'guard_ghostty_frontmost_bundle_fallback' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'frontmost_bundle_identifier()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"$frontmost_bundle" == "$host_bundle"' script/real_app_smoke.sh >/dev/null ||
