@@ -43,6 +43,7 @@ require_contains "$TMP_DIR/help.txt" "terminal or nohup"
 require_contains "$TMP_DIR/help.txt" "launchd runner by default"
 require_contains script/claude_code_ghostty_detached_proof.sh "reset_stale_only_ghostty_host_before_start"
 require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType AppleScript Probe"
+require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType Submit Probe"
 require_contains script/claude_code_ghostty_detached_proof.sh "unsafeWindowCount"
 require_contains script/claude_code_ghostty_detached_proof.sh "Detached Ghostty proof resetting stale-only Ghostty host before launch"
 require_contains script/claude_code_ghostty_detached_proof.sh 'reset_stale_only_ghostty_host_before_start "$log_file"'

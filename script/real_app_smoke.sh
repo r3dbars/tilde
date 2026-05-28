@@ -9421,6 +9421,12 @@ open_claude_code_terminal_proof() {
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
       : >"$ghostty_launch_stage_file"
+      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         ! pgrep -x ghostty >/dev/null 2>&1; then
+        echo "Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight."
+        open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true >/dev/null 2>&1 || true
+        sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_SETTLE_SECONDS:-1}"
+      fi
       if check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"; then
         ghostty_preflight_status=0
       else
@@ -9474,20 +9480,23 @@ tell application id "com.mitchellh.ghostty"
   my recordStage(launchStageFile, "shell-delay-finished")
   set targetTerminal to missing value
   set terminalReady to false
-  repeat with readyAttempt from 1 to 30
+  repeat with readyAttempt from 1 to 60
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
-      set terminalReady to true
       try
         set terminalDirectory to working directory of targetTerminal as text
+        if terminalDirectory is not "" then
+          set terminalReady to true
+          exit repeat
+        end if
       end try
-      exit repeat
     end try
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
   my recordStage(launchStageFile, "terminal-ready")
+  my recordStage(launchStageFile, "terminal-working-directory-present")
   focus targetTerminal
   my recordStage(launchStageFile, "terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
@@ -9568,20 +9577,23 @@ tell application id "com.mitchellh.ghostty"
   my recordStage(launchStageFile, "retry-shell-delay-finished")
   set targetTerminal to missing value
   set terminalReady to false
-  repeat with readyAttempt from 1 to 30
+  repeat with readyAttempt from 1 to 60
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
-      set terminalReady to true
       try
         set terminalDirectory to working directory of targetTerminal as text
+        if terminalDirectory is not "" then
+          set terminalReady to true
+          exit repeat
+        end if
       end try
-      exit repeat
     end try
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
   my recordStage(launchStageFile, "retry-terminal-ready")
+  my recordStage(launchStageFile, "retry-terminal-working-directory-present")
   focus targetTerminal
   my recordStage(launchStageFile, "retry-terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
@@ -9806,6 +9818,7 @@ reset_stale_only_claude_code_ghostty_proof_host() {
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
 set appleScriptProbePrefix to "SteadyType AppleScript Probe"
+set submitProbePrefix to "SteadyType Submit Probe"
 set windowCount to 0
 set unsafeWindowCount to 0
 tell application "System Events"
@@ -9821,6 +9834,7 @@ tell application "System Events"
       if markerText is not "" and windowName contains markerText then set isProofWindow to true
       if windowName contains proofDirectoryMarker then set isProofWindow to true
       if windowName starts with appleScriptProbePrefix then set isProofWindow to true
+      if windowName starts with submitProbePrefix then set isProofWindow to true
       if isProofWindow is false then set unsafeWindowCount to unsafeWindowCount + 1
     end repeat
   end tell
@@ -9870,13 +9884,15 @@ cleanup_stale_claude_code_ghostty_proofs() {
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
+set appleScriptProbePrefix to "SteadyType AppleScript Probe"
+set submitProbePrefix to "SteadyType Submit Probe"
 set closedCount to 0
 tell application id "com.mitchellh.ghostty"
   repeat with windowIndex from (count windows) to 1 by -1
     try
       set candidateWindow to window windowIndex
       set windowName to name of candidateWindow as text
-      if windowName contains markerText or windowName contains proofDirectoryMarker then
+      if windowName contains markerText or windowName contains proofDirectoryMarker or windowName starts with appleScriptProbePrefix or windowName starts with submitProbePrefix then
         close candidateWindow
         set closedCount to closedCount + 1
       else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
