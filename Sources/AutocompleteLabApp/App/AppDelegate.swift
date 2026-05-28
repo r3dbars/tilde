@@ -13404,7 +13404,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return (false, false, false)
         }
-        return (false, true, screenCopyOutcome.promptStayedUnchanged == true)
+        return (
+            false,
+            true,
+            screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true
+        )
     }
 
     private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(
@@ -13412,7 +13416,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo
-    ) -> (verified: Bool, promptStayedUnchanged: Bool?, safeToContinue: Bool) {
+    ) -> (
+        verified: Bool,
+        promptStayedUnchanged: Bool?,
+        safeToContinue: Bool,
+        nativeNoopClassified: Bool
+    ) {
         let osascriptPath = "/usr/bin/osascript"
         guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
             DiagnosticsLog.shared.record(
@@ -13424,7 +13433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, nil, true)
+            return (false, nil, true, false)
         }
 
         let pasteboard = NSPasteboard.general
@@ -13531,7 +13540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(String(describing: error).prefix(160))
                 ]
             )
-            return (false, nil, true)
+            return (false, nil, true, false)
         }
 
         guard Self.waitForProcessExit(
@@ -13560,7 +13569,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, nil, exitedAfterTerminate)
+            return (false, nil, exitedAfterTerminate, false)
         }
 
         let stdoutText = String(
@@ -13586,7 +13595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(stderrText.prefix(160))
                 ]
             )
-            return (false, nil, true)
+            return (false, nil, true, false)
         }
         guard stdoutText != "false",
               !stdoutText.hasPrefix("false|") else {
@@ -13601,7 +13610,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "claude-code-terminal-host-proof-insert",
                 metadata: metadata
             )
-            return (false, nil, true)
+            return (false, nil, true, false)
         }
 
         let deadline = Date().addingTimeInterval(1.0)
@@ -13622,7 +13631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount)
                 ]
             )
-            return (false, nil, true)
+            return (false, nil, true, false)
         }
 
         let compactScreenText = screenText
@@ -13636,6 +13645,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || compactScreenText.contains(expectedProofInputText)
         let containsOriginal = screenText.contains(originalProofInputText)
             || compactScreenText.contains(originalProofInputText)
+        let highConfidenceNoProofContextNoop =
+            !containsProofMarker
+            && !containsCompactProofMarker
+            && !containsExpected
+            && !containsOriginal
+            && screenCopyScriptMetadata["targetSelection"] == "frontProofTitle"
+            && screenCopyScriptMetadata["frontWindowProofMatch"] == "true"
+            && screenCopyScriptMetadata["windowCount"] == "1"
+        let nativeNoopClassified =
+            (!containsExpected && containsOriginal) || highConfidenceNoProofContextNoop
         var verificationMetadata = [
             "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
             "containsCompactProofMarker": String(containsCompactProofMarker),
@@ -13645,6 +13664,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "compactScreenChars": String(compactScreenText.count),
             "expectedChars": String(expectedProofInputText.count),
             "exitStatus": String(process.terminationStatus),
+            "nativeNoopClassified": String(nativeNoopClassified),
             "originalChars": String(originalProofInputText.count),
             "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount),
             "posted": "true",
@@ -13666,6 +13686,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reason": hasProofContext
                     ? "ghostty-screen-copy-proof-context-mismatch"
                     : "ghostty-screen-copy-no-proof-context",
+                "nativeNoopClassified": String(highConfidenceNoProofContextNoop),
                 "source": source
             ]
             metadata.merge(screenCopyScriptMetadata) { current, _ in current }
@@ -13673,9 +13694,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "claude-code-terminal-host-proof-insert",
                 metadata: metadata
             )
-            return hasProofContext ? (false, false, false) : (false, nil, true)
+            return hasProofContext
+                ? (false, false, false, false)
+                : (false, nil, true, highConfidenceNoProofContextNoop)
         }
-        return (containsExpected, containsOriginal, true)
+        return (containsExpected, containsOriginal, true, nativeNoopClassified)
     }
 
     nonisolated private static func ghosttyScreenCopyScriptMetadata(_ stdoutText: String) -> [String: String] {

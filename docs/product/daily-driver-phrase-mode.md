@@ -714,6 +714,18 @@ the handled-false Tab result at line `832491`. This keeps the next red bar
 honest: rerun until the probe reaches insertion, then either graduate it with
 verified no-submit proof or remove it.
 
+The newest Ghostty proof pass keeps the unsupported status but removes another
+slow ambiguous failure. `20260528T132403Z-ghostty` reached prompt-row suggestion
+diagnostics line `927766`, consumed Tab at line `928636`, and recorded a
+title-selected native screen copy with `frontWindowProofMatch=true`,
+`targetSelection=frontProofTitle`, `windowCount=1`, and
+`nativeNoopClassified=true` at lines `928677`-`928678`. The prompt stayed
+unchanged through the in-process native input baseline at lines
+`928692`-`928694`, so the app failed closed at lines `928695`-`928697` with
+`reason=ghostty-initial-insertion-noop-cluster` instead of spending the full
+45s exploratory budget. Ghostty still needs a different insertion architecture
+or verifier before it can count as supported.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |

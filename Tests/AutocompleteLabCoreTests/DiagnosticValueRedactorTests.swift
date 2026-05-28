@@ -162,6 +162,12 @@ struct DiagnosticValueRedactorTests {
                 value: "1"
             ) == "1"
         )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "nativeNoopClassified",
+                value: "true"
+            ) == "true"
+        )
     }
 
     @Test("Diagnostics metadata redacts local paths and directories by value")

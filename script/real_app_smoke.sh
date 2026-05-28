@@ -1784,6 +1784,52 @@ wait_for_claude_code_terminal_log_flush_suggestion_line_optional() {
   return 1
 }
 
+find_recent_claude_code_terminal_stale_proof_blocker_optional() {
+  local preferred_start_line="$1"
+  local current_line recent_window_lines recent_start_line matched
+  MATCHED_LOG_LINE=0
+  MATCHED_LOG_REASON=""
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -f "$LOG_PATH" ]] || return 1
+
+  recent_window_lines="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_STALE_BLOCKER_SCAN_LINES:-700}"
+  [[ "$recent_window_lines" =~ ^[0-9]+$ ]] || recent_window_lines=700
+  current_line="$(line_count "$LOG_PATH")"
+  recent_start_line=$((current_line > recent_window_lines ? current_line - recent_window_lines : 0))
+  if [[ "$preferred_start_line" =~ ^[0-9]+$ && "$preferred_start_line" -gt 0 ]]; then
+    recent_start_line=$((recent_start_line < preferred_start_line ? recent_start_line : preferred_start_line))
+  fi
+
+  matched="$(sed -n "$((recent_start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk \
+    -v start="$recent_start_line" '
+      /suggestion-blocked/ && /app=com.anthropic.claude-code/ {
+        reason = ""
+        if (index($0, "reason=claude-code-terminal-host-missingProofMarker")) {
+          reason = "missingProofMarker"
+        } else if (index($0, "reason=claude-code-terminal-host-shellCommandDetected")) {
+          reason = "shellCommandDetected"
+        }
+        if (reason != "") {
+          candidate_line = NR + start
+          candidate_reason = reason
+        }
+      }
+
+      END {
+        if (candidate_line != "") {
+          print candidate_line "|" candidate_reason
+        }
+      }
+    ' 2>/dev/null || true)"
+
+  [[ -n "$matched" ]] || return 1
+  MATCHED_LOG_LINE="${matched%%|*}"
+  MATCHED_LOG_REASON="${matched#*|}"
+  return 0
+}
+
 print_claude_code_terminal_suggestion_diagnostics_tail() {
   local start_line="$1"
   local host_name="$2"
@@ -13083,7 +13129,7 @@ run_claude_code_terminal_host_smoke() {
   require_claude_code_host_if_requested
 
   local runtime_start_line start_line trace_start_line suggestion_start_line pre_trigger_suggestion_start_line accept_start_line proof_text marker host_name
-  local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready
+  local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready stale_blocker_line stale_blocker_reason
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
   host_name="$(claude_code_host_display_name)"
@@ -13208,6 +13254,36 @@ run_claude_code_terminal_host_smoke() {
       if [[ "$suggestion_ready" != "1" &&
             "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
         echo "Claude Code $host_name proof attempt $attempt geometry nudge wait ended; allowing diagnostics flush grace from line $suggestion_start_line."
+        if wait_for_claude_code_terminal_log_flush_suggestion_line_optional \
+          "$suggestion_start_line" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_LOG_FLUSH_GRACE_SECONDS:-8}"; then
+          suggestion_ready=1
+        fi
+      fi
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+       find_recent_claude_code_terminal_stale_proof_blocker_optional "$suggestion_start_line"; then
+      stale_blocker_line="$MATCHED_LOG_LINE"
+      stale_blocker_reason="${MATCHED_LOG_REASON:-terminal-proof-gate}"
+      echo "Claude Code $host_name proof attempt $attempt was still gated by $stale_blocker_reason at diagnostics line $stale_blocker_line after typed prompt readiness; nudging the same prompt."
+      suggestion_start_line="$(line_count "$LOG_PATH")"
+      if ! type_claude_code_terminal_smoke_text " "; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while nudging after stale proof blocker" || break
+        continue
+      fi
+      if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove prompt readiness after stale proof blocker" || break
+        continue
+      fi
+      accept_start_line="$suggestion_start_line"
+      if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
+        "$suggestion_start_line" \
+        "$suggestion_wait_seconds"; then
+        suggestion_ready=1
+      fi
+      if [[ "$suggestion_ready" != "1" ]]; then
+        echo "Claude Code $host_name proof attempt $attempt stale blocker nudge wait ended; allowing diagnostics flush grace from line $suggestion_start_line."
         if wait_for_claude_code_terminal_log_flush_suggestion_line_optional \
           "$suggestion_start_line" \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_LOG_FLUSH_GRACE_SECONDS:-8}"; then

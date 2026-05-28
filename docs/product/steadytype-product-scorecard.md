@@ -564,9 +564,24 @@ and no original prompt, so the app continued past the inconclusive native copy,
 proved the prompt stayed unchanged across the rest of the app-owned ladder, and
 failed closed on the 45s budget at lines `923690`-`923693`. A follow-up after
 renaming the title-match key, `20260528T130816Z-ghostty`, reached a prompt-row
-suggestion at diagnostics line `924218` and pressed CGEvent Tab, but was stopped
-with exit `143` after no insertion diagnostics, so it is treated as
-post-accept flake evidence rather than screen-copy proof.
+suggestion at diagnostics line `924218`, handled Tab at line `925104`, recorded
+the current metadata keys at lines `925131`-`925132`, and then failed closed on
+the 45s budget at lines `925189`-`925192`.
+The latest natural detached rerun before the classified-no-op patch,
+`20260528T131620Z-ghostty`, reached prompt-row suggestion diagnostics line
+`925644`, consumed Tab at line `926571`, recorded the same title-selected
+90-character no-proof-context screen copy at lines `926612`-`926613`, and failed
+closed on the 45s budget at lines `926670`-`926673`.
+After classifying that high-confidence proof-window/no-proof-context copy as a
+native no-op, `20260528T132403Z-ghostty` reached prompt-row suggestion
+diagnostics line `927766`, consumed Tab at line `928636`, recorded
+`nativeNoopClassified=true` with `frontWindowProofMatch=true`,
+`targetSelection=frontProofTitle`, and `windowCount=1` at lines
+`928677`-`928678`, proved the prompt stayed unchanged through the in-process
+native input baseline at lines `928692`-`928694`, and failed closed earlier with
+`reason=ghostty-initial-insertion-noop-cluster` at lines `928695`-`928697`
+instead of spending the full 45s exploratory budget. Ghostty remains unsupported
+until a detached run exits `0` with verified one-word no-submit insertion.
 
 ## Scores
 
