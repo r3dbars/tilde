@@ -1080,6 +1080,24 @@ visited-node count, and role counts only. `./script/real_app_smoke_self_test.sh`
 guards the diagnostic and renderer-accessibility guidance, so Obsidian
 AX misses are actionable without leaking note text.
 
+Latest Ghostty proof-only source delta:
+`20260528T234152Z-ghostty` reached a prompt-row 5-word suggestion at diagnostics
+line `1086203`, handled the app-owned proof-only next-word accept at
+`1087077`-`1087093`, and then failed closed instead of hanging. The app now
+wraps Ghostty PID focus reassertion in a timeout-bounded `osascript` process;
+the live run records `ghostty-frontmost-pid-reassertion-timeout`, generic
+`insert ... success=false`, and deferred `stage=insert-failed` at
+`1087138`-`1087143`. This does not raise Ghostty support, but it moves the red
+bar from ambiguous timeout to verified app-owned insertion focus failure after a
+handled accept. The proof-only runner now skips pre-accept, post-Tab, and
+post-fail external comparator probes by default unless their explicit opt-ins
+are set.
+The immediate follow-up proof, `20260528T234656Z-ghostty`, did not reach that
+insertion path: it found a prompt-row suggestion, but the proof-only command was
+refused at line `1088565` because `hasVisibleSuggestion=false`. Keep Ghostty red
+until the accept-command timing race is solved and the activation-backed target
+verification path is exercised live.
+
 Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
 textedit`, `notes-title`, `chrome-textarea`, `chrome-contenteditable`, and
 `obsidian-long-note` passed on 2026-05-28, and the proof sweep added current

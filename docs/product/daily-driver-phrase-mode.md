@@ -1201,6 +1201,24 @@ The wrapper rerun `20260528T232204Z-ghostty` added one harness guardrail: when
 the proof-only driver also ran the slow pre-accept System Events comparator, the
 suggestion hid before the command arrived and SteadyType refused it. Detached
 proof-only runs now default that comparator off unless explicitly opted in.
+The latest bounded proof-only run, `20260528T234152Z-ghostty`, proves the
+accept side is no longer the blocker: the app showed a prompt-row 5-word
+suggestion at diagnostics line `1086203`, received the proof-only accept command
+with `hasVisibleSuggestion=true` at line `1087077`, logged
+`keyboard-action ... handled=true` at line `1087092`, and scheduled deferred
+insertion. The new timeout-bounded Ghostty focus reassertion then failed closed
+instead of hanging: lines `1087138`-`1087143` record the 1s focus timeout,
+`insert ... success=false`, and `stage=insert-failed`. Ghostty remains
+unsupported, but this is a cleaner red bar: app-owned Ghostty insertion cannot
+reassert/focus the disposable prompt reliably after a handled accept. The
+post-fail external comparator is now skipped by default for proof-only accept
+runs unless explicitly opted in, so future proof output should stay focused on
+the app-owned insertion failure.
+The follow-up run, `20260528T234656Z-ghostty`, found another prompt-row
+suggestion but did not reach insertion: the proof-only command arrived after the
+visible suggestion had already cleared, and the app refused it with
+`hasVisibleSuggestion=false` at diagnostics line `1088565`. That makes the next
+Ghostty red bar the proof-only accept timing race, not another insertion result.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh

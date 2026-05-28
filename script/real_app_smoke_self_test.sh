@@ -887,6 +887,13 @@ if "targetFingerprint.caretBounds" not in prompt_focus_block or "CGEvent(" not i
     raise SystemExit("Claude Code Ghostty prompt focus must click the shown caret, not a generic window point")
 if "ghostty-prompt-focus-click-missing-caret" not in prompt_focus_block:
     raise SystemExit("Claude Code Ghostty prompt focus click must fail closed when the shown caret is missing")
+prepare_target_start = app_delegate.index("private func prepareGhosttyTerminalHostProofInsertionTarget(")
+prepare_target_end = app_delegate.index("private func reassertGhosttyTerminalHostProofFrontmostProcess(", prepare_target_start)
+prepare_target_block = app_delegate[prepare_target_start:prepare_target_end]
+if "proofPromptVerified" not in prepare_target_block or "pidReasserted || activated" not in prepare_target_block:
+    raise SystemExit("Claude Code Ghostty target preparation must allow verified prompt state to carry an activated pid-reassertion timeout")
+if "activatedVerifiedPrompt" not in prepare_target_block:
+    raise SystemExit("Claude Code Ghostty target preparation must diagnose activation-backed verified prompt trust")
 front_window_input_start = app_delegate.index("private func insertGhosttyTerminalHostProofFrontWindowInputText(")
 front_window_input_end = app_delegate.index("private func focusGhosttyTerminalHostProofPromptByClickIfAvailable(", front_window_input_start)
 front_window_input_block = app_delegate[front_window_input_start:front_window_input_end]
@@ -4095,15 +4102,18 @@ if ! awk '
   /run_claude_code_ghostty_post_fail_external_insertion_probe\(\)/ { in_helper = 1 }
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_PROBE/ { saw_gate = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER/ { saw_proof_only_driver = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_FAIL_PROBE/ { saw_proof_only_opt_in = 1 }
+  in_helper && /post-fail external insertion probe skipped for proof-only accept driver/ { saw_proof_only_skip = 1 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_PROBE/ { saw_system_events_gate = 1 }
   in_helper && /type_claude_code_terminal_ghostty_native_text/ { saw_native = 1 }
   in_helper && /click_claude_code_ghostty_post_fail_prompt_caret "\$start_line"/ { saw_prompt_click = 1 }
   in_helper && /type_claude_code_terminal_raw_smoke_text/ { saw_system_events = 1 }
   in_helper && /try_claude_code_terminal_prompt_ready_quiet/ { saw_verify = 1 }
   in_helper && /without Enter/ { saw_no_enter_message = 1 }
-  END { exit (saw_gate && saw_system_events_gate && saw_native && saw_prompt_click && saw_system_events && saw_verify && saw_no_enter_message) ? 0 : 1 }
+  END { exit (saw_gate && saw_proof_only_driver && saw_proof_only_opt_in && saw_proof_only_skip && saw_system_events_gate && saw_native && saw_prompt_click && saw_system_events && saw_verify && saw_no_enter_message) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty post-fail comparator to be opt-in, compare native text, refocus the prompt row, compare System Events, verify the prompt, and avoid Enter" >&2
+  echo "real app smoke self-test expected Ghostty post-fail comparator to be opt-in, skip proof-only driver races by default, compare native text, refocus the prompt row, compare System Events, verify the prompt, and avoid Enter" >&2
   exit 1
 fi
 if ! awk '
