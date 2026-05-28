@@ -10317,7 +10317,7 @@ try_wait_for_claude_code_terminal_prompt() {
   fi
   prompt_marker_args=()
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
-    prompt_marker_args=(--allow-missing-marker-for-empty-text)
+    prompt_marker_args=(--allow-missing-marker-for-empty-text --reject-shell-command-text)
   fi
 
   case "$CLAUDE_CODE_HOST_VARIANT" in
@@ -10449,15 +10449,23 @@ type_claude_code_terminal_ghostty_paste_then_key_text() {
     prefix_text=""
     final_character="$text"
   fi
-  drain_seconds="$(claude_code_ghostty_event_drain_seconds)"
+  drain_seconds="$(claude_code_ghostty_typing_drain_seconds)"
 
   if [[ -n "$prefix_text" ]]; then
     type_claude_code_terminal_ghostty_native_text "$prefix_text"
     sleep "$drain_seconds"
   fi
 
-  settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
   CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_FINAL_TRIGGER_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty proof typing final trigger with native terminal input."
+    if type_claude_code_terminal_ghostty_native_final_character "$final_character"; then
+      return
+    fi
+    echo "Claude Code Ghostty proof native final trigger failed; falling back to CGEvent typing."
+  fi
+
+  settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
   type_text_cgevent "$final_character"
 }
 
@@ -10485,12 +10493,45 @@ end run
 APPLESCRIPT
 }
 
+type_claude_code_terminal_ghostty_native_final_character() {
+  local text="$1"
+
+  [[ -n "$text" ]] || return 0
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_FINAL_TRIGGER_TIMEOUT_SECONDS:-3}" \
+    "Claude Code Ghostty native final trigger" \
+    - "$text" <<'APPLESCRIPT' >/dev/null
+on run argv
+set triggerText to item 1 of argv
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  input text triggerText to targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
+}
+
 claude_code_ghostty_event_drain_seconds() {
   local drain_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EVENT_DRAIN_SECONDS:-8}"
   if [[ "$drain_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
     printf '%s\n' "$drain_seconds"
   else
     printf '%s\n' "8"
+  fi
+}
+
+claude_code_ghostty_typing_drain_seconds() {
+  local drain_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TYPING_DRAIN_SECONDS:-0.8}"
+  if [[ "$drain_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$drain_seconds"
+  else
+    printf '%s\n' "0.8"
   fi
 }
 
@@ -12819,6 +12860,21 @@ run_codex_full_accept() {
     ./script/manual_smoke_session.sh codex-full-accept --check --visual
 }
 
+retry_claude_code_terminal_proof_context() {
+  local host_name="$1"
+  local marker="$2"
+  local attempt="$3"
+  local max_attempts="$4"
+  local reason="$5"
+
+  if ((max_attempts > 0 && attempt >= max_attempts)); then
+    echo "Claude Code $host_name proof attempt $attempt $reason; no disposable attempts remain."
+    return 1
+  fi
+  echo "Claude Code $host_name proof attempt $attempt $reason; launching a fresh disposable context."
+  open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+}
+
 run_claude_code_terminal_host_smoke() {
   if [[ "$MANUAL_GATE" != "1" ]]; then
     echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
@@ -12873,8 +12929,7 @@ run_claude_code_terminal_host_smoke() {
     wait_for_frontmost_claude_code_terminal_proof_process
     echo "Claude Code $host_name proof attempt $attempt clearing disposable prompt line."
     if ! clear_claude_code_terminal_prompt_line; then
-      echo "Claude Code $host_name proof attempt $attempt lost focus while clearing; launching a fresh disposable context."
-      open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+      retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while clearing" || break
       continue
     fi
     echo "Claude Code $host_name proof attempt $attempt prompt line cleared."
@@ -12888,8 +12943,7 @@ run_claude_code_terminal_host_smoke() {
     pre_trigger_suggestion_start_line="$suggestion_start_line"
     echo "Claude Code $host_name proof attempt $attempt typing proof text."
     if ! type_claude_code_terminal_smoke_text "$proof_text"; then
-      echo "Claude Code $host_name proof attempt $attempt lost focus while typing; launching a fresh disposable context."
-      open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+      retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while typing" || break
       continue
     fi
     if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
@@ -12899,8 +12953,7 @@ run_claude_code_terminal_host_smoke() {
       suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"
     fi
     if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
-      echo "Claude Code $host_name proof attempt $attempt could not prove typed prompt readiness; launching a fresh disposable context."
-      open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+      retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove typed prompt readiness" || break
       continue
     fi
     accept_start_line="$suggestion_start_line"
@@ -12941,13 +12994,11 @@ run_claude_code_terminal_host_smoke() {
       echo "Claude Code $host_name proof attempt $attempt had its pending suggestion invalidated by screen geometry; nudging the same prompt."
       suggestion_start_line="$(line_count "$LOG_PATH")"
       if ! type_claude_code_terminal_smoke_text " "; then
-        echo "Claude Code $host_name proof attempt $attempt lost focus while nudging after geometry invalidation; launching a fresh disposable context."
-        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while nudging after geometry invalidation" || break
         continue
       fi
       if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
-        echo "Claude Code $host_name proof attempt $attempt could not prove prompt readiness after geometry invalidation; launching a fresh disposable context."
-        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove prompt readiness after geometry invalidation" || break
         continue
       fi
       accept_start_line="$suggestion_start_line"
@@ -12970,22 +13021,19 @@ run_claude_code_terminal_host_smoke() {
       suggestion_line="$MATCHED_LOG_LINE"
       echo "Claude Code $host_name proof attempt $attempt found prompt-row suggestion at diagnostics line $suggestion_line."
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
-        echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion before Tab; launching a fresh disposable context."
-        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion before Tab" || break
         continue
       fi
       suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
       settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
-        echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion during Tab refocus; launching a fresh disposable context."
-        open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab refocus" || break
         continue
       fi
       suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
         if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
-          echo "Claude Code $host_name proof attempt $attempt lost its visible suggestion during Tab injection; launching a fresh disposable context."
-          open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+          retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab injection" || break
           continue
         fi
       else
@@ -12999,8 +13047,7 @@ run_claude_code_terminal_host_smoke() {
       break
     fi
     print_claude_code_terminal_suggestion_diagnostics_tail "$suggestion_start_line" "$host_name" "$attempt"
-    echo "Claude Code $host_name proof attempt $attempt produced no visible suggestion; launching a fresh disposable context."
-    open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+    retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "produced no visible suggestion" || break
   done < <(claude_code_terminal_smoke_input_texts)
 
   if [[ "$found_suggestion" != "1" ]]; then
