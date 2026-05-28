@@ -10,14 +10,16 @@ inputs only. Do not raise a score unless the evidence in the row changes.
 Stale proof can explain progress, but it cannot make a row green.
 
 Current strict manual smoke is partly refreshed after the latest source changes.
-`./script/manual_smoke_status.sh --strict`: failed with 9 target app pass(es)
-stale or pending on 2026-05-28 after Notes title refreshed on `2691cba6ea04`.
-Notes title is current with diagnostics lines `933752`-`933823`, trace lines
-`30935`-`30953`, 2 accepted insertions, and strict visual trace evidence.
-TextEdit, Notes body/checklist, Obsidian default/theme/panes/long note, Chrome
-textarea, and Chrome contenteditable still need current-source proof. The latest
-Notes title pass proved that the instant predictive phrase remains accept-ready
-when the slower model refinement suppresses its own result as low confidence.
+`./script/manual_smoke_status.sh --strict`: failed with 8 target app pass(es)
+stale or pending on 2026-05-28 after Notes title and Obsidian long note
+refreshed on the current build. Notes title is current with diagnostics lines
+`934005`-`934077` and trace lines `30980`-`30998`; Obsidian long note is
+current with diagnostics lines `933827`-`933959` and trace lines `30954`-`30973`.
+Both rows have 2 accepted insertions and strict visual trace evidence. TextEdit,
+Notes body/checklist, Obsidian default/theme/panes, Chrome textarea, and Chrome
+contenteditable still need current-source proof. The latest long-note pass
+proved that the instant predictive phrase remains accept-ready when slower model
+refinement tries to change the first visible word.
 
 Current Ghostty terminal-host evidence is sharper but still red. Local probes
 showed Ghostty `input text` can return success without mutating a fresh shell,
