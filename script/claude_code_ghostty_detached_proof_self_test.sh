@@ -31,15 +31,15 @@ require_contains "$TMP_DIR/help.txt" "start|status|wait|tail|stop"
 require_contains "$TMP_DIR/help.txt" "outside the Codex"
 require_contains "$TMP_DIR/help.txt" "custom proof text"
 require_contains "$TMP_DIR/help.txt" "LaunchAgent"
-require_contains "$TMP_DIR/help.txt" "Terminal.app runner"
+require_contains "$TMP_DIR/help.txt" "terminal or launchd"
+require_contains "$TMP_DIR/help.txt" "background nohup runner by default"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/dry-run.txt"
 require_contains "$TMP_DIR/dry-run.txt" "Dry run only; detached Ghostty proof would run:"
-require_contains "$TMP_DIR/dry-run.txt" "Launcher: terminal"
-require_contains "$TMP_DIR/dry-run.txt" "open -g -na Terminal"
-require_contains "$TMP_DIR/dry-run.txt" "run-detached-proof.command"
-require_contains "$TMP_DIR/dry-run.txt" "run-detached-proof-worker.sh"
+require_contains "$TMP_DIR/dry-run.txt" "Launcher: nohup"
+require_contains "$TMP_DIR/dry-run.txt" "Command: nohup /bin/bash"
+require_contains "$TMP_DIR/dry-run.txt" "run-detached-proof.sh"
 require_contains "$TMP_DIR/dry-run.txt" "script/real_app_smoke.sh claude-code-ghostty --manual-gate"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.12"
@@ -59,6 +59,14 @@ require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DE
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE=1"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=2"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "script/real_app_smoke.sh claude-code-ghostty --manual-gate"
+
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=terminal \
+  script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/terminal-dry-run.txt"
+require_contains "$TMP_DIR/terminal-dry-run.txt" "Launcher: terminal"
+require_contains "$TMP_DIR/terminal-dry-run.txt" "open -g -na Terminal"
+require_contains "$TMP_DIR/terminal-dry-run.txt" "run-detached-proof.command"
+require_contains "$TMP_DIR/terminal-dry-run.txt" "run-detached-proof-worker.sh"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=launchd \
@@ -151,15 +159,17 @@ SCRIPT_TEXT="$TMP_DIR/script.txt"
 cp script/claude_code_ghostty_detached_proof.sh "$SCRIPT_TEXT"
 require_contains "$SCRIPT_TEXT" "open -g -na Terminal"
 require_contains "$SCRIPT_TEXT" "create_terminal_launcher_script"
-require_contains "$SCRIPT_TEXT" 'nohup "$WORKER_SCRIPT"'
+require_contains "$SCRIPT_TEXT" 'nohup /bin/bash "$WORKER_SCRIPT"'
 require_contains "$SCRIPT_TEXT" "launchctl bootstrap"
 require_contains "$SCRIPT_TEXT" "<key>EnvironmentVariables</key>"
 require_contains "$SCRIPT_TEXT" "cleanup_launchd_job_if_terminal"
 require_contains "$SCRIPT_TEXT" "run-detached-proof.command"
 require_contains "$SCRIPT_TEXT" "run-detached-proof-worker.sh"
 require_contains "$SCRIPT_TEXT" "trap '' HUP"
+require_contains "$SCRIPT_TEXT" "trap handle_exit EXIT"
 require_contains "$SCRIPT_TEXT" "handle_signal TERM 143"
 require_contains "$SCRIPT_TEXT" "handle_signal INT 130"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty proof exited before explicit final status"
 require_contains "$SCRIPT_TEXT" "stop_run()"
 require_contains "$SCRIPT_TEXT" "process_group_for_pid"
 require_contains "$SCRIPT_TEXT" 'kill -TERM "-$pgid"'
@@ -174,12 +184,14 @@ require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_
 require_contains "$SCRIPT_TEXT" "write_passthrough_env_exports"
 require_contains "$SCRIPT_TEXT" "repair_dead_runner_status_if_needed"
 require_contains "$SCRIPT_TEXT" "Detached proof runner exited before writing a final status."
+require_contains "$SCRIPT_TEXT" "terminate_orphaned_detached_smoke_processes"
+require_contains "$SCRIPT_TEXT" "Stopped orphaned detached Ghostty smoke process"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS"
 require_contains "$SCRIPT_TEXT" "status_file_age_seconds"
 require_contains "$SCRIPT_TEXT" "Detached proof runner did not start before startup grace expired."
 require_contains "$SCRIPT_TEXT" 'printf '\''export %s=%q\n'\'' "$key" "$value"'
 require_contains "$SCRIPT_TEXT" 'printf '\''command=%s\n'\'' "$SMOKE_COMMAND_SUMMARY"'
-require_contains "$SCRIPT_TEXT" 'nohup "$runner_script"'
+require_contains "$SCRIPT_TEXT" 'nohup /bin/bash "$runner_script"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-1}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE="${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:-1}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS:-4}"'

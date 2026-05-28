@@ -14,7 +14,7 @@ TAIL_LINES=80
 WAIT_POLL_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_POLL_SECONDS:-2}"
 WAIT_TIMEOUT_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_TIMEOUT_SECONDS:-900}"
 STARTUP_GRACE_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS:-45}"
-LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-terminal}"
+LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-nohup}"
 GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_ATTEMPTS
@@ -40,9 +40,9 @@ Usage: script/claude_code_ghostty_detached_proof.sh <start|status|wait|tail|stop
 
 Runs the Claude Code Ghostty one-word no-submit proof outside the Codex
 foreground shell. This is for the current focus-steal gap: the proof launches a
-normal Terminal.app runner by default, writes one log/status directory under
-dist/, and returns right away so the disposable Ghostty window can keep focus
-during Tab accept.
+background nohup runner by default, writes one log/status directory under dist/,
+and returns right away so the disposable Ghostty window can keep focus during
+Tab accept.
 
 Modes:
   start   Launch a detached Ghostty proof run.
@@ -57,7 +57,7 @@ Options:
   --dry-run        Show what start would launch without starting a process.
   --force          Allow start while the latest detached run is still active.
 
-Set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=launchd or nohup to use the
+Set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=terminal or launchd to use the
 older launch modes. The wrapper uses the same disposable defaults as
 script/real_app_smoke.sh. It does not persist custom proof text into the
 generated runner, LaunchAgent plist, or status file.
@@ -214,6 +214,25 @@ process_group_for_pid() {
   ps -p "$pid" -o pgid= 2>/dev/null | tr -d '[:space:]'
 }
 
+terminate_orphaned_detached_smoke_processes() {
+  local run_dir="$1"
+  local log_file current_pgid pid pgid args
+  log_file="$(log_file_for_run "$run_dir")"
+  current_pgid="$(process_group_for_pid "$$" || true)"
+  while IFS= read -r pid; do
+    [[ -z "$pid" || "$pid" == "$$" ]] && continue
+    args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+    [[ "$args" == *"script/real_app_smoke.sh claude-code-ghostty --manual-gate"* ]] || continue
+    pgid="$(process_group_for_pid "$pid" || true)"
+    if [[ -n "$pgid" && "$pgid" != "$current_pgid" ]]; then
+      kill -TERM "-$pgid" >/dev/null 2>&1 || true
+    else
+      kill -TERM "$pid" >/dev/null 2>&1 || true
+    fi
+    printf 'Stopped orphaned detached Ghostty smoke process pid=%s after runner exit.\n' "$pid" >>"$log_file"
+  done < <(pgrep -f "script/real_app_smoke.sh claude-code-ghostty --manual-gate" 2>/dev/null || true)
+}
+
 file_mtime_seconds() {
   local path="$1"
   stat -f %m "$path" 2>/dev/null || stat -c %Y "$path" 2>/dev/null
@@ -307,6 +326,7 @@ create_runner_script() {
     printf 'SMOKE_COMMAND_SUMMARY=%q\n' "$smoke_command_summary"
     cat <<'EOF'
 STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+FINAL_STATUS_WRITTEN=0
 
 write_status() {
   local state="$1"
@@ -335,16 +355,30 @@ write_status() {
   } >"$STATUS_FILE"
 }
 
+handle_exit() {
+  local exit_status="$?"
+  local finished_at
+  if [[ "${FINAL_STATUS_WRITTEN:-0}" == "1" ]]; then
+    return "$exit_status"
+  fi
+  finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  write_status failed "$exit_status" "$finished_at"
+  printf '\nDetached Ghostty proof exited before explicit final status at %s with exit status %s\n' "$finished_at" "$exit_status" >>"$LOG_FILE"
+  return "$exit_status"
+}
+
 handle_signal() {
   local signal_name="$1"
   local exit_status="$2"
   local finished_at
   finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   write_status failed "$exit_status" "$finished_at"
+  FINAL_STATUS_WRITTEN=1
   printf '\nDetached Ghostty proof interrupted by %s at %s\n' "$signal_name" "$finished_at" >>"$LOG_FILE"
   exit "$exit_status"
 }
 
+trap handle_exit EXIT
 trap 'handle_signal TERM 143' TERM
 trap 'handle_signal INT 130' INT
 
@@ -378,6 +412,7 @@ if ((status == 0)); then
 else
   write_status failed "$status" "$finished_at"
 fi
+FINAL_STATUS_WRITTEN=1
 printf '\nDetached Ghostty proof finished at %s with exit status %s\n' "$finished_at" "$status" >>"$LOG_FILE"
 exit "$status"
 EOF
@@ -403,7 +438,7 @@ create_terminal_launcher_script() {
   printf 'Terminal starter launched detached Ghostty worker at %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf 'Worker: %s\n' "$WORKER_SCRIPT"
 } >>"$LOG_FILE"
-nohup "$WORKER_SCRIPT" >>"$LOG_FILE" 2>&1 &
+nohup /bin/bash "$WORKER_SCRIPT" >>"$LOG_FILE" 2>&1 &
 worker_pid=$!
 printf 'Terminal starter detached worker pid %s\n' "$worker_pid" >>"$LOG_FILE"
 exit 0
@@ -524,6 +559,7 @@ repair_dead_runner_status_if_needed() {
   if [[ "$state" == "starting" || "$state" == "running" ]] &&
      [[ -n "$pid" ]] &&
      ! process_is_alive "$pid"; then
+    terminate_orphaned_detached_smoke_processes "$run_dir"
     write_parent_final_status "$run_dir" failed 1 "Detached proof runner exited before writing a final status."
   fi
 }
@@ -569,7 +605,7 @@ start_run() {
       echo "Command: open -g -na Terminal $runner_script"
       echo "Worker: $worker_script"
     else
-      echo "Command: nohup $runner_script"
+      echo "Command: nohup /bin/bash $runner_script"
     fi
     echo "Child smoke: $smoke_command_summary"
     return 0
@@ -634,7 +670,7 @@ start_run() {
     fi
     pid=""
   else
-    nohup "$runner_script" >>"$log_file" 2>&1 &
+    nohup /bin/bash "$runner_script" >>"$log_file" 2>&1 &
     pid=$!
   fi
 
@@ -701,6 +737,7 @@ wait_for_run() {
         ;;
       starting|running)
         if [[ -n "$pid" ]] && ! process_is_alive "$pid"; then
+          terminate_orphaned_detached_smoke_processes "$run_dir"
           write_parent_final_status "$run_dir" failed 1 "Detached proof runner exited before writing a final status."
           print_run_status "$run_dir"
           return 1

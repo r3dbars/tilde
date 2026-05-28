@@ -283,6 +283,21 @@ launch state `windows=5 proofTitleWindows=0 frontWindowHasProofTitle=false
 focusedTerminalWorkingDirectoryPresent=false`. This proves the harness now
 requires a visible title-marked Ghostty proof window with a real terminal
 working directory before it can count a disposable proof command as launched.
+The current harness-hardening pass widened the proof-only Ghostty launch waits,
+made the detached wrapper default to the `nohup` runner instead of the flaky
+Terminal launcher, invokes generated runners through `/bin/bash`, added an EXIT
+status trap, stops orphaned `real_app_smoke` children after dead-runner repair,
+and guarded the Ghostty host bundle-id helper against broken-pipe termination.
+`bash -n script/real_app_smoke.sh
+script/real_app_smoke_self_test.sh script/claude_code_ghostty_detached_proof.sh
+script/claude_code_ghostty_detached_proof_self_test.sh`,
+`./script/real_app_smoke_self_test.sh`,
+`./script/claude_code_ghostty_detached_proof_self_test.sh`, and `git diff
+--check` passed after the hardening. The live follow-up
+`20260528T063520Z-ghostty` still failed red before insertion: the `nohup` runner
+started, wrote the proof header, then exited before explicit final status, so
+the next blocker is the wrapper/smoke handoff rather than a green Ghostty
+insertion claim.
 Ghostty remains unsupported until a detached run reaches verified one-word
 no-submit insertion and exits `0`.
 

@@ -2636,32 +2636,34 @@ claude_code_host_display_name() {
 }
 
 claude_code_host_bundle_id() {
+  local bundle_id=""
   case "$CLAUDE_CODE_HOST_VARIANT" in
     auto)
-      printf 'auto\n'
+      bundle_id="auto"
       ;;
     terminal)
-      printf 'com.apple.Terminal\n'
+      bundle_id="com.apple.Terminal"
       ;;
     iterm2)
-      printf 'com.googlecode.iterm2\n'
+      bundle_id="com.googlecode.iterm2"
       ;;
     warp)
-      printf 'dev.warp.Warp\n'
+      bundle_id="dev.warp.Warp"
       ;;
     ghostty)
-      printf 'com.mitchellh.ghostty\n'
+      bundle_id="com.mitchellh.ghostty"
       ;;
     kitty)
-      printf 'net.kovidgoyal.kitty\n'
+      bundle_id="net.kovidgoyal.kitty"
       ;;
     alacritty)
-      printf 'org.alacritty\n'
+      bundle_id="org.alacritty"
       ;;
     wezterm)
-      printf 'com.github.wez.wezterm\n'
+      bundle_id="com.github.wez.wezterm"
       ;;
   esac
+  printf '%s\n' "$bundle_id" || true
 }
 
 claude_code_host_proof_label() {
@@ -9081,7 +9083,7 @@ describe_claude_code_ghostty_launch_state() {
 
   launch_state="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$proof_title" \
     run_osascript_with_timeout \
-      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_STATE_TIMEOUT_SECONDS:-2}" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_STATE_TIMEOUT_SECONDS:-4}" \
       "Claude Code Ghostty proof launch state" <<'APPLESCRIPT' 2>/dev/null || true
 set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
 set windowCount to 0
@@ -9328,9 +9330,9 @@ open_claude_code_terminal_proof() {
         ghostty_launch_action="$(ghostty_text_action "$ghostty_launch_command")"
       fi
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
-      ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.2}"
+      ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
       if ! run_osascript_with_timeout \
-          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-4}" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
           "Claude Code Ghostty proof launch" \
           - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" <<'APPLESCRIPT' >/dev/null; then
 on run argv
@@ -9349,11 +9351,11 @@ tell application id "com.mitchellh.ghostty"
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
-      set terminalDirectory to working directory of targetTerminal as text
-      if terminalDirectory is not "" then
-        set terminalReady to true
-        exit repeat
-      end if
+      set terminalReady to true
+      try
+        set terminalDirectory to working directory of targetTerminal as text
+      end try
+      exit repeat
     end try
     delay 0.1
   end repeat
@@ -9377,9 +9379,9 @@ APPLESCRIPT
         return 1
       fi
       if ! wait_for_claude_code_terminal_pidfile_process_optional \
-        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_PID_SECONDS:-3}"; then
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_PID_SECONDS:-8}"; then
         if ! run_osascript_with_timeout \
-            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-4}" \
+            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-10}" \
             "Claude Code Ghostty proof launch retry" \
             - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" <<'APPLESCRIPT' >/dev/null; then
 on run argv
@@ -9408,11 +9410,11 @@ tell application id "com.mitchellh.ghostty"
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
-      set terminalDirectory to working directory of targetTerminal as text
-      if terminalDirectory is not "" then
-        set terminalReady to true
-        exit repeat
-      end if
+      set terminalReady to true
+      try
+        set terminalDirectory to working directory of targetTerminal as text
+      end try
+      exit repeat
     end try
     delay 0.1
   end repeat
@@ -9439,7 +9441,7 @@ APPLESCRIPT
           return 1
         fi
         if ! wait_for_claude_code_terminal_pidfile_process_optional \
-          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_PID_SECONDS:-6}"; then
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_PID_SECONDS:-10}"; then
           describe_claude_code_terminal_proof_process_state \
             "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" \
             "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
@@ -9572,7 +9574,7 @@ close_claude_code_ghostty_proof_window_by_title() {
     AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$(claude_code_proof_marker)" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER="$(claude_code_compact_proof_marker)" \
     run_osascript_with_timeout \
-      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CLOSE_TIMEOUT_SECONDS:-2}" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CLOSE_TIMEOUT_SECONDS:-4}" \
       "Claude Code Ghostty proof window close" <<'APPLESCRIPT' >/dev/null || true
 set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
 set proofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
@@ -9602,7 +9604,7 @@ cleanup_stale_claude_code_ghostty_proofs() {
   closed_count="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="$cleanup_legacy_tmp_windows" \
     run_osascript_with_timeout \
-      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_CLEANUP_TIMEOUT_SECONDS:-2}" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_CLEANUP_TIMEOUT_SECONDS:-4}" \
       "Claude Code Ghostty stale proof window cleanup" <<'APPLESCRIPT' || true
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
