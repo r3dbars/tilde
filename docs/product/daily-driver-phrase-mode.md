@@ -1164,6 +1164,16 @@ text length. A later rerun showed a stale nohup `start --force` can interrupt a
 launchd proof, so cross-launcher force-starts now refuse by default unless the
 operator explicitly opts in; plain stop also refuses during the early evidence
 window unless the operator passes `stop --run-dir ... --force-stop`.
+The clean launchd rerun after that guard, `20260528T225106Z-ghostty`, got to the
+next honest red bar. It survived past the old external-stop point, accepted
+screen-copy and exact typed-prompt readiness, restored a native Ghostty prompt
+mutation, and found a prompt-row suggestion at diagnostics line `1068495`.
+Then every default-safe key-capture probe missed SteadyType's event tap:
+session/HID/combined CGEvent Shift, PID-targeted Shift for Ghostty pid `56810`,
+and private-source session/HID Shift. System Events Shift stayed opt-in because
+it can trigger the macOS permission UI. Ghostty is still unsupported, but the
+next blocker is now clear: find a key source or accept driver the event tap can
+actually observe in Ghostty.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
