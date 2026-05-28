@@ -587,6 +587,16 @@ CGEvent Tab, HID CGEvent Tab, and System Events Tab all produced no
 more launch/readiness work and focus on a Ghostty-specific accept path that the
 SteadyType event tap can observe.
 
+The next bounded launchd proof, `20260528T203530Z-ghostty`, added a
+non-mutating key-capture sentinel before Tab. The run reached the same
+prompt-row state, found the current suggestion at diagnostics line `1029172`,
+and SteadyType had started key capture at diagnostics line `1029158`. The
+session CGEvent Shift probe and the HID CGEvent Shift retry both produced no
+`keyboard-event-tap-latency key=other` diagnostic, so the harness failed before
+pressing Tab with `key capture probe did not reach event tap`. That moves the
+next red bar below Tab itself: the detached Ghostty runner needs a key source
+that can reach SteadyType's event tap at all before Tab delivery can be judged.
+
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
 and fallback Tab, the app-side Ghostty insertion ladder searches the title-marked
