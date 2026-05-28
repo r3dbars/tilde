@@ -3274,6 +3274,32 @@ if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/nu
   echo "real app smoke self-test expected Claude Code Terminal proof cleanup/readiness to track the disposable Claude process" >&2
   exit 1
 fi
+if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'mkdir -p "$base_dir"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal proof artifacts to support a durable caller-owned directory" >&2
+  exit 1
+fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("make_claude_code_terminal_proof_dir()")
+end = source.index("\nclaude_code_terminal_proof_title_for_dir()", start)
+block = source[start:end]
+artifact_start = block.index('base_dir="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR:-}"')
+artifact_end = block.index('base_dir="${TMPDIR:-/tmp}"')
+artifact_block = block[artifact_start:artifact_end]
+if "SMOKE_TMP_DIRS" in artifact_block:
+    raise SystemExit("durable Claude Code terminal proof artifact dirs must not be removed by smoke temp cleanup")
+for expected in (
+    'mkdir -p "$base_dir"',
+    'tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"',
+    "return 0",
+):
+    if expected not in artifact_block:
+        raise SystemExit(f"missing durable proof artifact behavior: {expected}")
+PY
 if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_text_action()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE' script/real_app_smoke.sh >/dev/null ||
