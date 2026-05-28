@@ -471,7 +471,10 @@ fresh disposable context, typed the marked proof prompt, found a prompt-row
 suggestion at diagnostics line `903324`, handled Tab, and then failed closed at
 the expected `ghostty-initial-insertion-noop-cluster` after `ghosttySendKey`,
 bulk System Events, and pasteboard all left the prompt unchanged. The current red
-bar is verified Ghostty one-word insertion, not prompt readiness.
+bar is verified Ghostty one-word insertion, not prompt readiness. A current-tree
+follow-up, `20260528T114501Z-ghostty`, was terminated by `SIGTERM` during the
+script-owned retry launch before prompt readiness, so it is not counted as
+insertion evidence.
 
 ## Scores
 
