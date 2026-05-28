@@ -2888,6 +2888,15 @@ if ! grep -F 'set proofWindow to new window' script/real_app_smoke.sh >/dev/null
    ! grep -F 'ghostty_text_action "$ghostty_launch_command"$'\''\r'\''' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_launch_stage_file="$proof_dir/ghostty-launch.log"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'ghostty_preflight_status=$?' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open_status=$?' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge preflight failed.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_APPLESCRIPT_PREFLIGHT_TIMEOUT_SECONDS:-2' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "preflight-tell-entered")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'preflight-finished' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "script-wrote-pidfile" script/real_app_smoke.sh >/dev/null ||
@@ -2930,6 +2939,12 @@ if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/rea
    ! grep -F 'Claude Code Terminal proof $label exit state' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty-launch.log' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'describe_claude_code_ghostty_launch_stages' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'check_claude_code_ghostty_applescript_health' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty AppleScript bridge did not answer preflight before disposable launch.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty AppleScript bridge preflight exited before recording completion.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'claude_code_ghostty_launch_stalled_before_stage()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'grep -Fx "$required_stage" "$stage_file"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "describe_claude_code_ghostty_launch_state" script/real_app_smoke.sh >/dev/null ||
@@ -2949,7 +2964,8 @@ if ! grep -F 'process_id_or_tree_has_name "$proof_pid" "$expected_name"' script/
   echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile wrapper or child process" >&2
   exit 1
 fi
-if ! grep -F 'if ! open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'if open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'if ((open_status != 0)); then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'try_wait_for_frontmost_claude_code_terminal_proof_process' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Terminal proof process did not become frontmost' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code $host_name proof host app did not become frontmost for fresh context attempt $launch_attempt.' script/real_app_smoke.sh >/dev/null ||
