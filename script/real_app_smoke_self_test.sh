@@ -3000,6 +3000,8 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CGEvent session key capture probe produced no diagnostic; retrying with HID Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with PID-targeted Shift for Ghostty pid' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key capture probes produced no diagnostic; retrying with private-source session Shift.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'private-source session key capture probe produced no diagnostic; retrying with private-source HID Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-}' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key capture probes produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with System Events Shift.' script/real_app_smoke.sh >/dev/null ||
@@ -3015,14 +3017,21 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'Claude Code terminal host is not frontmost for HID key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for combined-session key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for PID-targeted key capture probe.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for private-source session key capture probe.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for private-source HID key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for System Events key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for HID CGEvent proof Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for private-source session CGEvent proof Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for private-source HID CGEvent proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for fallback proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent session Tab produced no key=tab diagnostic; retrying with CGEvent HID Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEvent HID Tab produced no key=tab diagnostic; retrying with private-source session CGEvent Tab.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'private-source session CGEvent Tab produced no key=tab diagnostic; retrying with private-source HID CGEvent Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent Tab attempts produced no key=tab diagnostic; retrying with System Events Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
@@ -3034,12 +3043,16 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent combined-session key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent PID-targeted key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source session key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source HID key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="System Events key capture probe timed out"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source session Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source HID Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MAX_KEY_CAPTURE_MISSES' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_key_capture_miss_count=$((ghostty_key_capture_miss_count + 1))' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key capture probe did not reach event tap after ${ghostty_key_capture_miss_count} prompt-row suggestion(s)' script/real_app_smoke.sh >/dev/null ||
@@ -3049,10 +3062,13 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F '"hid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"warm"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"combinedSession"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"private"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '56 \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key code 56' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"key=other" \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"decision=passthrough-modifier"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'local timeout="${2:-}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_claude_code_terminal_proof_focus "session key-capture probe" "$focus_seconds"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid after CGEvent HID Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /probe_claude_code_terminal_host_key_capture "\$host_name" \|\| return 1/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
