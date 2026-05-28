@@ -734,7 +734,12 @@ grants one extra script-owned fallback attempt. The follow-up
 `20260528T133331Z-ghostty` used that default path, reached a prompt-row
 suggestion at diagnostics line `929688`, handled Tab at line `930715`, and
 failed closed at `ghostty-initial-insertion-noop-cluster` on lines
-`930759`-`930760` after the known unchanged-prompt insertion baselines.
+`930759`-`930760` after the known unchanged-prompt insertion baselines. The
+extended `20260528T134007Z-ghostty` probe then disabled fail-fast, enabled the
+native prefix/final-key probe, walked the later front-window/native/action/paste,
+System Events, hardware, and bundled-helper rungs, and still failed closed at
+lines `932456`-`932457` with `reason=ghostty-fast-verified-insertion-failed`.
+That rules out another cheap reorder of the current Ghostty transport ladder.
 
 ## Scorecard
 
