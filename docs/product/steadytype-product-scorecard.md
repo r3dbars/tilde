@@ -81,7 +81,16 @@ disposable contexts and captured the launch stages through
 and `shell-delay-finished`; the proof still failed before Tab with
 `textNodes=0`, `markerWindows=0`, and no marker, so the next blocker is prompt
 AX readiness after a shell-started Claude process, not missing launch-stage
-evidence.
+evidence. The patched follow-up `20260528T194828Z-ghostty` removed one more
+harness ambiguity: both attempts recorded `terminal-ready`,
+`terminal-working-directory-empty`, `title-marked`, and
+`configured-window-command-owned-launch` with no duplicate `launch-action-start`,
+so the configured Ghostty window owns command execution and the harness no
+longer types the launch command a second time. That run still failed before Tab
+with `textNodes=0`, `titles=0`, `markerWindows=0`, and `marker=false`, so the
+next blocker is Ghostty prompt AX discovery after clean configured-window
+command launch, before rerunning the post-Tab comparator or changing insertion
+again.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced

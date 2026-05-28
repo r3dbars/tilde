@@ -3383,6 +3383,9 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "launch-action-enter-sent")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set commandAlreadyLaunched to false' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'set commandAlreadyLaunched to true' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "configured-window-command-owned-launch")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "retry-launch-action-enter-sent")' script/real_app_smoke.sh >/dev/null ||
@@ -3396,6 +3399,25 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
   echo "real app smoke self-test expected Ghostty proof launch to create a script-owned disposable shell window and use native text-action launch by default without killing the user's Ghostty process" >&2
   exit 1
 fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index('set commandAlreadyLaunched to false')
+end = source.index('my recordStage(launchStageFile, "launch-finished")', start)
+block = source[start:end]
+for expected in (
+    'set proofConfig to new surface configuration from {initial working directory:rootDirectory, command:launchScriptPath, wait after command:true}',
+    'set commandAlreadyLaunched to true',
+    'if commandAlreadyLaunched is true then',
+    'my recordStage(launchStageFile, "configured-window-command-owned-launch")',
+    'else if launchAction is not "" then',
+):
+    if expected not in block:
+        raise SystemExit(f"missing configured-window launch guard: {expected}")
+if block.index('my recordStage(launchStageFile, "configured-window-command-owned-launch")') > block.index('my recordStage(launchStageFile, "launch-action-start")'):
+    raise SystemExit("configured-window command-owned launch must bypass launch-action typing before the launch-action branch")
+PY
 if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open -na "$host_app" "$launch_script"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "ghostty_launch_command" script/real_app_smoke.sh >/dev/null; then
@@ -3420,9 +3442,14 @@ if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/rea
    ! grep -F 'if terminalDirectory is not "" then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "set terminalReady to true" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "terminal-working-directory-present")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "terminal-working-directory-empty")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "retry-terminal-working-directory-present")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "retry-terminal-working-directory-empty")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "new-window-source-terminal-working-directory-empty")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "exit repeat" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "terminalReady is false" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '! grep -Fxq "terminal-ready" "$stage_file"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '! grep -Fxq "retry-terminal-ready" "$stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'printf '\''%s\n'\'' "$bundle_id" || true' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10' script/real_app_smoke.sh >/dev/null ||
