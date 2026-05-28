@@ -661,6 +661,8 @@ if "focusGhosttyTerminalHostProofPromptByClickIfAvailable" not in fast_ghostty_b
     raise SystemExit("Claude Code Ghostty fast proof must click the proven prompt-row caret before app-owned insertion")
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep guarded System Events fallback rungs")
+if "insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try the focused System Events bulk rung before the heavier terminal-scanning script")
 if "insertGhosttyTerminalHostProofInProcessInputText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try app-owned in-process native input text before subprocess input fallbacks")
 if "insertGhosttyTerminalHostProofFrontWindowInputText" not in fast_ghostty_block:
@@ -707,6 +709,8 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghos
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before slow native text fallbacks")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
+    raise SystemExit("Claude Code Ghostty fast proof must try focused System Events before terminal-scanning System Events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before pasteboard probes")
 bulk_system_events_source = fast_ghostty_block.index("bulkKeystroke: true")
@@ -717,6 +721,8 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke
     raise SystemExit("Claude Code Ghostty fast proof must try System Events before hardware key events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
     raise SystemExit("Claude Code Ghostty fast proof must try proven System Events bulk insertion before pasteboard probes")
+if "ghosttyFocusedSystemEventsBulkKeystrokeBaseline" not in app_delegate or '"focusMode": "frontmostProcessOnly"' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty focused System Events proof must verify the unchanged baseline and diagnose the simpler frontmost-process mode")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before the bundled text helper")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper") > fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter"):
