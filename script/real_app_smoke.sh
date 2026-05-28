@@ -11533,6 +11533,7 @@ press_claude_code_terminal_host_tab() {
   local suggestion_line="${1:-0}"
   local host_name="${2:-$(claude_code_host_display_name)}"
   local probe_start_line
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"
 
   settle_claude_code_terminal_proof_focus "host Tab hot accept" || return 1
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
@@ -11551,12 +11552,15 @@ end tell
 APPLESCRIPT
   probe_start_line="$(line_count "$LOG_PATH")"
   echo "Claude Code $host_name proof pressing CGEvent Tab for hot accept."
-  press_key_code_cgevent_with_timeout \
+  if ! press_key_code_cgevent_with_timeout \
     48 \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
     "Claude Code $host_name CGEvent Tab" \
     "session" \
-    "warm"
+    "warm"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session Tab helper failed"
+    return 1
+  fi
   if wait_for_log_fields_optional \
     "$probe_start_line" \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS:-1}" \
@@ -11569,19 +11573,66 @@ APPLESCRIPT
     log_since_has_fields "$suggestion_line" \
       "suggestion-hidden" \
       "app=com.anthropic.claude-code"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after CGEvent session Tab"
+    echo "Claude Code $host_name suggestion hid after CGEvent session Tab; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if ! settle_claude_code_terminal_proof_focus "HID CGEvent Tab hot accept"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before HID CGEvent Tab"
+      echo "Claude Code terminal host is not frontmost for HID CGEvent proof Tab." >&2
+      return 1
+    fi
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name CGEvent session Tab produced no key=tab diagnostic; retrying with CGEvent HID Tab."
+    if ! press_key_code_cgevent_with_timeout \
+      48 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent HID Tab" \
+      "hid" \
+      "warm"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID Tab helper failed"
+      return 1
+    fi
+    if wait_for_log_fields_optional \
+      "$probe_start_line" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_PROBE_SECONDS:-1}" \
+      "keyboard-event-tap-latency" \
+      "key=tab"; then
+      return 0
+    fi
+
+    if [[ "$suggestion_line" != "0" ]] &&
+      log_since_has_fields "$suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after CGEvent HID Tab"
+      echo "Claude Code $host_name suggestion hid after CGEvent HID Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$suggestion_line" != "0" ]] &&
+    log_since_has_fields "$suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion before fallback Tab"
     echo "Claude Code $host_name suggestion hid before fallback Tab; refreshing the disposable prompt." >&2
     return 1
   fi
 
   if ! settle_claude_code_terminal_proof_focus "fallback Tab hot accept"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before fallback Tab"
     echo "Claude Code terminal host is not frontmost for fallback proof Tab." >&2
     return 1
   fi
 
   probe_start_line="$(line_count "$LOG_PATH")"
-  echo "Claude Code $host_name CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab."
+  echo "Claude Code $host_name CGEvent Tab attempts produced no key=tab diagnostic; retrying with System Events Tab."
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
     if ! focus_claude_code_ghostty_proof_window_by_title; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not focus title-marked proof window before fallback Tab"
       echo "Claude Code $host_name fallback could not focus the title-marked proof window." >&2
       return 1
     fi
@@ -11594,6 +11645,7 @@ tell application "System Events"
 end tell
 APPLESCRIPT
   then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="fallback System Events Tab timed out"
     echo "Claude Code $host_name fallback System Events Tab timed out; refreshing the disposable prompt." >&2
     return 1
   fi
@@ -11606,6 +11658,7 @@ APPLESCRIPT
     return 0
   fi
 
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"
   echo "Claude Code $host_name fallback System Events Tab produced no immediate key=tab diagnostic; refreshing the disposable prompt." >&2
   return 1
 }
@@ -13773,12 +13826,15 @@ run_claude_code_terminal_host_smoke() {
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "Claude Code Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Claude Code runtime readiness" 60 "$SKIP_BUILD"
+  SMOKE_PHASE="claude-code $host_name warm hot-accept helpers"
   warm_claude_code_terminal_hot_accept_helpers "$host_name"
   echo "Claude Code $host_name proof warmed CGEvent helpers."
 
+  SMOKE_PHASE="claude-code $host_name cleanup stale disposable contexts"
   echo "Claude Code $host_name proof cleaning stale disposable contexts."
   cleanup_stale_claude_code_terminal_proofs
   echo "Claude Code $host_name proof stale context cleanup finished."
+  SMOKE_PHASE="claude-code $host_name open fresh disposable context"
   echo "Claude Code $host_name proof opening fresh disposable context."
   open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
   echo "Claude Code $host_name proof fresh disposable context ready."
@@ -13798,8 +13854,10 @@ run_claude_code_terminal_host_smoke() {
     attempt=$((attempt + 1))
     validate_claude_code_terminal_smoke_input_text "$proof_text"
 
+    SMOKE_PHASE="claude-code $host_name prompt focus attempt $attempt"
     echo "Claude Code $host_name proof attempt $attempt waiting for disposable prompt focus."
     wait_for_frontmost_claude_code_terminal_proof_process
+    SMOKE_PHASE="claude-code $host_name clear prompt attempt $attempt"
     echo "Claude Code $host_name proof attempt $attempt clearing disposable prompt line."
     if ! clear_claude_code_terminal_prompt_line; then
       retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while clearing" || break
@@ -13814,6 +13872,7 @@ run_claude_code_terminal_host_smoke() {
     CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE=0
     suggestion_start_line="$(line_count "$LOG_PATH")"
     pre_trigger_suggestion_start_line="$suggestion_start_line"
+    SMOKE_PHASE="claude-code $host_name type proof text attempt $attempt"
     echo "Claude Code $host_name proof attempt $attempt typing proof text."
     if ! type_claude_code_terminal_smoke_text "$proof_text"; then
       retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while typing" || break
@@ -13825,11 +13884,13 @@ run_claude_code_terminal_host_smoke() {
           "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" != "0" ]]; then
       suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"
     fi
+    SMOKE_PHASE="claude-code $host_name prove typed prompt readiness attempt $attempt"
     if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
       retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove typed prompt readiness" || break
       continue
     fi
     if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      SMOKE_PHASE="claude-code $host_name pre-accept external mutation probe attempt $attempt"
       if ! run_claude_code_ghostty_pre_accept_external_mutation_probe "$proof_text"; then
         retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "pre-accept external mutation probe could not restore the prompt" || break
         continue
@@ -13841,6 +13902,7 @@ run_claude_code_terminal_host_smoke() {
     fi
     accept_start_line="$suggestion_start_line"
     suggestion_ready=0
+    SMOKE_PHASE="claude-code $host_name wait for suggestion attempt $attempt"
     if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
       "$suggestion_start_line" \
       "$suggestion_wait_seconds"; then
@@ -13933,6 +13995,7 @@ run_claude_code_terminal_host_smoke() {
     if [[ "$suggestion_ready" == "1" ]]; then
       suggestion_line="$MATCHED_LOG_LINE"
       echo "Claude Code $host_name proof attempt $attempt found prompt-row suggestion at diagnostics line $suggestion_line."
+      SMOKE_PHASE="claude-code $host_name prepare hot accept attempt $attempt"
       if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
         retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion before Tab" || break
         continue
@@ -13945,10 +14008,17 @@ run_claude_code_terminal_host_smoke() {
       fi
       suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+        SMOKE_PHASE="claude-code $host_name press Tab attempt $attempt"
         if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
-          retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab injection" || break
+          retry_claude_code_terminal_proof_context \
+            "$host_name" \
+            "$marker" \
+            "$attempt" \
+            "$max_attempts" \
+            "${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}" || break
           continue
         fi
+        SMOKE_PHASE="claude-code $host_name post-Tab external mutation probe attempt $attempt"
         if ! run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe "$proof_text" "$accept_start_line"; then
           retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "post-Tab/pre-insert external mutability probe could not restore the prompt" || break
           continue
@@ -13963,6 +14033,7 @@ run_claude_code_terminal_host_smoke() {
       found_suggestion=1
       break
     fi
+    SMOKE_PHASE="claude-code $host_name suggestion diagnostics attempt $attempt"
     print_claude_code_terminal_suggestion_diagnostics_tail "$suggestion_start_line" "$host_name" "$attempt"
     retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "produced no visible suggestion" || break
   done < <(claude_code_terminal_smoke_input_texts)
@@ -13975,6 +14046,7 @@ run_claude_code_terminal_host_smoke() {
     exit 1
   fi
 
+  SMOKE_PHASE="claude-code $host_name wait for insertion result"
   wait_for_claude_code_terminal_insertion_result \
     "$accept_start_line" \
     "$host_name" \
