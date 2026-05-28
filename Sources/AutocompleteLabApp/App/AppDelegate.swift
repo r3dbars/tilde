@@ -524,6 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pauseExpirationTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
+    private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
@@ -4217,6 +4218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return .handled
             }
             guard insertAcceptedText(acceptedText, action: action) else {
+                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -4271,6 +4273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
             guard insertAcceptedText(acceptedText, action: action) else {
+                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -5109,6 +5112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             guard self.insertAcceptedText(acceptedText, action: action) else {
+                self.suppressCurrentFieldAfterInsertionFailure(reason: "ghostty-deferred-insert-failed")
                 self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
                     stage: "insert-failed",
                     metadata: [
@@ -16611,6 +16615,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let currentProfile,
               currentProfile.suppressesUntilBlurAfterEscape,
               let currentFieldIdentity else {
+            return
+        }
+
+        suppressField(currentFieldIdentity, profile: currentProfile, reason: reason)
+    }
+
+    private func suppressCurrentFieldAfterInsertionFailure(reason: String) {
+        guard let currentProfile,
+              let currentFieldIdentity,
+              !suppressedFieldIdentities.contains(currentFieldIdentity),
+              insertionFailureSuppressionPolicy.shouldSuppressField(
+                  profile: currentProfile,
+                  failureReason: reason
+              ) else {
             return
         }
 

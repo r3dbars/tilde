@@ -596,6 +596,10 @@ if deferred_accept_block.index("insertAcceptedText(acceptedText, action: action)
     raise SystemExit("Ghostty deferred insertion must verify insertion before committing next-word acceptance")
 if "ghostty-deferred-insert-failed" not in deferred_accept_block:
     raise SystemExit("Ghostty deferred insertion must fail closed and hide stale suggestions on insertion failure")
+if 'suppressCurrentFieldAfterInsertionFailure(reason: "ghostty-deferred-insert-failed")' not in deferred_accept_block:
+    raise SystemExit("Ghostty deferred insertion failure must suppress the broken field")
+if app_delegate.count('suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")') < 2:
+    raise SystemExit("Captured accept-key insertion failures must suppress the broken field before resurfacing")
 insert_accepted_start = app_delegate.index("private func insertAcceptedText(")
 insert_accepted_end = app_delegate.index("private func repairObsidianFullAcceptCaretIfNeeded(", insert_accepted_start)
 insert_accepted_block = app_delegate[insert_accepted_start:insert_accepted_end]
