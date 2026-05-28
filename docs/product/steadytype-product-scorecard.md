@@ -843,8 +843,11 @@ then showed the pre-accept System Events comparator did not mutate the prompt
 before the run was stopped. That exposed a detached cleanup gap: `stop` could
 leave the proof-owned Ghostty/Claude context alive, so the wrapper now cleans
 context pids from `claude.pid` and the proof-owned Ghostty pid in `proof.log`.
-App coverage stays at `83`; the next Ghostty blocker is observable key delivery
-into SteadyType's event tap under a detached runner, not prompt AX discovery.
+The Ghostty pre-accept comparator now also wraps quiet prompt-readiness checks in
+an outer timeout guard so a no-op System Events probe cannot wedge the detached
+run while proving the prompt stayed unchanged. App coverage stays at `83`; the
+next Ghostty blocker is observable key delivery into SteadyType's event tap
+under a detached runner, not prompt AX discovery.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

@@ -618,7 +618,10 @@ was stopped. That stop exposed a cleanup bug: the wrapper killed the proof
 runner but left the proof-owned Ghostty/Claude context alive. The detached
 runner stop path now cleans proof context pids from `claude.pid` and the
 proof-owned Ghostty pid recorded in `proof.log`, so stopped or wedged proof runs
-do not contaminate the next compatibility sample.
+do not contaminate the next compatibility sample. The follow-up harness patch
+also wraps the Ghostty pre-accept comparator's quiet prompt-readiness checks in
+an outer timeout guard, so a no-op System Events probe cannot wedge the detached
+run while it is checking whether the prompt stayed unchanged.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
