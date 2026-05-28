@@ -36,6 +36,8 @@ require_contains "$PRIVACY_SCRIPT" 'BUILD_LOG=/tmp/autocomplete-current-build-pr
 require_contains "$PRIVACY_SCRIPT" 'AUTOCOMPLETE_LAB_PRIVACY_EXPORT_LOCK_DIR'
 require_contains "$PRIVACY_SCRIPT" 'current build privacy export is already active'
 require_contains "$PRIVACY_SCRIPT" 'Waiting for active proof process before current build privacy export.'
+require_contains "$PRIVACY_SCRIPT" 'AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS'
+require_contains "$PRIVACY_SCRIPT" 'allowedProofPgids'
 require_contains "$PRIVACY_SCRIPT" 'failed to build app bundle for privacy export proof'
 require_contains "$PRIVACY_SCRIPT" 'steadytype-privacy-build.XXXXXX'
 require_contains "$PRIVACY_SCRIPT" 'AUTOCOMPLETE_LAB_DIST_DIR="$(dirname "$APP_BUNDLE")"'
