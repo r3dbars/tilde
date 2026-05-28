@@ -796,14 +796,14 @@ def validate_scorecard(
                 failures.append(
                     f"{raw_area}: next proof must move past the checked local audit toward real writing dogfood"
                 )
-            if DAILY_DRIVER_DOGFOOD_GATE not in source:
+            if DAILY_DRIVER_DOGFOOD_GATE not in evidence:
                 failures.append(
-                    f"{raw_area}: scorecard must name {DAILY_DRIVER_DOGFOOD_GATE} now that dogfood "
+                    f"{raw_area}: evidence must name {DAILY_DRIVER_DOGFOOD_GATE} now that dogfood "
                     "report visibility is a daily-driver gate"
                 )
-            if DAILY_DRIVER_MATCH_FAMILY_EVIDENCE not in source:
+            if DAILY_DRIVER_MATCH_FAMILY_EVIDENCE not in evidence:
                 failures.append(
-                    f"{raw_area}: scorecard must name redacted instant phrase {DAILY_DRIVER_MATCH_FAMILY_EVIDENCE}"
+                    f"{raw_area}: evidence must name redacted instant phrase {DAILY_DRIVER_MATCH_FAMILY_EVIDENCE}"
                 )
 
     missing = [area for area in REQUIRED_AREAS if area not in seen]

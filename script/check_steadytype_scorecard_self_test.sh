@@ -74,7 +74,18 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace("match-family counts", "family counts", 1)
+lines = []
+replaced = False
+for line in source.splitlines():
+    if line.startswith("| Suggestion quality |"):
+        if "match-family counts" not in line:
+            raise SystemExit("suggestion quality row missing match-family counts")
+        line = line.replace("match-family counts", "family counts", 1)
+        replaced = True
+    lines.append(line)
+if not replaced:
+    raise SystemExit("missing suggestion quality row")
+source = "\n".join(lines) + "\n"
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
 
@@ -83,9 +94,43 @@ if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_DOGFOOD_MATC
   exit 1
 fi
 
-if ! grep -F "Suggestion quality: scorecard must name redacted instant phrase match-family counts" "$TMP_DIR/stale-dogfood-match-family.txt" >/dev/null; then
+if ! grep -F "Suggestion quality: evidence must name redacted instant phrase match-family counts" "$TMP_DIR/stale-dogfood-match-family.txt" >/dev/null; then
   echo "scorecard self-test missing dogfood match-family failure" >&2
   cat "$TMP_DIR/stale-dogfood-match-family.txt" >&2
+  exit 1
+fi
+
+STALE_DOGFOOD_GATE="$TMP_DIR/stale-dogfood-gate.md"
+python3 - "$SCORECARD" "$STALE_DOGFOOD_GATE" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+lines = []
+replaced = False
+for line in source.splitlines():
+    if line.startswith("| Suggestion quality |"):
+        line = line.replace(
+            "`./script/daily_driver_dogfood_session_self_test.sh`",
+            "`./script/daily_driver_dogfood_session.sh`",
+            1,
+        )
+        replaced = True
+    lines.append(line)
+if not replaced:
+    raise SystemExit("missing suggestion quality row")
+source = "\n".join(lines) + "\n"
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_DOGFOOD_GATE" >"$TMP_DIR/stale-dogfood-gate.txt" 2>&1; then
+  echo "scorecard self-test expected missing dogfood gate evidence to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Suggestion quality: evidence must name ./script/daily_driver_dogfood_session_self_test.sh" "$TMP_DIR/stale-dogfood-gate.txt" >/dev/null; then
+  echo "scorecard self-test missing dogfood gate failure" >&2
+  cat "$TMP_DIR/stale-dogfood-gate.txt" >&2
   exit 1
 fi
 
