@@ -9443,7 +9443,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids ghostty_configured_window_first
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids ghostty_configured_window_first ghostty_command_open_ready
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -9509,8 +9509,51 @@ open_claude_code_terminal_proof() {
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
       ghostty_configured_window_first=0
+      ghostty_command_open_ready=0
       : >"$ghostty_launch_stage_file"
-      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         ! pgrep -x ghostty >/dev/null 2>&1; then
+        echo "Claude Code Ghostty proof opening no-restore host directly with proof command."
+        printf '%s\n' "no-restore-command-open-start" >>"$ghostty_launch_stage_file"
+        open -na "$host_app" --args \
+          --window-save-state=never \
+          --quit-after-last-window-closed=true \
+          --working-directory="$ROOT_DIR" \
+          -e "$launch_script" >/dev/null 2>&1 || true
+        printf '%s\n' "no-restore-command-open-finished" >>"$ghostty_launch_stage_file"
+        sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_SETTLE_SECONDS:-1}"
+        ghostty_preflight_pids="$(terminal_pid_list | tr '\n' ' ')"
+        ghostty_preflight_pids="${ghostty_preflight_pids% }"
+        if [[ -n "$ghostty_preflight_pids" ]]; then
+          CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+          CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_preflight_pids"
+          CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1
+          echo "Claude Code Ghostty proof owns no-restore command host pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS"
+        fi
+        if wait_for_claude_code_terminal_pidfile_process_optional \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_PID_SECONDS:-12}"; then
+          printf '%s\n' "no-restore-command-open-pidfile-present" >>"$ghostty_launch_stage_file"
+          ghostty_command_open_ready=1
+        else
+          printf '%s\n' "no-restore-command-open-no-pidfile" >>"$ghostty_launch_stage_file"
+          if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+            echo "Claude Code Ghostty proof no-restore command host did not write pidfile; cleaning pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+            kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
+            sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+          fi
+          CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+          CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
+          CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+        fi
+      fi
+      if [[ "$ghostty_command_open_ready" != "1" ]] &&
+         [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         ! pgrep -x ghostty >/dev/null 2>&1; then
+        : >"$ghostty_launch_stage_file"
+      fi
+      if [[ "$ghostty_command_open_ready" != "1" ]] &&
+         [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
          ! pgrep -x ghostty >/dev/null 2>&1; then
         echo "Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight."
         if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_INITIAL_WINDOW_DISABLED:-1}" =~ ^(1|true|yes|on)$ ]]; then
@@ -9539,20 +9582,26 @@ open_claude_code_terminal_proof() {
           fi
         fi
       fi
-      if check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"; then
+      if [[ "$ghostty_command_open_ready" != "1" ]] &&
+         check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"; then
         ghostty_preflight_status=0
       else
-        ghostty_preflight_status=$?
+        if [[ "$ghostty_command_open_ready" == "1" ]]; then
+          ghostty_preflight_status=0
+        else
+          ghostty_preflight_status=$?
+        fi
       fi
       if ((ghostty_preflight_status != 0)); then
         return "$ghostty_preflight_status"
       fi
-      reset_stale_only_claude_code_ghostty_proof_host
-      if [[ "$ghostty_configured_window_first" == "1" ]]; then
-        printf '%s\n' "zero-window-reset-deferred-for-configured-window" >>"$ghostty_launch_stage_file"
-      else
-        reset_zero_window_claude_code_ghostty_proof_host
-      fi
+      if [[ "$ghostty_command_open_ready" != "1" ]]; then
+        reset_stale_only_claude_code_ghostty_proof_host
+        if [[ "$ghostty_configured_window_first" == "1" ]]; then
+          printf '%s\n' "zero-window-reset-deferred-for-configured-window" >>"$ghostty_launch_stage_file"
+        else
+          reset_zero_window_claude_code_ghostty_proof_host
+        fi
       if ! run_osascript_with_timeout \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
           "Claude Code Ghostty proof launch" \
@@ -9849,6 +9898,7 @@ APPLESCRIPT
           fi
           return 1
         fi
+      fi
       fi
       mark_claude_code_ghostty_proof_window_title || {
         echo "Claude Code Ghostty proof could not mark the disposable proof window title." >&2

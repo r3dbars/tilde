@@ -39,8 +39,8 @@ require_contains "$TMP_DIR/help.txt" "start|status|wait|tail|stop"
 require_contains "$TMP_DIR/help.txt" "outside the Codex"
 require_contains "$TMP_DIR/help.txt" "custom proof text"
 require_contains "$TMP_DIR/help.txt" "LaunchAgent"
-require_contains "$TMP_DIR/help.txt" "terminal or nohup"
-require_contains "$TMP_DIR/help.txt" "launchd runner by default"
+require_contains "$TMP_DIR/help.txt" "terminal or launchd"
+require_contains "$TMP_DIR/help.txt" "nohup runner by default"
 require_contains script/claude_code_ghostty_detached_proof.sh "reset_stale_only_ghostty_host_before_start"
 require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType AppleScript Probe"
 require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType Submit Probe"
@@ -51,9 +51,8 @@ require_contains script/claude_code_ghostty_detached_proof.sh 'reset_stale_only_
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/dry-run.txt"
 require_contains "$TMP_DIR/dry-run.txt" "Dry run only; detached Ghostty proof would run:"
-require_contains "$TMP_DIR/dry-run.txt" "Launcher: launchd"
-require_contains "$TMP_DIR/dry-run.txt" "LaunchAgent:"
-require_contains "$TMP_DIR/dry-run.txt" "Command: launchctl bootstrap"
+require_contains "$TMP_DIR/dry-run.txt" "Launcher: nohup"
+require_contains "$TMP_DIR/dry-run.txt" "Command: HUP-trapped /bin/bash"
 require_contains "$TMP_DIR/dry-run.txt" "run-detached-proof.sh"
 require_contains "$TMP_DIR/dry-run.txt" "script/real_app_smoke.sh claude-code-ghostty --manual-gate"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
@@ -99,7 +98,7 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=nohup \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/nohup-dry-run.txt"
 require_contains "$TMP_DIR/nohup-dry-run.txt" "Launcher: nohup"
-require_contains "$TMP_DIR/nohup-dry-run.txt" "Command: nohup /bin/bash"
+require_contains "$TMP_DIR/nohup-dry-run.txt" "Command: HUP-trapped /bin/bash"
 require_contains "$TMP_DIR/nohup-dry-run.txt" "run-detached-proof.sh"
 
 FAKE_RUN="$TMP_DIR/proofs/fake-run"
@@ -218,6 +217,25 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh status --run-dir "$PENDING_RUN" >"$TMP_DIR/pending-status.txt"
 require_contains "$TMP_DIR/pending-status.txt" "runner_process=pending"
 
+PENDING_DEAD_STARTER_RUN="$TMP_DIR/proofs/pending-dead-starter-run"
+mkdir -p "$PENDING_DEAD_STARTER_RUN"
+cat >"$PENDING_DEAD_STARTER_RUN/status.env" <<EOF
+state=starting
+pid=999999
+started_at=2026-05-27T00:00:02Z
+run_dir=$PENDING_DEAD_STARTER_RUN
+launcher=nohup
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'pending dead starter detached log\n' >"$PENDING_DEAD_STARTER_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh status --run-dir "$PENDING_DEAD_STARTER_RUN" >"$TMP_DIR/pending-dead-starter-status.txt"
+require_contains "$TMP_DIR/pending-dead-starter-status.txt" "state=starting"
+require_contains "$TMP_DIR/pending-dead-starter-status.txt" "pid=999999"
+require_contains "$TMP_DIR/pending-dead-starter-status.txt" "runner_process=pending"
+reject_contains "$TMP_DIR/pending-dead-starter-status.txt" "state=failed"
+
 STALE_START_RUN="$TMP_DIR/proofs/stale-start-run"
 mkdir -p "$STALE_START_RUN"
 cat >"$STALE_START_RUN/status.env" <<EOF
@@ -237,6 +255,26 @@ require_contains "$TMP_DIR/stale-start-status.txt" "state=failed"
 require_contains "$TMP_DIR/stale-start-status.txt" "exit_status=1"
 require_contains "$TMP_DIR/stale-start-status.txt" "Detached proof runner did not start before startup grace expired."
 require_contains "$TMP_DIR/stale-start-status.txt" "runner_process=not-running"
+
+STALE_DEAD_STARTER_RUN="$TMP_DIR/proofs/stale-dead-starter-run"
+mkdir -p "$STALE_DEAD_STARTER_RUN"
+cat >"$STALE_DEAD_STARTER_RUN/status.env" <<EOF
+state=starting
+pid=999999
+started_at=2026-05-27T00:00:05Z
+run_dir=$STALE_DEAD_STARTER_RUN
+launcher=nohup
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'stale dead starter detached log\n' >"$STALE_DEAD_STARTER_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS=0 \
+  script/claude_code_ghostty_detached_proof.sh status --run-dir "$STALE_DEAD_STARTER_RUN" >"$TMP_DIR/stale-dead-starter-status.txt"
+require_contains "$TMP_DIR/stale-dead-starter-status.txt" "state=failed"
+require_contains "$TMP_DIR/stale-dead-starter-status.txt" "exit_status=1"
+require_contains "$TMP_DIR/stale-dead-starter-status.txt" "Detached proof runner and smoke child exited before writing a final status."
+require_contains "$TMP_DIR/stale-dead-starter-status.txt" "runner_process=not-running"
 
 DEAD_RUN="$TMP_DIR/proofs/dead-run"
 mkdir -p "$DEAD_RUN"
@@ -307,27 +345,37 @@ require_contains "$SCRIPT_TEXT" 'wait "$SMOKE_PID"'
 require_contains "$SCRIPT_TEXT" 'process_is_alive "$smoke_pid"'
 require_contains "$SCRIPT_TEXT" "smoke_process=alive"
 require_contains "$SCRIPT_TEXT" "smoke_process=not-running"
-require_contains "$SCRIPT_TEXT" 'runner_pgid="$(ps -o pgid= -p "$$"'
+require_contains "$SCRIPT_TEXT" 'RUNNER_PID="$$"'
+require_contains "$SCRIPT_TEXT" 'STATUS_PID="$SMOKE_PID"'
+require_contains "$SCRIPT_TEXT" 'runner_pgid="$(ps -o pgid= -p "$RUNNER_PID"'
 require_contains "$SCRIPT_TEXT" "Protected proof process groups:"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child protected proof process groups:"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof enabled job-control child process isolation"
 require_contains "$SCRIPT_TEXT" "set -m"
 require_contains "$SCRIPT_TEXT" "set +m"
-require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS="${protected_pgids:-}"'
+require_contains "$SCRIPT_TEXT" 'run_real_app_smoke "${child_protected_pgids:-}"'
 require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell pid"
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_REAL_APP_SMOKE_STARTUP_MARKER_PATH="$SMOKE_STARTUP_MARKER_FILE"'
-require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell received TERM"
-require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell received INT"
+require_contains "$SCRIPT_TEXT" "child_signal_status"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell received %s"
+require_contains "$SCRIPT_TEXT" "child_signal_status TERM 143"
+require_contains "$SCRIPT_TEXT" "child_signal_status INT 130"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell real_app_smoke returned status"
+require_contains "$SCRIPT_TEXT" "write_status passed"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof spawned smoke pid"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof smoke pid"
 require_contains "$SCRIPT_TEXT" "Stopped orphaned detached Ghostty smoke process"
 require_contains "$SCRIPT_TEXT" "Detached proof smoke child was stopped after runner exit."
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS"
 require_contains "$SCRIPT_TEXT" "status_file_age_seconds"
+require_contains "$SCRIPT_TEXT" "starting_status_is_within_grace"
 require_contains "$SCRIPT_TEXT" "Detached proof runner did not start before startup grace expired."
 require_contains "$SCRIPT_TEXT" 'printf '\''export %s=%q\n'\'' "$key" "$value"'
 require_contains "$SCRIPT_TEXT" 'printf '\''command=%s\n'\'' "$SMOKE_COMMAND_SUMMARY"'
-require_contains "$SCRIPT_TEXT" 'nohup /bin/bash "$runner_script"'
+require_contains "$SCRIPT_TEXT" 'exec /bin/bash "$runner_script"'
+require_contains "$SCRIPT_TEXT" "HUP-trapped runner pid"
+require_contains "$SCRIPT_TEXT" "run_real_app_smoke"
+require_contains "$SCRIPT_TEXT" "running smoke inline for nohup launcher"
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-1}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE="${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:-1}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS:-4}"'

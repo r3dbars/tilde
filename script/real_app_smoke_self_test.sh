@@ -2908,6 +2908,12 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_text_action "$ghostty_launch_command"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_launch_stage_file="$proof_dir/ghostty-launch.log"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'no-restore-command-open-start' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'no-restore-command-open-pidfile-present' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open -na "$host_app" --args \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- '--working-directory="$ROOT_DIR"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F ' -e "$launch_script"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight.' script/real_app_smoke.sh >/dev/null ||
