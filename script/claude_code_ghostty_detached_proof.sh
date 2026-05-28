@@ -14,7 +14,7 @@ TAIL_LINES=80
 WAIT_POLL_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_POLL_SECONDS:-2}"
 WAIT_TIMEOUT_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_TIMEOUT_SECONDS:-900}"
 STARTUP_GRACE_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS:-45}"
-LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-nohup}"
+LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-launchd}"
 GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_ATTEMPTS
@@ -40,7 +40,7 @@ Usage: script/claude_code_ghostty_detached_proof.sh <start|status|wait|tail|stop
 
 Runs the Claude Code Ghostty one-word no-submit proof outside the Codex
 foreground shell. This is for the current focus-steal gap: the proof launches a
-background nohup runner by default, writes one log/status directory under dist/,
+launchd runner by default, writes one log/status directory under dist/,
 and returns right away so the disposable Ghostty window can keep focus during
 Tab accept.
 
@@ -57,7 +57,7 @@ Options:
   --dry-run        Show what start would launch without starting a process.
   --force          Allow start while the latest detached run is still active.
 
-Set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=terminal or launchd to use the
+Set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=terminal or nohup to use the
 older launch modes. The wrapper uses the same disposable defaults as
 script/real_app_smoke.sh. It does not persist custom proof text into the
 generated runner, LaunchAgent plist, or status file.
@@ -360,6 +360,7 @@ create_runner_script() {
     printf 'STATUS_FILE=%q\n' "$status_file"
     printf 'LOG_FILE=%q\n' "$log_file"
     printf 'SMOKE_PID_FILE=%q\n' "$run_dir/smoke.pid"
+    printf 'SMOKE_STARTUP_MARKER_FILE=%q\n' "$run_dir/smoke-startup.log"
     printf 'LAUNCHER=%q\n' "$launcher"
     printf 'LAUNCH_LABEL=%q\n' "$launch_label"
     printf 'PLIST_FILE=%q\n' "$plist_file"
@@ -388,6 +389,7 @@ write_status() {
     elif [[ -f "$SMOKE_PID_FILE" ]]; then
       printf 'smoke_pid=%s\n' "$(head -n 1 "$SMOKE_PID_FILE" | tr -dc '0-9')"
     fi
+    printf 'startup_log=%s\n' "$SMOKE_STARTUP_MARKER_FILE"
     printf 'run_dir=%s\n' "$RUN_DIR"
     printf 'launcher=%s\n' "$LAUNCHER"
     if [[ -n "$LAUNCH_LABEL" ]]; then
@@ -456,6 +458,8 @@ if [[ -n "$runner_pgid" ]]; then
 fi
 
 set +e
+set -m
+printf 'Detached Ghostty proof enabled job-control child process isolation\n' >>"$LOG_FILE"
 (
   smoke_child_pid="${BASHPID:-$$}"
   smoke_child_pgid="$(ps -o pgid= -p "$smoke_child_pid" 2>/dev/null | tr -d '[:space:]' || true)"
@@ -465,6 +469,7 @@ set +e
   trap 'printf "\nDetached Ghostty smoke child shell received INT at %s\n" "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"; exit 130' INT
   AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-1}" \
   AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS="${protected_pgids:-}" \
+  AUTOCOMPLETE_LAB_REAL_APP_SMOKE_STARTUP_MARKER_PATH="$SMOKE_STARTUP_MARKER_FILE" \
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE="${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:-1}" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS:-4}" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS:-20}" \
@@ -484,6 +489,7 @@ printf 'Detached Ghostty proof spawned smoke pid %s protected_pgids=%s\n' "$SMOK
 write_status running
 wait "$SMOKE_PID"
 status=$?
+set +m >/dev/null 2>&1 || true
 set -e
 
 finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -591,7 +597,7 @@ write_parent_final_status() {
   local state="$2"
   local exit_status="$3"
   local note="$4"
-  local status_file pid started_at launcher launch_label plist_file smoke_pid
+  local status_file pid started_at launcher launch_label plist_file smoke_pid startup_log
   local smoke_command_summary
   status_file="$(status_file_for_run "$run_dir")"
   pid="$(status_value "$status_file" pid)"
@@ -600,6 +606,8 @@ write_parent_final_status() {
   launch_label="$(status_value "$status_file" launch_label)"
   plist_file="$(status_value "$status_file" plist_file)"
   smoke_pid="$(smoke_pid_for_run "$run_dir")"
+  startup_log="$(status_value "$status_file" startup_log)"
+  [[ -n "$startup_log" ]] || startup_log="$run_dir/smoke-startup.log"
   smoke_command_summary="$(status_value "$status_file" command)"
   [[ -n "$smoke_command_summary" ]] || smoke_command_summary="$(detached_smoke_command_summary)"
   [[ -n "$started_at" ]] || started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -612,6 +620,7 @@ write_parent_final_status() {
     if [[ -n "$smoke_pid" ]]; then
       printf 'smoke_pid=%s\n' "$smoke_pid"
     fi
+    printf 'startup_log=%s\n' "$startup_log"
     printf 'run_dir=%s\n' "$run_dir"
     if [[ -n "$launcher" ]]; then
       printf 'launcher=%s\n' "$launcher"
@@ -663,11 +672,12 @@ start_run() {
     return 1
   fi
 
-  local timestamp run_dir status_file log_file runner_script worker_script plist_file launch_label pid launch_domain smoke_command_summary
+  local timestamp run_dir status_file log_file startup_log runner_script worker_script plist_file launch_label pid launch_domain smoke_command_summary
   timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
   run_dir="$PROOF_ROOT/$timestamp-ghostty"
   status_file="$(status_file_for_run "$run_dir")"
   log_file="$(log_file_for_run "$run_dir")"
+  startup_log="$run_dir/smoke-startup.log"
   smoke_command_summary="$(detached_smoke_command_summary)"
   if [[ "$LAUNCHER" == "terminal" ]]; then
     runner_script="$run_dir/run-detached-proof.command"
@@ -685,6 +695,7 @@ start_run() {
     echo "Run directory: $run_dir"
     echo "Log: $log_file"
     echo "Status: $status_file"
+    echo "Smoke startup: $startup_log"
     echo "Launcher: $LAUNCHER"
     if [[ "$LAUNCHER" == "launchd" ]]; then
       echo "LaunchAgent: $plist_file"
@@ -713,6 +724,7 @@ start_run() {
     printf 'pid=\n'
     printf 'started_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf 'run_dir=%s\n' "$run_dir"
+    printf 'startup_log=%s\n' "$startup_log"
     printf 'launcher=%s\n' "$LAUNCHER"
     if [[ "$LAUNCHER" == "launchd" ]]; then
       printf 'launch_label=%s\n' "$launch_label"
@@ -732,6 +744,7 @@ start_run() {
         printf 'finished_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         printf 'exit_status=1\n'
         printf 'run_dir=%s\n' "$run_dir"
+        printf 'startup_log=%s\n' "$startup_log"
         printf 'launcher=%s\n' "$LAUNCHER"
         printf 'launch_label=%s\n' "$launch_label"
         printf 'plist_file=%s\n' "$plist_file"
@@ -750,6 +763,7 @@ start_run() {
         printf 'finished_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         printf 'exit_status=1\n'
         printf 'run_dir=%s\n' "$run_dir"
+        printf 'startup_log=%s\n' "$startup_log"
         printf 'launcher=%s\n' "$LAUNCHER"
         printf 'command=%s\n' "$smoke_command_summary"
         printf 'note=%s\n' 'Terminal.app launch failed before the child smoke could start.'
@@ -767,6 +781,7 @@ start_run() {
     printf 'pid=%s\n' "$pid"
     printf 'started_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf 'run_dir=%s\n' "$run_dir"
+    printf 'startup_log=%s\n' "$startup_log"
     printf 'launcher=%s\n' "$LAUNCHER"
     if [[ "$LAUNCHER" == "launchd" ]]; then
       printf 'launch_label=%s\n' "$launch_label"

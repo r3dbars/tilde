@@ -28,6 +28,18 @@ if ! grep -F "proof fragments are typed through System Events key events" "$TMP_
   echo "real app smoke self-test did not explain TextEdit proof typing uses live key events" >&2
   exit 1
 fi
+AUTOCOMPLETE_LAB_REAL_APP_SMOKE_STARTUP_MARKER_PATH="$TMP_DIR/startup-marker.log" \
+  script/real_app_smoke.sh textedit --dry-run >/dev/null
+if ! grep -F "phase=config-ready" "$TMP_DIR/startup-marker.log" >/dev/null ||
+   ! grep -F "phase=before-describe-plan" "$TMP_DIR/startup-marker.log" >/dev/null ||
+   ! grep -F "phase=after-describe-plan" "$TMP_DIR/startup-marker.log" >/dev/null; then
+  echo "real app smoke self-test expected startup markers through dry-run planning" >&2
+  exit 1
+fi
+if grep -F "phase=before-exclusive-cleanup" "$TMP_DIR/startup-marker.log" >/dev/null; then
+  echo "real app smoke self-test expected dry-run startup markers to stop before exclusive cleanup" >&2
+  exit 1
+fi
 
 script/real_app_smoke.sh textedit-model-latency --dry-run >"$TMP_DIR/textedit-model-latency.txt"
 if ! grep -F "TextEdit variant: model-latency" "$TMP_DIR/textedit-model-latency.txt" >/dev/null ||

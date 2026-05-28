@@ -292,8 +292,10 @@ Terminal launcher, invokes generated runners through `/bin/bash`, added an EXIT
 status trap, records the child `real_app_smoke` pid in `status.env` and
 `smoke.pid`, reports `smoke_process=alive|not-running`, preserves an alive
 smoke child after runner exit so its evidence can keep flowing, protects the
-wrapper process group from exclusive proof cleanup, and guarded the Ghostty host
-bundle-id helper against broken-pipe termination.
+wrapper process group from exclusive proof cleanup, isolates the child through
+job-control process groups, writes `smoke-startup.log` phase markers from inside
+`real_app_smoke.sh`, and guarded the Ghostty host bundle-id helper against
+broken-pipe termination.
 `bash -n script/real_app_smoke.sh
 script/real_app_smoke_self_test.sh script/claude_code_ghostty_detached_proof.sh
 script/claude_code_ghostty_detached_proof_self_test.sh`,
@@ -311,8 +313,13 @@ diagnostic run, `20260528T065031Z-ghostty`, proved the child shell itself
 starts: it logged protected process group `65768`, spawned smoke pid `65791`,
 and printed `Detached Ghostty smoke child shell pid 65785 pgid 65768 entering
 real_app_smoke`, but still died before `real_app_smoke.sh` printed its plan or
-returned a status. The next blocker is the smoke script startup / early-kill
-window, not a green Ghostty insertion claim.
+returned a status. The job-control follow-up, `20260528T065530Z-ghostty`, moved
+past that handoff failure: the child printed the smoke plan, built SteadyType,
+warmed CGEvent helpers, wrote startup phases through `after-interference-guard`,
+and exited cleanly with status `1` after two fresh Ghostty disposable contexts
+failed to write the Claude pidfile. The next blocker is Ghostty launch command
+execution / pidfile creation, not wrapper/smoke handoff and not a green
+insertion claim.
 Ghostty remains unsupported until a detached run reaches verified one-word
 no-submit insertion and exits `0`.
 
