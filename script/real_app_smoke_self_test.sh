@@ -320,7 +320,7 @@ if "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED" not in stale_
     raise SystemExit("Ghostty stale-only reset must be opt-in")
 if 'tell application "System Events"' not in stale_only_reset_block or 'application process "Ghostty"' not in stale_only_reset_block:
     raise SystemExit("Ghostty stale-only reset must inspect AX windows without touching Ghostty window objects")
-if "SteadyType AppleScript Probe" not in stale_only_reset_block or "steadytype-claude-code-proof" not in stale_only_reset_block:
+if "SteadyType AppleScript Probe" not in stale_only_reset_block or "SteadyType Submit Probe" not in stale_only_reset_block or "steadytype-claude-code-proof" not in stale_only_reset_block:
     raise SystemExit("Ghostty stale-only reset must recognize only SteadyType proof/probe windows")
 if "unsafeWindowCount" not in stale_only_reset_block or '"$unsafe_window_count" != "0"' not in stale_only_reset_block:
     raise SystemExit("Ghostty stale-only reset must refuse to kill when any non-proof window is present")
@@ -2908,6 +2908,9 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_text_action "$ghostty_launch_command"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_launch_stage_file="$proof_dir/ghostty-launch.log"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_preflight_status=$?' script/real_app_smoke.sh >/dev/null ||
@@ -2955,6 +2958,7 @@ if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_s
    ! grep -F "reset_stale_only_claude_code_ghostty_proof_host" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "SteadyType AppleScript Probe" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "SteadyType Submit Probe" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "unsafeWindowCount" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "reset_zero_window_claude_code_ghostty_proof_host" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED" script/real_app_smoke.sh >/dev/null ||
@@ -2964,7 +2968,10 @@ if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_s
 fi
 if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "working directory of targetTerminal" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'if terminalDirectory is not "" then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "set terminalReady to true" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "terminal-working-directory-present")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "retry-terminal-working-directory-present")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "exit repeat" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "terminalReady is false" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||

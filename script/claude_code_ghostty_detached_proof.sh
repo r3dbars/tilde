@@ -712,6 +712,7 @@ reset_stale_only_ghostty_host_before_start() {
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
 set appleScriptProbePrefix to "SteadyType AppleScript Probe"
+set submitProbePrefix to "SteadyType Submit Probe"
 set windowCount to 0
 set unsafeWindowCount to 0
 tell application "System Events"
@@ -727,6 +728,7 @@ tell application "System Events"
       if markerText is not "" and windowName contains markerText then set isProofWindow to true
       if windowName contains proofDirectoryMarker then set isProofWindow to true
       if windowName starts with appleScriptProbePrefix then set isProofWindow to true
+      if windowName starts with submitProbePrefix then set isProofWindow to true
       if isProofWindow is false then set unsafeWindowCount to unsafeWindowCount + 1
     end repeat
   end tell
