@@ -9981,24 +9981,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
-            let ghosttyShellBulkSystemEventsOutcome =
-                insertGhosttyTerminalHostProofSystemEventsKeystroke(
-                    acceptedText,
-                    expectedProofInputText: expectedProofInputText,
-                    originalProofInputText: originalProofInputText,
-                    frontmostApp: frontmostApp,
-                    profile: currentProfile,
-                    delayMilliseconds: 0,
-                    bulkKeystroke: true,
-                    launchThroughShell: true
-                )
-            if ghosttyShellBulkSystemEventsOutcome.verified {
-                return true
-            }
-            guard ghosttyShellBulkSystemEventsOutcome.safeToContinue else {
-                return false
-            }
-
             let ghosttySystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10078,6 +10060,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             guard bundledSessionHelperOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyShellBulkSystemEventsOutcome =
+                insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                    acceptedText,
+                    expectedProofInputText: expectedProofInputText,
+                    originalProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile,
+                    delayMilliseconds: 0,
+                    bulkKeystroke: true,
+                    launchThroughShell: true
+                )
+            if ghosttyShellBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyShellBulkSystemEventsOutcome.safeToContinue else {
                 return false
             }
 

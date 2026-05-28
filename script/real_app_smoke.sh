@@ -69,6 +69,7 @@ CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
 CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
 SMOKE_PHASE="startup"
 
 allow_model_latency_skip_build() {
@@ -8638,6 +8639,50 @@ APPLESCRIPT
   [[ "$focus_result" == "exact" || "$focus_result" == "bundle" || "$focus_result" == "true" ]]
 }
 
+focus_claude_code_ghostty_host_app_after_title_proof() {
+  local target_pid="${1:-}"
+  local host_focus_result
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ "${CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED:-0}" == "1" ]] || return 1
+
+  host_focus_result="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID="$target_pid" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_HOST_FOCUS_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty host focus after title proof" <<'APPLESCRIPT' || true
+set targetPidText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID"
+set targetPid to 0
+try
+  if targetPidText is not "" then set targetPid to targetPidText as integer
+end try
+tell application id "com.mitchellh.ghostty"
+  activate
+end tell
+delay 0.05
+tell application "System Events"
+  if targetPid is not 0 then
+    repeat with procRef in application processes
+      try
+        if unix id of procRef is targetPid then
+          set frontmost of procRef to true
+          exit repeat
+        end if
+      end try
+    end repeat
+  end if
+  delay 0.05
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is "com.mitchellh.ghostty" then return true
+    end try
+  end repeat
+end tell
+return false
+APPLESCRIPT
+)"
+  [[ "$host_focus_result" == "true" ]]
+}
+
 frontmost_claude_code_terminal_proof_process_is_active() {
   local frontmost_pid root_pid
 
@@ -8648,12 +8693,16 @@ frontmost_claude_code_terminal_proof_process_is_active() {
 
 frontmost_claude_code_terminal_host_app_is_active() {
   local frontmost_pid="${1:-}"
-  local host_bundle frontmost_bundle host_process
+  local host_app host_bundle frontmost_bundle host_process
 
   guard_ghostty_frontmost_bundle_fallback || return 1
+  host_app="$(claude_code_host_open_app_name)"
   host_bundle="$(claude_code_host_bundle_id)"
   frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"
   if [[ -n "$host_bundle" && "$frontmost_bundle" == "$host_bundle" ]]; then
+    return 0
+  fi
+  if [[ -n "$host_app" ]] && try_wait_for_frontmost_app "$host_app" 1; then
     return 0
   fi
 
@@ -8726,7 +8775,12 @@ try_wait_for_frontmost_claude_code_terminal_proof_process() {
 
   for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
     if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
-      focus_claude_code_ghostty_proof_window_by_title "$root_pid" >/dev/null 2>&1 || true
+      if focus_claude_code_ghostty_proof_window_by_title "$root_pid" >/dev/null 2>&1; then
+        return 0
+      fi
+      if focus_claude_code_ghostty_host_app_after_title_proof "$root_pid" >/dev/null 2>&1; then
+        return 0
+      fi
     fi
     activate_process_id "$root_pid" >/dev/null 2>&1 || true
     break
@@ -8743,7 +8797,12 @@ try_wait_for_frontmost_claude_code_terminal_proof_process() {
     if ((activation_attempt % 3 == 0)); then
       for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
         if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
-          focus_claude_code_ghostty_proof_window_by_title "$root_pid" >/dev/null 2>&1 || true
+          if focus_claude_code_ghostty_proof_window_by_title "$root_pid" >/dev/null 2>&1; then
+            return 0
+          fi
+          if focus_claude_code_ghostty_host_app_after_title_proof "$root_pid" >/dev/null 2>&1; then
+            return 0
+          fi
         fi
         activate_process_id "$root_pid" >/dev/null 2>&1 || true
         break
@@ -9001,33 +9060,28 @@ end run
 APPLESCRIPT
 }
 
-claude_code_ghostty_proof_window_process_id_by_title() {
+claude_code_ghostty_frontmost_proof_process_id_by_title() {
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
   [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
 
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$CLAUDE_CODE_TERMINAL_PROOF_TITLE" \
-    run_osascript_with_timeout \
-      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_PID_TIMEOUT_SECONDS:-2}" \
-      "Claude Code Ghostty proof title pid" <<'APPLESCRIPT'
-set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
-tell application "System Events"
-  repeat with procRef in application processes
-    try
-      if bundle identifier of procRef is "com.mitchellh.ghostty" then
-        repeat with windowRef in windows of procRef
-          try
-            set windowName to name of windowRef as text
-            if windowName contains proofTitle then
-              return (unix id of procRef) as text
-            end if
-          end try
-        end repeat
-      end if
-    end try
-  end repeat
-end tell
-return ""
-APPLESCRIPT
+  local host_app host_bundle frontmost_bundle frontmost_pid
+  host_app="$(claude_code_host_open_app_name)"
+  host_bundle="$(claude_code_host_bundle_id)"
+
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=1
+  try_wait_for_frontmost_app "$host_app" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_FRONTMOST_SECONDS:-3}" || return 1
+
+  frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"
+  if [[ -n "$host_bundle" && "$frontmost_bundle" != "$host_bundle" ]]; then
+    return 1
+  fi
+
+  frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+  frontmost_pid="$(printf '%s' "$frontmost_pid" | tr -dc '0-9')"
+  [[ -n "$frontmost_pid" ]] || return 1
+  printf '%s\n' "$frontmost_pid"
 }
 
 open_claude_code_terminal_proof() {
@@ -9173,7 +9227,7 @@ APPLESCRIPT
         echo "Claude Code Ghostty proof could not mark the disposable proof window title." >&2
         return 1
       }
-      ghostty_pid="$(claude_code_ghostty_proof_window_process_id_by_title 2>/dev/null || true)"
+      ghostty_pid="$(claude_code_ghostty_frontmost_proof_process_id_by_title 2>/dev/null || true)"
       ghostty_pid="$(printf '%s' "$ghostty_pid" | tr -dc '0-9')"
       if [[ -z "$ghostty_pid" ]]; then
         if ! try_wait_for_frontmost_app "$host_app" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_FRONTMOST_SECONDS:-6}"; then
@@ -9191,10 +9245,6 @@ APPLESCRIPT
         fi
       fi
       CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_pid"
-      if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
-        echo "Claude Code Ghostty proof window did not become exact frontmost after title-pid resolution: $ghostty_pid" >&2
-        return 1
-      fi
       ;;
     *)
       echo "Claude Code $(claude_code_host_display_name) proof does not have an automated disposable launch path yet." >&2
@@ -9246,6 +9296,7 @@ cleanup_claude_code_terminal_proof() {
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
   CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+  CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 }
 

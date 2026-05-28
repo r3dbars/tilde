@@ -205,8 +205,10 @@ if "system_events_frontmost_process_id_matches()" not in source or "System Event
     raise SystemExit("Ghostty proof harness must be able to verify exact frontmost ownership through System Events")
 if "Claude Code $host_name fallback could not focus the title-marked proof window" not in source:
     raise SystemExit("Ghostty fallback Tab must fail clearly when the title-marked proof window cannot be focused")
-if "claude_code_ghostty_proof_window_process_id_by_title()" not in source or "Claude Code Ghostty proof title pid" not in source:
-    raise SystemExit("Ghostty proof launch must resolve the title-marked proof window pid before frontmost checks")
+if "claude_code_ghostty_frontmost_proof_process_id_by_title()" not in source or "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_FRONTMOST_SECONDS" not in source:
+    raise SystemExit("Ghostty proof launch must resolve the frontmost root app pid after focusing the title-marked window")
+if "focus_claude_code_ghostty_host_app_after_title_proof()" not in source or "CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0" not in source:
+    raise SystemExit("Ghostty proof launch must remember title-focus proof before using host-app refocus fallback")
 if "claude_code_terminal_proof_title_for_dir()" not in source or 'CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"' not in source:
     raise SystemExit("Claude Code terminal proof titles must include the unique temp proof id")
 if 'CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"' in source:
@@ -214,14 +216,20 @@ if 'CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"' in source:
 launch_focus_start = source.index("mark_claude_code_ghostty_proof_window_title")
 launch_focus_end = source.index('CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_pid"', launch_focus_start)
 launch_focus_block = source[launch_focus_start:launch_focus_end]
-if "claude_code_ghostty_proof_window_process_id_by_title" not in launch_focus_block:
-    raise SystemExit("Ghostty proof launch must prefer title-pid resolution over generic frontmost pid discovery")
+if "claude_code_ghostty_frontmost_proof_process_id_by_title" not in launch_focus_block:
+    raise SystemExit("Ghostty proof launch must prefer title-focused root app pid discovery over generic frontmost pid discovery")
 if "if windowName contains proofTitle then" not in launch_focus_block:
-    raise SystemExit("Ghostty proof title-pid resolution must require the unique proof title")
+    raise SystemExit("Ghostty proof title-focused pid resolution must require the unique proof title")
 if "if windowName contains proofMarker or windowName contains compactProofMarker then" in launch_focus_block:
-    raise SystemExit("Ghostty proof title-pid resolution must not fall back to stale marker-only windows")
+    raise SystemExit("Ghostty proof title-focused pid resolution must not fall back to stale marker-only windows")
 if "focus_claude_code_ghostty_proof_window_by_title || true" not in launch_focus_block:
     raise SystemExit("Ghostty proof launch must still explicitly refocus the title-marked proof window before generic fallback")
+if "frontmost_process_id" not in launch_focus_block or "frontmost_bundle_identifier" not in launch_focus_block:
+    raise SystemExit("Ghostty proof launch must use the frontmost Ghostty root app pid after title focus")
+if "CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=1" not in launch_focus_block:
+    raise SystemExit("Ghostty proof launch must record successful title-focus before later host-app refocus")
+if "did not keep the focused title-marked app process frontmost" in source:
+    raise SystemExit("Ghostty proof launch must not immediately redo the volatile title-frontmost check after title-focused pid discovery")
 if source.count("set proofTitle to item 3 of argv") < 2 or source.count('perform action ("set_surface_title:" & proofTitle) on targetTerminal') < 3:
     raise SystemExit("Ghostty proof launch must title-mark the new disposable window before running claude")
 wait_focus_start = source.index("try_wait_for_frontmost_claude_code_terminal_proof_process()")
@@ -229,6 +237,10 @@ wait_focus_end = source.index("\nwait_for_frontmost_claude_code_terminal_proof_p
 wait_focus_block = source[wait_focus_start:wait_focus_end]
 if 'focus_claude_code_ghostty_proof_window_by_title "$root_pid"' not in wait_focus_block:
     raise SystemExit("Ghostty proof frontmost wait must actively refocus the exact title-marked window")
+if 'if focus_claude_code_ghostty_proof_window_by_title "$root_pid" >/dev/null 2>&1; then' not in wait_focus_block or "return 0" not in wait_focus_block:
+    raise SystemExit("Ghostty proof frontmost wait must trust the atomic title-window focus proof before laggy frontmost polling")
+if 'focus_claude_code_ghostty_host_app_after_title_proof "$root_pid"' not in wait_focus_block:
+    raise SystemExit("Ghostty proof frontmost wait must allow host-app refocus after a proven title focus")
 focus_start = source.index("focus_claude_code_ghostty_proof_window_by_title()")
 focus_end = source.index("frontmost_claude_code_terminal_proof_process_is_active()", focus_start)
 focus_block = source[focus_start:focus_end]
@@ -244,11 +256,27 @@ if "set frontmost of procRef to true" not in focus_block or 'return "exact"' not
     raise SystemExit("Ghostty proof focus must reassert exact-pid frontmost ownership through System Events")
 if 'focus_claude_code_ghostty_proof_window_by_title "$target_pid"' not in source:
     raise SystemExit("Ghostty proof activation must pass the exact disposable pid into title-scoped focus")
+host_focus_start = source.index("focus_claude_code_ghostty_host_app_after_title_proof()")
+host_focus_end = source.index("frontmost_claude_code_terminal_proof_process_is_active()", host_focus_start)
+host_focus_block = source[host_focus_start:host_focus_end]
+if "CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED" not in host_focus_block:
+    raise SystemExit("Ghostty host-app refocus fallback must only run after title-focus proof")
+if "host_focus_result" not in host_focus_block or '[[ "$host_focus_result" == "true" ]]' not in host_focus_block:
+    raise SystemExit("Ghostty host-app refocus fallback must inspect the AppleScript frontmost result")
+if 'tell application id "com.mitchellh.ghostty"' not in host_focus_block or "activate" not in host_focus_block:
+    raise SystemExit("Ghostty host-app refocus fallback must reactivate Ghostty directly")
+if 'bundle identifier of frontApp is "com.mitchellh.ghostty"' not in host_focus_block:
+    raise SystemExit("Ghostty host-app refocus fallback must verify Ghostty became frontmost")
 frontmost_match_start = source.index("frontmost_claude_code_terminal_proof_pid_matches()")
 frontmost_match_end = source.index("frontmost_claude_code_terminal_proof_root_pid_matches()", frontmost_match_start)
 frontmost_match_block = source[frontmost_match_start:frontmost_match_end]
 if "system_events_frontmost_process_id_matches" not in frontmost_match_block:
     raise SystemExit("Ghostty proof frontmost matching must accept exact System Events pid proof when NSWorkspace reports a root pid")
+host_active_start = source.index("frontmost_claude_code_terminal_host_app_is_active()")
+host_active_end = source.index("guard_ghostty_frontmost_bundle_fallback()", host_active_start)
+host_active_block = source[host_active_start:host_active_end]
+if 'try_wait_for_frontmost_app "$host_app" 1' not in host_active_block:
+    raise SystemExit("Ghostty proof frontmost matching must accept System Events host-app frontmost proof when NSWorkspace lags")
 fresh_context_start = source.index("open_fresh_claude_code_terminal_proof_context()")
 fresh_context_end = source.index("wait_for_claude_code_terminal_prompt()", fresh_context_start)
 fresh_context_block = source[fresh_context_start:fresh_context_end]
@@ -546,6 +574,8 @@ if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents"
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before the bundled text helper")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper") > fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter"):
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled text helper before in-process Unicode events")
+if fast_ghostty_block.index("ghosttyShellBulkSystemEventsOutcome") < fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
+    raise SystemExit("Claude Code Ghostty fast proof must try bundled helpers before the shell-launched System Events bulk fallback")
 if fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
     raise SystemExit("Claude Code Ghostty fast proof must try in-process Unicode events before pasteboard fallback")
 if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
