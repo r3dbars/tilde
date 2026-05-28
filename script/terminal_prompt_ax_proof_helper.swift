@@ -13,6 +13,7 @@ struct Options {
     var hints: [String] = []
     var allowsMissingMarkerForEmptyText = false
     var requiresExactText = false
+    var rejectsShellCommandText = false
 }
 
 struct Snapshot {
@@ -25,6 +26,7 @@ struct Snapshot {
     let hasMarker: Bool
     let hasText: Bool
     let hasHint: Bool
+    let hasRejectedShellCommandText: Bool
     let expectedTokenCount: Int
     let expectedTokenMatches: Int
 }
@@ -33,6 +35,7 @@ struct SearchState {
     let hasMarker: Bool
     let hasText: Bool
     let hasHint: Bool
+    let hasRejectedShellCommandText: Bool
     let expectedTokenCount: Int
     let expectedTokenMatches: Int
 
@@ -41,6 +44,7 @@ struct SearchState {
             + (hasText ? 1_000 : 0)
             + (hasHint ? 1_000 : 0)
             + expectedTokenMatches
+            - (hasRejectedShellCommandText ? 10_000 : 0)
     }
 }
 
@@ -50,7 +54,7 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
 }
 
 func usage() -> Never {
-    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS] [--allow-missing-marker-for-empty-text] [--require-exact-text]")
+    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS] [--allow-missing-marker-for-empty-text] [--require-exact-text] [--reject-shell-command-text]")
     exit(0)
 }
 
@@ -97,6 +101,8 @@ func parseOptions() -> Options {
             options.allowsMissingMarkerForEmptyText = true
         case "--require-exact-text":
             options.requiresExactText = true
+        case "--reject-shell-command-text":
+            options.rejectsShellCommandText = true
         case "--discovery-timeout":
             let rawValue = value()
             guard let timeout = TimeInterval(rawValue), timeout >= 0 else {
@@ -339,6 +345,30 @@ func containsExactPromptText(in searchable: [String], options: Options) -> Bool 
     }
 }
 
+func looksLikeSteadyTypeProofShellCommand(_ line: String) -> Bool {
+    let lowered = normalizedWhitespace(line).lowercased()
+    return lowered.contains("steadytype-claude-code-proof.command")
+        || (
+            lowered.contains(" -e ")
+                && lowered.contains("steadytype-claude-code-proof.")
+        )
+        || (
+            lowered.contains("exec ")
+                && lowered.contains("steadytype-claude-code-proof.")
+        )
+}
+
+func containsRejectedShellCommandText(in searchable: [String], options: Options) -> Bool {
+    guard options.rejectsShellCommandText else {
+        return false
+    }
+    return searchable.contains { value in
+        value.components(separatedBy: .newlines).contains { line in
+            looksLikeSteadyTypeProofShellCommand(line)
+        }
+    }
+}
+
 func searchState(in searchable: [String], options: Options) -> SearchState {
     let joinedSearchable = searchable.joined(separator: "\n")
     let hasMarker = containsText(joinedSearchable, options.marker, caseInsensitive: true)
@@ -362,6 +392,10 @@ func searchState(in searchable: [String], options: Options) -> SearchState {
         hasMarker: hasMarker,
         hasText: hasText,
         hasHint: hasHint,
+        hasRejectedShellCommandText: containsRejectedShellCommandText(
+            in: searchable,
+            options: options
+        ),
         expectedTokenCount: expectedTokens.count,
         expectedTokenMatches: expectedTokenMatches
     )
@@ -380,6 +414,7 @@ func snapshot(options: Options) -> Snapshot {
             hasMarker: false,
             hasText: false,
             hasHint: false,
+            hasRejectedShellCommandText: false,
             expectedTokenCount: 0,
             expectedTokenMatches: 0
         )
@@ -400,6 +435,7 @@ func snapshot(options: Options) -> Snapshot {
             hasMarker: false,
             hasText: false,
             hasHint: false,
+            hasRejectedShellCommandText: false,
             expectedTokenCount: 0,
             expectedTokenMatches: 0
         )
@@ -464,6 +500,7 @@ func snapshot(options: Options) -> Snapshot {
         hasMarker: bestState.hasMarker,
         hasText: bestState.hasText,
         hasHint: bestState.hasHint,
+        hasRejectedShellCommandText: bestState.hasRejectedShellCommandText,
         expectedTokenCount: bestState.expectedTokenCount,
         expectedTokenMatches: bestState.expectedTokenMatches
     )
@@ -473,7 +510,7 @@ func describeFailure(_ snapshot: Snapshot, options: Options) -> String {
     let frontmost = snapshot.frontmostBundleIdentifier ?? "none"
     let frontmostPID = snapshot.frontmostProcessIdentifier.map(String.init) ?? "none"
     let targetPID = snapshot.targetProcessIdentifier.map(String.init) ?? "none"
-    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), frontmostPid=\(frontmostPID), targetPid=\(targetPID), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), markerWindows=\(snapshot.markerWindowCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
+    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), frontmostPid=\(frontmostPID), targetPid=\(targetPID), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), markerWindows=\(snapshot.markerWindowCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), rejectedShellCommand=\(snapshot.hasRejectedShellCommandText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
 }
 
 let options = parseOptions()
@@ -498,7 +535,10 @@ func snapshotSatisfiesWait(_ snapshot: Snapshot, options: Options) -> Bool {
                 && options.text.isEmpty
                 && snapshot.textCount > 0
         )
-    return markerSatisfied && snapshot.hasText && snapshot.hasHint
+    return markerSatisfied
+        && snapshot.hasText
+        && snapshot.hasHint
+        && !snapshot.hasRejectedShellCommandText
 }
 
 switch options.action {

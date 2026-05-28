@@ -530,6 +530,10 @@ if "activateWithSystemEvents" not in terminal_prompt_helper or '"/usr/bin/osascr
     raise SystemExit("Terminal prompt AX helper must fall back to System Events pid activation when AppKit activation loses focus")
 if "frontmostPid=" not in terminal_prompt_helper or "targetPid=" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper failures must include focus ownership pids")
+if "--reject-shell-command-text" not in terminal_prompt_helper or "rejectsShellCommandText" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must reject shell-command-shaped launch text during Ghostty readiness")
+if "looksLikeSteadyTypeProofShellCommand" not in terminal_prompt_helper or "rejectedShellCommand=" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must diagnose rejected SteadyType proof shell command text")
 if "func focusedWindow(in appElement" not in terminal_prompt_helper or "kAXFocusedWindowAttribute" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper must include focused-window text when Ghostty omits AXWindows")
 if "if texts.isEmpty" not in terminal_prompt_helper or "collectText(from: appElement" not in terminal_prompt_helper:
@@ -2302,7 +2306,8 @@ if ! grep -F 'claude_code_terminal_smoke_input_texts()' script/real_app_smoke.sh
    ! grep -F 'wait_for_log_line_number_optional \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'placementAnchorSource=synthetic-caret' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'produced no visible suggestion; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "produced no visible suggestion" || break' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'no disposable attempts remain' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to retry disposable title-scoped contexts with Ghostty frontmost fallback and field-scoped prompt-row suggestion detection after typed prompt readiness, including still-visible Ghostty prefix suggestions" >&2
   exit 1
 fi
@@ -2622,8 +2627,8 @@ if ! grep -F 'prepare_claude_code_terminal_suggestion_for_hot_accept' script/rea
    ! grep -F 'reason=escape' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion is no longer visible before Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'lost its visible suggestion before Tab; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'lost its visible suggestion during Tab refocus; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion before Tab" || break' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab refocus" || break' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Terminal-host Claude Code proof to recover from focus-changed hidden suggestions by launching a fresh disposable host process before Tab" >&2
   exit 1
 fi
@@ -2855,6 +2860,10 @@ if ! awk '
 fi
 if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--allow-missing-marker-for-empty-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Ghostty empty-prompt readiness to allow missing title marker before typed proof text is asserted" >&2
+  exit 1
+fi
+if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--reject-shell-command-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty empty-prompt readiness to reject shell-command-shaped launch text" >&2
   exit 1
 fi
 if ! awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /^}/ && in_assert { in_assert = 0 } in_assert && /--require-exact-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
@@ -3134,9 +3143,9 @@ if ! awk '
   echo "real app smoke self-test expected Claude Code terminal-host proof to clear stale prompt text before typed proof input" >&2
   exit 1
 fi
-if ! grep -F 'lost focus while clearing; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'lost focus while typing; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'could not prove typed prompt readiness; launching a fresh disposable context' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while clearing" || break' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while typing" || break' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove typed prompt readiness" || break' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_claude_code_terminal_proof_focus "typed prompt AX check" || return 1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_claude_code_terminal_proof_focus "proof typing" || return 1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_claude_code_terminal_proof_focus "prompt clearing" || return 1' script/real_app_smoke.sh >/dev/null; then
@@ -3176,16 +3185,23 @@ if ! awk '
 fi
 if ! grep -F 'type_claude_code_terminal_ghostty_paste_then_key_text()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'type_claude_code_terminal_ghostty_native_text()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'type_claude_code_terminal_ghostty_native_final_character()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_ghostty_event_drain_seconds()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'claude_code_ghostty_typing_drain_seconds()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EVENT_DRAIN_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TYPING_DRAIN_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_FINAL_TRIGGER_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_FINAL_TRIGGER_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'prefix_text="${text:0:${#text}-1}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'final_character="${text: -1}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'type_claude_code_terminal_ghostty_native_text "$prefix_text"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof typing final trigger with native terminal input.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty native final trigger' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'type_text_cgevent "$final_character"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'sleep "$drain_seconds"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Ghostty proof final trigger typing' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof typing to native-paste the marked prefix, drain setup events, and type one final trigger character" >&2
+  echo "real app smoke self-test expected Ghostty proof typing to native-paste the marked prefix, drain setup events, and prefer native final-trigger typing with CGEvent fallback" >&2
   exit 1
 fi
 if ! awk '

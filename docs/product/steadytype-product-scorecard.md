@@ -415,6 +415,17 @@ text as prompt context. The run then timed out with
 `suggestion-blocked` diagnostics for shell-command and unsafe-input-line
 reasons, so Ghostty's red bar is now making the direct-open prompt truly
 Claude-ready and AX-readable before typing or retrying.
+`20260528T103624Z-ghostty` then showed the native prompt clear can get the
+direct-open context past the shell-text blocker and recover a prompt-row anchor,
+but the old long typing drain let focus slip before the final trigger. The
+current harness splits that drain so prefix typing settles briefly while prompt
+clearing can still use the longer Ghostty event drain. `20260528T104312Z-ghostty`
+proved that shorter drain plus native final-trigger typing avoids the focus-loss
+failure, but it still failed red: the prompt exposed only partial marked input
+(`beforeChars=28`), produced no visible suggestion, then fell back into
+missing-marker / unsafe-input-line diagnostics. The next Ghostty red bar is now
+full marked proof-text insertion into the Claude prompt before suggestion
+discovery, not just direct process launch.
 Ghostty remains unsupported until a
 detached run reaches verified one-word no-submit insertion and exits `0`.
 
