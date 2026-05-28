@@ -494,7 +494,13 @@ interference guard, `20260528T120818Z-ghostty` survived build/relaunch, found a
 prompt-row suggestion at diagnostics line `908782`, handled Tab, exercised the
 new `ghosttyFocusedSystemEventsBulkKeystroke` rung at line `908826`, and proved
 it exited `0` but still left the prompt unchanged before the known no-op cluster
-failed closed.
+failed closed. `20260528T121157Z-ghostty` tried to run the extended ladder but
+was terminated during the second no-restore launch before insertion. A focused
+native `text:` action rung then shipped before pasteboard probes;
+`20260528T121458Z-ghostty` reached the same prompt-row suggestion lane at
+diagnostics line `910704`, ran `ghosttyFocusedActionText` at line `911799`, and
+proved that focused native action also exited `0` while leaving the prompt
+unchanged before the expanded no-op cluster failed closed at line `911879`.
 
 ## Scores
 

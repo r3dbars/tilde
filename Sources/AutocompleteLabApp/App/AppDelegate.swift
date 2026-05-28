@@ -10179,6 +10179,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyFocusedActionText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyFocusedActionTextOutcome = insertGhosttyTerminalHostProofFocusedActionText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyFocusedActionTextOutcome.verified {
+                return true
+            }
+            guard ghosttyFocusedActionTextOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10271,6 +10288,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         || ghosttyBulkSystemEventsOutcome.verified,
                     systemEventsBulkSafeToContinue: ghosttyFocusedSystemEventsOutcome.safeToContinue
                         && ghosttyBulkSystemEventsOutcome.safeToContinue,
+                    focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified,
+                    focusedActionTextSafeToContinue: ghosttyFocusedActionTextOutcome.safeToContinue,
                     pasteboardVerified: ghosttyPasteboardOutcome.verified,
                     pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
                     inProcessInputTextVerified: ghosttyInProcessInputTextOutcome.verified,
@@ -13114,6 +13133,258 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
                     "reason": mutatedInputReason,
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofFocusedActionText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyFocusedActionText"
+        let baselineSource = "ghosttyFocusedActionTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let scriptSource = """
+        set actionText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set targetWindow to front window
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            perform action actionText on targetTerminal
+            return true
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"] = Self.ghosttyTextAction(acceptedText)
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.5,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-focused-action-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-focused-action-timeout-mutated-input",
+                        "source": baselineSource
+                    ]
+                )
+                return (false, false)
+            }
+            return (false, promptStayedUnchanged)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "focusMode": "frontmostTerminalOnly",
+                "launchMode": "direct",
+                "textTransport": "environment",
+                "exitStatus": String(process.terminationStatus),
+                "errorMessage": String(stderrText.prefix(160))
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-unverified-mutated-input",
                     "source": baselineSource
                 ]
             )
