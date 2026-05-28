@@ -2368,6 +2368,14 @@ fi
 python3 - <<'PY'
 from pathlib import Path
 
+source = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
+accept_all = source.split("case .acceptAllVisible:", 1)[1].split("let acceptanceID", 1)[0]
+if "allowCodexProofSnapshotFastPath: true" not in accept_all:
+    raise SystemExit("Codex full accept proof must use the Codex snapshot fast path before falling back to focus-changed")
+PY
+python3 - <<'PY'
+from pathlib import Path
+
 source = Path("script/real_app_smoke.sh").read_text()
 start = source.index("run_codex()")
 end = source.index("\nrun_codex_full_accept()", start)
