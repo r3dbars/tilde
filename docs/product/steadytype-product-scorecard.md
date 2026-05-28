@@ -159,6 +159,14 @@ Ghostty insertion ladder is now opt-in through
 `AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES`; Ghostty remains
 unsupported until a transport actually mutates and verifies the disposable
 Claude prompt.
+The next transport hypothesis is now available as an opt-in probe rather than a
+support claim: `AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE=1` tries
+the same shape the harness uses for setup typing, native Ghostty `input text`
+for the accepted prefix plus a real final key event. The first detached opt-in
+run, `20260528T032817Z-ghostty`, did not reach insertion; two disposable
+contexts produced no visible suggestion before the run was stopped with status
+`143`. Treat the probe as unproven until a later run reaches
+`ghosttyNativePrefixFinalKeyText` and verifies one-word no-submit insertion.
 
 ## Scores
 
