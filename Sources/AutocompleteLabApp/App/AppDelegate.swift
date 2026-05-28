@@ -10290,6 +10290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         && ghosttyBulkSystemEventsOutcome.safeToContinue,
                     focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified,
                     focusedActionTextSafeToContinue: ghosttyFocusedActionTextOutcome.safeToContinue,
+                    focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativeNoopClassified,
                     pasteboardVerified: ghosttyPasteboardOutcome.verified,
                     pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
                     inProcessInputTextVerified: ghosttyInProcessInputTextOutcome.verified,
@@ -13147,7 +13148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile?
-    ) -> (verified: Bool, safeToContinue: Bool) {
+    ) -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool) {
         let source = "ghosttyFocusedActionText"
         let baselineSource = "ghosttyFocusedActionTextBaseline"
         guard !acceptedText.isEmpty,
@@ -13161,7 +13162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
 
         let osascriptPath = "/usr/bin/osascript"
@@ -13175,7 +13176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
 
         let scriptSource = """
@@ -13236,7 +13237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(String(describing: error).prefix(160))
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         guard Self.waitForProcessExit(
@@ -13263,7 +13264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "source": source
                     ]
                 )
-                return (false, false)
+                return (false, false, false)
             }
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
@@ -13298,9 +13299,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "source": baselineSource
                     ]
                 )
-                return (false, false)
+                return (false, false, false)
             }
-            return (false, promptStayedUnchanged)
+            return (false, promptStayedUnchanged, false)
         }
 
         let stdoutText = String(
@@ -13325,7 +13326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(stderrText.prefix(160))
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
         guard stdoutText != "false" else {
             DiagnosticsLog.shared.record(
@@ -13337,7 +13338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         let verified = verifyClaudeCodeTerminalHostProofInsertion(
@@ -13361,7 +13362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         if verified {
-            return (true, false)
+            return (true, false, true)
         }
 
         let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
@@ -13371,10 +13372,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             frontmostApp: frontmostApp
         )
         if screenCopyOutcome.verified {
-            return (true, false)
+            return (true, false, true)
         }
         guard screenCopyOutcome.safeToContinue else {
-            return (false, false)
+            return (false, false, false)
         }
 
         let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
@@ -13401,9 +13402,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": baselineSource
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
-        return (false, true)
+        return (false, true, screenCopyOutcome.promptStayedUnchanged == true)
     }
 
     private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(

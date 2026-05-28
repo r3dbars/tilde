@@ -43,6 +43,13 @@ struct GhosttyInsertionNoopPolicyTests {
         )))
     }
 
+    @Test("Requires native screen-copy no-op classification before initial fail-fast")
+    func nativeScreenCopyNoopClassificationRequired() {
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            focusedActionTextNativeNoopClassified: false
+        )))
+    }
+
     @Test("Only applies to the proof-scoped Ghostty terminal host")
     func onlyAppliesToGhosttyProofProfile() {
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
@@ -63,6 +70,7 @@ private extension GhosttyInitialInsertionNoopInput {
         systemEventsBulkSafeToContinue: Bool = true,
         focusedActionTextVerified: Bool = false,
         focusedActionTextSafeToContinue: Bool = true,
+        focusedActionTextNativeNoopClassified: Bool = true,
         pasteboardVerified: Bool = false,
         pasteboardSafeToContinue: Bool = true,
         inProcessInputTextVerified: Bool = false,
@@ -78,6 +86,7 @@ private extension GhosttyInitialInsertionNoopInput {
             systemEventsBulkSafeToContinue: systemEventsBulkSafeToContinue,
             focusedActionTextVerified: focusedActionTextVerified,
             focusedActionTextSafeToContinue: focusedActionTextSafeToContinue,
+            focusedActionTextNativeNoopClassified: focusedActionTextNativeNoopClassified,
             pasteboardVerified: pasteboardVerified,
             pasteboardSafeToContinue: pasteboardSafeToContinue,
             inProcessInputTextVerified: inProcessInputTextVerified,
