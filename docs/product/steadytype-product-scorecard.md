@@ -837,9 +837,14 @@ verified a pre-accept native Ghostty mutation, then failed because it could not
 restore the original prompt before suggestion proof. Post-patch launchd run
 `20260528T204741Z-ghostty` forwarded the new key-capture env into detached
 status, then was SIGTERMed during startup before build or prompt setup, so it is
-not support evidence. App coverage stays at `83`; the next Ghostty blocker is
-observable key delivery into SteadyType's event tap under a detached runner, not
-prompt AX discovery.
+not support evidence. Follow-up run `20260528T204810Z-ghostty` reached native
+screen-copy prompt readiness, restored the pre-accept native Ghostty mutation,
+then showed the pre-accept System Events comparator did not mutate the prompt
+before the run was stopped. That exposed a detached cleanup gap: `stop` could
+leave the proof-owned Ghostty/Claude context alive, so the wrapper now cleans
+context pids from `claude.pid` and the proof-owned Ghostty pid in `proof.log`.
+App coverage stays at `83`; the next Ghostty blocker is observable key delivery
+into SteadyType's event tap under a detached runner, not prompt AX discovery.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

@@ -6,10 +6,20 @@ cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
 ALIVE_SMOKE_PID=""
+ALIVE_CONTEXT_PID=""
+ALIVE_CONTEXT_HOST_PID=""
 cleanup() {
   if [[ -n "${ALIVE_SMOKE_PID:-}" ]]; then
     kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
     wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
+  fi
+  if [[ -n "${ALIVE_CONTEXT_PID:-}" ]]; then
+    kill "$ALIVE_CONTEXT_PID" >/dev/null 2>&1 || true
+    wait "$ALIVE_CONTEXT_PID" 2>/dev/null || true
+  fi
+  if [[ -n "${ALIVE_CONTEXT_HOST_PID:-}" ]]; then
+    kill "$ALIVE_CONTEXT_HOST_PID" >/dev/null 2>&1 || true
+    wait "$ALIVE_CONTEXT_HOST_PID" 2>/dev/null || true
   fi
   rm -rf "$TMP_DIR"
 }
@@ -251,6 +261,49 @@ fi
 wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
 ALIVE_SMOKE_PID=""
 
+bash -c 'trap "kill ${child:-} >/dev/null 2>&1 || true; exit 0" TERM; sleep 600 & child=$!; wait "$child"' &
+ALIVE_CONTEXT_PID="$!"
+bash -c 'trap "kill ${child:-} >/dev/null 2>&1 || true; exit 0" TERM; sleep 600 & child=$!; wait "$child"' &
+ALIVE_CONTEXT_HOST_PID="$!"
+STOP_CONTEXT_RUN="$TMP_DIR/proofs/stop-context-run"
+mkdir -p "$STOP_CONTEXT_RUN/proof-artifacts/context"
+cat >"$STOP_CONTEXT_RUN/status.env" <<EOF
+state=running
+pid=999999
+started_at=2026-05-27T00:00:08Z
+run_dir=$STOP_CONTEXT_RUN
+proof_artifact_dir=$STOP_CONTEXT_RUN/proof-artifacts
+launcher=launchd
+launch_label=bar.r3d.steadytype.ghostty-detached-proof.test
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf '%s\n' "$ALIVE_CONTEXT_PID" >"$STOP_CONTEXT_RUN/proof-artifacts/context/claude.pid"
+{
+  printf 'context cleanup detached log\n'
+  printf 'Claude Code Ghostty proof owns no-restore host pid(s): %s\n' "$ALIVE_CONTEXT_HOST_PID"
+  printf 'root_pid=%s\n' "$ALIVE_CONTEXT_HOST_PID"
+} >"$STOP_CONTEXT_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh stop --run-dir "$STOP_CONTEXT_RUN" >"$TMP_DIR/stop-context-status.txt"
+require_contains "$TMP_DIR/stop-context-status.txt" "state=failed"
+require_contains "$TMP_DIR/stop-context-status.txt" "exit_status=143"
+require_contains "$TMP_DIR/stop-context-status.txt" "Detached proof context was stopped by wrapper after runner exit."
+require_contains "$STOP_CONTEXT_RUN/proof.log" "Stopped detached Ghostty proof context pid=$ALIVE_CONTEXT_PID after wrapper stop."
+require_contains "$STOP_CONTEXT_RUN/proof.log" "Stopped detached Ghostty proof context pid=$ALIVE_CONTEXT_HOST_PID after wrapper stop."
+if kill -0 "$ALIVE_CONTEXT_PID" >/dev/null 2>&1; then
+  echo "detached Ghostty proof stop should terminate proof context pid $ALIVE_CONTEXT_PID" >&2
+  exit 1
+fi
+if kill -0 "$ALIVE_CONTEXT_HOST_PID" >/dev/null 2>&1; then
+  echo "detached Ghostty proof stop should terminate proof context host pid $ALIVE_CONTEXT_HOST_PID" >&2
+  exit 1
+fi
+wait "$ALIVE_CONTEXT_PID" 2>/dev/null || true
+wait "$ALIVE_CONTEXT_HOST_PID" 2>/dev/null || true
+ALIVE_CONTEXT_PID=""
+ALIVE_CONTEXT_HOST_PID=""
+
 PENDING_RUN="$TMP_DIR/proofs/pending-run"
 mkdir -p "$PENDING_RUN"
 cat >"$PENDING_RUN/status.env" <<EOF
@@ -367,6 +420,10 @@ require_contains "$SCRIPT_TEXT" "Detached Ghostty proof exited before explicit f
 require_contains "$SCRIPT_TEXT" "stop_run()"
 require_contains "$SCRIPT_TEXT" "process_group_for_pid"
 require_contains "$SCRIPT_TEXT" "signal_process_or_group"
+require_contains "$SCRIPT_TEXT" "proof_artifact_dir_for_run"
+require_contains "$SCRIPT_TEXT" "detached_proof_context_pids_for_run"
+require_contains "$SCRIPT_TEXT" "terminate_detached_proof_context_processes"
+require_contains "$SCRIPT_TEXT" "Stopped detached Ghostty proof context pid="
 require_contains "$SCRIPT_TEXT" 'kill "-$signal" "-$pgid"'
 require_contains "$SCRIPT_TEXT" 'signal_process_or_group "$smoke_pid" KILL'
 require_contains "$SCRIPT_TEXT" 'kill -TERM "-$smoke_pgid"'

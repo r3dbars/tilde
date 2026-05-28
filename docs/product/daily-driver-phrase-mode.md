@@ -611,6 +611,14 @@ is not a safer default because it can leave the disposable prompt mutated.
 Post-patch launchd run `20260528T204741Z-ghostty` did forward the new
 key-capture probe env into detached status, but it was SIGTERMed during startup
 before build or prompt setup, so it is not key-source support evidence.
+Follow-up run `20260528T204810Z-ghostty` reached native screen-copy prompt
+readiness again and restored the pre-accept native Ghostty mutation, then showed
+the pre-accept System Events comparator did not mutate the prompt before the run
+was stopped. That stop exposed a cleanup bug: the wrapper killed the proof
+runner but left the proof-owned Ghostty/Claude context alive. The detached
+runner stop path now cleans proof context pids from `claude.pid` and the
+proof-owned Ghostty pid recorded in `proof.log`, so stopped or wedged proof runs
+do not contaminate the next compatibility sample.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
