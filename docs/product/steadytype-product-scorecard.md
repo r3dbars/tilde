@@ -483,7 +483,13 @@ no-restore prompt twice, found prompt-row suggestions at diagnostics lines
 `905520` and `906995`, retried after Tab delivery lost the first visible
 suggestion, then delivered Tab on attempt 2 and failed closed at
 `ghostty-initial-insertion-noop-cluster` after send-key, System Events,
-pasteboard, and in-process native input all left the prompt unchanged.
+pasteboard, and in-process native input all left the prompt unchanged. The app
+now has a focused frontmost-process System Events bulk rung before the heavier
+terminal-scanning System Events script, but `20260528T120508Z-ghostty` and the
+diagnostic `AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN=0`
+`20260528T120653Z-ghostty` were both terminated by `SIGTERM` during
+build/relaunch before reaching insertion, so they do not count as proof for
+that new rung.
 
 ## Scores
 
