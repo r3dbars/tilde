@@ -576,6 +576,17 @@ SIGTERM. The next red bar is no longer configured-window launch or AX prompt
 discovery; it is an accept driver that SteadyType can observe in Ghostty without
 losing the visible prompt-row suggestion.
 
+Post-commit proof `20260528T202618Z-ghostty` tightened that red bar. With
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=1`, the detached launchd
+run exited cleanly with status `1` instead of SIGTERM. It again passed
+screen-copy prompt readiness, exact typed prompt readiness, and native
+pre-accept mutation/restore. It found a prompt-row suggestion, then session
+CGEvent Tab, HID CGEvent Tab, and System Events Tab all produced no
+`key=tab` diagnostic. The run failed with the precise reason
+`Tab delivery did not reach key capture`, so the next experiment should skip
+more launch/readiness work and focus on a Ghostty-specific accept path that the
+SteadyType event tap can observe.
+
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
 and fallback Tab, the app-side Ghostty insertion ladder searches the title-marked
