@@ -10543,9 +10543,37 @@ end tell
 APPLESCRIPT
 }
 
+clear_claude_code_terminal_ghostty_native_line() {
+  local clear_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}"
+
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="$clear_delay" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_CLEAR_TIMEOUT_SECONDS:-3}" \
+      "Claude Code Ghostty native line clear" <<'APPLESCRIPT' >/dev/null
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  send key "u" modifiers "control" to targetTerminal
+  delay clearDelay
+  send key "u" modifiers "control" to targetTerminal
+  activate
+end tell
+APPLESCRIPT
+}
+
 clear_claude_code_terminal_prompt_line() {
   settle_claude_code_terminal_proof_focus "prompt clearing" || return 1
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_CLEAR_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+       clear_claude_code_terminal_ghostty_native_line; then
+      sleep "$(claude_code_ghostty_event_drain_seconds)"
+      return
+    fi
     AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
@@ -12841,12 +12869,15 @@ run_claude_code_terminal_host_smoke() {
     attempt=$((attempt + 1))
     validate_claude_code_terminal_smoke_input_text "$proof_text"
 
+    echo "Claude Code $host_name proof attempt $attempt waiting for disposable prompt focus."
     wait_for_frontmost_claude_code_terminal_proof_process
+    echo "Claude Code $host_name proof attempt $attempt clearing disposable prompt line."
     if ! clear_claude_code_terminal_prompt_line; then
       echo "Claude Code $host_name proof attempt $attempt lost focus while clearing; launching a fresh disposable context."
       open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
       continue
     fi
+    echo "Claude Code $host_name proof attempt $attempt prompt line cleared."
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
 
     start_line="$(line_count "$LOG_PATH")"
@@ -12855,6 +12886,7 @@ run_claude_code_terminal_host_smoke() {
     CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE=0
     suggestion_start_line="$(line_count "$LOG_PATH")"
     pre_trigger_suggestion_start_line="$suggestion_start_line"
+    echo "Claude Code $host_name proof attempt $attempt typing proof text."
     if ! type_claude_code_terminal_smoke_text "$proof_text"; then
       echo "Claude Code $host_name proof attempt $attempt lost focus while typing; launching a fresh disposable context."
       open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"

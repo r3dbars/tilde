@@ -522,35 +522,11 @@ run_real_app_smoke() {
     ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
 }
 
-if [[ "$LAUNCHER" == "nohup" ]]; then
-  SMOKE_PID="$RUNNER_PID"
-  STATUS_PID="$RUNNER_PID"
-  printf '%s\n' "$SMOKE_PID" >"$SMOKE_PID_FILE"
-  printf 'Detached Ghostty proof running smoke inline for nohup launcher pid %s protected_pgids=%s\n' "$RUNNER_PID" "${protected_pgids:-}" >>"$LOG_FILE"
-  write_status running
-  set +e
-  run_real_app_smoke "${protected_pgids:-}" >>"$LOG_FILE" 2>&1
-  status=$?
-  set -e
-  finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  printf '\nDetached Ghostty proof inline smoke returned status %s at %s\n' "$status" "$finished_at" >>"$LOG_FILE"
-  if ((status == 0)); then
-    write_status passed "$status" "$finished_at"
-  else
-    write_status failed "$status" "$finished_at"
-  fi
-  FINAL_STATUS_WRITTEN=1
-  printf '\nDetached Ghostty proof finished at %s with exit status %s\n' "$finished_at" "$status" >>"$LOG_FILE"
-  exit "$status"
-fi
-
 set +e
 set -m
 printf 'Detached Ghostty proof enabled job-control child process isolation\n' >>"$LOG_FILE"
 (
   smoke_child_pid="${BASHPID:-$$}"
-  SMOKE_PID="$smoke_child_pid"
-  STATUS_PID="$smoke_child_pid"
   smoke_child_pgid="$(ps -o pgid= -p "$smoke_child_pid" 2>/dev/null | tr -d '[:space:]' || true)"
   child_protected_pgids="${protected_pgids:-}"
   if [[ -n "$smoke_child_pgid" ]]; then
@@ -565,11 +541,14 @@ printf 'Detached Ghostty proof enabled job-control child process isolation\n' >>
   printf 'Detached Ghostty smoke child shell pid %s pgid %s entering real_app_smoke at %s\n' \
     "$smoke_child_pid" "${smoke_child_pgid:-unknown}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf 'Detached Ghostty smoke child protected proof process groups: %s\n' "${child_protected_pgids:-none}"
-  write_status running
   child_signal_status() {
     local signal_name="$1"
     local exit_status="$2"
     local finished_at
+    if [[ -f "$SMOKE_PID_FILE" ]]; then
+      SMOKE_PID="$(head -n 1 "$SMOKE_PID_FILE" | tr -dc '0-9')"
+      STATUS_PID="$SMOKE_PID"
+    fi
     finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf '\nDetached Ghostty smoke child shell received %s at %s\n' "$signal_name" "$finished_at"
     write_status failed "$exit_status" "$finished_at"
@@ -580,6 +559,10 @@ printf 'Detached Ghostty proof enabled job-control child process isolation\n' >>
   trap 'child_signal_status INT 130' INT
   run_real_app_smoke "${child_protected_pgids:-}"
   smoke_child_status=$?
+  if [[ -f "$SMOKE_PID_FILE" ]]; then
+    SMOKE_PID="$(head -n 1 "$SMOKE_PID_FILE" | tr -dc '0-9')"
+    STATUS_PID="$SMOKE_PID"
+  fi
   finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf 'Detached Ghostty smoke child shell real_app_smoke returned status %s at %s\n' \
     "$smoke_child_status" "$finished_at"
@@ -909,7 +892,7 @@ start_run() {
       echo "Command: open -g -na Terminal $runner_script"
       echo "Worker: $worker_script"
     else
-      echo "Command: HUP-trapped /bin/bash $runner_script"
+      echo "Command: nohup /bin/bash $runner_script"
     fi
     echo "Child smoke: $smoke_command_summary"
     return 0
@@ -978,12 +961,12 @@ start_run() {
     fi
     pid=""
   else
-    ( trap '' HUP; exec /bin/bash "$runner_script" ) >>"$log_file" 2>&1 &
+    nohup /bin/bash "$runner_script" >>"$log_file" 2>&1 &
     pid=$!
   fi
 
   if [[ "$LAUNCHER" == "nohup" ]]; then
-    printf 'Detached Ghostty proof HUP-trapped runner pid %s launched.\n' "$pid" >>"$log_file"
+    printf 'Detached Ghostty proof nohup starter pid %s launched; runner will publish worker pid.\n' "$pid" >>"$log_file"
   else
     {
       printf 'state=starting\n'

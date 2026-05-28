@@ -2914,6 +2914,13 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'open -na "$host_app" --args \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F -- '--working-directory="$ROOT_DIR"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F ' -e "$launch_script"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'clear_claude_code_terminal_ghostty_native_line' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_CLEAR_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty native line clear' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'waiting for disposable prompt focus' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'clearing disposable prompt line' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'prompt line cleared' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight.' script/real_app_smoke.sh >/dev/null ||
