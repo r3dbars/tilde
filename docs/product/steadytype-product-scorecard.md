@@ -707,10 +707,12 @@ Neither post-fail external path verified prompt mutation after the prompt-row
 refocus. App coverage stays at `83`; Ghostty is still unsupported until a
 detached proof exits `0` with verified one-word no-submit insertion.
 
-The newest default-ladder pass ruled out one more likely Ghostty transport
-without raising the score. SteadyType now tries a smoke-equivalent frontmost
-bundle System Events raw keystroke before the exact-PID focused System Events
-rung. `20260528T183440Z-ghostty` found prompt-row suggestions on two disposable
+The newest proof-only transport pass ruled out one more likely Ghostty path
+without raising the score. The detached proof lane now forwards an opt-in flag
+so SteadyType tries a smoke-equivalent frontmost bundle System Events raw
+keystroke before the exact-PID focused System Events rung, while normal app
+launches skip that unproven rung.
+`20260528T183440Z-ghostty` found prompt-row suggestions on two disposable
 contexts; attempt 1 lost the visible suggestion during Tab injection, and attempt
 2 consumed Tab at diagnostics line `989460`, clicked the prompt-row caret at
 line `989486`, then posted `ghosttyBundleSystemEventsRawKeystroke` at line
