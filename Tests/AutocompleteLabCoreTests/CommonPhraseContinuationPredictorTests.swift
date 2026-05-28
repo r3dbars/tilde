@@ -459,6 +459,36 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts everyday writing bridge phrases instantly")
+    func predictsEverydayWritingBridgePhrasesInstantly() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Daily note\nThe problem is", .docsProse, " where the current flow breaks", "intent-writing-bridge-problem-is"),
+            ("Obsidian scratchpad\nWhat I need is", .notes, " a clearer next step", "intent-writing-bridge-what-i-need-is"),
+            ("Private note\nI'm trying to figure out", .notes, " what needs to happen next", "intent-writing-bridge-trying-to-figure-out"),
+            ("Reflection\nI want to be able to", .docsProse, " write without losing the thread", "intent-writing-bridge-want-to-be-able-to"),
+            ("- The thing that matters is", .bullets, " where this helps in practice", "intent-writing-bridge-thing-that-matters"),
+            ("The right move is", .docsProse, " to test the next concrete step", "intent-writing-bridge-right-move-is"),
+            ("It would be useful if", .notes, " this showed up at the right time", "intent-writing-bridge-useful-if"),
+            ("This should help me", .docsProse, " finish the thought faster", "intent-writing-bridge-should-help-me"),
+            ("The next thing to make clear is", .docsProse, " what action comes next", "intent-writing-bridge-next-thing-clear"),
+            ("The reason this matters is", .notes, " what it changes for the user", "intent-writing-bridge-reason-this-matters")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect((3...8).contains(selection.suggestion?.visibleWordCount ?? 0))
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Predicts guarded next-sentence phrases at sentence boundaries")
     func predictsGuardedNextSentencePhrasesAtSentenceBoundaries() {
         let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
@@ -563,6 +593,14 @@ struct CommonPhraseContinuationPredictorTests {
             for: "The suggestions fall short",
             behaviorProfileID: .search
         ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "The problem is",
+            behaviorProfileID: .email
+        ).suppressionReason == "no-match")
+        #expect(predictor.selection(
+            for: "The problem is",
+            behaviorProfileID: .casualChat
+        ).suppressionReason == "no-match")
     }
 
     @Test("Allows explicit prompt-app proof prediction while keeping prompt apps blocked by default")

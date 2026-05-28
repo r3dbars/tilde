@@ -293,6 +293,13 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return writingFlowCandidate
         }
 
+        if let everydayWritingBridgeCandidate = everydayWritingBridgeCandidate(
+            for: words,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            return everydayWritingBridgeCandidate
+        }
+
         if let dailyDriverFeelingCandidate = dailyDriverFeelingCandidate(for: words) {
             return dailyDriverFeelingCandidate
         }
@@ -453,6 +460,52 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
         if hasSuffix(["the", "important", "detail", "is"], in: words) {
             return intentCandidate("writing-flow-important-detail", "what happens after accept")
+        }
+
+        return nil
+    }
+
+    private func everydayWritingBridgeCandidate(
+        for words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsWritingFlowPrediction(for: behaviorProfileID),
+              words.count >= 3 else {
+            return nil
+        }
+
+        if hasSuffix(["the", "problem", "is"], in: words) {
+            return intentCandidate("writing-bridge-problem-is", "where the current flow breaks")
+        }
+        if hasSuffix(["what", "i", "need", "is"], in: words) {
+            return intentCandidate("writing-bridge-what-i-need-is", "a clearer next step")
+        }
+        if hasAnySuffix([
+            ["i", "am", "trying", "to", "figure", "out"],
+            ["i", "m", "trying", "to", "figure", "out"]
+        ], in: words) {
+            return intentCandidate("writing-bridge-trying-to-figure-out", "what needs to happen next")
+        }
+        if hasSuffix(["i", "want", "to", "be", "able", "to"], in: words) {
+            return intentCandidate("writing-bridge-want-to-be-able-to", "write without losing the thread")
+        }
+        if hasSuffix(["the", "thing", "that", "matters", "is"], in: words) {
+            return intentCandidate("writing-bridge-thing-that-matters", "where this helps in practice")
+        }
+        if hasSuffix(["the", "right", "move", "is"], in: words) {
+            return intentCandidate("writing-bridge-right-move-is", "to test the next concrete step")
+        }
+        if hasSuffix(["it", "would", "be", "useful", "if"], in: words) {
+            return intentCandidate("writing-bridge-useful-if", "this showed up at the right time")
+        }
+        if hasSuffix(["this", "should", "help", "me"], in: words) {
+            return intentCandidate("writing-bridge-should-help-me", "finish the thought faster")
+        }
+        if hasSuffix(["the", "next", "thing", "to", "make", "clear", "is"], in: words) {
+            return intentCandidate("writing-bridge-next-thing-clear", "what action comes next")
+        }
+        if hasSuffix(["the", "reason", "this", "matters", "is"], in: words) {
+            return intentCandidate("writing-bridge-reason-this-matters", "what it changes for the user")
         }
 
         return nil
