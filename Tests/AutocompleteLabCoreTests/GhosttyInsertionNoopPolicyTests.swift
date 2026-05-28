@@ -66,6 +66,12 @@ struct GhosttyInsertionNoopPolicyTests {
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
             focusedActionTextNativeNoopClassified: false
         )))
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            pasteActionNativeNoopClassified: false
+        )))
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            frontWindowInputTextNativeNoopClassified: false
+        )))
     }
 
     @Test("Only applies to the proof-scoped Ghostty terminal host")
@@ -91,6 +97,7 @@ private extension GhosttyInitialInsertionNoopInput {
         focusedActionTextNativeNoopClassified: Bool = true,
         pasteActionVerified: Bool = false,
         pasteActionSafeToContinue: Bool = true,
+        pasteActionNativeNoopClassified: Bool = true,
         pasteboardVerified: Bool = false,
         pasteboardSafeToContinue: Bool = true,
         bundledGhosttyInputTextHelperVerified: Bool = false,
@@ -99,6 +106,7 @@ private extension GhosttyInitialInsertionNoopInput {
         inProcessInputTextSafeToContinue: Bool = true,
         frontWindowInputTextVerified: Bool = false,
         frontWindowInputTextSafeToContinue: Bool = true,
+        frontWindowInputTextNativeNoopClassified: Bool = true,
         promptStayedUnchanged: Bool = true,
         runsExtendedProbes: Bool = false
     ) -> GhosttyInitialInsertionNoopInput {
@@ -113,6 +121,7 @@ private extension GhosttyInitialInsertionNoopInput {
             focusedActionTextNativeNoopClassified: focusedActionTextNativeNoopClassified,
             pasteActionVerified: pasteActionVerified,
             pasteActionSafeToContinue: pasteActionSafeToContinue,
+            pasteActionNativeNoopClassified: pasteActionNativeNoopClassified,
             pasteboardVerified: pasteboardVerified,
             pasteboardSafeToContinue: pasteboardSafeToContinue,
             bundledGhosttyInputTextHelperVerified: bundledGhosttyInputTextHelperVerified,
@@ -121,6 +130,7 @@ private extension GhosttyInitialInsertionNoopInput {
             inProcessInputTextSafeToContinue: inProcessInputTextSafeToContinue,
             frontWindowInputTextVerified: frontWindowInputTextVerified,
             frontWindowInputTextSafeToContinue: frontWindowInputTextSafeToContinue,
+            frontWindowInputTextNativeNoopClassified: frontWindowInputTextNativeNoopClassified,
             promptStayedUnchanged: promptStayedUnchanged,
             runsExtendedProbes: runsExtendedProbes
         )

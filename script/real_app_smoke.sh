@@ -2131,6 +2131,7 @@ wait_for_claude_code_terminal_insertion_result() {
   local start_line="$1"
   local host_name="$2"
   local timeout_seconds="$3"
+  local proof_text="${4:-}"
   local deadline
 
   timeout_seconds="${timeout_seconds%%.*}"
@@ -2162,6 +2163,7 @@ wait_for_claude_code_terminal_insertion_result() {
       echo "Claude Code $host_name insertion failed closed." >&2
       echo "Required fields: insert app=com.anthropic.claude-code success=true" >&2
       echo "Observed insertion failure or fail-closed Ghostty proof diagnostics." >&2
+      run_claude_code_ghostty_post_fail_external_insertion_probe "$proof_text" || true
       echo "Log: $LOG_PATH" >&2
       tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
       exit 1
@@ -2175,6 +2177,35 @@ wait_for_claude_code_terminal_insertion_result() {
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
   exit 1
+}
+
+run_claude_code_ghostty_post_fail_external_insertion_probe() {
+  local proof_text="$1"
+  local probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_TEXT:-x}"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$proof_text" ]] || return 0
+  [[ -n "$probe_text" ]] || return 0
+  if [[ "$probe_text" == *$'\n'* || "$probe_text" == *$'\r'* ]]; then
+    echo "Claude Code Ghostty post-fail external insertion probe refused multiline text." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty post-fail external native insertion probe typing one suffix without Enter." >&2
+  if ! type_claude_code_terminal_ghostty_native_text "$probe_text"; then
+    echo "Claude Code Ghostty post-fail external native insertion probe could not post input." >&2
+    return 0
+  fi
+  sleep "$(claude_code_ghostty_typing_drain_seconds)"
+
+  if try_claude_code_terminal_prompt_ready_quiet \
+    "$proof_text$probe_text" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_VERIFY_SECONDS:-3}"; then
+    echo "Claude Code Ghostty post-fail external native insertion probe verified prompt mutation after app-owned insertion failed." >&2
+  else
+    echo "Claude Code Ghostty post-fail external native insertion probe did not verify prompt mutation." >&2
+  fi
 }
 
 wait_for_obsidian_long_note_second_suggestion() {
@@ -13440,7 +13471,8 @@ run_claude_code_terminal_host_smoke() {
   wait_for_claude_code_terminal_insertion_result \
     "$accept_start_line" \
     "$host_name" \
-    "$(claude_code_terminal_accept_wait_seconds)"
+    "$(claude_code_terminal_accept_wait_seconds)" \
+    "$proof_text"
   wait_for_log_pattern "$accept_start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code $host_name verified insertion" 12
   wait_for_screenshot_capture_if_enabled "$accept_start_line" "com.anthropic.claude-code" "Claude Code $host_name proof"
   assert_claude_code_terminal_prompt_retains_marker

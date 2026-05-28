@@ -837,6 +837,19 @@ on focused native action text at lines `964428`-`964430`, native paste at lines
 now a better-instrumented no-op, not supported; it still needs a detached proof
 that exits `0` with verified one-word no-submit insertion.
 
+The next no-op trust pass made the default Ghostty fail-fast stricter: focused
+native action, native paste action, and front-window native input must now carry
+Ghostty-native screen-copy no-op classification before the initial cluster can
+fail closed. `20260528T175216Z-ghostty` reached prompt-row suggestion line
+`965236`, retried Tab through System Events after CGEvent Tab produced no key
+diagnostic, then recorded `nativeNoopClassified=true` for focused native action
+at lines `966289`-`966291`, paste action screen-copy at lines
+`966293`-`966295`, and front-window input screen-copy at lines
+`966311`-`966313`. The stricter gate failed closed at lines `966314`-`966316`,
+and the proof log's post-fail external native insertion probe still did not
+verify prompt mutation. Ghostty remains unsupported, but the no-op classification
+is now based on multiple Ghostty-native screen reads instead of one AX baseline.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

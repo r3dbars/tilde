@@ -778,10 +778,14 @@ if "focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativ
     raise SystemExit("Claude Code Ghostty initial no-op classifier must require focused native screen-copy no-op classification")
 if "pasteActionVerified: ghosttyPasteActionOutcome.verified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include native paste action verification")
+if "pasteActionNativeNoopClassified: ghosttyPasteActionOutcome.nativeNoopClassified" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty initial no-op classifier must require native paste screen-copy no-op classification")
 if "bundledGhosttyInputTextHelperVerified: ghosttyBundledInputTextHelperOutcome.verified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include bundled native input helper verification")
 if "frontWindowInputTextVerified: ghosttyFrontWindowInputTextOutcome.verified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include front-window native input verification")
+if "frontWindowInputTextNativeNoopClassified: ghosttyFrontWindowInputTextOutcome.nativeNoopClassified" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty initial no-op classifier must require front-window native screen-copy no-op classification")
 focused_action_start = app_delegate.index("private func insertGhosttyTerminalHostProofFocusedActionText(")
 focused_action_end = app_delegate.index("private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(", focused_action_start)
 focused_action_block = app_delegate[focused_action_start:focused_action_end]
@@ -852,12 +856,16 @@ if "ghostty-prompt-focus-click-missing-caret" not in prompt_focus_block:
 front_window_input_start = app_delegate.index("private func insertGhosttyTerminalHostProofFrontWindowInputText(")
 front_window_input_end = app_delegate.index("private func focusGhosttyTerminalHostProofPromptByClickIfAvailable(", front_window_input_start)
 front_window_input_block = app_delegate[front_window_input_start:front_window_input_end]
+if ") -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool)" not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty front-window input proof must report native no-op classification")
 if "set targetWindow to front window" not in front_window_input_block or "input text acceptedText to targetTerminal" not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty front-window input rung must mirror the live smoke native typing path")
 if "ghosttyFrontWindowInputTextBaseline" not in front_window_input_block or "ghostty-front-window-input-unverified-mutated-input" not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty front-window input rung must verify unchanged baseline and fail closed on mutation")
 if "ghosttyFrontWindowInputTextScreenCopy" not in front_window_input_block or "verifyGhosttyTerminalHostProofWithNativeScreenCopy(" not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty front-window input rung must native screen-copy verify before trusting AX misses")
+if "screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true" not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty front-window input rung must classify no-op only from native screen-copy proof")
 if "ghosttyLoginShellFrontWindowInputText" not in front_window_input_block or 'process.arguments = ["-lc", "exec /usr/bin/osascript"]' not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty front-window input rung must support the login-shell native input proof path")
 if "ghosttyLoginShellFrontWindowInputTextScreenCopy" not in front_window_input_block:
@@ -1053,6 +1061,15 @@ if '"ghosttyPerformActionPasteFromClipboard"' not in terminal_insert_block or 'p
     raise SystemExit("Claude Code Ghostty proof must try Ghostty's native paste_from_clipboard action")
 if 'set actionPerformed to perform action "paste_from_clipboard" on targetTerminal' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty native paste action must preserve Ghostty's returned action result")
+paste_action_start = app_delegate.index("private func insertGhosttyTerminalHostProofPasteAction(")
+paste_action_end = app_delegate.index("private func insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke(", paste_action_start)
+paste_action_block = app_delegate[paste_action_start:paste_action_end]
+if ") -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool)" not in paste_action_block:
+    raise SystemExit("Claude Code Ghostty native paste action must report native no-op classification")
+if "ghosttyPerformActionPasteFromClipboardScreenCopy" not in paste_action_block or "verifyGhosttyTerminalHostProofWithNativeScreenCopy(" not in paste_action_block:
+    raise SystemExit("Claude Code Ghostty native paste action must native screen-copy verify before trusting AX misses")
+if "screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true" not in paste_action_block:
+    raise SystemExit("Claude Code Ghostty native paste action must classify no-op only from native screen-copy proof")
 if "ghosttyPerformActionPasteFromClipboardBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty native paste action must verify the prompt stayed unchanged after unverified paste")
 if "ghostty-paste-action-unverified-mutated-input" not in terminal_insert_block:
@@ -3599,9 +3616,11 @@ if not (suggestion_window_index < type_index < assert_index < accept_window_inde
     raise SystemExit(1)
 if '"$suggestion_start_line"' not in block[suggestion_wait_index:accept_wait_index]:
     raise SystemExit(1)
+if '"$proof_text"' not in block[insertion_wait_index:block.index("wait_for_log_pattern", insertion_wait_index)]:
+    raise SystemExit(1)
 PY
 then
-  echo "real app smoke self-test expected Claude Code terminal-host suggestion slices to capture fast suggestions while waits still happen after typed prompt readiness" >&2
+  echo "real app smoke self-test expected Claude Code terminal-host suggestion slices to capture fast suggestions while waits still happen after typed prompt readiness and insertion failure can inspect the active proof text" >&2
   exit 1
 fi
 if ! awk '
@@ -3623,10 +3642,23 @@ if ! awk '
   in_helper && /success=false/ { saw_failure = 1 }
   in_helper && /stage=insert-failed/ { saw_deferred_failure = 1 }
   in_helper && /source=ghosttyFastFailClosed/ { saw_fast_fail = 1 }
+  in_helper && /run_claude_code_ghostty_post_fail_external_insertion_probe/ { saw_probe = 1 }
   in_helper && /insertion failed closed/ { saw_message = 1 }
-  END { exit (saw_success && saw_failure && saw_deferred_failure && saw_fast_fail && saw_message) ? 0 : 1 }
+  END { exit (saw_success && saw_failure && saw_deferred_failure && saw_fast_fail && saw_probe && saw_message) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code terminal-host insertion helper to wait for success or fail-closed diagnostics instead of timing out early" >&2
+  echo "real app smoke self-test expected Claude Code terminal-host insertion helper to wait for success or fail-closed diagnostics, then run the Ghostty post-fail comparator before exiting" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_ghostty_post_fail_external_insertion_probe\(\)/ { in_helper = 1 }
+  /^}/ && in_helper { in_helper = 0 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_PROBE/ { saw_gate = 1 }
+  in_helper && /type_claude_code_terminal_ghostty_native_text/ { saw_native = 1 }
+  in_helper && /try_claude_code_terminal_prompt_ready_quiet/ { saw_verify = 1 }
+  in_helper && /without Enter/ { saw_no_enter_message = 1 }
+  END { exit (saw_gate && saw_native && saw_verify && saw_no_enter_message) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty post-fail comparator to be opt-in, use native text, verify the prompt, and avoid Enter" >&2
   exit 1
 fi
 if awk '
