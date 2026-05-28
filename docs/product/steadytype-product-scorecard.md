@@ -582,6 +582,20 @@ native input baseline at lines `928692`-`928694`, and failed closed earlier with
 `reason=ghostty-initial-insertion-noop-cluster` at lines `928695`-`928697`
 instead of spending the full 45s exploratory budget. Ghostty remains unsupported
 until a detached run exits `0` with verified one-word no-submit insertion.
+The detached proof runner now defaults `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED=0`
+so recurring automation starts on the script-owned/no-restore fallback path that
+has been reaching prompt-row Tab, while direct command-open remains available as
+an explicit opt-in probe. The first rerun after that change,
+`20260528T132935Z-ghostty`, exposed a harness edge where direct command-open
+dirtied the prompt on the final launch attempt; the fresh-context retry now
+grants one extra script-owned attempt after that dirty-prompt classification.
+The follow-up `20260528T133331Z-ghostty` proved the intended path: command-open
+was disabled, the script-owned/no-restore host reached a prompt-row suggestion
+at diagnostics line `929688`, handled Tab at line `930715`, recorded
+`nativeNoopClassified=true` at lines `930741`-`930742`, proved unchanged
+baselines through `ghosttyInProcessInputText` at lines `930754`-`930758`, and
+failed closed at `ghostty-initial-insertion-noop-cluster` on lines
+`930759`-`930760`.
 
 ## Scores
 

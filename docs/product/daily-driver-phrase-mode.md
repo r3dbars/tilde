@@ -724,7 +724,17 @@ unchanged through the in-process native input baseline at lines
 `928692`-`928694`, so the app failed closed at lines `928695`-`928697` with
 `reason=ghostty-initial-insertion-noop-cluster` instead of spending the full
 45s exploratory budget. Ghostty still needs a different insertion architecture
-or verifier before it can count as supported.
+or verifier before it can count as supported. The detached proof runner now
+defaults command-open off so recurring proof runs start on the
+script-owned/no-restore fallback path that has been reaching prompt-row Tab;
+direct command-open remains an explicit opt-in probe. The first rerun after that
+default flip, `20260528T132935Z-ghostty`, showed direct command-open can still
+dirty the prompt on the final launch attempt, so the fresh-context retry now
+grants one extra script-owned fallback attempt. The follow-up
+`20260528T133331Z-ghostty` used that default path, reached a prompt-row
+suggestion at diagnostics line `929688`, handled Tab at line `930715`, and
+failed closed at `ghostty-initial-insertion-noop-cluster` on lines
+`930759`-`930760` after the known unchanged-prompt insertion baselines.
 
 ## Scorecard
 

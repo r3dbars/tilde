@@ -10453,6 +10453,9 @@ open_fresh_claude_code_terminal_proof_context() {
         echo "Claude Code Ghostty proof direct command-open left launch-command text in AX; retrying without direct command-open." >&2
         CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=1
         CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
+        if ((launch_attempt >= max_launch_attempts)); then
+          max_launch_attempts=$((max_launch_attempts + 1))
+        fi
       fi
       continue
     fi
