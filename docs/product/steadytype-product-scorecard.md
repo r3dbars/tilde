@@ -150,6 +150,17 @@ The follow-up source slice adds process-id breadcrumbs to the app-side
 the current synthetic Ghostty key sources still do not reach the event tap, but
 it will make the next observed key-capture sample distinguish helper-origin,
 target-process, and user-key paths without logging typed text.
+The next harness slice adds private-state CGEvent Shift and Tab rungs after the
+session/HID/combined/PID probes and before the System Events opt-in path. This
+keeps the default Ghostty proof permission-safe while ruling out one more local
+synthetic key source that might reach SteadyType's event tap.
+Live run `20260528T221035Z-ghostty` did not reach those new rungs: it got
+through native screen-copy prompt readiness, typed-prompt readiness, and native
+pre-accept mutation/restore, then received SIGTERM while waiting for the
+suggestion on attempt 1. Cleanup stopped both the proof Ghostty pid and the
+proof command pid. The wrapper now prints periodic wait progress and the
+key-capture refocus path has an explicit timeout knob, so future long detached
+runs should explain their current phase instead of going quiet.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced

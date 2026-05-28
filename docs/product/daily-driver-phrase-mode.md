@@ -671,6 +671,18 @@ not change Ghostty support status because the current synthetic Ghostty key
 sources still miss the event tap, but it gives the next successful key-capture
 sample enough process context to separate helper-origin, target-process, and
 real-user key paths without recording typed text.
+The follow-up harness slice now tries private-state CGEvent Shift and Tab rungs
+after the session/HID/combined/PID attempts and before the System Events opt-in
+path. That keeps the default run permission-safe while ruling out one more
+synthetic key source for Ghostty before asking for a real permission-risk
+System Events experiment.
+Live run `20260528T221035Z-ghostty` did not reach that new key-source ladder.
+It passed native screen-copy prompt readiness, exact typed-prompt readiness, and
+native pre-accept mutation/restore, then received SIGTERM while waiting for the
+attempt-1 suggestion. Cleanup stopped the proof Ghostty process and proof
+command process. The detached wrapper now prints periodic wait progress, and
+the key-capture refocus path has a timeout knob so the next long run exposes its
+phase instead of looking idle.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

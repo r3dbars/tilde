@@ -77,6 +77,7 @@ require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_M
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS=2"
+require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS=2"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=0"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS=2"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS=2"
@@ -115,6 +116,7 @@ AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=4 \
 AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE=0 \
 AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS=0.25 \
 AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS=4 \
+AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS=5 \
 AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1 \
 AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS=5 \
 AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS=6 \
@@ -144,6 +146,7 @@ require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_COD
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE=0"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS=0.25"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS=4"
+require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS=5"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS=5"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS=6"
@@ -226,12 +229,37 @@ launcher=nohup
 command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
 note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
 EOF
-printf 'running smoke detached log\n' >"$RUNNING_SMOKE_RUN/proof.log"
+printf 'Detached Ghostty running smoke detached log\n' >"$RUNNING_SMOKE_RUN/proof.log"
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh status --run-dir "$RUNNING_SMOKE_RUN" >"$TMP_DIR/running-smoke-status.txt"
 require_contains "$TMP_DIR/running-smoke-status.txt" "smoke_pid=$ALIVE_SMOKE_PID"
 require_contains "$TMP_DIR/running-smoke-status.txt" "runner_process=alive"
 require_contains "$TMP_DIR/running-smoke-status.txt" "smoke_process=alive"
+(
+  sleep 2
+  cat >"$RUNNING_SMOKE_RUN/status.env" <<EOF
+state=passed
+pid=$$
+smoke_pid=$ALIVE_SMOKE_PID
+started_at=2026-05-27T00:00:01Z
+finished_at=2026-05-27T00:00:03Z
+exit_status=0
+run_dir=$RUNNING_SMOKE_RUN
+launcher=nohup
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+  kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
+) &
+WAIT_PROGRESS_UPDATER_PID="$!"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_PROGRESS_SECONDS=1 \
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_POLL_SECONDS=1 \
+  script/claude_code_ghostty_detached_proof.sh wait --run-dir "$RUNNING_SMOKE_RUN" >"$TMP_DIR/running-smoke-wait.txt"
+wait "$WAIT_PROGRESS_UPDATER_PID" 2>/dev/null || true
+require_contains "$TMP_DIR/running-smoke-wait.txt" "Detached Ghostty proof still running after"
+require_contains "$TMP_DIR/running-smoke-wait.txt" "phase=Detached Ghostty"
+require_contains "$TMP_DIR/running-smoke-wait.txt" "state=passed"
 kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
 wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
 ALIVE_SMOKE_PID=""
@@ -459,6 +487,9 @@ require_contains "$SCRIPT_TEXT" 'signal_process_or_group "$smoke_pid" KILL'
 require_contains "$SCRIPT_TEXT" 'kill -TERM "-$smoke_pgid"'
 require_contains "$SCRIPT_TEXT" 'write_parent_final_status "$run_dir" failed 143'
 require_contains "$SCRIPT_TEXT" "Run script/claude_code_ghostty_detached_proof.sh stop to terminate the active proof."
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_PROGRESS_SECONDS"
+require_contains "$SCRIPT_TEXT" "print_wait_progress"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty proof still"
 require_contains "$SCRIPT_TEXT" "export PATH="
 require_contains "$SCRIPT_TEXT" "GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=("
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE"
@@ -468,6 +499,7 @@ require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED"
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_PROBE"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_PROBE"

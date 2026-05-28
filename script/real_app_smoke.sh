@@ -4268,16 +4268,21 @@ wait_for_claude_code_terminal_key_capture_permission_ui_since() {
 
 probe_claude_code_terminal_host_key_capture() {
   local host_name="${1:-$(claude_code_host_display_name)}"
-  local key_capture_start_line probe_start_line proof_pid
+  local key_capture_start_line probe_start_line proof_pid focus_seconds
 
   if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ||
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE:-1}" == "0" ]]; then
     return 0
   fi
 
+  focus_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS:-2}"
+  focus_seconds="${focus_seconds%%.*}"
+  if ! [[ "$focus_seconds" =~ ^[0-9]+$ ]] || ((focus_seconds < 1)); then
+    focus_seconds=2
+  fi
   key_capture_start_line="$(line_count "$LOG_PATH")"
 
-  if ! settle_claude_code_terminal_proof_focus "session key-capture probe"; then
+  if ! settle_claude_code_terminal_proof_focus "session key-capture probe" "$focus_seconds"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before key capture probe"
     echo "Claude Code terminal host is not frontmost for key capture probe." >&2
     return 1
@@ -4303,7 +4308,7 @@ probe_claude_code_terminal_host_key_capture() {
     return 0
   fi
 
-  if ! settle_claude_code_terminal_proof_focus "HID key-capture probe"; then
+  if ! settle_claude_code_terminal_proof_focus "HID key-capture probe" "$focus_seconds"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before HID key capture probe"
     echo "Claude Code terminal host is not frontmost for HID key capture probe." >&2
     return 1
@@ -4329,7 +4334,7 @@ probe_claude_code_terminal_host_key_capture() {
     return 0
   fi
 
-  if ! settle_claude_code_terminal_proof_focus "combined-session key-capture probe"; then
+  if ! settle_claude_code_terminal_proof_focus "combined-session key-capture probe" "$focus_seconds"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before combined-session key capture probe"
     echo "Claude Code terminal host is not frontmost for combined-session key capture probe." >&2
     return 1
@@ -4357,7 +4362,7 @@ probe_claude_code_terminal_host_key_capture() {
     proof_pid="$(printf '%s\n' ${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-} 2>/dev/null | head -n 1 | tr -dc '0-9')"
   fi
   if [[ -n "$proof_pid" ]]; then
-    if ! settle_claude_code_terminal_proof_focus "PID-targeted key-capture probe"; then
+    if ! settle_claude_code_terminal_proof_focus "PID-targeted key-capture probe" "$focus_seconds"; then
       CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before PID-targeted key capture probe"
       echo "Claude Code terminal host is not frontmost for PID-targeted key capture probe." >&2
       return 1
@@ -4381,6 +4386,50 @@ probe_claude_code_terminal_host_key_capture() {
     echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; could not resolve a Ghostty proof pid for PID-targeted Shift." >&2
   fi
 
+  if ! settle_claude_code_terminal_proof_focus "private-source session key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source session key capture probe"
+    echo "Claude Code terminal host is not frontmost for private-source session key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name key capture probes produced no diagnostic; retrying with private-source session Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent private-source session key-capture probe" \
+    "session" \
+    "warm" \
+    "private"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source session key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "private-source HID key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source HID key capture probe"
+    echo "Claude Code terminal host is not frontmost for private-source HID key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name private-source session key capture probe produced no diagnostic; retrying with private-source HID Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent private-source HID key-capture probe" \
+    "hid" \
+    "warm" \
+    "private"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source HID key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+    return 0
+  fi
+
   if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
     echo "Claude Code $host_name key capture probes produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI. Set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1 to opt in." >&2
@@ -4388,7 +4437,7 @@ probe_claude_code_terminal_host_key_capture() {
     return 1
   fi
 
-  if ! settle_claude_code_terminal_proof_focus "System Events key-capture probe"; then
+  if ! settle_claude_code_terminal_proof_focus "System Events key-capture probe" "$focus_seconds"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before System Events key capture probe"
     echo "Claude Code terminal host is not frontmost for System Events key capture probe." >&2
     return 1
@@ -9733,10 +9782,15 @@ wait_for_frontmost_claude_code_terminal_proof_process() {
 
 settle_claude_code_terminal_proof_focus() {
   local label="$1"
+  local timeout="${2:-}"
   local host_name
   host_name="$(claude_code_host_display_name)"
 
-  if try_wait_for_frontmost_claude_code_terminal_proof_process; then
+  if [[ -n "$timeout" ]]; then
+    if try_wait_for_frontmost_claude_code_terminal_proof_process "$timeout"; then
+      return 0
+    fi
+  elif try_wait_for_frontmost_claude_code_terminal_proof_process; then
     return 0
   fi
 
@@ -11903,6 +11957,74 @@ APPLESCRIPT
         "app=com.anthropic.claude-code"; then
       CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after CGEvent HID Tab"
       echo "Claude Code $host_name suggestion hid after CGEvent HID Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
+    if ! settle_claude_code_terminal_proof_focus "private-source session CGEvent Tab hot accept"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source session CGEvent Tab"
+      echo "Claude Code terminal host is not frontmost for private-source session CGEvent proof Tab." >&2
+      return 1
+    fi
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name CGEvent HID Tab produced no key=tab diagnostic; retrying with private-source session CGEvent Tab."
+    if ! press_key_code_cgevent_with_timeout \
+      48 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent private-source session Tab" \
+      "session" \
+      "warm" \
+      "private"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source session Tab helper failed"
+      return 1
+    fi
+    if wait_for_log_fields_optional \
+      "$probe_start_line" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS:-1}" \
+      "keyboard-event-tap-latency" \
+      "key=tab"; then
+      return 0
+    fi
+
+    if [[ "$suggestion_line" != "0" ]] &&
+      log_since_has_fields "$suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after private-source session CGEvent Tab"
+      echo "Claude Code $host_name suggestion hid after private-source session CGEvent Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
+    if ! settle_claude_code_terminal_proof_focus "private-source HID CGEvent Tab hot accept"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source HID CGEvent Tab"
+      echo "Claude Code terminal host is not frontmost for private-source HID CGEvent proof Tab." >&2
+      return 1
+    fi
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name private-source session CGEvent Tab produced no key=tab diagnostic; retrying with private-source HID CGEvent Tab."
+    if ! press_key_code_cgevent_with_timeout \
+      48 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent private-source HID Tab" \
+      "hid" \
+      "warm" \
+      "private"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source HID Tab helper failed"
+      return 1
+    fi
+    if wait_for_log_fields_optional \
+      "$probe_start_line" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_PROBE_SECONDS:-1}" \
+      "keyboard-event-tap-latency" \
+      "key=tab"; then
+      return 0
+    fi
+
+    if [[ "$suggestion_line" != "0" ]] &&
+      log_since_has_fields "$suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after private-source HID CGEvent Tab"
+      echo "Claude Code $host_name suggestion hid after private-source HID CGEvent Tab; refreshing the disposable prompt." >&2
       return 1
     fi
   fi

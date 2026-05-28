@@ -13,6 +13,7 @@ RUN_DIR=""
 TAIL_LINES=80
 WAIT_POLL_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_POLL_SECONDS:-2}"
 WAIT_TIMEOUT_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_TIMEOUT_SECONDS:-900}"
+WAIT_PROGRESS_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_PROGRESS_SECONDS:-30}"
 STARTUP_GRACE_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS:-45}"
 LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-launchd}"
 GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
@@ -24,6 +25,7 @@ GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
   AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE
   AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS
   AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS
   AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE
   AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS
   AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS
@@ -78,6 +80,7 @@ GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
 : "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE:=1}"
 : "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS:=1}"
 : "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:=2}"
+: "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS:=2}"
 : "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE:=0}"
 : "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS:=2}"
 : "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:=2}"
@@ -205,6 +208,11 @@ fi
 
 if ! [[ "$WAIT_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || ((WAIT_TIMEOUT_SECONDS < 1)); then
   echo "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_TIMEOUT_SECONDS must be a positive integer." >&2
+  exit 2
+fi
+
+if ! [[ "$WAIT_PROGRESS_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_PROGRESS_SECONDS must be a non-negative integer." >&2
   exit 2
 fi
 
@@ -498,6 +506,43 @@ print_log_tail() {
     return 1
   fi
   tail -n "$TAIL_LINES" "$log_file"
+}
+
+latest_progress_line_for_run() {
+  local run_dir="$1"
+  local log_file
+  log_file="$(log_file_for_run "$run_dir")"
+  [[ -f "$log_file" ]] || return 0
+  awk '
+    NF && /^(Claude Code|Real app smoke|Build|App bundle|Detached Ghostty|Temporary|Plan:|Safety:)/ {
+      line = $0
+    }
+    END {
+      if (line != "") print line
+    }
+  ' "$log_file" 2>/dev/null || true
+}
+
+print_wait_progress() {
+  local run_dir="$1"
+  local elapsed_seconds="$2"
+  local status_file state pid smoke_pid phase
+  status_file="$(status_file_for_run "$run_dir")"
+  state="$(status_value "$status_file" state)"
+  pid="$(status_value "$status_file" pid)"
+  smoke_pid="$(smoke_pid_for_run "$run_dir")"
+  phase="$(latest_progress_line_for_run "$run_dir")"
+  printf 'Detached Ghostty proof still %s after %ss' "${state:-unknown}" "$elapsed_seconds"
+  if [[ -n "$pid" ]]; then
+    printf ' pid=%s' "$pid"
+  fi
+  if [[ -n "$smoke_pid" ]]; then
+    printf ' smoke_pid=%s' "$smoke_pid"
+  fi
+  if [[ -n "$phase" ]]; then
+    printf ' phase=%s' "$phase"
+  fi
+  printf '\n'
 }
 
 create_runner_script() {
@@ -1157,6 +1202,8 @@ wait_for_run() {
   local status_file state pid exit_status
   status_file="$(status_file_for_run "$run_dir")"
   local deadline=$((SECONDS + WAIT_TIMEOUT_SECONDS))
+  local wait_started_seconds="$SECONDS"
+  local next_progress_seconds=$((SECONDS + WAIT_PROGRESS_SECONDS))
   while true; do
     if [[ ! -f "$status_file" ]]; then
       echo "No detached Ghostty proof status file found: $status_file" >&2
@@ -1187,6 +1234,10 @@ wait_for_run() {
           echo "Run script/claude_code_ghostty_detached_proof.sh stop to terminate the active proof." >&2
           print_run_status "$run_dir"
           return 1
+        fi
+        if ((WAIT_PROGRESS_SECONDS > 0 && SECONDS >= next_progress_seconds)); then
+          print_wait_progress "$run_dir" "$((SECONDS - wait_started_seconds))"
+          next_progress_seconds=$((SECONDS + WAIT_PROGRESS_SECONDS))
         fi
         sleep "$WAIT_POLL_SECONDS"
         ;;
