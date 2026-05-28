@@ -2985,6 +2985,8 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with System Events Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_terminal_key_capture_permission_ui_since()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_claude_code_terminal_key_capture_permission_ui_since()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'com.apple.accessibility.universalAccessAuthWarn' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'frontmostApp=com.apple.systempreferences' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap.' script/real_app_smoke.sh >/dev/null ||
