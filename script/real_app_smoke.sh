@@ -14326,13 +14326,18 @@ run_claude_code_terminal_host_smoke() {
     echo "Claude Code $host_name proof attempt $attempt waiting for disposable prompt focus."
     wait_for_frontmost_claude_code_terminal_proof_process
     SMOKE_PHASE="claude-code $host_name clear prompt attempt $attempt"
-    echo "Claude Code $host_name proof attempt $attempt clearing disposable prompt line."
-    if ! clear_claude_code_terminal_prompt_line; then
-      retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while clearing" || break
-      continue
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SKIP_FRESH_PROMPT_CLEAR:-1}" =~ ^(1|true|yes|on)$ ]]; then
+      echo "Claude Code $host_name proof attempt $attempt skipping fresh disposable prompt clear; typed-prompt readiness will catch dirty prompt state."
+    else
+      echo "Claude Code $host_name proof attempt $attempt clearing disposable prompt line."
+      if ! clear_claude_code_terminal_prompt_line; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while clearing" || break
+        continue
+      fi
+      echo "Claude Code $host_name proof attempt $attempt prompt line cleared."
+      sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
     fi
-    echo "Claude Code $host_name proof attempt $attempt prompt line cleared."
-    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
 
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"

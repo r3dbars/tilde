@@ -691,6 +691,9 @@ The native pre-accept mutability probe now restores the entire proof prompt via
 Ghostty-native clear-and-input rather than a single System Events backspace,
 which keeps native mutation evidence from becoming a cleanup failure before the
 suggestion/key-capture step.
+Fresh Ghostty proof contexts also skip the initial prompt clear by default now.
+Typed-prompt readiness still rejects dirty prompt state, but the harness avoids
+one more focus-sensitive key path before typing the real proof text.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

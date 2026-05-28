@@ -172,6 +172,10 @@ Ghostty-native clear-and-input instead of a one-character System Events
 backspace. That keeps the prompt restore proportional to the whole proof text
 after native probes, reducing false red runs where native Ghostty input mutates
 the prompt but the cleanup path cannot restore the original prompt.
+Ghostty fresh disposable contexts now skip the initial prompt clear by default;
+the exact typed-prompt readiness check remains the dirty-state guard. This
+removes another focus-sensitive key path before the proof text is typed while
+still failing closed if stale prompt content is present.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
