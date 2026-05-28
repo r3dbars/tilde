@@ -116,6 +116,10 @@ Shift and HID CGEvent Shift both produced no `keyboard-event-tap-latency`
 diagnostic with `key=other`. The proof now fails before Tab with
 `key capture probe did not reach event tap`, so the next Ghostty work is a
 detached-runner key source that reaches the SteadyType event tap at all.
+The latest bounded launchd proof `20260528T210138Z-ghostty` keeps that as the
+active blocker and adds a sharper diagnostic: macOS Accessibility/System
+Settings can steal focus during the key-probe window, so future runs classify
+that permission-UI focus steal separately from a plain no-diagnostic key miss.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -848,6 +852,13 @@ an outer timeout guard so a no-op System Events probe cannot wedge the detached
 run while proving the prompt stayed unchanged. App coverage stays at `83`; the
 next Ghostty blocker is observable key delivery into SteadyType's event tap
 under a detached runner, not prompt AX discovery.
+The next launchd pass, `20260528T210138Z-ghostty`, kept that diagnosis current:
+native Ghostty text mutated and restored the proof prompt, System Events did not
+mutate it, a prompt-row suggestion appeared, and every non-mutating key-capture
+sentinel missed the event tap. Diagnostics also showed macOS
+Accessibility/System Settings stealing focus during that key probe window, so
+the harness now classifies that permission-UI focus steal explicitly instead of
+falling through to a generic suggestion timeout.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

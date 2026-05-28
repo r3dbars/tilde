@@ -4199,14 +4199,42 @@ wait_for_claude_code_terminal_key_capture_modifier_probe() {
     "decision=passthrough-modifier"
 }
 
+claude_code_terminal_key_capture_permission_ui_since() {
+  local start_line="$1"
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+
+  awk -v start="$start_line" '
+    NR <= start {
+      next
+    }
+    /workspace-focus-changed/ &&
+      (/app=com.apple.accessibility.universalAccessAuthWarn/ ||
+       /frontmostApp=com.apple.accessibility.universalAccessAuthWarn/ ||
+       /app=com.apple.systempreferences/ ||
+       /frontmostApp=com.apple.systempreferences/) {
+      found = 1
+      exit
+    }
+    END {
+      exit found ? 0 : 1
+    }
+  ' "$LOG_PATH" 2>/dev/null
+}
+
 probe_claude_code_terminal_host_key_capture() {
   local host_name="${1:-$(claude_code_host_display_name)}"
-  local probe_start_line
+  local key_capture_start_line probe_start_line
 
   if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ||
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE:-1}" == "0" ]]; then
     return 0
   fi
+
+  key_capture_start_line="$(line_count "$LOG_PATH")"
 
   if ! settle_claude_code_terminal_proof_focus "session key-capture probe"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before key capture probe"
@@ -4303,6 +4331,12 @@ APPLESCRIPT
   fi
   if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
     return 0
+  fi
+
+  if claude_code_terminal_key_capture_permission_ui_since "$key_capture_start_line"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"
+    echo "Claude Code $host_name key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap." >&2
+    return 1
   fi
 
   CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
@@ -13993,6 +14027,7 @@ run_claude_code_terminal_host_smoke() {
 
   local runtime_start_line start_line trace_start_line suggestion_start_line pre_trigger_suggestion_start_line accept_start_line proof_text marker host_name
   local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready stale_blocker_line stale_blocker_reason
+  local post_suggestion_failure_reason post_suggestion_failure_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
   host_name="$(claude_code_host_display_name)"
@@ -14002,6 +14037,8 @@ run_claude_code_terminal_host_smoke() {
     echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS must be a non-negative integer." >&2
     exit 2
   fi
+  post_suggestion_failure_reason=""
+  post_suggestion_failure_start_line=0
 
   prepare_temporary_app_enablement
   build_if_needed
@@ -14191,6 +14228,8 @@ run_claude_code_terminal_host_smoke() {
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
         SMOKE_PHASE="claude-code $host_name press Tab attempt $attempt"
         if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
+          post_suggestion_failure_reason="${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}"
+          post_suggestion_failure_start_line="$suggestion_line"
           retry_claude_code_terminal_proof_context \
             "$host_name" \
             "$marker" \
@@ -14220,6 +14259,14 @@ run_claude_code_terminal_host_smoke() {
   done < <(claude_code_terminal_smoke_input_texts)
 
   if [[ "$found_suggestion" != "1" ]]; then
+    if [[ -n "$post_suggestion_failure_reason" ]]; then
+      echo "Claude Code $host_name proof failed after a visible prompt-row suggestion: $post_suggestion_failure_reason." >&2
+      echo "Required fields: keyboard-event-tap-latency app=com.anthropic.claude-code key=tab or key=other." >&2
+      echo "Suggestion diagnostics line: ${post_suggestion_failure_start_line:-unknown}" >&2
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((post_suggestion_failure_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
+      exit 1
+    fi
     echo "Timed out waiting for Claude Code $host_name proof suggestion after $attempt disposable context(s)." >&2
     echo "Pattern: suggestion-presented .*app=com.anthropic.claude-code" >&2
     echo "Log: $LOG_PATH" >&2
