@@ -443,6 +443,14 @@ so typed prompt proof can start consistently. A follow-up
 `20260528T110231Z-ghostty` failed even earlier because both direct-open contexts
 could not become frontmost and zero-window Ghostty hosts had to be reset, so
 frontmost launch readiness is still flaky around the same prompt-preflight lane.
+The empty-prompt AX helper now treats hints as optional only for empty-text
+readiness, avoiding brittle placeholder dependence after process/pid proof.
+`20260528T110650Z-ghostty` proved the improvement: the run reached a fresh
+direct-open context, cleared the prompt, typed the proof text, showed a prompt-row
+phrase suggestion, and delivered Tab with `keyboard-action handled=true`, then
+failed closed at verified insertion because every app-owned Ghostty transport
+left the prompt unchanged. The current Ghostty red bar is again the actual
+one-word insertion transport, not prompt launch or suggestion presentation.
 Ghostty remains unsupported until a
 detached run reaches verified one-word no-submit insertion and exits `0`.
 
