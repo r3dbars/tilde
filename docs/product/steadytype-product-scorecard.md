@@ -696,6 +696,17 @@ now sharper: prove why the disposable Ghostty prompt stops accepting external
 text after the fail-closed insertion cluster, or avoid entering that state with
 a different insertion architecture.
 
+The follow-up comparator removed the simple focus explanation and proved the
+before/after split. `20260528T181801Z-ghostty` first typed one external native
+Ghostty suffix and one external System Events suffix before Tab; both mutated
+the prompt and restored the original text. The same run then reached prompt-row
+suggestion line `975159`, failed closed after Tab, typed one external native
+suffix without Enter, clicked the latest terminal-screen prompt caret at
+`x=633 y=723`, then typed one external System Events suffix without Enter.
+Neither post-fail external path verified prompt mutation after the prompt-row
+refocus. App coverage stays at `83`; Ghostty is still unsupported until a
+detached proof exits `0` with verified one-word no-submit insertion.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as

@@ -2163,7 +2163,7 @@ wait_for_claude_code_terminal_insertion_result() {
       echo "Claude Code $host_name insertion failed closed." >&2
       echo "Required fields: insert app=com.anthropic.claude-code success=true" >&2
       echo "Observed insertion failure or fail-closed Ghostty proof diagnostics." >&2
-      run_claude_code_ghostty_post_fail_external_insertion_probe "$proof_text" || true
+      run_claude_code_ghostty_post_fail_external_insertion_probe "$proof_text" "$start_line" || true
       echo "Log: $LOG_PATH" >&2
       tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
       exit 1
@@ -2179,8 +2179,221 @@ wait_for_claude_code_terminal_insertion_result() {
   exit 1
 }
 
+find_claude_code_terminal_prompt_caret_point_optional() {
+  local start_line="$1"
+  local matched
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_X=""
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y=""
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH=""
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT=""
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+
+  matched="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk '
+      /synthetic-caret/ && /app=com.anthropic.claude-code/ && /source=terminal-screen-prompt/ {
+        for (fieldIndex = 1; fieldIndex <= NF; fieldIndex++) {
+          if (index($fieldIndex, "caret=x=") == 1) {
+            caret = substr($fieldIndex, length("caret=x=") + 1)
+            split(caret, parts, ",")
+            x = parts[1]
+            y = parts[2]
+            w = parts[3]
+            h = parts[4]
+            sub(/^y=/, "", y)
+            sub(/^w=/, "", w)
+            sub(/^h=/, "", h)
+            candidate = x " " y " " w " " h
+          }
+        }
+      }
+
+      END {
+        if (candidate != "") {
+          print candidate
+        }
+      }
+    ' 2>/dev/null || true)"
+
+  [[ -n "$matched" ]] || return 1
+  read -r CLAUDE_CODE_TERMINAL_PROMPT_CARET_X \
+    CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y \
+    CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH \
+    CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT <<<"$matched"
+
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_X" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || return 1
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || return 1
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH=0
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT=0
+}
+
+click_screen_point_cgevent() {
+  local x="$1"
+  local y="$2"
+  local label="$3"
+
+  swift - "$x" "$y" <<'SWIFT' >/dev/null
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 3,
+      let x = Double(CommandLine.arguments[1]),
+      let y = Double(CommandLine.arguments[2]),
+      x.isFinite,
+      y.isFinite,
+      let source = CGEventSource(stateID: .hidSystemState) else {
+    fputs("screen point CGEvent click failed: invalid point or event source.\n", stderr)
+    exit(1)
+}
+
+let point = CGPoint(x: x, y: y)
+let events: [(CGEventType, useconds_t)] = [
+    (.mouseMoved, 20_000),
+    (.leftMouseDown, 35_000),
+    (.leftMouseUp, 80_000),
+]
+
+for (eventType, delay) in events {
+    guard let event = CGEvent(
+        mouseEventSource: source,
+        mouseType: eventType,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        fputs("screen point CGEvent click failed: could not create mouse event.\n", stderr)
+        exit(1)
+    }
+    event.post(tap: .cghidEventTap)
+    usleep(delay)
+}
+SWIFT
+}
+
+click_claude_code_ghostty_post_fail_prompt_caret() {
+  local start_line="$1"
+  local click_x click_y
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  if ! find_claude_code_terminal_prompt_caret_point_optional "$start_line"; then
+    echo "Claude Code Ghostty post-fail prompt-row refocus found no synthetic caret to click." >&2
+    return 1
+  fi
+
+  click_x="$(awk \
+    -v x="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_X" \
+    -v w="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH" \
+    'BEGIN { offset = w + 0; if (offset < 1) offset = 1; printf "%.0f", x + offset }')"
+  click_y="$(awk \
+    -v y="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y" \
+    -v h="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT" \
+    'BEGIN { offset = (h + 0) / 2; if (offset < 1) offset = 1; printf "%.0f", y + offset }')"
+
+  echo "Claude Code Ghostty post-fail prompt-row refocus clicking latest synthetic caret at x=$click_x y=$click_y before System Events probe." >&2
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  click_screen_point_cgevent "$click_x" "$click_y" "Claude Code Ghostty post-fail prompt-row refocus"
+}
+
+press_claude_code_terminal_external_backspace_key() {
+  local label="${1:-external mutation restore}"
+
+  settle_claude_code_terminal_proof_focus "$label" || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_RESTORE_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty pre-accept external restore" <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+tell application "System Events"
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
+    error "Claude Code terminal host is not frontmost for proof restore."
+  end if
+  key code 51
+end tell
+APPLESCRIPT
+}
+
+run_claude_code_ghostty_pre_accept_external_mutation_probe_one() {
+  local proof_text="$1"
+  local label="$2"
+  local probe_text="$3"
+  local type_function="$4"
+  local verify_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_VERIFY_SECONDS:-3}"
+
+  [[ -n "$probe_text" ]] || return 0
+  if [[ "$probe_text" == *$'\n'* || "$probe_text" == *$'\r'* || ${#probe_text} -ne 1 ]]; then
+    echo "Claude Code Ghostty pre-accept external $label mutability probe refused non-single-character text." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty pre-accept external $label mutability probe typing one suffix without Enter." >&2
+  if ! "$type_function" "$probe_text"; then
+    echo "Claude Code Ghostty pre-accept external $label mutability probe could not post input." >&2
+    return 0
+  fi
+  sleep "$(claude_code_ghostty_typing_drain_seconds)"
+
+  if try_claude_code_terminal_prompt_ready_quiet "$proof_text$probe_text" "$verify_seconds"; then
+    echo "Claude Code Ghostty pre-accept external $label mutability probe verified prompt mutation before app-owned insertion." >&2
+    if ! press_claude_code_terminal_external_backspace_key "Ghostty pre-accept $label restore"; then
+      echo "Claude Code Ghostty pre-accept external $label mutability probe could not post restore backspace." >&2
+      return 1
+    fi
+    sleep "$(claude_code_ghostty_typing_drain_seconds)"
+    if try_claude_code_terminal_prompt_ready_quiet "$proof_text" "$verify_seconds"; then
+      echo "Claude Code Ghostty pre-accept external $label mutability probe restored the original prompt." >&2
+      return 0
+    fi
+    echo "Claude Code Ghostty pre-accept external $label mutability probe could not verify original prompt restore." >&2
+    return 1
+  fi
+
+  echo "Claude Code Ghostty pre-accept external $label mutability probe did not verify prompt mutation." >&2
+  if try_claude_code_terminal_prompt_ready_quiet "$proof_text" "$verify_seconds"; then
+    return 0
+  fi
+  echo "Claude Code Ghostty pre-accept external $label mutability probe left the prompt in an unverified state." >&2
+  return 1
+}
+
+run_claude_code_ghostty_pre_accept_external_mutation_probe() {
+  local proof_text="$1"
+  local native_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_NATIVE_TEXT:-n}"
+  local system_events_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_SYSTEM_EVENTS_TEXT:-s}"
+
+  CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN=0
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$proof_text" ]] || return 0
+  CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN=1
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_NATIVE_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "native" \
+      "$native_probe_text" \
+      type_claude_code_terminal_ghostty_native_text || return 1
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "System Events" \
+      "$system_events_probe_text" \
+      type_claude_code_terminal_raw_smoke_text || return 1
+  fi
+}
+
 run_claude_code_ghostty_post_fail_external_insertion_probe() {
   local proof_text="$1"
+  local start_line="${2:-0}"
   local probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_TEXT:-x}"
   local system_events_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_TEXT:-z}"
 
@@ -2208,6 +2421,8 @@ run_claude_code_ghostty_post_fail_external_insertion_probe() {
   else
     echo "Claude Code Ghostty post-fail external native insertion probe did not verify prompt mutation." >&2
   fi
+
+  click_claude_code_ghostty_post_fail_prompt_caret "$start_line" || true
 
   [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]] || return 0
   [[ -n "$system_events_probe_text" ]] || return 0
@@ -13362,6 +13577,16 @@ run_claude_code_terminal_host_smoke() {
     if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
       retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove typed prompt readiness" || break
       continue
+    fi
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      if ! run_claude_code_ghostty_pre_accept_external_mutation_probe "$proof_text"; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "pre-accept external mutation probe could not restore the prompt" || break
+        continue
+      fi
+      if [[ "${CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN:-0}" == "1" ]]; then
+        suggestion_start_line="$(line_count "$LOG_PATH")"
+        pre_trigger_suggestion_start_line="$suggestion_start_line"
+      fi
     fi
     accept_start_line="$suggestion_start_line"
     suggestion_ready=0
