@@ -646,6 +646,14 @@ the instant email/casual-chat reply layer with safe short continuations such as
 and `Thanks again` -> `for sending this`; prompt, search, form, and code
 profiles stay gated out of that fallback path.
 
+Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
+textedit` and `script/manual_proof_refresh.sh --verify-target notes-title`
+passed on 2026-05-28 at commit `76cd2b614de6`, adding current strict visual
+proof rows for TextEdit default and Notes title. `script/manual_smoke_status.sh
+--strict` still exits red because Notes body/checklist, Obsidian
+default/theme/pane/long-note, and Chrome textarea/contenteditable remain stale
+after the latest app/source change.
+
 ## Scores
 
 | Area | Score | Evidence | Why It Is Not Higher | Next Proof |
