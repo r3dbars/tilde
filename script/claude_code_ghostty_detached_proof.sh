@@ -760,7 +760,7 @@ APPLESCRIPT
   fi
 
   reset_reason="System Events reported only SteadyType proof/probe Ghostty AX windows (${ax_window_count})"
-  printf 'Detached Ghostty proof resetting stale-only Ghostty host before launch: %s(%s)\n' "$(printf '%s' "$ghostty_pids" | tr '\n' ' ')" "$reset_reason" >>"$log_file"
+  printf 'Detached Ghostty proof resetting stale-only Ghostty host before launch: %s (%s)\n' "$(printf '%s' "$ghostty_pids" | tr '\n' ' ')" "$reset_reason" >>"$log_file"
   while IFS= read -r proof_pid; do
     [[ -z "$proof_pid" ]] && continue
     kill "$proof_pid" >/dev/null 2>&1 || true
