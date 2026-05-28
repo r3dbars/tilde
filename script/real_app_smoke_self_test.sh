@@ -745,8 +745,8 @@ if "GhosttyInsertionNoopPolicy.initialNoopClusterReason" not in fast_ghostty_blo
     raise SystemExit("Claude Code Ghostty proof must fail fast on the known initial no-op insertion cluster")
 if "runsExtendedProbes: runsExtendedGhosttyInsertionProbes" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty proof must keep the long insertion ladder available behind the extended-probes flag")
-if fast_ghostty_block.index("ghosttyInitialNoopClusterBaseline") > fast_ghostty_block.index("insertGhosttyTerminalHostProofNativePrefixFinalKeyText"):
-    raise SystemExit("Claude Code Ghostty initial no-op fail-fast must run before slower native-prefix probes")
+if fast_ghostty_block.index("ghosttyInitialNoopClusterBaseline") < fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
+    raise SystemExit("Claude Code Ghostty initial no-op fail-fast must include the default app-owned in-process input proof")
 if 'shouldContinueGhosttyFastInsertion(before: "ghosttyPerformActionText")' not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must budget-gate slower native action text probes")
 if 'shouldContinueGhosttyFastInsertion(before: "cgUnicodeKeyEventsPerCharacterGlobal")' not in fast_ghostty_block:

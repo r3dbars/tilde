@@ -470,10 +470,14 @@ direct command-open for the retry, the script-owned/no-restore path reached a
 fresh disposable context, typed the marked proof prompt, found a prompt-row
 suggestion at diagnostics line `903324`, handled Tab, and then failed closed at
 the expected `ghostty-initial-insertion-noop-cluster` after `ghosttySendKey`,
-bulk System Events, and pasteboard all left the prompt unchanged. The current red
-bar is verified Ghostty one-word insertion, not prompt readiness. A current-tree
-follow-up, `20260528T114501Z-ghostty`, was terminated by `SIGTERM` during the
-script-owned retry launch before prompt readiness, so it is not counted as
+bulk System Events, and pasteboard all left the prompt unchanged. The initial
+fail-fast cluster now also includes the default app-owned in-process Ghostty
+input proof before slower extended probes, so a future in-process verified or
+unsafe result will not be hidden behind the known send-key / System Events /
+pasteboard no-op. The current red bar is verified Ghostty one-word insertion,
+not prompt readiness. Current-tree follow-ups `20260528T114501Z-ghostty` and
+`20260528T115241Z-ghostty` were both terminated by `SIGTERM` during the
+script-owned retry launch before prompt readiness, so they are not counted as
 insertion evidence.
 
 ## Scores

@@ -10176,53 +10176,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
-            if !runsExtendedGhosttyInsertionProbes {
-                let promptStayedUnchangedAfterInitialNoopCluster =
-                    verifyClaudeCodeTerminalHostProofInsertion(
-                        expectedProofInputText: originalProofInputText,
-                        frontmostApp: frontmostApp,
-                        profile: currentProfile,
-                        attempts: 4
-                    )
-                DiagnosticsLog.shared.record(
-                    "claude-code-terminal-host-proof-insert",
-                    metadata: [
-                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                        "source": "ghosttyInitialNoopClusterBaseline",
-                        "verified": String(promptStayedUnchangedAfterInitialNoopCluster)
-                    ]
-                )
-                guard promptStayedUnchangedAfterInitialNoopCluster else {
-                    DiagnosticsLog.shared.record(
-                        "claude-code-terminal-host-proof-insert",
-                        metadata: [
-                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                            "posted": "false",
-                            "reason": "ghostty-initial-noop-cluster-mutated-input",
-                            "source": "ghosttyInitialNoopClusterBaseline"
-                        ]
-                    )
-                    return false
-                }
-
-                let initialNoopCluster = GhosttyInitialInsertionNoopInput(
-                    hostBundleIdentifier: frontmostApp.bundleIdentifier,
-                    proofProfileBundleIdentifier: currentProfile?.bundleIdentifier,
-                    sendKeyVerified: ghosttySendKeyOutcome.verified,
-                    systemEventsBulkVerified: ghosttyBulkSystemEventsOutcome.verified,
-                    systemEventsBulkSafeToContinue: ghosttyBulkSystemEventsOutcome.safeToContinue,
-                    pasteboardVerified: ghosttyPasteboardOutcome.verified,
-                    pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
-                    promptStayedUnchanged: promptStayedUnchangedAfterInitialNoopCluster,
-                    runsExtendedProbes: runsExtendedGhosttyInsertionProbes
-                )
-                if GhosttyInsertionNoopPolicy().shouldFailFastAfterInitialNoopCluster(initialNoopCluster) {
-                    return recordGhosttyFastFailClosed(
-                        reason: GhosttyInsertionNoopPolicy.initialNoopClusterReason
-                    )
-                }
-            }
-
             if ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE"] == "1" {
                 guard shouldContinueGhosttyFastInsertion(before: "ghosttyNativePrefixFinalKeyText") else {
                     return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
@@ -10262,6 +10215,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             guard ghosttyInProcessInputTextOutcome.safeToContinue else {
                 return false
+            }
+
+            if !runsExtendedGhosttyInsertionProbes {
+                let promptStayedUnchangedAfterInitialNoopCluster =
+                    verifyClaudeCodeTerminalHostProofInsertion(
+                        expectedProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: currentProfile,
+                        attempts: 4
+                    )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "ghosttyInitialNoopClusterBaseline",
+                        "verified": String(promptStayedUnchangedAfterInitialNoopCluster)
+                    ]
+                )
+                guard promptStayedUnchangedAfterInitialNoopCluster else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "ghostty-initial-noop-cluster-mutated-input",
+                            "source": "ghosttyInitialNoopClusterBaseline"
+                        ]
+                    )
+                    return false
+                }
+
+                let initialNoopCluster = GhosttyInitialInsertionNoopInput(
+                    hostBundleIdentifier: frontmostApp.bundleIdentifier,
+                    proofProfileBundleIdentifier: currentProfile?.bundleIdentifier,
+                    sendKeyVerified: ghosttySendKeyOutcome.verified,
+                    systemEventsBulkVerified: ghosttyBulkSystemEventsOutcome.verified,
+                    systemEventsBulkSafeToContinue: ghosttyBulkSystemEventsOutcome.safeToContinue,
+                    pasteboardVerified: ghosttyPasteboardOutcome.verified,
+                    pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
+                    inProcessInputTextVerified: ghosttyInProcessInputTextOutcome.verified,
+                    inProcessInputTextSafeToContinue: ghosttyInProcessInputTextOutcome.safeToContinue,
+                    promptStayedUnchanged: promptStayedUnchangedAfterInitialNoopCluster,
+                    runsExtendedProbes: runsExtendedGhosttyInsertionProbes
+                )
+                if GhosttyInsertionNoopPolicy().shouldFailFastAfterInitialNoopCluster(initialNoopCluster) {
+                    return recordGhosttyFastFailClosed(
+                        reason: GhosttyInsertionNoopPolicy.initialNoopClusterReason
+                    )
+                }
             }
 
             guard shouldContinueGhosttyFastInsertion(before: "ghosttyFrontWindowInputText") else {

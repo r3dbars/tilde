@@ -23,7 +23,17 @@ struct GhosttyInsertionNoopPolicyTests {
             systemEventsBulkVerified: true
         )))
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            inProcessInputTextVerified: true
+        )))
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
             promptStayedUnchanged: false
+        )))
+    }
+
+    @Test("Does not fail fast when an in-process input miss is unsafe")
+    func unsafeInProcessInputMissDoesNotFailFast() {
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            inProcessInputTextSafeToContinue: false
         )))
     }
 
@@ -47,6 +57,8 @@ private extension GhosttyInitialInsertionNoopInput {
         systemEventsBulkSafeToContinue: Bool = true,
         pasteboardVerified: Bool = false,
         pasteboardSafeToContinue: Bool = true,
+        inProcessInputTextVerified: Bool = false,
+        inProcessInputTextSafeToContinue: Bool = true,
         promptStayedUnchanged: Bool = true,
         runsExtendedProbes: Bool = false
     ) -> GhosttyInitialInsertionNoopInput {
@@ -58,6 +70,8 @@ private extension GhosttyInitialInsertionNoopInput {
             systemEventsBulkSafeToContinue: systemEventsBulkSafeToContinue,
             pasteboardVerified: pasteboardVerified,
             pasteboardSafeToContinue: pasteboardSafeToContinue,
+            inProcessInputTextVerified: inProcessInputTextVerified,
+            inProcessInputTextSafeToContinue: inProcessInputTextSafeToContinue,
             promptStayedUnchanged: promptStayedUnchanged,
             runsExtendedProbes: runsExtendedProbes
         )
