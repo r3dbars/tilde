@@ -4160,6 +4160,72 @@ press_key_code_cgevent_with_timeout() {
   wait_for_background_process "$pid" "$timeout_seconds" "$label"
 }
 
+probe_claude_code_terminal_host_key_capture() {
+  local host_name="${1:-$(claude_code_host_display_name)}"
+  local probe_start_line
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ||
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE:-1}" == "0" ]]; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "session key-capture probe"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before key capture probe"
+    echo "Claude Code terminal host is not frontmost for key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name probing CGEvent session key capture with non-mutating Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent session key-capture probe" \
+    "session" \
+    "warm"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=other" \
+    "decision=passthrough-modifier"; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "HID key-capture probe"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before HID key capture probe"
+    echo "Claude Code terminal host is not frontmost for HID key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name CGEvent session key capture probe produced no diagnostic; retrying with HID Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent HID key-capture probe" \
+    "hid" \
+    "warm"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=other" \
+    "decision=passthrough-modifier"; then
+    return 0
+  fi
+
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
+  echo "Claude Code $host_name key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt." >&2
+  return 1
+}
+
 cgevent_text_helper_path() {
   printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-text-v1}"
 }
@@ -11550,6 +11616,7 @@ tell application "System Events"
   end if
 end tell
 APPLESCRIPT
+  probe_claude_code_terminal_host_key_capture "$host_name" || return 1
   probe_start_line="$(line_count "$LOG_PATH")"
   echo "Claude Code $host_name proof pressing CGEvent Tab for hot accept."
   if ! press_key_code_cgevent_with_timeout \

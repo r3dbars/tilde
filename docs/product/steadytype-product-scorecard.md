@@ -109,6 +109,13 @@ screen-copy readiness, exact typed prompt readiness, and native pre-accept
 mutation/restore all passed; session CGEvent Tab, HID CGEvent Tab, and System
 Events Tab all produced no `key=tab` diagnostic; the run failed with
 `Tab delivery did not reach key capture`.
+The follow-up `20260528T203530Z-ghostty` added a non-mutating key-capture
+sentinel before Tab. It reached a prompt-row suggestion at diagnostics line
+`1029172` with key capture started at line `1029158`, then session CGEvent
+Shift and HID CGEvent Shift both produced no `keyboard-event-tap-latency`
+diagnostic with `key=other`. The proof now fails before Tab with
+`key capture probe did not reach event tap`, so the next Ghostty work is a
+detached-runner key source that reaches the SteadyType event tap at all.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
