@@ -425,7 +425,11 @@ failure, but it still failed red: the prompt exposed only partial marked input
 (`beforeChars=28`), produced no visible suggestion, then fell back into
 missing-marker / unsafe-input-line diagnostics. The next Ghostty red bar is now
 full marked proof-text insertion into the Claude prompt before suggestion
-discovery, not just direct process launch.
+discovery, not just direct process launch. The bounded retry loop now routes
+retryable Ghostty misses through a max-attempt guard so one-attempt proofs stop
+at the real red bar instead of opening an extra disposable context; the
+follow-up `20260528T104706Z-ghostty` failed earlier in launch readiness, before
+the typed-prompt path, and left no running proof process.
 Ghostty remains unsupported until a
 detached run reaches verified one-word no-submit insertion and exits `0`.
 
