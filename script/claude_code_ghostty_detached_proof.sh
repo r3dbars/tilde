@@ -14,6 +14,17 @@ TAIL_LINES=80
 WAIT_POLL_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_POLL_SECONDS:-2}"
 WAIT_TIMEOUT_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_TIMEOUT_SECONDS:-900}"
 LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-terminal}"
+GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_ATTEMPTS
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS
+  AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES
+  AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS
+  AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS
+  AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE
+  AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE
+  AUTOCOMPLETE_LAB_SCREENSHOT_TRACE
+)
 
 usage() {
   cat <<'EOF'
@@ -151,6 +162,27 @@ log_file_for_run() {
   printf '%s/proof.log\n' "$1"
 }
 
+detached_smoke_command_summary() {
+  local key value
+  for key in "${GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS[@]}"; do
+    if [[ -n "${!key+x}" ]]; then
+      value="${!key}"
+      printf '%s=%q ' "$key" "$value"
+    fi
+  done
+  printf '%s' 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate'
+}
+
+write_passthrough_env_exports() {
+  local key value
+  for key in "${GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS[@]}"; do
+    if [[ -n "${!key+x}" ]]; then
+      value="${!key}"
+      printf 'export %s=%q\n' "$key" "$value"
+    fi
+  done
+}
+
 status_value() {
   local file="$1"
   local key="$2"
@@ -228,12 +260,15 @@ create_runner_script() {
   local plist_file="$7"
   local runner_path="${PATH:-/Users/redbars/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
   local runner_home="${HOME:-/Users/redbars}"
+  local smoke_command_summary
+  smoke_command_summary="$(detached_smoke_command_summary)"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'set -u\n\n'
     printf "trap '' HUP\n"
     printf 'export PATH=%q\n' "$runner_path"
     printf 'export HOME=%q\n' "$runner_home"
+    write_passthrough_env_exports
     printf 'ROOT_DIR=%q\n' "$ROOT_DIR"
     printf 'RUN_DIR=%q\n' "$run_dir"
     printf 'STATUS_FILE=%q\n' "$status_file"
@@ -241,6 +276,7 @@ create_runner_script() {
     printf 'LAUNCHER=%q\n' "$launcher"
     printf 'LAUNCH_LABEL=%q\n' "$launch_label"
     printf 'PLIST_FILE=%q\n' "$plist_file"
+    printf 'SMOKE_COMMAND_SUMMARY=%q\n' "$smoke_command_summary"
     cat <<'EOF'
 STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
@@ -266,7 +302,7 @@ write_status() {
     if [[ -n "$PLIST_FILE" ]]; then
       printf 'plist_file=%s\n' "$PLIST_FILE"
     fi
-    printf 'command=%s\n' 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate'
+    printf 'command=%s\n' "$SMOKE_COMMAND_SUMMARY"
     printf 'note=%s\n' 'Detached wrapper stores status and child output only; custom proof text is not persisted here.'
   } >"$STATUS_FILE"
 }
@@ -291,7 +327,7 @@ write_status running
   printf 'Detached Ghostty proof started at %s\n' "$STARTED_AT"
   printf 'Run directory: %s\n' "$RUN_DIR"
   printf 'Root: %s\n' "$ROOT_DIR"
-  printf 'Command: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate\n'
+  printf 'Command: %s\n' "$SMOKE_COMMAND_SUMMARY"
   printf '\n'
 } >>"$LOG_FILE"
 
@@ -409,12 +445,15 @@ write_parent_final_status() {
   local exit_status="$3"
   local note="$4"
   local status_file pid started_at launcher launch_label plist_file
+  local smoke_command_summary
   status_file="$(status_file_for_run "$run_dir")"
   pid="$(status_value "$status_file" pid)"
   started_at="$(status_value "$status_file" started_at)"
   launcher="$(status_value "$status_file" launcher)"
   launch_label="$(status_value "$status_file" launch_label)"
   plist_file="$(status_value "$status_file" plist_file)"
+  smoke_command_summary="$(status_value "$status_file" command)"
+  [[ -n "$smoke_command_summary" ]] || smoke_command_summary="$(detached_smoke_command_summary)"
   [[ -n "$started_at" ]] || started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   {
     printf 'state=%s\n' "$state"
@@ -432,7 +471,7 @@ write_parent_final_status() {
     if [[ -n "$plist_file" ]]; then
       printf 'plist_file=%s\n' "$plist_file"
     fi
-    printf 'command=%s\n' 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate'
+    printf 'command=%s\n' "$smoke_command_summary"
     printf 'note=%s\n' "$note"
   } >"$status_file"
 }
@@ -448,11 +487,12 @@ start_run() {
     return 1
   fi
 
-  local timestamp run_dir status_file log_file runner_script worker_script plist_file launch_label pid launch_domain
+  local timestamp run_dir status_file log_file runner_script worker_script plist_file launch_label pid launch_domain smoke_command_summary
   timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
   run_dir="$PROOF_ROOT/$timestamp-ghostty"
   status_file="$(status_file_for_run "$run_dir")"
   log_file="$(log_file_for_run "$run_dir")"
+  smoke_command_summary="$(detached_smoke_command_summary)"
   if [[ "$LAUNCHER" == "terminal" ]]; then
     runner_script="$run_dir/run-detached-proof.command"
     worker_script="$run_dir/run-detached-proof-worker.sh"
@@ -479,7 +519,7 @@ start_run() {
     else
       echo "Command: nohup $runner_script"
     fi
-    echo "Child smoke: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate"
+    echo "Child smoke: $smoke_command_summary"
     return 0
   fi
 
@@ -502,7 +542,7 @@ start_run() {
       printf 'launch_label=%s\n' "$launch_label"
       printf 'plist_file=%s\n' "$plist_file"
     fi
-    printf 'command=%s\n' 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate'
+    printf 'command=%s\n' "$smoke_command_summary"
     printf 'note=%s\n' 'Detached wrapper stores status and child output only; custom proof text is not persisted here.'
   } >"$status_file"
   printf '%s\n' "$run_dir" >"$LATEST_FILE"
@@ -519,7 +559,7 @@ start_run() {
         printf 'launcher=%s\n' "$LAUNCHER"
         printf 'launch_label=%s\n' "$launch_label"
         printf 'plist_file=%s\n' "$plist_file"
-        printf 'command=%s\n' 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate'
+        printf 'command=%s\n' "$smoke_command_summary"
         printf 'note=%s\n' 'launchctl bootstrap failed before the child smoke could start.'
       } >"$status_file"
       return 1
@@ -535,7 +575,7 @@ start_run() {
         printf 'exit_status=1\n'
         printf 'run_dir=%s\n' "$run_dir"
         printf 'launcher=%s\n' "$LAUNCHER"
-        printf 'command=%s\n' 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate'
+        printf 'command=%s\n' "$smoke_command_summary"
         printf 'note=%s\n' 'Terminal.app launch failed before the child smoke could start.'
       } >"$status_file"
       return 1
@@ -556,7 +596,7 @@ start_run() {
       printf 'launch_label=%s\n' "$launch_label"
       printf 'plist_file=%s\n' "$plist_file"
     fi
-    printf 'command=%s\n' 'AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate'
+    printf 'command=%s\n' "$smoke_command_summary"
     printf 'note=%s\n' 'Detached wrapper stores status and child output only; custom proof text is not persisted here.'
   } >"$status_file"
 

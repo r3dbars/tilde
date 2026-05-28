@@ -746,6 +746,15 @@ if "postUnicodeTextKeyEventsPerCharacter(finalText)" not in native_prefix_final_
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must use a real final key event after native input")
 if "ghostty-native-prefix-final-key-unverified-mutated-input" not in native_prefix_final_key_block:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must fail closed if only part of the transport mutates the prompt")
+for env_key in [
+    "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES",
+    "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS",
+    "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS",
+    "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE",
+    "AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE",
+]:
+    if env_key not in source:
+        raise SystemExit(f"real app smoke launch must forward {env_key} into the SteadyType app process")
 if '"ghosttySystemEventsLoginShellBulkKeystroke"' not in terminal_insert_block or 'exec /usr/bin/osascript' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must keep a shell-launched System Events bulk fallback")
 if "ghosttySystemEventsBulkKeystrokeShellBaseline" not in terminal_insert_block:
@@ -884,6 +893,13 @@ if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/
    ! grep -F 'launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'launchctl unsetenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected model latency proof scenario cleanup" >&2
+  exit 1
+fi
+
+if ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE \' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof env overrides to reach relaunched SteadyType" >&2
   exit 1
 fi
 
