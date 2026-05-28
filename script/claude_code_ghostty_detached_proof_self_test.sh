@@ -56,6 +56,7 @@ require_contains "$TMP_DIR/help.txt" "custom proof text"
 require_contains "$TMP_DIR/help.txt" "LaunchAgent"
 require_contains "$TMP_DIR/help.txt" "terminal or nohup"
 require_contains "$TMP_DIR/help.txt" "LaunchAgent by default"
+require_contains "$TMP_DIR/help.txt" "--force-stop"
 require_contains script/claude_code_ghostty_detached_proof.sh "reset_stale_only_ghostty_host_before_start"
 require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType AppleScript Probe"
 require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType Submit Probe"
@@ -294,6 +295,42 @@ kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
 wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
 ALIVE_SMOKE_PID=""
 
+GUARDED_STOP_RUN="$TMP_DIR/proofs/guarded-stop-run"
+mkdir -p "$GUARDED_STOP_RUN"
+ALIVE_SMOKE_PID="$(start_fake_smoke_process)"
+cat >"$GUARDED_STOP_RUN/status.env" <<EOF
+state=running
+pid=999999
+smoke_pid=$ALIVE_SMOKE_PID
+started_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+run_dir=$GUARDED_STOP_RUN
+launcher=nohup
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'guarded stop detached log\n' >"$GUARDED_STOP_RUN/proof.log"
+if AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh stop --run-dir "$GUARDED_STOP_RUN" >"$TMP_DIR/guarded-stop-refused.txt" 2>&1; then
+  echo "detached Ghostty proof early stop should require --force-stop" >&2
+  exit 1
+fi
+require_contains "$TMP_DIR/guarded-stop-refused.txt" "Refusing to stop active detached Ghostty proof during the early evidence window"
+require_contains "$TMP_DIR/guarded-stop-refused.txt" "Use stop --force-stop if this is intentional"
+if ! kill -0 "$ALIVE_SMOKE_PID" >/dev/null 2>&1; then
+  echo "detached Ghostty proof guarded stop should leave the active smoke pid alive" >&2
+  exit 1
+fi
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh stop --force-stop --run-dir "$GUARDED_STOP_RUN" >"$TMP_DIR/guarded-stop-forced.txt"
+require_contains "$TMP_DIR/guarded-stop-forced.txt" "state=failed"
+require_contains "$TMP_DIR/guarded-stop-forced.txt" "exit_status=143"
+if kill -0 "$ALIVE_SMOKE_PID" >/dev/null 2>&1; then
+  echo "detached Ghostty proof --force-stop should terminate guarded smoke pid $ALIVE_SMOKE_PID" >&2
+  exit 1
+fi
+wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
+ALIVE_SMOKE_PID=""
+
 STOP_ORPHANED_SMOKE_RUN="$TMP_DIR/proofs/stop-orphaned-smoke-run"
 mkdir -p "$STOP_ORPHANED_SMOKE_RUN"
 bash -c 'trap "exit 0" TERM; while :; do sleep 1 & wait $!; done' &
@@ -486,7 +523,7 @@ require_contains "$SCRIPT_TEXT" "all_run_dirs()"
 require_contains "$SCRIPT_TEXT" "active_run_dirs()"
 require_contains "$SCRIPT_TEXT" "Force start stopping active detached Ghostty proof"
 require_contains "$SCRIPT_TEXT" "start --force to stop active run(s) before starting"
-require_contains "$SCRIPT_TEXT" "Stop any active detached Ghostty proof before starting."
+require_contains "$SCRIPT_TEXT" "Stop active same-launcher proof runs before starting."
 require_contains "$SCRIPT_TEXT" "process_group_for_pid"
 require_contains "$SCRIPT_TEXT" "signal_process_or_group"
 require_contains "$SCRIPT_TEXT" "proof_artifact_dir_for_run"
@@ -498,6 +535,14 @@ require_contains "$SCRIPT_TEXT" 'signal_process_or_group "$smoke_pid" KILL'
 require_contains "$SCRIPT_TEXT" 'kill -TERM "-$smoke_pgid"'
 require_contains "$SCRIPT_TEXT" 'write_parent_final_status "$run_dir" failed 143'
 require_contains "$SCRIPT_TEXT" "Run script/claude_code_ghostty_detached_proof.sh stop to terminate the active proof."
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_ALLOW_CROSS_LAUNCHER_FORCE"
+require_contains "$SCRIPT_TEXT" "Refusing to force-stop active"
+require_contains "$SCRIPT_TEXT" "Run stop --run-dir explicitly"
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STOP_FORCE_GRACE_SECONDS"
+require_contains "$SCRIPT_TEXT" "status_started_age_seconds"
+require_contains "$SCRIPT_TEXT" "stop_requires_force_guard"
+require_contains "$SCRIPT_TEXT" "Refusing to stop active detached Ghostty proof during the early evidence window"
+require_contains "$SCRIPT_TEXT" "Use stop --force-stop if this is intentional"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_PROGRESS_SECONDS"
 require_contains "$SCRIPT_TEXT" "print_wait_progress"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof still"
