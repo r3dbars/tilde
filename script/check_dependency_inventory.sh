@@ -38,6 +38,7 @@ for needle in \
   "swift-huggingface" \
   "swift-transformers" \
   "NSAccessibilityUsageDescription" \
+  "NSAppleEventsUsageDescription" \
   "No analytics SDK" \
   "No crash reporting SDK" \
   "download_mlx_model.py" \
@@ -68,6 +69,7 @@ if [[ ! -f "$INFO_PLIST" ]]; then
 fi
 
 /usr/libexec/PlistBuddy -c 'Print :NSAccessibilityUsageDescription' "$INFO_PLIST" >/tmp/autocomplete-accessibility-usage.txt
+/usr/libexec/PlistBuddy -c 'Print :NSAppleEventsUsageDescription' "$INFO_PLIST" >/tmp/autocomplete-apple-events-usage.txt
 
 for forbidden_key in \
   NSCameraUsageDescription \

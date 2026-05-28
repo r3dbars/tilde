@@ -600,6 +600,8 @@ cat >"$INFO_PLIST" <<PLIST
   <false/>
   <key>NSAccessibilityUsageDescription</key>
   <string>SteadyType needs Accessibility permission to read the active text field and show local suggestions near the cursor.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>SteadyType uses Automation only for opted-in terminal hosts, so accepted suggestions can be inserted into supported prompts without submitting them.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>

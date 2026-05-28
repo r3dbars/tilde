@@ -223,6 +223,36 @@ native action text was still running before the safer front-window input rungs.
 The app ladder now runs action text after in-process, direct front-window, and
 shell-launched front-window native input, while keeping it before the slower
 marker-scanned native input and paste-action rungs.
+The next current-head run, `20260528T045645Z-ghostty`, found a prompt-row
+suggestion at diagnostics line `846384` and proved the action-word safety gate
+was the next blocker: deferred Tab accept reached `stage=insert-start`, then
+line `847494` blocked with `reason=accepted-text-prompt-action-word`. That is
+too broad for the explicit one-word no-submit proof lane, so accepted text
+safety now allows prompt action words only when
+`shouldUseClaudeCodeTerminalHostProofDirectInsertion` is true; command prefixes,
+shell metacharacters, hidden controls, multiword unsafe text, and normal prompt
+surfaces remain blocked.
+After that patch, bare detached proof defaults also changed to the intended
+deferred Ghostty lane with a proof-only 45s insertion budget. `20260528T050302Z-ghostty`
+showed the normal detached command now passes the action-word gate and reaches
+the reordered ladder, but the 28s prior default still stopped before the session
+helper at diagnostics line `851094`. The longer exploratory run,
+`20260528T050557Z-ghostty`, found a prompt-row suggestion at line `851655`,
+scheduled deferred Tab accept at lines `852671`-`852673`, then proved every
+current app-owned transport still left the disposable prompt unchanged:
+send-key, direct and shell-launched System Events, targeted and global
+pasteboard, in-process native input, front-window native input, action text,
+marker-scanned native input, paste action, HID and session CGEvent helpers,
+shell-launched bulk System Events, and global Unicode key events. It failed
+closed with `ghostty-fast-verified-insertion-failed`, `insert ... success=false`,
+and deferred `stage=insert-failed` at lines `852754`-`852756`. Ghostty remains
+unsupported; the next real fix needs a new transport or permission shape, not
+another no-op rung.
+The app bundle and dependency inventory now declare and verify
+`NSAppleEventsUsageDescription` for opted-in terminal host Automation. This is
+permission hygiene for the next Ghostty transport attempt, not green support:
+`./script/check_app_bundle.sh` and `./script/check_dependency_inventory.sh`
+passed after the change, while the live Ghostty proof above still failed closed.
 
 ## Scores
 
