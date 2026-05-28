@@ -707,6 +707,22 @@ Neither post-fail external path verified prompt mutation after the prompt-row
 refocus. App coverage stays at `83`; Ghostty is still unsupported until a
 detached proof exits `0` with verified one-word no-submit insertion.
 
+The newest default-ladder pass ruled out one more likely Ghostty transport
+without raising the score. SteadyType now tries a smoke-equivalent frontmost
+bundle System Events raw keystroke before the exact-PID focused System Events
+rung. `20260528T183440Z-ghostty` found prompt-row suggestions on two disposable
+contexts; attempt 1 lost the visible suggestion during Tab injection, and attempt
+2 consumed Tab at diagnostics line `989460`, clicked the prompt-row caret at
+line `989486`, then posted `ghosttyBundleSystemEventsRawKeystroke` at line
+`989490`. That new rung exited `0` but verified `false`, its unchanged-prompt
+baseline verified `true` at line `989491`, focused System Events stayed false at
+lines `989493`-`989494`, send-key stayed false at lines `989496`-`989497`, and
+the proof failed closed at lines `989529`-`989532`. The pre-accept external
+native/System Events probes still mutated and restored the prompt, while the
+post-fail external probes did not mutate after prompt-row refocus. App coverage
+stays at `83`; Ghostty is still unsupported until a detached proof exits `0`
+with verified one-word no-submit insertion.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as
