@@ -2891,6 +2891,9 @@ if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/rea
    ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Terminal proof $label exit state' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "describe_claude_code_ghostty_launch_state" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Claude Code Ghostty proof launch state:" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "proofTitleWindows=" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Claude Code Ghostty proof shell did not exec the disposable proof command." script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Ghostty proof launch to verify, retry, and diagnose the disposable shell command before prompt discovery" >&2
   exit 1
