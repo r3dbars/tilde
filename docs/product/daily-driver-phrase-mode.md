@@ -96,9 +96,14 @@ Cycle 2 follow-up keeps instant fallbacks trustworthy while the model refines:
   in the same field, and not invalidated by user typing,
 - risky model suppression still hides the current suggestion instead of
   preserving something unsafe,
+- user typing that invalidates the visible suggestion now lets a stronger fresh
+  replacement show, so an old phrase does not block the next phrase in the same
+  note,
 - Notes proof accepts now wait briefly for a fresh keyboard event tap marker
   before sending `Tab` or the full-accept shortcut, which makes proof races
-  easier to separate from real insertion failures.
+  easier to separate from real insertion failures,
+- Notes, TextEdit, and Chrome proof setup now reasserts the target app/caret at
+  the fragile accept and undo moments before counting the row.
 
 Validation from the follow-up:
 
@@ -107,12 +112,17 @@ Validation from the follow-up:
 - `swift test --jobs 1 --filter SuggestionOrchestratorTests/replacementDecisionUsesVisibleAgeAndScoreMargin`
   passed.
 - `./script/real_app_smoke_self_test.sh` passed.
-- Notes title passed with 2 accepted insertions and strict visual trace
-  evidence at diagnostics lines `933752`-`933823` and trace lines
-  `30935`-`30953`.
-- `./script/manual_smoke_status.sh --strict` still fails with 9 stale rows:
-  TextEdit, Notes body/checklist, Obsidian default/theme/panes/long note, Chrome
-  textarea, and Chrome contenteditable.
+- `./script/manual_smoke_status.sh --strict` now passes on commit
+  `e2da385b0ece`: TextEdit, Notes title/body/checklist, Obsidian
+  default/theme/pane/long-note, Chrome textarea, and Chrome contenteditable are
+  all current.
+- The latest current rows include TextEdit diagnostics lines `936047`-`936183`,
+  Notes title/body/checklist lines `934963`-`935036`, `935094`-`935164`, and
+  `935424`-`935499`, Obsidian long-note lines `936188`-`936319`, Chrome
+  textarea lines `936380`-`936545`, and Chrome contenteditable lines
+  `936553`-`936730`.
+- Each refreshed row records 2 accepted insertions and strict visual trace
+  evidence.
 
 Cycle 3 keeps prompt proof honest while the faster typing lanes are hardened:
 
