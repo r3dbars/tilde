@@ -9,12 +9,16 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
     public let focusedActionTextVerified: Bool
     public let focusedActionTextSafeToContinue: Bool
     public let focusedActionTextNativeNoopClassified: Bool
+    public let pasteActionVerified: Bool
+    public let pasteActionSafeToContinue: Bool
     public let pasteboardVerified: Bool
     public let pasteboardSafeToContinue: Bool
     public let bundledGhosttyInputTextHelperVerified: Bool
     public let bundledGhosttyInputTextHelperSafeToContinue: Bool
     public let inProcessInputTextVerified: Bool
     public let inProcessInputTextSafeToContinue: Bool
+    public let frontWindowInputTextVerified: Bool
+    public let frontWindowInputTextSafeToContinue: Bool
     public let promptStayedUnchanged: Bool
     public let runsExtendedProbes: Bool
 
@@ -27,12 +31,16 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         focusedActionTextVerified: Bool,
         focusedActionTextSafeToContinue: Bool,
         focusedActionTextNativeNoopClassified: Bool,
+        pasteActionVerified: Bool,
+        pasteActionSafeToContinue: Bool,
         pasteboardVerified: Bool,
         pasteboardSafeToContinue: Bool,
         bundledGhosttyInputTextHelperVerified: Bool,
         bundledGhosttyInputTextHelperSafeToContinue: Bool,
         inProcessInputTextVerified: Bool,
         inProcessInputTextSafeToContinue: Bool,
+        frontWindowInputTextVerified: Bool,
+        frontWindowInputTextSafeToContinue: Bool,
         promptStayedUnchanged: Bool,
         runsExtendedProbes: Bool
     ) {
@@ -44,12 +52,16 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         self.focusedActionTextVerified = focusedActionTextVerified
         self.focusedActionTextSafeToContinue = focusedActionTextSafeToContinue
         self.focusedActionTextNativeNoopClassified = focusedActionTextNativeNoopClassified
+        self.pasteActionVerified = pasteActionVerified
+        self.pasteActionSafeToContinue = pasteActionSafeToContinue
         self.pasteboardVerified = pasteboardVerified
         self.pasteboardSafeToContinue = pasteboardSafeToContinue
         self.bundledGhosttyInputTextHelperVerified = bundledGhosttyInputTextHelperVerified
         self.bundledGhosttyInputTextHelperSafeToContinue = bundledGhosttyInputTextHelperSafeToContinue
         self.inProcessInputTextVerified = inProcessInputTextVerified
         self.inProcessInputTextSafeToContinue = inProcessInputTextSafeToContinue
+        self.frontWindowInputTextVerified = frontWindowInputTextVerified
+        self.frontWindowInputTextSafeToContinue = frontWindowInputTextSafeToContinue
         self.promptStayedUnchanged = promptStayedUnchanged
         self.runsExtendedProbes = runsExtendedProbes
     }
@@ -72,12 +84,16 @@ public struct GhosttyInsertionNoopPolicy: Equatable, Sendable {
             && !input.focusedActionTextVerified
             && input.focusedActionTextSafeToContinue
             && input.focusedActionTextNativeNoopClassified
+            && !input.pasteActionVerified
+            && input.pasteActionSafeToContinue
             && !input.pasteboardVerified
             && input.pasteboardSafeToContinue
             && !input.bundledGhosttyInputTextHelperVerified
             && input.bundledGhosttyInputTextHelperSafeToContinue
             && !input.inProcessInputTextVerified
             && input.inProcessInputTextSafeToContinue
+            && !input.frontWindowInputTextVerified
+            && input.frontWindowInputTextSafeToContinue
             && input.promptStayedUnchanged
     }
 }
