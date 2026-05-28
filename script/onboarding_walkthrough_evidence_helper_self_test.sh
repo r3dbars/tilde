@@ -40,6 +40,9 @@ script/onboarding_walkthrough_evidence_helper.py \
 for expected in \
   "Onboarding walkthrough evidence helper: before-delete" \
   "This is not a pass row." \
+  "Local model ready at practice start" \
+  "TextEdit enabled at practice start" \
+  "Suggestions unpaused at practice start" \
   "TextEdit Tab accepted one word" \
   "TextEdit acceptNextWord events: 1" \
   "trace lines 1-2" \
@@ -66,6 +69,60 @@ fi
 if ! grep -F "TextEdit Esc dismissed suggestion" "$TMP_DIR/missing-esc.txt" >/dev/null; then
   echo "onboarding evidence helper self-test missing Esc failure detail" >&2
   cat "$TMP_DIR/missing-esc.txt" >&2
+  exit 1
+fi
+
+MODEL_NOT_READY="$TMP_DIR/model-not-ready.log"
+sed 's/model=ready/model=installing/' "$DIAGNOSTICS" >"$MODEL_NOT_READY"
+if script/onboarding_walkthrough_evidence_helper.py \
+  --mode before-delete \
+  --require-ready \
+  --diagnostics-log "$MODEL_NOT_READY" \
+  --trace-log "$TRACE" \
+  >"$TMP_DIR/model-not-ready.txt" 2>&1; then
+  echo "onboarding evidence helper self-test expected model-not-ready proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Local model ready at practice start" "$TMP_DIR/model-not-ready.txt" >/dev/null; then
+  echo "onboarding evidence helper self-test missing model-ready failure detail" >&2
+  cat "$TMP_DIR/model-not-ready.txt" >&2
+  exit 1
+fi
+
+TEXTEDIT_DISABLED="$TMP_DIR/textedit-disabled.log"
+sed 's/textEditEnabled=true/textEditEnabled=false/' "$DIAGNOSTICS" >"$TEXTEDIT_DISABLED"
+if script/onboarding_walkthrough_evidence_helper.py \
+  --mode before-delete \
+  --require-ready \
+  --diagnostics-log "$TEXTEDIT_DISABLED" \
+  --trace-log "$TRACE" \
+  >"$TMP_DIR/textedit-disabled.txt" 2>&1; then
+  echo "onboarding evidence helper self-test expected TextEdit-disabled proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "TextEdit enabled at practice start" "$TMP_DIR/textedit-disabled.txt" >/dev/null; then
+  echo "onboarding evidence helper self-test missing TextEdit-enabled failure detail" >&2
+  cat "$TMP_DIR/textedit-disabled.txt" >&2
+  exit 1
+fi
+
+GLOBAL_PAUSED="$TMP_DIR/global-paused.log"
+sed 's/globalPaused=false/globalPaused=true/' "$DIAGNOSTICS" >"$GLOBAL_PAUSED"
+if script/onboarding_walkthrough_evidence_helper.py \
+  --mode before-delete \
+  --require-ready \
+  --diagnostics-log "$GLOBAL_PAUSED" \
+  --trace-log "$TRACE" \
+  >"$TMP_DIR/global-paused.txt" 2>&1; then
+  echo "onboarding evidence helper self-test expected globally-paused proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Suggestions unpaused at practice start" "$TMP_DIR/global-paused.txt" >/dev/null; then
+  echo "onboarding evidence helper self-test missing unpaused failure detail" >&2
+  cat "$TMP_DIR/global-paused.txt" >&2
   exit 1
 fi
 
