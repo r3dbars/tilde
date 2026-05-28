@@ -523,6 +523,28 @@ if "canTrustPromptProofFieldIdentityRefresh" not in app_delegate or "prompt-proo
     raise SystemExit("Prompt proof refresh must safely relax stale field identity only after live text verification")
 if "pollTimer?.fireDate" in app_delegate:
     raise SystemExit("focused text polling must not defer the shared timer past a future faster cadence state")
+accept_next_word_start = app_delegate.index("case .acceptNextWord:")
+accept_next_word_end = app_delegate.index("case .acceptAllVisible:", accept_next_word_start)
+accept_next_word_block = app_delegate[accept_next_word_start:accept_next_word_end]
+if "scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance" not in accept_next_word_block:
+    raise SystemExit("Ghostty proof Tab accept must be able to defer insertion until after the accept key has unwound")
+if accept_next_word_block.index("scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance") > accept_next_word_block.index("insertAcceptedText(acceptedText, action: action)"):
+    raise SystemExit("Ghostty deferred insertion probe must run before the synchronous insertion ladder")
+if "completeNextWordAcceptance" not in accept_next_word_block:
+    raise SystemExit("Next-word acceptance bookkeeping must stay shared between sync and verified deferred inserts")
+deferred_accept_start = app_delegate.index("private func scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(")
+deferred_accept_end = app_delegate.index("private func deferredGhosttyInsertionProbeDelayMilliseconds(", deferred_accept_start)
+deferred_accept_block = app_delegate[deferred_accept_start:deferred_accept_end]
+if "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE" not in deferred_accept_block:
+    raise SystemExit("Ghostty deferred insertion must stay behind an explicit proof env flag")
+if '"com.mitchellh.ghostty"' not in deferred_accept_block:
+    raise SystemExit("Ghostty deferred insertion probe must be limited to the Ghostty host")
+if "insertAcceptedText(acceptedText, action: action)" not in deferred_accept_block or "stage: \"insert-succeeded\"" not in deferred_accept_block:
+    raise SystemExit("Ghostty deferred insertion must only commit after verified insertion succeeds")
+if deferred_accept_block.index("insertAcceptedText(acceptedText, action: action)") > deferred_accept_block.index("completeNextWordAcceptance"):
+    raise SystemExit("Ghostty deferred insertion must verify insertion before committing next-word acceptance")
+if "ghostty-deferred-insert-failed" not in deferred_accept_block:
+    raise SystemExit("Ghostty deferred insertion must fail closed and hide stale suggestions on insertion failure")
 placement_gate_start = app_delegate.index("let syntheticCaretBundleIdentifier = syntheticTextAreaCaretBundleIdentifier(")
 placement_gate_end = app_delegate.index("guard supportsSyntheticTextAreaCaret", placement_gate_start)
 placement_gate_block = app_delegate[placement_gate_start:placement_gate_end]
@@ -766,6 +788,8 @@ drain_source = native_prefix_final_key_block.index("Thread.sleep(forTimeInterval
 if drain_source > prefix_verify_source:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must drain native text before prefix verification")
 for env_key in [
+    "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS",
+    "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES",
     "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS",
     "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS",
@@ -917,7 +941,8 @@ if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/
   exit 1
 fi
 
-if ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE \' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE \' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Ghostty proof env overrides to reach relaunched SteadyType" >&2

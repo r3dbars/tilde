@@ -496,6 +496,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var debounceTaskSuggestionID: String?
     private var insertionVerificationTask: Task<Void, Never>?
+    private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
     private var runtimeWarmTask: Task<Void, Never>?
@@ -603,6 +604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseExpirationTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
+        deferredTerminalHostAcceptanceTask?.cancel()
         acceptedInsertionUndoExpirationTask?.cancel()
         runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
@@ -4180,6 +4182,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 key: key,
                 action: action
             )
+            if scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptedAt: acceptedAt,
+                action: action,
+                acceptanceProof: acceptanceProof,
+                verificationBaseline: verificationBaseline
+            ) {
+                suppressKey(key)
+                recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted-deferred-insert-scheduled")
+                return .handled
+            }
             guard insertAcceptedText(acceptedText, action: action) else {
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
@@ -4190,38 +4204,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 action: action
             )
 
-            armAcceptedInsertionUndo(
+            completeNextWordAcceptance(
                 acceptedText: acceptedText,
                 acceptanceID: acceptanceID,
                 acceptedAt: acceptedAt,
-                acceptMode: action.diagnosticName
-            )
-            suggestionSession.commitNextWordAcceptance(acceptedText)
-            recordAcceptedText(acceptedText)
-            armObsidianPostAcceptanceSuppressionIfNeeded()
-            advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
-            suggestionRepetitionSuppressor.recordAcceptance(
-                acceptedText,
-                mode: currentSuggestionRequestMode,
-                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
-            )
-            recordRawAcceptance(
                 action: action,
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptanceProof: acceptanceProof
+                acceptanceProof: acceptanceProof,
+                verificationBaseline: verificationBaseline
             )
-            recordAnnoyanceSignal(
-                .accepted,
-                context: currentAnnoyanceContext(),
-                suggestionID: currentSuggestionID ?? "",
-                reason: action.diagnosticName
-            )
-            refreshAfterNextWordAcceptance(
-                residualReason: "Accepted: next word; showing remainder",
-                emptyReason: "accepted-next-word"
-            )
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return .handled
@@ -5026,6 +5016,172 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.clearPendingAcceptedInsertionUndo(reason: "expired")
             self.scheduleKeyboardEventTapStopIfIdle()
         }
+    }
+
+    private func scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
+        acceptedText: String,
+        acceptanceID: String,
+        acceptedAt: Date,
+        action: KeyboardAction,
+        acceptanceProof: SuggestionAcceptanceProof,
+        verificationBaseline: InsertionVerificationBaseline?
+    ) -> Bool {
+        guard ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE"] == "1",
+              let profile = currentProfile,
+              shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action),
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return false
+        }
+
+        let scheduledSuggestionID = currentSuggestionID
+        let scheduledFieldIdentity = currentSuggestionFieldIdentity
+        let scheduledRequestMode = currentSuggestionRequestMode
+        let delayMilliseconds = deferredGhosttyInsertionProbeDelayMilliseconds()
+        deferredTerminalHostAcceptanceTask?.cancel()
+        focusedTextPollingPause.pause(
+            now: Date(),
+            durationMilliseconds: delayMilliseconds + postInsertionPollPauseMilliseconds
+        )
+        keyboardEventTap?.suppressPassthroughObservation(for: TimeInterval(delayMilliseconds) / 1000.0 + 0.75)
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-deferred-accept",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "stage": "scheduled",
+                "acceptedChars": String(acceptedText.count),
+                "delayMilliseconds": String(delayMilliseconds),
+                "suggestionID": scheduledSuggestionID ?? "",
+                "requestMode": scheduledRequestMode?.rawValue ?? ""
+            ]
+        )
+
+        deferredTerminalHostAcceptanceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            guard !Task.isCancelled,
+                  let self else {
+                return
+            }
+            self.deferredTerminalHostAcceptanceTask = nil
+            guard self.suggestionSession.hasVisibleSuggestion,
+                  self.currentSuggestionID == scheduledSuggestionID,
+                  self.currentSuggestionFieldIdentity == scheduledFieldIdentity,
+                  self.currentSuggestionRequestMode == scheduledRequestMode,
+                  !self.currentSuggestionInvalidatedByUserKeyDown else {
+                self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                    stage: "aborted",
+                    metadata: [
+                        "reason": "suggestion-state-changed",
+                        "suggestionID": scheduledSuggestionID ?? ""
+                    ]
+                )
+                return
+            }
+
+            self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                stage: "insert-start",
+                metadata: [
+                    "acceptedChars": String(acceptedText.count),
+                    "suggestionID": scheduledSuggestionID ?? ""
+                ]
+            )
+            guard self.insertAcceptedText(acceptedText, action: action) else {
+                self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                    stage: "insert-failed",
+                    metadata: [
+                        "acceptedChars": String(acceptedText.count),
+                        "suggestionID": scheduledSuggestionID ?? ""
+                    ]
+                )
+                self.setSuggestionDecision("Blocked: deferred Ghostty insert failed")
+                self.hideSuggestion(reason: "ghostty-deferred-insert-failed")
+                return
+            }
+
+            self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                stage: "insert-succeeded",
+                metadata: [
+                    "acceptedChars": String(acceptedText.count),
+                    "suggestionID": scheduledSuggestionID ?? ""
+                ]
+            )
+            self.completeNextWordAcceptance(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptedAt: acceptedAt,
+                action: action,
+                acceptanceProof: acceptanceProof,
+                verificationBaseline: verificationBaseline,
+                residualReason: "Accepted: deferred Ghostty next word; showing remainder",
+                emptyReason: "accepted-ghostty-deferred-next-word"
+            )
+        }
+        return true
+    }
+
+    private func deferredGhosttyInsertionProbeDelayMilliseconds() -> Int {
+        let configuredDelaySeconds = ProcessInfo.processInfo.environment[
+            "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS"
+        ].flatMap(TimeInterval.init)
+        let delaySeconds = min(1.0, max(0.02, configuredDelaySeconds ?? 0.12))
+        return Int((delaySeconds * 1000).rounded())
+    }
+
+    private func recordDeferredClaudeCodeTerminalHostProofAcceptance(
+        stage: String,
+        metadata extraMetadata: [String: String] = [:]
+    ) {
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-deferred-accept",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "stage": stage
+            ].merging(extraMetadata) { current, _ in current }
+        )
+    }
+
+    private func completeNextWordAcceptance(
+        acceptedText: String,
+        acceptanceID: String,
+        acceptedAt: Date,
+        action: KeyboardAction,
+        acceptanceProof: SuggestionAcceptanceProof,
+        verificationBaseline: InsertionVerificationBaseline?,
+        residualReason: String = "Accepted: next word; showing remainder",
+        emptyReason: String = "accepted-next-word"
+    ) {
+        armAcceptedInsertionUndo(
+            acceptedText: acceptedText,
+            acceptanceID: acceptanceID,
+            acceptedAt: acceptedAt,
+            acceptMode: action.diagnosticName
+        )
+        suggestionSession.commitNextWordAcceptance(acceptedText)
+        recordAcceptedText(acceptedText)
+        armObsidianPostAcceptanceSuppressionIfNeeded()
+        advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
+        suggestionRepetitionSuppressor.recordAcceptance(
+            acceptedText,
+            mode: currentSuggestionRequestMode,
+            scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+        )
+        recordRawAcceptance(
+            action: action,
+            acceptedText: acceptedText,
+            acceptanceID: acceptanceID,
+            acceptanceProof: acceptanceProof
+        )
+        recordAnnoyanceSignal(
+            .accepted,
+            context: currentAnnoyanceContext(),
+            suggestionID: currentSuggestionID ?? "",
+            reason: action.diagnosticName
+        )
+        refreshAfterNextWordAcceptance(
+            residualReason: residualReason,
+            emptyReason: emptyReason
+        )
+        scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
     }
 
     private func clearPendingAcceptedInsertionUndo(reason: String) {
