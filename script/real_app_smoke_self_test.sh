@@ -2881,7 +2881,7 @@ if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/nu
   echo "real app smoke self-test expected Claude Code Terminal proof cleanup/readiness to track the disposable Claude process" >&2
   exit 1
 fi
-if ! grep -F 'set proofWindow to new window' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_text_action()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1' script/real_app_smoke.sh >/dev/null ||
@@ -2894,11 +2894,19 @@ if ! grep -F 'set proofWindow to new window' script/real_app_smoke.sh >/dev/null
    ! grep -F 'Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge preflight failed.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_APPLESCRIPT_PREFLIGHT_TIMEOUT_SECONDS:-2' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "preflight-tell-entered")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "preflight-tell-entered")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "preflight-version:" & ghosttyVersion)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'preflight-finished' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-created"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-action-ready")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-action-finished")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled during disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "script-wrote-pidfile" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'if launchAction is not "" then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'perform action launchAction on targetTerminal' script/real_app_smoke.sh >/dev/null ||
@@ -2945,8 +2953,11 @@ if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/rea
    ! grep -F 'claude_code_ghostty_launch_stalled_before_stage()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'grep -Fx "$required_stage" "$stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled during disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "retry-window-selected")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "describe_claude_code_ghostty_launch_state" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Claude Code Ghostty proof launch state:" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "proofTitleWindows=" script/real_app_smoke.sh >/dev/null ||
@@ -2964,6 +2975,18 @@ if ! grep -F 'process_id_or_tree_has_name "$proof_pid" "$expected_name"' script/
   echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile wrapper or child process" >&2
   exit 1
 fi
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("wait_for_background_process()")
+end = source.index("run_osascript_with_timeout()", start)
+block = source[start:end]
+if "wait_status=$?" not in block or 'return "$wait_status"' not in block:
+    raise SystemExit("real app smoke self-test expected background process waits to preserve nonzero child exit status")
+if "return $?" in block:
+    raise SystemExit("real app smoke self-test expected background process waits not to lose nonzero child exit status")
+PY
 if ! grep -F 'if open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'if ((open_status != 0)); then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'try_wait_for_frontmost_claude_code_terminal_proof_process' script/real_app_smoke.sh >/dev/null ||

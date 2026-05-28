@@ -26,12 +26,14 @@ GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
   AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS
   AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE
   AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE
 )
 
 : "${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS:=0.12}"
 : "${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE:=1}"
 : "${AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS:=45}"
+: "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED:=1}"
 : "${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:=1}"
 
 usage() {
@@ -218,6 +220,21 @@ process_group_for_pid() {
   ps -p "$pid" -o pgid= 2>/dev/null | tr -d '[:space:]'
 }
 
+signal_process_or_group() {
+  local pid="$1"
+  local signal="${2:-TERM}"
+  local pgid current_pgid
+
+  [[ -n "$pid" ]] || return 1
+  current_pgid="$(process_group_for_pid "$$" || true)"
+  pgid="$(process_group_for_pid "$pid" || true)"
+  if [[ -n "$pgid" && "$pgid" != "$current_pgid" ]]; then
+    kill "-$signal" "-$pgid" >/dev/null 2>&1 || true
+  else
+    kill "-$signal" "$pid" >/dev/null 2>&1 || true
+  fi
+}
+
 smoke_pid_for_run() {
   local run_dir="$1"
   local status_file smoke_pid smoke_pid_file
@@ -232,17 +249,19 @@ smoke_pid_for_run() {
 
 terminate_orphaned_detached_smoke_processes() {
   local run_dir="$1"
-  local log_file smoke_pid current_pgid pid pgid args
+  local log_file smoke_pid pid args deadline
   log_file="$(log_file_for_run "$run_dir")"
-  current_pgid="$(process_group_for_pid "$$" || true)"
   smoke_pid="$(smoke_pid_for_run "$run_dir")"
   if [[ -n "$smoke_pid" ]]; then
     if process_is_alive "$smoke_pid"; then
-      pgid="$(process_group_for_pid "$smoke_pid" || true)"
-      if [[ -n "$pgid" && "$pgid" != "$current_pgid" ]]; then
-        kill -TERM "-$pgid" >/dev/null 2>&1 || true
-      else
-        kill -TERM "$smoke_pid" >/dev/null 2>&1 || true
+      signal_process_or_group "$smoke_pid" TERM
+      deadline=$((SECONDS + 5))
+      while process_is_alive "$smoke_pid" && ((SECONDS <= deadline)); do
+        sleep 0.2
+      done
+      if process_is_alive "$smoke_pid"; then
+        signal_process_or_group "$smoke_pid" KILL
+        sleep 0.5
       fi
       printf 'Stopped orphaned detached Ghostty smoke process pid=%s after runner exit.\n' "$smoke_pid" >>"$log_file"
     fi
@@ -252,11 +271,14 @@ terminate_orphaned_detached_smoke_processes() {
     [[ -z "$pid" || "$pid" == "$$" ]] && continue
     args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
     [[ "$args" == *"script/real_app_smoke.sh claude-code-ghostty --manual-gate"* ]] || continue
-    pgid="$(process_group_for_pid "$pid" || true)"
-    if [[ -n "$pgid" && "$pgid" != "$current_pgid" ]]; then
-      kill -TERM "-$pgid" >/dev/null 2>&1 || true
-    else
-      kill -TERM "$pid" >/dev/null 2>&1 || true
+    signal_process_or_group "$pid" TERM
+    deadline=$((SECONDS + 5))
+    while process_is_alive "$pid" && ((SECONDS <= deadline)); do
+      sleep 0.2
+    done
+    if process_is_alive "$pid"; then
+      signal_process_or_group "$pid" KILL
+      sleep 0.5
     fi
     printf 'Stopped orphaned detached Ghostty smoke process pid=%s after runner exit.\n' "$pid" >>"$log_file"
   done < <(pgrep -f "script/real_app_smoke.sh claude-code-ghostty --manual-gate" 2>/dev/null || true)
@@ -419,9 +441,16 @@ handle_signal() {
   local signal_name="$1"
   local exit_status="$2"
   local finished_at
+  local smoke_pgid runner_pgid
   finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   if [[ -n "${SMOKE_PID:-}" ]]; then
-    kill -TERM "$SMOKE_PID" >/dev/null 2>&1 || true
+    smoke_pgid="$(ps -o pgid= -p "$SMOKE_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+    runner_pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ -n "$smoke_pgid" && "$smoke_pgid" != "$runner_pgid" ]]; then
+      kill -TERM "-$smoke_pgid" >/dev/null 2>&1 || true
+    else
+      kill -TERM "$SMOKE_PID" >/dev/null 2>&1 || true
+    fi
   fi
   write_status failed "$exit_status" "$finished_at"
   FINAL_STATUS_WRITTEN=1
@@ -927,6 +956,10 @@ stop_run() {
     echo "Detached Ghostty proof runner is still alive after stop: $pid" >&2
     print_run_status "$run_dir"
     return 1
+  fi
+
+  if process_is_alive "$smoke_pid"; then
+    terminate_orphaned_detached_smoke_processes "$run_dir"
   fi
 
   sleep 0.5

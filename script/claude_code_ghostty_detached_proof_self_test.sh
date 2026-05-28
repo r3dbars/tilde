@@ -53,6 +53,7 @@ require_contains "$TMP_DIR/dry-run.txt" "script/real_app_smoke.sh claude-code-gh
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.12"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=45"
+require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED=1"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1"
 require_contains "$TMP_DIR/dry-run.txt" "proof.log"
 require_contains "$TMP_DIR/dry-run.txt" "status.env"
@@ -164,6 +165,34 @@ kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
 wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
 ALIVE_SMOKE_PID=""
 
+STOP_ORPHANED_SMOKE_RUN="$TMP_DIR/proofs/stop-orphaned-smoke-run"
+mkdir -p "$STOP_ORPHANED_SMOKE_RUN"
+bash -c 'trap "exit 0" TERM; while :; do sleep 1 & wait $!; done' &
+ALIVE_SMOKE_PID="$!"
+cat >"$STOP_ORPHANED_SMOKE_RUN/status.env" <<EOF
+state=running
+pid=999999
+smoke_pid=$ALIVE_SMOKE_PID
+started_at=2026-05-27T00:00:01Z
+run_dir=$STOP_ORPHANED_SMOKE_RUN
+launcher=nohup
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'stop orphaned smoke detached log\n' >"$STOP_ORPHANED_SMOKE_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh stop --run-dir "$STOP_ORPHANED_SMOKE_RUN" >"$TMP_DIR/stop-orphaned-smoke-status.txt"
+require_contains "$TMP_DIR/stop-orphaned-smoke-status.txt" "state=failed"
+require_contains "$TMP_DIR/stop-orphaned-smoke-status.txt" "exit_status=143"
+require_contains "$TMP_DIR/stop-orphaned-smoke-status.txt" "Detached proof smoke child was stopped after runner exit."
+require_contains "$STOP_ORPHANED_SMOKE_RUN/proof.log" "Stopped orphaned detached Ghostty smoke process pid=$ALIVE_SMOKE_PID after runner exit."
+if kill -0 "$ALIVE_SMOKE_PID" >/dev/null 2>&1; then
+  echo "detached Ghostty proof stop should terminate orphaned smoke pid $ALIVE_SMOKE_PID" >&2
+  exit 1
+fi
+wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
+ALIVE_SMOKE_PID=""
+
 PENDING_RUN="$TMP_DIR/proofs/pending-run"
 mkdir -p "$PENDING_RUN"
 cat >"$PENDING_RUN/status.env" <<EOF
@@ -240,7 +269,10 @@ require_contains "$SCRIPT_TEXT" "handle_signal INT 130"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof exited before explicit final status"
 require_contains "$SCRIPT_TEXT" "stop_run()"
 require_contains "$SCRIPT_TEXT" "process_group_for_pid"
-require_contains "$SCRIPT_TEXT" 'kill -TERM "-$pgid"'
+require_contains "$SCRIPT_TEXT" "signal_process_or_group"
+require_contains "$SCRIPT_TEXT" 'kill "-$signal" "-$pgid"'
+require_contains "$SCRIPT_TEXT" 'signal_process_or_group "$smoke_pid" KILL'
+require_contains "$SCRIPT_TEXT" 'kill -TERM "-$smoke_pgid"'
 require_contains "$SCRIPT_TEXT" 'write_parent_final_status "$run_dir" failed 143'
 require_contains "$SCRIPT_TEXT" "Run script/claude_code_ghostty_detached_proof.sh stop to terminate the active proof."
 require_contains "$SCRIPT_TEXT" "export PATH="
@@ -249,6 +281,7 @@ require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PRO
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS"
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED"
 require_contains "$SCRIPT_TEXT" "write_passthrough_env_exports"
 require_contains "$SCRIPT_TEXT" "repair_dead_runner_status_if_needed"
 require_contains "$SCRIPT_TEXT" "Detached proof runner and smoke child exited before writing a final status."
@@ -292,6 +325,7 @@ require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEM
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE="${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE:-1}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS:-0.12}"'
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS:-45}"'
+require_contains "$SCRIPT_TEXT" ': "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED:=1}"'
 require_contains "$SCRIPT_TEXT" "./script/real_app_smoke.sh claude-code-ghostty --manual-gate"
 require_contains "$SCRIPT_TEXT" "custom proof text is not persisted here"
 reject_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_TEXTS="
