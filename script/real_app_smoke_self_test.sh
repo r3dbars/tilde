@@ -671,6 +671,8 @@ if "launchThroughShell: true" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the shell-launched front-window input text rung")
 if "insertGhosttyTerminalHostProofActionText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep Ghostty's native text action as a later verified fallback")
+if "insertGhosttyTerminalHostProofFocusedActionText" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try a focused native text action before clipboard probes")
 if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep timeout-bounded native input text as a verified fallback")
 if "ghosttyAppleScriptLoginShellInputText" not in app_delegate or "ghosttyLoginShellInputTextOutcome" not in fast_ghostty_block:
@@ -721,6 +723,14 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke
     raise SystemExit("Claude Code Ghostty fast proof must try System Events before hardware key events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
     raise SystemExit("Claude Code Ghostty fast proof must try proven System Events bulk insertion before pasteboard probes")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofFocusedActionText") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try focused native action text before pasteboard probes")
+if "ghosttyFocusedActionTextBaseline" not in app_delegate or '"focusMode": "frontmostTerminalOnly"' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty focused native action proof must verify the unchanged baseline and diagnose the focused-terminal mode")
+if '"textTransport": "environment"' not in app_delegate or "ghostty-focused-action-timeout-mutated-input" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty focused native action proof must avoid argv text transport and fail closed on timeout mutation")
+if "focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty initial no-op classifier must include focused native action verification")
 if "ghosttyFocusedSystemEventsBulkKeystrokeBaseline" not in app_delegate or '"focusMode": "frontmostProcessOnly"' not in app_delegate:
     raise SystemExit("Claude Code Ghostty focused System Events proof must verify the unchanged baseline and diagnose the simpler frontmost-process mode")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):

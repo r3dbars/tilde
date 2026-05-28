@@ -23,6 +23,9 @@ struct GhosttyInsertionNoopPolicyTests {
             systemEventsBulkVerified: true
         )))
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            focusedActionTextVerified: true
+        )))
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
             inProcessInputTextVerified: true
         )))
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
@@ -32,6 +35,9 @@ struct GhosttyInsertionNoopPolicyTests {
 
     @Test("Does not fail fast when an in-process input miss is unsafe")
     func unsafeInProcessInputMissDoesNotFailFast() {
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            focusedActionTextSafeToContinue: false
+        )))
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
             inProcessInputTextSafeToContinue: false
         )))
@@ -55,6 +61,8 @@ private extension GhosttyInitialInsertionNoopInput {
         sendKeyVerified: Bool = false,
         systemEventsBulkVerified: Bool = false,
         systemEventsBulkSafeToContinue: Bool = true,
+        focusedActionTextVerified: Bool = false,
+        focusedActionTextSafeToContinue: Bool = true,
         pasteboardVerified: Bool = false,
         pasteboardSafeToContinue: Bool = true,
         inProcessInputTextVerified: Bool = false,
@@ -68,6 +76,8 @@ private extension GhosttyInitialInsertionNoopInput {
             sendKeyVerified: sendKeyVerified,
             systemEventsBulkVerified: systemEventsBulkVerified,
             systemEventsBulkSafeToContinue: systemEventsBulkSafeToContinue,
+            focusedActionTextVerified: focusedActionTextVerified,
+            focusedActionTextSafeToContinue: focusedActionTextSafeToContinue,
             pasteboardVerified: pasteboardVerified,
             pasteboardSafeToContinue: pasteboardSafeToContinue,
             inProcessInputTextVerified: inProcessInputTextVerified,
