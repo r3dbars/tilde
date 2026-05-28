@@ -68,8 +68,8 @@ struct HostCompatibilityPolicyTests {
         }
     }
 
-    @Test("Word-only prompt policies stay one-word and full accept disabled")
-    func wordOnlyPromptPoliciesStayOneWordAndFullAcceptDisabled() throws {
+    @Test("Prompt safety policies keep proof state explicit")
+    func promptSafetyPoliciesKeepProofStateExplicit() throws {
         let profiles = CompatibilityProfileStore.mvp.profiles
         let catalog = HostCompatibilityPolicyCatalog.mvp
         let wordOnlyPolicies = catalog.policies.values.filter { $0.safetyMode == .wordOnly }
@@ -78,11 +78,13 @@ struct HostCompatibilityPolicyTests {
         for policy in wordOnlyPolicies {
             let profile = try #require(profiles[policy.bundleIdentifier])
             #expect(profile.supportsOneWordAcceptance)
-            #expect(!profile.supportsFullAcceptance)
-            #expect(profile.requiresNoSubmitAcceptanceProof)
             if policy.bundleIdentifier == "com.openai.codex" {
+                #expect(profile.supportsFullAcceptance)
+                #expect(!profile.requiresNoSubmitAcceptanceProof)
                 #expect(policy.killSwitch == .perHostDisable)
             } else {
+                #expect(!profile.supportsFullAcceptance)
+                #expect(profile.requiresNoSubmitAcceptanceProof)
                 #expect(policy.killSwitch == .proofModeRequired)
             }
             #expect(!policy.proofArtifacts.isEmpty)

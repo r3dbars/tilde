@@ -1460,10 +1460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func isCodexFullAcceptNoSubmitProofProfile(_ profile: CompatibilityProfile) -> Bool {
-        shouldUseCodexFullAcceptNoSubmitProofProfile(
-            appBundleIdentifier: profile.bundleIdentifier,
-            profile: profile
-        )
+        profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && profile.supportsFullAcceptance
             && !profile.requiresNoSubmitAcceptanceProof
     }

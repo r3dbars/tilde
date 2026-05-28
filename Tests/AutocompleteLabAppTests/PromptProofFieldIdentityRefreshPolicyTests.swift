@@ -8,7 +8,10 @@ struct PromptProofFieldIdentityRefreshPolicyTests {
 
     @Test("Allows word-only prompt proof identity churn inside proof mode")
     func allowsWordOnlyPromptProofIdentityChurnInsideProofMode() throws {
-        let profile = try codexProfile()
+        let profile = try codexProfile().replacingAcceptanceProofMode(
+            supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true
+        )
 
         #expect(policy.canTrustRefresh(
             requestFieldIdentity: identity(elementIdentifier: 7),

@@ -595,10 +595,9 @@
       "proofState": "partial",
       "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
       "requiredProof": [
-        "more prompt layouts before raising beyond word-only",
-        "separate full-accept no-submit proof before enabling full accept"
+        "more prompt layouts before raising beyond the default Codex composer"
       ],
-      "notes": "Default Codex proof has one-word Tab accept, insertion verification, no submit, and screenshot-backed trace proof refreshed at 2026-05-26T02:06:11Z for proof mode only; normal beta use remains blocked."
+      "notes": "Default Codex proof has one-word Tab accept, full-accept no-submit proof, insertion verification, no submit, and screenshot-backed trace proof for this exact local build; normal beta support remains limited to the proven default composer."
     },
     {
       "surface": "Obsidian long notes",
@@ -812,6 +811,21 @@
           "status": "complete",
           "summary": "Default Codex prompt proof passed with strict screenshot evidence, one-word Tab accept, insertion verification, and zero prompt-submit safety counters on 2026-05-26.",
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+        },
+        {
+          "id": "codex-default-full-accept-no-submit",
+          "status": "complete",
+          "summary": "Default Codex prompt proof passed with strict screenshot evidence, whole-suggestion accept, insertion verification, and zero prompt-submit safety counters on 2026-05-28.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate",
+          "manualSmoke": {
+            "app": "Codex",
+            "bundle": "com.openai.codex",
+            "proof": "full-accept",
+            "minVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": true,
+            "requiresPromptNoSubmit": true,
+            "requiresPromptFullAcceptNoSubmit": true
+          }
         }
       ]
     },
@@ -1037,7 +1051,7 @@
       "surface": "Codex",
       "status": "partial",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Codex is proof-mode-only for one-word no-submit checks; it is not beta-safe normal writing support and full accept remains blocked."
+      "safetyNote": "Codex is available for the exact proven local build with one-word and full-accept no-submit checks; other prompt layouts remain proof-gated."
     },
     {
       "bundle": "com.anthropic.claude-code",
