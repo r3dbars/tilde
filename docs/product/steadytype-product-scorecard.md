@@ -147,8 +147,18 @@ insertion ladder, and failed closed at `819271` / `819273`. The default follow-u
 `821100`, consumed Tab at `821919`, skipped the session probe at `821948`,
 recorded the unchanged global paste baseline at `821951`, and failed closed at
 `821995` / `821997` with `keyboard-action handled=false reason=insert-failed`.
-Ghostty remains unsupported until a transport actually mutates and verifies the
-disposable Claude prompt.
+The bounded follow-up `20260528T031735Z-ghostty` kept the same prompt-row Tab
+path, accepted the next-word proof at diagnostics line `823023`, ran targeted
+and global pasteboard, in-process native input, direct front-window input, and
+shell-launched front-window input, then stopped at the explicit default budget:
+line `823052` recorded `ghosttyFastInsertionBudget` with
+`elapsedMilliseconds=9886` / `budgetMilliseconds=8000` before
+`ghosttyPerformActionText`, and lines `823053` / `823055` failed closed with
+`keyboard-action handled=false reason=insert-failed`. The longer exploratory
+Ghostty insertion ladder is now opt-in through
+`AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES`; Ghostty remains
+unsupported until a transport actually mutates and verifies the disposable
+Claude prompt.
 
 ## Scores
 
