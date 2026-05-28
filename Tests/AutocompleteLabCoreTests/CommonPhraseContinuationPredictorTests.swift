@@ -193,6 +193,43 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts field safety trust phrases instantly")
+    func predictsFieldSafetyTrustPhrasesInstantly() {
+        let cases: [(String, String, String)] = [
+            ("If the focused field looks risky, it should", " fail closed before typing", "intent-field-safety-risky-should"),
+            ("When the wrong field should", " stay silent until proof", "intent-field-safety-wrong-field"),
+            ("If placement feels weird, it should", " stay quiet until proof", "intent-field-safety-placement"),
+            ("When the cursor looks wrong, it should", " stay quiet until proof", "intent-field-safety-placement")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount == 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "If the focused field looks risky, it should",
+            behaviorProfileID: .email
+        ).suppressionReason == "no-match")
+        #expect(predictor.selection(
+            for: "If the focused field looks risky, it should",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Search field looks risky, it should",
+            behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+    }
+
     @Test("Predicts first-person daily-driver trust and feeling shapes")
     func predictsFirstPersonDailyDriverTrustAndFeelingShapes() {
         let cases: [(String, String, String)] = [

@@ -396,6 +396,12 @@ as truly quiet in the menu, settings, and diagnostics presentation. This closes
 one trust leak where intentional silence could previously look like generic
 ready state instead of telling the user why no suggestion appeared.
 
+Field-safety trust language is instant now too. In writing profiles, phrases
+like `If the focused field looks risky, it should`, `When the wrong field
+should`, and `If placement feels weird, it should` can produce zero-latency
+fail-closed continuations, while email, prompt, search, form, and code profiles
+stay gated out of that path.
+
 Very-proactive writing surfaces now keep going at sentence boundaries too. When
 the user finishes a sentence in TextEdit, Notes, Obsidian, or another non-prompt
 writing profile, the activation and trigger policies can queue the next

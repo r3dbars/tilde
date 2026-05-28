@@ -279,6 +279,13 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return markdownCandidate
         }
 
+        if let fieldSafetyCandidate = fieldSafetyCandidate(
+            for: words,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            return fieldSafetyCandidate
+        }
+
         if let writingFlowCandidate = writingFlowCandidate(
             for: words,
             behaviorProfileID: behaviorProfileID
@@ -547,6 +554,46 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             ["feels", "heavy"]
         ], in: words) {
             return intentCandidate("daily-driver-feels-slow", "enough to break flow")
+        }
+
+        return nil
+    }
+
+    private func fieldSafetyCandidate(
+        for words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsWritingFlowPrediction(for: behaviorProfileID),
+              words.count >= 4,
+              containsAny(["field", "fields", "cursor", "caret", "placement"], in: words) else {
+            return nil
+        }
+
+        if hasAnySuffix([
+            ["looks", "risky", "it", "should"],
+            ["feels", "risky", "it", "should"],
+            ["is", "risky", "it", "should"],
+            ["looks", "unsafe", "it", "should"]
+        ], in: words) {
+            return intentCandidate("field-safety-risky-should", "fail closed before typing")
+        }
+
+        if hasAnySuffix([
+            ["wrong", "field", "should"],
+            ["wrong", "fields", "should"],
+            ["field", "is", "wrong", "it", "should"],
+            ["fields", "are", "wrong", "it", "should"]
+        ], in: words) {
+            return intentCandidate("field-safety-wrong-field", "stay silent until proof")
+        }
+
+        if hasAnySuffix([
+            ["placement", "is", "weird", "it", "should"],
+            ["placement", "feels", "weird", "it", "should"],
+            ["caret", "looks", "wrong", "it", "should"],
+            ["cursor", "looks", "wrong", "it", "should"]
+        ], in: words) {
+            return intentCandidate("field-safety-placement", "stay quiet until proof")
         }
 
         return nil
