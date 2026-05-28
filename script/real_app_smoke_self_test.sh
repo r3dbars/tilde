@@ -2827,6 +2827,21 @@ if ! python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
+typing_start = source.index("type_claude_code_terminal_ghostty_paste_then_key_text()")
+typing_end = source.index("\ntype_claude_code_terminal_ghostty_native_text()", typing_start)
+typing_block = source[typing_start:typing_end]
+for expected in (
+    'try_claude_code_terminal_prompt_ready_quiet "$text"',
+    'Claude Code Ghostty proof native typed prompt was incomplete; retrying with System Events bulk typing.',
+    'AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1',
+    'Claude Code Ghostty proof bulk typing was incomplete; retrying with paced System Events typing.',
+    'type_claude_code_terminal_raw_smoke_text "$text"',
+):
+    if expected not in typing_block:
+        raise SystemExit(1)
+if 'if type_claude_code_terminal_ghostty_native_final_character "$final_character"; then\n      return' in typing_block:
+    raise SystemExit(1)
+
 start = source.index("clear_claude_code_terminal_prompt_line()")
 end = source.index("\npress_claude_code_terminal_host_tab()", start)
 block = source[start:end]
@@ -2843,6 +2858,10 @@ ghostty_block = block[ghostty_start:ghostty_end]
 if 'keystroke "u" using control down' not in ghostty_block:
     raise SystemExit(1)
 if 'sleep "$(claude_code_ghostty_event_drain_seconds)"' not in ghostty_block:
+    raise SystemExit(1)
+if 'ghostty_native_clear_posted=0' not in ghostty_block or 'ghostty_system_events_clear_posted=$?' not in ghostty_block:
+    raise SystemExit(1)
+if ghostty_block.index('clear_claude_code_terminal_ghostty_native_line') > ghostty_block.index('keystroke "u" using control down'):
     raise SystemExit(1)
 if "key code 53" in ghostty_block:
     raise SystemExit(1)
@@ -2888,6 +2907,46 @@ if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_cla
 fi
 if ! awk '/^try_wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /^wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 0 } in_wait && /rejectedShellCommand=true/ { saw_reject = 1 } in_wait && /clear_claude_code_terminal_prompt_line/ { saw_clear = 1 } in_wait && /clearing before readiness retry/ { saw_log = 1 } END { exit saw_reject && saw_clear && saw_log ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Ghostty prompt readiness to clear launch-command text once before failing the fresh context" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+for expected in (
+    "CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=0",
+    "CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0",
+    "CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=0",
+    '[[ "${CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN:-0}" != "1" ]]',
+    "CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=1",
+    "CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=1",
+    "retrying without direct command-open",
+):
+    if expected not in source:
+        raise SystemExit(1)
+open_fresh = source[
+    source.index("open_fresh_claude_code_terminal_proof_context()"):
+    source.index("\ntry_wait_for_claude_code_terminal_prompt()", source.index("open_fresh_claude_code_terminal_proof_context()"))
+]
+if "CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=1" not in open_fresh:
+    raise SystemExit(1)
+prompt_wait = source[
+    source.index("try_wait_for_claude_code_terminal_prompt()"):
+    source.index("\nwait_for_claude_code_terminal_prompt()", source.index("try_wait_for_claude_code_terminal_prompt()"))
+]
+if '"$prompt_wait_output" == *"rejectedShellCommand=true"*' not in prompt_wait:
+    raise SystemExit(1)
+if "CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN" not in prompt_wait:
+    raise SystemExit(1)
+cleanup = source[
+    source.index("cleanup_claude_code_terminal_proof()"):
+    source.index("\nghostty_window_api_reports_visible_window()", source.index("cleanup_claude_code_terminal_proof()"))
+]
+if "CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=0" in cleanup:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected dirty Ghostty direct command-open prompt readiness to fall back to script-owned launch on retry" >&2
   exit 1
 fi
 if ! awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /^}/ && in_assert { in_assert = 0 } in_assert && /--require-exact-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
