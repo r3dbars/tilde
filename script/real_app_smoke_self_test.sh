@@ -2886,6 +2886,11 @@ if ! grep -F 'set proofWindow to new window' script/real_app_smoke.sh >/dev/null
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_text_action "$ghostty_launch_command"$'\''\r'\''' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'ghostty_launch_stage_file="$proof_dir/ghostty-launch.log"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "script-wrote-pidfile" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'if launchAction is not "" then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'perform action launchAction on targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'delay launchActionDrain' script/real_app_smoke.sh >/dev/null ||
@@ -2923,6 +2928,10 @@ if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/rea
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Terminal proof $label exit state' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'ghostty-launch.log' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'describe_claude_code_ghostty_launch_stages' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "describe_claude_code_ghostty_launch_state" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Claude Code Ghostty proof launch state:" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "proofTitleWindows=" script/real_app_smoke.sh >/dev/null ||
