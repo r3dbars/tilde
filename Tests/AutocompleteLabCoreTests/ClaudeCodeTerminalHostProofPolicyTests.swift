@@ -1862,6 +1862,53 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
         ))
     }
 
+    @Test("Ghostty insertion verification prefers current terminal screen over stale focused text")
+    func ghosttyInsertionVerificationPrefersCurrentTerminalScreenOverStaleFocusedText() {
+        let originalInput = "Make this command line setting configurable"
+        let expectedInput = "\(originalInput) now"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code \(ClaudeCodeTerminalHostProofPolicy.compactProofMarker)",
+            focusedText: "\(ClaudeCodeTerminalHostProofPolicy.compactProofMarker) \(originalInput)",
+            rawTextBeforeCursor: "\(ClaudeCodeTerminalHostProofPolicy.compactProofMarker) \(originalInput)",
+            terminalScreenText: """
+            Claude Code \(ClaudeCodeTerminalHostProofPolicy.compactProofMarker)
+            ❯ \(ClaudeCodeTerminalHostProofPolicy.compactProofMarker) \(expectedInput)
+            ? for shortcuts
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputText(for: context) == originalInput)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputTextPreferringTerminalScreen(
+            for: context
+        ) == expectedInput)
+    }
+
+    @Test("Ghostty insertion verification ignores unmarked terminal screen text")
+    func ghosttyInsertionVerificationIgnoresUnmarkedTerminalScreenText() {
+        let originalInput = "Make this command line setting configurable"
+        let expectedInput = "\(originalInput) now"
+        let context = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: "com.mitchellh.ghostty",
+            windowTitle: "Claude Code",
+            focusedText: "\(ClaudeCodeTerminalHostProofPolicy.compactProofMarker) \(originalInput)",
+            rawTextBeforeCursor: "\(ClaudeCodeTerminalHostProofPolicy.compactProofMarker) \(originalInput)",
+            terminalScreenText: """
+            Claude Code
+            ❯ \(expectedInput)
+            ? for shortcuts
+            """,
+            proofModeEnabled: true
+        )
+
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
+        #expect(ClaudeCodeTerminalHostProofPolicy.proofInputTextPreferringTerminalScreen(
+            for: context
+        ) == originalInput)
+    }
+
     @Test("Terminal proof preserves pending request during focused text polling throttle")
     func terminalProofPreservesPendingRequestDuringFocusedTextPollingThrottle() {
         let input = "Make this setting easier to use"

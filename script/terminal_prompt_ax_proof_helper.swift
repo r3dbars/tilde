@@ -11,6 +11,7 @@ struct Options {
     var processIdentifier: pid_t?
     var discoveryTimeoutSeconds: TimeInterval = 0
     var hints: [String] = []
+    var allowsMissingMarkerForEmptyText = false
 }
 
 struct Snapshot {
@@ -48,7 +49,7 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
 }
 
 func usage() -> Never {
-    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS]")
+    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS] [--allow-missing-marker-for-empty-text]")
     exit(0)
 }
 
@@ -91,6 +92,8 @@ func parseOptions() -> Options {
             options.processIdentifier = pid_t(pid)
         case "--hint":
             options.hints.append(value())
+        case "--allow-missing-marker-for-empty-text":
+            options.allowsMissingMarkerForEmptyText = true
         case "--discovery-timeout":
             let rawValue = value()
             guard let timeout = TimeInterval(rawValue), timeout >= 0 else {
@@ -137,6 +140,14 @@ func focusedElement(in appElement: AXUIElement) -> AXUIElement? {
         return nil
     }
     return (focusedValue as! AXUIElement)
+}
+
+func focusedWindow(in appElement: AXUIElement) -> AXUIElement? {
+    guard let focusedWindowValue = copyAttribute(appElement, kAXFocusedWindowAttribute),
+          CFGetTypeID(focusedWindowValue) == AXUIElementGetTypeID() else {
+        return nil
+    }
+    return (focusedWindowValue as! AXUIElement)
 }
 
 func collectText(from element: AXUIElement, depth: Int = 0, into values: inout [String]) {
@@ -336,7 +347,10 @@ func snapshot(options: Options) -> Snapshot {
 
     var texts: [String] = []
     var scopedSearchables: [[String]] = []
-    let allWindows = windows(from: appElement)
+    var allWindows = windows(from: appElement)
+    if let focusedWindow = focusedWindow(in: appElement) {
+        allWindows.insert(focusedWindow, at: 0)
+    }
     let markerWindows = allWindows.filter { window in
         containsText(stringAttribute(window, kAXTitleAttribute), options.marker, caseInsensitive: true)
     }
@@ -360,6 +374,13 @@ func snapshot(options: Options) -> Snapshot {
                 scopedSearchables.append(focusedTexts + (title.isEmpty ? [] : [title]))
             }
         }
+    }
+
+    if texts.isEmpty {
+        var appTexts: [String] = []
+        collectText(from: appElement, into: &appTexts)
+        texts.append(contentsOf: appTexts)
+        scopedSearchables.append(appTexts)
     }
 
     let titles = scopedWindows
@@ -399,7 +420,7 @@ func waitForMatch(options: Options) -> Snapshot {
     var latest = snapshot(options: options)
     repeat {
         latest = snapshot(options: options)
-        if latest.hasMarker && latest.hasText && latest.hasHint {
+        if snapshotSatisfiesWait(latest, options: options) {
             return latest
         }
         Thread.sleep(forTimeInterval: 0.2)
@@ -407,10 +428,20 @@ func waitForMatch(options: Options) -> Snapshot {
     return latest
 }
 
+func snapshotSatisfiesWait(_ snapshot: Snapshot, options: Options) -> Bool {
+    let markerSatisfied = snapshot.hasMarker
+        || (
+            options.allowsMissingMarkerForEmptyText
+                && options.text.isEmpty
+                && snapshot.textCount > 0
+        )
+    return markerSatisfied && snapshot.hasText && snapshot.hasHint
+}
+
 switch options.action {
 case "wait":
     let result = waitForMatch(options: options)
-    guard result.hasMarker && result.hasText && result.hasHint else {
+    guard snapshotSatisfiesWait(result, options: options) else {
         fail(describeFailure(result, options: options))
     }
 case "assert":

@@ -199,15 +199,43 @@ if "focus_claude_code_ghostty_proof_window_by_title()" not in source:
     raise SystemExit("Ghostty proof harness must have a title-marked focus helper")
 if source.count("focus_claude_code_ghostty_proof_window_by_title") < 3:
     raise SystemExit("Ghostty proof harness must use title-marked focus before activation and fallback Tab")
-if "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE" not in source or "compactProofMarker" not in source:
+if "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE" not in source:
     raise SystemExit("Ghostty proof focus must scope activation to the title-marked disposable window")
 if "system_events_frontmost_process_id_matches()" not in source or "System Events frontmost pid probe" not in source:
     raise SystemExit("Ghostty proof harness must be able to verify exact frontmost ownership through System Events")
 if "Claude Code $host_name fallback could not focus the title-marked proof window" not in source:
     raise SystemExit("Ghostty fallback Tab must fail clearly when the title-marked proof window cannot be focused")
+if "claude_code_ghostty_proof_window_process_id_by_title()" not in source or "Claude Code Ghostty proof title pid" not in source:
+    raise SystemExit("Ghostty proof launch must resolve the title-marked proof window pid before frontmost checks")
+if "claude_code_terminal_proof_title_for_dir()" not in source or 'CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"' not in source:
+    raise SystemExit("Claude Code terminal proof titles must include the unique temp proof id")
+if 'CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"' in source:
+    raise SystemExit("Claude Code terminal proof titles must not reuse the same marker-only title")
+launch_focus_start = source.index("mark_claude_code_ghostty_proof_window_title")
+launch_focus_end = source.index('CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_pid"', launch_focus_start)
+launch_focus_block = source[launch_focus_start:launch_focus_end]
+if "claude_code_ghostty_proof_window_process_id_by_title" not in launch_focus_block:
+    raise SystemExit("Ghostty proof launch must prefer title-pid resolution over generic frontmost pid discovery")
+if "if windowName contains proofTitle then" not in launch_focus_block:
+    raise SystemExit("Ghostty proof title-pid resolution must require the unique proof title")
+if "if windowName contains proofMarker or windowName contains compactProofMarker then" in launch_focus_block:
+    raise SystemExit("Ghostty proof title-pid resolution must not fall back to stale marker-only windows")
+if "focus_claude_code_ghostty_proof_window_by_title || true" not in launch_focus_block:
+    raise SystemExit("Ghostty proof launch must still explicitly refocus the title-marked proof window before generic fallback")
+if source.count("set proofTitle to item 3 of argv") < 2 or source.count('perform action ("set_surface_title:" & proofTitle) on targetTerminal') < 3:
+    raise SystemExit("Ghostty proof launch must title-mark the new disposable window before running claude")
+wait_focus_start = source.index("try_wait_for_frontmost_claude_code_terminal_proof_process()")
+wait_focus_end = source.index("\nwait_for_frontmost_claude_code_terminal_proof_process()", wait_focus_start)
+wait_focus_block = source[wait_focus_start:wait_focus_end]
+if 'focus_claude_code_ghostty_proof_window_by_title "$root_pid"' not in wait_focus_block:
+    raise SystemExit("Ghostty proof frontmost wait must actively refocus the exact title-marked window")
 focus_start = source.index("focus_claude_code_ghostty_proof_window_by_title()")
 focus_end = source.index("frontmost_claude_code_terminal_proof_process_is_active()", focus_start)
 focus_block = source[focus_start:focus_end]
+if "if windowName contains proofTitle then" not in focus_block:
+    raise SystemExit("Ghostty proof focus must require the exact unique proof title")
+if "if windowName contains proofTitle or windowName contains proofMarker" in focus_block:
+    raise SystemExit("Ghostty proof focus must not fall back to stale marker-only windows")
 if "set windowName to name of front window of frontApp" in focus_block:
     raise SystemExit("Ghostty proof focus must not reject title-scoped activation on lagging System Events front-window metadata")
 if "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID" not in focus_block:
@@ -401,6 +429,12 @@ if "activateWithSystemEvents" not in terminal_prompt_helper or '"/usr/bin/osascr
     raise SystemExit("Terminal prompt AX helper must fall back to System Events pid activation when AppKit activation loses focus")
 if "frontmostPid=" not in terminal_prompt_helper or "targetPid=" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper failures must include focus ownership pids")
+if "func focusedWindow(in appElement" not in terminal_prompt_helper or "kAXFocusedWindowAttribute" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must include focused-window text when Ghostty omits AXWindows")
+if "if texts.isEmpty" not in terminal_prompt_helper or "collectText(from: appElement" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must fall back to the exact target app AX subtree when Ghostty reports no window text nodes")
+if "--allow-missing-marker-for-empty-text" not in terminal_prompt_helper or "allowsMissingMarkerForEmptyText" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must support Ghostty empty-prompt readiness when title markers are not exposed")
 
 text_event_helper = Path("Sources/SteadyTypeTextEventHelper/main.swift").read_text()
 if "waitForExpectedFrontmostApplication" not in text_event_helper or ".activate(options: [.activateAllWindows])" not in text_event_helper:
@@ -436,6 +470,13 @@ if 'source != "terminal-screen-prompt"' not in synthetic_record_block:
 terminal_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(")
 terminal_insert_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_insert_start)
 terminal_insert_block = app_delegate[terminal_insert_start:terminal_insert_end]
+terminal_verification_start = app_delegate.index("private func claudeCodeTerminalHostProofVerificationInputText(")
+terminal_verification_end = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(", terminal_verification_start)
+terminal_verification_block = app_delegate[terminal_verification_start:terminal_verification_end]
+if "proofInputTextPreferringTerminalScreen" not in terminal_verification_block or "focusedWindowText(for: app)" not in terminal_verification_block:
+    raise SystemExit("Claude Code Ghostty proof verification must prefer current terminal screen text over stale focused text")
+if "claude-code-terminal-host-proof-verification" not in app_delegate or '"terminalScreen"' not in terminal_verification_block:
+    raise SystemExit("Claude Code Ghostty proof verification must diagnose terminal-screen verification wins")
 hardware_helper_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofHardwareKeyEvents(")
 hardware_helper_end = app_delegate.index("\n    private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(", hardware_helper_start)
 hardware_helper_block = app_delegate[hardware_helper_start:hardware_helper_end]
@@ -2557,6 +2598,10 @@ if ! awk '
   echo "real app smoke self-test expected Terminal, iTerm2, and Ghostty prompt readiness to use the AX proof helper" >&2
   exit 1
 fi
+if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_claude_code_terminal_prompt_ready\(\)/ { in_wait = 0 } in_wait && /--allow-missing-marker-for-empty-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty empty-prompt readiness to allow missing title marker before typed proof text is asserted" >&2
+  exit 1
+fi
 if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code prompt readiness to settle before typing samples" >&2
   exit 1
@@ -2569,6 +2614,13 @@ if ! grep -F 'claude_code_terminal_proof_primary_pid' script/real_app_smoke.sh >
 fi
 if awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /assert_claude_code_terminal_prompt_retains_marker\(\)/ { in_assert = 0 } in_assert && /claude_code_terminal_ax_helper wait/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected typed Claude Code prompt text checks not to require placeholder hints" >&2
+  exit 1
+fi
+if ! grep -F 'claude_code_terminal_text_wait_seconds()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_seconds="12"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- '--discovery-timeout "$(claude_code_terminal_text_wait_seconds)"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty typed prompt readiness to use a longer host-specific AX wait" >&2
   exit 1
 fi
 if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/null ||
