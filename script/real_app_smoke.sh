@@ -9065,6 +9065,72 @@ process_id_or_tree_has_name() {
     process_tree_contains_name "$pid" "$expected_name"
 }
 
+process_tree_has_child() {
+  local root_pid="$1"
+
+  [[ -n "$root_pid" ]] || return 1
+  pgrep -P "$root_pid" >/dev/null 2>&1
+}
+
+ghostty_process_tree_has_child() {
+  local root_pid
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 1
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if process_tree_has_child "$root_pid"; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+wait_for_ghostty_process_tree_child_optional() {
+  local timeout="${1:-2}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 1
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=2
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    if ghostty_process_tree_has_child; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
+describe_claude_code_ghostty_process_tree() {
+  local root_pid child
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 0
+
+  echo "Claude Code Ghostty proof process tree:" >&2
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    echo "root_pid=$root_pid" >&2
+    ps -p "$root_pid" -o pid,ppid,pgid,stat,comm,args 2>/dev/null >&2 ||
+      echo "  root process unavailable to ps" >&2
+    while IFS= read -r child; do
+      [[ -n "$child" ]] || continue
+      ps -p "$child" -o pid,ppid,pgid,stat,comm,args 2>/dev/null >&2 ||
+        echo "  child process unavailable to ps: $child" >&2
+    done < <(pgrep -P "$root_pid" 2>/dev/null || true)
+  done
+}
+
 describe_claude_code_terminal_proof_process_state() {
   local expected_name="$1"
   local label="${2:-$expected_name}"
@@ -9434,6 +9500,15 @@ open_claude_code_terminal_proof() {
           CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_preflight_pids"
           CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1
           echo "Claude Code Ghostty proof owns no-restore host pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS"
+          if wait_for_ghostty_process_tree_child_optional \
+            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CHILD_PROCESS_READY_SECONDS:-2}"; then
+            echo "Claude Code Ghostty proof no-restore host has a child process before AppleScript preflight."
+            printf '%s\n' "no-restore-host-child-present" >>"$ghostty_launch_stage_file"
+          else
+            echo "Claude Code Ghostty proof no-restore host has no shell child before AppleScript preflight." >&2
+            printf '%s\n' "no-restore-host-no-child-process" >>"$ghostty_launch_stage_file"
+            describe_claude_code_ghostty_process_tree
+          fi
         fi
       fi
       if check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"; then
@@ -9532,6 +9607,7 @@ end run
 APPLESCRIPT
         describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
         describe_claude_code_ghostty_launch_state "$proof_title"
+        describe_claude_code_ghostty_process_tree
         if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"; then
           echo "Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry." >&2
           return 42
@@ -9544,6 +9620,7 @@ APPLESCRIPT
         if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-created"; then
           describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
           describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
           echo "Claude Code Ghostty proof AppleScript bridge stalled during disposable window creation; skipping retry." >&2
           return 42
         fi
@@ -9633,6 +9710,7 @@ end run
 APPLESCRIPT
           describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
           describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
           echo "Claude Code Ghostty proof could not retry the disposable proof command." >&2
           return 1
         fi
@@ -9643,6 +9721,7 @@ APPLESCRIPT
             "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
           describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
           describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
           echo "Claude Code Ghostty proof shell did not exec the disposable proof command." >&2
           return 1
         fi
