@@ -385,7 +385,12 @@ follow-up `20260528T090002Z-ghostty` records the new no-restore ownership path
 proof-created Ghostty host afterward. `20260528T091930Z-ghostty` added a
 proof-owned process-tree classifier, recorded `no-restore-host-no-child-process`
 for Ghostty pid `94700`, still stalled at `new-window-front-window-start`, exited
-`42`, and cleaned up the proof-owned host. Ghostty remains unsupported until a
+`42`, and cleaned up the proof-owned host. `20260528T094450Z-ghostty` then
+started Ghostty with `--initial-window=false`, skipped the restored-window count
+path, reached `configured-window-start`, still stalled before
+`configured-window-created`, exited `42`, cleaned proof-owned pid `79161`, and
+left no Ghostty/proof process behind.
+Ghostty remains unsupported until a
 detached run reaches verified one-word no-submit insertion and exits `0`.
 
 ## Scores

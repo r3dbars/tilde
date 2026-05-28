@@ -9422,7 +9422,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids ghostty_configured_window_first
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -9487,11 +9487,18 @@ open_claude_code_terminal_proof() {
       fi
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
+      ghostty_configured_window_first=0
       : >"$ghostty_launch_stage_file"
       if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
          ! pgrep -x ghostty >/dev/null 2>&1; then
         echo "Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight."
-        open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true >/dev/null 2>&1 || true
+        if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_INITIAL_WINDOW_DISABLED:-1}" =~ ^(1|true|yes|on)$ ]]; then
+          ghostty_configured_window_first=1
+          printf '%s\n' "no-restore-host-initial-window-disabled" >>"$ghostty_launch_stage_file"
+          open -na "$host_app" --args --window-save-state=never --initial-window=false --quit-after-last-window-closed=true >/dev/null 2>&1 || true
+        else
+          open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true >/dev/null 2>&1 || true
+        fi
         sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_SETTLE_SECONDS:-1}"
         ghostty_preflight_pids="$(terminal_pid_list | tr '\n' ' ')"
         ghostty_preflight_pids="${ghostty_preflight_pids% }"
@@ -9524,7 +9531,7 @@ open_claude_code_terminal_proof() {
       if ! run_osascript_with_timeout \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
           "Claude Code Ghostty proof launch" \
-          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" "$ghostty_launch_stage_file" <<'APPLESCRIPT' >/dev/null; then
+          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" "$ghostty_launch_stage_file" "$ROOT_DIR" "$launch_script" "$ghostty_configured_window_first" <<'APPLESCRIPT' >/dev/null; then
 on recordStage(stageFile, stageName)
   if stageFile is not "" then
     try
@@ -9540,24 +9547,81 @@ set proofTitle to item 3 of argv
 set launchAction to item 4 of argv
 set launchActionDrain to item 5 of argv as real
 set launchStageFile to item 6 of argv
+set rootDirectory to item 7 of argv
+set launchScriptPath to item 8 of argv
+set configuredWindowFirst to item 9 of argv
 recordStage(launchStageFile, "launch-begin")
 tell application id "com.mitchellh.ghostty"
   my recordStage(launchStageFile, "new-window-start")
-  my recordStage(launchStageFile, "new-window-front-window-start")
-  set sourceWindow to front window
-  my recordStage(launchStageFile, "new-window-front-window-resolved")
-  my recordStage(launchStageFile, "new-window-selected-tab-start")
-  set sourceTab to selected tab of sourceWindow
-  my recordStage(launchStageFile, "new-window-selected-tab-resolved")
-  my recordStage(launchStageFile, "new-window-focused-terminal-start")
-  set sourceTerminal to focused terminal of sourceTab
-  my recordStage(launchStageFile, "new-window-focused-terminal-resolved")
-  my recordStage(launchStageFile, "new-window-action-ready")
-  perform action "new_window" on sourceTerminal
-  my recordStage(launchStageFile, "new-window-action-finished")
-  delay 0.5
-  set proofWindow to front window
-  my recordStage(launchStageFile, "new-window-created")
+  if configuredWindowFirst is "1" then
+    my recordStage(launchStageFile, "configured-window-start")
+    set proofConfig to new surface configuration from {initial working directory:rootDirectory, command:launchScriptPath, wait after command:true}
+    set proofWindow to new window with configuration proofConfig
+    my recordStage(launchStageFile, "configured-window-created")
+    my recordStage(launchStageFile, "new-window-created")
+  else
+    my recordStage(launchStageFile, "new-window-count-start")
+    set existingWindowCount to count windows
+    my recordStage(launchStageFile, "new-window-count:" & (existingWindowCount as text))
+    if existingWindowCount is 0 then
+      my recordStage(launchStageFile, "configured-window-start")
+      set proofConfig to new surface configuration from {initial working directory:rootDirectory, command:launchScriptPath, wait after command:true}
+      set proofWindow to new window with configuration proofConfig
+      my recordStage(launchStageFile, "configured-window-created")
+      my recordStage(launchStageFile, "new-window-created")
+    else
+    my recordStage(launchStageFile, "new-window-front-window-start")
+    set sourceWindow to missing value
+    set sourceWindowCount to 0
+    repeat with sourceWindowAttempt from 1 to 20
+      try
+        set sourceWindowCount to count windows
+        if sourceWindowCount > 0 then
+          set sourceWindow to front window
+          exit repeat
+        end if
+      end try
+      delay 0.1
+    end repeat
+    my recordStage(launchStageFile, "new-window-source-window-count:" & (sourceWindowCount as text))
+    if sourceWindow is missing value then
+      my recordStage(launchStageFile, "new-window-no-source-window")
+      error "Ghostty proof has no source window for disposable launch."
+    end if
+    my recordStage(launchStageFile, "new-window-front-window-resolved")
+    my recordStage(launchStageFile, "new-window-selected-tab-start")
+    my recordStage(launchStageFile, "new-window-focused-terminal-start")
+    set sourceTerminal to missing value
+    set sourceTerminalReady to false
+    repeat with sourceTerminalAttempt from 1 to 20
+      try
+        set sourceTab to selected tab of sourceWindow
+        my recordStage(launchStageFile, "new-window-selected-tab-resolved")
+        set sourceTerminal to focused terminal of sourceTab
+        try
+          set sourceTerminalDirectory to working directory of sourceTerminal as text
+          if sourceTerminalDirectory is not "" then
+            set sourceTerminalReady to true
+            exit repeat
+          end if
+        end try
+      end try
+      delay 0.1
+    end repeat
+    if sourceTerminal is missing value or sourceTerminalReady is false then
+      my recordStage(launchStageFile, "new-window-source-terminal-not-ready")
+      error "Ghostty proof source terminal was not ready for disposable launch."
+    end if
+    my recordStage(launchStageFile, "new-window-focused-terminal-resolved")
+    my recordStage(launchStageFile, "new-window-source-terminal-ready")
+    my recordStage(launchStageFile, "new-window-action-ready")
+    perform action "new_window" on sourceTerminal
+    my recordStage(launchStageFile, "new-window-action-finished")
+    delay 0.5
+    set proofWindow to front window
+    my recordStage(launchStageFile, "new-window-created")
+    end if
+  end if
   activate window proofWindow
   my recordStage(launchStageFile, "window-activated")
   delay shellReadyDelay
@@ -9608,6 +9672,19 @@ APPLESCRIPT
         describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
         describe_claude_code_ghostty_launch_state "$proof_title"
         describe_claude_code_ghostty_process_tree
+        if grep -Fxq "configured-window-start" "$ghostty_launch_stage_file" 2>/dev/null &&
+           ! grep -Fxq "configured-window-created" "$ghostty_launch_stage_file" 2>/dev/null; then
+          echo "Claude Code Ghostty proof configured-window API stalled before disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        if grep -Fxq "new-window-no-source-window" "$ghostty_launch_stage_file" 2>/dev/null; then
+          echo "Claude Code Ghostty proof had no source window for disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        if grep -Fxq "new-window-source-terminal-not-ready" "$ghostty_launch_stage_file" 2>/dev/null; then
+          echo "Claude Code Ghostty proof source terminal was not ready for disposable window creation; skipping retry." >&2
+          return 42
+        fi
         if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"; then
           echo "Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry." >&2
           return 42
@@ -9788,6 +9865,10 @@ cleanup_claude_code_terminal_proof() {
       fi
     done
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    if [[ "$CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO" == "1" ]]; then
+      reset_zero_window_claude_code_ghostty_proof_host
+      reset_stale_only_claude_code_ghostty_proof_host
+    fi
   elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
     close_claude_code_ghostty_proof_window_by_title || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
@@ -9909,6 +9990,7 @@ reset_stale_only_claude_code_ghostty_proof_host() {
       "Claude Code Ghostty stale-only host check" <<'APPLESCRIPT' 2>/dev/null || true
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
+set steadyTypeGhosttyProbeMarker to "steadytype-ghostty-"
 set appleScriptProbePrefix to "SteadyType AppleScript Probe"
 set submitProbePrefix to "SteadyType Submit Probe"
 set windowCount to 0
@@ -9925,6 +10007,7 @@ tell application "System Events"
       set isProofWindow to false
       if markerText is not "" and windowName contains markerText then set isProofWindow to true
       if windowName contains proofDirectoryMarker then set isProofWindow to true
+      if windowName contains steadyTypeGhosttyProbeMarker then set isProofWindow to true
       if windowName starts with appleScriptProbePrefix then set isProofWindow to true
       if windowName starts with submitProbePrefix then set isProofWindow to true
       if isProofWindow is false then set unsafeWindowCount to unsafeWindowCount + 1
@@ -9976,6 +10059,7 @@ cleanup_stale_claude_code_ghostty_proofs() {
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
+set steadyTypeGhosttyProbeMarker to "steadytype-ghostty-"
 set appleScriptProbePrefix to "SteadyType AppleScript Probe"
 set submitProbePrefix to "SteadyType Submit Probe"
 set closedCount to 0
@@ -9984,7 +10068,7 @@ tell application id "com.mitchellh.ghostty"
     try
       set candidateWindow to window windowIndex
       set windowName to name of candidateWindow as text
-      if windowName contains markerText or windowName contains proofDirectoryMarker or windowName starts with appleScriptProbePrefix or windowName starts with submitProbePrefix then
+      if windowName contains markerText or windowName contains proofDirectoryMarker or windowName contains steadyTypeGhosttyProbeMarker or windowName starts with appleScriptProbePrefix or windowName starts with submitProbePrefix then
         close candidateWindow
         set closedCount to closedCount + 1
       else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
@@ -10093,7 +10177,7 @@ open_fresh_claude_code_terminal_proof_context() {
     if ((open_status != 0)); then
       echo "Claude Code $host_name proof could not launch disposable context attempt $launch_attempt." >&2
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" && "$open_status" == "42" ]]; then
-        echo "Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge preflight failed." >&2
+        echo "Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge or disposable window launch failed." >&2
         return "$open_status"
       fi
       continue

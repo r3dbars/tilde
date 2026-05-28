@@ -2914,6 +2914,13 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof owns no-restore host pid(s):' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- '--initial-window=false' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'no-restore-host-initial-window-disabled' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'configured-window-start' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'configured-window-created' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'new window with configuration proofConfig' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'command:launchScriptPath' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadyTypeGhosttyProbeMarker' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_ghostty_process_tree_child_optional' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'no-restore-host-no-child-process' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'describe_claude_code_ghostty_process_tree' script/real_app_smoke.sh >/dev/null ||
@@ -2923,7 +2930,7 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_preflight_status=$?' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open_status=$?' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge preflight failed.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge or disposable window launch failed.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_APPLESCRIPT_PREFLIGHT_TIMEOUT_SECONDS:-2' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "preflight-tell-entered")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "preflight-tell-entered")' script/real_app_smoke.sh >/dev/null ||
@@ -2932,11 +2939,18 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-created"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-front-window-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-source-window-count:" & (sourceWindowCount as text))' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-no-source-window")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-front-window-resolved")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-selected-tab-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-focused-terminal-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-action-ready")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-source-terminal-not-ready")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-source-terminal-ready")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-action-finished")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof configured-window API stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof had no source window for disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof source terminal was not ready for disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled during disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'recordStage(launchStageFile, "launch-action-start")' script/real_app_smoke.sh >/dev/null ||
