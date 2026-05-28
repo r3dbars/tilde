@@ -689,6 +689,29 @@ def latency_milliseconds(event):
     return value if value >= 0 else None
 
 
+def instant_phrase_match_family(event):
+    match = str(metadata(event).get("predictivePhraseMatch") or "").strip()
+    if not match:
+        return "none"
+    if match.startswith("intent-writing-bridge-"):
+        return "writing-bridge"
+    if match.startswith("intent-writing-flow-"):
+        return "writing-flow"
+    if match.startswith("intent-markdown-"):
+        return "markdown"
+    if match.startswith("intent-reply-"):
+        return "reply"
+    if match.startswith("intent-daily-driver-"):
+        return "daily-driver"
+    if match.startswith("intent-sentence-boundary-"):
+        return "sentence-boundary"
+    if match.startswith("intent-field-safety-"):
+        return "field-safety"
+    if match.startswith("intent-"):
+        return "intent"
+    return "prior"
+
+
 def event_reason(event):
     return str(event.get("reason") or metadata(event).get("reason") or "").strip()
 
@@ -833,11 +856,14 @@ instant_phrase_presented = [
     and selection_source(event) == "predictive-phrase-fallback"
 ]
 instant_phrase_first_line_by_key = {}
+instant_phrase_match_family_by_key = {}
 for line_number, event in instant_phrase_presented:
     key = suggestion_key(line_number, event)
     instant_phrase_first_line_by_key.setdefault(key, line_number)
+    instant_phrase_match_family_by_key.setdefault(key, instant_phrase_match_family(event))
 instant_phrase_keys = set(instant_phrase_first_line_by_key)
 instant_phrase_shown = len(instant_phrase_keys)
+instant_phrase_match_family_counts = Counter(instant_phrase_match_family_by_key.values())
 instant_phrase_latencies = [
     latency
     for _, event in instant_phrase_presented
@@ -1036,6 +1062,12 @@ print("Instant phrase outcomes:")
 if instant_phrase_outcome_counts:
     for outcome, count in instant_phrase_outcome_counts.most_common(8):
         print(f"- {outcome}: {count}")
+else:
+    print("- none: 0")
+print("Instant phrase match families:")
+if instant_phrase_match_family_counts:
+    for family, count in instant_phrase_match_family_counts.most_common(8):
+        print(f"- {family}: {count}")
 else:
     print("- none: 0")
 print(f"Model-backed shown: {model_backed_shown}")

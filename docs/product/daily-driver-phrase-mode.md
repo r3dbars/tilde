@@ -299,6 +299,10 @@ mix counts for shown / accepted / accepted-kept
 suggestions, including instant phrase fallback, model-backed, word fallback, and
 unknown sources, and fails when the fast phrase path never appears or appears
 late, so a dogfood report proves whether instant speculation actually helped.
+It also prints redacted instant phrase match-family counts, so the report can
+show whether zero-latency suggestions came from writing bridges, markdown note
+labels, reply phrases, sentence-boundary guesses, daily-driver trust language,
+or generic priors without exposing the typed text.
 The same report now summarizes no-show reasons and triggers for
 `suggestionSuppressed` events, so a dogfood pass can explain whether SteadyType
 stayed quiet because the model returned nothing useful, instant fallback missed,
@@ -325,8 +329,9 @@ shows the saved mark, rows since the mark, the redacted app filter, and the
 exact next start/finish/review command.
 When the session has new trace rows, it also runs the metadata-only sample gate
 as a preview, so the tester can see shown suggestions, phrase suggestions,
-accepted-kept reach, source mix, and no-show reasons before finishing the
-report. It now previews the redacted trust-killer gate too, so insertion
+accepted-kept reach, source mix, instant match families, and no-show reasons
+before finishing the report. It now previews the redacted trust-killer gate too,
+so insertion
 failures, wrong-context suppressions, caret geometry failures, sensitive-field
 presentations, prompt submit risks, and other daily-driver trust breaks are
 visible before `finish`. The same status preflight now previews the redacted
