@@ -121,6 +121,28 @@ write_one_word_trace() {
 EOF
 }
 
+write_prompt_full_accept_log() {
+  local bundle_id="$1"
+  local render_mode="$2"
+
+  cat >"$LOG_PATH" <<EOF
+2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=synthetic-caret placementConfidenceBand=medium hasCaretRect=true requestMode=phraseContinuation
+2026-04-26T08:00:01Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axValueReplacement
+2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=18 previousBeforeChars=42 currentBeforeChars=60
+EOF
+}
+
+write_prompt_full_accept_trace() {
+  local bundle_id="$1"
+
+  cat >"$TRACE_PATH" <<EOF
+{"type":"suggestionPresented","suggestionID":"full-accept","appBundleIdentifier":"$bundle_id","fieldIdentity":"$bundle_id|pid:1|element:1","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"anchorSource":"caret","anchorQuality":"trusted","anchorReason":"caretBoundsTrusted","anchorCanPresent":"true","anchorRect":"10,20,0,18","hasCaretRect":"true","hasTextLineRect":"true","hasElementRect":"true","hasWindowRect":"true","placementConfidenceBand":"high"}}
+{"type":"suggestionAccepted","suggestionID":"full-accept","appBundleIdentifier":"$bundle_id","fieldIdentity":"$bundle_id|pid:1|element:1","requestMode":"phraseContinuation","acceptedText":" validate this next","metadata":{"acceptMode":"acceptAllVisible"}}
+{"type":"insertionVerified","suggestionID":"full-accept","appBundleIdentifier":"$bundle_id","fieldIdentity":"$bundle_id|pid:1|element:1","requestMode":"phraseContinuation","acceptedText":" validate this next","outcome":"verified","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","promptSafetyMode":"fullAcceptProof"}}
+EOF
+}
+
 write_passing_visual_trace() {
   local bundle_id="$1"
   local screenshot_one="$TMP_DIR/autocomplete-lab-one.png"
@@ -217,6 +239,38 @@ run_one_word_case() {
   fi
 }
 
+run_prompt_full_accept_case() {
+  local app="$1"
+  local status_name="$2"
+  local report_name="$3"
+  local bundle_id="$4"
+  local expected_render="$5"
+  local observed_render="$6"
+  local proof_label="${7:-full-accept}"
+
+  write_prompt_full_accept_log "$bundle_id" "$observed_render"
+  write_prompt_full_accept_trace "$bundle_id"
+
+  AUTOCOMPLETE_LAB_LOG="$LOG_PATH" \
+    AUTOCOMPLETE_LAB_TRACE_PATH="$TRACE_PATH" \
+    AUTOCOMPLETE_LAB_LOG_START_LINE=0 \
+    AUTOCOMPLETE_LAB_TRACE_START_LINE=0 \
+    AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$proof_label" \
+    AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
+    AUTOCOMPLETE_LAB_PROMPT_FULL_ACCEPT_NO_SUBMIT_CONFIRMED=1 \
+    AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$REPORT_PATH" \
+    script/manual_smoke_session.sh "$app" --check >/dev/null
+
+  if ! grep -F "| $report_name | \`$bundle_id\` | \`$proof_label\` | 1 | \`$expected_render\` | lines 1-" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record prompt full-accept no-submit proof for $status_name" >&2
+    exit 1
+  fi
+  if ! grep -F "prompt full-accept no-submit confirmed" "$REPORT_PATH" >/dev/null; then
+    echo "manual smoke self-test did not record the prompt full-accept no-submit label" >&2
+    exit 1
+  fi
+}
+
 run_strict_visual_case() {
   local app="$1"
   local proof_label="$2"
@@ -303,6 +357,7 @@ if ! grep -F "| TextEdit | \`com.apple.TextEdit\` | \`option-tab\` | 2 | \`inlin
 fi
 
 run_one_word_case codex Codex Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
+run_prompt_full_accept_case codex-full-accept "Codex full accept" Codex com.openai.codex 'inlineAdjacent|floatingMirror' inlineAdjacent
 run_one_word_case claude "Claude desktop" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent
 for claude_proof_label in claude-empty claude-long claude-wrapped claude-narrow claude-context claude-light claude-dark; do
   run_one_word_case claude "Claude desktop $claude_proof_label" Claude com.anthropic.claudefordesktop 'inlineAdjacent|floatingMirror' inlineAdjacent "$claude_proof_label"

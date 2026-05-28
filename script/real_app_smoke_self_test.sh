@@ -1910,6 +1910,29 @@ if ! grep -F 'ensure_cgevent_keypress_helper()' script/real_app_smoke.sh >/dev/n
   echo "real app smoke self-test expected Codex proof to warm the CGEvent keypress helper before showing a suggestion" >&2
   exit 1
 fi
+
+script/real_app_smoke.sh codex-full-accept --dry-run >"$TMP_DIR/codex-full-accept.txt"
+if ! grep -F "Codex prompt full-accept no-submit proof" "$TMP_DIR/codex-full-accept.txt" >/dev/null ||
+   ! grep -F "runtime scenario codex-full-accept-no-submit" "$TMP_DIR/codex-full-accept.txt" >/dev/null ||
+   ! grep -F "never presses Enter" "$TMP_DIR/codex-full-accept.txt" >/dev/null ||
+   ! grep -F "prompt full-accept no-submit gate on the same trace slice" "$TMP_DIR/codex-full-accept.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Codex full-accept no-submit proof lane" >&2
+  exit 1
+fi
+if script/real_app_smoke.sh codex-full-accept --skip-build --dry-run >"$TMP_DIR/codex-full-accept-skip-build.txt" 2>&1; then
+  echo "real app smoke self-test expected Codex full accept proof to reject --skip-build" >&2
+  exit 1
+fi
+if ! grep -F "must relaunch with the codex-full-accept-no-submit proof scenario" "$TMP_DIR/codex-full-accept-skip-build.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain Codex full accept --skip-build rejection" >&2
+  exit 1
+fi
+if ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /prepare_codex_full_accept_runtime_options/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_accept_all_shortcut/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /manual_smoke_session.sh codex-full-accept/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex full accept proof to set the proof scenario, press accept-all, and run the full-accept validator" >&2
+  exit 1
+fi
 python3 - <<'PY'
 from pathlib import Path
 

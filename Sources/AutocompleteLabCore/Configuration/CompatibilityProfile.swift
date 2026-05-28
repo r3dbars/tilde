@@ -223,6 +223,44 @@ public struct CompatibilityProfile: Equatable, Sendable {
         !isSensitive && supportLevel != .unsupported
     }
 
+    public func replacingAcceptanceProofMode(
+        supportsFullAcceptance: Bool,
+        requiresNoSubmitAcceptanceProof: Bool,
+        notes: String? = nil
+    ) -> CompatibilityProfile {
+        CompatibilityProfile(
+            bundleIdentifier: bundleIdentifier,
+            displayName: displayName,
+            appFamily: appFamily,
+            supportLevel: supportLevel,
+            graduationDecision: graduationDecision,
+            supportReason: supportReason,
+            renderMode: renderMode,
+            insertionMode: insertionMode,
+            fallbackRenderMode: fallbackRenderMode,
+            fallbackInsertionMode: fallbackInsertionMode,
+            fieldIdentityMode: fieldIdentityMode,
+            anchorLadder: anchorLadder,
+            knownFailureModes: knownFailureModes,
+            allowsFieldAnchor: allowsFieldAnchor,
+            allowsWindowAnchor: allowsWindowAnchor,
+            requiresValidatedCaret: requiresValidatedCaret,
+            supportsObserverUpdates: supportsObserverUpdates,
+            supportsOneWordAcceptance: supportsOneWordAcceptance,
+            supportsFullAcceptance: supportsFullAcceptance,
+            allowsUnknownFieldKind: allowsUnknownFieldKind,
+            requiresNoSubmitAcceptanceProof: requiresNoSubmitAcceptanceProof,
+            suppressesUntilBlurAfterEscape: suppressesUntilBlurAfterEscape,
+            suppressesAfterInsertionFailure: suppressesAfterInsertionFailure,
+            allowsDescendantTextFallback: allowsDescendantTextFallback,
+            allowsDetachedSuggestions: allowsDetachedSuggestions,
+            allowsSyntheticCaretPlacement: allowsSyntheticCaretPlacement,
+            isSensitive: isSensitive,
+            promptAppSafetyMode: promptAppSafetyMode,
+            notes: notes ?? self.notes
+        )
+    }
+
     public var userFacingSafetySummary: String {
         guard canPresentSuggestions, !isSensitive else {
             return "Suggestions stay off here."

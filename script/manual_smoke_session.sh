@@ -2,6 +2,7 @@
 set -euo pipefail
 
 APP="${1:-}"
+REQUESTED_APP="$APP"
 if [[ $# -gt 0 ]]; then
   shift
 fi
@@ -14,6 +15,7 @@ OBSIDIAN_VARIANT=""
 REQUIRES_UNDO_ACCEPT=0
 TEXTEDIT_SELECTED_SUPPRESSION_PROOF=0
 TEXTEDIT_FAST_TYPING_PROOF=0
+CODEX_FULL_ACCEPT_PROOF=0
 STRICT_VISUAL_EVIDENCE="${AUTOCOMPLETE_LAB_SMOKE_REQUIRE_VISUAL_EVIDENCE:-${AUTOCOMPLETE_LAB_TRACE_REQUIRE_VISUAL_EVIDENCE:-0}}"
 LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}"
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
@@ -26,7 +28,7 @@ CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
 
 usage() {
   cat <<'EOF'
-Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|chrome|codex|claude-code|claude> [--print|--check] [--visual]
+Usage: script/manual_smoke_session.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|notes|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|chrome|codex|codex-full-accept|claude-code|claude> [--print|--check] [--visual]
 
 Default mode prints the local manual steps, records the current diagnostics log
 line, waits for Enter, validates the new diagnostics for that app, then appends
@@ -88,6 +90,10 @@ case "$APP" in
   textedit-fast-typing)
     APP="textedit"
     TEXTEDIT_VARIANT="fast-typing"
+    ;;
+  codex-full-accept)
+    APP="codex"
+    CODEX_FULL_ACCEPT_PROOF=1
     ;;
   notes-title)
     APP="notes"
@@ -335,7 +341,9 @@ SESSION_NAME=""
 REPORT_APP_NAME=""
 EXPECTED_RENDER=""
 REQUIRES_FULL_ACCEPT=1
+REQUIRES_TAB_ACCEPT=1
 PROMPT_NO_SUBMIT_PROFILE=0
+PROMPT_FULL_ACCEPT_NO_SUBMIT_PROFILE=0
 MIN_VERIFIED_ACCEPTS=2
 STEPS=""
 
@@ -622,16 +630,31 @@ case "$APP" in
     BUNDLE_ID="com.openai.codex"
     DISPLAY_NAME="Codex"
     EXPECTED_RENDER="inlineAdjacent|floatingMirror"
-    REQUIRES_FULL_ACCEPT=0
-    PROMPT_NO_SUBMIT_PROFILE=1
-    MIN_VERIFIED_ACCEPTS=1
-    STEPS="- Focus the Codex message box without submitting.
+    if (( CODEX_FULL_ACCEPT_PROOF == 1 )); then
+      PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-full-accept}"
+      SESSION_NAME="Codex full accept no-submit"
+      REQUIRES_FULL_ACCEPT=1
+      REQUIRES_TAB_ACCEPT=0
+      PROMPT_FULL_ACCEPT_NO_SUBMIT_PROFILE=1
+      MIN_VERIFIED_ACCEPTS=1
+      STEPS="- Focus the Codex message box without submitting.
+- Type only disposable prompt text that includes \`$CODEX_PROOF_MARKER\`, ending with a complete phrase like \`I think the next step should\`.
+- Confirm a short phrase suggestion appears near the prompt or in a stable mirror position.
+- Use the configured full-accept shortcut once.
+- Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.
+- Do not press Enter as part of the smoke pass."
+    else
+      REQUIRES_FULL_ACCEPT=0
+      PROMPT_NO_SUBMIT_PROFILE=1
+      MIN_VERIFIED_ACCEPTS=1
+      STEPS="- Focus the Codex message box without submitting.
 - Type only disposable prompt text that includes \`$CODEX_PROOF_MARKER\`, then a harmless local fragment like \`Can we make this\`.
 - Confirm a suggestion appears near the prompt or in a stable mirror position.
 - Use Tab once for one word/suffix.
 - Visually confirm the text stayed in the composer, no user message bubble appeared, and no assistant response started.
 - Do not press Enter as part of the smoke pass.
 - Full visible accept stays disabled until separate full-accept no-submit proof exists."
+    fi
     ;;
   claude-code)
     BUNDLE_ID="com.anthropic.claude-code"
@@ -943,6 +966,9 @@ append_report_row() {
   if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
     trace_summary="$trace_summary; prompt no-submit confirmed"
   fi
+  if (( PROMPT_FULL_ACCEPT_NO_SUBMIT_PROFILE == 1 )); then
+    trace_summary="$trace_summary; prompt full-accept no-submit confirmed"
+  fi
   local build_proof
   build_proof="$(current_build_proof_summary)"
   if [[ -n "$build_proof" ]]; then
@@ -1074,7 +1100,17 @@ require_pattern "suggestion-presented .*app=$BUNDLE_ID .*effectiveRenderMode=($E
 if [[ "$APP" == "obsidian" || "$APP" == "codex" || "$APP" == "claude-code" || "$APP" == "claude" ]]; then
   require_trusted_prompt_placement
 fi
-require_line_with_fields "Tab handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true"
+if [[ "$REQUIRES_TAB_ACCEPT" == "1" ]]; then
+  require_line_with_fields "Tab handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true"
+else
+  TAB_ACCEPT_COUNT="$(count_line_with_fields "keyboard-action" "app=$BUNDLE_ID" "key=tab" "action=acceptNextWord" "handled=true")"
+  if (( TAB_ACCEPT_COUNT > 0 )); then
+    echo "failed $DISPLAY_NAME diagnostics: Tab one-word accept appeared in a full-accept-only proof" >&2
+    echo "log: $LOG_PATH" >&2
+    print_failure_summary
+    exit 1
+  fi
+fi
 if [[ "$REQUIRES_FULL_ACCEPT" == "1" ]]; then
   require_line_with_fields "full accept key handled by autocomplete" "keyboard-action" "app=$BUNDLE_ID" "key=$ACCEPT_ALL_SHORTCUT" "action=acceptAllVisible" "handled=true"
 else
@@ -1115,16 +1151,30 @@ if [[ "$REQUIRES_FULL_ACCEPT" != "1" ]] && (( VERIFIED_COUNT != 1 )); then
   print_failure_summary
   exit 1
 fi
+if (( PROMPT_FULL_ACCEPT_NO_SUBMIT_PROFILE == 1 && VERIFIED_COUNT != 1 )); then
+  echo "expected exactly one verified full accept for $SESSION_NAME, saw $VERIFIED_COUNT" >&2
+  echo "log: $LOG_PATH" >&2
+  print_failure_summary
+  exit 1
+fi
 
 reject_pattern "insert-verification-final-failure .*app=$BUNDLE_ID" "unrecovered insertion verification failure"
 reject_pattern "field-suppressed .*app=$BUNDLE_ID" "field suppression"
 reject_pattern "suggestion-blocked .*app=$BUNDLE_ID .*reason=(insert-verification-failed|missing-anchor)" "blocking failure"
 
-if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
+if (( PROMPT_NO_SUBMIT_PROFILE == 1 || PROMPT_FULL_ACCEPT_NO_SUBMIT_PROFILE == 1 )); then
   if [[ "$APP" == "codex" ]] && ! is_truthy "${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED:-0}"; then
     echo "failed $SESSION_NAME prompt no-submit proof: Codex proof marker was not confirmed" >&2
     echo "expected disposable prompt marker: $CODEX_PROOF_MARKER" >&2
     echo "set AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 only after the prompt contains the marker and was not submitted" >&2
+    print_failure_summary
+    exit 1
+  fi
+  if [[ "$APP" == "codex" ]] &&
+    (( PROMPT_FULL_ACCEPT_NO_SUBMIT_PROFILE == 1 )) &&
+    ! is_truthy "${AUTOCOMPLETE_LAB_PROMPT_FULL_ACCEPT_NO_SUBMIT_CONFIRMED:-0}"; then
+    echo "failed $SESSION_NAME prompt full-accept proof: full-accept no-submit confirmation was not set" >&2
+    echo "set AUTOCOMPLETE_LAB_PROMPT_FULL_ACCEPT_NO_SUBMIT_CONFIRMED=1 only after the accepted phrase stayed in the prompt and was not submitted" >&2
     print_failure_summary
     exit 1
   fi
@@ -1169,7 +1219,26 @@ if (( PROMPT_NO_SUBMIT_PROFILE == 1 )); then
     exit 1
   fi
 
-  if grep -E '"acceptMode":"acceptAllVisible"|"checkpoint":"fieldSend"|"reason":"field-send-finalized"' <<<"$TRACE_SCAN_LINES" >/dev/null; then
+  if (( PROMPT_FULL_ACCEPT_NO_SUBMIT_PROFILE == 1 )); then
+    if ! grep -F '"acceptMode":"acceptAllVisible"' <<<"$TRACE_SCAN_LINES" >/dev/null; then
+      echo "failed $SESSION_NAME prompt full-accept proof: trace slice has no acceptAllVisible suggestionAccepted event" >&2
+      echo "trace: $TRACE_PATH" >&2
+      print_failure_summary
+      exit 1
+    fi
+    if grep -E '"checkpoint":"fieldSend"|"reason":"field-send-finalized"' <<<"$TRACE_SCAN_LINES" >/dev/null; then
+      echo "failed $SESSION_NAME prompt full-accept proof: trace slice contains field-send signal" >&2
+      echo "trace: $TRACE_PATH" >&2
+      print_failure_summary
+      exit 1
+    fi
+    script/check_prompt_app_proof.sh \
+      --trace "$TRACE_PATH" \
+      --start-line "$((TRACE_START_LINE + 1))" \
+      --bundle "$BUNDLE_ID" \
+      --allow-full-accept-proof \
+      --require-full-accept-proof >/dev/null
+  elif grep -E '"acceptMode":"acceptAllVisible"|"checkpoint":"fieldSend"|"reason":"field-send-finalized"' <<<"$TRACE_SCAN_LINES" >/dev/null; then
     echo "failed $SESSION_NAME prompt no-submit proof: trace slice contains full-accept or field-send signal" >&2
     echo "trace: $TRACE_PATH" >&2
     print_failure_summary

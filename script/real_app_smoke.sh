@@ -21,6 +21,7 @@ CHROME_ACCESSIBILITY_MODE_WAS_SET=0
 CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
 CHROME_MODEL_LATENCY=0
 CODEX_MODEL_LATENCY=0
+CODEX_FULL_ACCEPT_PROOF=0
 CLAUDE_CODE_MODEL_LATENCY=0
 CLAUDE_MODEL_LATENCY=0
 CHROME_REMOTE_DEBUGGING_PORT=""
@@ -85,7 +86,7 @@ is_model_latency_lane() {
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|codex|codex-model-latency|claude-code|claude-code-terminal|claude-code-model-latency|claude-code-terminal-model-latency|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-model-latency|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|codex|codex-full-accept|codex-model-latency|claude-code|claude-code-terminal|claude-code-model-latency|claude-code-terminal-model-latency|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-model-latency|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -93,7 +94,8 @@ Claude Code, and Claude desktop are manual-gated so this script never types
 into private notes, vaults, terminal prompts, or agent prompts by surprise.
 The Codex and Terminal-host Claude Code lanes use targeted disposable proof
 helpers after the manual gate: they seed marked proof text, press Tab once, and
-never press Enter.
+never press Enter. Use codex-full-accept for the separate bounded no-submit
+full-accept proof lane; it is tagged with a proof-only runtime scenario.
 
 Notes proof must use notes-title, notes-body, notes-checklist, their
 notes-*-undo variants, or explicit Notes variant lanes such as
@@ -301,6 +303,10 @@ case "$APP" in
   codex-model-latency)
     APP="codex"
     CODEX_MODEL_LATENCY=1
+    ;;
+  codex-full-accept)
+    APP="codex"
+    CODEX_FULL_ACCEPT_PROOF=1
     ;;
   claude-model-latency)
     APP="claude"
@@ -534,6 +540,12 @@ fi
 
 if [[ "$APP" == "codex" && "$CODEX_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "codex-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ "$APP" == "codex" && "$CODEX_FULL_ACCEPT_PROOF" == "1" && "$SKIP_BUILD" == "1" ]]; then
+  echo "codex-full-accept cannot be combined with --skip-build because the app must relaunch with the codex-full-accept-no-submit proof scenario before accepting a whole suggestion." >&2
   usage >&2
   exit 2
 fi
@@ -2895,6 +2907,32 @@ prepare_codex_model_latency_runtime_options() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so Codex model-latency proof mode only applies if the app was launched with this environment." >&2
   fi
+}
+
+prepare_codex_full_accept_runtime_options() {
+  local scenario="codex-full-accept-no-submit"
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Codex full accept no-submit proof scenario: $scenario"
+  echo "Codex full accept no-submit proof keeps prompt-app full accept proof-only for this launch."
+  echo "Codex full accept no-submit proof suppresses annoyance learning for synthetic prompt accept keys."
 }
 
 prepare_claude_code_model_latency_runtime_options() {
@@ -8154,6 +8192,20 @@ codex_proof_text() {
   printf '%s\n' "$proof_text"
 }
 
+codex_full_accept_proof_text() {
+  local proof_nonce="${AUTOCOMPLETE_LAB_CODEX_PROOF_NONCE:-$(date +%s)}"
+  local proof_text="${AUTOCOMPLETE_LAB_CODEX_FULL_ACCEPT_PROOF_TEXT:-AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce full-accept I think the next step should}"
+  if [[ "$proof_text" != *"AUTOCOMPLETE_LAB_CODEX_PROOF"* ]]; then
+    echo "Codex full accept proof text must include AUTOCOMPLETE_LAB_CODEX_PROOF." >&2
+    exit 2
+  fi
+  if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+    echo "Codex full accept proof text must be a single prompt line." >&2
+    exit 2
+  fi
+  printf '%s\n' "$proof_text"
+}
+
 codex_model_latency_proof_texts() {
   if [[ -n "${AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS:-}" ]]; then
     printf '%s\n' "$AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS"
@@ -11195,6 +11247,11 @@ describe_plan() {
         echo "Safety: Codex model latency proof tags the runtime launch with scenario codex-model-latency so generic prompt samples cannot satisfy the strict selector."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; it runs the prompt no-submit gate on the same trace slice."
         echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
+      elif [[ "$CODEX_FULL_ACCEPT_PROOF" == "1" ]]; then
+        echo "Plan: manual-gated Codex prompt full-accept no-submit proof. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text, waits for a visible short phrase, presses the configured full-accept shortcut once, and validates that the phrase stayed in the composer."
+        echo "Safety: Codex full accept is enabled only for the proof-mode Codex bundle and runtime scenario codex-full-accept-no-submit."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter; it runs the prompt full-accept no-submit gate on the same trace slice."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
       else
         echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
@@ -11617,6 +11674,63 @@ run_codex() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh codex --check --visual
+}
+
+run_codex_full_accept() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  local runtime_start_line start_line trace_start_line proof_text backup_dir accept_shortcut
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  proof_text="$(codex_full_accept_proof_text)"
+  backup_dir="$(make_tmp_dir)"
+  CODEX_DRAFT_BACKUP_PATH="$backup_dir/codex-draft-backup.txt"
+  : >"$CODEX_DRAFT_BACKUP_PATH"
+  chmod 600 "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+
+  prepare_temporary_app_enablement
+  prepare_codex_full_accept_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Codex full accept Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Codex full accept runtime readiness" 60 "$SKIP_BUILD"
+  ensure_cgevent_keypress_helper
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  seed_codex_proof_prompt "$proof_text" "$CODEX_DRAFT_BACKUP_PATH"
+  if [[ -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+    CODEX_DRAFT_BACKUP_ACTIVE=1
+  fi
+  focus_codex_proof_prompt
+  wait_for_log_fields "$start_line" "Codex full accept phrase suggestion" 24 \
+    "suggestion-presented" \
+    "app=com.openai.codex" \
+    "requestMode=phraseContinuation"
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex full accept proof"
+  assert_frontmost_app "Codex" "Codex full accept proof"
+  sleep 0.05
+  accept_shortcut="$(accept_all_shortcut)"
+  press_accept_all_shortcut
+  wait_for_log_fields "$start_line" "Codex full accept acceptance" 12 \
+    "keyboard-action" \
+    "app=com.openai.codex" \
+    "key=$accept_shortcut" \
+    "action=acceptAllVisible" \
+    "handled=true"
+  wait_for_log_pattern "$start_line" "insert .*app=com.openai.codex .*success=true" "Codex full accept successful insertion" 12
+  wait_for_log_pattern "$start_line" "insert-verification .*app=com.openai.codex .*result=verified" "Codex full accept verified insertion" 12
+  assert_codex_prompt_retains_marker
+
+  sleep 1
+  AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_PROMPT_FULL_ACCEPT_NO_SUBMIT_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="full-accept" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/manual_smoke_session.sh codex-full-accept --check --visual
 }
 
 run_claude_code_terminal_host_smoke() {
@@ -14430,6 +14544,8 @@ case "$APP" in
   codex)
     if [[ "$CODEX_MODEL_LATENCY" == "1" ]]; then
       run_codex_model_latency
+    elif [[ "$CODEX_FULL_ACCEPT_PROOF" == "1" ]]; then
+      run_codex_full_accept
     else
       run_codex
     fi

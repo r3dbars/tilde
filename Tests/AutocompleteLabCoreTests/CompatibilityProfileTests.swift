@@ -457,6 +457,27 @@ struct CompatibilityProfileTests {
         )
     }
 
+    @Test("Proof-only profile copy can enable full accept without changing placement")
+    func proofOnlyProfileCopyCanEnableFullAcceptWithoutChangingPlacement() throws {
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let proofProfile = codex.replacingAcceptanceProofMode(
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false,
+            notes: "Proof-only full accept."
+        )
+
+        #expect(proofProfile.bundleIdentifier == codex.bundleIdentifier)
+        #expect(proofProfile.displayName == codex.displayName)
+        #expect(proofProfile.renderMode == codex.renderMode)
+        #expect(proofProfile.insertionMode == codex.insertionMode)
+        #expect(proofProfile.fieldIdentityMode == codex.fieldIdentityMode)
+        #expect(proofProfile.supportsOneWordAcceptance == codex.supportsOneWordAcceptance)
+        #expect(proofProfile.supportsFullAcceptance)
+        #expect(!proofProfile.requiresNoSubmitAcceptanceProof)
+        #expect(proofProfile.promptAppSafetyMode == codex.promptAppSafetyMode)
+        #expect(proofProfile.notes == "Proof-only full accept.")
+    }
+
     @Test("Insertion mode plans can skip failed primary modes")
     func insertionModePlansCanSkipFailedPrimaryModes() throws {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))
