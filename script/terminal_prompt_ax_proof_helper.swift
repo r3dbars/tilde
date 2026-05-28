@@ -543,9 +543,10 @@ func snapshotSatisfiesWait(_ snapshot: Snapshot, options: Options) -> Bool {
                 && options.text.isEmpty
                 && snapshot.textCount > 0
         )
+    let hintSatisfied = options.text.isEmpty || snapshot.hasHint
     return markerSatisfied
         && snapshot.hasText
-        && snapshot.hasHint
+        && hintSatisfied
         && !snapshot.hasRejectedShellCommandText
 }
 

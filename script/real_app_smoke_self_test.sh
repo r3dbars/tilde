@@ -534,6 +534,8 @@ if "--reject-shell-command-text" not in terminal_prompt_helper or "rejectsShellC
     raise SystemExit("Terminal prompt AX helper must reject shell-command-shaped launch text during Ghostty readiness until the prompt hint is visible")
 if "looksLikeSteadyTypeProofShellCommand" not in terminal_prompt_helper or "rejectedShellCommand=" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper must diagnose rejected SteadyType proof shell command text")
+if "let hintSatisfied = options.text.isEmpty || snapshot.hasHint" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must not require brittle placeholder hints for empty Claude Code prompt readiness")
 if "func focusedWindow(in appElement" not in terminal_prompt_helper or "kAXFocusedWindowAttribute" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper must include focused-window text when Ghostty omits AXWindows")
 if "if texts.isEmpty" not in terminal_prompt_helper or "collectText(from: appElement" not in terminal_prompt_helper:
