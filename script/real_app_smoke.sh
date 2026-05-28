@@ -2329,11 +2329,49 @@ end tell
 APPLESCRIPT
 }
 
+restore_claude_code_terminal_system_events_backspace() {
+  local proof_text="$1"
+  local label="${2:-external mutation restore}"
+  [[ -n "$proof_text" ]] || return 1
+  press_claude_code_terminal_external_backspace_key "$label"
+}
+
+restore_claude_code_terminal_ghostty_native_prompt_text() {
+  local proof_text="$1"
+  local label="${2:-native mutation restore}"
+  local clear_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}"
+
+  [[ -n "$proof_text" ]] || return 1
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RESTORE_TEXT="$proof_text" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="$clear_delay" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_RESTORE_TIMEOUT_SECONDS:-4}" \
+      "$label" <<'APPLESCRIPT' >/dev/null
+set restoreText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RESTORE_TEXT"
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  send key "u" modifiers "control" to targetTerminal
+  delay clearDelay
+  send key "u" modifiers "control" to targetTerminal
+  delay clearDelay
+  input text restoreText to targetTerminal
+  activate
+end tell
+APPLESCRIPT
+}
+
 run_claude_code_ghostty_pre_accept_external_mutation_probe_one() {
   local proof_text="$1"
   local label="$2"
   local probe_text="$3"
   local type_function="$4"
+  local restore_function="${5:-restore_claude_code_terminal_system_events_backspace}"
   local verify_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_VERIFY_SECONDS:-3}"
 
   [[ -n "$probe_text" ]] || return 0
@@ -2354,8 +2392,8 @@ run_claude_code_ghostty_pre_accept_external_mutation_probe_one() {
     "$verify_seconds" \
     "Claude Code Ghostty pre-accept external $label mutation readiness"; then
     echo "Claude Code Ghostty pre-accept external $label mutability probe verified prompt mutation before app-owned insertion." >&2
-    if ! press_claude_code_terminal_external_backspace_key "Ghostty pre-accept $label restore"; then
-      echo "Claude Code Ghostty pre-accept external $label mutability probe could not post restore backspace." >&2
+    if ! "$restore_function" "$proof_text" "Ghostty pre-accept $label restore"; then
+      echo "Claude Code Ghostty pre-accept external $label mutability probe could not restore the original prompt." >&2
       return 1
     fi
     sleep "$(claude_code_ghostty_typing_drain_seconds)"
@@ -2397,7 +2435,8 @@ run_claude_code_ghostty_pre_accept_external_mutation_probe() {
       "$proof_text" \
       "native" \
       "$native_probe_text" \
-      type_claude_code_terminal_ghostty_native_text || return 1
+      type_claude_code_terminal_ghostty_native_text \
+      restore_claude_code_terminal_ghostty_native_prompt_text || return 1
   fi
 
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
@@ -2405,7 +2444,8 @@ run_claude_code_ghostty_pre_accept_external_mutation_probe() {
       "$proof_text" \
       "System Events" \
       "$system_events_probe_text" \
-      type_claude_code_terminal_raw_smoke_text || return 1
+      type_claude_code_terminal_raw_smoke_text \
+      restore_claude_code_terminal_system_events_backspace || return 1
   fi
 }
 
@@ -2435,7 +2475,8 @@ run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe() {
       "$proof_text" \
       "post-Tab/pre-insert native" \
       "$native_probe_text" \
-      type_claude_code_terminal_ghostty_native_text || return 1
+      type_claude_code_terminal_ghostty_native_text \
+      restore_claude_code_terminal_ghostty_native_prompt_text || return 1
   fi
 
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
@@ -2443,7 +2484,8 @@ run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe() {
       "$proof_text" \
       "post-Tab/pre-insert System Events" \
       "$system_events_probe_text" \
-      type_claude_code_terminal_raw_smoke_text || return 1
+      type_claude_code_terminal_raw_smoke_text \
+      restore_claude_code_terminal_system_events_backspace || return 1
   fi
 }
 
