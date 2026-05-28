@@ -826,8 +826,20 @@ restored a pre-accept native Ghostty prompt mutation. It still did not prove
 accept: CGEvent Tab produced no `key=tab` diagnostic, System Events Tab produced
 no immediate `key=tab`, the visible suggestion was lost during Tab injection,
 and the detached retry loop was stopped after the second disposable context
-began. App coverage stays at `83`; the next Ghostty blocker is Tab delivery /
-suggestion retention in the detached launchd lane, not prompt AX discovery.
+began. Follow-up launchd run `20260528T203530Z-ghostty` reached prompt-row
+suggestion evidence again, but a non-mutating Shift sentinel did not reach
+SteadyType's event tap through either session or HID CGEvents, so the harness
+failed before Tab with `key capture probe did not reach event tap`. The key
+source probe now also tries combined-session CGEvents and guarded System Events
+Shift before Tab, and the detached wrapper forwards those probe knobs. Launcher
+comparison run `20260528T204242Z-ghostty` used `nohup`, reached prompt typing,
+verified a pre-accept native Ghostty mutation, then failed because it could not
+restore the original prompt before suggestion proof. Post-patch launchd run
+`20260528T204741Z-ghostty` forwarded the new key-capture env into detached
+status, then was SIGTERMed during startup before build or prompt setup, so it is
+not support evidence. App coverage stays at `83`; the next Ghostty blocker is
+observable key delivery into SteadyType's event tap under a detached runner, not
+prompt AX discovery.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
