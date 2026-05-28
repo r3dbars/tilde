@@ -2911,6 +2911,10 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof owns no-restore host pid(s):' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof cleaning no-restore host pid(s):' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_preflight_status=$?' script/real_app_smoke.sh >/dev/null ||
