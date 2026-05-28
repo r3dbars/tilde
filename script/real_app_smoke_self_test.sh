@@ -2866,10 +2866,15 @@ if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/nu
   exit 1
 fi
 if ! grep -F 'set proofWindow to new window' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'ghostty_text_action()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'if launchAction is not "" then' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'perform action launchAction on targetTerminal' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'delay launchActionDrain' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'input text launchCommand to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'send key "enter" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof launch to create a script-owned disposable shell window without killing the user's Ghostty process" >&2
+  echo "real app smoke self-test expected Ghostty proof launch to create a script-owned disposable shell window and keep text-action launch as an opt-in probe without killing the user's Ghostty process" >&2
   exit 1
 fi
 if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||

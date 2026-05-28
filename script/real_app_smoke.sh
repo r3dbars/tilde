@@ -9149,6 +9149,25 @@ wait_for_claude_code_terminal_pidfile_process_optional() {
   return 1
 }
 
+ghostty_text_action() {
+  local text="$1"
+  local byte action
+
+  action="text:"
+  while read -r byte; do
+    case "$byte" in
+      30|31|32|33|34|35|36|37|38|39|41|42|43|44|45|46|47|48|49|4a|4b|4c|4d|4e|4f|50|51|52|53|54|55|56|57|58|59|5a|61|62|63|64|65|66|67|68|69|6a|6b|6c|6d|6e|6f|70|71|72|73|74|75|76|77|78|79|7a)
+        action+="$(printf '%b' "\\x$byte")"
+        ;;
+      *)
+        action+="\\x$byte"
+        ;;
+    esac
+  done < <(LC_ALL=C printf '%s' "$text" | od -An -tx1 -v | tr ' ' '\n' | sed '/^$/d')
+
+  printf '%s\n' "$action"
+}
+
 try_wait_for_claude_code_terminal_process_name() {
   local expected_name="$1"
   local label="${2:-$expected_name}"
@@ -9249,7 +9268,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_shell_ready_delay ghostty_exit_hold_seconds
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_shell_ready_delay ghostty_exit_hold_seconds
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -9304,15 +9323,22 @@ open_claude_code_terminal_proof() {
       CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
       reset_zero_window_claude_code_ghostty_proof_host
       ghostty_launch_command="$(printf 'exec %q' "$launch_script")"
+      ghostty_launch_action=""
+      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-0}" == "1" ]]; then
+        ghostty_launch_action="$(ghostty_text_action "$ghostty_launch_command")"
+      fi
+      ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.2}"
       if ! run_osascript_with_timeout \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-4}" \
           "Claude Code Ghostty proof launch" \
-          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" <<'APPLESCRIPT' >/dev/null; then
+          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" <<'APPLESCRIPT' >/dev/null; then
 on run argv
 set launchCommand to item 1 of argv
 set shellReadyDelay to item 2 of argv as real
 set proofTitle to item 3 of argv
+set launchAction to item 4 of argv
+set launchActionDrain to item 5 of argv as real
 tell application id "com.mitchellh.ghostty"
   set proofWindow to new window
   activate window proofWindow
@@ -9335,7 +9361,12 @@ tell application id "com.mitchellh.ghostty"
   focus targetTerminal
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
-  input text launchCommand to targetTerminal
+  if launchAction is not "" then
+    perform action launchAction on targetTerminal
+    delay launchActionDrain
+  else
+    input text launchCommand to targetTerminal
+  end if
   send key "enter" to targetTerminal
   activate
 end tell
@@ -9350,11 +9381,13 @@ APPLESCRIPT
         if ! run_osascript_with_timeout \
             "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-4}" \
             "Claude Code Ghostty proof launch retry" \
-            - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" <<'APPLESCRIPT' >/dev/null; then
+            - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" <<'APPLESCRIPT' >/dev/null; then
 on run argv
 set launchCommand to item 1 of argv
 set shellReadyDelay to item 2 of argv as real
 set proofTitle to item 3 of argv
+set launchAction to item 4 of argv
+set launchActionDrain to item 5 of argv as real
 tell application id "com.mitchellh.ghostty"
   set proofWindow to missing value
   repeat with candidateWindow in windows
@@ -9390,7 +9423,12 @@ tell application id "com.mitchellh.ghostty"
   try
     send key "u" modifiers "control" to targetTerminal
   end try
-  input text launchCommand to targetTerminal
+  if launchAction is not "" then
+    perform action launchAction on targetTerminal
+    delay launchActionDrain
+  else
+    input text launchCommand to targetTerminal
+  end if
   send key "enter" to targetTerminal
   activate
 end tell
