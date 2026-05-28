@@ -668,12 +668,22 @@ if "reassertGhosttyTerminalHostProofFrontmostProcess" not in terminal_insert_blo
     raise SystemExit("Claude Code Ghostty pid paste proof must reassert the exact proof pid before Command-V")
 if "pasteboardCommandVToPidBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must verify the prompt stayed unchanged after an unverified pid paste")
+if "AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host session-tap paste probe must stay opt-in after timeout evidence")
+if "pasteboardCommandVSession" not in terminal_insert_block or ".cgSessionEventTap" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must keep the paced session-tap Command-V probe available for isolated repros")
+if "session-tap-probe-disabled" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host paste proof must skip the session-tap probe by default instead of risking a proof timeout")
+if "RestoreDeferredToNextAttempt" not in terminal_insert_block or "deferPasteboardRestoreOnMiss: false" not in terminal_insert_block:
+    raise SystemExit("Claude Code terminal-host session paste miss must hand off to the final global paste without a blocking restore when the opt-in probe runs")
 if "pasteboard-to-pid-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must fail closed if pid paste mutates the prompt unexpectedly")
 if "guard targetedPasteOutcome.safeToContinue else" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must not continue to global paste after unsafe pid insertion")
 if "restoreSynchronouslyOnMiss: true" not in terminal_insert_block or "restoreSynchronouslyOnMiss: false" not in terminal_insert_block:
     raise SystemExit("Claude Code terminal-host paste proof must keep synchronous pid cleanup but async final global cleanup")
+if "tapLocation: CGEventTapLocation" not in app_delegate or "Thread.sleep(forTimeInterval: 0.018)" not in app_delegate:
+    raise SystemExit("Claude Code terminal-host paste proof must pace Command-V key-down/key-up events")
 paste_verified_record = terminal_insert_block.index('"verified": String(verified)')
 paste_miss_baseline = terminal_insert_block.index("let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion", paste_verified_record)
 paste_miss_restore = terminal_insert_block.index("if restoreSynchronouslyOnMiss", paste_miss_baseline)
