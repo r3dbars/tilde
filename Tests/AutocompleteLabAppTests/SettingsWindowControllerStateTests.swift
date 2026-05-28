@@ -305,8 +305,8 @@ struct SettingsWindowControllerStateTests {
         #expect(!safari.canToggle)
     }
 
-    @Test("Codex prompt app exposes one-word no-submit proof controls")
-    func codexPromptAppExposesOneWordNoSubmitProofControls() {
+    @Test("Codex prompt app exposes no-submit proof controls")
+    func codexPromptAppExposesNoSubmitProofControls() {
         let store = CompatibilityProfileStore.mvp
         let codex = SettingsCurrentAppState(
             displayName: "Codex",
@@ -319,21 +319,24 @@ struct SettingsWindowControllerStateTests {
         #expect(codex.statusText == "Current app: Codex is yellow and on")
         #expect(
             codex.detailText
-                == "Codex prompt support is on for this installed app: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Suggestions are on for this app."
+                == "Codex prompt support is on for this installed app: Tab and whole-suggestion accept are available, and prompt safety gates stay on. Suggestions are on for this app."
         )
         #expect(codex.modeText == "Mode: next to the cursor, floating backup fallback")
         #expect(
             codex.acceptanceText
-                == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion accept is off for safety."
+                == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion shortcut works here."
         )
-        #expect(codex.proofText == "Check: use the guided prompt-app check, press Tab once, and do not press Enter.")
+        #expect(codex.proofText == "Check: use the guided prompt-app checks, press Tab or the whole-suggestion shortcut, and do not press Enter.")
         #expect(
             codex.proofCommandText
-                == "Manual check: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+                == "Manual checks: AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate; AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate"
         )
         #expect(
             codex.proofCommandClipboardText
-                == "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+                == """
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate
+                """
         )
         #expect(codex.canCopyProofCommand)
         #expect(codex.toggleTitle == "Suggestions in this app")
@@ -364,7 +367,7 @@ struct SettingsWindowControllerStateTests {
         #expect(disabledCodex.statusText == "Current app: Codex is yellow and off")
         #expect(
             disabledCodex.detailText
-                == "Codex prompt support is on for this installed app: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on. Suggestions are paused in this app. Resume only where you want suggestions."
+                == "Codex prompt support is on for this installed app: Tab and whole-suggestion accept are available, and prompt safety gates stay on. Suggestions are paused in this app. Resume only where you want suggestions."
         )
         #expect(disabledCodex.proofText == "Check: turn on suggestions for this app first.")
         #expect(disabledCodex.proofButtonTitle == "Enable Suggestions First")
@@ -863,8 +866,8 @@ struct SettingsWindowControllerStateTests {
                 disabledAppCount: 0
             )
         )
-        #expect(codex.conflictText == "Conflict check: whole-suggestion accept is off in Codex")
-        #expect(codex.perAppProfileText == "Per-app profile: Codex allows Tab one-word accept only.")
+        #expect(codex.conflictText == "Conflict check: no known conflict in Codex")
+        #expect(codex.perAppProfileText == "Per-app profile: Codex allows Tab one-word accept and whole-suggestion accept.")
     }
 
     @Test("Trust state gathers local privacy current surface and why copy")

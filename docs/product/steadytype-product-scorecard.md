@@ -18,6 +18,13 @@ The refreshed rows include TextEdit diagnostics lines `936047`-`936183`,
 Obsidian long-note lines `936188`-`936319`, Chrome textarea lines
 `936380`-`936545`, and Chrome contenteditable lines `936553`-`936730`.
 
+Current Codex prompt full-accept evidence is green for the exact proven default
+composer. `./script/check_prompt_app_manifest_proof.sh` now passes with two
+bounded prompt slices: default one-word Tab no-submit at traces lines
+`31519`-`31530`, and full-accept no-submit at traces lines `31585`-`31599`.
+Full accept stays limited to the proven Codex default composer; other prompt,
+chat, terminal, and hosted browser surfaces remain proof-gated.
+
 Current Ghostty terminal-host evidence is sharper but still red. Local probes
 showed Ghostty `input text` can return success without mutating a fresh shell,
 while Ghostty `perform action "text:..."` can type into a fresh shell. External

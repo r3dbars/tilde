@@ -217,9 +217,10 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/codex-inline.png"),
-                HostProofArtifact(kind: "manual-smoke", reference: "Codex/default")
+                HostProofArtifact(kind: "manual-smoke", reference: "Codex/default"),
+                HostProofArtifact(kind: "manual-smoke", reference: "Codex/full-accept")
             ],
-            notes: "Enabled for this local Codex build with one-word accept only. Full accept, detached suggestions, and generic key-event insertion stay off."
+            notes: "Enabled for this local Codex build with one-word and full-accept no-submit proof. Detached suggestions and generic key-event insertion stay off."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claude-code",

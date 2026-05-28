@@ -77,7 +77,7 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.appFamily == .customCanvas)
         #expect(store.profile(for: "com.openai.codex")?.allowsFieldAnchor == false)
         #expect(store.profile(for: "com.openai.codex")?.supportLevel == .yellow)
-        #expect(store.profile(for: "com.openai.codex")?.graduationDecision == .wordOnly)
+        #expect(store.profile(for: "com.openai.codex")?.graduationDecision == .supported)
         #expect(store.profile(for: "com.openai.codex")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "com.openai.codex")?.fallbackRenderMode == .floatingMirror)
         #expect(store.profile(for: "com.openai.codex")?.insertionMode == .axValueReplacement)
@@ -85,8 +85,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.openai.codex")?.anchorLadder == [.caret])
         #expect(store.profile(for: "com.openai.codex")?.supportsOneWordAcceptance == true)
-        #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == false)
-        #expect(store.profile(for: "com.openai.codex")?.requiresNoSubmitAcceptanceProof == true)
+        #expect(store.profile(for: "com.openai.codex")?.supportsFullAcceptance == true)
+        #expect(store.profile(for: "com.openai.codex")?.requiresNoSubmitAcceptanceProof == false)
         #expect(store.profile(for: "com.openai.codex")?.canPresentSuggestions == true)
         #expect(store.profile(for: "com.openai.codex")?.allowsDetachedSuggestions == false)
         #expect(store.profile(for: "com.openai.codex")?.isSensitive == false)
@@ -319,8 +319,8 @@ struct CompatibilityProfileTests {
         #expect(notes.allowsDetachedSuggestions == false)
         #expect(notes.fallbackInsertionMode == .keyEvents)
         #expect(codex.supportsOneWordAcceptance == true)
-        #expect(codex.supportsFullAcceptance == false)
-        #expect(codex.requiresNoSubmitAcceptanceProof == true)
+        #expect(codex.supportsFullAcceptance == true)
+        #expect(codex.requiresNoSubmitAcceptanceProof == false)
         #expect(codex.canPresentSuggestions == true)
         #expect(claudeCode.supportsOneWordAcceptance == false)
         #expect(claudeCode.supportsFullAcceptance == false)
@@ -331,8 +331,10 @@ struct CompatibilityProfileTests {
         #expect(claude.canPresentSuggestions == true)
 
         #expect(codex.supportReason.contains("on for this installed app"))
-        #expect(codex.notes.contains("one-word no-submit safety"))
-        #expect(codex.supportsFullAcceptance == false)
+        #expect(codex.notes.contains("one-word no-submit proof"))
+        #expect(codex.notes.contains("full-accept no-submit proof"))
+        #expect(codex.supportsFullAcceptance == true)
+        #expect(codex.requiresNoSubmitAcceptanceProof == false)
         #expect(codex.allowsDetachedSuggestions == false)
         #expect(codex.allowsSyntheticCaretPlacement == false)
         #expect(codex.isSensitive == false)
@@ -356,7 +358,8 @@ struct CompatibilityProfileTests {
         #expect(codex.renderMode == .inlineAdjacent)
         #expect(codex.insertionMode == .axValueReplacement)
         #expect(codex.supportsOneWordAcceptance == true)
-        #expect(codex.supportsFullAcceptance == false)
+        #expect(codex.supportsFullAcceptance == true)
+        #expect(codex.requiresNoSubmitAcceptanceProof == false)
         #expect(codex.promptAppSafetyMode == .wordOnly)
         #expect(codex.canPresentSuggestions == true)
 
@@ -388,14 +391,14 @@ struct CompatibilityProfileTests {
 
         let supportedBundles = [
             "com.google.Chrome",
-            "md.obsidian"
+            "md.obsidian",
+            "com.openai.codex"
         ]
         for bundleIdentifier in supportedBundles {
             #expect(try #require(store.profile(for: bundleIdentifier)).graduationDecision == .supported)
         }
 
         let wordOnlyBundles = [
-            "com.openai.codex",
             "com.anthropic.claudefordesktop"
         ]
         for bundleIdentifier in wordOnlyBundles {
@@ -447,7 +450,7 @@ struct CompatibilityProfileTests {
         )
         #expect(
             codex.userFacingSafetySummary
-                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Full accept stays off until no-submit proof exists. Prompt safety mode is word-only. Insertion fails closed if the primary method is not verified."
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Detached field/window suggestions are disabled. Prompt safety mode is word-only. Insertion fails closed if the primary method is not verified."
         )
         #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
