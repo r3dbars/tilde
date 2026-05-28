@@ -759,6 +759,17 @@ same AX path SteadyType relies on. This keeps the proof lane moving, but normal
 Obsidian daily-driver support should stay caveated until default-launch
 renderer accessibility is proven or guided.
 
+TextEdit proof freshness moved forward on the same pass. The first rerun
+exposed a proof-harness seed bug where TextEdit's native completion expanded
+`Smoke proof feels inst` to `Smoke proof feels instant` before the proof app was
+allowed to own the suggestion. The harness now uses the timeout-bounded
+selected-text replacement helper instead of a shadowed AX value writer and trims
+native completion suffixes during seed normalization. The retry passed on
+2026-05-28T13:59:30Z at commit `f81c34d22c2e` with diagnostics lines
+`933094`-`933189`, trace lines `30815`-`30837`, 2 accepted insertions, and
+strict visual trace evidence. Strict manual smoke is now down to 7 stale
+beta-safe rows instead of 9.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |

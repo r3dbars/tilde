@@ -1231,10 +1231,18 @@ if ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_AX_WRITE_TIMEOUT_SECONDS' script/real_ap
   echo "real app smoke self-test expected TextEdit AX document writes to be timeout-bounded" >&2
   exit 1
 fi
+if [[ "$(grep -c '^set_textedit_document_text()' script/real_app_smoke.sh)" != "1" ]]; then
+  echo "real app smoke self-test expected one timeout-bounded TextEdit AX write helper" >&2
+  exit 1
+fi
 if ! grep -F 'trim_textedit_native_completion_suffix' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_TEXTEDIT_SUFFIX_DELETE_COUNT' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'trim_textedit_native_completion_suffix "$textedit_window_title" "$expected_text" "TextEdit model latency sample $sample_index attempt $attempt"' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected TextEdit model latency to trim native completion suffixes before waiting for visible proof" >&2
+  exit 1
+fi
+if ! grep -F 'trim_textedit_native_completion_suffix "$window_title" "$expected_text" "$label typed seed normalize"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit seed normalization to trim native completion suffixes" >&2
   exit 1
 fi
 if ! grep -F 'trim_textedit_native_completion_suffix()' script/real_app_smoke.sh >/dev/null ||
@@ -1831,9 +1839,9 @@ if ! grep -F "bodyText.utf16.count" script/real_app_smoke.sh >/dev/null ||
   echo "real app smoke self-test expected Notes body proof to move the caret to the end of the disposable note" >&2
   exit 1
 fi
-if ! grep -F "moveCaret(textInput, to: replacementText.utf16.count)" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "kAXValueAttribute as CFString" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected TextEdit proof setup to leave the caret after exact setup text" >&2
+if ! grep -F "AXUIElementSetAttributeValue(textInput, kAXSelectedTextAttribute as CFString, replacementText as CFString)" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "setSelectedTextRange(CFRange(location: replacementText.utf16.count, length: 0), in: textInput)" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TextEdit proof setup to replace the exact setup text and leave the caret after it" >&2
   exit 1
 fi
 if ! grep -F "kAXFocusedUIElementAttribute" script/real_app_smoke.sh >/dev/null ||
