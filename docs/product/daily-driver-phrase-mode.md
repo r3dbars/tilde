@@ -818,9 +818,11 @@ verified `false`, its unchanged baseline verified `true`, and the prompt stayed
 at 42 chars through `ghosttyInProcessInputText` and `ghosttyFrontWindowInputText`
 before fail-closing at `ghostty-initial-insertion-noop-cluster` on lines
 `961365`-`961367`. The intervening `20260528T172055Z-ghostty` record exited
-during startup with a lock/TERM and is not insertion evidence. Ghostty remains
-unsupported until the detached proof exits `0` with verified one-word no-submit
-insertion.
+during startup with a lock/TERM, and the later no-defer/extended follow-ups
+`20260528T172842Z-ghostty` and `20260528T172932Z-ghostty` also terminated during
+startup before prompt-row insertion. Those `143` records are not insertion
+evidence. Ghostty remains unsupported until the detached proof exits `0` with
+verified one-word no-submit insertion.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
