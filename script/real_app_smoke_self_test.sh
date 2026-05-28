@@ -1320,6 +1320,7 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'relatedToSelf(pid)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'selfPgid' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'processGroup[pid]' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'SMOKE_INTERFERENCE_GUARD_PID=""' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'terminate_foreign_proof_processes_for_exclusive_run' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'foreign_proof_process_lines' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN' script/real_app_smoke.sh >/dev/null ||
@@ -1334,6 +1335,14 @@ python3 - <<'PY'
 from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
+cleanup_start = source.index("cleanup_smoke()")
+cleanup_end = source.index("\ntrap cleanup_smoke EXIT", cleanup_start)
+cleanup_block = source[cleanup_start:cleanup_end]
+if 'kill "$SMOKE_INTERFERENCE_GUARD_PID"' not in cleanup_block:
+    raise SystemExit(
+        "real app smoke self-test expected cleanup to stop the exclusive proof interference guard"
+    )
+
 foreign_start = source.index("foreign_proof_process_lines()")
 foreign_end = source.index("\nterminate_foreign_proof_processes_for_exclusive_run()", foreign_start)
 foreign_block = source[foreign_start:foreign_end]
