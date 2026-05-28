@@ -39,14 +39,15 @@ require_contains "$TMP_DIR/help.txt" "start|status|wait|tail|stop"
 require_contains "$TMP_DIR/help.txt" "outside the Codex"
 require_contains "$TMP_DIR/help.txt" "custom proof text"
 require_contains "$TMP_DIR/help.txt" "LaunchAgent"
-require_contains "$TMP_DIR/help.txt" "terminal or launchd"
-require_contains "$TMP_DIR/help.txt" "background nohup runner by default"
+require_contains "$TMP_DIR/help.txt" "terminal or nohup"
+require_contains "$TMP_DIR/help.txt" "launchd runner by default"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/dry-run.txt"
 require_contains "$TMP_DIR/dry-run.txt" "Dry run only; detached Ghostty proof would run:"
-require_contains "$TMP_DIR/dry-run.txt" "Launcher: nohup"
-require_contains "$TMP_DIR/dry-run.txt" "Command: nohup /bin/bash"
+require_contains "$TMP_DIR/dry-run.txt" "Launcher: launchd"
+require_contains "$TMP_DIR/dry-run.txt" "LaunchAgent:"
+require_contains "$TMP_DIR/dry-run.txt" "Command: launchctl bootstrap"
 require_contains "$TMP_DIR/dry-run.txt" "run-detached-proof.sh"
 require_contains "$TMP_DIR/dry-run.txt" "script/real_app_smoke.sh claude-code-ghostty --manual-gate"
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
@@ -83,6 +84,13 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=launchd \
 require_contains "$TMP_DIR/launchd-dry-run.txt" "Launcher: launchd"
 require_contains "$TMP_DIR/launchd-dry-run.txt" "LaunchAgent:"
 require_contains "$TMP_DIR/launchd-dry-run.txt" "launchctl bootstrap"
+
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=nohup \
+  script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/nohup-dry-run.txt"
+require_contains "$TMP_DIR/nohup-dry-run.txt" "Launcher: nohup"
+require_contains "$TMP_DIR/nohup-dry-run.txt" "Command: nohup /bin/bash"
+require_contains "$TMP_DIR/nohup-dry-run.txt" "run-detached-proof.sh"
 
 FAKE_RUN="$TMP_DIR/proofs/fake-run"
 mkdir -p "$FAKE_RUN"
