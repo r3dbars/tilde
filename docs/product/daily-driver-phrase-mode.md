@@ -792,6 +792,21 @@ screen dump at `16:02:53Z` confirmed `containsOriginal=true` and
 closed at insertion, but the verifier now proves the target prompt is correct
 and unchanged instead of mistaking the copied file path for terminal content.
 
+The next transport slice ruled out one more app-owned identity. SteadyType now
+bundles a proof-scoped Ghostty `input text` mode in
+`SteadyTypeTextEventHelper`: accepted text is passed over stdin, the helper
+requires the exact Ghostty PID plus proof title markers, and the app verifies
+the unchanged prompt before continuing. The detached rerun
+`20260528T161536Z-ghostty` reached a prompt-row suggestion at diagnostics line
+`949755`, handled Tab at line `950837`, reasserted the exact Ghostty PID at line
+`950875`, and ran `bundledGhosttyInputTextHelper` at line `950877`; it still
+verified `false`, proved the original prompt unchanged at line `950878`, then
+failed closed at `ghostty-initial-insertion-noop-cluster` on lines
+`950883`-`950886`. The helper is kept behind
+`AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE=1` so the default
+fast path does not pay for a proven no-op. Ghostty remains unsupported, but
+separate bundled-helper AppleScript identity is no longer an unknown.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

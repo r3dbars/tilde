@@ -620,6 +620,22 @@ through line `932455`, and ended with `ghostty-fast-verified-insertion-failed`
 at lines `932456`-`932457`. This rules out a simple reorder of the current
 transport ladder on the stable script-owned launch path.
 
+The latest Ghostty transport slice rules out a separate bundled-helper
+AppleScript identity without broadening support. `SteadyTypeTextEventHelper`
+now has a proof-scoped `--ghostty-input-text` mode that keeps accepted text on
+stdin, requires the exact Ghostty PID and proof title markers, and exits
+fail-closed on missing proof context. `20260528T161536Z-ghostty` rebuilt the app,
+reached a prompt-row suggestion at diagnostics line `949755`, handled Tab at
+line `950837`, reasserted the exact Ghostty PID at line `950875`, ran
+`bundledGhosttyInputTextHelper` at line `950877`, verified `false`, proved the
+original prompt unchanged at line `950878`, and failed closed at
+`ghostty-initial-insertion-noop-cluster` on lines `950883`-`950886`. Because it
+is a proven no-op, the helper remains opt-in behind
+`AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE=1`; the default fast
+path does not spend extra time on it. Ghostty remains unsupported until a
+different app-owned insertion architecture mutates and verifies the disposable
+Claude prompt.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as

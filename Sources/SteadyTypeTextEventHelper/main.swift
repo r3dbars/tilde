@@ -3,10 +3,18 @@ import ApplicationServices
 import Foundation
 
 struct Options {
+    enum Mode {
+        case cgeventText
+        case ghosttyInputText
+    }
+
+    var mode: Mode = .cgeventText
     var tapLocation: CGEventTapLocation = .cghidEventTap
     var expectedFrontmostBundleIdentifier: String?
     var expectedFrontmostProcessIdentifier: pid_t?
     var delayMicros: useconds_t = 12_000
+    var proofMarker: String = ""
+    var compactProofMarker: String = ""
 }
 
 func fail(_ message: String, code: Int32) -> Never {
@@ -28,6 +36,8 @@ func parseOptions(_ arguments: [String]) -> Options {
         }
 
         switch argument {
+        case "--ghostty-input-text":
+            options.mode = .ghosttyInputText
         case "--tap":
             switch value() {
             case "hid":
@@ -49,6 +59,10 @@ func parseOptions(_ arguments: [String]) -> Options {
                 fail("invalid delay", code: 2)
             }
             options.delayMicros = delay
+        case "--proof-marker":
+            options.proofMarker = value()
+        case "--compact-proof-marker":
+            options.compactProofMarker = value()
         default:
             fail("unknown argument", code: 2)
         }
@@ -157,6 +171,125 @@ guard let text = String(data: inputData, encoding: .utf8), !text.isEmpty else {
 guard !text.contains(where: \.isNewline) else {
     fail("multiline text refused", code: 4)
 }
+
+func appleScriptStringLiteral(_ value: String) -> String {
+    var result = "\""
+    for character in value {
+        switch character {
+        case "\\":
+            result += "\\\\"
+        case "\"":
+            result += "\\\""
+        case "\r":
+            result += "\" & return & \""
+        case "\n":
+            result += "\" & linefeed & \""
+        default:
+            result.append(character)
+        }
+    }
+    result += "\""
+    return result
+}
+
+func postGhosttyNativeInputText(_ text: String, options: Options) {
+    guard let expectedPID = options.expectedFrontmostProcessIdentifier else {
+        fail("ghostty input text requires pid", code: 6)
+    }
+    guard options.expectedFrontmostBundleIdentifier == nil ||
+        options.expectedFrontmostBundleIdentifier == "com.mitchellh.ghostty" else {
+        fail("ghostty input text requires Ghostty bundle", code: 6)
+    }
+    guard !options.proofMarker.isEmpty || !options.compactProofMarker.isEmpty else {
+        fail("ghostty input text requires proof marker", code: 6)
+    }
+
+    setenv("AUTOCOMPLETE_LAB_TEXT_EVENT_HELPER_ACCEPTED_TEXT", text, 1)
+    defer {
+        unsetenv("AUTOCOMPLETE_LAB_TEXT_EVENT_HELPER_ACCEPTED_TEXT")
+    }
+
+    let proofMarkerLiteral = appleScriptStringLiteral(options.proofMarker)
+    let compactProofMarkerLiteral = appleScriptStringLiteral(options.compactProofMarker)
+    let scriptSource = """
+    set acceptedText to system attribute "AUTOCOMPLETE_LAB_TEXT_EVENT_HELPER_ACCEPTED_TEXT"
+    set proofMarker to \(proofMarkerLiteral)
+    set compactProofMarker to \(compactProofMarkerLiteral)
+    set targetProcessId to \(expectedPID) as integer
+    set targetWindow to missing value
+    set targetWindowName to ""
+    set targetWindowNameIsProof to false
+    tell application "System Events"
+        set ghosttyProcess to first application process whose unix id is targetProcessId
+        if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+        set frontmost of ghosttyProcess to true
+        delay 0.04
+        if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        try
+            set targetWindowName to name of front window of ghosttyProcess as text
+            if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+        end try
+    end tell
+    tell application id "com.mitchellh.ghostty"
+        repeat with candidateWindow in windows
+            set windowName to name of candidateWindow as text
+            if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                set targetWindow to candidateWindow
+                exit repeat
+            end if
+        end repeat
+        if targetWindow is missing value then
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if windowName contains proofMarker or windowName contains compactProofMarker then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+        end if
+        if targetWindow is missing value then return false
+        set targetTab to selected tab of targetWindow
+        set targetTerminal to focused terminal of targetTab
+        activate window targetWindow
+        select tab targetTab
+        focus targetTerminal
+        activate
+    end tell
+    delay 0.02
+    tell application "System Events"
+        set ghosttyProcess to first application process whose unix id is targetProcessId
+        if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+        set frontmost of ghosttyProcess to true
+        delay 0.04
+        if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+    end tell
+    tell application id "com.mitchellh.ghostty"
+        input text acceptedText to targetTerminal
+        return true
+    end tell
+    """
+
+    guard let script = NSAppleScript(source: scriptSource) else {
+        fail("ghostty input text script create failed", code: 6)
+    }
+
+    var errorInfo: NSDictionary?
+    let result = script.executeAndReturnError(&errorInfo)
+    if let errorInfo {
+        let number = (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? ""
+        let message = errorInfo["NSAppleScriptErrorMessage"] as? String ?? "unknown"
+        fail("ghostty input text failed number=\(number) message=\(message)", code: 6)
+    }
+    guard result.booleanValue else {
+        fail("ghostty input text proof window missing", code: 6)
+    }
+}
+
+if options.mode == .ghosttyInputText {
+    postGhosttyNativeInputText(text, options: options)
+    exit(0)
+}
+
 guard let source = CGEventSource(stateID: .hidSystemState) else {
     fail("failed to create CGEvent source", code: 5)
 }

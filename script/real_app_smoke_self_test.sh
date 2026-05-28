@@ -558,6 +558,10 @@ if "frontmost pid mismatch actual=" not in text_event_helper or "expected=" not 
     raise SystemExit("Bundled text-event helper frontmost failures must include actual and expected pids")
 if "readDataToEndOfFile" not in text_event_helper or "multiline text refused" not in text_event_helper:
     raise SystemExit("Bundled text-event helper must keep stdin-only single-line text input")
+if "--ghostty-input-text" not in text_event_helper or "AUTOCOMPLETE_LAB_TEXT_EVENT_HELPER_ACCEPTED_TEXT" not in text_event_helper:
+    raise SystemExit("Bundled text-event helper must keep Ghostty native input text behind an explicit stdin-backed mode")
+if "ghostty input text requires proof marker" not in text_event_helper or "input text acceptedText to targetTerminal" not in text_event_helper:
+    raise SystemExit("Bundled text-event helper Ghostty mode must target only proof-marked Ghostty terminals")
 
 app_delegate = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 if "clonePasteboardItems" not in app_delegate or "$0.copy() as? NSPasteboardItem" in app_delegate:
@@ -685,6 +689,8 @@ if "insertClaudeCodeTerminalHostProofHardwareKeyEvents" not in fast_ghostty_bloc
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before bundled Unicode helpers")
 if "insertClaudeCodeTerminalHostProofBundledTextEventHelper" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled app-owned CGEvent text helper")
+if "insertClaudeCodeTerminalHostProofBundledGhosttyInputTextHelper" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try the bundled app-owned Ghostty input-text helper before declaring the initial no-op cluster")
 if "bulkKeystroke: true" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try System Events bulk keystroke before per-character fallback")
 if "launchThroughShell: true" not in fast_ghostty_block:
@@ -762,6 +768,8 @@ if "focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified" not in 
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include focused native action verification")
 if "focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativeNoopClassified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must require focused native screen-copy no-op classification")
+if "bundledGhosttyInputTextHelperVerified: ghosttyBundledInputTextHelperOutcome.verified" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty initial no-op classifier must include bundled native input helper verification")
 focused_action_start = app_delegate.index("private func insertGhosttyTerminalHostProofFocusedActionText(")
 focused_action_end = app_delegate.index("private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(", focused_action_start)
 focused_action_block = app_delegate[focused_action_start:focused_action_end]
@@ -779,12 +787,16 @@ if fast_ghostty_block.index("ghosttyShellBulkSystemEventsOutcome") < fast_ghostt
     raise SystemExit("Claude Code Ghostty fast proof must try bundled helpers before the shell-launched System Events bulk fallback")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
     raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slower native input fallbacks")
+if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledGhosttyInputTextHelper") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try the bundled native input helper before in-process native input")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofNativePrefixFinalKeyText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
     raise SystemExit("Claude Code Ghostty fast proof must try the opt-in native-prefix/final-key transport before plain native input")
 if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must fail closed before generic insertion fallbacks")
 if "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep the long insertion ladder behind an explicit opt-in flag")
+if "AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty bundled input helper must stay behind an explicit opt-in probe flag")
 if "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must allow an explicit bounded insertion budget override")
 if "ghosttyFastInsertionBudget" not in fast_ghostty_block or "ghostty-fast-insertion-budget-exceeded" not in fast_ghostty_block:
@@ -842,6 +854,10 @@ if "bundledCGEventTextHelper" not in bundled_helper_block or "bundled-helper-unv
     raise SystemExit("Claude Code Ghostty bundled helper proof must be verified and fail closed on unexpected mutation")
 if "bundledCGEventTextHelperHID" not in bundled_helper_block or "bundledCGEventTextHelperSession" not in bundled_helper_block:
     raise SystemExit("Claude Code Ghostty bundled helper proof must try both HID and session text taps")
+if "bundledGhosttyInputTextHelper" not in bundled_helper_block or "bundled-ghostty-input-helper-unverified-mutated-input" not in bundled_helper_block:
+    raise SystemExit("Claude Code Ghostty bundled native input helper proof must be verified and fail closed on unexpected mutation")
+if '"--ghostty-input-text"' not in bundled_helper_block or '"--proof-marker"' not in bundled_helper_block:
+    raise SystemExit("Claude Code Ghostty bundled native input helper must use the explicit proof-marker helper mode")
 if "FrontmostPidReassertion" not in bundled_helper_block or "FrontmostPidReassertionBaseline" not in bundled_helper_block:
     raise SystemExit("Claude Code Ghostty bundled helper proof must reassert and baseline-check the exact Ghostty proof pid before posting events")
 if 'tapName: "hid"' not in fast_ghostty_block or 'tapName: "session"' not in fast_ghostty_block:
@@ -932,6 +948,7 @@ if drain_source > prefix_verify_source:
 for env_key in [
     "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS",
     "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE",
+    "AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES",
     "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS",
     "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS",
@@ -1089,6 +1106,7 @@ if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/
 fi
 
 if ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE \' script/real_app_smoke.sh >/dev/null; then
