@@ -862,6 +862,18 @@ means the current failed context is not merely an app-owned transport mismatch;
 after SteadyType fails closed, the harness can no longer prove external Ghostty
 input mutates that same disposable prompt either.
 
+The follow-up comparator removed the last obvious focus excuse from that result
+and proved the before/after split. `20260528T181801Z-ghostty` first typed one
+external native Ghostty suffix and one external System Events suffix before Tab;
+both mutated the prompt and restored the original text. The same run then found
+a prompt-row suggestion at diagnostics line `975159`, failed closed after Tab,
+typed one external native suffix without Enter, clicked the latest
+terminal-screen prompt caret at `x=633 y=723`, and typed one external System
+Events suffix without Enter. Neither post-fail external path verified prompt
+mutation after the prompt-row refocus. Ghostty remains unsupported; the next
+useful slice is a different insertion architecture or a pre-fail path that
+avoids this no-op state entirely.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit
