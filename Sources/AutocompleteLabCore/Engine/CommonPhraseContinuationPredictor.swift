@@ -456,9 +456,10 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         words: [String],
         behaviorProfileID: AutocompleteBehaviorProfileID?
     ) -> CommonPhraseContinuationCandidate? {
+        let trimmedRawContext = rawContext.trimmingCharacters(in: .whitespacesAndNewlines)
         guard allowsWritingFlowPrediction(for: behaviorProfileID),
               words.count >= 4,
-              rawContext.last?.isSentenceBoundary == true,
+              trimmedRawContext.last?.isSentenceBoundary == true,
               containsDailyDriverTopic(words) || containsWritingMotionTopic(words) || containsFeelingTopic(words) else {
             return nil
         }
