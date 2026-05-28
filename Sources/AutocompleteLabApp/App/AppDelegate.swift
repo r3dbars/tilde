@@ -3850,7 +3850,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DiagnosticsLog.shared.record(
                 "keyboard-event-tap-started",
                 metadata: [
-                    "diagnosticLayer": "keyCapture"
+                    "diagnosticLayer": "keyCapture",
+                    "tapLocation": eventTap.tapPlacement.rawValue
                 ]
             )
             return true

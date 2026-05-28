@@ -230,6 +230,17 @@ Events Shift stayed skipped behind the explicit opt-in permission-risk env. The
 next Ghostty blocker is therefore an observable key source / accept driver that
 reaches SteadyType's event tap for Ghostty, not prompt readiness, placement,
 or external TERM interference.
+The follow-up source slice makes SteadyType's keyboard tap location
+proof-configurable with `AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION`, keeps
+normal launches on the session tap, and defaults the detached Ghostty proof to
+`hid` while logging `keyboard-event-tap-started tapLocation=...`. Live launchd
+proof `20260528T230217Z-ghostty` confirmed the new path was exercised and still
+failed honestly: it reached screen-copy prompt readiness, exact typed-prompt
+readiness, native pre-accept mutation/restore, and a prompt-row suggestion at
+diagnostics line `1071450`, then session/HID/combined/PID/private-source Shift
+sentinels all missed the event tap. That rules out a simple session-vs-HID tap
+placement change; Ghostty still needs a genuinely observable key source or a
+separate proof-only accept-driver experiment.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced

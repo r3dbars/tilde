@@ -146,4 +146,16 @@ struct KeyboardEventTapKeyCodeTests {
         #expect(metadata["eventSourcePID"] == "1234")
         #expect(metadata["eventTargetPID"] == "5678")
     }
+
+    @Test("Event tap placement defaults to session and accepts proof HID override")
+    func eventTapPlacementUsesProofOverride() {
+        let key = KeyboardEventTapPlacement.environmentKey
+
+        #expect(KeyboardEventTapPlacement.fromEnvironment([:]) == .session)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "session"]) == .session)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "cgSessionEventTap"]) == .session)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "hid"]) == .hid)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "cgHIDEventTap"]) == .hid)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "bogus"]) == .session)
+    }
 }
