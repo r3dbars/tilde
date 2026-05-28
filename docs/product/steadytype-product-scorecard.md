@@ -176,6 +176,21 @@ Ghostty fresh disposable contexts now skip the initial prompt clear by default;
 the exact typed-prompt readiness check remains the dirty-state guard. This
 removes another focus-sensitive key path before the proof text is typed while
 still failing closed if stale prompt content is present.
+Typed Ghostty prompt readiness can now use the native screen-copy path even when
+the AX helper reports text nodes, as long as the exact typed proof text is being
+checked. That keeps the fallback from being limited to complete AX misses while
+still requiring an exact prompt match before the proof can advance.
+The latest detached-runner slice removes the extra job-control smoke child shell
+and launches `real_app_smoke.sh` as the direct child process through `exec env`.
+`20260528T222807Z-ghostty` was generated before that patch and got as far as
+typed-prompt readiness, but it still reported through the old child-shell
+wrapper after native, bulk System Events, and paced System Events prompt typing
+were incomplete. `20260528T223417Z-ghostty` used the direct-child runner and no
+longer emitted any smoke-child-shell diagnostics; the real smoke process itself
+received SIGTERM during `claude-code Ghostty open fresh disposable context`
+after the stale-only host check and before prompt readiness. Ghostty is still
+red, but the next blocker is now the disposable open lifecycle or external TERM
+source, not detached wrapper ambiguity.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -936,6 +951,19 @@ instead of silently using foreground-only defaults. It also defaults
 `AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=1`, after
 `20260528T214421Z-ghostty` showed repeated disposable contexts can spend minutes
 reconfirming the same key-source miss.
+Follow-up run `20260528T222807Z-ghostty` exposed a harness-only typed-prompt
+red bar before it could retest the key source: SteadyType's terminal prompt
+anchor repeatedly saw the full 42-character proof prompt and placed the
+synthetic caret, but the AX readiness helper still treated the prompt as
+incomplete because the native screen-copy fallback only ran for `textNodes=0`
+failures. Typed Ghostty prompt readiness now lets a title-scoped native
+`write_screen_file:copy,plain` proof certify the exact stripped prompt text on
+any AX failure, while the empty-prompt path still requires the older
+`textNodes=0` guard. `./script/real_app_smoke_self_test.sh` and
+`./script/claude_code_ghostty_detached_proof_self_test.sh` pass for the new
+guard. App coverage stays at `83`; the next live proof should rerun the bounded
+detached Ghostty lane and should fail or pass on suggestion/key delivery rather
+than on a false typed-prompt readiness miss.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

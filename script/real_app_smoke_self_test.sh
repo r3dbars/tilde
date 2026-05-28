@@ -3394,6 +3394,16 @@ for expected in (
 ):
     if expected not in assert_block:
         raise SystemExit(f"missing typed prompt screen-copy fallback: {expected}")
+screen_copy_block = source[
+    source.index("run_claude_code_ghostty_prompt_screen_copy_probe()"):
+    source.index("\nmark_claude_code_ghostty_proof_window_title()", source.index("run_claude_code_ghostty_prompt_screen_copy_probe()"))
+]
+for expected in (
+    'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROMPT_SCREEN_COPY_ON_TYPED_AX_FAILURE',
+    '[[ "$prompt_wait_output" == *"textNodes=0"* ]] || return 1',
+):
+    if expected not in screen_copy_block:
+        raise SystemExit(f"missing typed prompt screen-copy guard: {expected}")
 PY
 then
   echo "real app smoke self-test expected typed Ghostty prompt readiness to fall back to exact native screen-copy proof after an AX miss" >&2

@@ -694,6 +694,19 @@ suggestion/key-capture step.
 Fresh Ghostty proof contexts also skip the initial prompt clear by default now.
 Typed-prompt readiness still rejects dirty prompt state, but the harness avoids
 one more focus-sensitive key path before typing the real proof text.
+Typed Ghostty prompt readiness now allows the native screen-copy fallback after
+an AX miss when an exact typed proof prompt is expected. That makes the fallback
+useful beyond `textNodes=0` failures without relaxing the dirty-prompt guard.
+The detached Ghostty proof runner also launches `real_app_smoke.sh` as the
+direct child process instead of wrapping it in an extra job-control child shell.
+`20260528T222807Z-ghostty` still used the old wrapper and reached typed-prompt
+readiness before TERM after native, bulk System Events, and paced System Events
+prompt typing were incomplete. `20260528T223417Z-ghostty` used the direct-child
+path and removed the smoke-child-shell ambiguity; the real smoke process now
+receives SIGTERM during `claude-code Ghostty open fresh disposable context`,
+after the stale-only host check and before prompt readiness. That keeps Ghostty
+unsupported, but it gives the next iteration a much narrower failure to chase:
+the disposable open lifecycle or the external TERM source.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
