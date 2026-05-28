@@ -122,6 +122,18 @@ prompt-readiness snapshot only matched part of the typed proof text before the
 retry path, and `20260528T012819Z-ghostty` failed exact frontmost reactivation
 after title-PID resolution. Ghostty remains unsupported until the detached proof
 exits `0` with verified one-word no-submit insertion.
+The newest detached pass moved the failure back to the real insertion problem
+instead of stale host state. `20260528T021253Z-ghostty` exercised retryable
+prompt/process discovery but showed a poisoned zero-window Ghostty process could
+block fresh contexts. The harness now uses Ghostty-native stale cleanup, resets
+only a Ghostty host whose own API reports exactly zero windows, retries fresh
+contexts, records proof-process exit diagnostics, and gives Ghostty's expanded
+insertion ladder a 90-second Tab acceptance window. `20260528T023640Z-ghostty`
+reset stale pid `32024` and reached prompt-row Tab insertion before the old wait
+cut it off mid-ladder; `20260528T024044Z-ghostty` waited through the full ladder
+and failed closed with `keyboard-action handled=false` after unchanged-prompt
+baselines. Ghostty remains unsupported, but the next red bar is now cleanly a
+verified app-owned insertion transport.
 
 ## Scores
 
