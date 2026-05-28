@@ -15237,6 +15237,9 @@ run_textedit() {
   elif [[ "$TEXTEDIT_VARIANT" != "undo-full" ]]; then
     local undo_start_line
     undo_start_line="$(line_count "$LOG_PATH")"
+    focus_textedit_smoke_editor "$textedit_window_title"
+    click_textedit_smoke_editor "$textedit_window_title"
+    assert_textedit_frontmost_window "$textedit_window_title" "TextEdit one-word undo"
     osascript <<'APPLESCRIPT'
 tell application "System Events"
   keystroke "z" using command down
@@ -15274,6 +15277,9 @@ APPLESCRIPT
   elif [[ "$TEXTEDIT_VARIANT" == "undo-full" ]]; then
     local full_undo_start_line
     full_undo_start_line="$(line_count "$LOG_PATH")"
+    focus_textedit_smoke_editor "$textedit_window_title"
+    click_textedit_smoke_editor "$textedit_window_title"
+    assert_textedit_frontmost_window "$textedit_window_title" "TextEdit full-accept undo"
     osascript <<'APPLESCRIPT'
 tell application "System Events"
   keystroke "z" using command down

@@ -1177,6 +1177,16 @@ if fallback > open_document:
     raise SystemExit("TextEdit smoke must enable single-window fallback before opening/focusing the proof document")
 if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in run_textedit:
     raise SystemExit("TextEdit smoke must allow bounded System Events activation for focus recovery")
+one_word_undo = run_textedit.index('undo_start_line="$(line_count "$LOG_PATH")"')
+one_word_keystroke = run_textedit.index('keystroke "z" using command down', one_word_undo)
+one_word_preflight = run_textedit[one_word_undo:one_word_keystroke]
+if 'focus_textedit_smoke_editor "$textedit_window_title"' not in one_word_preflight or 'assert_textedit_frontmost_window "$textedit_window_title" "TextEdit one-word undo"' not in one_word_preflight:
+    raise SystemExit("TextEdit one-word undo proof must reassert the disposable TextEdit window before Command-Z")
+full_undo = run_textedit.index('full_undo_start_line="$(line_count "$LOG_PATH")"')
+full_keystroke = run_textedit.index('keystroke "z" using command down', full_undo)
+full_preflight = run_textedit[full_undo:full_keystroke]
+if 'focus_textedit_smoke_editor "$textedit_window_title"' not in full_preflight or 'assert_textedit_frontmost_window "$textedit_window_title" "TextEdit full-accept undo"' not in full_preflight:
+    raise SystemExit("TextEdit full-accept undo proof must reassert the disposable TextEdit window before Command-Z")
 
 model_latency = function_body("run_textedit_model_latency")
 if "AUTOCOMPLETE_LAB_SKIP_SYSTEM_EVENTS_PROCESS_ACTIVATION=1" in model_latency:
