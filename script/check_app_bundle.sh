@@ -38,6 +38,7 @@ EXECUTABLE="$APP_BUNDLE/Contents/MacOS/SteadyType"
 APP_ICON="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 MLX_METALLIB="$APP_BUNDLE/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"
 ICON_TMP_DIR="$(mktemp -d)"
+ENTITLEMENTS_TMP="$ICON_TMP_DIR/entitlements.plist"
 trap 'rm -rf "$ICON_TMP_DIR"' EXIT
 
 plist_value() {
@@ -80,6 +81,10 @@ APPLE_EVENTS_REASON="$(plist_value NSAppleEventsUsageDescription)"
   || fail "missing Apple Events usage description"
 
 codesign --verify --deep --strict "$APP_BUNDLE" >/dev/null 2>&1 || fail "codesign verification failed"
+codesign -d --entitlements :- "$APP_BUNDLE" >"$ENTITLEMENTS_TMP" 2>/dev/null \
+  || fail "unable to read app entitlements"
+/usr/libexec/PlistBuddy -c 'Print :com.apple.security.automation.apple-events' "$ENTITLEMENTS_TMP" >/dev/null 2>&1 \
+  || fail "missing Apple Events automation entitlement"
 
 SIGNATURE_DETAILS="$(codesign --display --verbose=4 "$APP_BUNDLE" 2>&1 || true)"
 grep -F "runtime" <<<"$SIGNATURE_DETAILS" >/dev/null || fail "hardened runtime flag is missing"

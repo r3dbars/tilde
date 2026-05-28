@@ -20,6 +20,7 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 HELPER_BINARY="$APP_MACOS/$HELPER_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"
 APP_ICON="$APP_RESOURCES/AppIcon.icns"
 GENERATED_APP_ICON_REL="dist/$APP_NAME.generated-icon.$$.icns"
 GENERATED_APP_ICON="$ROOT_DIR/$GENERATED_APP_ICON_REL"
@@ -440,12 +441,12 @@ find_signing_identity() {
 sign_app_bundle() {
   local identity="$1"
 
-  if codesign --force --options runtime --sign "$identity" "$APP_BUNDLE" >/dev/null; then
+  if codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign "$identity" "$APP_BUNDLE" >/dev/null; then
     return 0
   fi
 
   sleep 0.5
-  codesign --force --options runtime --sign "$identity" "dist/$APP_NAME.app" >/dev/null
+  codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign "$identity" "dist/$APP_NAME.app" >/dev/null
 }
 
 run_swift_package_resolve() {
@@ -614,7 +615,7 @@ if [[ -n "$SIGNING_IDENTITY" ]]; then
   sign_app_bundle "$SIGNING_IDENTITY"
 else
   codesign --force --options runtime --sign - "$HELPER_BINARY" >/dev/null
-  codesign --force --options runtime --sign - "$APP_BUNDLE" >/dev/null
+  codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign - "$APP_BUNDLE" >/dev/null
   echo "warning: no stable code signing identity found; Accessibility may ask again after rebuilds" >&2
 fi
 
