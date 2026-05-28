@@ -589,6 +589,20 @@ SMOKE_INTERFERENCE_GUARD_POLL_SECONDS="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_POLL_S
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
 SMOKE_QUARANTINE_GUARD_PID=""
 EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}"
+SMOKE_STARTUP_MARKER_PATH="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_STARTUP_MARKER_PATH:-}"
+
+smoke_startup_marker() {
+  local phase="$1"
+  local pgid
+  [[ -n "$SMOKE_STARTUP_MARKER_PATH" ]] || return 0
+  mkdir -p "$(dirname "$SMOKE_STARTUP_MARKER_PATH")" >/dev/null 2>&1 || true
+  pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+  printf '%s phase=%s pid=%s pgid=%s app=%s\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$phase" "$SMOKE_SCRIPT_PID" "${pgid:-unknown}" "$APP" \
+    >>"$SMOKE_STARTUP_MARKER_PATH" 2>/dev/null || true
+}
+
+smoke_startup_marker "config-ready"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
@@ -15025,7 +15039,9 @@ run_chrome() {
   fi
 }
 
+smoke_startup_marker "before-describe-plan"
 describe_plan
+smoke_startup_marker "after-describe-plan"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
@@ -15038,11 +15054,17 @@ if [[ "$APP" == "chrome" ]] && chrome_fixture_is_blocked_high_value_surface "$CH
   exit 1
 fi
 
+smoke_startup_marker "before-exclusive-cleanup"
 terminate_foreign_proof_processes_for_exclusive_run
+smoke_startup_marker "after-exclusive-cleanup"
 start_foreign_worktree_quarantine_guard
+smoke_startup_marker "after-quarantine-guard"
 refuse_other_smoke_processes
+smoke_startup_marker "after-refuse-other-smoke"
 acquire_smoke_lock
+smoke_startup_marker "after-smoke-lock"
 start_smoke_interference_guard
+smoke_startup_marker "after-interference-guard"
 
 case "$APP" in
   textedit)

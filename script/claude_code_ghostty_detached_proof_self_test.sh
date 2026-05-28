@@ -55,6 +55,7 @@ require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION
 require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1"
 require_contains "$TMP_DIR/dry-run.txt" "proof.log"
 require_contains "$TMP_DIR/dry-run.txt" "status.env"
+require_contains "$TMP_DIR/dry-run.txt" "Smoke startup:"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
 AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1 \
@@ -247,6 +248,8 @@ require_contains "$SCRIPT_TEXT" "terminate_orphaned_detached_smoke_processes"
 require_contains "$SCRIPT_TEXT" "smoke_pid_file_for_run"
 require_contains "$SCRIPT_TEXT" "smoke_pid_for_run"
 require_contains "$SCRIPT_TEXT" "SMOKE_PID_FILE"
+require_contains "$SCRIPT_TEXT" "SMOKE_STARTUP_MARKER_FILE"
+require_contains "$SCRIPT_TEXT" "startup_log=%s"
 require_contains "$SCRIPT_TEXT" 'SMOKE_PID=""'
 require_contains "$SCRIPT_TEXT" 'smoke_pid=%s'
 require_contains "$SCRIPT_TEXT" 'printf '\''%s\n'\'' "$SMOKE_PID" >"$SMOKE_PID_FILE"'
@@ -256,8 +259,12 @@ require_contains "$SCRIPT_TEXT" "smoke_process=alive"
 require_contains "$SCRIPT_TEXT" "smoke_process=not-running"
 require_contains "$SCRIPT_TEXT" 'runner_pgid="$(ps -o pgid= -p "$$"'
 require_contains "$SCRIPT_TEXT" "Protected proof process groups:"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty proof enabled job-control child process isolation"
+require_contains "$SCRIPT_TEXT" "set -m"
+require_contains "$SCRIPT_TEXT" "set +m"
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS="${protected_pgids:-}"'
 require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell pid"
+require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_REAL_APP_SMOKE_STARTUP_MARKER_PATH="$SMOKE_STARTUP_MARKER_FILE"'
 require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell received TERM"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell received INT"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell real_app_smoke returned status"
