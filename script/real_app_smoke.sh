@@ -4331,6 +4331,13 @@ probe_claude_code_terminal_host_key_capture() {
     return 0
   fi
 
+  if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
+    echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI. Set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1 to opt in." >&2
+    echo "Claude Code $host_name key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
   if ! settle_claude_code_terminal_proof_focus "System Events key-capture probe"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before System Events key capture probe"
     echo "Claude Code terminal host is not frontmost for System Events key capture probe." >&2
