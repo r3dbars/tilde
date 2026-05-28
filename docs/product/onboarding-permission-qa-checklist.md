@@ -49,7 +49,7 @@ language:
 - [ ] Click `Delete Local Logs` from Practice and confirm local trace JSONL and screenshot files are gone.
 - [ ] Record the walkthrough in the `Guided TextEdit Walkthrough Proof` table below.
 - [ ] Keep evidence to command output, line ranges, counters, and hashes. Do not paste raw typed text.
-- [ ] Use `./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready` before deletion and `./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready` after deletion to gather redacted line ranges. The before-delete helper must show model ready, TextEdit enabled, and suggestions unpaused at practice start.
+- [ ] Use `./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready` before deletion and `./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready` after deletion to gather redacted line ranges. The before-delete helper must show model ready, TextEdit enabled, suggestions unpaused at practice start, and Tab/Esc/Pause evidence after the latest TextEdit practice-start line.
 - [ ] Run `./script/check_onboarding_walkthrough_proof.py`.
 
 ## First Success
