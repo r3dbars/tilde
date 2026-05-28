@@ -43,6 +43,11 @@ reject_contains() {
   fi
 }
 
+start_fake_smoke_process() {
+  bash -c 'trap "exit 0" TERM; while :; do sleep 1 & wait $!; done' >/dev/null 2>&1 &
+  printf '%s\n' "$!"
+}
+
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh --help >"$TMP_DIR/help.txt"
 require_contains "$TMP_DIR/help.txt" "start|status|wait|tail|stop"
@@ -191,7 +196,7 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=nohup \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/nohup-dry-run.txt"
 require_contains "$TMP_DIR/nohup-dry-run.txt" "Launcher: nohup"
-require_contains "$TMP_DIR/nohup-dry-run.txt" "Command: nohup /bin/bash"
+require_contains "$TMP_DIR/nohup-dry-run.txt" "Command: /usr/bin/python3 start_new_session /bin/bash"
 require_contains "$TMP_DIR/nohup-dry-run.txt" "run-detached-proof.sh"
 
 FAKE_RUN="$TMP_DIR/proofs/fake-run"
@@ -217,8 +222,7 @@ require_contains "$TMP_DIR/status.txt" "script/real_app_smoke.sh claude-code-gho
 
 RUNNING_SMOKE_RUN="$TMP_DIR/proofs/running-smoke-run"
 mkdir -p "$RUNNING_SMOKE_RUN"
-sleep 60 &
-ALIVE_SMOKE_PID="$!"
+ALIVE_SMOKE_PID="$(start_fake_smoke_process)"
 cat >"$RUNNING_SMOKE_RUN/status.env" <<EOF
 state=running
 pid=$$
@@ -266,8 +270,7 @@ ALIVE_SMOKE_PID=""
 
 ORPHANED_SMOKE_RUN="$TMP_DIR/proofs/orphaned-smoke-run"
 mkdir -p "$ORPHANED_SMOKE_RUN"
-sleep 60 &
-ALIVE_SMOKE_PID="$!"
+ALIVE_SMOKE_PID="$(start_fake_smoke_process)"
 cat >"$ORPHANED_SMOKE_RUN/status.env" <<EOF
 state=running
 pid=999999
@@ -465,6 +468,9 @@ cp script/claude_code_ghostty_detached_proof.sh "$SCRIPT_TEXT"
 require_contains "$SCRIPT_TEXT" "open -g -na Terminal"
 require_contains "$SCRIPT_TEXT" "create_terminal_launcher_script"
 require_contains "$SCRIPT_TEXT" 'nohup /bin/bash "$WORKER_SCRIPT"'
+require_contains "$SCRIPT_TEXT" "start_nohup_runner"
+require_contains "$SCRIPT_TEXT" "start_new_session=True"
+require_contains "$SCRIPT_TEXT" "nohup detached runner pid"
 require_contains "$SCRIPT_TEXT" "launchctl bootstrap"
 require_contains "$SCRIPT_TEXT" "<key>EnvironmentVariables</key>"
 require_contains "$SCRIPT_TEXT" "cleanup_launchd_job_if_terminal"
@@ -554,7 +560,7 @@ require_contains "$SCRIPT_TEXT" "starting_status_is_within_grace"
 require_contains "$SCRIPT_TEXT" "Detached proof runner did not start before startup grace expired."
 require_contains "$SCRIPT_TEXT" 'printf '\''export %s=%q\n'\'' "$key" "$value"'
 require_contains "$SCRIPT_TEXT" 'printf '\''command=%s\n'\'' "$SMOKE_COMMAND_SUMMARY"'
-require_contains "$SCRIPT_TEXT" "nohup starter pid"
+require_contains "$SCRIPT_TEXT" "nohup detached runner pid"
 require_contains "$SCRIPT_TEXT" "run_real_app_smoke"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof spawned smoke pid"
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-1}"'

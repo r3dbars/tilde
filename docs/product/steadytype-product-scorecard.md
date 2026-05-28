@@ -161,6 +161,12 @@ suggestion on attempt 1. Cleanup stopped both the proof Ghostty pid and the
 proof command pid. The wrapper now prints periodic wait progress and the
 key-capture refocus path has an explicit timeout knob, so future long detached
 runs should explain their current phase instead of going quiet.
+The next harness hardening keeps the optional `nohup` detached launcher out of
+the Codex app-server process group by starting the runner through Python with
+`start_new_session=True`. This does not count as Ghostty support, but it removes
+one more false-red source when comparing launchd and nohup evidence: a nohup
+proof should now live or die by the proof script, not by the shell that invoked
+it.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
