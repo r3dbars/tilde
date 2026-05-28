@@ -9534,7 +9534,23 @@ open_claude_code_terminal_proof() {
         if wait_for_claude_code_terminal_pidfile_process_optional \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_PID_SECONDS:-12}"; then
           printf '%s\n' "no-restore-command-open-pidfile-present" >>"$ghostty_launch_stage_file"
-          ghostty_command_open_ready=1
+          if try_wait_for_frontmost_claude_code_terminal_proof_process \
+            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_FRONTMOST_SECONDS:-5}" &&
+             ghostty_window_api_reports_visible_window; then
+            printf '%s\n' "no-restore-command-open-frontmost" >>"$ghostty_launch_stage_file"
+            ghostty_command_open_ready=1
+          else
+            printf '%s\n' "no-restore-command-open-not-frontmost" >>"$ghostty_launch_stage_file"
+            echo "Claude Code Ghostty proof no-restore command host wrote pidfile but did not expose a frontmost window; falling back to script-owned window launch." >&2
+            if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+              kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
+              sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+            fi
+            CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+            CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
+            CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+            reset_zero_window_claude_code_ghostty_proof_host
+          fi
         else
           printf '%s\n' "no-restore-command-open-no-pidfile" >>"$ghostty_launch_stage_file"
           if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
@@ -9988,6 +10004,22 @@ cleanup_claude_code_terminal_proof() {
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 }
 
+ghostty_window_api_reports_visible_window() {
+  local window_count
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  window_count="$(run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_WINDOW_CHECK_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty visible-window check" <<'APPLESCRIPT' 2>/dev/null || true
+tell application id "com.mitchellh.ghostty"
+  return (count windows) as text
+end tell
+APPLESCRIPT
+)"
+  window_count="$(printf '%s' "$window_count" | tr -d '[:space:]')"
+  [[ "$window_count" =~ ^[1-9][0-9]*$ ]]
+}
+
 reset_zero_window_claude_code_ghostty_proof_host() {
   local ghostty_pids window_count ax_window_count proof_pid reset_reason
 
@@ -10317,18 +10349,39 @@ try_wait_for_claude_code_terminal_prompt() {
   fi
   prompt_marker_args=()
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
-    prompt_marker_args=(--allow-missing-marker-for-empty-text --reject-shell-command-text)
+    prompt_marker_args=(--allow-missing-marker-for-empty-text --reject-shell-command-text --hint "shortcuts")
   fi
 
   case "$CLAUDE_CODE_HOST_VARIANT" in
     terminal|iterm2|ghostty)
-      swift script/terminal_prompt_ax_proof_helper.swift wait \
+      local prompt_wait_output prompt_wait_status
+      prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait \
         --bundle "$(claude_code_host_bundle_id)" \
         --display "$(claude_code_host_display_name)" \
         --marker "$(claude_code_proof_marker)" \
         "${proof_pid_args[@]}" \
         "${prompt_marker_args[@]}" \
-        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}" || return 1
+        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}" 2>&1)"
+      prompt_wait_status=$?
+      if ((prompt_wait_status != 0)) &&
+         [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+            "$prompt_wait_output" == *"rejectedShellCommand=true"* ]]; then
+        echo "Claude Code Ghostty proof prompt still contains launch-command text; clearing before readiness retry."
+        if clear_claude_code_terminal_prompt_line; then
+          prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait \
+            --bundle "$(claude_code_host_bundle_id)" \
+            --display "$(claude_code_host_display_name)" \
+            --marker "$(claude_code_proof_marker)" \
+            "${proof_pid_args[@]}" \
+            "${prompt_marker_args[@]}" \
+            --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}" 2>&1)"
+          prompt_wait_status=$?
+        fi
+      fi
+      if ((prompt_wait_status != 0)); then
+        printf '%s\n' "$prompt_wait_output" >&2
+        return 1
+      fi
       ;;
     *)
       echo "Claude Code $(claude_code_host_display_name) prompt readiness is not automated for this host." >&2

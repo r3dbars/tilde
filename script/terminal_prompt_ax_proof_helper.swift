@@ -362,6 +362,14 @@ func containsRejectedShellCommandText(in searchable: [String], options: Options)
     guard options.rejectsShellCommandText else {
         return false
     }
+    let joinedSearchable = searchable.joined(separator: "\n")
+    if options.text.isEmpty,
+       !options.hints.isEmpty,
+       options.hints.contains(where: { hint in
+           containsText(joinedSearchable, hint, caseInsensitive: true)
+       }) {
+        return false
+    }
     return searchable.contains { value in
         value.components(separatedBy: .newlines).contains { line in
             looksLikeSteadyTypeProofShellCommand(line)
