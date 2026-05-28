@@ -658,6 +658,19 @@ startup before prompt-row insertion. None of those startup records count as
 insertion proof. Ghostty remains unsupported until a detached proof exits `0`
 with verified one-word no-submit insertion.
 
+The current action-return pass makes those native Ghostty probes more honest:
+SteadyType now preserves the AppleScript `perform action` boolean for focused
+text action, native paste, and screen-copy verification instead of forcing a
+successful post. `20260528T173408Z-ghostty` reached prompt-row suggestion line
+`962043`, proved the native prefix/final-key probe did not mutate the prompt at
+lines `962959`-`962962`, and failed closed at lines `962970`-`962972`. The
+immediate rerun `20260528T174209Z-ghostty` confirmed the new metadata:
+prompt-row suggestion line `963531`, `actionPerformed=true` on focused native
+action text at lines `964428`-`964430`, native paste at lines
+`964432`-`964433`, front-window input plus native screen-copy no-op at lines
+`964449`-`964451`, and fail-closed insert lines `964452`-`964454`. App coverage
+stays at `83` until Ghostty produces a verified one-word no-submit insertion.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as

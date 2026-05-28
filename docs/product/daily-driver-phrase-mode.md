@@ -824,6 +824,19 @@ startup before prompt-row insertion. Those `143` records are not insertion
 evidence. Ghostty remains unsupported until the detached proof exits `0` with
 verified one-word no-submit insertion.
 
+The next Ghostty instrumentation pass preserves Ghostty's AppleScript
+`perform action` boolean instead of forcing native actions to look posted.
+`20260528T173408Z-ghostty` still reached a prompt-row suggestion at diagnostics
+line `962043`, handled Tab, proved the native prefix/final-key probe did not
+mutate the prompt at lines `962959`-`962962`, and failed closed at lines
+`962970`-`962972`. The immediate rerun `20260528T174209Z-ghostty` then confirmed
+the new metadata: prompt-row suggestion line `963531`, `actionPerformed=true`
+on focused native action text at lines `964428`-`964430`, native paste at lines
+`964432`-`964433`, front-window input plus native screen-copy no-op at lines
+`964449`-`964451`, and fail-closed insert lines `964452`-`964454`. Ghostty is
+now a better-instrumented no-op, not supported; it still needs a detached proof
+that exits `0` with verified one-word no-submit insertion.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit
