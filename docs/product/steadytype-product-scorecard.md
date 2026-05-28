@@ -196,6 +196,15 @@ guard pids, tracked Claude Code terminal proof pids, lock owner, process-group
 members, and proof-related process rows before cleanup. The next red run should
 name whether the signal is coming from proof cleanup, wrapper/session teardown,
 or a separate watcher.
+Live run `20260528T223728Z-ghostty` then got past fresh launch and native
+screen-copy prompt readiness, typed the proof text, failed native and bulk
+System Events prompt typing, and received TERM during paced System Events
+typing. A later overlapping force attempt, `20260528T223936Z-ghostty`, showed
+the new signal diagnostics working at startup and named the active lock owner,
+but it also exposed a wrapper bug: `start --force` could start another run while
+an older active detached proof was still holding the smoke lock. The wrapper now
+enumerates all active detached Ghostty runs under the proof root and stops them
+before launching a forced replacement.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -964,11 +973,17 @@ incomplete because the native screen-copy fallback only ran for `textNodes=0`
 failures. Typed Ghostty prompt readiness now lets a title-scoped native
 `write_screen_file:copy,plain` proof certify the exact stripped prompt text on
 any AX failure, while the empty-prompt path still requires the older
-`textNodes=0` guard. `./script/real_app_smoke_self_test.sh` and
+`textNodes=0` guard. Rerun `20260528T223728Z-ghostty` proved that was still not
+enough because the screen-copy check stayed quiet while SteadyType continued to
+log the full typed prompt length. The harness now has a second typed-readiness
+fallback that accepts SteadyType's privacy-safe terminal prompt-anchor
+diagnostic only when it appears after the typing trigger and reports both
+`beforeChars` and `promptLineInputChars` equal to the proof text length.
+`./script/real_app_smoke_self_test.sh` and
 `./script/claude_code_ghostty_detached_proof_self_test.sh` pass for the new
-guard. App coverage stays at `83`; the next live proof should rerun the bounded
-detached Ghostty lane and should fail or pass on suggestion/key delivery rather
-than on a false typed-prompt readiness miss.
+guards. App coverage stays at `83`; the next live proof should rerun the
+bounded detached Ghostty lane and should fail or pass on suggestion/key delivery
+rather than on a false typed-prompt readiness miss.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

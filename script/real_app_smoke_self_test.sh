@@ -3400,6 +3400,7 @@ for expected in (
     'if prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait',
     'prompt_wait_status=$?',
     'run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output" "$expected_prompt_text"',
+    'run_claude_code_ghostty_prompt_anchor_diagnostics_probe "$proof_text"',
     'accepted native screen-copy typed prompt readiness after AX miss',
     "return \"$prompt_wait_status\"",
 ):
@@ -3415,6 +3416,20 @@ for expected in (
 ):
     if expected not in screen_copy_block:
         raise SystemExit(f"missing typed prompt screen-copy guard: {expected}")
+anchor_block = source[
+    source.index("run_claude_code_ghostty_prompt_anchor_diagnostics_probe()"):
+    source.index("\nmark_claude_code_ghostty_proof_window_title()", source.index("run_claude_code_ghostty_prompt_anchor_diagnostics_probe()"))
+]
+for expected in (
+    'CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE',
+    'claude-code-terminal-host-proof-direct-prompt-anchor-used',
+    'beforeChars=',
+    'promptLineInputChars=',
+    'app=com.anthropic.claude-code',
+    'host=com.mitchellh.ghostty',
+):
+    if expected not in anchor_block:
+        raise SystemExit(f"missing Ghostty typed prompt anchor fallback guard: {expected}")
 PY
 then
   echo "real app smoke self-test expected typed Ghostty prompt readiness to fall back to exact native screen-copy proof after an AX miss" >&2

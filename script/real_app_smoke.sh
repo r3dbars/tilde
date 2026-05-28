@@ -10485,6 +10485,43 @@ APPLESCRIPT
   [[ "$screen_ready" == "true" ]]
 }
 
+run_claude_code_ghostty_prompt_anchor_diagnostics_probe() {
+  local proof_text="$1"
+  local start_line="${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}"
+  local expected_chars matched_line
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -f "$LOG_PATH" ]] || return 1
+  [[ "$start_line" =~ ^[0-9]+$ ]] || start_line=0
+  expected_chars="${#proof_text}"
+  ((expected_chars > 0)) || return 1
+
+  matched_line="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk \
+      -v start="$start_line" \
+      -v expected="$expected_chars" '
+        index($0, "claude-code-terminal-host-proof-direct-prompt-anchor-used") &&
+        index($0, "app=com.anthropic.claude-code") &&
+        index($0, "host=com.mitchellh.ghostty") &&
+        $0 ~ ("beforeChars=" expected "([^0-9]|$)") &&
+        $0 ~ ("promptLineInputChars=" expected "([^0-9]|$)") {
+          candidate = NR + start
+        }
+        END {
+          if (candidate != "") {
+            print candidate
+          }
+        }
+      ' 2>/dev/null || true)"
+
+  if [[ -n "$matched_line" ]]; then
+    echo "Claude Code Ghostty proof accepted terminal prompt-anchor typed readiness at diagnostics line $matched_line (chars=$expected_chars)." >&2
+    return 0
+  fi
+
+  return 1
+}
+
 mark_claude_code_ghostty_proof_window_title() {
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
   [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
@@ -11569,6 +11606,11 @@ assert_claude_code_terminal_prompt_ready() {
      [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
      run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output" "$expected_prompt_text"; then
     echo "Claude Code Ghostty proof accepted native screen-copy typed prompt readiness after AX miss." >&2
+    return 0
+  fi
+  if ((prompt_wait_status != 0)) &&
+     [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+     run_claude_code_ghostty_prompt_anchor_diagnostics_probe "$proof_text"; then
     return 0
   fi
   if ((prompt_wait_status != 0)); then
