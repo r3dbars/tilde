@@ -2584,9 +2584,11 @@ if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'let tapArgument = CommandLine.arguments.count == 3 ? CommandLine.arguments[2] : "hid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'tap = .cgSessionEventTap' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'helper is not warm; refusing to compile on the hot accept path.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER_BUILD_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_background_process "$swiftc_pid" "$build_timeout_seconds" "CGEvent keypress helper compile"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyDown.flags = []' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyUp.flags = []' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through fresh CGEvents with HID and session tap support" >&2
+  echo "real app smoke self-test expected Terminal-host Claude Code proof to press Tab through timeout-bounded fresh CGEvents with HID and session tap support" >&2
   exit 1
 fi
 if ! grep -F 'warm_claude_code_terminal_hot_accept_helpers()' script/real_app_smoke.sh >/dev/null ||
@@ -2598,8 +2600,10 @@ fi
 if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadytype-cgevent-text-v1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'keyboardSetUnicodeString' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'CGEventSource(stateID: .hidSystemState)' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof typing to post Unicode text through fresh HID CGEvents" >&2
+   ! grep -F 'CGEventSource(stateID: .hidSystemState)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER_BUILD_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_background_process "$swiftc_pid" "$build_timeout_seconds" "CGEvent text helper compile"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof typing to post Unicode text through timeout-bounded fresh HID CGEvents" >&2
   exit 1
 fi
 if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||

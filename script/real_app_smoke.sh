@@ -3428,7 +3428,7 @@ cgevent_keypress_helper_path() {
 }
 
 ensure_cgevent_keypress_helper() {
-  local helper source
+  local helper source swiftc_pid build_timeout_seconds
   helper="$(cgevent_keypress_helper_path)"
   if [[ -x "$helper" ]]; then
     return 0
@@ -3469,7 +3469,15 @@ usleep(20_000)
 keyUp.post(tap: tap)
 SWIFT
 
-  if ! swiftc "$source" -o "$helper"; then
+  build_timeout_seconds="${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER_BUILD_TIMEOUT_SECONDS:-8}"
+  build_timeout_seconds="${build_timeout_seconds%%.*}"
+  if ! [[ "$build_timeout_seconds" =~ ^[0-9]+$ ]] || ((build_timeout_seconds < 1)); then
+    build_timeout_seconds=8
+  fi
+
+  swiftc "$source" -o "$helper" &
+  swiftc_pid="$!"
+  if ! wait_for_background_process "$swiftc_pid" "$build_timeout_seconds" "CGEvent keypress helper compile"; then
     rm -f "$source" "$helper" >/dev/null 2>&1 || true
     return 1
   fi
@@ -3510,7 +3518,7 @@ cgevent_text_helper_path() {
 }
 
 ensure_cgevent_text_helper() {
-  local helper source
+  local helper source swiftc_pid build_timeout_seconds
   helper="$(cgevent_text_helper_path)"
   if [[ -x "$helper" ]]; then
     return 0
@@ -3550,7 +3558,15 @@ for character in text {
 }
 SWIFT
 
-  if ! swiftc "$source" -o "$helper"; then
+  build_timeout_seconds="${AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER_BUILD_TIMEOUT_SECONDS:-8}"
+  build_timeout_seconds="${build_timeout_seconds%%.*}"
+  if ! [[ "$build_timeout_seconds" =~ ^[0-9]+$ ]] || ((build_timeout_seconds < 1)); then
+    build_timeout_seconds=8
+  fi
+
+  swiftc "$source" -o "$helper" &
+  swiftc_pid="$!"
+  if ! wait_for_background_process "$swiftc_pid" "$build_timeout_seconds" "CGEvent text helper compile"; then
     rm -f "$source" "$helper" >/dev/null 2>&1 || true
     return 1
   fi
