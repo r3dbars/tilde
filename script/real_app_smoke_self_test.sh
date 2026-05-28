@@ -1005,6 +1005,8 @@ if drain_source > prefix_verify_source:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must drain native text before prefix verification")
 for env_key in [
     "AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION",
+    "AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS",
+    "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER",
     "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS",
     "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE",
@@ -3007,6 +3009,12 @@ if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
   exit 1
 fi
 if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'try_steadytype_proof_only_accept_next_word_driver()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'proof-only-accept-command-result' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof using SteadyType proof-only accept command after $reason.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'proof-only-driver-enabled' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'probe_claude_code_terminal_host_key_capture()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'probing CGEvent session key capture with non-mutating Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent session key capture probe produced no diagnostic; retrying with HID Shift.' script/real_app_smoke.sh >/dev/null ||
@@ -3083,7 +3091,8 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'settle_claude_code_terminal_proof_focus "session key-capture probe" "$focus_seconds"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid after CGEvent HID Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
-   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /probe_claude_code_terminal_host_key_capture "\$host_name" \|\| return 1/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER/ { saw_driver_guard = 1 } in_fn && saw_driver_guard && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "proof-only-driver-enabled"/ { saw_driver_call = 1 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1; if (saw_driver_call) found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1 } in_fn && saw_probe_guard && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "key-capture-probe-miss"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /press_key_code_cgevent_with_timeout/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /"session"/ { saw_session = 1 } in_fn && saw_session && /"hid"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /wait_for_log_fields_optional/ { saw_probe = 1 } in_fn && saw_probe && /key code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
@@ -3979,6 +3988,18 @@ if ! awk '
   exit 1
 fi
 if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN/ && /\!= "1"/ { saw_pretrigger_guard = 1 }
+  in_smoke && /relaxed_suggestion_start_line="\$start_line"/ { saw_relaxed_start = 1 }
+  in_smoke && /CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN/ && /== "1"/ { saw_probe_ran_branch = 1 }
+  in_smoke && /relaxed_suggestion_start_line="\$suggestion_start_line"/ { saw_current_floor = 1 }
+  END { exit (saw_pretrigger_guard && saw_relaxed_start && saw_probe_ran_branch && saw_current_floor) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty suggestion fallback to ignore pre-probe suggestions after the pre-accept mutation probe runs" >&2
+  exit 1
+fi
+if ! awk '
   /run_claude_code_ghostty_pre_accept_external_mutation_probe\(\)/ { in_helper = 1 }
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE/ { saw_gate = 1 }
@@ -3995,15 +4016,18 @@ if ! awk '
   /run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe\(\)/ { in_helper = 1 }
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE/ { saw_gate = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER/ { saw_proof_only_driver = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_TAB_PROBE/ { saw_proof_only_opt_in = 1 }
+  in_helper && /post-Tab\/pre-insert external mutability probe skipped for proof-only accept driver/ { saw_proof_only_skip = 1 }
   in_helper && /wait_for_log_fields_optional/ { saw_schedule_wait = 1 }
   in_helper && /stage=scheduled/ { saw_schedule = 1 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_PROBE/ { saw_native_gate = 1 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_PROBE/ { saw_system_events_gate = 1 }
   in_helper && /type_claude_code_terminal_ghostty_native_text/ { saw_native = 1 }
   in_helper && /type_claude_code_terminal_raw_smoke_text/ { saw_system_events = 1 }
-  END { exit (saw_gate && saw_schedule_wait && saw_schedule && saw_native_gate && saw_system_events_gate && saw_native && saw_system_events) ? 0 : 1 }
+  END { exit (saw_gate && saw_proof_only_driver && saw_proof_only_opt_in && saw_proof_only_skip && saw_schedule_wait && saw_schedule && saw_native_gate && saw_system_events_gate && saw_native && saw_system_events) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty post-Tab/pre-insert comparator to be opt-in, wait for the deferred schedule, and compare native text with System Events" >&2
+  echo "real app smoke self-test expected Ghostty post-Tab/pre-insert comparator to be opt-in, skip proof-only driver races by default, wait for the deferred schedule, and compare native text with System Events" >&2
   exit 1
 fi
 if ! awk '
