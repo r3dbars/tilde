@@ -193,6 +193,42 @@ final class SuggestionOrchestrator {
         currentFieldIdentity: FocusedFieldIdentity?,
         hasVisibleSuggestion: Bool
     ) -> Bool {
+        shouldKeepVisibleSuggestionForSameLiveRequest(
+            suggestionID: suggestionID,
+            currentSuggestionID: currentSuggestionID,
+            ticket: ticket,
+            fieldIdentity: fieldIdentity,
+            currentFieldIdentity: currentFieldIdentity,
+            hasVisibleSuggestion: hasVisibleSuggestion
+        )
+    }
+
+    func shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+        suggestionID: String,
+        currentSuggestionID: String?,
+        ticket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
+        shouldKeepVisibleSuggestionForSameLiveRequest(
+            suggestionID: suggestionID,
+            currentSuggestionID: currentSuggestionID,
+            ticket: ticket,
+            fieldIdentity: fieldIdentity,
+            currentFieldIdentity: currentFieldIdentity,
+            hasVisibleSuggestion: hasVisibleSuggestion
+        )
+    }
+
+    private func shouldKeepVisibleSuggestionForSameLiveRequest(
+        suggestionID: String,
+        currentSuggestionID: String?,
+        ticket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
         hasVisibleSuggestion
             && currentSuggestionID == suggestionID
             && allows(ticket, fieldIdentity: fieldIdentity, currentFieldIdentity: currentFieldIdentity)

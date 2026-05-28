@@ -79,6 +79,16 @@ public struct CommonPhraseContinuationPrior: Equatable, Sendable {
         CommonPhraseContinuationPrior(contextSuffix: "what makes this useful is", continuation: "getting the words right", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "when this feels magical it", continuation: "knows the next phrase", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "if i am writing fast i", continuation: "want help finishing thoughts", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the difference is", continuation: "whether it feels magical", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "what would make me install it is", continuation: "predicting my exact next words", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "this breaks trust when", continuation: "it appears in the wrong field", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the reach test is", continuation: "whether i keep using it", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "i would miss it if", continuation: "it disappeared tomorrow", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the fastest version is", continuation: "already waiting with the phrase", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "when suggestions are wrong they", continuation: "break trust immediately", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the daily driver bar is", continuation: "would i miss it tomorrow", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "i should be able to", continuation: "keep typing without thinking", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "a useful autocomplete should", continuation: "finish the thought in motion", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the most important thing is to", continuation: "keep the scope small", score: 0.26),
         CommonPhraseContinuationPrior(contextSuffix: "i am trying to", continuation: "figure out how to", score: 0.26),
         CommonPhraseContinuationPrior(contextSuffix: "this sentence should continue", continuation: "without sounding too formal", score: 0.26),
@@ -389,6 +399,21 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
         if hasSuffix(["the", "next", "pass", "should"], in: words) {
             return intentCandidate("writing-flow-next-pass", "make the point clearer")
+        }
+        if hasSuffix(["the", "thing", "i", "keep", "missing", "is"], in: words) {
+            return intentCandidate("writing-flow-thing-i-keep-missing", "the shape of the problem")
+        }
+        if hasSuffix(["what", "i", "need", "next", "is"], in: words) {
+            return intentCandidate("writing-flow-what-i-need-next", "a clearer path forward")
+        }
+        if hasSuffix(["the", "part", "that", "matters", "is"], in: words) {
+            return intentCandidate("writing-flow-part-that-matters", "where the user gets stuck")
+        }
+        if hasSuffix(["a", "better", "way", "to", "say", "this", "is"], in: words) {
+            return intentCandidate("writing-flow-better-way-to-say-this", "keep it simple and direct")
+        }
+        if hasSuffix(["the", "tradeoff", "is"], in: words) {
+            return intentCandidate("writing-flow-tradeoff-is", "speed without losing trust")
         }
 
         return nil

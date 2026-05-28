@@ -6852,6 +6852,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         var fastPhraseFallbackMetadata: [String: String] = [:]
+        var didPresentFastPhraseFallback = false
         if requestMode == .phraseContinuation,
            !disablesFastPhraseFallbackForProof {
             let allowsClaudeCodeProofPromptPrediction =
@@ -6983,7 +6984,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         candidateSelectionMetadata: fastPresentationMetadata,
                         refreshBeforePresenting: false
                     )
-                    return
+                    didPresentFastPhraseFallback = suggestionSession.hasVisibleSuggestion
+                        && currentSuggestionID == suggestionID
+                    fastPhraseFallbackMetadata = [
+                        "fastPhraseFallbackChecked": "true",
+                        "fastPhraseFallbackOutcome": didPresentFastPhraseFallback
+                            ? "shown-then-model"
+                            : "presentation-blocked-model-only",
+                        "fastPhraseFallbackVisibleWords": String(fastSuggestion.visibleWordCount)
+                    ]
+                    .merging(fastPresentationMetadata) { current, _ in current }
+                    if didPresentFastPhraseFallback {
+                        setSuggestionDecision("Shown: instant phrase; refining with model")
+                    }
                 }
             }
 
@@ -7009,6 +7022,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
+            if didPresentFastPhraseFallback {
+                let metadata = [
+                    "renderMode": renderMode.rawValue,
+                    "reason": "typing-burst-model-continuation-kept-fast-phrase"
+                ]
+                .merging(fieldClassification.traceMetadata) { current, _ in current }
+                .merging(typingBurstMetadata) { current, _ in current }
+                .merging(fastPhraseFallbackMetadata) { current, _ in current }
+                .merging(requestMetadata) { current, _ in current }
+                setSuggestionDecision("Shown: instant phrase while typing fast")
+                showFieldStatusIndicator(.shown, context: context)
+                RawAutocompleteTraceLog.shared.record(
+                    type: .suggestionSuppressed,
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentityDescription,
+                    requestMode: request.mode.rawValue,
+                    triggerReason: "typing-burst-policy",
+                    textBeforeCursor: request.textBeforeCursor,
+                    textAfterCursor: request.textAfterCursor,
+                    reason: "typing-burst-model-continuation-kept-fast-phrase",
+                    metadata: metadata
+                )
+                recordSuggestionEvent(
+                    "suggestion-blocked",
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+                repositionVisibleSuggestion(context: context, profile: profile)
+                updateKeyboardEventTapSnapshot()
+                return
+            }
+
             let metadata = [
                 "renderMode": renderMode.rawValue,
                 "reason": "typing-burst-model-continuation"
@@ -7278,6 +7325,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await MainActor.run {
                     self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
                     self.clearCompletedSuggestionTask(suggestionID: suggestionID)
+                    if self.suggestionOrchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+                        suggestionID: suggestionID,
+                        currentSuggestionID: self.currentSuggestionID,
+                        ticket: requestTicket,
+                        fieldIdentity: fieldIdentity,
+                        currentFieldIdentity: self.currentFieldIdentity,
+                        hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
+                    ) {
+                        self.setSuggestionDecision("Shown: kept instant phrase after model error")
+                        self.repositionVisibleSuggestion(context: context, profile: profile)
+                        self.updateKeyboardEventTapSnapshot()
+                        return
+                    }
                     guard self.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
                         ticket: requestTicket,
                         failedRequestFieldIdentity: fieldIdentity,
