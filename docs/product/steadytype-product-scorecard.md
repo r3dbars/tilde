@@ -725,6 +725,19 @@ post-fail external probes did not mutate after prompt-row refocus. App coverage
 stays at `83`; Ghostty is still unsupported until a detached proof exits `0`
 with verified one-word no-submit insertion.
 
+The latest Ghostty comparator added one more negative proof without changing the
+score. `20260528T185553Z-ghostty` ran with
+`AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE=1`
+and reached deferred Tab accept on attempt 2. Before the prompt-row click,
+SteadyType posted `ghosttyPrePromptFocusBundleSystemEventsRawKeystroke` at
+diagnostics line `999928`; it exited `0` but verified `false`, and the
+unchanged-prompt baseline verified `true` at line `999929`. The regular
+prompt-click raw System Events rung, focused System Events, send-key, pasteboard,
+and native Ghostty follow-ups also no-oped against the same original prompt, and
+the proof failed closed at lines `999973`-`999976`. App coverage stays at `83`;
+Ghostty is still unsupported until a detached proof exits `0` with verified
+one-word no-submit insertion.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as
