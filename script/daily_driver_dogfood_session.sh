@@ -689,6 +689,10 @@ def latency_milliseconds(event):
     return value if value >= 0 else None
 
 
+def event_reason(event):
+    return str(event.get("reason") or metadata(event).get("reason") or "").strip()
+
+
 def acceptance_key(line_number, event):
     event_metadata = metadata(event)
     return str(event_metadata.get("acceptanceID") or suggestion_key(line_number, event))
@@ -783,7 +787,7 @@ suppressed_events = [
     event for _, event in matched if event.get("type") == "suggestionSuppressed"
 ]
 suppressed_reason_counts = Counter(
-    str(event.get("reason") or metadata(event).get("reason") or "unknown").strip() or "unknown"
+    event_reason(event) or "unknown"
     for event in suppressed_events
 )
 suppressed_trigger_counts = Counter(
@@ -823,14 +827,20 @@ model_backed_sources = {"app-model-result", "model-candidate-ranker"}
 word_fallback_sources = {"fast-word-completion", "predictive-word-fallback"}
 instant_phrase_shown = presented_source_counts.get("predictive-phrase-fallback", 0)
 instant_phrase_presented = [
-    event
-    for _, event in matched
+    (line_number, event)
+    for line_number, event in matched
     if event.get("type") == "suggestionPresented"
     and selection_source(event) == "predictive-phrase-fallback"
 ]
+instant_phrase_first_line_by_key = {}
+for line_number, event in instant_phrase_presented:
+    key = suggestion_key(line_number, event)
+    instant_phrase_first_line_by_key.setdefault(key, line_number)
+instant_phrase_keys = set(instant_phrase_first_line_by_key)
+instant_phrase_shown = len(instant_phrase_keys)
 instant_phrase_latencies = [
     latency
-    for event in instant_phrase_presented
+    for _, event in instant_phrase_presented
     for latency in [latency_milliseconds(event)]
     if latency is not None
 ]
@@ -839,10 +849,62 @@ instant_phrase_max_latency = max(instant_phrase_latencies) if instant_phrase_lat
 instant_phrase_learned_restraint = sum(
     1
     for event in suppressed_events
-    if str(event.get("reason") or metadata(event).get("reason") or "").strip()
-    == "fast-phrase-learning-restraint"
+    if event_reason(event) == "fast-phrase-learning-restraint"
     and selection_source(event) == "predictive-phrase-fallback"
 )
+instant_phrase_model_result_keys = set()
+instant_phrase_model_replacement_keys = set()
+instant_phrase_typing_burst_preserved_keys = set()
+instant_phrase_empty_model_preserved_keys = set()
+instant_phrase_late_suppression_preserved_keys = set()
+instant_phrase_outcome_by_key = {
+    key: "shown-then-model" for key in instant_phrase_keys
+}
+for line_number, event in matched:
+    key = suggestion_key(line_number, event)
+    event_metadata = metadata(event)
+    outcome = str(event_metadata.get("fastPhraseFallbackOutcome") or "").strip()
+    if outcome:
+        instant_phrase_outcome_by_key.setdefault(key, outcome)
+
+    reason = event_reason(event)
+    if (
+        event.get("type") == "suggestionSuppressed"
+        and selection_source(event) == "predictive-phrase-fallback"
+        and reason
+    ):
+        instant_phrase_outcome_by_key.setdefault(key, reason)
+
+    first_line = instant_phrase_first_line_by_key.get(key)
+    if first_line is None or line_number <= first_line:
+        continue
+
+    if event.get("type") == "modelResult" and str(event.get("triggerReason") or "").strip() == "model-result":
+        instant_phrase_model_result_keys.add(key)
+    if (
+        event.get("type") == "suggestionPresented"
+        and selection_source(event) in model_backed_sources
+        and str(event.get("triggerReason") or metadata(event).get("triggerReason") or "").strip()
+        == "model-result"
+    ):
+        instant_phrase_model_replacement_keys.add(key)
+    if (
+        event.get("type") == "suggestionSuppressed"
+        and reason == "typing-burst-model-continuation-kept-fast-phrase"
+    ):
+        instant_phrase_typing_burst_preserved_keys.add(key)
+    if (
+        event.get("type") == "suggestionSuppressed"
+        and reason == "empty-suggestion"
+        and truthy(event_metadata.get("keptVisibleStreamingSuggestion"))
+    ):
+        instant_phrase_empty_model_preserved_keys.add(key)
+    if (
+        event.get("type") == "suggestionSuppressed"
+        and truthy(event_metadata.get("keptVisibleSuggestionAfterLateSuppression"))
+    ):
+        instant_phrase_late_suppression_preserved_keys.add(key)
+instant_phrase_outcome_counts = Counter(instant_phrase_outcome_by_key.values())
 model_backed_shown = sum(
     count
     for source, count in presented_source_counts.items()
@@ -964,6 +1026,18 @@ else:
     )
 print(f"Instant phrase latency samples missing: {instant_phrase_missing_latency}")
 print(f"Instant phrase learned restraint: {instant_phrase_learned_restraint}")
+print("Instant phrase model refinement:")
+print(f"- model follow-up results: {len(instant_phrase_model_result_keys)}")
+print(f"- model replacements shown: {len(instant_phrase_model_replacement_keys)}")
+print(f"- kept visible during typing burst: {len(instant_phrase_typing_burst_preserved_keys)}")
+print(f"- kept visible after empty model: {len(instant_phrase_empty_model_preserved_keys)}")
+print(f"- kept visible after late suppression: {len(instant_phrase_late_suppression_preserved_keys)}")
+print("Instant phrase outcomes:")
+if instant_phrase_outcome_counts:
+    for outcome, count in instant_phrase_outcome_counts.most_common(8):
+        print(f"- {outcome}: {count}")
+else:
+    print("- none: 0")
 print(f"Model-backed shown: {model_backed_shown}")
 print(f"Word fallback shown: {word_fallback_shown}")
 print(f"Unknown source shown: {unknown_source_shown}")
