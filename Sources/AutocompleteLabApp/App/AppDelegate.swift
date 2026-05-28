@@ -9917,8 +9917,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard shouldContinueGhosttyFastInsertion(before: "ghosttyNativePrefixFinalKeyText") else {
                     return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
                 }
+                let ghosttyNativePrefixFinalKeyAcceptedPrefixText = String(acceptedText.dropLast())
+                let ghosttyNativePrefixExpectedProofInputText = lastTextSnapshot.textBeforeCursor
+                    + ghosttyNativePrefixFinalKeyAcceptedPrefixText
+                    + lastTextSnapshot.textAfterCursor
                 let ghosttyNativePrefixFinalKeyOutcome = insertGhosttyTerminalHostProofNativePrefixFinalKeyText(
                     acceptedText,
+                    prefixExpectedProofInputText: ghosttyNativePrefixExpectedProofInputText,
                     expectedProofInputText: expectedProofInputText,
                     originalProofInputText: originalProofInputText,
                     frontmostApp: frontmostApp,
@@ -10815,6 +10820,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func insertGhosttyTerminalHostProofNativePrefixFinalKeyText(
         _ acceptedText: String,
+        prefixExpectedProofInputText: String,
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
@@ -10988,6 +10994,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 false,
                 verifyOriginalPromptStillUnchanged(
                     reason: "ghostty-native-prefix-final-key-prefix-unverified-mutated-input"
+                )
+            )
+        }
+
+        let prefixVerified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: prefixExpectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 8
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": source,
+                "stage": "prefix-verified",
+                "verified": String(prefixVerified)
+            ]
+        )
+        guard prefixVerified else {
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-prefix-unverified-noop"
                 )
             )
         }
