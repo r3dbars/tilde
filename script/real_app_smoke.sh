@@ -3437,7 +3437,12 @@ prepare_obsidian_pane_variant_if_needed() {
     return 0
   fi
 
-  osascript <<'APPLESCRIPT' >/dev/null
+  focus_obsidian_visible_tail_line
+  set_obsidian_caret_to_value_end
+
+  local attempt
+  for attempt in 1 2 3; do
+    osascript <<'APPLESCRIPT' >/dev/null
 tell application "System Events"
   tell application process "Obsidian"
     set frontmost to true
@@ -3445,14 +3450,18 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
-  sleep 0.8
-  activate_obsidian_for_smoke
+    sleep 0.8
+    activate_obsidian_for_smoke
 
-  pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
-  if (( pane_count < 2 )); then
-    echo "Could not verify two Obsidian editor panes for pane proof." >&2
-    exit 3
-  fi
+    pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+    if (( pane_count >= 2 )); then
+      return 0
+    fi
+    focus_obsidian_visible_tail_line || true
+  done
+
+  echo "Could not verify two Obsidian editor panes for pane proof; marker text area count=$pane_count." >&2
+  exit 3
 }
 
 restore_obsidian_single_pane_if_needed() {

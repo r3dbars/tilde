@@ -1901,6 +1901,12 @@ if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smo
   echo "real app smoke self-test expected Obsidian long-note proof to allow viewport-only CodeMirror AX counts while requiring afterChars=0" >&2
   exit 1
 fi
+if ! grep -F 'for attempt in 1 2 3; do' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'focus_obsidian_visible_tail_line' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'marker text area count=$pane_count' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian pane setup to focus the proof editor, retry split-right, and report the marker pane count on failure" >&2
+  exit 1
+fi
 
 python3 - <<'PY'
 from pathlib import Path
