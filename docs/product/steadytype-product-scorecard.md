@@ -684,6 +684,18 @@ and the proof log's post-fail external native insertion probe still did not
 verify prompt mutation. App coverage stays at `83`, but the red Ghostty decision
 is now backed by multiple Ghostty-native screen reads.
 
+The current harness comparator now tests whether the same failed context is
+still externally mutable after app-owned insertion fails closed. `20260528T180004Z-ghostty`
+reached prompt-row suggestion line `967039`, repeated the classified no-op proof
+for focused action at lines `967919`-`967921`, paste action at lines
+`967923`-`967925`, and front-window input at lines `967941`-`967943`, then
+failed closed at lines `967944`-`967946`. The post-fail comparator typed one
+native Ghostty suffix and one System Events suffix without Enter; neither
+verified prompt mutation. App coverage stays at `83`, and the next blocker is
+now sharper: prove why the disposable Ghostty prompt stops accepting external
+text after the fail-closed insertion cluster, or avoid entering that state with
+a different insertion architecture.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as

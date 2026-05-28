@@ -850,6 +850,18 @@ and the proof log's post-fail external native insertion probe still did not
 verify prompt mutation. Ghostty remains unsupported, but the no-op classification
 is now based on multiple Ghostty-native screen reads instead of one AX baseline.
 
+The post-fail comparator now checks both external native Ghostty input and
+external System Events typing after app-owned insertion has failed closed. The
+fresh rerun `20260528T180004Z-ghostty` reached prompt-row suggestion line
+`967039`, then repeated the stricter native no-op proof: focused action at lines
+`967919`-`967921`, paste action plus screen-copy at lines `967923`-`967925`,
+front-window input plus screen-copy at lines `967941`-`967943`, and fail-closed
+insert at lines `967944`-`967946`. The proof log then typed one native suffix and
+one System Events suffix without Enter; neither verified prompt mutation. That
+means the current failed context is not merely an app-owned transport mismatch;
+after SteadyType fails closed, the harness can no longer prove external Ghostty
+input mutates that same disposable prompt either.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

@@ -3653,12 +3653,14 @@ if ! awk '
   /run_claude_code_ghostty_post_fail_external_insertion_probe\(\)/ { in_helper = 1 }
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_PROBE/ { saw_gate = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_PROBE/ { saw_system_events_gate = 1 }
   in_helper && /type_claude_code_terminal_ghostty_native_text/ { saw_native = 1 }
+  in_helper && /type_claude_code_terminal_raw_smoke_text/ { saw_system_events = 1 }
   in_helper && /try_claude_code_terminal_prompt_ready_quiet/ { saw_verify = 1 }
   in_helper && /without Enter/ { saw_no_enter_message = 1 }
-  END { exit (saw_gate && saw_native && saw_verify && saw_no_enter_message) ? 0 : 1 }
+  END { exit (saw_gate && saw_system_events_gate && saw_native && saw_system_events && saw_verify && saw_no_enter_message) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty post-fail comparator to be opt-in, use native text, verify the prompt, and avoid Enter" >&2
+  echo "real app smoke self-test expected Ghostty post-fail comparator to be opt-in, compare native text and System Events, verify the prompt, and avoid Enter" >&2
   exit 1
 fi
 if awk '
