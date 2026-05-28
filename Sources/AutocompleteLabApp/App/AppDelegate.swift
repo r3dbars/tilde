@@ -10378,6 +10378,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativeNoopClassified,
                     pasteActionVerified: ghosttyPasteActionOutcome.verified,
                     pasteActionSafeToContinue: ghosttyPasteActionOutcome.safeToContinue,
+                    pasteActionNativeNoopClassified: ghosttyPasteActionOutcome.nativeNoopClassified,
                     pasteboardVerified: ghosttyPasteboardOutcome.verified,
                     pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
                     bundledGhosttyInputTextHelperVerified: ghosttyBundledInputTextHelperOutcome.verified,
@@ -10386,6 +10387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     inProcessInputTextSafeToContinue: ghosttyInProcessInputTextOutcome.safeToContinue,
                     frontWindowInputTextVerified: ghosttyFrontWindowInputTextOutcome.verified,
                     frontWindowInputTextSafeToContinue: ghosttyFrontWindowInputTextOutcome.safeToContinue,
+                    frontWindowInputTextNativeNoopClassified: ghosttyFrontWindowInputTextOutcome.nativeNoopClassified,
                     promptStayedUnchanged: promptStayedUnchangedAfterInitialNoopCluster,
                     runsExtendedProbes: runsExtendedGhosttyInsertionProbes
                 )
@@ -11849,7 +11851,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile?,
         launchThroughShell: Bool = false
-    ) -> (verified: Bool, safeToContinue: Bool) {
+    ) -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool) {
         let source = launchThroughShell
             ? "ghosttyLoginShellFrontWindowInputText"
             : "ghosttyFrontWindowInputText"
@@ -11867,7 +11869,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
 
         let osascriptPath = "/usr/bin/osascript"
@@ -11881,7 +11883,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
 
         let shellPath = "/bin/zsh"
@@ -11896,7 +11898,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         let usesArgumentText = !launchThroughShell
@@ -11969,7 +11971,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(String(describing: error).prefix(160))
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         guard Self.waitForProcessExit(
@@ -11996,7 +11998,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "source": source
                     ]
                 )
-                return (false, false)
+                return (false, false, false)
             }
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
@@ -12021,7 +12023,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "verified": String(promptStayedUnchanged)
                 ]
             )
-            return (false, promptStayedUnchanged)
+            return (false, promptStayedUnchanged, false)
         }
 
         let stdoutText = String(
@@ -12046,7 +12048,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(stderrText.prefix(160))
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         guard stdoutText != "false" else {
@@ -12059,7 +12061,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         let verified = verifyClaudeCodeTerminalHostProofInsertion(
@@ -12080,7 +12082,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         if verified {
-            return (true, false)
+            return (true, false, true)
         }
 
         let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
@@ -12092,10 +12094,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             frontmostApp: frontmostApp
         )
         if screenCopyOutcome.verified {
-            return (true, false)
+            return (true, false, true)
         }
         guard screenCopyOutcome.safeToContinue else {
-            return (false, false)
+            return (false, false, false)
         }
 
         let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
@@ -12122,9 +12124,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": baselineSource
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
-        return (false, true)
+        return (
+            false,
+            true,
+            screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true
+        )
     }
 
     private func focusGhosttyTerminalHostProofPromptByClickIfAvailable(source: String) -> Bool {
@@ -12534,7 +12540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile?
-    ) -> (verified: Bool, safeToContinue: Bool) {
+    ) -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool) {
         let source = "ghosttyPerformActionPasteFromClipboard"
         let baselineSource = "ghosttyPerformActionPasteFromClipboardBaseline"
         guard !acceptedText.isEmpty,
@@ -12548,7 +12554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
 
         let osascriptPath = "/usr/bin/osascript"
@@ -12562,7 +12568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
 
         let pasteboard = NSPasteboard.general
@@ -12586,7 +12592,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
         let fallbackChangeCount = pasteboard.changeCount
 
@@ -12676,7 +12682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(String(describing: error).prefix(160))
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         guard Self.waitForProcessExit(
@@ -12707,7 +12713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             guard exitedAfterTerminate else {
-                return (false, false)
+                return (false, false, false)
             }
             let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: originalProofInputText,
@@ -12733,9 +12739,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "source": "ghosttyPerformActionPasteFromClipboardTimeoutBaseline"
                     ]
                 )
-                return (false, false)
+                return (false, false, false)
             }
-            return (false, true)
+            return (false, true, false)
         }
 
         let stdoutText = String(
@@ -12761,7 +12767,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(stderrText.prefix(160))
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         guard stdoutText != "false" else {
@@ -12775,7 +12781,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": source
                 ]
             )
-            return (false, true)
+            return (false, true, false)
         }
 
         let verified = verifyClaudeCodeTerminalHostProofInsertion(
@@ -12803,10 +12809,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 originalItems: originalItems,
                 delaySeconds: 0.35
             )
-            return (true, false)
+            return (true, false, true)
         }
 
         restoreOriginalPasteboard()
+        let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+            source: "ghosttyPerformActionPasteFromClipboardScreenCopy",
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp
+        )
+        if screenCopyOutcome.verified {
+            return (true, false, true)
+        }
+        guard screenCopyOutcome.safeToContinue else {
+            return (false, false, false)
+        }
+
         let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
             expectedProofInputText: originalProofInputText,
             frontmostApp: frontmostApp,
@@ -12831,9 +12850,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "source": baselineSource
                 ]
             )
-            return (false, false)
+            return (false, false, false)
         }
-        return (false, true)
+        return (
+            false,
+            true,
+            screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true
+        )
     }
 
     private func insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke(

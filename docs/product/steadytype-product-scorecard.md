@@ -671,6 +671,19 @@ action text at lines `964428`-`964430`, native paste at lines
 `964449`-`964451`, and fail-closed insert lines `964452`-`964454`. App coverage
 stays at `83` until Ghostty produces a verified one-word no-submit insertion.
 
+The follow-up no-op trust pass made the default Ghostty fail-fast stricter:
+focused native action, native paste action, and front-window native input must
+now all carry Ghostty-native screen-copy no-op classification before the initial
+cluster can fail closed. `20260528T175216Z-ghostty` reached prompt-row
+suggestion line `965236`, retried Tab through System Events after CGEvent Tab
+produced no key diagnostic, then recorded `nativeNoopClassified=true` for
+focused native action at lines `966289`-`966291`, paste action screen-copy at
+lines `966293`-`966295`, and front-window input screen-copy at lines
+`966311`-`966313`. The stricter gate failed closed at lines `966314`-`966316`,
+and the proof log's post-fail external native insertion probe still did not
+verify prompt mutation. App coverage stays at `83`, but the red Ghostty decision
+is now backed by multiple Ghostty-native screen reads.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as
