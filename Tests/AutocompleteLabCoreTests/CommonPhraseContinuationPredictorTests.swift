@@ -250,6 +250,43 @@ struct CommonPhraseContinuationPredictorTests {
         ).suppressionReason == "unsupported-profile")
     }
 
+    @Test("Predicts short reply phrases for messaging and email shapes")
+    func predictsShortReplyPhrasesForMessagingAndEmailShapes() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Maya: Can you review this?\nSounds good", .casualChat, " to me", "intent-reply-sounds-good"),
+            ("Reply draft\nThat makes sense", .email, " to me", "intent-reply-that-makes-sense"),
+            ("Jordan: Could you check the note?\nI can", .casualChat, " take a look", "intent-reply-take-a-look"),
+            ("Quick reply\nLet me", .email, " take a look", "intent-reply-take-a-look"),
+            ("Thread\nHappy to", .docsProse, " take a look", "intent-reply-take-a-look"),
+            ("Thanks for", .email, " sending this over", "intent-reply-thanks-for"),
+            ("Meeting move?\nYes please", .casualChat, " that works for me", "intent-reply-yes-please"),
+            ("No worries", .casualChat, " at all", "intent-reply-no-worries")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 2)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "Prompt\nSounds good",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Search\nThanks for",
+            behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+    }
+
     @Test("Predicts Obsidian markdown note labels instantly")
     func predictsObsidianMarkdownNoteLabelsInstantly() {
         let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [

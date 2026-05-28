@@ -265,6 +265,10 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return dailyDriverFeelingCandidate
         }
 
+        if let replyCandidate = messageReplyCandidate(for: words) {
+            return replyCandidate
+        }
+
         return intentPatternCandidate(for: words)
     }
 
@@ -394,6 +398,36 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             ["feels", "heavy"]
         ], in: words) {
             return intentCandidate("daily-driver-feels-slow", "enough to break flow")
+        }
+
+        return nil
+    }
+
+    private func messageReplyCandidate(for words: [String]) -> CommonPhraseContinuationCandidate? {
+        guard words.count >= 2 else {
+            return nil
+        }
+
+        if hasSuffix(["sounds", "good"], in: words) {
+            return intentCandidate("reply-sounds-good", "to me")
+        }
+        if hasSuffix(["that", "makes", "sense"], in: words) {
+            return intentCandidate("reply-that-makes-sense", "to me")
+        }
+        if hasAnySuffix([["i", "can"], ["let", "me"], ["happy", "to"]], in: words) {
+            return intentCandidate("reply-take-a-look", "take a look")
+        }
+        if hasSuffix(["i", "can", "take"], in: words) {
+            return intentCandidate("reply-take-a-look", "a look")
+        }
+        if hasSuffix(["thanks", "for"], in: words) {
+            return intentCandidate("reply-thanks-for", "sending this over")
+        }
+        if hasSuffix(["yes", "please"], in: words) {
+            return intentCandidate("reply-yes-please", "that works for me")
+        }
+        if hasSuffix(["no", "worries"], in: words) {
+            return intentCandidate("reply-no-worries", "at all")
         }
 
         return nil
