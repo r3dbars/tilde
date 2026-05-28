@@ -11153,6 +11153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+            activate
         end tell
         delay 0.02
         tell application "System Events"
@@ -12020,6 +12021,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+            activate
         end tell
         delay 0.02
         tell application "System Events"
@@ -12349,6 +12351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             set targetTerminal to focused terminal of targetTab
             select tab targetTab
             focus targetTerminal
+            activate
         end tell
         delay 0.02
         tell application "System Events"
@@ -12657,6 +12660,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+            activate
         end tell
         delay 0.02
         tell application "System Events"
@@ -12963,6 +12967,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+            activate
         end tell
         delay 0.02
         tell application "System Events"
@@ -13266,6 +13271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activate window targetWindow
             select tab targetTab
             focus targetTerminal
+            activate
         end tell
         delay 0.02
         tell application "System Events"
