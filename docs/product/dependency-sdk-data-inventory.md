@@ -51,6 +51,11 @@ Expected absent bundle contents:
   adapters that use macOS Automation to insert accepted suggestion text into a
   supported prompt without submitting it.
 
+The app signature should include:
+
+- `com.apple.security.automation.apple-events`: required by hardened runtime
+  for the same opted-in terminal host Automation path.
+
 `Info.plist` should not contain:
 
 - camera permission

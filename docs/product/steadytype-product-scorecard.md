@@ -248,11 +248,19 @@ closed with `ghostty-fast-verified-insertion-failed`, `insert ... success=false`
 and deferred `stage=insert-failed` at lines `852754`-`852756`. Ghostty remains
 unsupported; the next real fix needs a new transport or permission shape, not
 another no-op rung.
-The app bundle and dependency inventory now declare and verify
-`NSAppleEventsUsageDescription` for opted-in terminal host Automation. This is
-permission hygiene for the next Ghostty transport attempt, not green support:
-`./script/check_app_bundle.sh` and `./script/check_dependency_inventory.sh`
-passed after the change, while the live Ghostty proof above still failed closed.
+The app bundle, release packaging, and dependency inventory now sign and verify
+both `NSAppleEventsUsageDescription` and the
+`com.apple.security.automation.apple-events` entitlement for opted-in terminal
+host Automation. This is permission hygiene for the next Ghostty transport
+attempt, not green support: `AUTOCOMPLETE_LAB_VERIFY_STABILITY_SECONDS=5
+./script/build_and_run.sh --verify`, `./script/check_app_bundle.sh`, and
+`./script/check_dependency_inventory.sh` passed after the change. The current
+detached entitled-app proof `20260528T051532Z-ghostty` still failed closed after
+finding a prompt-row suggestion at proof-log line `855905`, scheduling deferred
+Tab insertion at diagnostics lines `857001` and `857003`, and stopping on
+`ghostty-fast-insertion-budget-exceeded` plus `insert ... success=false` at
+diagnostics lines `857069` and `857071` before deferred `stage=insert-failed`
+at line `857072`.
 
 ## Scores
 

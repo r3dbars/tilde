@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/SteadyType.app"
+ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"
 ZIP_PATH="$DIST_DIR/SteadyType.zip"
 DMG_PATH="$DIST_DIR/SteadyType.dmg"
 PROOF_DIR="$DIST_DIR/release-proof"
@@ -343,7 +344,7 @@ package_existing_app() {
     exit 1
   fi
 
-  codesign --force --options runtime --timestamp --sign "$developer_id" "$APP_BUNDLE" >/dev/null
+  codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "$developer_id" "$APP_BUNDLE" >/dev/null
   ./script/check_app_bundle.sh --release "$APP_BUNDLE"
 
   mkdir -p "$PROOF_DIR"
