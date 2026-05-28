@@ -397,6 +397,52 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts guarded next-sentence phrases at sentence boundaries")
+    func predictsGuardedNextSentencePhrasesAtSentenceBoundaries() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Suggestions feel too timid.", .docsProse, " It should predict the next phrase", "intent-sentence-boundary-timid-suggestions"),
+            ("Placement keeps showing in the wrong field.", .docsProse, " That has to fail closed", "intent-sentence-boundary-wrong-field"),
+            ("Typing feels slow when suggestions lag.", .docsProse, " Speed has to feel invisible", "intent-sentence-boundary-speed"),
+            ("This would feel magical.", .notes, " It should know the next phrase", "intent-sentence-boundary-magic"),
+            ("The note is getting clearer.", .notes, " The next sentence should stay local", "intent-sentence-boundary-writing")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 5)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "Suggestions feel too timid. ",
+            behaviorProfileID: .docsProse
+        ).suppressionReason == "not-word-boundary")
+        #expect(predictor.selection(
+            for: "Email suggestions feel too timid.",
+            behaviorProfileID: .email
+        ).suppressionReason == "not-word-boundary")
+        #expect(predictor.selection(
+            for: "Prompt suggestions feel too timid.",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Search suggestions feel too timid.",
+            behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "let suggestion = value.",
+            behaviorProfileID: .coding
+        ).suppressionReason == "unsupported-profile")
+    }
+
     @Test("Blocks thinking-flow phrases in email chat prompt search form and code profiles")
     func blocksThinkingFlowPhrasesOutsideWritingSurfaces() {
         for profile in [

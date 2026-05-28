@@ -188,22 +188,6 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
 
         let trimmed = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
         let clampedMaxWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
-        guard let last = trimmed.last, last.isLetter || last.isNumber else {
-            if let candidate = markdownLabelCandidate(
-                for: trimmed,
-                behaviorProfileID: behaviorProfileID
-            ) {
-                return selection(for: candidate, maxVisibleWords: clampedMaxWords)
-            }
-
-            return CommonPhraseContinuationSelection(
-                suggestion: nil,
-                matchedContextSuffix: nil,
-                score: nil,
-                suppressionReason: "not-word-boundary"
-            )
-        }
-
         let context = normalizedPhrase(trimmed)
         let words = words(in: context)
         guard !context.isEmpty else {
@@ -212,6 +196,30 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
                 matchedContextSuffix: nil,
                 score: nil,
                 suppressionReason: "empty-context"
+            )
+        }
+
+        guard let last = trimmed.last, last.isLetter || last.isNumber else {
+            if let candidate = markdownLabelCandidate(
+                for: trimmed,
+                behaviorProfileID: behaviorProfileID
+            ) {
+                return selection(for: candidate, maxVisibleWords: clampedMaxWords)
+            }
+
+            if let sentenceCandidate = sentenceBoundaryCandidate(
+                for: textBeforeCursor,
+                words: words,
+                behaviorProfileID: behaviorProfileID
+            ) {
+                return selection(for: sentenceCandidate, maxVisibleWords: clampedMaxWords)
+            }
+
+            return CommonPhraseContinuationSelection(
+                suggestion: nil,
+                matchedContextSuffix: nil,
+                score: nil,
+                suppressionReason: "not-word-boundary"
             )
         }
 
@@ -414,6 +422,47 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
         if hasSuffix(["the", "tradeoff", "is"], in: words) {
             return intentCandidate("writing-flow-tradeoff-is", "speed without losing trust")
+        }
+
+        return nil
+    }
+
+    private func sentenceBoundaryCandidate(
+        for rawContext: String,
+        words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsWritingFlowPrediction(for: behaviorProfileID),
+              words.count >= 4,
+              rawContext.last?.isSentenceBoundary == true,
+              containsDailyDriverTopic(words) || containsWritingMotionTopic(words) || containsFeelingTopic(words) else {
+            return nil
+        }
+
+        if containsAny(["wrong"], in: words),
+           containsAny(["field", "fields"], in: words) {
+            return intentCandidate("sentence-boundary-wrong-field", "That has to fail closed")
+        }
+        if containsAny(["placement", "caret"], in: words),
+           containsAny(["wrong", "off", "weird", "breaks", "broken"], in: words) {
+            return intentCandidate("sentence-boundary-placement-trust", "The next fix is caret proof")
+        }
+        if containsAny(["timid", "generic", "dumb"], in: words),
+           containsAny(["suggestion", "suggestions", "autocomplete"], in: words) {
+            return intentCandidate("sentence-boundary-timid-suggestions", "It should predict the next phrase")
+        }
+        if containsAny(["slow", "late", "lag", "lags", "laggy"], in: words),
+           containsAny(["typing", "suggestion", "suggestions", "autocomplete"], in: words) {
+            return intentCandidate("sentence-boundary-speed", "Speed has to feel invisible")
+        }
+        if containsAny(["magical", "magic"], in: words) {
+            return intentCandidate("sentence-boundary-magic", "It should know the next phrase")
+        }
+        if containsAny(["trust", "trusted", "reliable"], in: words) {
+            return intentCandidate("sentence-boundary-trust", "The next step is proof")
+        }
+        if containsAny(["note", "notes", "draft", "writing"], in: words) {
+            return intentCandidate("sentence-boundary-writing", "The next sentence should stay local")
         }
 
         return nil
@@ -746,5 +795,11 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
     private func containsAny(_ candidates: [String], in words: [String]) -> Bool {
         let wordSet = Set(words)
         return candidates.contains { wordSet.contains($0) }
+    }
+}
+
+private extension Character {
+    var isSentenceBoundary: Bool {
+        [".", "!", "?"].contains(self)
     }
 }
