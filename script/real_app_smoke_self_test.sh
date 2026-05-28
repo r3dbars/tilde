@@ -2359,6 +2359,8 @@ if ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smo
 fi
 if ! grep -F "assert_codex_full_accept_shortcut_safe" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "keyboard_event_tap_active_since" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Codex full accept CGEvent backtick" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CODEX_FULL_ACCEPT_CGEVENT_BACKTICK_TIMEOUT_SECONDS" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "keyboard capture is not active; refusing to press accept-all" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "suggestion hid before accept-all; refusing to type the shortcut into Codex" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "decision=passthrough-unsupported" script/real_app_smoke.sh >/dev/null; then
@@ -2372,6 +2374,9 @@ source = Path("Sources/AutocompleteLabApp/App/AppDelegate.swift").read_text()
 accept_all = source.split("case .acceptAllVisible:", 1)[1].split("let acceptanceID", 1)[0]
 if "allowCodexProofSnapshotFastPath: true" not in accept_all:
     raise SystemExit("Codex full accept proof must use the Codex snapshot fast path before falling back to focus-changed")
+focus_check = source.split("guard focusedFieldMatchesCurrentSuggestion(", 1)[1].split(") else", 1)[0]
+if "allowCodexProofSnapshotFastPath: action.insertsSuggestionText" not in focus_check:
+    raise SystemExit("Codex full accept proof must use the Codex snapshot fast path during the pre-accept focus check")
 PY
 python3 - <<'PY'
 from pathlib import Path
