@@ -148,7 +148,7 @@ for surface_name, claim in claims:
     app = str(claim.get("app", "")).strip()
     bundle = str(claim.get("bundle", "")).strip()
     proof = str(claim.get("proof", "default")).strip() or "default"
-    matches = [
+    strict_matches = [
         row
         for row in smoke_rows
         if row["app"] == app
@@ -157,13 +157,15 @@ for surface_name, claim in claims:
         and "strict-complete" in row["trace"]
         and trace_reference(row) is not None
     ]
-    if bundle == "com.openai.codex":
-        matches = [
-            row for row in matches
-            if "prompt no-submit confirmed" in row["trace"]
-        ]
-    if not matches:
+    if not strict_matches:
         fail(f"{surface_name}: no bounded strict prompt smoke row for {app} {bundle} proof={proof}")
+
+    matches = [
+        row for row in strict_matches
+        if "prompt no-submit confirmed" in row["trace"]
+    ]
+    if not matches:
+        fail(f"{surface_name}: missing prompt no-submit confirmation for {app} {bundle} proof={proof}")
 
     row = matches[-1]
     trace_path, start_line, end_line = trace_reference(row) or ("", "", "")
