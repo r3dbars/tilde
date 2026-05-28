@@ -13448,6 +13448,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set targetWindow to missing value
         set targetWindowName to ""
         set targetWindowNameIsProof to false
+        set targetSelectionMode to "missing"
+        set ghosttyWindowCount to 0
         tell application "System Events"
             set ghosttyProcess to first application process whose unix id is targetProcessId
             if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
@@ -13460,10 +13462,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             end try
         end tell
         tell application id "com.mitchellh.ghostty"
+            set ghosttyWindowCount to count of windows
             repeat with candidateWindow in windows
                 set windowName to name of candidateWindow as text
                 if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
                     set targetWindow to candidateWindow
+                    set targetSelectionMode to "frontProofTitle"
                     exit repeat
                 end if
             end repeat
@@ -13472,11 +13476,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     set windowName to name of candidateWindow as text
                     if windowName contains proofMarker or windowName contains compactProofMarker then
                         set targetWindow to candidateWindow
+                        set targetSelectionMode to "markerTitleScan"
                         exit repeat
                     end if
                 end repeat
             end if
-            if targetWindow is missing value then return false
+            if targetWindow is missing value then return "false|targetSelection:" & targetSelectionMode & "|frontWindowProofMatch:" & (targetWindowNameIsProof as text) & "|windowCount:" & (ghosttyWindowCount as text)
             activate window targetWindow
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
@@ -13494,7 +13499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         end tell
         tell application id "com.mitchellh.ghostty"
             perform action "write_screen_file:copy,plain" on targetTerminal
-            return true
+            return "true|targetSelection:" & targetSelectionMode & "|frontWindowProofMatch:" & (targetWindowNameIsProof as text) & "|windowCount:" & (ghosttyWindowCount as text)
         end tell
         """
 
@@ -13563,6 +13568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             encoding: .utf8
         )?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let screenCopyScriptMetadata = Self.ghosttyScreenCopyScriptMetadata(stdoutText)
         let stderrText = String(
             data: standardError.fileHandleForReading.readDataToEndOfFile(),
             encoding: .utf8
@@ -13582,15 +13588,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return (false, nil, true)
         }
-        guard stdoutText != "false" else {
+        guard stdoutText != "false",
+              !stdoutText.hasPrefix("false|") else {
+            var metadata = [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "false",
+                "reason": "ghostty-screen-copy-returned-false",
+                "source": source
+            ]
+            metadata.merge(screenCopyScriptMetadata) { current, _ in current }
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
-                metadata: [
-                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": "ghostty-screen-copy-returned-false",
-                    "source": source
-                ]
+                metadata: metadata
             )
             return (false, nil, true)
         }
@@ -13627,42 +13636,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || compactScreenText.contains(expectedProofInputText)
         let containsOriginal = screenText.contains(originalProofInputText)
             || compactScreenText.contains(originalProofInputText)
+        var verificationMetadata = [
+            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            "containsCompactProofMarker": String(containsCompactProofMarker),
+            "containsExpected": String(containsExpected),
+            "containsOriginal": String(containsOriginal),
+            "containsProofMarker": String(containsProofMarker),
+            "compactScreenChars": String(compactScreenText.count),
+            "expectedChars": String(expectedProofInputText.count),
+            "exitStatus": String(process.terminationStatus),
+            "originalChars": String(originalProofInputText.count),
+            "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount),
+            "posted": "true",
+            "screenChars": String(screenText.count),
+            "source": source,
+            "verified": String(containsExpected),
+            "verificationSource": "ghosttyScreenCopy"
+        ]
+        verificationMetadata.merge(screenCopyScriptMetadata) { current, _ in current }
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
-            metadata: [
-                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                "containsCompactProofMarker": String(containsCompactProofMarker),
-                "containsExpected": String(containsExpected),
-                "containsOriginal": String(containsOriginal),
-                "containsProofMarker": String(containsProofMarker),
-                "compactScreenChars": String(compactScreenText.count),
-                "expectedChars": String(expectedProofInputText.count),
-                "exitStatus": String(process.terminationStatus),
-                "originalChars": String(originalProofInputText.count),
-                "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount),
-                "posted": "true",
-                "screenChars": String(screenText.count),
-                "source": source,
-                "verified": String(containsExpected),
-                "verificationSource": "ghosttyScreenCopy"
-            ]
+            metadata: verificationMetadata
         )
         guard containsExpected || containsOriginal else {
             let hasProofContext = containsProofMarker || containsCompactProofMarker
+            var metadata = [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "false",
+                "reason": hasProofContext
+                    ? "ghostty-screen-copy-proof-context-mismatch"
+                    : "ghostty-screen-copy-no-proof-context",
+                "source": source
+            ]
+            metadata.merge(screenCopyScriptMetadata) { current, _ in current }
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
-                metadata: [
-                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": hasProofContext
-                        ? "ghostty-screen-copy-proof-context-mismatch"
-                        : "ghostty-screen-copy-no-proof-context",
-                    "source": source
-                ]
+                metadata: metadata
             )
             return hasProofContext ? (false, false, false) : (false, nil, true)
         }
         return (containsExpected, containsOriginal, true)
+    }
+
+    nonisolated private static func ghosttyScreenCopyScriptMetadata(_ stdoutText: String) -> [String: String] {
+        let allowedSelectionModes = Set(["frontProofTitle", "markerTitleScan", "missing"])
+        var metadata: [String: String] = [:]
+        let parts = stdoutText.split(separator: "|", omittingEmptySubsequences: true)
+        for part in parts.dropFirst() {
+            let keyValue = part.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            guard keyValue.count == 2 else {
+                continue
+            }
+            let key = String(keyValue[0])
+            let value = String(keyValue[1])
+            switch key {
+            case "targetSelection":
+                metadata["targetSelection"] = allowedSelectionModes.contains(value) ? value : "unknown"
+            case "frontWindowProofMatch":
+                metadata["frontWindowProofMatch"] = value == "true" ? "true" : "false"
+            case "windowCount":
+                metadata["windowCount"] = value.allSatisfy(\.isNumber) ? value : "unknown"
+            default:
+                continue
+            }
+        }
+        return metadata
     }
 
     private func insertGhosttyTerminalHostProofActionText(

@@ -736,10 +736,16 @@ screen_copy_end = app_delegate.index("let deadline = Date().addingTimeInterval",
 screen_copy_block = app_delegate[screen_copy_start:screen_copy_end]
 if "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER" not in screen_copy_block or "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER" not in screen_copy_block:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must receive proof markers for title-scoped target selection")
-if "repeat with candidateWindow in windows" not in screen_copy_block or "if targetWindow is missing value then return false" not in screen_copy_block:
+if "repeat with candidateWindow in windows" not in screen_copy_block or 'if targetWindow is missing value then return "false|targetSelection:"' not in screen_copy_block:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must scan for the title-marked proof window before copying")
 if "verificationSource\": \"ghosttyScreenCopy\"" not in app_delegate or "screenChars" not in app_delegate or "compactScreenChars" not in app_delegate:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must record only redacted shape metadata")
+if "targetSelectionMode" not in screen_copy_block or '"true|targetSelection:" & targetSelectionMode' not in screen_copy_block:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must report the redacted target-selection path")
+if "frontWindowProofMatch" not in screen_copy_block or "ghosttyWindowCount" not in screen_copy_block:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must report title-match and window-count shape metadata")
+if "ghosttyScreenCopyScriptMetadata" not in app_delegate or 'metadata["targetSelection"]' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must sanitize target-selection metadata before diagnostics")
 if "clearedChangeCount" not in app_delegate or '"pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount)' not in app_delegate:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must report whether native screen copy changed the pasteboard after the pre-clear")
 if "containsProofMarker" not in app_delegate or "containsCompactProofMarker" not in app_delegate:
