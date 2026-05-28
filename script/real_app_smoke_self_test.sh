@@ -2888,6 +2888,7 @@ if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_s
 fi
 if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "working directory of targetTerminal" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "terminalReady is false" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Terminal proof $label exit state' script/real_app_smoke.sh >/dev/null ||
