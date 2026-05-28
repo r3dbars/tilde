@@ -391,6 +391,11 @@ report now also print `Instant phrase learned restraint`, so a session can show
 when SteadyType skipped a canned phrase because local learning said it was not
 helping.
 
+The status surface now treats `Quiet:`, `Hidden:`, and paused no-show decisions
+as truly quiet in the menu, settings, and diagnostics presentation. This closes
+one trust leak where intentional silence could previously look like generic
+ready state instead of telling the user why no suggestion appeared.
+
 Very-proactive writing surfaces now keep going at sentence boundaries too. When
 the user finishes a sentence in TextEdit, Notes, Obsidian, or another non-prompt
 writing profile, the activation and trigger policies can queue the next

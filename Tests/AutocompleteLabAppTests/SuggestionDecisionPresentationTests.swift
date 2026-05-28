@@ -21,6 +21,27 @@ struct SuggestionDecisionPresentationTests {
         #expect(presentation.menuTitle == "Why: Shown")
     }
 
+    @Test("Quiet decisions stay visibly quiet")
+    func quietDecisionsStayVisiblyQuiet() {
+        let presentation = SuggestionDecisionPresentation("Quiet: no useful suggestion")
+
+        #expect(presentation.statusKind == .quiet)
+        #expect(presentation.summary == "no useful suggestion")
+        #expect(presentation.menuTitle == "Why: no useful suggestion")
+        #expect(presentation.diagnosticsKind == "quiet")
+    }
+
+    @Test("Hidden and paused decisions stay visibly quiet")
+    func hiddenAndPausedDecisionsStayVisiblyQuiet() {
+        let hidden = SuggestionDecisionPresentation("Hidden: focus changed")
+        let paused = SuggestionDecisionPresentation("Paused")
+
+        #expect(hidden.statusKind == .quiet)
+        #expect(hidden.summary == "focus changed")
+        #expect(paused.statusKind == .quiet)
+        #expect(paused.summary == "paused")
+    }
+
     @Test("Long reasons stay one line")
     func longReasonsStayOneLine() {
         let presentation = SuggestionDecisionPresentation(
