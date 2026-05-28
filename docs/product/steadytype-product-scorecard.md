@@ -501,6 +501,28 @@ native `text:` action rung then shipped before pasteboard probes;
 diagnostics line `910704`, ran `ghosttyFocusedActionText` at line `911799`, and
 proved that focused native action also exited `0` while leaving the prompt
 unchanged before the expanded no-op cluster failed closed at line `911879`.
+The next proof slice adds a native Ghostty screen-copy verifier after a focused
+native action miss so AX-only insertion misses are not the only source of truth.
+The verifier uses Ghostty's `write_screen_file:copy,plain` action, restores the
+user pasteboard, and records only redacted shape metadata. The short
+non-exclusive run `20260528T122859Z-ghostty` reached a prompt-row suggestion at
+diagnostics line `914890`, handled Tab at line `915747`, and then recorded
+`ghosttyFocusedActionTextScreenCopy` at line `915773`: Ghostty's native copied
+screen had `screenChars=90` but contained neither the expected inserted prompt
+nor the original prompt, while AX still reported the original prompt at the
+following baseline. That does not make Ghostty supported; it proves AX and
+native screen state can disagree after app-owned insertion attempts, so the app
+now treats proof-context screen-copy mismatches as fail-closed evidence and only
+continues when the copied screen has no proof context. The patched rerun
+`20260528T123354Z-ghostty` rebuilt the app, reached a prompt-row suggestion at
+diagnostics line `916684`, but lost the visible suggestion during Tab injection
+before insertion, so it is launch/accept flake evidence rather than verifier
+evidence. A later patched run, `20260528T123843Z-ghostty`, reached the same
+prompt-row path at diagnostics line `918110`, exercised the native screen-copy
+verifier at lines `919006`-`919007`, classified the copy as
+`ghostty-screen-copy-no-proof-context`, continued through the AX baseline only as
+inconclusive, and still failed closed through the unchanged-prompt no-op cluster
+at lines `919023`-`919026`.
 
 ## Scores
 

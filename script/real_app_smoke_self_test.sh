@@ -729,6 +729,18 @@ if "ghosttyFocusedActionTextBaseline" not in app_delegate or '"focusMode": "fron
     raise SystemExit("Claude Code Ghostty focused native action proof must verify the unchanged baseline and diagnose the focused-terminal mode")
 if '"textTransport": "environment"' not in app_delegate or "ghostty-focused-action-timeout-mutated-input" not in app_delegate:
     raise SystemExit("Claude Code Ghostty focused native action proof must avoid argv text transport and fail closed on timeout mutation")
+if "ghosttyFocusedActionTextScreenCopy" not in app_delegate or 'perform action "write_screen_file:copy,plain" on targetTerminal' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty focused native action proof must use Ghostty's native screen-copy verifier before trusting AX misses")
+if "verificationSource\": \"ghosttyScreenCopy\"" not in app_delegate or "screenChars" not in app_delegate or "compactScreenChars" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must record only redacted shape metadata")
+if "clearedChangeCount" not in app_delegate or '"pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount)' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must report whether native screen copy changed the pasteboard after the pre-clear")
+if "containsProofMarker" not in app_delegate or "containsCompactProofMarker" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must distinguish proof-context misses from inconclusive screen copies")
+if "ghostty-screen-copy-proof-context-mismatch" not in app_delegate or "ghostty-screen-copy-no-proof-context" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must fail closed only when copied proof context mismatches")
+if "Self.clonePasteboardItems(pasteboard.pasteboardItems)" not in app_delegate or "defer {\n            restoreOriginalPasteboard()\n        }" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must restore the user's pasteboard after native screen copy")
 if "focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty initial no-op classifier must include focused native action verification")
 if "ghosttyFocusedSystemEventsBulkKeystrokeBaseline" not in app_delegate or '"focusMode": "frontmostProcessOnly"' not in app_delegate:
