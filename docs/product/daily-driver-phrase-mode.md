@@ -852,10 +852,9 @@ suggestion appears, which preserves the caret at the accepted phrase.
 
 ## Scorecard
 
-Current proof freshness caveat: TextEdit default, Notes title/body/checklist,
-Chrome textarea/contenteditable, and Obsidian default/theme/pane have current
-strict visual proof. The beta-safe grid is not green yet because Obsidian
-long-note timed out waiting for its second verified insertion after focus drift.
+Current proof freshness: TextEdit default, Notes title/body/checklist, Chrome
+textarea/contenteditable, and Obsidian default/theme/pane/long-note all have
+current strict visual proof with two verified accepts.
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
