@@ -23,6 +23,10 @@ cat >"$TRACE_PATH" <<'JSONL'
 {"type":"insertionVerified","suggestionID":"claude-safe-one","appBundleIdentifier":"com.anthropic.claude-code","requestMode":"wordCompletion","acceptedText":"safe","outcome":"verified","metadata":{"acceptMode":"acceptNextWord","promptSafetyMode":"wordOnly"}}
 {"type":"acceptedTextEdited","suggestionID":"claude-safe-one","appBundleIdentifier":"com.anthropic.claude-code","requestMode":"wordCompletion","acceptedText":"safe","outcome":"exactKept","metadata":{"checkpoint":"10s","promptSafetyMode":"wordOnly"}}
 {"type":"suggestionHidden","suggestionID":"claude-safe-one","appBundleIdentifier":"com.anthropic.claude-code","requestMode":"wordCompletion","outcome":"accepted"}
+{"type":"suggestionPresented","suggestionID":"codex-full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"finish this thought","screenshotPath":"/tmp/codex-full.png","metadata":{"promptSafetyMode":"fullAcceptProof"}}
+{"type":"suggestionAccepted","suggestionID":"codex-full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"finish this thought","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","promptSafetyMode":"fullAcceptProof"}}
+{"type":"insertionVerified","suggestionID":"codex-full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"finish this thought","outcome":"verified","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","promptSafetyMode":"fullAcceptProof"}}
+{"type":"acceptedTextEdited","suggestionID":"codex-full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"finish this thought","outcome":"exactKept","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","checkpoint":"10s","promptSafetyMode":"fullAcceptProof"}}
 JSONL
 
 cat >"$SMOKE_PATH" <<EOF
@@ -30,6 +34,7 @@ cat >"$SMOKE_PATH" <<EOF
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 | 2026-05-09T03:06:50Z | Codex | \`com.openai.codex\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 1-5 in \`/tmp/diagnostics.log\` | lines 1-5 in \`$TRACE_PATH\`; visual \`strict-complete\`; prompt no-submit confirmed |
 | 2026-05-09T03:07:50Z | Claude Code | \`com.anthropic.claude-code\` | \`default\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 6-10 in \`/tmp/diagnostics.log\` | lines 7-11 in \`$TRACE_PATH\`; visual \`strict-complete\`; prompt no-submit confirmed |
+| 2026-05-09T03:08:50Z | Codex | \`com.openai.codex\` | \`full-accept\` | 1 | \`inlineAdjacent|floatingMirror\` | lines 11-14 in \`/tmp/diagnostics.log\` | lines 12-15 in \`$TRACE_PATH\`; visual \`strict-complete\`; prompt full-accept no-submit confirmed |
 EOF
 
 cat >"$MANIFEST_PATH" <<'JSON'
@@ -67,8 +72,17 @@ cat >"$MANIFEST_PATH" <<'JSON'
         },
         {
           "id": "codex-full-accept-no-submit",
-          "status": "pending",
-          "summary": "Full accept stays disabled until separately proven."
+          "status": "complete",
+          "summary": "Full accept no-submit proof is recorded separately.",
+          "manualSmoke": {
+            "app": "Codex",
+            "bundle": "com.openai.codex",
+            "proof": "full-accept",
+            "minVerifiedAccepts": 1,
+            "maxVerifiedAccepts": 1,
+            "requiresVisualStrictComplete": true,
+            "requiresPromptFullAcceptNoSubmit": true
+          }
         }
       ]
     },
@@ -102,9 +116,10 @@ AUTOCOMPLETE_LAB_MANUAL_SMOKE_RUNS="$SMOKE_PATH" \
 for expected in \
   "Prompt app manifest proof status" \
   "Codex / codex-one-word-no-submit: com.openai.codex proof=default lines 1-5" \
+  "Codex / codex-full-accept-no-submit: com.openai.codex proof=full-accept lines 12-15" \
   "Claude Code / claude-code-one-word-no-submit: com.anthropic.claude-code proof=default lines 7-11" \
   "wrongContextInsertionCount: 0" \
-  "Prompt app manifest proof gate passed with 2 bounded prompt slice(s)."; do
+  "Prompt app manifest proof gate passed with 3 bounded prompt slice(s)."; do
   if ! grep -F "$expected" "$TMP_DIR/pass.txt" >/dev/null; then
     echo "prompt app manifest proof self-test missing output: $expected" >&2
     cat "$TMP_DIR/pass.txt" >&2
@@ -122,7 +137,7 @@ if AUTOCOMPLETE_LAB_PROOF_MANIFEST="$MANIFEST_PATH" \
   exit 1
 fi
 
-if ! grep -F "missing prompt no-submit confirmation" "$TMP_DIR/fail.txt" >/dev/null; then
+if ! grep -F "missing prompt no-submit confirmed" "$TMP_DIR/fail.txt" >/dev/null; then
   echo "prompt app manifest proof self-test did not explain missing no-submit proof" >&2
   cat "$TMP_DIR/fail.txt" >&2
   exit 1
@@ -138,9 +153,25 @@ if AUTOCOMPLETE_LAB_PROOF_MANIFEST="$MANIFEST_PATH" \
   exit 1
 fi
 
-if ! grep -F "Claude Code / claude-code-one-word-no-submit: missing prompt no-submit confirmation" "$TMP_DIR/claude-fail.txt" >/dev/null; then
+if ! grep -F "Claude Code / claude-code-one-word-no-submit: missing prompt no-submit confirmed" "$TMP_DIR/claude-fail.txt" >/dev/null; then
   echo "prompt app manifest proof self-test did not require non-Codex no-submit proof" >&2
   cat "$TMP_DIR/claude-fail.txt" >&2
+  exit 1
+fi
+
+sed 's/; prompt full-accept no-submit confirmed//' \
+  "$SMOKE_PATH" >"$TMP_DIR/full-accept-no-submit-missing.md"
+if AUTOCOMPLETE_LAB_PROOF_MANIFEST="$MANIFEST_PATH" \
+  AUTOCOMPLETE_LAB_MANUAL_SMOKE_RUNS="$TMP_DIR/full-accept-no-submit-missing.md" \
+  ./script/check_prompt_app_manifest_proof.sh >"$TMP_DIR/full-accept-fail.txt" 2>&1; then
+  echo "prompt app manifest proof self-test expected missing full-accept no-submit label to fail" >&2
+  cat "$TMP_DIR/full-accept-fail.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Codex / codex-full-accept-no-submit: missing prompt full-accept no-submit confirmed" "$TMP_DIR/full-accept-fail.txt" >/dev/null; then
+  echo "prompt app manifest proof self-test did not require full-accept no-submit proof" >&2
+  cat "$TMP_DIR/full-accept-fail.txt" >&2
   exit 1
 fi
 
