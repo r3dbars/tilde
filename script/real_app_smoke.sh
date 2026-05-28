@@ -9934,6 +9934,153 @@ wait_for_claude_code_terminal_process() {
   wait_for_claude_code_terminal_process_name "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
 }
 
+run_claude_code_ghostty_prompt_screen_copy_probe() {
+  local prompt_wait_output="${1:-}"
+  local expected_text="${2:-}"
+  local target_pid proof_title proof_marker compact_marker old_pasteboard action_output raw_pasteboard
+  local screen_text screen_transport screen_chars compact_screen_chars has_marker has_compact_marker has_hint
+  local has_expected has_rejected_shell screen_ready screen_normalized expected_normalized tmp_prefix
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ "$prompt_wait_output" == *"textNodes=0"* ]] || return 1
+  target_pid="$(claude_code_terminal_proof_primary_pid)"
+  proof_title="${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}"
+  proof_marker="$(claude_code_proof_marker)"
+  compact_marker="$(claude_code_compact_proof_marker)"
+  [[ -n "$target_pid" && -n "$proof_title" ]] || return 1
+
+  old_pasteboard="$(pbpaste 2>/dev/null || true)"
+  : | pbcopy >/dev/null 2>&1 || true
+  action_output="$(
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$proof_title" \
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$proof_marker" \
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER="$compact_marker" \
+      AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID="$target_pid" \
+      run_osascript_with_timeout \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROMPT_SCREEN_COPY_TIMEOUT_SECONDS:-3}" \
+        "Claude Code Ghostty prompt screen-copy readiness" <<'APPLESCRIPT' 2>/dev/null || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set proofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER"
+set targetPidText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"
+set targetProcessId to targetPidText as integer
+set targetSelectionMode to "none"
+set ghosttyWindowCount to 0
+tell application id "com.mitchellh.ghostty"
+  set ghosttyWindowCount to count windows
+  set targetWindow to missing value
+  repeat with candidateWindow in windows
+    try
+      set windowName to name of candidateWindow as text
+      if windowName contains proofTitle then
+        set targetWindow to candidateWindow
+        set targetSelectionMode to "proofTitle"
+        exit repeat
+      end if
+    end try
+  end repeat
+  if targetWindow is missing value then
+    repeat with candidateWindow in windows
+      try
+        set windowName to name of candidateWindow as text
+        if windowName contains proofMarker or windowName contains compactProofMarker then
+          set targetWindow to candidateWindow
+          set targetSelectionMode to "markerTitle"
+          exit repeat
+        end if
+      end try
+    end repeat
+  end if
+  if targetWindow is missing value and ghosttyWindowCount > 0 then
+    set targetWindow to front window
+    set targetSelectionMode to "frontWindow"
+  end if
+  if targetWindow is missing value then return "false|targetSelection:none|windowCount:" & (ghosttyWindowCount as text)
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  select tab targetTab
+  focus targetTerminal
+  activate
+end tell
+delay 0.04
+tell application "System Events"
+  set ghosttyProcess to first application process whose unix id is targetProcessId
+  if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+  set frontmost of ghosttyProcess to true
+end tell
+tell application id "com.mitchellh.ghostty"
+  set actionPerformed to perform action "write_screen_file:copy,plain" on targetTerminal
+  if actionPerformed is false then return "false|targetSelection:" & targetSelectionMode & "|windowCount:" & (ghosttyWindowCount as text)
+  return "true|targetSelection:" & targetSelectionMode & "|windowCount:" & (ghosttyWindowCount as text)
+end tell
+APPLESCRIPT
+  )"
+  raw_pasteboard="$(pbpaste 2>/dev/null || true)"
+  if [[ -n "$old_pasteboard" ]]; then
+    printf '%s' "$old_pasteboard" | pbcopy >/dev/null 2>&1 || true
+  else
+    : | pbcopy >/dev/null 2>&1 || true
+  fi
+
+  screen_transport="pasteboardText"
+  screen_text="$raw_pasteboard"
+  tmp_prefix="${TMPDIR:-/tmp}"
+  tmp_prefix="${tmp_prefix%/}"
+  if [[ -n "$raw_pasteboard" && -f "$raw_pasteboard" ]]; then
+    case "$raw_pasteboard" in
+      "$tmp_prefix"/*|/tmp/*|/private/tmp/*|/var/folders/*|/private/var/folders/*)
+        screen_text="$(cat "$raw_pasteboard" 2>/dev/null || true)"
+        screen_transport="screenFile"
+        ;;
+      *)
+        screen_transport="filePathRejected"
+        ;;
+    esac
+  fi
+
+  screen_chars="${#screen_text}"
+  compact_screen_chars="$(printf '%s' "$screen_text" | tr -d '\r\n' | wc -c | tr -d ' ')"
+  has_marker="false"
+  has_compact_marker="false"
+  has_hint="false"
+  has_expected="false"
+  has_rejected_shell="false"
+  screen_ready="false"
+  if [[ -n "$proof_marker" ]] && printf '%s' "$screen_text" | grep -Fqi "$proof_marker"; then
+    has_marker="true"
+  fi
+  if [[ -n "$compact_marker" ]] && printf '%s' "$screen_text" | tr -d '\r\n' | grep -Fqi "$compact_marker"; then
+    has_compact_marker="true"
+  fi
+  if printf '%s' "$screen_text" | grep -Eiq 'shortcuts|esc|enter'; then
+    has_hint="true"
+  fi
+  if printf '%s' "$screen_text" | grep -Eiq 'steadytype-claude-code-proof\.command| -e .*steadytype-claude-code-proof\.|exec .*steadytype-claude-code-proof\.'; then
+    has_rejected_shell="true"
+  fi
+  screen_normalized="$(printf '%s' "$screen_text" | awk '{$1=$1; print}')"
+  expected_normalized="$(printf '%s' "$expected_text" | awk '{$1=$1; print}')"
+  if [[ -z "$expected_normalized" ]] || printf '%s' "$screen_normalized" | grep -Fq "$expected_normalized"; then
+    has_expected="true"
+  fi
+  if [[ "$action_output" == true* &&
+        "$screen_chars" =~ ^[1-9][0-9]*$ &&
+        "$has_rejected_shell" == "false" &&
+        "$has_expected" == "true" &&
+        (
+          "$has_marker" == "true" ||
+          "$has_compact_marker" == "true" ||
+          "$has_hint" == "true" ||
+          ( "$action_output" == *"targetSelection:proofTitle"* && -n "$screen_normalized" )
+        ) ]]; then
+    screen_ready="true"
+  fi
+
+  echo "Claude Code Ghostty prompt screen-copy readiness: action=${action_output:-empty} transport=$screen_transport screenChars=$screen_chars compactScreenChars=$compact_screen_chars hasMarker=$has_marker hasCompactMarker=$has_compact_marker hasHint=$has_hint hasExpected=$has_expected rejectedShellCommand=$has_rejected_shell ready=$screen_ready" >&2
+  [[ "$screen_ready" == "true" ]]
+}
+
 mark_claude_code_ghostty_proof_window_title() {
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
   [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
@@ -9986,7 +10133,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids ghostty_configured_window_first ghostty_command_open_ready
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids ghostty_configured_window_first ghostty_command_open_ready ghostty_claude_permission_mode
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -10021,8 +10168,9 @@ open_claude_code_terminal_proof() {
     printf 'printf %q\n' "$title_sequence"
     if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
       ghostty_exit_hold_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS:-20}"
+      ghostty_claude_permission_mode="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PERMISSION_MODE:-plan}"
       printf 'printf '"'"'%%s\\n'"'"' script-starting-claude >> %q\n' "$ghostty_launch_stage_file"
-      printf '%q\n' "$claude_bin"
+      printf '%q --permission-mode %q\n' "$claude_bin" "$ghostty_claude_permission_mode"
       printf 'claude_status=$?\n'
       printf 'printf '"'"'%%s\\n'"'"' "script-claude-returned:$claude_status" >> %q\n' "$ghostty_launch_stage_file"
       printf 'printf '"'"'status=%%s finished_at=%%s\\n'"'"' "$claude_status" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE"
@@ -10958,6 +11106,13 @@ try_wait_for_claude_code_terminal_prompt() {
         fi
       fi
       if ((prompt_wait_status != 0)); then
+        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+           run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output"; then
+          echo "Claude Code Ghostty proof accepted native screen-copy prompt readiness after AX textNodes=0." >&2
+          prompt_wait_status=0
+        fi
+      fi
+      if ((prompt_wait_status != 0)); then
         if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
               "${CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN:-0}" == "1" &&
               "$prompt_wait_output" == *"rejectedShellCommand=true"* ]]; then
@@ -10993,14 +11148,29 @@ assert_claude_code_terminal_prompt_ready() {
   if [[ -n "$proof_pid" ]]; then
     proof_pid_args=(--pid "$proof_pid")
   fi
-  swift script/terminal_prompt_ax_proof_helper.swift wait \
+  local prompt_wait_output prompt_wait_status
+  if prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait \
     --bundle "$(claude_code_host_bundle_id)" \
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
     --text "$expected_prompt_text" \
     --require-exact-text \
     "${proof_pid_args[@]}" \
-    --discovery-timeout "$(claude_code_terminal_text_wait_seconds)"
+    --discovery-timeout "$(claude_code_terminal_text_wait_seconds)" 2>&1)"; then
+    prompt_wait_status=0
+  else
+    prompt_wait_status=$?
+  fi
+  if ((prompt_wait_status != 0)) &&
+     [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+     run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output" "$expected_prompt_text"; then
+    echo "Claude Code Ghostty proof accepted native screen-copy typed prompt readiness after AX miss." >&2
+    return 0
+  fi
+  if ((prompt_wait_status != 0)); then
+    printf '%s\n' "$prompt_wait_output" >&2
+    return "$prompt_wait_status"
+  fi
 }
 
 try_claude_code_terminal_prompt_ready_quiet() {
@@ -11216,7 +11386,10 @@ type_claude_code_terminal_raw_smoke_text() {
   settle_claude_code_terminal_proof_focus "proof typing" || return 1
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE:-0}" == "1" ]]; then
     AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+      run_osascript_with_timeout \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TYPE_TIMEOUT_SECONDS:-4}" \
+        "Claude Code terminal raw bulk proof typing" <<'APPLESCRIPT'
 set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 tell application "System Events"
@@ -11237,7 +11410,10 @@ APPLESCRIPT
 
   AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY_SECONDS:-0.012}" osascript <<'APPLESCRIPT'
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY_SECONDS:-0.012}" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TYPE_TIMEOUT_SECONDS:-4}" \
+      "Claude Code terminal raw proof typing" <<'APPLESCRIPT'
 set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 set keyDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY") as real
@@ -11292,9 +11468,13 @@ clear_claude_code_terminal_prompt_line() {
        clear_claude_code_terminal_ghostty_native_line; then
       ghostty_native_clear_posted=0
       sleep "$(claude_code_ghostty_event_drain_seconds)"
+      return 0
     fi
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
+    if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SYSTEM_EVENTS_CLEAR_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+      return 1
+    fi
+    if AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
 tell application "System Events"
@@ -11312,7 +11492,11 @@ tell application "System Events"
   keystroke "u" using control down
 end tell
 APPLESCRIPT
-    ghostty_system_events_clear_posted=$?
+    then
+      ghostty_system_events_clear_posted=0
+    else
+      ghostty_system_events_clear_posted=$?
+    fi
     sleep "$(claude_code_ghostty_event_drain_seconds)"
     ((ghostty_native_clear_posted == 0 || ghostty_system_events_clear_posted == 0))
     return
