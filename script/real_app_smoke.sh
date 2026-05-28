@@ -14005,6 +14005,13 @@ create_notes_smoke_note() {
   create_notes_blank_smoke_note
 }
 
+activate_notes_for_smoke() {
+  osascript <<'APPLESCRIPT' >/dev/null
+tell application "Notes" to activate
+APPLESCRIPT
+  wait_for_frontmost_app "Notes" 5
+}
+
 type_notes_raw_smoke_text() {
   local text="$1"
 
@@ -14898,6 +14905,7 @@ run_notes() {
     assert_notes_title_smoke_target
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes title"
     settle_keyboard_event_tap_if_started "$start_line" "Notes title Tab acceptance"
     press_key_code 48
@@ -14921,6 +14929,7 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title second suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes title"
     settle_keyboard_event_tap_if_started "$second_start_line" "Notes title full acceptance"
     full_start_line="$(line_count "$LOG_PATH")"
@@ -14969,6 +14978,7 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes checklist"
     settle_keyboard_event_tap_if_started "$start_line" "Notes checklist Tab acceptance"
     press_key_code 48
@@ -14997,6 +15007,7 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist second suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes checklist"
     settle_keyboard_event_tap_if_started "$second_start_line" "Notes checklist full acceptance"
     full_start_line="$(line_count "$LOG_PATH")"
@@ -15034,6 +15045,7 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
+  activate_notes_for_smoke
   assert_frontmost_app "Notes" "Notes body"
   settle_keyboard_event_tap_if_started "$start_line" "Notes body Tab acceptance"
   press_key_code 48
@@ -15055,6 +15067,7 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_second_fragment"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
+  activate_notes_for_smoke
   assert_frontmost_app "Notes" "Notes body"
   settle_keyboard_event_tap_if_started "$second_start_line" "Notes body full acceptance"
   full_start_line="$(line_count "$LOG_PATH")"

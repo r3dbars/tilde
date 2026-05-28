@@ -3739,6 +3739,7 @@ if ! grep -F "script/real_app_smoke.sh notes-title-undo --manual-gate" "$TMP_DIR
 fi
 
 if ! grep -F 'settle_keyboard_event_tap_if_started()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'activate_notes_for_smoke()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_keyboard_event_tap_if_started "$start_line" "Notes title Tab acceptance"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_keyboard_event_tap_if_started "$second_start_line" "Notes title full acceptance"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_keyboard_event_tap_if_started "$start_line" "Notes checklist Tab acceptance"' script/real_app_smoke.sh >/dev/null ||
