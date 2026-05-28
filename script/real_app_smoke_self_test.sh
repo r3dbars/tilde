@@ -287,12 +287,14 @@ if 'tell application id "com.mitchellh.ghostty"' not in ghostty_cleanup_block:
 if "application processes" in ghostty_cleanup_block:
     raise SystemExit("Ghostty stale cleanup must not enumerate System Events application windows")
 if "reset_zero_window_claude_code_ghostty_proof_host()" not in source:
-    raise SystemExit("Ghostty proof cleanup must reset poisoned zero-window Ghostty hosts")
+    raise SystemExit("Ghostty proof cleanup must keep an opt-in poisoned zero-window Ghostty host reset helper")
 zero_window_reset_start = source.index("reset_zero_window_claude_code_ghostty_proof_host()")
 zero_window_reset_end = source.index("close_claude_code_ghostty_proof_window_by_title()", zero_window_reset_start)
 zero_window_reset_block = source[zero_window_reset_start:zero_window_reset_end]
 if 'return (count windows) as text' not in zero_window_reset_block:
     raise SystemExit("Ghostty zero-window reset must prove no user windows through Ghostty's own API")
+if 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED' not in zero_window_reset_block:
+    raise SystemExit("Ghostty zero-window reset must be opt-in so proof retries do not terminate the smoke runner")
 if '[[ "$window_count" == "0" ]]' not in zero_window_reset_block:
     raise SystemExit("Ghostty zero-window reset must only kill the host when window count is exactly zero")
 if 'kill -KILL "$proof_pid"' not in zero_window_reset_block:
@@ -301,9 +303,9 @@ open_proof_start = source.index("open_claude_code_terminal_proof()")
 open_proof_end = source.index("cleanup_claude_code_terminal_proof()", open_proof_start)
 open_proof_block = source[open_proof_start:open_proof_end]
 if "reset_zero_window_claude_code_ghostty_proof_host" not in open_proof_block:
-    raise SystemExit("Ghostty proof launch must reset zero-window hosts before creating a new proof window")
+    raise SystemExit("Ghostty proof launch must call the opt-in zero-window reset helper before creating a new proof window")
 if "reset_zero_window_claude_code_ghostty_proof_host" not in ghostty_cleanup_block:
-    raise SystemExit("Ghostty stale cleanup must reset zero-window hosts after closing stale proof windows")
+    raise SystemExit("Ghostty stale cleanup must call the opt-in zero-window reset helper after closing stale proof windows")
 generic_cleanup_start = source.index("cleanup_stale_claude_code_terminal_proofs()")
 generic_cleanup_end = source.index("open_fresh_claude_code_terminal_proof_context()", generic_cleanup_start)
 generic_cleanup_block = source[generic_cleanup_start:generic_cleanup_end]
@@ -501,6 +503,12 @@ if "if texts.isEmpty" not in terminal_prompt_helper or "collectText(from: appEle
     raise SystemExit("Terminal prompt AX helper must fall back to the exact target app AX subtree when Ghostty reports no window text nodes")
 if "--allow-missing-marker-for-empty-text" not in terminal_prompt_helper or "allowsMissingMarkerForEmptyText" not in terminal_prompt_helper:
     raise SystemExit("Terminal prompt AX helper must support Ghostty empty-prompt readiness when title markers are not exposed")
+if "--require-exact-text" not in terminal_prompt_helper or "requiresExactText" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must support exact typed-text checks so stale prompts cannot satisfy readiness")
+if "containsExactPromptText" not in terminal_prompt_helper or "exactPromptTextCandidates" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper must compare exact prompt lines instead of broad substring text")
+if "withoutProofMarker" not in terminal_prompt_helper or "withoutTerminalPromptPrefix" not in terminal_prompt_helper:
+    raise SystemExit("Terminal prompt AX helper exact matching must strip proof markers and terminal prompt prefixes")
 
 text_event_helper = Path("Sources/SteadyTypeTextEventHelper/main.swift").read_text()
 if "waitForExpectedFrontmostApplication" not in text_event_helper or ".activate(options: [.activateAllWindows])" not in text_event_helper:
@@ -599,7 +607,7 @@ if "insertGhosttyTerminalHostProofFrontWindowInputText" not in fast_ghostty_bloc
 if "launchThroughShell: true" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the shell-launched front-window input text rung")
 if "insertGhosttyTerminalHostProofActionText" not in fast_ghostty_block:
-    raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native text action before slower key fallbacks")
+    raise SystemExit("Claude Code Ghostty fast proof must keep Ghostty's native text action as a later verified fallback")
 if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep timeout-bounded native input text as a verified fallback")
 if "ghosttyAppleScriptLoginShellInputText" not in app_delegate or "ghosttyLoginShellInputTextOutcome" not in fast_ghostty_block:
@@ -620,14 +628,16 @@ if '"cgHardwareKeyEventsToPid"' not in fast_ghostty_block or '"cgHardwareKeyEven
     raise SystemExit("Claude Code Ghostty fast proof must try targeted and global hardware key-event insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText"):
     raise SystemExit("Claude Code Ghostty fast proof must try native text action before native input text")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") < fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
+    raise SystemExit("Claude Code Ghostty fast proof must try send key before native text action")
 if fast_ghostty_block.index("focusGhosttyTerminalHostProofPromptByClickIfAvailable") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
     raise SystemExit("Claude Code Ghostty fast proof must focus-click the prompt before native text insertion")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText"):
     raise SystemExit("Claude Code Ghostty fast proof must try in-process native input before subprocess front-window input")
-if fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
-    raise SystemExit("Claude Code Ghostty fast proof must try front-window input text before marker-scanned native text action")
-if fast_ghostty_block.index("launchThroughShell: true") > fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText"):
-    raise SystemExit("Claude Code Ghostty fast proof must try shell-launched front-window input text before marker-scanned native text action")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") < fast_ghostty_block.index("insertGhosttyTerminalHostProofFrontWindowInputText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try front-window input text before native text action")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofActionText") < fast_ghostty_block.index("ghosttyLoginShellFrontWindowInputTextOutcome"):
+    raise SystemExit("Claude Code Ghostty fast proof must try shell-launched front-window input text before native text action")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
     raise SystemExit("Claude Code Ghostty fast proof must try native input text before native paste action")
 if fast_ghostty_block.index("ghosttyLoginShellInputTextOutcome") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
@@ -2593,8 +2603,13 @@ if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
 fi
 if ! grep -F 'warm_claude_code_terminal_hot_accept_helpers()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code $host_name proof warming CGEvent Tab helper before prompt suggestions.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof warmed CGEvent helpers.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof cleaning stale disposable contexts.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof stale context cleanup finished.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof opening fresh disposable context.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof fresh disposable context ready.' script/real_app_smoke.sh >/dev/null ||
    ! awk '/run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /wait_for_runtime_ready/ { saw_runtime = 1 } in_smoke && saw_runtime && /warm_claude_code_terminal_hot_accept_helpers "\$host_name"/ { saw_warm = 1 } in_smoke && saw_warm && /cleanup_stale_claude_code_terminal_proofs/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty proof to precompile the CGEvent Tab helper before any visible suggestion can go stale" >&2
+  echo "real app smoke self-test expected Ghostty proof to precompile the CGEvent Tab helper and log cleanup/context phases before any visible suggestion can go stale" >&2
   exit 1
 fi
 if ! grep -F 'type_text_cgevent()' script/real_app_smoke.sh >/dev/null ||
@@ -2793,6 +2808,14 @@ if ! awk '/wait_for_claude_code_terminal_prompt\(\)/ { in_wait = 1 } /assert_cla
   echo "real app smoke self-test expected Ghostty empty-prompt readiness to allow missing title marker before typed proof text is asserted" >&2
   exit 1
 fi
+if ! awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /^}/ && in_assert { in_assert = 0 } in_assert && /--require-exact-text/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected typed Claude Code prompt readiness to require exact text" >&2
+  exit 1
+fi
+if ! awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /^}/ && in_assert { in_assert = 0 } in_assert && /expected_prompt_text=/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected typed Claude Code prompt readiness to strip the marker before exact text matching" >&2
+  exit 1
+fi
 if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Claude Code prompt readiness to settle before typing samples" >&2
   exit 1
@@ -2846,8 +2869,9 @@ fi
 if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'close window candidateWindow' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "reset_zero_window_claude_code_ghostty_proof_host" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_CHECK_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof cleanup to close the disposable proof window and only reset a proven zero-window host" >&2
+  echo "real app smoke self-test expected Ghostty proof cleanup to close the disposable proof window and only opt into resetting a proven zero-window host" >&2
   exit 1
 fi
 if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/real_app_smoke.sh >/dev/null ||
@@ -3048,7 +3072,8 @@ suggestion_window_index = block.index('suggestion_start_line="$(line_count "$LOG
 accept_window_index = block.index('accept_start_line="$suggestion_start_line"')
 suggestion_wait_index = block.index("wait_for_claude_code_terminal_proof_suggestion_ready_optional")
 accept_wait_index = block.index("wait_for_claude_code_terminal_tab_acceptance")
-if not (suggestion_window_index < type_index < assert_index < accept_window_index < suggestion_wait_index < accept_wait_index):
+insertion_wait_index = block.index("wait_for_claude_code_terminal_insertion_result")
+if not (suggestion_window_index < type_index < assert_index < accept_window_index < suggestion_wait_index < accept_wait_index < insertion_wait_index):
     raise SystemExit(1)
 if '"$suggestion_start_line"' not in block[suggestion_wait_index:accept_wait_index]:
     raise SystemExit(1)
@@ -3067,6 +3092,19 @@ if ! awk '
   END { exit (saw_fail_closed && saw_message && saw_stale_tab && saw_stale_message) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Claude Code terminal-host acceptance helper to fail fast on handled=false and stale after-typing Tab" >&2
+  exit 1
+fi
+if ! awk '
+  /wait_for_claude_code_terminal_insertion_result\(\)/ { in_helper = 1 }
+  /^}/ && in_helper { in_helper = 0 }
+  in_helper && /success=true/ { saw_success = 1 }
+  in_helper && /success=false/ { saw_failure = 1 }
+  in_helper && /stage=insert-failed/ { saw_deferred_failure = 1 }
+  in_helper && /source=ghosttyFastFailClosed/ { saw_fast_fail = 1 }
+  in_helper && /insertion failed closed/ { saw_message = 1 }
+  END { exit (saw_success && saw_failure && saw_deferred_failure && saw_fast_fail && saw_message) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Claude Code terminal-host insertion helper to wait for success or fail-closed diagnostics instead of timing out early" >&2
   exit 1
 fi
 if awk '

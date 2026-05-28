@@ -1895,6 +1895,56 @@ wait_for_claude_code_terminal_tab_acceptance() {
   exit 1
 }
 
+wait_for_claude_code_terminal_insertion_result() {
+  local start_line="$1"
+  local host_name="$2"
+  local timeout_seconds="$3"
+  local deadline
+
+  timeout_seconds="${timeout_seconds%%.*}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
+    timeout_seconds=30
+  fi
+  deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if log_since_has_fields "$start_line" \
+      "insert" \
+      "app=com.anthropic.claude-code" \
+      "success=true"; then
+      return 0
+    fi
+
+    if log_since_has_fields "$start_line" \
+      "insert" \
+      "app=com.anthropic.claude-code" \
+      "success=false" ||
+       log_since_has_fields "$start_line" \
+         "claude-code-terminal-host-proof-deferred-accept" \
+         "app=com.anthropic.claude-code" \
+         "stage=insert-failed" ||
+       log_since_has_fields "$start_line" \
+         "claude-code-terminal-host-proof-insert" \
+         "app=com.anthropic.claude-code" \
+         "source=ghosttyFastFailClosed"; then
+      echo "Claude Code $host_name insertion failed closed." >&2
+      echo "Required fields: insert app=com.anthropic.claude-code success=true" >&2
+      echo "Observed insertion failure or fail-closed Ghostty proof diagnostics." >&2
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
+      exit 1
+    fi
+
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Claude Code $host_name insertion result." >&2
+  echo "Required fields: insert app=com.anthropic.claude-code success=true or success=false" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
+  exit 1
+}
+
 wait_for_obsidian_long_note_second_suggestion() {
   local start_line="$1"
   local expected_before_chars="$2"
@@ -8318,8 +8368,8 @@ claude_code_terminal_smoke_input_texts() {
   local marker
   marker="$(claude_code_proof_marker)"
   cat <<EOF
-$marker Make this setting the feature
 $marker Please make this
+$marker Make this setting the feature
 $marker This should feel
 $marker What I want is
 $marker It should almost always
@@ -9382,6 +9432,9 @@ reset_zero_window_claude_code_ghostty_proof_host() {
   local ghostty_pids window_count proof_pid
 
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
 
   ghostty_pids="$(pgrep -x ghostty 2>/dev/null || true)"
   [[ -n "$ghostty_pids" ]] || return 0
@@ -9630,11 +9683,14 @@ wait_for_claude_code_terminal_prompt() {
 
 assert_claude_code_terminal_prompt_ready() {
   local proof_text="$1"
-  local proof_pid
+  local proof_pid marker expected_prompt_text
   local -a proof_pid_args
 
   settle_claude_code_terminal_proof_focus "typed prompt AX check" || return 1
   proof_pid="$(claude_code_terminal_proof_primary_pid)"
+  marker="$(claude_code_proof_marker)"
+  expected_prompt_text="${proof_text//$marker/}"
+  expected_prompt_text="$(printf '%s' "$expected_prompt_text" | awk '{$1=$1; print}')"
   proof_pid_args=()
   if [[ -n "$proof_pid" ]]; then
     proof_pid_args=(--pid "$proof_pid")
@@ -9643,7 +9699,8 @@ assert_claude_code_terminal_prompt_ready() {
     --bundle "$(claude_code_host_bundle_id)" \
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
-    --text "$proof_text" \
+    --text "$expected_prompt_text" \
+    --require-exact-text \
     "${proof_pid_args[@]}" \
     --discovery-timeout "$(claude_code_terminal_text_wait_seconds)"
 }
@@ -12104,9 +12161,14 @@ run_claude_code_terminal_host_smoke() {
   wait_for_accessibility_ready "$runtime_start_line" "Claude Code Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Claude Code runtime readiness" 60 "$SKIP_BUILD"
   warm_claude_code_terminal_hot_accept_helpers "$host_name"
+  echo "Claude Code $host_name proof warmed CGEvent helpers."
 
+  echo "Claude Code $host_name proof cleaning stale disposable contexts."
   cleanup_stale_claude_code_terminal_proofs
+  echo "Claude Code $host_name proof stale context cleanup finished."
+  echo "Claude Code $host_name proof opening fresh disposable context."
   open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+  echo "Claude Code $host_name proof fresh disposable context ready."
   attempt=0
   found_suggestion=0
   accept_start_line="$(line_count "$LOG_PATH")"
@@ -12256,7 +12318,10 @@ run_claude_code_terminal_host_smoke() {
     exit 1
   fi
 
-  wait_for_log_pattern "$accept_start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code $host_name successful insertion" 12
+  wait_for_claude_code_terminal_insertion_result \
+    "$accept_start_line" \
+    "$host_name" \
+    "$(claude_code_terminal_accept_wait_seconds)"
   wait_for_log_pattern "$accept_start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code $host_name verified insertion" 12
   wait_for_screenshot_capture_if_enabled "$accept_start_line" "com.anthropic.claude-code" "Claude Code $host_name proof"
   assert_claude_code_terminal_prompt_retains_marker

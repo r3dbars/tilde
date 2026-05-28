@@ -12,6 +12,7 @@ struct Options {
     var discoveryTimeoutSeconds: TimeInterval = 0
     var hints: [String] = []
     var allowsMissingMarkerForEmptyText = false
+    var requiresExactText = false
 }
 
 struct Snapshot {
@@ -49,7 +50,7 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
 }
 
 func usage() -> Never {
-    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS] [--allow-missing-marker-for-empty-text]")
+    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS] [--allow-missing-marker-for-empty-text] [--require-exact-text]")
     exit(0)
 }
 
@@ -94,6 +95,8 @@ func parseOptions() -> Options {
             options.hints.append(value())
         case "--allow-missing-marker-for-empty-text":
             options.allowsMissingMarkerForEmptyText = true
+        case "--require-exact-text":
+            options.requiresExactText = true
         case "--discovery-timeout":
             let rawValue = value()
             guard let timeout = TimeInterval(rawValue), timeout >= 0 else {
@@ -279,6 +282,63 @@ func containsText(_ haystack: String, _ needle: String, caseInsensitive: Bool = 
     return normalizedWhitespace(haystack).contains(normalizedWhitespace(needle))
 }
 
+func withoutProofMarker(_ text: String, marker: String) -> String {
+    guard !marker.isEmpty else {
+        return text
+    }
+    return text.replacingOccurrences(
+        of: marker,
+        with: "",
+        options: [.caseInsensitive]
+    )
+}
+
+func withoutTerminalPromptPrefix(_ text: String) -> String {
+    let normalized = normalizedWhitespace(text)
+    let promptPrefixes = ["❯", ">", "$", "%", "›", "»", "➜"]
+    for prefix in promptPrefixes {
+        if normalized == prefix {
+            return ""
+        }
+        let spacedPrefix = "\(prefix) "
+        if normalized.hasPrefix(spacedPrefix) {
+            return normalizedWhitespace(String(normalized.dropFirst(spacedPrefix.count)))
+        }
+    }
+    return normalized
+}
+
+func exactPromptTextCandidates(from rawText: String, marker: String) -> [String] {
+    let lines = rawText
+        .components(separatedBy: .newlines)
+        .flatMap { line -> [String] in
+            let withoutMarker = withoutProofMarker(line, marker: marker)
+            var candidates = [
+                normalizedWhitespace(line),
+                normalizedWhitespace(withoutMarker),
+                withoutTerminalPromptPrefix(line),
+                withoutTerminalPromptPrefix(withoutMarker),
+            ]
+            if let markerRange = line.range(of: marker, options: [.caseInsensitive]) {
+                let suffix = String(line[markerRange.upperBound...])
+                candidates.append(normalizedWhitespace(suffix))
+                candidates.append(withoutTerminalPromptPrefix(suffix))
+            }
+            return candidates
+        }
+    return Array(Set(lines)).filter { !$0.isEmpty }
+}
+
+func containsExactPromptText(in searchable: [String], options: Options) -> Bool {
+    let expected = normalizedWhitespace(options.text)
+    guard !expected.isEmpty else {
+        return true
+    }
+    return searchable.contains { value in
+        exactPromptTextCandidates(from: value, marker: options.marker).contains(expected)
+    }
+}
+
 func searchState(in searchable: [String], options: Options) -> SearchState {
     let joinedSearchable = searchable.joined(separator: "\n")
     let hasMarker = containsText(joinedSearchable, options.marker, caseInsensitive: true)
@@ -288,9 +348,12 @@ func searchState(in searchable: [String], options: Options) -> SearchState {
     }.count
     let hasNearCompleteText = expectedTokens.count >= 4
         && expectedTokenMatches >= expectedTokens.count - 1
+    let hasExactText = options.requiresExactText
+        ? containsExactPromptText(in: searchable, options: options)
+        : containsText(joinedSearchable, options.text)
     let hasText = options.text.isEmpty
-        || containsText(joinedSearchable, options.text)
-        || hasNearCompleteText
+        || hasExactText
+        || (!options.requiresExactText && hasNearCompleteText)
     let hasHint = options.hints.isEmpty || options.hints.contains { hint in
         containsText(joinedSearchable, hint, caseInsensitive: true)
     }
