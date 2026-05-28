@@ -216,6 +216,20 @@ The wrapper now protects active runs during the early evidence window: plain
 `stop --run-dir` refuses while the run is fresh, and intentional cleanup uses
 `--force-stop`. This keeps Codex-side cleanup from turning a build or prompt
 sample into another false product red while preserving explicit operator stop.
+The clean post-guard launchd proof `20260528T225106Z-ghostty` survived the old
+external-stop window and reached the real red bar. It launched through the
+direct no-restore Ghostty path, accepted native screen-copy prompt readiness
+after AX exposed no text nodes, proved exact typed-prompt readiness, verified
+and restored native Ghostty pre-accept prompt mutation, and found a prompt-row
+suggestion at diagnostics line `1068495` with terminal prompt-anchor and
+synthetic-caret evidence. It then failed closed before Tab because every
+permission-safe key-capture sentinel missed SteadyType's event tap: session
+CGEvent Shift, HID Shift, combined-session Shift, PID-targeted Shift for Ghostty
+pid `56810`, private-source session Shift, and private-source HID Shift. System
+Events Shift stayed skipped behind the explicit opt-in permission-risk env. The
+next Ghostty blocker is therefore an observable key source / accept driver that
+reaches SteadyType's event tap for Ghostty, not prompt readiness, placement,
+or external TERM interference.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
