@@ -9273,6 +9273,27 @@ claude_code_ghostty_launch_stalled_before_stage() {
   ! grep -Fx "$required_stage" "$stage_file" >/dev/null 2>&1
 }
 
+claude_code_ghostty_configured_window_shell_not_ready() {
+  local stage_file="$1"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$stage_file" && -s "$stage_file" ]] || return 1
+
+  grep -Fxq "configured-window-created" "$stage_file" 2>/dev/null &&
+    grep -Fxq "shell-delay-finished" "$stage_file" 2>/dev/null &&
+    ! grep -Fxq "terminal-working-directory-present" "$stage_file" 2>/dev/null
+}
+
+claude_code_ghostty_retry_window_shell_not_ready() {
+  local stage_file="$1"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$stage_file" && -s "$stage_file" ]] || return 1
+
+  grep -Fxq "retry-shell-delay-finished" "$stage_file" 2>/dev/null &&
+    ! grep -Fxq "retry-terminal-working-directory-present" "$stage_file" 2>/dev/null
+}
+
 wait_for_claude_code_terminal_pidfile_process_optional() {
   local timeout="${1:-3}"
   local timeout_seconds="${timeout%%.*}"
@@ -9713,6 +9734,13 @@ APPLESCRIPT
           echo "Claude Code Ghostty proof AppleScript bridge stalled during disposable window creation; skipping retry." >&2
           return 42
         fi
+        if claude_code_ghostty_configured_window_shell_not_ready "$ghostty_launch_stage_file"; then
+          printf '%s\n' "configured-window-shell-not-ready" >>"$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
+          echo "Claude Code Ghostty proof configured window opened but did not become shell-ready; retrying command submission." >&2
+        fi
         if ! run_osascript_with_timeout \
             "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-10}" \
             "Claude Code Ghostty proof launch retry" \
@@ -9805,13 +9833,20 @@ APPLESCRIPT
         fi
         if ! wait_for_claude_code_terminal_pidfile_process_optional \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_PID_SECONDS:-10}"; then
+          if claude_code_ghostty_retry_window_shell_not_ready "$ghostty_launch_stage_file"; then
+            printf '%s\n' "retry-configured-window-shell-not-ready" >>"$ghostty_launch_stage_file"
+          fi
           describe_claude_code_terminal_proof_process_state \
             "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" \
             "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
           describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
           describe_claude_code_ghostty_launch_state "$proof_title"
           describe_claude_code_ghostty_process_tree
-          echo "Claude Code Ghostty proof shell did not exec the disposable proof command." >&2
+          if claude_code_ghostty_retry_window_shell_not_ready "$ghostty_launch_stage_file"; then
+            echo "Claude Code Ghostty proof configured window never became shell-ready enough to exec the disposable proof command." >&2
+          else
+            echo "Claude Code Ghostty proof shell did not exec the disposable proof command." >&2
+          fi
           return 1
         fi
       fi
