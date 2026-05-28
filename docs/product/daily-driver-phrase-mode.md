@@ -517,7 +517,8 @@ preempting the target window.
 The runner-isolated path now has a concrete wrapper:
 `./script/claude_code_ghostty_detached_proof.sh start` launches the same
 Ghostty one-word no-submit proof through a short-lived LaunchAgent and writes
-status/logs under `dist/claude-code-ghostty-detached-proof/`. Use
+status/logs plus preserved proof artifacts under
+`dist/claude-code-ghostty-detached-proof/`. Use
 `./script/claude_code_ghostty_detached_proof.sh wait` to collect the result; the
 wait path also unloads the completed LaunchAgent. The first real launchd run
 survived Codex shell cleanup and found the Claude CLI, but it failed before
@@ -527,8 +528,10 @@ not Ghostty support; support only starts after that detached run proves
 prompt-row placement and verified one-word insertion without submitting the
 prompt.
 
-The detached runner is now Terminal/nohup-based by default, has a `stop` command,
-and no longer wedges on Ghostty's native `input text` AppleEvent. The proof
+The detached runner has a `stop` command and no longer wedges on Ghostty's
+native `input text` AppleEvent. It defaults to the LaunchAgent runner again,
+with Terminal/nohup kept as explicit fallback launchers, because a live nohup
+probe can inherit the caller process group and receive SIGTERM mid-proof. The proof
 harness now uses HID CGEvent Unicode text for Ghostty setup typing, records the
 diagnostics line immediately before the final trigger character, refuses older
 prompt-row suggestions from before that trigger, bounds stale cleanup and
@@ -930,6 +933,12 @@ original prompt before the delayed app-owned insert fires. The matching app-side
 delay clamp now allows an explicitly configured 3s proof window. That should
 separate "Tab poisoned the prompt before insertion" from "only SteadyType-owned
 insertion transports are no-ops" on the next detached run.
+
+The first launchd comparator attempt, `20260528T193340Z-ghostty`, stayed clean
+at the wrapper layer but did not reach that question. Both disposable Ghostty
+attempts failed before prompt readiness with `textNodes=0`, `markerWindows=0`,
+and no marker. The comparator remains the right next proof, but only after the
+no-restore Ghostty launch path reliably reaches a Claude prompt row.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh

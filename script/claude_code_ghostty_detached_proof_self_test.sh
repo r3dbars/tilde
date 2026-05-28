@@ -47,6 +47,8 @@ require_contains script/claude_code_ghostty_detached_proof.sh "SteadyType Submit
 require_contains script/claude_code_ghostty_detached_proof.sh "unsafeWindowCount"
 require_contains script/claude_code_ghostty_detached_proof.sh "Detached Ghostty proof resetting stale-only Ghostty host before launch"
 require_contains script/claude_code_ghostty_detached_proof.sh 'reset_stale_only_ghostty_host_before_start "$log_file"'
+require_contains script/claude_code_ghostty_detached_proof.sh "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR"
+require_contains script/real_app_smoke.sh "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/dry-run.txt"
@@ -76,6 +78,7 @@ require_contains "$TMP_DIR/dry-run.txt" "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1"
 require_contains "$TMP_DIR/dry-run.txt" "proof.log"
 require_contains "$TMP_DIR/dry-run.txt" "status.env"
 require_contains "$TMP_DIR/dry-run.txt" "Smoke startup:"
+require_contains "$TMP_DIR/dry-run.txt" "Proof artifacts:"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
 AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1 \
@@ -381,6 +384,10 @@ require_contains "$SCRIPT_TEXT" "smoke_pid_file_for_run"
 require_contains "$SCRIPT_TEXT" "smoke_pid_for_run"
 require_contains "$SCRIPT_TEXT" "SMOKE_PID_FILE"
 require_contains "$SCRIPT_TEXT" "SMOKE_STARTUP_MARKER_FILE"
+require_contains "$SCRIPT_TEXT" "PROOF_ARTIFACT_DIR"
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR"
+require_contains "$SCRIPT_TEXT" 'proof_artifact_dir=%s'
+require_contains "$SCRIPT_TEXT" 'Proof artifacts: $proof_artifact_dir'
 require_contains "$SCRIPT_TEXT" "startup_log=%s"
 require_contains "$SCRIPT_TEXT" 'SMOKE_PID=""'
 require_contains "$SCRIPT_TEXT" 'smoke_pid=%s'

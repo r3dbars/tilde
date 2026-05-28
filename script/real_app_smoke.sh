@@ -1399,6 +1399,15 @@ make_tmp_dir() {
 
 make_claude_code_terminal_proof_dir() {
   local base_dir tmp_dir
+  base_dir="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR:-}"
+  if [[ -n "$base_dir" ]]; then
+    base_dir="${base_dir%/}"
+    mkdir -p "$base_dir"
+    tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
+    printf '%s\n' "$tmp_dir"
+    return 0
+  fi
+
   base_dir="${TMPDIR:-/tmp}"
   base_dir="${base_dir%/}"
   tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
