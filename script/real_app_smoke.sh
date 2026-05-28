@@ -68,6 +68,7 @@ CLAUDE_DRAFT_BACKUP_PATH=""
 CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
+CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
 CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
 CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
 SMOKE_PHASE="startup"
@@ -1840,7 +1841,13 @@ wait_for_claude_code_terminal_tab_acceptance() {
   local start_line="$1"
   local host_name="$2"
   local timeout_seconds="$3"
-  local deadline=$((SECONDS + timeout_seconds))
+  local deadline
+
+  timeout_seconds="${timeout_seconds%%.*}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
+    timeout_seconds=30
+  fi
+  deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
     if log_since_has_fields "$start_line" \
@@ -8963,6 +8970,42 @@ process_id_has_name() {
   [[ "$command_name" == "$expected_name" || "$command_name" == "-$expected_name" ]]
 }
 
+process_id_or_tree_has_name() {
+  local pid="$1"
+  local expected_name="$2"
+
+  [[ -z "$pid" || -z "$expected_name" ]] && return 1
+  process_id_has_name "$pid" "$expected_name" ||
+    process_tree_contains_name "$pid" "$expected_name"
+}
+
+describe_claude_code_terminal_proof_process_state() {
+  local expected_name="$1"
+  local label="${2:-$expected_name}"
+  local proof_pid ps_line exit_state
+
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
+        -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+    proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+    if [[ -n "$proof_pid" ]]; then
+      ps_line="$(ps -p "$proof_pid" -o pid=,ppid=,stat=,comm=,args= 2>/dev/null || true)"
+      if [[ -n "$ps_line" ]]; then
+        echo "Claude Code Terminal proof pidfile process state: $ps_line" >&2
+      else
+        echo "Claude Code Terminal proof pidfile process no longer exists: $proof_pid" >&2
+      fi
+    fi
+  elif [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+    echo "Claude Code Terminal proof pidfile was not written: $CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" >&2
+  fi
+
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE" &&
+        -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE" ]]; then
+    exit_state="$(tr '\n' ' ' <"$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE" | head -c 240)"
+    echo "Claude Code Terminal proof $label exit state: $exit_state" >&2
+  fi
+}
+
 wait_for_claude_code_terminal_pidfile_process_optional() {
   local timeout="${1:-3}"
   local timeout_seconds="${timeout%%.*}"
@@ -8983,7 +9026,7 @@ wait_for_claude_code_terminal_pidfile_process_optional() {
   while ((SECONDS <= deadline)); do
     if [[ -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
       proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
-      if process_id_has_name "$proof_pid" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"; then
+      if process_id_or_tree_has_name "$proof_pid" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"; then
         return 0
       fi
     fi
@@ -8993,7 +9036,7 @@ wait_for_claude_code_terminal_pidfile_process_optional() {
   return 1
 }
 
-wait_for_claude_code_terminal_process_name() {
+try_wait_for_claude_code_terminal_process_name() {
   local expected_name="$1"
   local label="${2:-$expected_name}"
   local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
@@ -9002,7 +9045,7 @@ wait_for_claude_code_terminal_process_name() {
 
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" || -z "$expected_name" ]]; then
     echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
-    exit 1
+    return 1
   fi
   if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
     timeout_seconds=20
@@ -9016,7 +9059,7 @@ wait_for_claude_code_terminal_process_name() {
     if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
           -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
       proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
-      if process_id_has_name "$proof_pid" "$expected_name"; then
+      if process_id_or_tree_has_name "$proof_pid" "$expected_name"; then
         return 0
       fi
     fi
@@ -9028,8 +9071,13 @@ wait_for_claude_code_terminal_process_name() {
     sleep 0.2
   done
 
+  describe_claude_code_terminal_proof_process_state "$expected_name" "$label"
   echo "Claude Code Terminal proof did not start $label under disposable $(claude_code_host_display_name) pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
-  exit 1
+  return 1
+}
+
+wait_for_claude_code_terminal_process_name() {
+  try_wait_for_claude_code_terminal_process_name "$@" || exit 1
 }
 
 wait_for_claude_code_terminal_process() {
@@ -9088,7 +9136,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_shell_ready_delay
+  local ghostty_pid ghostty_launch_command ghostty_shell_ready_delay ghostty_exit_hold_seconds
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -9111,12 +9159,23 @@ open_claude_code_terminal_proof() {
   title_sequence=$'\033]0;'"$proof_title"$'\007'
   launch_script="$proof_dir/steadytype-claude-code-proof.command"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE="$proof_dir/claude.pid"
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE="$proof_dir/claude.exit"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q\n' "$ROOT_DIR"
     printf 'printf '"'"'%%s\\n'"'"' "$$" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"
     printf 'printf %q\n' "$title_sequence"
-    printf 'exec %q\n' "$claude_bin"
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      ghostty_exit_hold_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS:-20}"
+      printf '%q\n' "$claude_bin"
+      printf 'claude_status=$?\n'
+      printf 'printf '"'"'status=%%s finished_at=%%s\\n'"'"' "$claude_status" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE"
+      printf 'printf '"'"'\\n[SteadyType proof] Claude exited with status %%s; keeping Ghostty open for diagnostics.\\n'"'"' "$claude_status"\n'
+      printf 'sleep %q\n' "$ghostty_exit_hold_seconds"
+      printf 'exit "$claude_status"\n'
+    else
+      printf 'exec %q\n' "$claude_bin"
+    fi
   } >"$launch_script"
   chmod +x "$launch_script"
 
@@ -9130,6 +9189,7 @@ open_claude_code_terminal_proof() {
       ;;
     ghostty)
       CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
+      reset_zero_window_claude_code_ghostty_proof_host
       ghostty_launch_command="$(printf 'exec %q' "$launch_script")"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.2}"
       if ! run_osascript_with_timeout \
@@ -9285,6 +9345,7 @@ cleanup_claude_code_terminal_proof() {
   elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
     close_claude_code_ghostty_proof_window_by_title || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    reset_zero_window_claude_code_ghostty_proof_host
   elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
     local host_process
     host_process="$(claude_code_host_process_name)"
@@ -9295,9 +9356,44 @@ cleanup_claude_code_terminal_proof() {
   CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
   CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
   CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
+}
+
+reset_zero_window_claude_code_ghostty_proof_host() {
+  local ghostty_pids window_count proof_pid
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+
+  ghostty_pids="$(pgrep -x ghostty 2>/dev/null || true)"
+  [[ -n "$ghostty_pids" ]] || return 0
+
+  window_count="$(run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_CHECK_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty zero-window host check" <<'APPLESCRIPT' 2>/dev/null || true
+tell application id "com.mitchellh.ghostty"
+  return (count windows) as text
+end tell
+APPLESCRIPT
+)"
+  window_count="$(printf '%s' "$window_count" | tr -d '[:space:]')"
+  [[ "$window_count" == "0" ]] || return 0
+
+  echo "Claude Code Ghostty proof resetting zero-window Ghostty host pid(s): $(printf '%s' "$ghostty_pids" | tr '\n' ' ')" >&2
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    kill "$proof_pid" >/dev/null 2>&1 || true
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    if kill -0 "$proof_pid" >/dev/null 2>&1; then
+      kill -KILL "$proof_pid" >/dev/null 2>&1 || true
+    fi
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
 }
 
 close_claude_code_ghostty_proof_window_by_title() {
@@ -9328,6 +9424,46 @@ return false
 APPLESCRIPT
 }
 
+cleanup_stale_claude_code_ghostty_proofs() {
+  local marker cleanup_legacy_tmp_windows closed_count
+  marker="$(claude_code_proof_marker)"
+  cleanup_legacy_tmp_windows="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-0}"
+
+  pgrep -x ghostty >/dev/null 2>&1 || return 0
+
+  closed_count="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="$cleanup_legacy_tmp_windows" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_CLEANUP_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty stale proof window cleanup" <<'APPLESCRIPT' || true
+set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
+set proofDirectoryMarker to "steadytype-claude-code-proof"
+set closedCount to 0
+tell application id "com.mitchellh.ghostty"
+  repeat with windowIndex from (count windows) to 1 by -1
+    try
+      set candidateWindow to window windowIndex
+      set windowName to name of candidateWindow as text
+      if windowName contains markerText or windowName contains proofDirectoryMarker then
+        close candidateWindow
+        set closedCount to closedCount + 1
+      else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
+        close candidateWindow
+        set closedCount to closedCount + 1
+      end if
+    end try
+  end repeat
+end tell
+return closedCount as text
+APPLESCRIPT
+)"
+  if [[ "$closed_count" =~ ^[1-9][0-9]*$ ]]; then
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  fi
+  reset_zero_window_claude_code_ghostty_proof_host
+}
+
 cleanup_stale_claude_code_terminal_proofs() {
   local marker stale_pids stale_pid cleanup_host_bundle cleanup_legacy_tmp_windows
   marker="$(claude_code_proof_marker)"
@@ -9336,6 +9472,10 @@ cleanup_stale_claude_code_terminal_proofs() {
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
         -z "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS+x}" ]]; then
     cleanup_legacy_tmp_windows=0
+  fi
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    cleanup_stale_claude_code_ghostty_proofs
+    return
   fi
   stale_pids="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_HOST_BUNDLE="$cleanup_host_bundle" \
@@ -9395,29 +9535,51 @@ APPLESCRIPT
 open_fresh_claude_code_terminal_proof_context() {
   local host_name="$1"
   local marker="$2"
-  local proof_dir
+  local proof_dir launch_attempt max_launch_attempts
+  max_launch_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CONTEXT_LAUNCH_ATTEMPTS:-2}"
+  if ! [[ "$max_launch_attempts" =~ ^[0-9]+$ ]] || ((max_launch_attempts < 1)); then
+    max_launch_attempts=1
+  fi
 
-  cleanup_claude_code_terminal_proof
-  proof_dir="$(make_claude_code_terminal_proof_dir)"
-  CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"
-  open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" || return 1
-  if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
-    echo "Claude Code $host_name proof host app did not become frontmost for fresh context." >&2
-    return 1
-  fi
-  wait_for_claude_code_terminal_prompt
-  if ! settle_claude_code_terminal_proof_focus "fresh proof context"; then
-    echo "Claude Code $host_name proof could not keep its disposable host focused for fresh context." >&2
-    return 1
-  fi
+  for launch_attempt in $(seq 1 "$max_launch_attempts"); do
+    cleanup_claude_code_terminal_proof
+    proof_dir="$(make_claude_code_terminal_proof_dir)"
+    CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"
+    if ! open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then
+      echo "Claude Code $host_name proof could not launch disposable context attempt $launch_attempt." >&2
+      continue
+    fi
+    if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
+      echo "Claude Code $host_name proof host app did not become frontmost for fresh context attempt $launch_attempt." >&2
+      continue
+    fi
+    if ! try_wait_for_claude_code_terminal_prompt; then
+      echo "Claude Code $host_name proof prompt was not ready for fresh context attempt $launch_attempt." >&2
+      continue
+    fi
+    if settle_claude_code_terminal_proof_focus "fresh proof context"; then
+      return 0
+    fi
+    echo "Claude Code $host_name proof could not keep its disposable host focused for fresh context attempt $launch_attempt." >&2
+  done
+
+  echo "Claude Code $host_name proof could not launch a fresh disposable context after $max_launch_attempts attempt(s)." >&2
+  return 1
 }
 
-wait_for_claude_code_terminal_prompt() {
+try_wait_for_claude_code_terminal_prompt() {
   local proof_pid
   local -a proof_pid_args prompt_marker_args
 
-  wait_for_frontmost_claude_code_terminal_proof_process
-  wait_for_claude_code_terminal_process
+  if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+    return 1
+  fi
+  if ! try_wait_for_claude_code_terminal_process_name \
+    "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" \
+    "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"; then
+    return 1
+  fi
   proof_pid="$(claude_code_terminal_proof_primary_pid)"
   proof_pid_args=()
   if [[ -n "$proof_pid" ]]; then
@@ -9436,14 +9598,18 @@ wait_for_claude_code_terminal_prompt() {
         --marker "$(claude_code_proof_marker)" \
         "${proof_pid_args[@]}" \
         "${prompt_marker_args[@]}" \
-        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
+        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}" || return 1
       ;;
     *)
       echo "Claude Code $(claude_code_host_display_name) prompt readiness is not automated for this host." >&2
-      exit 1
+      return 1
       ;;
   esac
   sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS:-3}"
+}
+
+wait_for_claude_code_terminal_prompt() {
+  try_wait_for_claude_code_terminal_prompt || exit 1
 }
 
 assert_claude_code_terminal_prompt_ready() {
@@ -9479,6 +9645,22 @@ claude_code_terminal_text_wait_seconds() {
     printf '%s\n' "$wait_seconds"
   else
     printf '%s\n' "4"
+  fi
+}
+
+claude_code_terminal_accept_wait_seconds() {
+  local wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-}"
+  if [[ -z "$wait_seconds" ]]; then
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ACCEPT_WAIT_SECONDS:-90}"
+    else
+      wait_seconds="30"
+    fi
+  fi
+  if [[ "$wait_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$wait_seconds"
+  else
+    printf '%s\n' "30"
   fi
 }
 
@@ -12034,7 +12216,7 @@ run_claude_code_terminal_host_smoke() {
       wait_for_claude_code_terminal_tab_acceptance \
         "$accept_start_line" \
         "$host_name" \
-        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}"
+        "$(claude_code_terminal_accept_wait_seconds)"
       found_suggestion=1
       break
     fi

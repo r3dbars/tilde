@@ -277,13 +277,51 @@ host_active_end = source.index("guard_ghostty_frontmost_bundle_fallback()", host
 host_active_block = source[host_active_start:host_active_end]
 if 'try_wait_for_frontmost_app "$host_app" 1' not in host_active_block:
     raise SystemExit("Ghostty proof frontmost matching must accept System Events host-app frontmost proof when NSWorkspace lags")
+if "cleanup_stale_claude_code_ghostty_proofs()" not in source:
+    raise SystemExit("Ghostty proof cleanup must have a Ghostty-native stale window cleanup path")
+ghostty_cleanup_start = source.index("cleanup_stale_claude_code_ghostty_proofs()")
+ghostty_cleanup_end = source.index("cleanup_stale_claude_code_terminal_proofs()", ghostty_cleanup_start)
+ghostty_cleanup_block = source[ghostty_cleanup_start:ghostty_cleanup_end]
+if 'tell application id "com.mitchellh.ghostty"' not in ghostty_cleanup_block:
+    raise SystemExit("Ghostty stale cleanup must use Ghostty's own window API")
+if "application processes" in ghostty_cleanup_block:
+    raise SystemExit("Ghostty stale cleanup must not enumerate System Events application windows")
+if "reset_zero_window_claude_code_ghostty_proof_host()" not in source:
+    raise SystemExit("Ghostty proof cleanup must reset poisoned zero-window Ghostty hosts")
+zero_window_reset_start = source.index("reset_zero_window_claude_code_ghostty_proof_host()")
+zero_window_reset_end = source.index("close_claude_code_ghostty_proof_window_by_title()", zero_window_reset_start)
+zero_window_reset_block = source[zero_window_reset_start:zero_window_reset_end]
+if 'return (count windows) as text' not in zero_window_reset_block:
+    raise SystemExit("Ghostty zero-window reset must prove no user windows through Ghostty's own API")
+if '[[ "$window_count" == "0" ]]' not in zero_window_reset_block:
+    raise SystemExit("Ghostty zero-window reset must only kill the host when window count is exactly zero")
+if 'kill -KILL "$proof_pid"' not in zero_window_reset_block:
+    raise SystemExit("Ghostty zero-window reset must hard-reset a stuck zero-window process")
+open_proof_start = source.index("open_claude_code_terminal_proof()")
+open_proof_end = source.index("cleanup_claude_code_terminal_proof()", open_proof_start)
+open_proof_block = source[open_proof_start:open_proof_end]
+if "reset_zero_window_claude_code_ghostty_proof_host" not in open_proof_block:
+    raise SystemExit("Ghostty proof launch must reset zero-window hosts before creating a new proof window")
+if "reset_zero_window_claude_code_ghostty_proof_host" not in ghostty_cleanup_block:
+    raise SystemExit("Ghostty stale cleanup must reset zero-window hosts after closing stale proof windows")
+generic_cleanup_start = source.index("cleanup_stale_claude_code_terminal_proofs()")
+generic_cleanup_end = source.index("open_fresh_claude_code_terminal_proof_context()", generic_cleanup_start)
+generic_cleanup_block = source[generic_cleanup_start:generic_cleanup_end]
+if 'if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]' not in generic_cleanup_block or "cleanup_stale_claude_code_ghostty_proofs" not in generic_cleanup_block:
+    raise SystemExit("Ghostty stale cleanup must bypass generic System Events terminal process cleanup")
 fresh_context_start = source.index("open_fresh_claude_code_terminal_proof_context()")
 fresh_context_end = source.index("wait_for_claude_code_terminal_prompt()", fresh_context_start)
 fresh_context_block = source[fresh_context_start:fresh_context_end]
 if 'settle_claude_code_terminal_proof_focus "fresh proof context"' not in fresh_context_block:
     raise SystemExit("Ghostty fresh-context setup must repair exact proof focus before failing")
+if "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CONTEXT_LAUNCH_ATTEMPTS" not in fresh_context_block or "try_wait_for_claude_code_terminal_prompt" not in fresh_context_block:
+    raise SystemExit("Ghostty fresh-context setup must retry transient disposable launch failures")
 if 'assert_frontmost_app "$host_name" "Claude Code $host_name proof"' in fresh_context_block:
     raise SystemExit("Ghostty fresh-context setup must not use a plain host-app assertion after exact proof focus repair")
+if "try_wait_for_claude_code_terminal_process_name()" not in source or "wait_for_claude_code_terminal_process_name() {\n  try_wait_for_claude_code_terminal_process_name" not in source:
+    raise SystemExit("Claude Code terminal process discovery must offer a retryable helper plus the fatal wrapper")
+if "try_wait_for_claude_code_terminal_prompt()" not in source or "wait_for_claude_code_terminal_prompt() {\n  try_wait_for_claude_code_terminal_prompt || exit 1" not in source:
+    raise SystemExit("Claude Code terminal prompt readiness must offer a retryable helper plus the fatal wrapper")
 start = source.index('run_textedit_model_latency()')
 end = source.index('run_textedit_default_model_latency()', start)
 block = source[start:end]
@@ -519,7 +557,7 @@ if "prepareGhosttyTerminalHostProofInsertionTarget" not in fast_ghostty_block:
 if "focusGhosttyTerminalHostProofPromptByClickIfAvailable" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must click the proven prompt-row caret before app-owned insertion")
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
-    raise SystemExit("Claude Code Ghostty fast proof must try guarded System Events before pasteboard fallback")
+    raise SystemExit("Claude Code Ghostty fast proof must keep guarded System Events fallback rungs")
 if "insertGhosttyTerminalHostProofInProcessInputText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try app-owned in-process native input text before subprocess input fallbacks")
 if "insertGhosttyTerminalHostProofFrontWindowInputText" not in fast_ghostty_block:
@@ -576,8 +614,10 @@ if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHe
     raise SystemExit("Claude Code Ghostty fast proof must try the bundled text helper before in-process Unicode events")
 if fast_ghostty_block.index("ghosttyShellBulkSystemEventsOutcome") < fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
     raise SystemExit("Claude Code Ghostty fast proof must try bundled helpers before the shell-launched System Events bulk fallback")
-if fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
-    raise SystemExit("Claude Code Ghostty fast proof must try in-process Unicode events before pasteboard fallback")
+if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slower native input fallbacks")
+if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
+    raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slow System Events fallbacks")
 if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must fail closed before generic insertion fallbacks")
 if "postHardwareTextKeyEvents" not in hardware_helper_block or "mutatedInputReason" not in hardware_helper_block:
@@ -2653,8 +2693,16 @@ if ! grep -F 'claude_code_terminal_text_wait_seconds()' script/real_app_smoke.sh
   echo "real app smoke self-test expected Ghostty typed prompt readiness to use a longer host-specific AX wait" >&2
   exit 1
 fi
+if ! grep -F 'claude_code_terminal_accept_wait_seconds()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ACCEPT_WAIT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ACCEPT_WAIT_SECONDS:-90}"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$(claude_code_terminal_accept_wait_seconds)"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty Tab acceptance to wait for the full verified insertion ladder" >&2
+  exit 1
+fi
 if ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PIDS" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE" script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"$proof_dir/claude.pid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "process_tree_contains_name" script/real_app_smoke.sh >/dev/null; then
@@ -2665,7 +2713,7 @@ if ! grep -F 'set proofWindow to new window' script/real_app_smoke.sh >/dev/null
    ! grep -F 'input text launchCommand to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'send key "enter" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof launch to create a script-owned disposable shell window and exec the proof command without killing the user's Ghostty process" >&2
+  echo "real app smoke self-test expected Ghostty proof launch to create a script-owned disposable shell window without killing the user's Ghostty process" >&2
   exit 1
 fi
 if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/dev/null ||
@@ -2675,15 +2723,19 @@ if ! grep -F "steadytype-claude-code-proof.command" script/real_app_smoke.sh >/d
   exit 1
 fi
 if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'close window candidateWindow' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof cleanup to close the disposable proof window instead of killing the host app" >&2
+   ! grep -F 'close window candidateWindow' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "reset_zero_window_claude_code_ghostty_proof_host" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_CHECK_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Ghostty proof cleanup to close the disposable proof window and only reset a proven zero-window host" >&2
   exit 1
 fi
 if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "working directory of targetTerminal" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'send key "u" modifiers "control" to targetTerminal' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Terminal proof $label exit state' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "Claude Code Ghostty proof shell did not exec the disposable proof command." script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Ghostty proof launch to verify and retry the disposable shell command before prompt discovery" >&2
+  echo "real app smoke self-test expected Ghostty proof launch to verify, retry, and diagnose the disposable shell command before prompt discovery" >&2
   exit 1
 fi
 if ! grep -F "mark_claude_code_ghostty_proof_window_title" script/real_app_smoke.sh >/dev/null ||
@@ -2692,14 +2744,15 @@ if ! grep -F "mark_claude_code_ghostty_proof_window_title" script/real_app_smoke
   echo "real app smoke self-test expected Ghostty proof launch to restamp the disposable title marker after Claude starts" >&2
   exit 1
 fi
-if ! grep -F 'process_id_has_name "$proof_pid" "$expected_name"' script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile" >&2
+if ! grep -F 'process_id_or_tree_has_name "$proof_pid" "$expected_name"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile wrapper or child process" >&2
   exit 1
 fi
-if ! grep -F 'open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" || return 1' script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'if ! open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'try_wait_for_frontmost_claude_code_terminal_proof_process' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Terminal proof process did not become frontmost' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'Claude Code $host_name proof host app did not become frontmost for fresh context.' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'Claude Code $host_name proof host app did not become frontmost for fresh context attempt $launch_attempt.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code $host_name proof could not launch a fresh disposable context after $max_launch_attempts attempt(s).' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected fresh Claude Code terminal proof launch to fail cleanly when focus activation is blocked" >&2
   exit 1
 fi

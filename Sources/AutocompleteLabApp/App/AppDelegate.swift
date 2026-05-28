@@ -9851,6 +9851,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+            let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteboardOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteboardOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyInProcessInputTextOutcome = insertGhosttyTerminalHostProofInProcessInputText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10130,19 +10144,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
-                acceptedText,
-                expectedProofInputText: expectedProofInputText,
-                originalProofInputText: originalProofInputText,
-                frontmostApp: frontmostApp,
-                profile: currentProfile
-            )
-            if ghosttyPasteboardOutcome.verified {
-                return true
-            }
-            guard ghosttyPasteboardOutcome.safeToContinue else {
-                return false
-            }
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
