@@ -2349,14 +2349,20 @@ run_claude_code_ghostty_pre_accept_external_mutation_probe_one() {
   fi
   sleep "$(claude_code_ghostty_typing_drain_seconds)"
 
-  if try_claude_code_terminal_prompt_ready_quiet "$proof_text$probe_text" "$verify_seconds"; then
+  if try_claude_code_terminal_prompt_ready_bounded_quiet \
+    "$proof_text$probe_text" \
+    "$verify_seconds" \
+    "Claude Code Ghostty pre-accept external $label mutation readiness"; then
     echo "Claude Code Ghostty pre-accept external $label mutability probe verified prompt mutation before app-owned insertion." >&2
     if ! press_claude_code_terminal_external_backspace_key "Ghostty pre-accept $label restore"; then
       echo "Claude Code Ghostty pre-accept external $label mutability probe could not post restore backspace." >&2
       return 1
     fi
     sleep "$(claude_code_ghostty_typing_drain_seconds)"
-    if try_claude_code_terminal_prompt_ready_quiet "$proof_text" "$verify_seconds"; then
+    if try_claude_code_terminal_prompt_ready_bounded_quiet \
+      "$proof_text" \
+      "$verify_seconds" \
+      "Claude Code Ghostty pre-accept external $label restore readiness"; then
       echo "Claude Code Ghostty pre-accept external $label mutability probe restored the original prompt." >&2
       return 0
     fi
@@ -2365,7 +2371,10 @@ run_claude_code_ghostty_pre_accept_external_mutation_probe_one() {
   fi
 
   echo "Claude Code Ghostty pre-accept external $label mutability probe did not verify prompt mutation." >&2
-  if try_claude_code_terminal_prompt_ready_quiet "$proof_text" "$verify_seconds"; then
+  if try_claude_code_terminal_prompt_ready_bounded_quiet \
+    "$proof_text" \
+    "$verify_seconds" \
+    "Claude Code Ghostty pre-accept external $label unchanged readiness"; then
     return 0
   fi
   echo "Claude Code Ghostty pre-accept external $label mutability probe left the prompt in an unverified state." >&2
@@ -11324,6 +11333,36 @@ try_claude_code_terminal_prompt_ready_quiet() {
   else
     assert_claude_code_terminal_prompt_ready "$proof_text" >/dev/null 2>&1
   fi
+}
+
+try_claude_code_terminal_prompt_ready_bounded_quiet() {
+  local proof_text="$1"
+  local timeout_seconds="${2:-}"
+  local label="${3:-Claude Code terminal prompt readiness}"
+  local guard_seconds pid status
+
+  guard_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROMPT_READY_GUARD_SECONDS:-}"
+  if [[ -z "$guard_seconds" ]]; then
+    guard_seconds="${timeout_seconds:-$(claude_code_terminal_text_wait_seconds)}"
+    guard_seconds="${guard_seconds%%.*}"
+    if ! [[ "$guard_seconds" =~ ^[0-9]+$ ]] || ((guard_seconds < 1)); then
+      guard_seconds=4
+    fi
+    guard_seconds=$((guard_seconds + 8))
+  fi
+  guard_seconds="${guard_seconds%%.*}"
+  if ! [[ "$guard_seconds" =~ ^[0-9]+$ ]] || ((guard_seconds < 1)); then
+    guard_seconds=12
+  fi
+
+  try_claude_code_terminal_prompt_ready_quiet "$proof_text" "$timeout_seconds" &
+  pid="$!"
+  wait_for_background_process "$pid" "$guard_seconds" "$label"
+  status=$?
+  if ((status == 124)); then
+    echo "$label timed out while verifying prompt readiness." >&2
+  fi
+  return "$status"
 }
 
 claude_code_terminal_text_wait_seconds() {
