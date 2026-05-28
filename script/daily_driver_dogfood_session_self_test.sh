@@ -37,13 +37,13 @@ export AUTOCOMPLETE_LAB_STEADYTYPE_STATUS_OVERRIDE=running
 
 cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:00:00Z","sessionID":"old","suggestionID":"old","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":200}
-{"timestamp":"2026-05-25T00:01:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:01:00Z","sessionID":"s","suggestionID":"s1","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","predictivePhraseMatch":"intent-writing-bridge-problem-is","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:01:01Z","sessionID":"s","suggestionID":"s1","type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","metadata":{"acceptanceID":"a1"}}
 {"timestamp":"2026-05-25T00:01:02Z","sessionID":"s","suggestionID":"s1","type":"insertionVerified","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","metadata":{"acceptanceID":"a1"}}
 {"timestamp":"2026-05-25T00:01:12Z","sessionID":"s","suggestionID":"s1","type":"acceptedTextEdited","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","metadata":{"acceptanceID":"a1","checkpoint":"10s","survivalClass":"exactKept","strongAcceptedAndKept":"true"}}
 {"timestamp":"2026-05-25T00:02:00Z","sessionID":"s","suggestionID":"s2","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":220,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:02:10Z","sessionID":"s","suggestionID":"s2","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"escape-dismissed"}
-{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","predictivePhraseMatch":"intent-markdown-next","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:03:05Z","sessionID":"s","suggestionID":"s3","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"model-result","reason":"empty-suggestion","metadata":{"candidateSelectionSource":"app-model-result","fieldKind":"plain","keptVisibleStreamingSuggestion":"true"}}
 {"timestamp":"2026-05-25T00:03:20Z","sessionID":"s","suggestionID":"s3","type":"suggestionTypedOver","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"typed-against-visible-suggestion"}
 {"timestamp":"2026-05-25T00:04:00Z","sessionID":"s","suggestionID":"s4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","latencyMilliseconds":240,"metadata":{"candidateSelectionSource":"fast-word-completion","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"1","supportState":"supported"}}
@@ -52,7 +52,7 @@ cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:05:10Z","sessionID":"s","suggestionID":"q2","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"predictive-phrase-fallback","reason":"no-suggestion","metadata":{"candidateSelectionSource":"predictive-phrase-fallback","fieldKind":"plain"}}
 {"timestamp":"2026-05-25T00:05:20Z","sessionID":"s","suggestionID":"q3","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"predictive-phrase-fallback","reason":"fast-phrase-learning-restraint","metadata":{"candidateSelectionSource":"predictive-phrase-fallback","fieldKind":"plain","fastPhraseFallbackLearningSuppressed":"true","acceptedAndKeptSamples":"6","acceptedAndKeptRejected":"6"}}
 {"timestamp":"2026-05-25T00:06:10Z","sessionID":"s","suggestionID":"s5","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":250,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
-{"timestamp":"2026-05-25T00:06:20Z","sessionID":"s","suggestionID":"s6","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:06:20Z","sessionID":"s","suggestionID":"s6","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","predictivePhraseMatch":"i just wanted to","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:06:21Z","sessionID":"s","suggestionID":"s6","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"model-result","latencyMilliseconds":210,"metadata":{"candidateSelectionSource":"app-model-result","fastPhraseFallbackOutcome":"shown-then-model","fieldKind":"plain","visibleWordCount":"4"}}
 {"timestamp":"2026-05-25T00:06:22Z","sessionID":"s","suggestionID":"s6","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"model-result","latencyMilliseconds":215,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"4","supportState":"supported"}}
 JSONL
@@ -197,6 +197,10 @@ for expected in \
   "kept visible after empty model: 1" \
   "Source mix: shown / accepted / accepted-kept shown" \
   "Instant phrase learned restraint: 1" \
+  "Instant phrase match families:" \
+  "writing-bridge: 1" \
+  "markdown: 1" \
+  "prior: 1" \
   "No-show summary: suggestionSuppressed events by reason" \
   "Trust-killer preview: pass" \
   "Daily-driver trust-killer gate" \
@@ -329,6 +333,10 @@ for expected in \
   "shown-then-model: 3" \
   "no-suggestion: 1" \
   "fast-phrase-learning-restraint: 1" \
+  "Instant phrase match families:" \
+  "writing-bridge: 1" \
+  "markdown: 1" \
+  "prior: 1" \
   "Model-backed shown: 3" \
   "Word fallback shown: 1" \
   "Unknown source shown: 0" \
@@ -398,6 +406,10 @@ done
 
 if grep -q "displayedText\\|acceptedText\\|rawOutput" "$REPORT_PATH"; then
   echo "dogfood self-test report leaked raw trace text keys" >&2
+  exit 1
+fi
+if grep -q "predictivePhraseMatch\\|i just wanted to" "$REPORT_PATH" "$TMP_DIR/status-preview.out"; then
+  echo "dogfood self-test report leaked raw predictive phrase match text" >&2
   exit 1
 fi
 

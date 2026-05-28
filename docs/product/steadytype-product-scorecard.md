@@ -876,6 +876,11 @@ next`, `It would be useful if` -> `this showed up at the right time`, and
 casual-chat, prompt, search, form, and code profiles stay gated out of that
 broader writing fallback path.
 
+Latest dogfood-report source delta: `./script/daily_driver_dogfood_session_self_test.sh`
+passes after the sample gate started printing redacted instant phrase
+match-family counts such as writing-bridge, markdown, reply, sentence-boundary,
+daily-driver, and prior, without exposing `predictivePhraseMatch` text.
+
 Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
 textedit`, `notes-title`, `chrome-textarea`, `chrome-contenteditable`, and
 `obsidian-long-note` passed on 2026-05-28, and the proof sweep added current
