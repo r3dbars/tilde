@@ -9913,6 +9913,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            if ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE"] == "1" {
+                guard shouldContinueGhosttyFastInsertion(before: "ghosttyNativePrefixFinalKeyText") else {
+                    return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+                }
+                let ghosttyNativePrefixFinalKeyOutcome = insertGhosttyTerminalHostProofNativePrefixFinalKeyText(
+                    acceptedText,
+                    expectedProofInputText: expectedProofInputText,
+                    originalProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile
+                )
+                if ghosttyNativePrefixFinalKeyOutcome.verified {
+                    return true
+                }
+                guard ghosttyNativePrefixFinalKeyOutcome.safeToContinue else {
+                    return false
+                }
+            }
+
             guard shouldContinueGhosttyFastInsertion(before: "ghosttyInProcessInputText") else {
                 return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
             }
@@ -10792,6 +10811,249 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (false, false)
         }
         return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofNativePrefixFinalKeyText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyNativePrefixFinalKeyText"
+        let baselineSource = "ghosttyNativePrefixFinalKeyTextBaseline"
+        func verifyOriginalPromptStillUnchanged(reason: String) -> Bool {
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": reason,
+                        "source": baselineSource
+                    ]
+                )
+                return false
+            }
+            return true
+        }
+
+        guard acceptedText.count > 1,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-text-not-eligible",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let prefixText = String(acceptedText.dropLast())
+        let finalText = String(acceptedText.suffix(1))
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let scriptSource = """
+        set acceptedPrefixText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_PREFIX_TEXT"
+        tell application id "com.mitchellh.ghostty"
+            set targetWindow to front window
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            focus targetTerminal
+            input text acceptedPrefixText to targetTerminal
+            activate
+            return true
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_PREFIX_TEXT"] = prefixText
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "acceptedChars": String(acceptedText.count),
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "prefixChars": String(prefixText.count),
+                "source": source,
+                "stage": "start"
+            ]
+        )
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-prefix-timeout",
+                    "source": source
+                ]
+            )
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-prefix-timeout-mutated-input"
+                )
+            )
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0, stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": process.terminationStatus == 0
+                        ? "ghostty-native-prefix-final-key-prefix-returned-false"
+                        : "ghostty-native-prefix-final-key-prefix-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-prefix-unverified-mutated-input"
+                )
+            )
+        }
+
+        let drainSeconds = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS"]
+            .flatMap { TimeInterval($0) }
+            .map { min(max($0, 0.0), 2.0) } ?? 0.08
+        if drainSeconds > 0 {
+            Thread.sleep(forTimeInterval: drainSeconds)
+        }
+        guard reassertGhosttyTerminalHostProofFrontmostProcess(
+            frontmostApp: frontmostApp,
+            source: "ghosttyNativePrefixFinalKeyFrontmostPidReassertion"
+        ) else {
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-frontmost-reassertion-mutated-input"
+                )
+            )
+        }
+
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        guard Self.postUnicodeTextKeyEventsPerCharacter(finalText) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-final-event-not-posted",
+                    "source": source
+                ]
+            )
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-final-event-unverified-mutated-input"
+                )
+            )
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        return (
+            false,
+            verifyOriginalPromptStillUnchanged(
+                reason: "ghostty-native-prefix-final-key-unverified-mutated-input"
+            )
+        )
     }
 
     private func insertGhosttyTerminalHostProofInProcessInputText(

@@ -549,6 +549,9 @@ hardware_helper_block = app_delegate[hardware_helper_start:hardware_helper_end]
 bundled_helper_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(")
 bundled_helper_end = app_delegate.index("private func prepareGhosttyTerminalHostProofInsertionTarget(", bundled_helper_start)
 bundled_helper_block = app_delegate[bundled_helper_start:bundled_helper_end]
+native_prefix_final_key_start = app_delegate.index("private func insertGhosttyTerminalHostProofNativePrefixFinalKeyText(")
+native_prefix_final_key_end = app_delegate.index("private func insertGhosttyTerminalHostProofInProcessInputText(", native_prefix_final_key_start)
+native_prefix_final_key_block = app_delegate[native_prefix_final_key_start:native_prefix_final_key_end]
 fast_ghostty_start = app_delegate.index("if prefersFastGhosttyPasteboardInsertion {")
 fast_ghostty_end = app_delegate.index('\n        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",', fast_ghostty_start)
 fast_ghostty_block = app_delegate[fast_ghostty_start:fast_ghostty_end]
@@ -616,6 +619,8 @@ if fast_ghostty_block.index("ghosttyShellBulkSystemEventsOutcome") < fast_ghostt
     raise SystemExit("Claude Code Ghostty fast proof must try bundled helpers before the shell-launched System Events bulk fallback")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
     raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slower native input fallbacks")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofNativePrefixFinalKeyText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try the opt-in native-prefix/final-key transport before plain native input")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slow System Events fallbacks")
 if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
@@ -626,10 +631,23 @@ if "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS" not in fast_ghostty_
     raise SystemExit("Claude Code Ghostty fast proof must allow an explicit bounded insertion budget override")
 if "ghosttyFastInsertionBudget" not in fast_ghostty_block or "ghostty-fast-insertion-budget-exceeded" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must log a bounded fail-closed insertion miss")
+if "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must stay opt-in until live proof verifies it")
+if "ghosttyNativePrefixFinalKeyText" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must keep the native-prefix/final-key transport in the insertion ladder")
 if 'shouldContinueGhosttyFastInsertion(before: "ghosttyPerformActionText")' not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must budget-gate slower native action text probes")
 if 'shouldContinueGhosttyFastInsertion(before: "cgUnicodeKeyEventsPerCharacterGlobal")' not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must budget-gate the final global Unicode key-event probe")
+native_prefix_helper_start = app_delegate.index("private func insertGhosttyTerminalHostProofNativePrefixFinalKeyText(")
+native_prefix_helper_end = app_delegate.index("private func insertGhosttyTerminalHostProofInProcessInputText(", native_prefix_helper_start)
+native_prefix_helper_block = app_delegate[native_prefix_helper_start:native_prefix_helper_end]
+if "ghosttyNativePrefixFinalKeyTextBaseline" not in native_prefix_helper_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must verify the original prompt before continuing")
+if "ghostty-native-prefix-final-key-final-event-not-posted" not in native_prefix_helper_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must log final key-event post misses")
+if "ghostty-native-prefix-final-key-frontmost-reassertion-mutated-input" not in native_prefix_helper_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must fail closed when focus reassertion cannot prove the prompt unchanged")
 if "postHardwareTextKeyEvents" not in hardware_helper_block or "mutatedInputReason" not in hardware_helper_block:
     raise SystemExit("Claude Code Ghostty hardware key proof must be verified and fail closed on unexpected mutation")
 if "FrontmostPidReassertion" not in hardware_helper_block:
@@ -722,6 +740,12 @@ if "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID" not in terminal_insert_block or "whose 
     raise SystemExit("Claude Code Ghostty insertion fallbacks must foreground the exact title-scoped Ghostty proof process")
 if "Target Ghostty process is not frontmost" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty insertion fallbacks must fail clearly when the exact proof process is not frontmost")
+if "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS" not in native_prefix_final_key_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must have a bounded drain override")
+if "postUnicodeTextKeyEventsPerCharacter(finalText)" not in native_prefix_final_key_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must use a real final key event after native input")
+if "ghostty-native-prefix-final-key-unverified-mutated-input" not in native_prefix_final_key_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must fail closed if only part of the transport mutates the prompt")
 if '"ghosttySystemEventsLoginShellBulkKeystroke"' not in terminal_insert_block or 'exec /usr/bin/osascript' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must keep a shell-launched System Events bulk fallback")
 if "ghosttySystemEventsBulkKeystrokeShellBaseline" not in terminal_insert_block:

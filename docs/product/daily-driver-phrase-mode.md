@@ -679,6 +679,15 @@ ladder is still available with `AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROB
 but the default path now preserves trust by stopping quickly when the known bad
 transport family keeps producing unchanged baselines.
 
+The next Ghostty transport idea is guarded as an experiment, not default
+behavior: `AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE=1` sends the
+accepted prefix through native Ghostty `input text`, then sends the final
+character as a real key event. The first detached opt-in run
+`20260528T032817Z-ghostty` never reached that rung because two disposable
+contexts produced no visible suggestion, so the run was stopped. This keeps the
+next red bar honest: rerun until the probe reaches insertion, then either
+graduate it with verified no-submit proof or remove it.
+
 ## Scorecard
 
 | Area | Current Read | Daily-Driver Bar | Next Proof |
