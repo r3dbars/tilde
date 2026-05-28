@@ -746,6 +746,8 @@ if "frontWindowProofMatch" not in screen_copy_block or "ghosttyWindowCount" not 
     raise SystemExit("Claude Code Ghostty screen-copy verifier must report title-match and window-count shape metadata")
 if "ghosttyScreenCopyScriptMetadata" not in app_delegate or 'metadata["targetSelection"]' not in app_delegate:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must sanitize target-selection metadata before diagnostics")
+if "highConfidenceNoProofContextNoop" not in app_delegate or '"nativeNoopClassified": String(nativeNoopClassified)' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must classify high-confidence proof-window no-op copies")
 if "clearedChangeCount" not in app_delegate or '"pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount)' not in app_delegate:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must report whether native screen copy changed the pasteboard after the pre-clear")
 if "containsProofMarker" not in app_delegate or "containsCompactProofMarker" not in app_delegate:
@@ -2522,6 +2524,60 @@ for expected in expected_order:
 PY
 then
   echo "real app smoke self-test expected Ghostty proof to wait from the app-proven pre-trigger prompt window, allow log flush grace, and keep same-line fallback evidence" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("find_recent_claude_code_terminal_stale_proof_blocker_optional()")
+end = source.index("\nprint_claude_code_terminal_suggestion_diagnostics_tail()", start)
+block = source[start:end]
+for expected in (
+    'AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_STALE_BLOCKER_SCAN_LINES',
+    'MATCHED_LOG_REASON=""',
+    '[[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]',
+    'suggestion-blocked',
+    'app=com.anthropic.claude-code',
+    'reason=claude-code-terminal-host-missingProofMarker',
+    'reason=claude-code-terminal-host-shellCommandDetected',
+    'MATCHED_LOG_LINE="${matched%%|*}"',
+    'MATCHED_LOG_REASON="${matched#*|}"',
+):
+    if expected not in block:
+        raise SystemExit(1)
+if 'tail -n +' in block:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Ghostty proof to detect stale terminal-host proof blockers from indexed recent diagnostics" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("run_claude_code_terminal_host_smoke()")
+end = source.index("\nrun_codex_model_latency()", start)
+block = source[start:end]
+expected_order = [
+    'find_recent_claude_code_terminal_stale_proof_blocker_optional "$suggestion_start_line"',
+    'stale_blocker_line="$MATCHED_LOG_LINE"',
+    'was still gated by $stale_blocker_reason',
+    'type_claude_code_terminal_smoke_text " "',
+    'could not prove prompt readiness after stale proof blocker',
+    'stale blocker nudge wait ended; allowing diagnostics flush grace',
+    'wait_for_claude_code_terminal_log_flush_suggestion_line_optional',
+]
+position = -1
+for expected in expected_order:
+    next_position = block.find(expected, position + 1)
+    if next_position == -1:
+        raise SystemExit(1)
+    position = next_position
+PY
+then
+  echo "real app smoke self-test expected Ghostty proof to nudge a prompt that remains gated by stale terminal-host proof blockers" >&2
   exit 1
 fi
 if ! python3 - <<'PY'
