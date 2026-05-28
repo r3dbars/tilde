@@ -1070,6 +1070,9 @@ if "Int(CFHash(element)) == elementIdentifier" not in fallback_block:
 PY
 
 if ! grep -F 'PROOF_SCENARIO_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'proof_scenario_is_smoke_owned()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'prepare_default_proof_scenario_baseline' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'codex-full-accept-no-submit' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_WORD_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'PROOF_DISABLE_FAST_PHRASE_LAUNCHCTL_PREVIOUS' script/real_app_smoke.sh >/dev/null ||
@@ -2309,8 +2312,20 @@ if ! grep -F "codex-proof-insert-verification-fast-path" Sources/AutocompleteLab
   echo "real app smoke self-test expected proof-only Codex insertion verification fast path diagnostics" >&2
   exit 1
 fi
-if ! awk '/run_codex\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Codex proof to press Tab through CGEvent session events" >&2
+if ! awk '/run_codex\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_codex_tab_for_smoke "\$start_line"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_codex_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent_with_timeout/ && /\\$/ { found_call = 1 } in_smoke && /"session"/ { found_session = 1 } in_smoke && /"warm"/ { found_warm = 1 } END { exit (found_call && found_session && found_warm) ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex proof to press Tab through the guarded session CGEvent helper" >&2
+  exit 1
+fi
+if ! grep -F "wait_for_codex_tab_diagnostic_optional" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_ATTEMPTS" script/real_app_smoke.sh >/dev/null ||
+   ! awk '/press_codex_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /wait_for_codex_tab_diagnostic_optional/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex proof to use a short hot-path CGEvent diagnostic wait before fallback" >&2
+  exit 1
+fi
+if ! grep -F "Codex CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab." script/real_app_smoke.sh >/dev/null ||
+   ! awk '/press_codex_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Codex proof to retry with guarded System Events Tab only after missing key diagnostics" >&2
   exit 1
 fi
 if ! grep -F 'ensure_cgevent_keypress_helper()' script/real_app_smoke.sh >/dev/null ||
@@ -2337,9 +2352,17 @@ if ! grep -F "must relaunch with the codex-full-accept-no-submit proof scenario"
   exit 1
 fi
 if ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /prepare_codex_full_accept_runtime_options/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
-   ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_accept_all_shortcut/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_codex_full_accept_shortcut_for_smoke "\$start_line" "\$suggestion_start_line" "\$accept_shortcut"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /manual_smoke_session.sh codex-full-accept/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Codex full accept proof to set the proof scenario, press accept-all, and run the full-accept validator" >&2
+  echo "real app smoke self-test expected Codex full accept proof to set the proof scenario, use the guarded accept-all helper, and run the full-accept validator" >&2
+  exit 1
+fi
+if ! grep -F "assert_codex_full_accept_shortcut_safe" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "keyboard_event_tap_active_since" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "keyboard capture is not active; refusing to press accept-all" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "suggestion hid before accept-all; refusing to type the shortcut into Codex" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "decision=passthrough-unsupported" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Codex full accept to fail closed before a stale shortcut can leak into the prompt" >&2
   exit 1
 fi
 python3 - <<'PY'
@@ -2347,12 +2370,12 @@ from pathlib import Path
 
 source = Path("script/real_app_smoke.sh").read_text()
 start = source.index("run_codex()")
-end = source.index("run_claude_code_terminal_host_smoke()", start)
+end = source.index("\nrun_codex_full_accept()", start)
 block = source[start:end]
 if block.index("focus_codex_proof_prompt") > block.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"'):
     raise SystemExit("Codex proof must focus the marker composer before waiting for the visible suggestion")
 after_visible = block.split('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"', 1)[1]
-before_tab = after_visible.split("press_key_code_cgevent 48", 1)[0]
+before_tab = after_visible.split('press_codex_tab_for_smoke "$start_line"', 1)[0]
 if "focus_codex_proof_prompt" in before_tab or "assert_codex_proof_prompt_ready" in before_tab:
     raise SystemExit("Codex proof must not refocus the composer after the suggestion is visible")
 PY

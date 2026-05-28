@@ -303,10 +303,11 @@ public struct CompatibilityProfile: Equatable, Sendable {
 
     public var allowsStrictVisualProofSyntheticCaretPlacement: Bool {
         supportsOneWordAcceptance
-            && !supportsFullAcceptance
+            && (!supportsFullAcceptance || !requiresNoSubmitAcceptanceProof)
             && !allowsDetachedSuggestions
             && !allowsSyntheticCaretPlacement
             && !isSensitive
+            && promptAppSafetyMode == .wordOnly
             && anchorLadder == [.caret]
             && notes.contains("one-word no-submit proof")
     }

@@ -772,6 +772,59 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Codex full-accept no-submit proof candidates bypass final latency suppression")
+    func codexFullAcceptNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(
+            CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier)?
+                .replacingAcceptanceProofMode(
+                    supportsFullAcceptance: true,
+                    requiresNoSubmitAcceptanceProof: false
+                )
+        )
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "\(CodexProofFocusedTargetPolicy.marker) I think the next step should",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "codex-full-accept-proof-late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " land the proof before broadening the surface", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_100,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "codex-proof-no-submit")
+    }
+
+    @MainActor
     @Test("Claude Code terminal host proof candidates bypass final latency suppression")
     func claudeCodeTerminalHostProofCandidatesBypassFinalLatencySuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -1231,6 +1284,43 @@ struct SuggestionOrchestratorTests {
         #expect(proofedPresentation.renderMode == .inlineAdjacent)
         #expect(proofedPresentation.anchorSource == .syntheticCaret)
         #expect(proofedPresentation.reason == .healthy)
+    }
+
+    @MainActor
+    @Test("Codex full-accept proof profile keeps strict visual synthetic caret inline")
+    func codexFullAcceptProofProfileKeepsStrictVisualSyntheticCaretInline() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier))
+        let profile = codex.replacingAcceptanceProofMode(
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false,
+            notes: "\(codex.notes) Proof-only Codex full-accept no-submit scenario is active."
+        )
+        let learningAdjustment = CompatibilityLearningAdjustment(
+            profile: nil,
+            effectiveRenderMode: .inlineAdjacent
+        )
+        let context = makeContext(
+            textBeforeCursor: "\(CodexProofFocusedTargetPolicy.marker) I think the next step should",
+            textAfterCursor: "",
+            windowTitle: "Codex",
+            caretIsSynthetic: true
+        )
+
+        let plan = orchestrator.placementHealthPlan(
+            context: context,
+            profile: profile,
+            learningAdjustment: learningAdjustment,
+            screenshotTracingEnabled: true
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected proof-mode Codex synthetic caret to stay inline")
+            return
+        }
+        #expect(presentation.renderMode == .inlineAdjacent)
+        #expect(presentation.anchorSource == .syntheticCaret)
+        #expect(presentation.reason == .healthy)
     }
 
     @MainActor
