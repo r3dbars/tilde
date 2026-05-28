@@ -281,22 +281,33 @@ instead of typing into an unready Ghostty surface. `20260528T054054Z-ghostty`
 timed out waiting for launch retry, did not write the proof pidfile, and logged
 launch state `windows=5 proofTitleWindows=0 frontWindowHasProofTitle=false
 focusedTerminalWorkingDirectoryPresent=false`. This proves the harness now
-requires a visible title-marked Ghostty proof window with a real terminal
-working directory before it can count a disposable proof command as launched.
+requires a visible title-marked Ghostty proof window before it can count a
+disposable proof command as launched. A manual probe showed Ghostty can expose a
+focused terminal while reporting an empty working directory, so the harness now
+treats focused terminal availability as readiness and keeps the working
+directory signal diagnostic-only.
 The current harness-hardening pass widened the proof-only Ghostty launch waits,
 made the detached wrapper default to the `nohup` runner instead of the flaky
 Terminal launcher, invokes generated runners through `/bin/bash`, added an EXIT
-status trap, stops orphaned `real_app_smoke` children after dead-runner repair,
-and guarded the Ghostty host bundle-id helper against broken-pipe termination.
+status trap, records the child `real_app_smoke` pid in `status.env` and
+`smoke.pid`, reports `smoke_process=alive|not-running`, preserves an alive
+smoke child after runner exit so its evidence can keep flowing, protects the
+wrapper process group from exclusive proof cleanup, and guarded the Ghostty host
+bundle-id helper against broken-pipe termination.
 `bash -n script/real_app_smoke.sh
 script/real_app_smoke_self_test.sh script/claude_code_ghostty_detached_proof.sh
 script/claude_code_ghostty_detached_proof_self_test.sh`,
 `./script/real_app_smoke_self_test.sh`,
-`./script/claude_code_ghostty_detached_proof_self_test.sh`, and `git diff
---check` passed after the hardening. The live follow-up
-`20260528T063520Z-ghostty` still failed red before insertion: the `nohup` runner
-started, wrote the proof header, then exited before explicit final status, so
-the next blocker is the wrapper/smoke handoff rather than a green Ghostty
+`./script/claude_code_ghostty_detached_proof_self_test.sh`,
+`./script/real_app_smoke_self_test.sh`, `./script/check_steadytype_scorecard.py
+--live`, and `git diff --check` passed after the hardening. The live follow-ups
+`20260528T063520Z-ghostty` and `20260528T063816Z-ghostty` still failed red
+before insertion because the runner/smoke handoff died before prompt setup. The
+latest bounded run, `20260528T064815Z-ghostty`, now shows a sharper red bar:
+the `nohup` runner wrote the proof header, logged protected proof process group
+`58736`, spawned smoke pid `58759`, then both the runner and smoke child exited
+before the child printed the real app smoke plan or wrote a final status.
+The next blocker is smoke-child startup/handoff diagnostics, not a green Ghostty
 insertion claim.
 Ghostty remains unsupported until a detached run reaches verified one-word
 no-submit insertion and exits `0`.
