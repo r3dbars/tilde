@@ -319,7 +319,11 @@ warmed CGEvent helpers, wrote startup phases through `after-interference-guard`,
 and exited cleanly with status `1` after two fresh Ghostty disposable contexts
 failed to write the Claude pidfile. The next blocker is Ghostty launch command
 execution / pidfile creation, not wrapper/smoke handoff and not a green
-insertion claim.
+insertion claim. The launch-command follow-up now defaults Ghostty to the native
+`text:` action with a carriage return instead of separating text input from
+Enter, but `20260528T070944Z-ghostty` was not conclusive: it waited on an active
+older smoke process, reached build/helper warmup, then the runner was
+interrupted with `TERM` and the orphaned smoke child was stopped.
 Ghostty remains unsupported until a detached run reaches verified one-word
 no-submit insertion and exits `0`.
 

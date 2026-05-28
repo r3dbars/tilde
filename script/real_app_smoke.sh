@@ -9344,8 +9344,8 @@ open_claude_code_terminal_proof() {
       reset_zero_window_claude_code_ghostty_proof_host
       ghostty_launch_command="$(printf 'exec %q' "$launch_script")"
       ghostty_launch_action=""
-      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-0}" == "1" ]]; then
-        ghostty_launch_action="$(ghostty_text_action "$ghostty_launch_command")"
+      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+        ghostty_launch_action="$(ghostty_text_action "$ghostty_launch_command"$'\r')"
       fi
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
@@ -9386,8 +9386,8 @@ tell application id "com.mitchellh.ghostty"
     delay launchActionDrain
   else
     input text launchCommand to targetTerminal
+    send key "enter" to targetTerminal
   end if
-  send key "enter" to targetTerminal
   activate
 end tell
 end run
@@ -9448,8 +9448,8 @@ tell application id "com.mitchellh.ghostty"
     delay launchActionDrain
   else
     input text launchCommand to targetTerminal
+    send key "enter" to targetTerminal
   end if
-  send key "enter" to targetTerminal
   activate
 end tell
 end run
