@@ -725,6 +725,9 @@ failed during `build/relaunch current SteadyType`, and the new signal snapshot
 showed a separate Codex-owned `claude_code_ghostty_detached_proof.sh stop`
 process targeting that same run directory. Treat that run as external stop
 interference rather than a Ghostty support verdict.
+The detached wrapper now refuses plain `stop --run-dir` during the early
+evidence window unless `--force-stop` is passed, so automatic cleanup has a
+harder time invalidating the next build/prompt sample.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
@@ -1153,6 +1156,14 @@ session/HID/fallback Tab timing knobs used by the foreground smoke path, so the
 next Ghostty proof run can tune key-delivery windows without patching the
 runner. It also defaults detached Ghostty to one disposable context, keeping
 current key-source proof runs from spending minutes repeating the same miss.
+The latest typed-prompt hardening keeps that lane from regressing into a false
+prompt-readiness miss. If Ghostty AX cannot certify the typed prompt, the
+harness can now accept SteadyType's privacy-safe terminal prompt-anchor
+diagnostic when it appears after the typing trigger and reports the exact proof
+text length. A later rerun showed a stale nohup `start --force` can interrupt a
+launchd proof, so cross-launcher force-starts now refuse by default unless the
+operator explicitly opts in; plain stop also refuses during the early evidence
+window unless the operator passes `stop --run-dir ... --force-stop`.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh

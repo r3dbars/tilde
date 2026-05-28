@@ -9,12 +9,14 @@ LATEST_FILE="$PROOF_ROOT/latest-run.txt"
 MODE="${1:-status}"
 DRY_RUN=0
 FORCE_START=0
+FORCE_STOP=0
 RUN_DIR=""
 TAIL_LINES=80
 WAIT_POLL_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_POLL_SECONDS:-2}"
 WAIT_TIMEOUT_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_TIMEOUT_SECONDS:-900}"
 WAIT_PROGRESS_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_WAIT_PROGRESS_SECONDS:-30}"
 STARTUP_GRACE_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS:-45}"
+STOP_FORCE_GRACE_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STOP_FORCE_GRACE_SECONDS:-120}"
 LAUNCHER="${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER:-launchd}"
 GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=(
   AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN
@@ -125,12 +127,15 @@ Options:
   --run-dir <dir>  Use a specific run directory for status/wait/tail.
   --lines <n>      Log lines for tail/status. Default: 80.
   --dry-run        Show what start would launch without starting a process.
-  --force          Stop any active detached Ghostty proof before starting.
+  --force          Stop active same-launcher proof runs before starting.
+  --force-stop     Stop an active proof even during the early evidence window.
 
 Set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=terminal or nohup to use the
 older launch modes. The wrapper uses the same disposable defaults as
 script/real_app_smoke.sh. It does not persist custom proof text into the
 generated runner, LaunchAgent plist, or status file.
+Set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_ALLOW_CROSS_LAUNCHER_FORCE=1 only when
+you intentionally want one launcher family to stop another active proof run.
 EOF
 }
 
@@ -167,6 +172,10 @@ while (($#)); do
       ;;
     --force)
       FORCE_START=1
+      shift
+      ;;
+    --force-stop)
+      FORCE_STOP=1
       shift
       ;;
     -h|--help|help)
@@ -218,6 +227,11 @@ fi
 
 if ! [[ "$STARTUP_GRACE_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS must be a non-negative integer." >&2
+  exit 2
+fi
+
+if ! [[ "$STOP_FORCE_GRACE_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STOP_FORCE_GRACE_SECONDS must be a non-negative integer." >&2
   exit 2
 fi
 
@@ -439,11 +453,38 @@ status_file_age_seconds() {
   printf '%s\n' "$((now - mtime))"
 }
 
+status_started_age_seconds() {
+  local status_file="$1"
+  local started_at started_epoch now
+  started_at="$(status_value "$status_file" started_at)"
+  [[ -n "$started_at" ]] || return 1
+  started_epoch="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$started_at" '+%s' 2>/dev/null || true)"
+  [[ -n "$started_epoch" ]] || return 1
+  now="$(date +%s)"
+  printf '%s\n' "$((now - started_epoch))"
+}
+
 starting_status_is_within_grace() {
   local status_file="$1"
   local age
   age="$(status_file_age_seconds "$status_file" || true)"
   [[ -n "$age" ]] && ((age < STARTUP_GRACE_SECONDS))
+}
+
+stop_requires_force_guard() {
+  local status_file="$1"
+  local state="$2"
+  local pid="$3"
+  local smoke_pid="$4"
+  local age
+
+  [[ "$FORCE_STOP" != "1" ]] || return 1
+  ((STOP_FORCE_GRACE_SECONDS > 0)) || return 1
+  [[ "$state" == "starting" || "$state" == "running" ]] || return 1
+  { process_is_alive "$pid" || process_is_alive "$smoke_pid"; } || return 1
+  age="$(status_started_age_seconds "$status_file" || true)"
+  [[ -n "$age" ]] || age="$(status_file_age_seconds "$status_file" || true)"
+  [[ -n "$age" ]] && ((age < STOP_FORCE_GRACE_SECONDS))
 }
 
 run_is_active() {
@@ -1026,14 +1067,22 @@ APPLESCRIPT
 start_run() {
   mkdir -p "$PROOF_ROOT"
 
-  local active_runs latest run_dir_to_stop
+  local active_runs latest run_dir_to_stop active_launcher
   active_runs="$(active_run_dirs || true)"
   if [[ -n "$active_runs" ]]; then
     if [[ "$FORCE_START" == "1" ]]; then
       while IFS= read -r run_dir_to_stop; do
         [[ -n "$run_dir_to_stop" ]] || continue
+        active_launcher="$(status_value "$(status_file_for_run "$run_dir_to_stop")" launcher)"
+        if [[ -n "$active_launcher" &&
+              "$active_launcher" != "$LAUNCHER" &&
+              ! "${AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_ALLOW_CROSS_LAUNCHER_FORCE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+          echo "Refusing to force-stop active $active_launcher detached Ghostty proof from $LAUNCHER launcher: $run_dir_to_stop" >&2
+          echo "Run stop --run-dir explicitly, or set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_ALLOW_CROSS_LAUNCHER_FORCE=1." >&2
+          return 1
+        fi
         echo "Force start stopping active detached Ghostty proof: $run_dir_to_stop" >&2
-        stop_run "$run_dir_to_stop" >&2
+        FORCE_STOP=1 stop_run "$run_dir_to_stop" >&2
       done <<<"$active_runs"
     else
       echo "Detached Ghostty proof is already running:" >&2
@@ -1270,6 +1319,12 @@ stop_run() {
   state="$(status_value "$status_file" state)"
   pid="$(status_value "$status_file" pid)"
   smoke_pid="$(smoke_pid_for_run "$run_dir")"
+  if stop_requires_force_guard "$status_file" "$state" "$pid" "$smoke_pid"; then
+    echo "Refusing to stop active detached Ghostty proof during the early evidence window: $run_dir" >&2
+    echo "Use stop --force-stop if this is intentional, or wait ${STOP_FORCE_GRACE_SECONDS}s for normal stop cleanup." >&2
+    print_run_status "$run_dir"
+    return 2
+  fi
   cleanup_launchd_job_if_terminal "$run_dir"
 
   if [[ -z "$pid" ]]; then

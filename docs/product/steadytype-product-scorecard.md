@@ -212,6 +212,10 @@ SteadyType`, but the signal snapshot named a separate Codex-owned stop command
 against the same run directory (`claude_code_ghostty_detached_proof.sh stop
 --run-dir ...20260528T224532Z-ghostty`) at the moment of TERM. That means this
 red sample is external stop interference, not a Ghostty prompt/caret result.
+The wrapper now protects active runs during the early evidence window: plain
+`stop --run-dir` refuses while the run is fresh, and intentional cleanup uses
+`--force-stop`. This keeps Codex-side cleanup from turning a build or prompt
+sample into another false product red while preserving explicit operator stop.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -991,10 +995,14 @@ diagnostic only when it appears after the typing trigger and reports both
 guards. Rerun `20260528T224425Z-ghostty` did not reach prompt typing because a
 concurrent `start --force` nohup proof interrupted the launchd run during fresh
 context setup, so it is interference evidence rather than product support
-evidence. App coverage stays at `83`; the next live proof should rerun the
-bounded detached Ghostty lane with no concurrent force-start runner and should
-fail or pass on suggestion/key delivery rather than on a false typed-prompt
-readiness miss.
+evidence. The detached wrapper now refuses cross-launcher force-starts by
+default, so a stale nohup runner cannot stop an active launchd evidence run
+unless `AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_ALLOW_CROSS_LAUNCHER_FORCE=1` is set
+or the operator runs `stop --run-dir ... --force-stop` explicitly; plain stop
+also refuses during the early evidence window. App coverage stays at `83`; the
+next live proof should rerun the bounded detached Ghostty lane with no
+concurrent force-start runner and should fail or pass on suggestion/key delivery
+rather than on a false typed-prompt readiness miss.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
