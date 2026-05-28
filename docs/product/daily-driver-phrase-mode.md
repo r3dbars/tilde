@@ -906,6 +906,22 @@ kept the same unchanged prompt and the proof failed closed at lines
 avoid the app-owned post-accept event/input-text no-op state rather than merely
 changing focus timing.
 
+The latest Ghostty proof slice removes the stale-event-tap ambiguity from that
+result. A non-deferred run, `20260528T185115Z-ghostty`, reached prompt-row Tab
+accept with `AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=0` and still
+failed the same unchanged-prompt ladder, so the 120ms deferred accept delay is
+not the cause. The clean follow-up, `20260528T191017Z-ghostty`, rebuilt the app
+with the corrected pre-prompt raw System Events probe and reached prompt-row
+suggestion diagnostics line `1002533`. Tab was consumed at `19:14:13Z`, deferred
+insert started at `19:14:14Z`, and
+`ghosttyPrePromptFocusBundleSystemEventsRawKeystroke` posted at `19:14:16Z`
+with `keyboardTapStopped=false`; it still verified `false` while the
+original-prompt baseline verified `true`. The normal focus-click and raw/focused
+System Events/send-key rungs then repeated the unchanged result before
+`ghosttyInitialNoopClusterBaseline verified=true` and fail-closed insert at
+`19:14:43Z`. Ghostty remains unsupported; the current ladder is now ruled out
+on timing, prompt click, and event-tap stop shape.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

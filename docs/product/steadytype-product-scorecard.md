@@ -43,7 +43,17 @@ satisfy the primary scanner, Claude Code terminal-host proof candidates can
 bypass final-result latency suppression without broadening normal app latency
 behavior, focused-text polling throttles can preserve a still-valid pending
 proof phrase request, and exclusive proof cleanup no longer terminates the
-current SteadyType app bundle. The current insertion pass adds two verified
+current SteadyType app bundle. The newest red evidence keeps the score flat:
+`20260528T185115Z-ghostty` disabled deferred insertion and still failed the
+same unchanged-prompt ladder, while `20260528T191017Z-ghostty` rebuilt the app,
+found a prompt-row suggestion at diagnostics line `1002533`, consumed Tab at
+`19:14:13Z`, and posted
+`ghosttyPrePromptFocusBundleSystemEventsRawKeystroke` with
+`keyboardTapStopped=false` at `19:14:16Z`; it verified `false`, its unchanged
+baseline verified `true`, and the ladder failed closed at `19:14:43Z` after
+`ghosttyInitialNoopClusterBaseline verified=true`. That rules out deferred
+timing, prompt-click timing, and event-tap stopping as cheap fixes. The current
+insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
 per-character System Events typing, and a native Ghostty
 `paste_from_clipboard` action rung with pasteboard restore and unchanged-prompt
