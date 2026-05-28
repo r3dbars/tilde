@@ -2919,6 +2919,10 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'configured-window-start' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'configured-window-created' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'zero-window-reset-deferred-for-configured-window' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'claude_code_ghostty_configured_window_shell_not_ready' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'configured-window-shell-not-ready' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'retry-configured-window-shell-not-ready' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'configured window never became shell-ready enough to exec the disposable proof command' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'new window with configuration proofConfig' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command:launchScriptPath' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadyTypeGhosttyProbeMarker' script/real_app_smoke.sh >/dev/null ||
