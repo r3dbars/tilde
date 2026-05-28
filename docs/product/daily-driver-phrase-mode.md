@@ -712,6 +712,13 @@ ids, guard pids, tracked proof pids, lock owner, process-group members, and
 nearby proof-related processes before cleanup. The next failed Ghostty run
 should identify whether TERM is coming from proof cleanup, wrapper/session
 teardown, or an outside watcher.
+`20260528T223728Z-ghostty` got past fresh launch and native screen-copy prompt
+readiness, then failed native and bulk System Events proof typing before TERM
+during paced System Events typing. The overlapping `20260528T223936Z-ghostty`
+startup failure proved the new signal diagnostics can name the smoke lock owner,
+and it exposed that `start --force` only considered the latest run. The wrapper
+now stops every active detached Ghostty proof under the proof root before
+starting a forced replacement.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

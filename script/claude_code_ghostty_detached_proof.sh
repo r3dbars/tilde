@@ -125,7 +125,7 @@ Options:
   --run-dir <dir>  Use a specific run directory for status/wait/tail.
   --lines <n>      Log lines for tail/status. Default: 80.
   --dry-run        Show what start would launch without starting a process.
-  --force          Allow start while the latest detached run is still active.
+  --force          Stop any active detached Ghostty proof before starting.
 
 Set AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_LAUNCHER=terminal or nohup to use the
 older launch modes. The wrapper uses the same disposable defaults as
@@ -244,6 +244,13 @@ latest_run_dir() {
 
 status_file_for_run() {
   printf '%s/status.env\n' "$1"
+}
+
+all_run_dirs() {
+  [[ -d "$PROOF_ROOT" ]] || return 0
+  find "$PROOF_ROOT" -mindepth 2 -maxdepth 2 -name status.env -type f -print 2>/dev/null |
+    sed 's#/status\.env$##' |
+    sort
 }
 
 log_file_for_run() {
@@ -455,6 +462,16 @@ run_is_active() {
   fi
   [[ "$state" == "starting" || "$state" == "running" ]] &&
     { process_is_alive "$pid" || process_is_alive "$smoke_pid"; }
+}
+
+active_run_dirs() {
+  local run_dir
+  while IFS= read -r run_dir; do
+    [[ -n "$run_dir" ]] || continue
+    if run_is_active "$run_dir"; then
+      printf '%s\n' "$run_dir"
+    fi
+  done < <(all_run_dirs)
 }
 
 print_run_status() {
@@ -1009,11 +1026,27 @@ APPLESCRIPT
 start_run() {
   mkdir -p "$PROOF_ROOT"
 
-  local latest
+  local active_runs latest run_dir_to_stop
+  active_runs="$(active_run_dirs || true)"
+  if [[ -n "$active_runs" ]]; then
+    if [[ "$FORCE_START" == "1" ]]; then
+      while IFS= read -r run_dir_to_stop; do
+        [[ -n "$run_dir_to_stop" ]] || continue
+        echo "Force start stopping active detached Ghostty proof: $run_dir_to_stop" >&2
+        stop_run "$run_dir_to_stop" >&2
+      done <<<"$active_runs"
+    else
+      echo "Detached Ghostty proof is already running:" >&2
+      printf '%s\n' "$active_runs" >&2
+      echo "Use status/wait/tail, or start --force to stop active run(s) before starting." >&2
+      return 1
+    fi
+  fi
+
   latest="$(latest_run_dir 2>/dev/null || true)"
   if [[ -n "$latest" && "$FORCE_START" != "1" ]] && run_is_active "$latest"; then
     echo "Detached Ghostty proof is already running: $latest" >&2
-    echo "Use status/wait/tail, or start --force if you intentionally want another run." >&2
+    echo "Use status/wait/tail, or start --force to stop it before starting." >&2
     return 1
   fi
 
