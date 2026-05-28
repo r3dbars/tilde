@@ -926,6 +926,19 @@ if "inputPipe.fileHandleForWriting.write(Data(acceptedText.utf8))" not in bundle
     raise SystemExit("Claude Code Ghostty bundled helper must pass accepted text over stdin")
 if "ghosttyFocusPidReassertion" not in app_delegate or "reassertGhosttyTerminalHostProofFrontmostProcess" not in app_delegate:
     raise SystemExit("Claude Code Ghostty proof must keep a reusable exact-pid frontmost reassertion before fragile event-posting rungs")
+reassert_start = app_delegate.index("private func reassertGhosttyTerminalHostProofFrontmostProcess(")
+reassert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", reassert_start)
+reassert_block = app_delegate[reassert_start:reassert_end]
+if "/usr/bin/osascript" not in reassert_block or "Self.waitForProcessExit" not in reassert_block:
+    raise SystemExit("Claude Code Ghostty exact-pid frontmost reassertion must be timeout-bounded through osascript")
+if "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID" not in reassert_block:
+    raise SystemExit("Claude Code Ghostty exact-pid frontmost reassertion must pass the target pid through environment")
+if "ghostty-frontmost-pid-reassertion-timeout" not in reassert_block:
+    raise SystemExit("Claude Code Ghostty exact-pid frontmost reassertion must fail closed on timeout")
+if "ghostty-frontmost-pid-reassertion-launch-failed" not in reassert_block:
+    raise SystemExit("Claude Code Ghostty exact-pid frontmost reassertion must diagnose launch failures")
+if "NSAppleScript(source:" in reassert_block:
+    raise SystemExit("Claude Code Ghostty exact-pid frontmost reassertion must not use unbounded in-process NSAppleScript")
 targeted_source = terminal_insert_block.index('source: "pasteboardCommandVToPid"')
 global_source = terminal_insert_block.index('source: "pasteboardCommandV"', targeted_source)
 if targeted_source > global_source:
@@ -4003,13 +4016,16 @@ if ! awk '
   /run_claude_code_ghostty_pre_accept_external_mutation_probe\(\)/ { in_helper = 1 }
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE/ { saw_gate = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER/ { saw_proof_only_driver = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_PRE_ACCEPT_PROBE/ { saw_proof_only_opt_in = 1 }
+  in_helper && /pre-accept external mutability probe skipped for proof-only accept driver/ { saw_proof_only_skip = 1 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_NATIVE_PROBE/ { saw_native_gate = 1 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_SYSTEM_EVENTS_PROBE/ { saw_system_events_gate = 1 }
   in_helper && /type_claude_code_terminal_ghostty_native_text/ { saw_native = 1 }
   in_helper && /type_claude_code_terminal_raw_smoke_text/ { saw_system_events = 1 }
-  END { exit (saw_gate && saw_native_gate && saw_system_events_gate && saw_native && saw_system_events) ? 0 : 1 }
+  END { exit (saw_gate && saw_proof_only_driver && saw_proof_only_opt_in && saw_proof_only_skip && saw_native_gate && saw_system_events_gate && saw_native && saw_system_events) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty pre-accept comparator to be opt-in and compare native text with System Events" >&2
+  echo "real app smoke self-test expected Ghostty pre-accept comparator to be opt-in, skip proof-only driver races by default, and compare native text with System Events" >&2
   exit 1
 fi
 if ! awk '

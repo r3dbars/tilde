@@ -12397,41 +12397,120 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
 
-        let scriptSource = """
-        set targetProcessId to \(frontmostApp.processIdentifier) as integer
-        tell application "System Events"
-            set ghosttyProcess to first application process whose unix id is targetProcessId
-            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
-            set frontmost of ghosttyProcess to true
-            delay 0.04
-            return frontmost of ghosttyProcess
-        end tell
-        """
-        guard let script = NSAppleScript(source: scriptSource) else {
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-frontmost-pid-reassertion-script-create-failed",
+                    "reason": "ghostty-frontmost-pid-reassertion-osascript-missing",
                     "source": source
                 ]
             )
             return false
         }
 
-        var errorInfo: NSDictionary?
-        let result = script.executeAndReturnError(&errorInfo)
-        let verified = errorInfo == nil && result.booleanValue
+        let scriptSource = """
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess then
+                return "true"
+            end if
+        end tell
+        return "false"
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "pid": String(frontmostApp.processIdentifier),
+                    "posted": "false",
+                    "reason": "ghostty-frontmost-pid-reassertion-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return false
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.0,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            let exitedAfterTerminate = Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "pid": String(frontmostApp.processIdentifier),
+                    "posted": "false",
+                    "reason": exitedAfterTerminate
+                        ? "ghostty-frontmost-pid-reassertion-timeout"
+                        : "ghostty-frontmost-pid-reassertion-timeout-still-running",
+                    "source": source,
+                    "timeoutMilliseconds": "1000"
+                ]
+            )
+            return false
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let verified = process.terminationStatus == 0 && stdoutText == "true"
         var metadata: [String: String] = [
             "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            "exitStatus": String(process.terminationStatus),
             "pid": String(frontmostApp.processIdentifier),
             "source": source,
             "verified": String(verified)
         ]
-        if let errorInfo {
-            metadata["errorNumber"] = (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? ""
-            metadata["errorMessage"] = String((errorInfo["NSAppleScriptErrorMessage"] as? String ?? "").prefix(160))
+        if !verified {
+            metadata["posted"] = "false"
+            metadata["reason"] = process.terminationStatus == 0
+                ? "ghostty-frontmost-pid-reassertion-not-frontmost"
+                : "ghostty-frontmost-pid-reassertion-script-failed"
+            metadata["scriptOutput"] = String(stdoutText.prefix(80))
+        }
+        if !stderrText.isEmpty {
+            metadata["errorMessage"] = String(stderrText.prefix(160))
         }
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",

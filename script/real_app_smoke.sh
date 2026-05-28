@@ -2470,6 +2470,13 @@ run_claude_code_ghostty_pre_accept_external_mutation_probe() {
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
   [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
   [[ -n "$proof_text" ]] || return 0
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_PRE_ACCEPT_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty pre-accept external mutability probe skipped for proof-only accept driver; set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_PRE_ACCEPT_PROBE=1 to opt in." >&2
+    return 0
+  fi
+
   CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN=1
 
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_NATIVE_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
