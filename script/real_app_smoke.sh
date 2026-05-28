@@ -2345,6 +2345,7 @@ wait_for_background_process() {
   local timeout_seconds="$2"
   local label="$3"
   local deadline=$((SECONDS + timeout_seconds))
+  local wait_status
 
   while kill -0 "$pid" >/dev/null 2>&1; do
     if ((SECONDS > deadline)); then
@@ -2358,11 +2359,9 @@ wait_for_background_process() {
     sleep 0.1
   done
 
-  if wait "$pid"; then
-    return 0
-  fi
-
-  return $?
+  wait "$pid"
+  wait_status=$?
+  return "$wait_status"
 }
 
 run_osascript_with_timeout() {
@@ -9176,9 +9175,9 @@ on run argv
 set launchStageFile to item 1 of argv
 recordStage(launchStageFile, "preflight-begin")
 tell application id "com.mitchellh.ghostty"
-  recordStage(launchStageFile, "preflight-tell-entered")
-  set ghosttyWindowCount to count windows
-  recordStage(launchStageFile, "preflight-window-count:" & (ghosttyWindowCount as text))
+  my recordStage(launchStageFile, "preflight-tell-entered")
+  set ghosttyVersion to version as text
+  my recordStage(launchStageFile, "preflight-version:" & ghosttyVersion)
 end tell
 recordStage(launchStageFile, "preflight-finished")
 end run
@@ -9452,13 +9451,20 @@ set launchActionDrain to item 5 of argv as real
 set launchStageFile to item 6 of argv
 recordStage(launchStageFile, "launch-begin")
 tell application id "com.mitchellh.ghostty"
-  recordStage(launchStageFile, "new-window-start")
-  set proofWindow to new window
-  recordStage(launchStageFile, "new-window-created")
+  my recordStage(launchStageFile, "new-window-start")
+  set sourceWindow to front window
+  set sourceTab to selected tab of sourceWindow
+  set sourceTerminal to focused terminal of sourceTab
+  my recordStage(launchStageFile, "new-window-action-ready")
+  perform action "new_window" on sourceTerminal
+  my recordStage(launchStageFile, "new-window-action-finished")
+  delay 0.5
+  set proofWindow to front window
+  my recordStage(launchStageFile, "new-window-created")
   activate window proofWindow
-  recordStage(launchStageFile, "window-activated")
+  my recordStage(launchStageFile, "window-activated")
   delay shellReadyDelay
-  recordStage(launchStageFile, "shell-delay-finished")
+  my recordStage(launchStageFile, "shell-delay-finished")
   set targetTerminal to missing value
   set terminalReady to false
   repeat with readyAttempt from 1 to 30
@@ -9474,26 +9480,26 @@ tell application id "com.mitchellh.ghostty"
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
-  recordStage(launchStageFile, "terminal-ready")
+  my recordStage(launchStageFile, "terminal-ready")
   focus targetTerminal
-  recordStage(launchStageFile, "terminal-focused")
+  my recordStage(launchStageFile, "terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
-  recordStage(launchStageFile, "title-marked")
+  my recordStage(launchStageFile, "title-marked")
   if launchAction is not "" then
-    recordStage(launchStageFile, "launch-action-start")
+    my recordStage(launchStageFile, "launch-action-start")
     perform action launchAction on targetTerminal
-    recordStage(launchStageFile, "launch-action-finished")
+    my recordStage(launchStageFile, "launch-action-finished")
     delay launchActionDrain
   else
-    recordStage(launchStageFile, "input-text-start")
+    my recordStage(launchStageFile, "input-text-start")
     input text launchCommand to targetTerminal
-    recordStage(launchStageFile, "input-text-finished")
+    my recordStage(launchStageFile, "input-text-finished")
     send key "enter" to targetTerminal
-    recordStage(launchStageFile, "enter-sent")
+    my recordStage(launchStageFile, "enter-sent")
   end if
   activate
-  recordStage(launchStageFile, "launch-finished")
+  my recordStage(launchStageFile, "launch-finished")
 end tell
 end run
 APPLESCRIPT
@@ -9508,6 +9514,12 @@ APPLESCRIPT
       fi
       if ! wait_for_claude_code_terminal_pidfile_process_optional \
         "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_PID_SECONDS:-8}"; then
+        if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-created"; then
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          echo "Claude Code Ghostty proof AppleScript bridge stalled during disposable window creation; skipping retry." >&2
+          return 42
+        fi
         if ! run_osascript_with_timeout \
             "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-10}" \
             "Claude Code Ghostty proof launch retry" \
@@ -9540,11 +9552,11 @@ tell application id "com.mitchellh.ghostty"
     end try
   end repeat
   if proofWindow is missing value then set proofWindow to front window
-  recordStage(launchStageFile, "retry-window-selected")
+  my recordStage(launchStageFile, "retry-window-selected")
   activate window proofWindow
-  recordStage(launchStageFile, "retry-window-activated")
+  my recordStage(launchStageFile, "retry-window-activated")
   delay shellReadyDelay
-  recordStage(launchStageFile, "retry-shell-delay-finished")
+  my recordStage(launchStageFile, "retry-shell-delay-finished")
   set targetTerminal to missing value
   set terminalReady to false
   repeat with readyAttempt from 1 to 30
@@ -9560,30 +9572,30 @@ tell application id "com.mitchellh.ghostty"
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
-  recordStage(launchStageFile, "retry-terminal-ready")
+  my recordStage(launchStageFile, "retry-terminal-ready")
   focus targetTerminal
-  recordStage(launchStageFile, "retry-terminal-focused")
+  my recordStage(launchStageFile, "retry-terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
-  recordStage(launchStageFile, "retry-title-marked")
+  my recordStage(launchStageFile, "retry-title-marked")
   try
     send key "u" modifiers "control" to targetTerminal
-    recordStage(launchStageFile, "retry-clear-sent")
+    my recordStage(launchStageFile, "retry-clear-sent")
   end try
   if launchAction is not "" then
-    recordStage(launchStageFile, "retry-launch-action-start")
+    my recordStage(launchStageFile, "retry-launch-action-start")
     perform action launchAction on targetTerminal
-    recordStage(launchStageFile, "retry-launch-action-finished")
+    my recordStage(launchStageFile, "retry-launch-action-finished")
     delay launchActionDrain
   else
-    recordStage(launchStageFile, "retry-input-text-start")
+    my recordStage(launchStageFile, "retry-input-text-start")
     input text launchCommand to targetTerminal
-    recordStage(launchStageFile, "retry-input-text-finished")
+    my recordStage(launchStageFile, "retry-input-text-finished")
     send key "enter" to targetTerminal
-    recordStage(launchStageFile, "retry-enter-sent")
+    my recordStage(launchStageFile, "retry-enter-sent")
   end if
   activate
-  recordStage(launchStageFile, "retry-launch-finished")
+  my recordStage(launchStageFile, "retry-launch-finished")
 end tell
 end run
 APPLESCRIPT
@@ -9683,7 +9695,7 @@ cleanup_claude_code_terminal_proof() {
 }
 
 reset_zero_window_claude_code_ghostty_proof_host() {
-  local ghostty_pids window_count proof_pid
+  local ghostty_pids window_count ax_window_count proof_pid reset_reason
 
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
   if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
@@ -9702,9 +9714,25 @@ end tell
 APPLESCRIPT
 )"
   window_count="$(printf '%s' "$window_count" | tr -d '[:space:]')"
-  [[ "$window_count" == "0" ]] || return 0
+  if [[ "$window_count" == "0" ]]; then
+    reset_reason="Ghostty window API reported zero windows"
+  else
+    ax_window_count="$(run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_AX_WINDOW_CHECK_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty AX zero-window host check" <<'APPLESCRIPT' 2>/dev/null || true
+tell application "System Events"
+  tell application process "Ghostty"
+    return (count windows) as text
+  end tell
+end tell
+APPLESCRIPT
+)"
+    ax_window_count="$(printf '%s' "$ax_window_count" | tr -d '[:space:]')"
+    [[ "$ax_window_count" == "0" ]] || return 0
+    reset_reason="System Events reported zero Ghostty AX windows while Ghostty window API reported ${window_count:-unavailable}"
+  fi
 
-  echo "Claude Code Ghostty proof resetting zero-window Ghostty host pid(s): $(printf '%s' "$ghostty_pids" | tr '\n' ' ')" >&2
+  echo "Claude Code Ghostty proof resetting zero-window Ghostty host pid(s): $(printf '%s' "$ghostty_pids" | tr '\n' ' ') ($reset_reason)" >&2
   while IFS= read -r proof_pid; do
     [[ -z "$proof_pid" ]] && continue
     kill "$proof_pid" >/dev/null 2>&1 || true
