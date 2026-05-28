@@ -3978,16 +3978,27 @@ if ! awk '
   exit 1
 fi
 if ! awk '
+  /restore_claude_code_terminal_ghostty_native_prompt_text\(\)/ { in_helper = 1 }
+  /^}/ && in_helper { in_helper = 0 }
+  in_helper && /run_osascript_with_timeout/ { saw_timeout = 1 }
+  in_helper && /send key "u" modifiers "control"/ { saw_clear = 1 }
+  in_helper && /input text restoreText to targetTerminal/ { saw_restore_text = 1 }
+  END { exit (saw_timeout && saw_clear && saw_restore_text) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty native comparator restore to use timeout-bounded native input instead of System Events" >&2
+  exit 1
+fi
+if ! awk '
   /run_claude_code_ghostty_pre_accept_external_mutation_probe_one\(\)/ { in_helper = 1 }
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /without Enter/ { saw_no_enter = 1 }
   in_helper && /try_claude_code_terminal_prompt_ready_bounded_quiet/ { saw_bounded_verify = 1 }
   in_helper && /"\$proof_text\$probe_text"/ { saw_mutation_verify = 1 }
-  in_helper && /press_claude_code_terminal_external_backspace_key/ { saw_restore_key = 1 }
+  in_helper && /"\$restore_function" "\$proof_text" "Ghostty pre-accept \$label restore"/ { saw_restore_key = 1 }
   in_helper && /"\$proof_text"/ { saw_restore_verify = 1 }
   END { exit (saw_no_enter && saw_bounded_verify && saw_mutation_verify && saw_restore_key && saw_restore_verify) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Ghostty pre-accept comparator to verify mutation, restore with backspace, and reverify the original prompt with bounded readiness checks" >&2
+  echo "real app smoke self-test expected Ghostty pre-accept comparator to verify mutation, call the selected restore path, and reverify the original prompt with bounded readiness checks" >&2
   exit 1
 fi
 if ! awk '

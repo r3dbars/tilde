@@ -687,6 +687,10 @@ The optional nohup launcher is also less entangled with Codex now: it starts the
 runner in a new session through Python's `start_new_session=True`, so nohup
 comparison runs should not inherit the app-server process group. That is not
 Ghostty support, but it makes future nohup-vs-launchd red evidence cleaner.
+The native pre-accept mutability probe now restores the entire proof prompt via
+Ghostty-native clear-and-input rather than a single System Events backspace,
+which keeps native mutation evidence from becoming a cleanup failure before the
+suggestion/key-capture step.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

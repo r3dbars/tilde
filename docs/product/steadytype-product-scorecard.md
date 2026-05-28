@@ -167,6 +167,11 @@ the Codex app-server process group by starting the runner through Python with
 one more false-red source when comparing launchd and nohup evidence: a nohup
 proof should now live or die by the proof script, not by the shell that invoked
 it.
+The pre-accept mutability comparator now restores native Ghostty mutations with
+Ghostty-native clear-and-input instead of a one-character System Events
+backspace. That keeps the prompt restore proportional to the whole proof text
+after native probes, reducing false red runs where native Ghostty input mutates
+the prompt but the cleanup path cannot restore the original prompt.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
