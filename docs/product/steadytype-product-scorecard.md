@@ -299,17 +299,20 @@ script/real_app_smoke_self_test.sh script/claude_code_ghostty_detached_proof.sh
 script/claude_code_ghostty_detached_proof_self_test.sh`,
 `./script/real_app_smoke_self_test.sh`,
 `./script/claude_code_ghostty_detached_proof_self_test.sh`,
-`./script/real_app_smoke_self_test.sh`, `./script/check_steadytype_scorecard.py
---live`, and `git diff --check` passed after the hardening. The live follow-ups
+`./script/check_steadytype_scorecard.py --live`, and `git diff --check` passed
+after the hardening. The live follow-ups
 `20260528T063520Z-ghostty` and `20260528T063816Z-ghostty` still failed red
 before insertion because the runner/smoke handoff died before prompt setup. The
-latest bounded run, `20260528T065022Z-ghostty`, now shows a sharper red bar:
-the `nohup` runner wrote the proof header, logged protected proof process group
-`65594`, spawned smoke pid `65618`, and the smoke child shell logged that it was
-entering `real_app_smoke`, then both the runner and smoke child exited before
-the child printed the real app smoke plan or wrote a final status. The next
-blocker is the early smoke-script startup kill, not a green Ghostty insertion
-claim.
+bounded run `20260528T064731Z-ghostty` sharpened the red bar: the `nohup`
+runner wrote the proof header, logged protected proof process group `55629`,
+spawned smoke pid `55652`, then both the runner and smoke child exited before
+the child printed the real app smoke plan or wrote a final status. The latest
+diagnostic run, `20260528T065031Z-ghostty`, proved the child shell itself
+starts: it logged protected process group `65768`, spawned smoke pid `65791`,
+and printed `Detached Ghostty smoke child shell pid 65785 pgid 65768 entering
+real_app_smoke`, but still died before `real_app_smoke.sh` printed its plan or
+returned a status. The next blocker is the smoke script startup / early-kill
+window, not a green Ghostty insertion claim.
 Ghostty remains unsupported until a detached run reaches verified one-word
 no-submit insertion and exits `0`.
 
