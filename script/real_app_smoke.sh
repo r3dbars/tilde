@@ -9452,9 +9452,15 @@ set launchStageFile to item 6 of argv
 recordStage(launchStageFile, "launch-begin")
 tell application id "com.mitchellh.ghostty"
   my recordStage(launchStageFile, "new-window-start")
+  my recordStage(launchStageFile, "new-window-front-window-start")
   set sourceWindow to front window
+  my recordStage(launchStageFile, "new-window-front-window-resolved")
+  my recordStage(launchStageFile, "new-window-selected-tab-start")
   set sourceTab to selected tab of sourceWindow
+  my recordStage(launchStageFile, "new-window-selected-tab-resolved")
+  my recordStage(launchStageFile, "new-window-focused-terminal-start")
   set sourceTerminal to focused terminal of sourceTab
+  my recordStage(launchStageFile, "new-window-focused-terminal-resolved")
   my recordStage(launchStageFile, "new-window-action-ready")
   perform action "new_window" on sourceTerminal
   my recordStage(launchStageFile, "new-window-action-finished")

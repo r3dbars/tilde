@@ -2899,6 +2899,10 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'preflight-finished' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-created"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-front-window-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-front-window-resolved")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-selected-tab-start")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'my recordStage(launchStageFile, "new-window-focused-terminal-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-action-ready")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "new-window-action-finished")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh >/dev/null ||
