@@ -4071,7 +4071,7 @@ APPLESCRIPT
 }
 
 cgevent_keypress_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v4}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v5}"
 }
 
 ensure_cgevent_keypress_helper() {
@@ -4088,16 +4088,13 @@ import ApplicationServices
 import Foundation
 
 guard CommandLine.arguments.count >= 2,
-      CommandLine.arguments.count <= 3,
-      let keyCode = UInt16(CommandLine.arguments[1]),
-      let source = CGEventSource(stateID: .hidSystemState),
-      let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
-      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
-    FileHandle.standardError.write(Data("failed to create CGEvent key press\n".utf8))
+      CommandLine.arguments.count <= 4,
+      let keyCode = UInt16(CommandLine.arguments[1]) else {
+    FileHandle.standardError.write(Data("usage: cgevent-keypress <keyCode> [hid|session] [hidSystem|combinedSession|private]\n".utf8))
     exit(1)
 }
 
-let tapArgument = CommandLine.arguments.count == 3 ? CommandLine.arguments[2] : "hid"
+let tapArgument = CommandLine.arguments.count >= 3 ? CommandLine.arguments[2] : "hid"
 let tap: CGEventTapLocation
 switch tapArgument {
 case "hid":
@@ -4107,6 +4104,27 @@ case "session":
 default:
     FileHandle.standardError.write(Data("unknown CGEvent tap location\n".utf8))
     exit(2)
+}
+
+let sourceArgument = CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : "hidSystem"
+let sourceState: CGEventSourceStateID
+switch sourceArgument {
+case "hidSystem":
+    sourceState = .hidSystemState
+case "combinedSession":
+    sourceState = .combinedSessionState
+case "private":
+    sourceState = .privateState
+default:
+    FileHandle.standardError.write(Data("unknown CGEvent source state\n".utf8))
+    exit(3)
+}
+
+guard let source = CGEventSource(stateID: sourceState),
+      let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
+    FileHandle.standardError.write(Data("failed to create CGEvent key press\n".utf8))
+    exit(4)
 }
 
 keyDown.flags = []
@@ -4147,6 +4165,7 @@ press_key_code_cgevent_with_timeout() {
   local label="$3"
   local tap_location="${4:-hid}"
   local warm_policy="${5:-compile}"
+  local source_state="${6:-hidSystem}"
   local helper pid
 
   helper="$(cgevent_keypress_helper_path)"
@@ -4155,9 +4174,20 @@ press_key_code_cgevent_with_timeout() {
     return 1
   fi
   ensure_cgevent_keypress_helper
-  "$helper" "$key_code" "$tap_location" &
+  "$helper" "$key_code" "$tap_location" "$source_state" &
   pid="$!"
   wait_for_background_process "$pid" "$timeout_seconds" "$label"
+}
+
+wait_for_claude_code_terminal_key_capture_modifier_probe() {
+  local start_line="$1"
+
+  wait_for_log_fields_optional \
+    "$start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=other" \
+    "decision=passthrough-modifier"
 }
 
 probe_claude_code_terminal_host_key_capture() {
@@ -4218,6 +4248,51 @@ probe_claude_code_terminal_host_key_capture() {
     "keyboard-event-tap-latency" \
     "key=other" \
     "decision=passthrough-modifier"; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "combined-session key-capture probe"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before combined-session key capture probe"
+    echo "Claude Code terminal host is not frontmost for combined-session key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent combined-session key-capture probe" \
+    "session" \
+    "warm" \
+    "combinedSession"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent combined-session key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "System Events key-capture probe"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before System Events key capture probe"
+    echo "Claude Code terminal host is not frontmost for System Events key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; retrying with System Events Shift."
+  if ! run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name System Events key-capture probe" <<'APPLESCRIPT'
+tell application "System Events"
+  key code 56
+end tell
+APPLESCRIPT
+  then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="System Events key capture probe timed out"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
     return 0
   fi
 

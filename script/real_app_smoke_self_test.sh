@@ -2941,10 +2941,15 @@ if ! grep -F 'claude_code_terminal_suggestion_cancelled_by_screen_geometry()' sc
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadytype-cgevent-keypress-v4' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'CGEventSource(stateID: .hidSystemState)' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'let tapArgument = CommandLine.arguments.count == 3 ? CommandLine.arguments[2] : "hid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype-cgevent-keypress-v5' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CommandLine.arguments.count <= 4' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'let sourceArgument = CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : "hidSystem"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'sourceState = .hidSystemState' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'sourceState = .combinedSessionState' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'sourceState = .privateState' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'let tapArgument = CommandLine.arguments.count >= 3 ? CommandLine.arguments[2] : "hid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'tap = .cgSessionEventTap' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"$helper" "$key_code" "$tap_location" "$source_state"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'helper is not warm; refusing to compile on the hot accept path.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER_BUILD_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_background_process "$swiftc_pid" "$build_timeout_seconds" "CGEvent keypress helper compile"' script/real_app_smoke.sh >/dev/null ||
@@ -2977,10 +2982,14 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'probe_claude_code_terminal_host_key_capture()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'probing CGEvent session key capture with non-mutating Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent session key capture probe produced no diagnostic; retrying with HID Shift.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with System Events Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for HID key capture probe.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for combined-session key capture probe.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for System Events key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for HID CGEvent proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for fallback proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent session Tab produced no key=tab diagnostic; retrying with CGEvent HID Tab.' script/real_app_smoke.sh >/dev/null ||
@@ -2988,6 +2997,7 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
@@ -2995,6 +3005,8 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent combined-session key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="System Events key capture probe timed out"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
@@ -3002,7 +3014,9 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F '"session"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"hid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"warm"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"combinedSession"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '56 \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key code 56' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"key=other" \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"decision=passthrough-modifier"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||

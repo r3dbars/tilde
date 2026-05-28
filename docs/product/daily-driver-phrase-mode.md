@@ -597,6 +597,21 @@ pressing Tab with `key capture probe did not reach event tap`. That moves the
 next red bar below Tab itself: the detached Ghostty runner needs a key source
 that can reach SteadyType's event tap at all before Tab delivery can be judged.
 
+The follow-up key-source pass keeps that boundary honest. The CGEvent helper now
+accepts an explicit source state, so the non-mutating Shift sentinel can try
+session HID-state events, HID-tap HID-state events, session-tap combined-session
+events, and finally a guarded System Events Shift before Tab. The detached
+wrapper also forwards and reports the key-capture probe knobs. A launcher
+comparison run, `20260528T204242Z-ghostty`, used `nohup` instead of launchd and
+failed earlier: it reached prompt typing, verified a pre-accept native Ghostty
+mutation, but could not restore the original prompt, so it never reached
+suggestion/key-capture proof. Ghostty remains unsupported; launchd still reaches
+prompt-row suggestions but cannot yet deliver an observable key, while `nohup`
+is not a safer default because it can leave the disposable prompt mutated.
+Post-patch launchd run `20260528T204741Z-ghostty` did forward the new
+key-capture probe env into detached status, but it was SIGTERMed during startup
+before build or prompt setup, so it is not key-source support evidence.
+
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
 and fallback Tab, the app-side Ghostty insertion ladder searches the title-marked
