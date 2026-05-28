@@ -739,6 +739,14 @@ if "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE" not in fast_ghostty_
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must stay opt-in until live proof verifies it")
 if "ghosttyNativePrefixFinalKeyText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep the native-prefix/final-key transport in the insertion ladder")
+if "ghosttyInitialNoopClusterBaseline" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty proof must recheck unchanged prompt state after the initial no-op insertion cluster")
+if "GhosttyInsertionNoopPolicy.initialNoopClusterReason" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty proof must fail fast on the known initial no-op insertion cluster")
+if "runsExtendedProbes: runsExtendedGhosttyInsertionProbes" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty proof must keep the long insertion ladder available behind the extended-probes flag")
+if fast_ghostty_block.index("ghosttyInitialNoopClusterBaseline") > fast_ghostty_block.index("insertGhosttyTerminalHostProofNativePrefixFinalKeyText"):
+    raise SystemExit("Claude Code Ghostty initial no-op fail-fast must run before slower native-prefix probes")
 if 'shouldContinueGhosttyFastInsertion(before: "ghosttyPerformActionText")' not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must budget-gate slower native action text probes")
 if 'shouldContinueGhosttyFastInsertion(before: "cgUnicodeKeyEventsPerCharacterGlobal")' not in fast_ghostty_block:
@@ -2937,6 +2945,12 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'no-restore-command-open-start' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'no-restore-command-open-pidfile-present' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'no-restore-command-open-not-frontmost' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'allow_claude_code_ghostty_proof_command_alert' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Allow Ghostty to execute' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'windowText contains launchScript' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code Ghostty proof allowed command execution alert for disposable proof command.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT="$launch_script"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_ALERT_SECONDS:-2' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'ghostty_window_api_reports_visible_window' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty visible-window check' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_FRONTMOST_SECONDS:-5' script/real_app_smoke.sh >/dev/null ||

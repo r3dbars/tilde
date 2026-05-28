@@ -8776,6 +8776,75 @@ APPLESCRIPT
   [[ "$host_focus_result" == "true" ]]
 }
 
+allow_claude_code_ghostty_proof_command_alert() {
+  local launch_script="$1"
+  local timeout_seconds="${2:-2}"
+  local allow_result
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$launch_script" ]] || return 1
+
+  allow_result="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_SCRIPT="$launch_script" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ALERT_TIMEOUT_SECONDS="$timeout_seconds" \
+    run_osascript_with_timeout \
+      "$timeout_seconds" \
+      "Claude Code Ghostty proof command alert allow" <<'APPLESCRIPT' || true
+set launchScript to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_SCRIPT"
+set timeoutSeconds to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ALERT_TIMEOUT_SECONDS") as real
+set deadline to (current date) + timeoutSeconds
+
+on appendIfText(existingText, candidateValue)
+  try
+    if candidateValue is not missing value then return existingText & " " & (candidateValue as text)
+  end try
+  return existingText
+end appendIfText
+
+repeat while (current date) < deadline
+  tell application "System Events"
+    if exists application process "Ghostty" then
+      tell application process "Ghostty"
+        if exists front window then
+          set windowText to ""
+          try
+            set windowText to my appendIfText(windowText, name of front window)
+          end try
+          try
+            set windowText to my appendIfText(windowText, value of front window)
+          end try
+          try
+            repeat with elementRef in static texts of front window
+              try
+                set windowText to my appendIfText(windowText, name of elementRef)
+              end try
+              try
+                set windowText to my appendIfText(windowText, value of elementRef)
+              end try
+            end repeat
+          end try
+          if windowText contains "Allow Ghostty to execute" and windowText contains launchScript then
+            if exists button "Allow" of front window then
+              click button "Allow" of front window
+              return "allowed"
+            end if
+          end if
+        end if
+      end tell
+    end if
+  end tell
+  delay 0.1
+end repeat
+
+return "not-present"
+APPLESCRIPT
+)"
+  if [[ "$allow_result" == "allowed" ]]; then
+    echo "Claude Code Ghostty proof allowed command execution alert for disposable proof command."
+    return 0
+  fi
+  return 1
+}
+
 frontmost_claude_code_terminal_proof_process_is_active() {
   local frontmost_pid root_pid
 
@@ -9465,6 +9534,7 @@ open_claude_code_terminal_proof() {
 
   title_sequence=$'\033]0;'"$proof_title"$'\007'
   launch_script="$proof_dir/steadytype-claude-code-proof.command"
+  CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT="$launch_script"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE="$proof_dir/claude.pid"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE="$proof_dir/claude.exit"
   ghostty_launch_stage_file="$proof_dir/ghostty-launch.log"
@@ -9523,6 +9593,9 @@ open_claude_code_terminal_proof() {
           -e "$launch_script" >/dev/null 2>&1 || true
         printf '%s\n' "no-restore-command-open-finished" >>"$ghostty_launch_stage_file"
         sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_SETTLE_SECONDS:-1}"
+        allow_claude_code_ghostty_proof_command_alert \
+          "$launch_script" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_ALERT_SECONDS:-2}" || true
         ghostty_preflight_pids="$(terminal_pid_list | tr '\n' ' ')"
         ghostty_preflight_pids="${ghostty_preflight_pids% }"
         if [[ -n "$ghostty_preflight_pids" ]]; then
@@ -12967,6 +13040,11 @@ run_claude_code_terminal_host_smoke() {
   echo "Claude Code $host_name proof opening fresh disposable context."
   open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
   echo "Claude Code $host_name proof fresh disposable context ready."
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" && -n "${CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT:-}" ]]; then
+    allow_claude_code_ghostty_proof_command_alert \
+      "$CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_ALERT_SECONDS:-2}" || true
+  fi
   attempt=0
   found_suggestion=0
   accept_start_line="$(line_count "$LOG_PATH")"
