@@ -13238,7 +13238,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "posted": "false",
                         "reason": "ghostty-apple-script-timeout-mutated-input",
                         "source": "ghosttyAppleScriptInputTextTimeoutBaseline"
-                    ]
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
                 )
                 return (false, false)
             }
@@ -13325,11 +13330,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "posted": "false",
                     "reason": "ghostty-apple-script-unverified-mutated-input",
                     "source": baselineSource
-                ]
+                ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                    expectedProofInputText: expectedProofInputText,
+                    originalProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: profile
+                )) { current, _ in current }
             )
             return (false, false)
         }
         return (false, true)
+    }
+
+    private func claudeCodeTerminalHostProofMutationShapeMetadata(
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> [String: String] {
+        guard let profile,
+              let currentContext = accessibilityClient.focusedTextContext(
+                for: frontmostApp,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ) else {
+            return [
+                "actualInputAvailable": "false",
+                "expectedChars": String(expectedProofInputText.count),
+                "originalChars": String(originalProofInputText.count)
+            ]
+        }
+
+        let verificationInput = claudeCodeTerminalHostProofVerificationInputText(
+            app: frontmostApp,
+            context: currentContext,
+            profile: profile
+        )
+        guard let actualProofInputText = verificationInput.inputText else {
+            return [
+                "actualInputAvailable": "false",
+                "actualInputSource": verificationInput.source,
+                "expectedChars": String(expectedProofInputText.count),
+                "originalChars": String(originalProofInputText.count)
+            ]
+        }
+
+        return [
+            "actualInputAvailable": "true",
+            "actualInputSource": verificationInput.source,
+            "actualChars": String(actualProofInputText.count),
+            "expectedChars": String(expectedProofInputText.count),
+            "originalChars": String(originalProofInputText.count),
+            "actualDeltaFromExpected": String(actualProofInputText.count - expectedProofInputText.count),
+            "actualDeltaFromOriginal": String(actualProofInputText.count - originalProofInputText.count),
+            "actualEqualsOriginal": String(actualProofInputText == originalProofInputText),
+            "actualHasExpectedPrefix": String(actualProofInputText.hasPrefix(expectedProofInputText)),
+            "expectedHasActualPrefix": String(expectedProofInputText.hasPrefix(actualProofInputText)),
+            "actualContainsExpected": String(actualProofInputText.contains(expectedProofInputText)),
+            "actualContainsOriginal": String(actualProofInputText.contains(originalProofInputText)),
+            "actualLineCount": String(actualProofInputText.components(separatedBy: .newlines).count),
+            "expectedLineCount": String(expectedProofInputText.components(separatedBy: .newlines).count)
+        ]
     }
 
     nonisolated private static func waitForProcessExit(
@@ -13691,9 +13751,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return true
             }
+            if attempt == attempts - 1, let currentProofInputText = verificationInput.inputText {
+                recordClaudeCodeTerminalHostProofVerificationMismatch(
+                    expectedProofInputText: expectedProofInputText,
+                    currentProofInputText: currentProofInputText,
+                    source: verificationInput.source,
+                    frontmostApp: frontmostApp,
+                    attempt: attempt + 1,
+                    attempts: attempts
+                )
+            }
         }
 
         return false
+    }
+
+    private func recordClaudeCodeTerminalHostProofVerificationMismatch(
+        expectedProofInputText: String,
+        currentProofInputText: String,
+        source: String,
+        frontmostApp: RunningApplicationInfo,
+        attempt: Int,
+        attempts: Int
+    ) {
+        guard frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-verification-mismatch",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "host": frontmostApp.bundleIdentifier,
+                "source": source,
+                "attempt": String(attempt),
+                "attempts": String(attempts),
+                "expectedChars": String(expectedProofInputText.count),
+                "currentChars": String(currentProofInputText.count),
+                "lengthDelta": String(currentProofInputText.count - expectedProofInputText.count),
+                "commonPrefixChars": String(
+                    Self.commonPrefixCharacterCount(expectedProofInputText, currentProofInputText)
+                ),
+                "commonSuffixChars": String(
+                    Self.commonSuffixCharacterCount(expectedProofInputText, currentProofInputText)
+                ),
+                "currentHasExpectedPrefix": String(currentProofInputText.hasPrefix(expectedProofInputText)),
+                "currentHasExpectedSuffix": String(currentProofInputText.hasSuffix(expectedProofInputText)),
+                "expectedHasCurrentPrefix": String(expectedProofInputText.hasPrefix(currentProofInputText)),
+                "expectedHasCurrentSuffix": String(expectedProofInputText.hasSuffix(currentProofInputText))
+            ]
+        )
+    }
+
+    nonisolated private static func commonPrefixCharacterCount(_ lhs: String, _ rhs: String) -> Int {
+        var count = 0
+        var lhsIndex = lhs.startIndex
+        var rhsIndex = rhs.startIndex
+        while lhsIndex < lhs.endIndex,
+              rhsIndex < rhs.endIndex,
+              lhs[lhsIndex] == rhs[rhsIndex] {
+            count += 1
+            lhs.formIndex(after: &lhsIndex)
+            rhs.formIndex(after: &rhsIndex)
+        }
+        return count
+    }
+
+    nonisolated private static func commonSuffixCharacterCount(_ lhs: String, _ rhs: String) -> Int {
+        var count = 0
+        var lhsIndex = lhs.endIndex
+        var rhsIndex = rhs.endIndex
+        while lhsIndex > lhs.startIndex,
+              rhsIndex > rhs.startIndex {
+            lhs.formIndex(before: &lhsIndex)
+            rhs.formIndex(before: &rhsIndex)
+            guard lhs[lhsIndex] == rhs[rhsIndex] else {
+                break
+            }
+            count += 1
+        }
+        return count
     }
 
     private func schedulePasteboardRestore(

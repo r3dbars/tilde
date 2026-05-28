@@ -545,6 +545,15 @@ if deferred_accept_block.index("insertAcceptedText(acceptedText, action: action)
     raise SystemExit("Ghostty deferred insertion must verify insertion before committing next-word acceptance")
 if "ghostty-deferred-insert-failed" not in deferred_accept_block:
     raise SystemExit("Ghostty deferred insertion must fail closed and hide stale suggestions on insertion failure")
+verification_start = app_delegate.index("private func verifyClaudeCodeTerminalHostProofInsertion(")
+verification_end = app_delegate.index("private func schedulePasteboardRestore(", verification_start)
+verification_block = app_delegate[verification_start:verification_end]
+if "claude-code-terminal-host-proof-verification-mismatch" not in verification_block:
+    raise SystemExit("Ghostty proof verification must record redacted mismatch diagnostics when insertion changes unexpected text")
+if "commonPrefixChars" not in verification_block or "commonSuffixChars" not in verification_block:
+    raise SystemExit("Ghostty proof mismatch diagnostics must include redacted prefix/suffix distance")
+if "currentHasExpectedPrefix" not in verification_block or "expectedHasCurrentPrefix" not in verification_block:
+    raise SystemExit("Ghostty proof mismatch diagnostics must distinguish partial insertion from unchanged prompt state")
 placement_gate_start = app_delegate.index("let syntheticCaretBundleIdentifier = syntheticTextAreaCaretBundleIdentifier(")
 placement_gate_end = app_delegate.index("guard supportsSyntheticTextAreaCaret", placement_gate_start)
 placement_gate_block = app_delegate[placement_gate_start:placement_gate_end]
@@ -866,6 +875,8 @@ if "ghosttyAppleScriptInputTextBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified scripting input")
 if "ghostty-apple-script-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must fail closed if scripting input mutates the prompt unexpectedly")
+if "claudeCodeTerminalHostProofMutationShapeMetadata" not in terminal_insert_block or "actualDeltaFromExpected" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty mutated-input failures must log privacy-safe shape diagnostics")
 if '"ghosttyInProcessInputText"' not in app_delegate or "ghosttyInProcessInputTextBaseline" not in app_delegate:
     raise SystemExit("Claude Code Ghostty proof must include in-process native input text with unchanged-prompt baseline proof")
 if "ghostty-in-process-input-unverified-mutated-input" not in app_delegate:
