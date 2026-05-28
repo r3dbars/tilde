@@ -15231,7 +15231,6 @@ run_textedit() {
   SMOKE_PHASE="TextEdit Tab acceptance"
   wait_for_textedit_acceptance_with_stale_retry "$start_line" "TextEdit Tab acceptance" "tab" "acceptNextWord" "$textedit_window_title"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   if native_undo_proof_requested; then
     verify_textedit_native_undo "$textedit_window_title" "$before_one_word_accept_text" "$start_line" "TextEdit one-word native undo" "acceptNextWord"
   elif [[ "$TEXTEDIT_VARIANT" != "undo-full" ]]; then
@@ -15254,6 +15253,7 @@ APPLESCRIPT
       "accepted-insertion-undone" \
       "app=com.apple.TextEdit"
   fi
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
   second_start_line="$(line_count "$LOG_PATH")"

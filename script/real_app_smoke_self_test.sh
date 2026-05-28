@@ -1182,6 +1182,9 @@ one_word_keystroke = run_textedit.index('keystroke "z" using command down', one_
 one_word_preflight = run_textedit[one_word_undo:one_word_keystroke]
 if 'focus_textedit_smoke_editor "$textedit_window_title"' not in one_word_preflight or 'assert_textedit_frontmost_window "$textedit_window_title" "TextEdit one-word undo"' not in one_word_preflight:
     raise SystemExit("TextEdit one-word undo proof must reassert the disposable TextEdit window before Command-Z")
+first_screenshot_wait = run_textedit.index('wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"')
+if first_screenshot_wait < one_word_keystroke:
+    raise SystemExit("TextEdit one-word undo proof must run before waiting on screenshot proof so rollback does not expire")
 full_undo = run_textedit.index('full_undo_start_line="$(line_count "$LOG_PATH")"')
 full_keystroke = run_textedit.index('keystroke "z" using command down', full_undo)
 full_preflight = run_textedit[full_undo:full_keystroke]
