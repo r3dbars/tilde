@@ -5150,7 +5150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let configuredDelaySeconds = ProcessInfo.processInfo.environment[
             "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS"
         ].flatMap(TimeInterval.init)
-        let delaySeconds = min(1.0, max(0.02, configuredDelaySeconds ?? 0.12))
+        let delaySeconds = min(3.0, max(0.02, configuredDelaySeconds ?? 0.12))
         return Int((delaySeconds * 1000).rounded())
     }
 

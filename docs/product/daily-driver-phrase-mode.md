@@ -922,6 +922,15 @@ System Events/send-key rungs then repeated the unchanged result before
 `19:14:43Z`. Ghostty remains unsupported; the current ladder is now ruled out
 on timing, prompt click, and event-tap stop shape.
 
+The next proof hook is now narrower than another insertion-ladder reorder.
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE=1`
+lets the Ghostty smoke wait for SteadyType to schedule deferred insertion after
+Tab, then try one external native/System Events character and restore the
+original prompt before the delayed app-owned insert fires. The matching app-side
+delay clamp now allows an explicitly configured 3s proof window. That should
+separate "Tab poisoned the prompt before insertion" from "only SteadyType-owned
+insertion transports are no-ops" on the next detached run.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

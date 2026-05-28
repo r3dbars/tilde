@@ -598,6 +598,11 @@ if "ghostty-deferred-insert-failed" not in deferred_accept_block:
     raise SystemExit("Ghostty deferred insertion must fail closed and hide stale suggestions on insertion failure")
 if 'suppressCurrentFieldAfterInsertionFailure(reason: "ghostty-deferred-insert-failed")' not in deferred_accept_block:
     raise SystemExit("Ghostty deferred insertion failure must suppress the broken field")
+deferred_delay_start = app_delegate.index("private func deferredGhosttyInsertionProbeDelayMilliseconds(", deferred_accept_end)
+deferred_delay_end = app_delegate.index("private func recordDeferredClaudeCodeTerminalHostProofAcceptance(", deferred_delay_start)
+deferred_delay_block = app_delegate[deferred_delay_start:deferred_delay_end]
+if "min(3.0" not in deferred_delay_block:
+    raise SystemExit("Ghostty deferred insertion delay must allow the post-Tab/pre-insert proof comparator enough room when explicitly configured")
 if app_delegate.count('suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")') < 2:
     raise SystemExit("Captured accept-key insertion failures must suppress the broken field before resurfacing")
 insert_accepted_start = app_delegate.index("private func insertAcceptedText(")
@@ -3690,6 +3695,17 @@ if ! awk '
   exit 1
 fi
 if ! awk '
+  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1 }
+  /^}/ && in_smoke { in_smoke = 0 }
+  in_smoke && /press_claude_code_terminal_host_tab "\$suggestion_line" "\$host_name"/ { saw_tab = 1 }
+  in_smoke && saw_tab && /run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe "\$proof_text" "\$accept_start_line"/ { saw_probe = 1 }
+  in_smoke && saw_probe && /wait_for_claude_code_terminal_tab_acceptance/ { saw_accept_wait = 1 }
+  END { exit (saw_tab && saw_probe && saw_accept_wait) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty proof to optionally probe external prompt mutability after Tab capture but before waiting for final insertion" >&2
+  exit 1
+fi
+if ! awk '
   /run_claude_code_ghostty_pre_accept_external_mutation_probe\(\)/ { in_helper = 1 }
   /^}/ && in_helper { in_helper = 0 }
   in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE/ { saw_gate = 1 }
@@ -3700,6 +3716,21 @@ if ! awk '
   END { exit (saw_gate && saw_native_gate && saw_system_events_gate && saw_native && saw_system_events) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Ghostty pre-accept comparator to be opt-in and compare native text with System Events" >&2
+  exit 1
+fi
+if ! awk '
+  /run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe\(\)/ { in_helper = 1 }
+  /^}/ && in_helper { in_helper = 0 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE/ { saw_gate = 1 }
+  in_helper && /wait_for_log_fields_optional/ { saw_schedule_wait = 1 }
+  in_helper && /stage=scheduled/ { saw_schedule = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_PROBE/ { saw_native_gate = 1 }
+  in_helper && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_PROBE/ { saw_system_events_gate = 1 }
+  in_helper && /type_claude_code_terminal_ghostty_native_text/ { saw_native = 1 }
+  in_helper && /type_claude_code_terminal_raw_smoke_text/ { saw_system_events = 1 }
+  END { exit (saw_gate && saw_schedule_wait && saw_schedule && saw_native_gate && saw_system_events_gate && saw_native && saw_system_events) ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty post-Tab/pre-insert comparator to be opt-in, wait for the deferred schedule, and compare native text with System Events" >&2
   exit 1
 fi
 if ! awk '
