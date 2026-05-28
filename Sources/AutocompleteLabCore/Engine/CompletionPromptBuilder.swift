@@ -176,7 +176,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(
             forVisibleWords: visibleWords
         )
-        guard visibleWords >= 12 else {
+        guard visibleWords >= 6 else {
             return "Next words:"
         }
 
