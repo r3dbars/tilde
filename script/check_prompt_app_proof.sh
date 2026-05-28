@@ -11,10 +11,12 @@ REQUIRE_PROMPT_EVENTS="${AUTOCOMPLETE_LAB_PROMPT_PROOF_REQUIRE_EVENTS:-1}"
 EXTRA_BUNDLES="${AUTOCOMPLETE_LAB_PROMPT_PROOF_EXTRA_BUNDLES:-}"
 PROOF_SURFACE="${AUTOCOMPLETE_LAB_PROMPT_PROOF_SURFACE:-}"
 REQUIRE_BROWSER_CHAT_SURFACE="${AUTOCOMPLETE_LAB_PROMPT_PROOF_REQUIRE_BROWSER_CHAT_SURFACE:-0}"
+ALLOW_FULL_ACCEPT_PROOF="${AUTOCOMPLETE_LAB_PROMPT_PROOF_ALLOW_FULL_ACCEPT:-0}"
+REQUIRE_FULL_ACCEPT_PROOF="${AUTOCOMPLETE_LAB_PROMPT_PROOF_REQUIRE_FULL_ACCEPT:-0}"
 
 usage() {
   cat <<'EOF'
-Usage: script/check_prompt_app_proof.sh [--trace PATH] [--start-line N] [--end-line N] [--bundle BUNDLE] [--surface SURFACE] [--require-browser-chat-surface] [--allow-empty]
+Usage: script/check_prompt_app_proof.sh [--trace PATH] [--start-line N] [--end-line N] [--bundle BUNDLE] [--surface SURFACE] [--require-browser-chat-surface] [--allow-full-accept-proof] [--require-full-accept-proof] [--allow-empty]
 
 Reads a JSONL trace slice and fails if prompt/chat no-submit proof metrics are
 nonzero. Line numbers are inclusive.
@@ -68,6 +70,14 @@ while (($# > 0)); do
       REQUIRE_BROWSER_CHAT_SURFACE=1
       shift
       ;;
+    --allow-full-accept-proof)
+      ALLOW_FULL_ACCEPT_PROOF=1
+      shift
+      ;;
+    --require-full-accept-proof)
+      REQUIRE_FULL_ACCEPT_PROOF=1
+      shift
+      ;;
     --allow-empty)
       REQUIRE_PROMPT_EVENTS=0
       shift
@@ -96,7 +106,17 @@ if [[ -n "$END_LINE" ]]; then
   fi
 fi
 
-PYTHON_ARGS=("$TRACE_PATH" "$START_LINE" "$END_LINE" "$REQUIRE_PROMPT_EVENTS" "$EXTRA_BUNDLES" "$PROOF_SURFACE" "$REQUIRE_BROWSER_CHAT_SURFACE")
+PYTHON_ARGS=(
+  "$TRACE_PATH"
+  "$START_LINE"
+  "$END_LINE"
+  "$REQUIRE_PROMPT_EVENTS"
+  "$EXTRA_BUNDLES"
+  "$PROOF_SURFACE"
+  "$REQUIRE_BROWSER_CHAT_SURFACE"
+  "$ALLOW_FULL_ACCEPT_PROOF"
+  "$REQUIRE_FULL_ACCEPT_PROOF"
+)
 if ((${#EXTRA_ARGS[@]} > 0)); then
   PYTHON_ARGS+=("${EXTRA_ARGS[@]}")
 fi
@@ -123,7 +143,9 @@ extra_bundles = {
 }
 proof_surface = sys.argv[6].strip().lower()
 require_browser_chat_surface = sys.argv[7].lower() not in {"0", "false", "no", "off"}
-extra_bundles.update(value.strip() for value in sys.argv[8:] if value.strip())
+allow_full_accept_proof = sys.argv[8].lower() not in {"0", "false", "no", "off"}
+require_full_accept_proof = sys.argv[9].lower() not in {"0", "false", "no", "off"}
+extra_bundles.update(value.strip() for value in sys.argv[10:] if value.strip())
 
 prompt_bundles = {
     "com.openai.codex",
@@ -290,7 +312,7 @@ def wrong_context(event: dict) -> bool:
     )
 
 
-def full_accept_without_proof(event: dict) -> bool:
+def is_full_accept_event(event: dict) -> bool:
     metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
     event_text = " ".join(
         lower_text(event.get(field))
@@ -312,6 +334,10 @@ def full_accept_without_proof(event: dict) -> bool:
             "acceptall"
         ]
     )
+
+
+def full_accept_without_proof(event: dict) -> bool:
+    return is_full_accept_event(event) and not allow_full_accept_proof
 
 
 def suggestion_content_violation(event: dict) -> bool:
@@ -388,6 +414,22 @@ for name, check in metric_checks:
     metric_examples[name] = examples
     metric_counts[name] = len(examples)
 
+full_accept_prompt_events = [
+    (line, event)
+    for line, event in prompt_events
+    if is_full_accept_event(event)
+]
+full_accept_accepts = [
+    (line, event)
+    for line, event in full_accept_prompt_events
+    if event.get("type") == "suggestionAccepted"
+]
+full_accept_verified = [
+    (line, event)
+    for line, event in full_accept_prompt_events
+    if event.get("type") == "insertionVerified" and event.get("outcome") == "verified"
+]
+
 line_label = f"{start_line}-{end_line}" if end_line is not None else f"{start_line}+"
 print("Prompt/chat proof status")
 print(f"Trace: {path}")
@@ -405,11 +447,24 @@ if browser_chat_counts_by_bundle:
         print(f"- {bundle}: {count}")
 if proof_surface:
     print(f"Proof surface: {proof_surface}")
+print("Full accept proof:")
+print(f"- allowed: {int(allow_full_accept_proof)}")
+print(f"- required: {int(require_full_accept_proof)}")
+print(f"- fullAcceptEventCount: {len(full_accept_prompt_events)}")
+print(f"- fullAcceptAcceptedCount: {len(full_accept_accepts)}")
+print(f"- fullAcceptVerifiedCount: {len(full_accept_verified)}")
 print("Prompt/chat safety metrics:")
 for name, _ in metric_checks:
     print(f"- {name}: {metric_counts[name]}")
 
 failures = [name for name, count in metric_counts.items() if count > 0]
+proof_failures: list[str] = []
+if require_full_accept_proof:
+    if not full_accept_accepts:
+        proof_failures.append("missing full-accept suggestionAccepted event")
+    if not full_accept_verified:
+        proof_failures.append("missing full-accept insertionVerified outcome=verified event")
+
 if failures:
     print("", file=sys.stderr)
     print("Prompt/chat proof metric failures:", file=sys.stderr)
@@ -418,6 +473,14 @@ if failures:
         for example in metric_examples[name][:3]:
             print(f"  - {example}", file=sys.stderr)
     print(f"Prompt app proof gate failed with {len(failures)} nonzero metric(s).", file=sys.stderr)
+    raise SystemExit(1)
+
+if proof_failures:
+    print("", file=sys.stderr)
+    print("Prompt/chat full-accept proof failures:", file=sys.stderr)
+    for failure in proof_failures:
+        print(f"- {failure}", file=sys.stderr)
+    print("Prompt app proof gate failed full-accept proof requirements.", file=sys.stderr)
     raise SystemExit(1)
 
 print("Prompt app proof gate passed.")

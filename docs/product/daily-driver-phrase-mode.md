@@ -306,10 +306,13 @@ session that feels heavy before it ever reaches the report.
 Wrong-field safety now has both prompt-app and sensitive-field gates in the
 default smoke path. Prompt no-submit self-tests cover accidental submit, send
 key collision, prompt mutation, wrong-context insertion, unsafe full accept, and
-prompt-action suggestion text. Sensitive-field proof self-tests cover required
-password, OTP, payment, login, search, address, government ID, medical, command
-line, API key, password manager, private prompt, private search, and blocked
-browser-hosted surface categories with redacted metadata only.
+prompt-action suggestion text. Prompt full-accept now has its own no-submit
+proof mode, and normal prompt proof still fails if full accept appears without
+that separate manifest and smoke-row evidence. Sensitive-field proof self-tests
+cover required password, OTP, payment, login, search, address, government ID,
+medical, command line, API key, password manager, private prompt, private
+search, and blocked browser-hosted surface categories with redacted metadata
+only.
 
 The instant phrase fallback is broader now too. It can produce zero-latency
 3-8 word daily-driver phrases for common writing contexts like Obsidian note
