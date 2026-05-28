@@ -505,7 +505,7 @@ if [[ "$MODE" == "check-only" ]]; then
   }
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
-  run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
+  run_check "Prompt app manifest proof gate" ./script/check_prompt_app_manifest_proof.sh || failures=$((failures + 1))
   run_check "Onboarding permission QA" ./script/check_onboarding_permission_qa.sh --check || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
@@ -589,8 +589,8 @@ echo "== Production mock fallback disabled =="
 check_production_mock_fallback_disabled
 
 echo
-echo "== Prompt app proof gate =="
-./script/check_prompt_app_proof.sh
+echo "== Prompt app manifest proof gate =="
+./script/check_prompt_app_manifest_proof.sh
 
 echo
 echo "== Onboarding permission QA =="
