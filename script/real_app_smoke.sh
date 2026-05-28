@@ -4225,6 +4225,27 @@ claude_code_terminal_key_capture_permission_ui_since() {
   ' "$LOG_PATH" 2>/dev/null
 }
 
+wait_for_claude_code_terminal_key_capture_permission_ui_since() {
+  local start_line="$1"
+  local timeout_seconds="${2:-1}"
+  local deadline
+
+  timeout_seconds="${timeout_seconds%%.*}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    if claude_code_terminal_key_capture_permission_ui_since "$start_line"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  return 1
+}
+
 probe_claude_code_terminal_host_key_capture() {
   local host_name="${1:-$(claude_code_host_display_name)}"
   local key_capture_start_line probe_start_line
@@ -4333,7 +4354,8 @@ APPLESCRIPT
     return 0
   fi
 
-  if claude_code_terminal_key_capture_permission_ui_since "$key_capture_start_line"; then
+  if wait_for_claude_code_terminal_key_capture_permission_ui_since "$key_capture_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-1}"; then
     CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"
     echo "Claude Code $host_name key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap." >&2
     return 1

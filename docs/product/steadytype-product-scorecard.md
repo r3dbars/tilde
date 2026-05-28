@@ -120,6 +120,9 @@ The latest bounded launchd proof `20260528T210138Z-ghostty` keeps that as the
 active blocker and adds a sharper diagnostic: macOS Accessibility/System
 Settings can steal focus during the key-probe window, so future runs classify
 that permission-UI focus steal separately from a plain no-diagnostic key miss.
+Follow-up run `20260528T210954Z-ghostty` kept the proof bounded and reached the
+same prompt-row key-probe miss; the classifier now waits briefly for late
+focus-change diagnostics before printing the final reason.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -857,8 +860,11 @@ native Ghostty text mutated and restored the proof prompt, System Events did not
 mutate it, a prompt-row suggestion appeared, and every non-mutating key-capture
 sentinel missed the event tap. Diagnostics also showed macOS
 Accessibility/System Settings stealing focus during that key probe window, so
-the harness now classifies that permission-UI focus steal explicitly instead of
-falling through to a generic suggestion timeout.
+the harness now classifies that permission-UI focus steal explicitly. Follow-up
+run `20260528T210954Z-ghostty` stayed bounded and again reached a prompt-row
+suggestion, then showed the System Settings focus-change line can flush just
+after the generic key-capture miss; the classifier now waits briefly after the
+probe so that focus-steal evidence is not missed.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
