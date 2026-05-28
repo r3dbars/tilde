@@ -12083,6 +12083,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (true, false)
         }
 
+        let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+            source: launchThroughShell
+                ? "ghosttyLoginShellFrontWindowInputTextScreenCopy"
+                : "ghosttyFrontWindowInputTextScreenCopy",
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp
+        )
+        if screenCopyOutcome.verified {
+            return (true, false)
+        }
+        guard screenCopyOutcome.safeToContinue else {
+            return (false, false)
+        }
+
         let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
             expectedProofInputText: originalProofInputText,
             frontmostApp: frontmostApp,
@@ -12627,8 +12642,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
         end tell
         tell application id "com.mitchellh.ghostty"
-            perform action "paste_from_clipboard" on targetTerminal
-            return true
+            set actionPerformed to perform action "paste_from_clipboard" on targetTerminal
+            return actionPerformed
         end tell
         """
 
@@ -12776,6 +12791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "posted": "true",
                 "source": source,
                 "verified": String(verified),
+                "actionPerformed": "true",
                 "exitStatus": String(process.terminationStatus),
                 "errorMessage": String(stderrText.prefix(160))
             ]
@@ -13465,8 +13481,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
         end tell
         tell application id "com.mitchellh.ghostty"
-            perform action actionText on targetTerminal
-            return true
+            set actionPerformed to perform action actionText on targetTerminal
+            return actionPerformed
         end tell
         """
 
@@ -13612,6 +13628,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "posted": "true",
                 "source": source,
                 "verified": String(verified),
+                "actionPerformed": "true",
                 "focusMode": "frontmostTerminalOnly",
                 "launchMode": "direct",
                 "textTransport": "environment",
@@ -13765,7 +13782,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
         end tell
         tell application id "com.mitchellh.ghostty"
-            perform action "write_screen_file:copy,plain" on targetTerminal
+            set actionPerformed to perform action "write_screen_file:copy,plain" on targetTerminal
+            if actionPerformed is false then return "false|targetSelection:" & targetSelectionMode & "|frontWindowProofMatch:" & (targetWindowNameIsProof as text) & "|windowCount:" & (ghosttyWindowCount as text)
             return "true|targetSelection:" & targetSelectionMode & "|frontWindowProofMatch:" & (targetWindowNameIsProof as text) & "|windowCount:" & (ghosttyWindowCount as text)
         end tell
         """
@@ -13928,6 +13946,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "originalChars": String(originalProofInputText.count),
             "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount),
             "posted": "true",
+            "actionPerformed": "true",
             "screenChars": String(screenText.count),
             "screenCopyTransport": screenCopyText.transport,
             "source": source,
@@ -14123,8 +14142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
         end tell
         tell application id "com.mitchellh.ghostty"
-            perform action actionText on targetTerminal
-            return true
+            set actionPerformed to perform action actionText on targetTerminal
+            return actionPerformed
         end tell
         """
 
@@ -14279,6 +14298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                 "posted": "true",
                 "source": source,
+                "actionPerformed": "true",
                 "verified": String(verified)
             ]
         )

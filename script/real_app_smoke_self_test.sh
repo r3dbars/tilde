@@ -741,6 +741,8 @@ if '"textTransport": "environment"' not in app_delegate or "ghostty-focused-acti
     raise SystemExit("Claude Code Ghostty focused native action proof must avoid argv text transport and fail closed on timeout mutation")
 if "ghosttyFocusedActionTextScreenCopy" not in app_delegate or 'perform action "write_screen_file:copy,plain" on targetTerminal' not in app_delegate:
     raise SystemExit("Claude Code Ghostty focused native action proof must use Ghostty's native screen-copy verifier before trusting AX misses")
+if "set actionPerformed to perform action actionText on targetTerminal" not in app_delegate:
+    raise SystemExit("Claude Code Ghostty native text action proof must preserve Ghostty's returned action result")
 screen_copy_start = app_delegate.index("private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(")
 screen_copy_end = app_delegate.index("let deadline = Date().addingTimeInterval", screen_copy_start)
 screen_copy_block = app_delegate[screen_copy_start:screen_copy_end]
@@ -754,6 +756,8 @@ if "ghosttyScreenCopyPlainText" not in app_delegate or '"screenCopyTransport": s
     raise SystemExit("Claude Code Ghostty screen-copy verifier must read Ghostty's copied screen file path before matching proof text")
 if "targetSelectionMode" not in screen_copy_block or '"true|targetSelection:" & targetSelectionMode' not in screen_copy_block:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must report the redacted target-selection path")
+if 'set actionPerformed to perform action "write_screen_file:copy,plain" on targetTerminal' not in screen_copy_block or 'if actionPerformed is false then return "false|targetSelection:"' not in screen_copy_block:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must preserve Ghostty's returned action result")
 if "frontWindowProofMatch" not in screen_copy_block or "ghosttyWindowCount" not in screen_copy_block:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must report title-match and window-count shape metadata")
 if "ghosttyScreenCopyScriptMetadata" not in app_delegate or 'metadata["targetSelection"]' not in app_delegate:
@@ -852,8 +856,12 @@ if "set targetWindow to front window" not in front_window_input_block or "input 
     raise SystemExit("Claude Code Ghostty front-window input rung must mirror the live smoke native typing path")
 if "ghosttyFrontWindowInputTextBaseline" not in front_window_input_block or "ghostty-front-window-input-unverified-mutated-input" not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty front-window input rung must verify unchanged baseline and fail closed on mutation")
+if "ghosttyFrontWindowInputTextScreenCopy" not in front_window_input_block or "verifyGhosttyTerminalHostProofWithNativeScreenCopy(" not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty front-window input rung must native screen-copy verify before trusting AX misses")
 if "ghosttyLoginShellFrontWindowInputText" not in front_window_input_block or 'process.arguments = ["-lc", "exec /usr/bin/osascript"]' not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty front-window input rung must support the login-shell native input proof path")
+if "ghosttyLoginShellFrontWindowInputTextScreenCopy" not in front_window_input_block:
+    raise SystemExit("Claude Code Ghostty login-shell front-window input rung must native screen-copy verify before trusting AX misses")
 if "standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))" not in front_window_input_block:
     raise SystemExit("Claude Code Ghostty shell-launched front-window input must pass AppleScript through stdin")
 if "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS" not in terminal_insert_block or "repeat with characterIndex" not in terminal_insert_block:
@@ -1007,6 +1015,8 @@ if terminal_insert_block.count("\n            activate\n") < 5:
     raise SystemExit("Claude Code Ghostty native insertion fallbacks must mirror the harness by activating Ghostty after terminal focus")
 if '"ghosttyPerformActionText"' not in terminal_insert_block or "perform action" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native text action command")
+if terminal_insert_block.count("set actionPerformed to perform action actionText on targetTerminal") < 2:
+    raise SystemExit("Claude Code Ghostty native text action probes must preserve Ghostty's returned action result")
 if "ghosttyPerformActionTextBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must verify the prompt stayed unchanged after unverified action text")
 if "ghostty-action-unverified-mutated-input" not in terminal_insert_block:
@@ -1041,6 +1051,8 @@ if "ghostty-in-process-input-unverified-mutated-input" not in app_delegate:
     raise SystemExit("Claude Code Ghostty in-process native input must fail closed if it mutates the prompt unexpectedly")
 if '"ghosttyPerformActionPasteFromClipboard"' not in terminal_insert_block or 'perform action "paste_from_clipboard"' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must try Ghostty's native paste_from_clipboard action")
+if 'set actionPerformed to perform action "paste_from_clipboard" on targetTerminal' not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty native paste action must preserve Ghostty's returned action result")
 if "ghosttyPerformActionPasteFromClipboardBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty native paste action must verify the prompt stayed unchanged after unverified paste")
 if "ghostty-paste-action-unverified-mutated-input" not in terminal_insert_block:
