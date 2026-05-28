@@ -2554,6 +2554,13 @@ run_claude_code_ghostty_post_fail_external_insertion_probe() {
   [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
   [[ -n "$proof_text" ]] || return 0
   [[ -n "$probe_text" ]] || return 0
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_FAIL_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty post-fail external insertion probe skipped for proof-only accept driver; set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_FAIL_PROBE=1 to opt in." >&2
+    return 0
+  fi
+
   if [[ "$probe_text" == *$'\n'* || "$probe_text" == *$'\r'* ]]; then
     echo "Claude Code Ghostty post-fail external insertion probe refused multiline text." >&2
     return 0

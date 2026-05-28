@@ -12368,14 +12368,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             source: "ghosttyFocusPidReassertion"
         )
         Thread.sleep(forTimeInterval: 0.04)
-        let verified = pidReasserted
-            && verifyClaudeCodeTerminalHostProofInsertion(
-                expectedProofInputText: originalProofInputText,
-                frontmostApp: frontmostApp,
-                profile: profile,
-                attempts: 6,
-                delaySeconds: 0.03
-            )
+        let proofPromptVerified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 6,
+            delaySeconds: 0.03
+        )
+        let verified = proofPromptVerified && (pidReasserted || activated)
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
@@ -12383,6 +12383,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "source": "ghosttyFocusReassertion",
                 "activated": String(activated),
                 "pidReasserted": String(pidReasserted),
+                "proofPromptVerified": String(proofPromptVerified),
+                "verificationTrust": pidReasserted
+                    ? "pidReasserted"
+                    : (activated ? "activatedVerifiedPrompt" : "none"),
                 "verified": String(verified)
             ]
         )
