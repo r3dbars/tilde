@@ -323,7 +323,14 @@ insertion claim. The launch-command follow-up now defaults Ghostty to the native
 `text:` action with a carriage return instead of separating text input from
 Enter, but `20260528T070944Z-ghostty` was not conclusive: it waited on an active
 older smoke process, reached build/helper warmup, then the runner was
-interrupted with `TERM` and the orphaned smoke child was stopped.
+interrupted with `TERM` and the orphaned smoke child was stopped. The next clean
+run, `20260528T071059Z-ghostty`, still failed after two fresh disposable
+contexts with no Claude pidfile. The launch-stage diagnostic follow-up,
+`20260528T071510Z-ghostty`, narrowed that failure further: `ghostty-launch.log`
+recorded only `launch-begin retry-begin`, which proves the AppleScript wrapper
+started but never reached `new-window-start` inside the Ghostty `tell` block.
+Manual `open -na /Applications/Ghostty.app` probes with `--command`, `-e`, and a
+`.command` document also failed to write a proof pidfile.
 Ghostty remains unsupported until a detached run reaches verified one-word
 no-submit insertion and exits `0`.
 

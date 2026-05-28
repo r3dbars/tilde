@@ -9139,6 +9139,21 @@ APPLESCRIPT
   fi
 }
 
+describe_claude_code_ghostty_launch_stages() {
+  local stage_file="$1"
+  local stages
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$stage_file" ]] || return 0
+
+  if [[ -s "$stage_file" ]]; then
+    stages="$(tr '\n' ' ' <"$stage_file" | sed 's/[[:space:]]*$//')"
+    echo "Claude Code Ghostty proof launch stages: $stages" >&2
+  else
+    echo "Claude Code Ghostty proof launch stages unavailable: $stage_file" >&2
+  fi
+}
+
 wait_for_claude_code_terminal_pidfile_process_optional() {
   local timeout="${1:-3}"
   local timeout_seconds="${timeout%%.*}"
@@ -9288,7 +9303,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_shell_ready_delay ghostty_exit_hold_seconds
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -9312,15 +9327,20 @@ open_claude_code_terminal_proof() {
   launch_script="$proof_dir/steadytype-claude-code-proof.command"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE="$proof_dir/claude.pid"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE="$proof_dir/claude.exit"
+  ghostty_launch_stage_file="$proof_dir/ghostty-launch.log"
   {
     printf '#!/usr/bin/env bash\n'
+    printf 'printf '"'"'%%s\\n'"'"' script-started >> %q\n' "$ghostty_launch_stage_file"
     printf 'cd %q\n' "$ROOT_DIR"
     printf 'printf '"'"'%%s\\n'"'"' "$$" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"
+    printf 'printf '"'"'%%s\\n'"'"' script-wrote-pidfile >> %q\n' "$ghostty_launch_stage_file"
     printf 'printf %q\n' "$title_sequence"
     if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
       ghostty_exit_hold_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS:-20}"
+      printf 'printf '"'"'%%s\\n'"'"' script-starting-claude >> %q\n' "$ghostty_launch_stage_file"
       printf '%q\n' "$claude_bin"
       printf 'claude_status=$?\n'
+      printf 'printf '"'"'%%s\\n'"'"' "script-claude-returned:$claude_status" >> %q\n' "$ghostty_launch_stage_file"
       printf 'printf '"'"'status=%%s finished_at=%%s\\n'"'"' "$claude_status" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE"
       printf 'printf '"'"'\\n[SteadyType proof] Claude exited with status %%s; keeping Ghostty open for diagnostics.\\n'"'"' "$claude_status"\n'
       printf 'sleep %q\n' "$ghostty_exit_hold_seconds"
@@ -9349,20 +9369,35 @@ open_claude_code_terminal_proof() {
       fi
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
+      : >"$ghostty_launch_stage_file"
       if ! run_osascript_with_timeout \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
           "Claude Code Ghostty proof launch" \
-          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" <<'APPLESCRIPT' >/dev/null; then
+          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" "$ghostty_launch_stage_file" <<'APPLESCRIPT' >/dev/null; then
+on recordStage(stageFile, stageName)
+  if stageFile is not "" then
+    try
+      do shell script "/bin/echo " & quoted form of stageName & " >> " & quoted form of stageFile
+    end try
+  end if
+end recordStage
+
 on run argv
 set launchCommand to item 1 of argv
 set shellReadyDelay to item 2 of argv as real
 set proofTitle to item 3 of argv
 set launchAction to item 4 of argv
 set launchActionDrain to item 5 of argv as real
+set launchStageFile to item 6 of argv
+recordStage(launchStageFile, "launch-begin")
 tell application id "com.mitchellh.ghostty"
+  recordStage(launchStageFile, "new-window-start")
   set proofWindow to new window
+  recordStage(launchStageFile, "new-window-created")
   activate window proofWindow
+  recordStage(launchStageFile, "window-activated")
   delay shellReadyDelay
+  recordStage(launchStageFile, "shell-delay-finished")
   set targetTerminal to missing value
   set terminalReady to false
   repeat with readyAttempt from 1 to 30
@@ -9378,20 +9413,30 @@ tell application id "com.mitchellh.ghostty"
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
+  recordStage(launchStageFile, "terminal-ready")
   focus targetTerminal
+  recordStage(launchStageFile, "terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
+  recordStage(launchStageFile, "title-marked")
   if launchAction is not "" then
+    recordStage(launchStageFile, "launch-action-start")
     perform action launchAction on targetTerminal
+    recordStage(launchStageFile, "launch-action-finished")
     delay launchActionDrain
   else
+    recordStage(launchStageFile, "input-text-start")
     input text launchCommand to targetTerminal
+    recordStage(launchStageFile, "input-text-finished")
     send key "enter" to targetTerminal
+    recordStage(launchStageFile, "enter-sent")
   end if
   activate
+  recordStage(launchStageFile, "launch-finished")
 end tell
 end run
 APPLESCRIPT
+        describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
         describe_claude_code_ghostty_launch_state "$proof_title"
         echo "Claude Code Ghostty proof could not create a script-owned disposable proof window." >&2
         return 1
@@ -9401,13 +9446,23 @@ APPLESCRIPT
         if ! run_osascript_with_timeout \
             "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-10}" \
             "Claude Code Ghostty proof launch retry" \
-            - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" <<'APPLESCRIPT' >/dev/null; then
+            - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" "$ghostty_launch_stage_file" <<'APPLESCRIPT' >/dev/null; then
+on recordStage(stageFile, stageName)
+  if stageFile is not "" then
+    try
+      do shell script "/bin/echo " & quoted form of stageName & " >> " & quoted form of stageFile
+    end try
+  end if
+end recordStage
+
 on run argv
 set launchCommand to item 1 of argv
 set shellReadyDelay to item 2 of argv as real
 set proofTitle to item 3 of argv
 set launchAction to item 4 of argv
 set launchActionDrain to item 5 of argv as real
+set launchStageFile to item 6 of argv
+recordStage(launchStageFile, "retry-begin")
 tell application id "com.mitchellh.ghostty"
   set proofWindow to missing value
   repeat with candidateWindow in windows
@@ -9420,8 +9475,11 @@ tell application id "com.mitchellh.ghostty"
     end try
   end repeat
   if proofWindow is missing value then set proofWindow to front window
+  recordStage(launchStageFile, "retry-window-selected")
   activate window proofWindow
+  recordStage(launchStageFile, "retry-window-activated")
   delay shellReadyDelay
+  recordStage(launchStageFile, "retry-shell-delay-finished")
   set targetTerminal to missing value
   set terminalReady to false
   repeat with readyAttempt from 1 to 30
@@ -9437,23 +9495,34 @@ tell application id "com.mitchellh.ghostty"
     delay 0.1
   end repeat
   if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
+  recordStage(launchStageFile, "retry-terminal-ready")
   focus targetTerminal
+  recordStage(launchStageFile, "retry-terminal-focused")
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
+  recordStage(launchStageFile, "retry-title-marked")
   try
     send key "u" modifiers "control" to targetTerminal
+    recordStage(launchStageFile, "retry-clear-sent")
   end try
   if launchAction is not "" then
+    recordStage(launchStageFile, "retry-launch-action-start")
     perform action launchAction on targetTerminal
+    recordStage(launchStageFile, "retry-launch-action-finished")
     delay launchActionDrain
   else
+    recordStage(launchStageFile, "retry-input-text-start")
     input text launchCommand to targetTerminal
+    recordStage(launchStageFile, "retry-input-text-finished")
     send key "enter" to targetTerminal
+    recordStage(launchStageFile, "retry-enter-sent")
   end if
   activate
+  recordStage(launchStageFile, "retry-launch-finished")
 end tell
 end run
 APPLESCRIPT
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
           describe_claude_code_ghostty_launch_state "$proof_title"
           echo "Claude Code Ghostty proof could not retry the disposable proof command." >&2
           return 1
@@ -9463,6 +9532,7 @@ APPLESCRIPT
           describe_claude_code_terminal_proof_process_state \
             "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" \
             "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
           describe_claude_code_ghostty_launch_state "$proof_title"
           echo "Claude Code Ghostty proof shell did not exec the disposable proof command." >&2
           return 1
