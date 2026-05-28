@@ -205,6 +205,13 @@ but it also exposed a wrapper bug: `start --force` could start another run while
 an older active detached proof was still holding the smoke lock. The wrapper now
 enumerates all active detached Ghostty runs under the proof root and stops them
 before launching a forced replacement.
+Clean replacement run `20260528T224532Z-ghostty` confirmed the force guard:
+the wrapper stopped active `20260528T224425Z-ghostty` before starting the new
+nohup run. The new run was still terminated during `build/relaunch current
+SteadyType`, but the signal snapshot named a separate Codex-owned stop command
+against the same run directory (`claude_code_ghostty_detached_proof.sh stop
+--run-dir ...20260528T224532Z-ghostty`) at the moment of TERM. That means this
+red sample is external stop interference, not a Ghostty prompt/caret result.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -981,9 +988,13 @@ diagnostic only when it appears after the typing trigger and reports both
 `beforeChars` and `promptLineInputChars` equal to the proof text length.
 `./script/real_app_smoke_self_test.sh` and
 `./script/claude_code_ghostty_detached_proof_self_test.sh` pass for the new
-guards. App coverage stays at `83`; the next live proof should rerun the
-bounded detached Ghostty lane and should fail or pass on suggestion/key delivery
-rather than on a false typed-prompt readiness miss.
+guards. Rerun `20260528T224425Z-ghostty` did not reach prompt typing because a
+concurrent `start --force` nohup proof interrupted the launchd run during fresh
+context setup, so it is interference evidence rather than product support
+evidence. App coverage stays at `83`; the next live proof should rerun the
+bounded detached Ghostty lane with no concurrent force-start runner and should
+fail or pass on suggestion/key delivery rather than on a false typed-prompt
+readiness miss.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

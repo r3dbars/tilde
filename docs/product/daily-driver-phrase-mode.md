@@ -719,6 +719,12 @@ startup failure proved the new signal diagnostics can name the smoke lock owner,
 and it exposed that `start --force` only considered the latest run. The wrapper
 now stops every active detached Ghostty proof under the proof root before
 starting a forced replacement.
+`20260528T224532Z-ghostty` proved that guard by stopping
+`20260528T224425Z-ghostty` first, then starting a clean nohup run. It still
+failed during `build/relaunch current SteadyType`, and the new signal snapshot
+showed a separate Codex-owned `claude_code_ghostty_detached_proof.sh stop`
+process targeting that same run directory. Treat that run as external stop
+interference rather than a Ghostty support verdict.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
