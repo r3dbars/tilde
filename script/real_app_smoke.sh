@@ -1091,13 +1091,17 @@ exclusive_proof_run_enabled() {
 }
 
 foreign_proof_process_lines() {
-  local current_pgid
+  local current_pgid protected_pgids
   current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+  protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
 
   ps -axo pid=,pgid=,command= 2>/dev/null |
     while read -r pid pgid command; do
       [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
       [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
+      case " $protected_pgids " in
+        *" $pgid "*) continue ;;
+      esac
 
       case "$command" in
         *script/real_app_smoke.sh*|*script/manual_proof_refresh.sh*|*script/obsidian_deep_sweep.sh*|*script/build_and_run.sh*|*script/local_quality_audit.py*|*script/local_completion_runtime.py*|*/SteadyType.app/Contents/MacOS/SteadyType*)

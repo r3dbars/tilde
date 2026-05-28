@@ -1278,6 +1278,10 @@ if '"$command" == "$ROOT_DIR"/dist/SteadyType.app/Contents/MacOS/SteadyType*' no
     raise SystemExit(
         "real app smoke self-test expected exclusive proof cleanup not to terminate the current SteadyType app bundle"
     )
+if "protected_pgids=" not in foreign_block or 'case " $protected_pgids " in' not in foreign_block:
+    raise SystemExit(
+        "real app smoke self-test expected foreign proof cleanup to respect protected proof process groups"
+    )
 
 current_start = source.index("current_steadytype_app_bundle_pids()")
 current_end = source.index("\nstop_current_steadytype_app_bundle()", current_start)

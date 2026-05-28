@@ -5,7 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+ALIVE_SMOKE_PID=""
+cleanup() {
+  if [[ -n "${ALIVE_SMOKE_PID:-}" ]]; then
+    kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
+    wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
 
 require_contains() {
   local file="$1"
@@ -96,6 +104,57 @@ require_contains "$TMP_DIR/status.txt" "state=passed"
 require_contains "$TMP_DIR/status.txt" "runner_process=not-running"
 require_contains "$TMP_DIR/status.txt" "script/real_app_smoke.sh claude-code-ghostty --manual-gate"
 
+RUNNING_SMOKE_RUN="$TMP_DIR/proofs/running-smoke-run"
+mkdir -p "$RUNNING_SMOKE_RUN"
+sleep 60 &
+ALIVE_SMOKE_PID="$!"
+cat >"$RUNNING_SMOKE_RUN/status.env" <<EOF
+state=running
+pid=$$
+smoke_pid=$ALIVE_SMOKE_PID
+started_at=2026-05-27T00:00:01Z
+run_dir=$RUNNING_SMOKE_RUN
+launcher=nohup
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'running smoke detached log\n' >"$RUNNING_SMOKE_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh status --run-dir "$RUNNING_SMOKE_RUN" >"$TMP_DIR/running-smoke-status.txt"
+require_contains "$TMP_DIR/running-smoke-status.txt" "smoke_pid=$ALIVE_SMOKE_PID"
+require_contains "$TMP_DIR/running-smoke-status.txt" "runner_process=alive"
+require_contains "$TMP_DIR/running-smoke-status.txt" "smoke_process=alive"
+kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
+wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
+ALIVE_SMOKE_PID=""
+
+ORPHANED_SMOKE_RUN="$TMP_DIR/proofs/orphaned-smoke-run"
+mkdir -p "$ORPHANED_SMOKE_RUN"
+sleep 60 &
+ALIVE_SMOKE_PID="$!"
+cat >"$ORPHANED_SMOKE_RUN/status.env" <<EOF
+state=running
+pid=999999
+smoke_pid=$ALIVE_SMOKE_PID
+started_at=2026-05-27T00:00:01Z
+run_dir=$ORPHANED_SMOKE_RUN
+launcher=nohup
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'orphaned smoke detached log\n' >"$ORPHANED_SMOKE_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh status --run-dir "$ORPHANED_SMOKE_RUN" >"$TMP_DIR/orphaned-smoke-status.txt"
+require_contains "$TMP_DIR/orphaned-smoke-status.txt" "state=running"
+require_contains "$TMP_DIR/orphaned-smoke-status.txt" "smoke_pid=$ALIVE_SMOKE_PID"
+require_contains "$TMP_DIR/orphaned-smoke-status.txt" "runner_process=not-running"
+require_contains "$TMP_DIR/orphaned-smoke-status.txt" "warning=runner exited before writing a final status"
+require_contains "$TMP_DIR/orphaned-smoke-status.txt" "smoke_process=alive"
+reject_contains "$TMP_DIR/orphaned-smoke-status.txt" "state=failed"
+kill "$ALIVE_SMOKE_PID" >/dev/null 2>&1 || true
+wait "$ALIVE_SMOKE_PID" 2>/dev/null || true
+ALIVE_SMOKE_PID=""
+
 PENDING_RUN="$TMP_DIR/proofs/pending-run"
 mkdir -p "$PENDING_RUN"
 cat >"$PENDING_RUN/status.env" <<EOF
@@ -148,7 +207,7 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh status --run-dir "$DEAD_RUN" >"$TMP_DIR/dead-status.txt"
 require_contains "$TMP_DIR/dead-status.txt" "state=failed"
 require_contains "$TMP_DIR/dead-status.txt" "exit_status=1"
-require_contains "$TMP_DIR/dead-status.txt" "Detached proof runner exited before writing a final status."
+require_contains "$TMP_DIR/dead-status.txt" "Detached proof runner and smoke child exited before writing a final status."
 require_contains "$TMP_DIR/dead-status.txt" "runner_process=not-running"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
@@ -183,9 +242,25 @@ require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KE
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS"
 require_contains "$SCRIPT_TEXT" "write_passthrough_env_exports"
 require_contains "$SCRIPT_TEXT" "repair_dead_runner_status_if_needed"
-require_contains "$SCRIPT_TEXT" "Detached proof runner exited before writing a final status."
+require_contains "$SCRIPT_TEXT" "Detached proof runner and smoke child exited before writing a final status."
 require_contains "$SCRIPT_TEXT" "terminate_orphaned_detached_smoke_processes"
+require_contains "$SCRIPT_TEXT" "smoke_pid_file_for_run"
+require_contains "$SCRIPT_TEXT" "smoke_pid_for_run"
+require_contains "$SCRIPT_TEXT" "SMOKE_PID_FILE"
+require_contains "$SCRIPT_TEXT" 'SMOKE_PID=""'
+require_contains "$SCRIPT_TEXT" 'smoke_pid=%s'
+require_contains "$SCRIPT_TEXT" 'printf '\''%s\n'\'' "$SMOKE_PID" >"$SMOKE_PID_FILE"'
+require_contains "$SCRIPT_TEXT" 'wait "$SMOKE_PID"'
+require_contains "$SCRIPT_TEXT" 'process_is_alive "$smoke_pid"'
+require_contains "$SCRIPT_TEXT" "smoke_process=alive"
+require_contains "$SCRIPT_TEXT" "smoke_process=not-running"
+require_contains "$SCRIPT_TEXT" 'runner_pgid="$(ps -o pgid= -p "$$"'
+require_contains "$SCRIPT_TEXT" "Protected proof process groups:"
+require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS="${protected_pgids:-}"'
+require_contains "$SCRIPT_TEXT" "Detached Ghostty proof spawned smoke pid"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty proof smoke pid"
 require_contains "$SCRIPT_TEXT" "Stopped orphaned detached Ghostty smoke process"
+require_contains "$SCRIPT_TEXT" "Detached proof smoke child was stopped after runner exit."
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_STARTUP_GRACE_SECONDS"
 require_contains "$SCRIPT_TEXT" "status_file_age_seconds"
 require_contains "$SCRIPT_TEXT" "Detached proof runner did not start before startup grace expired."
