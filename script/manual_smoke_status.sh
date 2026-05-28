@@ -380,10 +380,10 @@ print_focused_graduation_decisions() {
   echo "- Browser ChatGPT: blocked - no disposable real-service one-word no-submit screenshot and insertion proof yet; the browser-chat harness does not count."
   echo "- Chrome production text fields: blocked - public or production browser text fields do not count as beta-safe local fixtures."
   echo "- Claude desktop layouts: proof-only - default one-word proof exists; normal beta use and layout variants remain blocked."
-  echo "- Codex layouts: proof-only - default one-word proof exists; normal beta use and more prompt layouts remain blocked."
+  echo "- Codex layouts: proof-only - default one-word and full-accept no-submit proof exists; normal beta use and more prompt layouts remain blocked."
   echo "- Obsidian long notes: supported target - beta-safe when strict current proof passes; broader vault variance remains yellow."
   echo "- Real Monaco and CodeMirror editors: blocked - official/default editor proof is not beta-safe local textarea/contenteditable proof."
-  echo "- Prompt-app full accept: blocked - no prompt app may count full accept without exact separate no-submit screenshot and insertion proof."
+  echo "- Prompt-app full accept: proof-only - Codex default composer has exact separate no-submit proof; all other prompt/chat full-accept claims remain blocked."
 }
 
 if [[ ! -f "$REPORT_PATH" ]]; then

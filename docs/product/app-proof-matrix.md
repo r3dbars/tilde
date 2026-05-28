@@ -41,10 +41,10 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 | Mail compose | diagnostics-only | Compose content is sensitive and insertion is unproven; suggestions stay off. |
 | Browser webmail | blocked | Email composers can send messages and expose private recipients/subjects; no disposable real-service proof exists. |
 | Browser ChatGPT | blocked | Real ChatGPT prompt surfaces need one-word no-submit proof; the local browser-chat harness does not count. |
-| Prompt-app full accept | blocked | Full accept needs its own exact prompt-app no-submit screenshot and insertion proof. One-word proof does not count. |
+| Prompt-app full accept | proof-only | Codex default composer has exact separate no-submit screenshot and insertion proof; other prompt/chat full-accept claims remain blocked. |
 | Chrome production text fields | blocked | Public proof pages and production browser apps do not count as beta-safe local fixture proof. |
 | Claude desktop layouts | proof-only | Default one-word no-submit proof exists, but normal beta use, layout variants, and full accept remain blocked. |
-| Codex layouts | proof-only | Default one-word no-submit proof refreshed at 2026-05-26T02:06:11Z; normal beta use, broader layouts, and full accept remain gated. |
+| Codex layouts | proof-only | Default one-word and full-accept no-submit proof is recorded for the Codex composer; normal beta use and broader layouts remain gated. |
 | Obsidian long notes | supported | Current-head long-note proof now has bounded strict screenshot evidence, viewport-end repair, verified Tab insertion, and accepted-and-kept behavior; broader vault variance still keeps general Obsidian support yellow. |
 | Real Monaco and CodeMirror editors | blocked | Forced local fixtures are useful evidence, but official/default Monaco and current CodeMirror proof are not complete. |
 

@@ -46,7 +46,7 @@ insertion, and undo/recovery proof.
 | Browser ChatGPT | blocked | Browser ChatGPT is blocked by hosted-surface policy; ChatGPT app/Atlas profiles are disabled. | Disposable prompt proof for one-word Tab, no submit/tool/context side effect, insertion verification, undo/recovery, and screenshot-backed placement. |
 | Chrome production text fields | blocked | Public proof pages and production browser apps no longer count as beta-safe. | Disposable production-page proof before any public or production page is treated as safe. |
 | Claude desktop layouts | proof-only | Default Claude desktop proof exists; layout variants are pending. | Empty, long, wrapped, narrow, context, light, and dark prompt layout rows with one-word no-submit proof. |
-| Codex layouts | proof-only | Default Codex proof exists with one-word no-submit behavior. | More prompt layouts before raising beyond proof-only; full accept stays off until a separate no-submit lane exists. |
+| Codex layouts | proof-only | Default Codex proof exists with one-word and full-accept no-submit behavior. | More prompt layouts before raising beyond proof-only/default-composer support. |
 | Obsidian long notes | supported | Current-head long-note proof has strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior in the disposable proof vault. | Broader vault layouts, hidden-caret variants, and stronger native undo proof. |
 | Real Monaco and CodeMirror editors | blocked | ProseMirror proof is stronger; official/default Monaco and current CodeMirror are not complete. | Official CodeMirror and Monaco/default-AX lanes with verified insertion, undo/recovery, and current screenshots. |
 
