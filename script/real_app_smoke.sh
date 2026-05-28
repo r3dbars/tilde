@@ -10301,7 +10301,10 @@ run_claude_code_ghostty_prompt_screen_copy_probe() {
   local has_expected has_rejected_shell screen_ready screen_normalized expected_normalized tmp_prefix
 
   [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
-  [[ "$prompt_wait_output" == *"textNodes=0"* ]] || return 1
+  if [[ -z "$expected_text" ||
+        ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROMPT_SCREEN_COPY_ON_TYPED_AX_FAILURE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    [[ "$prompt_wait_output" == *"textNodes=0"* ]] || return 1
+  fi
   target_pid="$(claude_code_terminal_proof_primary_pid)"
   proof_title="${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}"
   proof_marker="$(claude_code_proof_marker)"
