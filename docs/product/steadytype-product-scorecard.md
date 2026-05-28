@@ -2,24 +2,21 @@
 
 Updated: 2026-05-28 America/Chicago.
 Base app/source evidence checked through the current score-loop commits.
-Latest beta gate evidence checked with `./script/beta_readiness.sh --check-only`, `./script/manual_smoke_status.sh --strict`, `./script/check_runtime_network_egress.py --validate-proof`, `./script/select_latency_window.py`, `./script/private_beta_packet.sh --check`, `./script/package_release.sh archive`, `./script/package_release.sh --notarize`, `./script/package_release.sh --check --require-developer-id --require-notary-profile`, `./script/check_prompt_app_manifest_proof.sh`, the guided TextEdit walkthrough proof gate self-test, fresh beta-safe app proof, current TextEdit model-latency proof, retired Claude desktop model-latency proof lane, packaged TextEdit model-latency proof wrapper, current runtime no-egress proof, Claude Code terminal-host insertion source proof, detached Ghostty launchd/nohup proof failure evidence, direct Ghostty command-open prompt-readiness evidence, detached Ghostty proof runner self-test, focused daily-driver activation/trigger Swift tests, full Swift test, focused model-integrity Swift tests, current Obsidian run-on proof, current Obsidian font-zoom proof, current Obsidian Markdown-list proof, current Obsidian Markdown-bold proof, current Obsidian multiline proof, current Codex one-word no-submit proof, current Chrome textarea/contenteditable split-persistence proof, and the latest strict manual smoke status with Obsidian default refreshed on the current build.
+Latest beta gate evidence checked with `./script/beta_readiness.sh --check-only`, `./script/manual_smoke_status.sh --strict`, `./script/check_runtime_network_egress.py --validate-proof`, `./script/select_latency_window.py`, `./script/private_beta_packet.sh --check`, `./script/package_release.sh archive`, `./script/package_release.sh --notarize`, `./script/package_release.sh --check --require-developer-id --require-notary-profile`, `./script/check_prompt_app_manifest_proof.sh`, the guided TextEdit walkthrough proof gate self-test, fresh beta-safe app proof, current TextEdit model-latency proof, retired Claude desktop model-latency proof lane, packaged TextEdit model-latency proof wrapper, current runtime no-egress proof, Claude Code terminal-host insertion source proof, detached Ghostty launchd/nohup proof failure evidence, direct Ghostty command-open prompt-readiness evidence, detached Ghostty proof runner self-test, focused daily-driver activation/trigger Swift tests, full Swift test, focused model-integrity Swift tests, current Obsidian run-on proof, current Obsidian font-zoom proof, current Obsidian Markdown-list proof, current Obsidian Markdown-bold proof, current Obsidian multiline proof, current Codex one-word no-submit proof, current Chrome textarea/contenteditable split-persistence proof, and the latest strict manual smoke status passing on the current build.
 Overall score: 86/100.
 
 This is the single current product scorecard. Older scorecards are historical
 inputs only. Do not raise a score unless the evidence in the row changes.
 Stale proof can explain progress, but it cannot make a row green.
 
-Current strict manual smoke is partly refreshed after the latest source changes.
-`./script/manual_smoke_status.sh --strict`: failed with 8 target app pass(es)
-stale or pending on 2026-05-28 after Notes title and Obsidian long note
-refreshed on the current build. Notes title is current with diagnostics lines
-`934005`-`934077` and trace lines `30980`-`30998`; Obsidian long note is
-current with diagnostics lines `933827`-`933959` and trace lines `30954`-`30973`.
-Both rows have 2 accepted insertions and strict visual trace evidence. TextEdit,
-Notes body/checklist, Obsidian default/theme/panes, Chrome textarea, and Chrome
-contenteditable still need current-source proof. The latest long-note pass
-proved that the instant predictive phrase remains accept-ready when slower model
-refinement tries to change the first visible word.
+Current strict manual smoke is green after the latest source changes.
+`./script/manual_smoke_status.sh --strict`: passed on 2026-05-28 at commit
+`e2da385b0ece`. TextEdit, Notes title/body/checklist, Obsidian
+default/theme/pane/long-note, Chrome textarea, and Chrome contenteditable all
+have current rows with 2 accepted insertions and strict visual trace evidence.
+The refreshed rows include TextEdit diagnostics lines `936047`-`936183`,
+Obsidian long-note lines `936188`-`936319`, Chrome textarea lines
+`936380`-`936545`, and Chrome contenteditable lines `936553`-`936730`.
 
 Current Ghostty terminal-host evidence is sharper but still red. Local probes
 showed Ghostty `input text` can return success without mutating a fresh shell,
