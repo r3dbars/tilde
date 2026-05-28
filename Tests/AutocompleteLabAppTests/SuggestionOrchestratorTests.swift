@@ -1083,6 +1083,20 @@ struct SuggestionOrchestratorTests {
         #expect(allowed.shouldPresent)
         #expect(allowed.reason == nil)
         #expect(allowed.metadata["replacementScoreMargin"] == "0.50")
+
+        let invalidated = orchestrator.replacementDecision(
+            currentVisibleText: " make this easier",
+            proposedVisibleText: " ship the follow up",
+            currentSuggestionID: "current",
+            proposedSuggestionID: "proposed",
+            currentPresentedAt: currentPresentedAt,
+            currentScore: 1.00,
+            proposedScore: 0.80,
+            currentSuggestionInvalidatedByUserTyping: true,
+            now: now
+        )
+        #expect(invalidated.shouldPresent)
+        #expect(invalidated.reason == nil)
     }
 
     @MainActor

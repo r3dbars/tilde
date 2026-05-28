@@ -7673,7 +7673,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             proposedSuggestionID: suggestionID,
             currentPresentedAt: currentSuggestionPresentedAt,
             currentScore: currentSuggestionDisplayScoreFinal,
-            proposedScore: displayScoreTrace.score.finalScore
+            proposedScore: displayScoreTrace.score.finalScore,
+            currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
         )
         let replacementMetadata = replacementDecision.metadata
         let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
