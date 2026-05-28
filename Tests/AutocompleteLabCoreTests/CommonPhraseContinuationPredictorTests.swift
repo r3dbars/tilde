@@ -332,6 +332,56 @@ struct CommonPhraseContinuationPredictorTests {
         ).suppressionReason == "not-word-boundary")
     }
 
+    @Test("Predicts Obsidian thinking-flow phrases instantly")
+    func predictsObsidianThinkingFlowPhrasesInstantly() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Daily note\nOne thing I noticed is", .docsProse, " that the flow breaks there", "intent-writing-flow-one-thing-i-noticed"),
+            ("Obsidian scratchpad\nWhat I know so far is", .notes, " the next step is clear", "intent-writing-flow-what-i-know"),
+            ("Private note\nI do not want to", .docsProse, " lose the thread here", "intent-writing-flow-do-not-want-to"),
+            ("Research log\nThis is probably worth", .docsProse, " turning into a small test", "intent-writing-flow-probably-worth"),
+            ("- The thing to watch is", .bullets, " where trust breaks first", "intent-writing-flow-thing-to-watch"),
+            ("I keep coming back to", .notes, " the same core problem", "intent-writing-flow-coming-back-to"),
+            ("The useful version is", .docsProse, " small fast and reliable", "intent-writing-flow-useful-version"),
+            ("Before I move on I should", .notes, " capture the next step", "intent-writing-flow-before-moving-on"),
+            ("This note is really about", .docsProse, " the decision we need", "intent-writing-flow-note-about"),
+            ("The next pass should", .docsProse, " make the point clearer", "intent-writing-flow-next-pass")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect((3...8).contains(selection.suggestion?.visibleWordCount ?? 0))
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
+    @Test("Blocks thinking-flow phrases in email chat prompt search form and code profiles")
+    func blocksThinkingFlowPhrasesOutsideWritingSurfaces() {
+        for profile in [
+            AutocompleteBehaviorProfileID.email,
+            .casualChat,
+            .aiChat,
+            .search,
+            .forms,
+            .coding
+        ] {
+            let selection = predictor.selection(
+                for: "Daily note\nWhat I know so far is",
+                behaviorProfileID: profile
+            )
+
+            #expect(selection.suggestion == nil)
+            #expect(selection.suppressionReason != nil)
+        }
+    }
+
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
     func blocksUnsafeProfiles() {
         #expect(predictor.suggestion(
