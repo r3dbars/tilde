@@ -647,12 +647,11 @@ and `Thanks again` -> `for sending this`; prompt, search, form, and code
 profiles stay gated out of that fallback path.
 
 Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
-textedit` and `script/manual_proof_refresh.sh --verify-target notes-title`
-passed on 2026-05-28 at commit `76cd2b614de6`, adding current strict visual
-proof rows for TextEdit default and Notes title. `script/manual_smoke_status.sh
---strict` still exits red because Notes body/checklist, Obsidian
-default/theme/pane/long-note, and Chrome textarea/contenteditable remain stale
-after the latest app/source change.
+textedit`, `notes-title`, `chrome-textarea`, and `chrome-contenteditable`
+passed on 2026-05-28, and the proof sweep added current Notes checklist plus
+Obsidian default/theme/pane rows. The beta-safe proof grid is now 9 current / 1
+stale: only Obsidian long note remains red after a rerun timed out waiting for
+the second verified insertion while focus drifted away from Obsidian.
 
 ## Scores
 
