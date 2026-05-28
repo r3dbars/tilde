@@ -9154,6 +9154,59 @@ describe_claude_code_ghostty_launch_stages() {
   fi
 }
 
+check_claude_code_ghostty_applescript_health() {
+  local stage_file="$1"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$stage_file" ]] || return 42
+
+  if run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_APPLESCRIPT_PREFLIGHT_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty AppleScript preflight" \
+    - "$stage_file" <<'APPLESCRIPT' >/dev/null; then
+on recordStage(stageFile, stageName)
+  if stageFile is not "" then
+    try
+      do shell script "/bin/echo " & quoted form of stageName & " >> " & quoted form of stageFile
+    end try
+  end if
+end recordStage
+
+on run argv
+set launchStageFile to item 1 of argv
+recordStage(launchStageFile, "preflight-begin")
+tell application id "com.mitchellh.ghostty"
+  recordStage(launchStageFile, "preflight-tell-entered")
+  set ghosttyWindowCount to count windows
+  recordStage(launchStageFile, "preflight-window-count:" & (ghosttyWindowCount as text))
+end tell
+recordStage(launchStageFile, "preflight-finished")
+end run
+APPLESCRIPT
+    if grep -Fxq "preflight-finished" "$stage_file" 2>/dev/null; then
+      return 0
+    fi
+
+    describe_claude_code_ghostty_launch_stages "$stage_file"
+    echo "Claude Code Ghostty AppleScript bridge preflight exited before recording completion." >&2
+    return 42
+  fi
+
+  describe_claude_code_ghostty_launch_stages "$stage_file"
+  echo "Claude Code Ghostty AppleScript bridge did not answer preflight before disposable launch." >&2
+  return 42
+}
+
+claude_code_ghostty_launch_stalled_before_stage() {
+  local stage_file="$1"
+  local required_stage="$2"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$stage_file" && -n "$required_stage" && -s "$stage_file" ]] || return 1
+
+  ! grep -Fx "$required_stage" "$stage_file" >/dev/null 2>&1
+}
+
 wait_for_claude_code_terminal_pidfile_process_optional() {
   local timeout="${1:-3}"
   local timeout_seconds="${timeout%%.*}"
@@ -9303,7 +9356,7 @@ open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
-  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -9361,7 +9414,6 @@ open_claude_code_terminal_proof() {
       ;;
     ghostty)
       CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
-      reset_zero_window_claude_code_ghostty_proof_host
       ghostty_launch_command="$(printf 'exec %q' "$launch_script")"
       ghostty_launch_action=""
       if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
@@ -9370,6 +9422,15 @@ open_claude_code_terminal_proof() {
       ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
       ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
       : >"$ghostty_launch_stage_file"
+      if check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"; then
+        ghostty_preflight_status=0
+      else
+        ghostty_preflight_status=$?
+      fi
+      if ((ghostty_preflight_status != 0)); then
+        return "$ghostty_preflight_status"
+      fi
+      reset_zero_window_claude_code_ghostty_proof_host
       if ! run_osascript_with_timeout \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
           "Claude Code Ghostty proof launch" \
@@ -9438,6 +9499,10 @@ end run
 APPLESCRIPT
         describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
         describe_claude_code_ghostty_launch_state "$proof_title"
+        if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"; then
+          echo "Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry." >&2
+          return 42
+        fi
         echo "Claude Code Ghostty proof could not create a script-owned disposable proof window." >&2
         return 1
       fi
@@ -9793,7 +9858,7 @@ APPLESCRIPT
 open_fresh_claude_code_terminal_proof_context() {
   local host_name="$1"
   local marker="$2"
-  local proof_dir launch_attempt max_launch_attempts
+  local proof_dir launch_attempt max_launch_attempts open_status
   max_launch_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CONTEXT_LAUNCH_ATTEMPTS:-2}"
   if ! [[ "$max_launch_attempts" =~ ^[0-9]+$ ]] || ((max_launch_attempts < 1)); then
     max_launch_attempts=1
@@ -9803,8 +9868,17 @@ open_fresh_claude_code_terminal_proof_context() {
     cleanup_claude_code_terminal_proof
     proof_dir="$(make_claude_code_terminal_proof_dir)"
     CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"
-    if ! open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then
+    if open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then
+      open_status=0
+    else
+      open_status=$?
+    fi
+    if ((open_status != 0)); then
       echo "Claude Code $host_name proof could not launch disposable context attempt $launch_attempt." >&2
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" && "$open_status" == "42" ]]; then
+        echo "Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge preflight failed." >&2
+        return "$open_status"
+      fi
       continue
     fi
     if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
