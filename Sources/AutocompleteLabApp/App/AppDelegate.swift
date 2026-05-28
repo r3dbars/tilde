@@ -9899,6 +9899,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySendKey") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttySendKeyOutcome.verified {
+                return true
+            }
+            guard ghosttySendKeyOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsBulkKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyBulkSystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                delayMilliseconds: 0,
+                bulkKeystroke: true
+            )
+            if ghosttyBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyBulkSystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10055,42 +10091,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             guard ghosttyPasteActionOutcome.safeToContinue else {
-                return false
-            }
-
-            guard shouldContinueGhosttyFastInsertion(before: "ghosttySendKey") else {
-                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
-            }
-            let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
-                acceptedText,
-                expectedProofInputText: expectedProofInputText,
-                originalProofInputText: originalProofInputText,
-                frontmostApp: frontmostApp,
-                profile: currentProfile
-            )
-            if ghosttySendKeyOutcome.verified {
-                return true
-            }
-            guard ghosttySendKeyOutcome.safeToContinue else {
-                return false
-            }
-
-            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsBulkKeystroke") else {
-                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
-            }
-            let ghosttyBulkSystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
-                acceptedText,
-                expectedProofInputText: expectedProofInputText,
-                originalProofInputText: originalProofInputText,
-                frontmostApp: frontmostApp,
-                profile: currentProfile,
-                delayMilliseconds: 0,
-                bulkKeystroke: true
-            )
-            if ghosttyBulkSystemEventsOutcome.verified {
-                return true
-            }
-            guard ghosttyBulkSystemEventsOutcome.safeToContinue else {
                 return false
             }
 
@@ -10998,16 +10998,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
+        let drainSeconds = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS"]
+            .flatMap { TimeInterval($0) }
+            .map { min(max($0, 0.0), 10.0) } ?? 8.0
+        if drainSeconds > 0 {
+            Thread.sleep(forTimeInterval: drainSeconds)
+        }
         let prefixVerified = verifyClaudeCodeTerminalHostProofInsertion(
             expectedProofInputText: prefixExpectedProofInputText,
             frontmostApp: frontmostApp,
             profile: profile,
-            attempts: 8
+            attempts: 24,
+            delaySeconds: 0.1
         )
         DiagnosticsLog.shared.record(
             "claude-code-terminal-host-proof-insert",
             metadata: [
                 "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "drainMilliseconds": String(Int(drainSeconds * 1000)),
                 "source": source,
                 "stage": "prefix-verified",
                 "verified": String(prefixVerified)
@@ -11022,12 +11030,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        let drainSeconds = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS"]
-            .flatMap { TimeInterval($0) }
-            .map { min(max($0, 0.0), 2.0) } ?? 0.08
-        if drainSeconds > 0 {
-            Thread.sleep(forTimeInterval: drainSeconds)
-        }
         guard reassertGhosttyTerminalHostProofFrontmostProcess(
             frontmostApp: frontmostApp,
             source: "ghosttyNativePrefixFinalKeyFrontmostPidReassertion"
@@ -12396,13 +12398,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : "ghostty-system-events-insertion"
         )
 
+        let keyDelaySeconds = Double(max(keyDelayMilliseconds, 0)) / 1_000
+        let scriptTimeoutSeconds = max(
+            1.5,
+            0.75 + TimeInterval(acceptedText.count) * (bulkKeystroke ? 0.02 : keyDelaySeconds + 0.05)
+        )
+
         do {
             try process.run()
             if launchThroughShell {
                 standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
                 try? standardInput.fileHandleForWriting.close()
             }
-            process.waitUntilExit()
         } catch {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
@@ -12414,6 +12421,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "errorMessage": String(String(describing: error).prefix(160))
                 ]
             )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: scriptTimeoutSeconds,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-system-events-osascript-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-osascript-timeout",
+                    "source": source,
+                    "timeoutMilliseconds": String(Int(scriptTimeoutSeconds * 1000))
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-system-events-timeout-mutated-input",
+                        "source": baselineSource
+                    ]
+                )
+                return (false, false)
+            }
             return (false, true)
         }
 

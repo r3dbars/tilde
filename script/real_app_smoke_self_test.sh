@@ -570,11 +570,11 @@ if "launchThroughShell: true" not in fast_ghostty_block:
 if "insertGhosttyTerminalHostProofActionText" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native text action before slower key fallbacks")
 if "insertGhosttyTerminalHostProofAppleScriptText" not in fast_ghostty_block:
-    raise SystemExit("Claude Code Ghostty fast proof must try timeout-bounded native input text before key fallbacks")
+    raise SystemExit("Claude Code Ghostty fast proof must keep timeout-bounded native input text as a verified fallback")
 if "ghosttyAppleScriptLoginShellInputText" not in app_delegate or "ghosttyLoginShellInputTextOutcome" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must include shell-launched marker-scanned native input text")
 if "insertGhosttyTerminalHostProofPasteAction" not in fast_ghostty_block:
-    raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native paste action before key fallbacks")
+    raise SystemExit("Claude Code Ghostty fast proof must keep Ghostty's native paste action as a verified fallback")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
 if "insertClaudeCodeTerminalHostProofHardwareKeyEvents" not in fast_ghostty_block:
@@ -601,16 +601,20 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofAppleScriptText") > f
     raise SystemExit("Claude Code Ghostty fast proof must try native input text before native paste action")
 if fast_ghostty_block.index("ghosttyLoginShellInputTextOutcome") > fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction"):
     raise SystemExit("Claude Code Ghostty fast proof must try shell-launched marker-scanned native input before native paste action")
-if fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
-    raise SystemExit("Claude Code Ghostty fast proof must try native paste action before terminal-scoped send key")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before slow native text fallbacks")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before pasteboard probes")
 bulk_system_events_source = fast_ghostty_block.index("bulkKeystroke: true")
 per_character_system_events_source = fast_ghostty_block.index("delayMilliseconds: 0", bulk_system_events_source + 1)
 if bulk_system_events_source > per_character_system_events_source:
     raise SystemExit("Claude Code Ghostty fast proof must try bulk System Events before per-character System Events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents"):
     raise SystemExit("Claude Code Ghostty fast proof must try System Events before hardware key events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
+    raise SystemExit("Claude Code Ghostty fast proof must try proven System Events bulk insertion before pasteboard probes")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before the bundled text helper")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper") > fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter"):
@@ -621,8 +625,6 @@ if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") >
     raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slower native input fallbacks")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofNativePrefixFinalKeyText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
     raise SystemExit("Claude Code Ghostty fast proof must try the opt-in native-prefix/final-key transport before plain native input")
-if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
-    raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slow System Events fallbacks")
 if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must fail closed before generic insertion fallbacks")
 if "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES" not in fast_ghostty_block:
@@ -728,6 +730,10 @@ if "ghosttySystemEventsKeystrokeShellBaseline" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must verify the prompt stayed unchanged after unverified keystrokes")
 if "ghostty-system-events-unverified-mutated-input" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must fail closed if keystrokes mutate the prompt unexpectedly")
+if "scriptTimeoutSeconds" not in terminal_insert_block or "ghostty-system-events-osascript-timeout" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events proof must be timeout bounded")
+if "ghostty-system-events-timeout-mutated-input" not in terminal_insert_block:
+    raise SystemExit("Claude Code Ghostty System Events timeout must fail closed if keystrokes mutate the prompt")
 if "ghosttySystemEventsKeystrokeShellAsync" in terminal_insert_block or "ghosttyPerformActionTextAsync" in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must not report success from unverified async insertion")
 if "DispatchQueue.main.asyncAfter" in terminal_insert_block:
@@ -748,12 +754,17 @@ if "ghostty-native-prefix-final-key-unverified-mutated-input" not in native_pref
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must fail closed if only part of the transport mutates the prompt")
 if "prefixExpectedProofInputText" not in native_prefix_final_key_block or '"stage": "prefix-verified"' not in native_prefix_final_key_block:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must verify the native prefix before sending the final key")
+if "?? 8.0" not in native_prefix_final_key_block or "10.0" not in native_prefix_final_key_block:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must use the harness-like bounded native-text drain")
 if "ghostty-native-prefix-final-key-prefix-unverified-noop" not in native_prefix_final_key_block:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must distinguish a no-op prefix from a final-key miss")
 prefix_verify_source = native_prefix_final_key_block.index("expectedProofInputText: prefixExpectedProofInputText")
 final_key_source = native_prefix_final_key_block.index("postUnicodeTextKeyEventsPerCharacter(finalText)")
 if prefix_verify_source > final_key_source:
     raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must verify the prefix before posting the final key event")
+drain_source = native_prefix_final_key_block.index("Thread.sleep(forTimeInterval: drainSeconds)")
+if drain_source > prefix_verify_source:
+    raise SystemExit("Claude Code Ghostty native-prefix/final-key probe must drain native text before prefix verification")
 for env_key in [
     "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES",
     "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS",
