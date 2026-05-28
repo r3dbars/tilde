@@ -11346,7 +11346,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             failedReason: String,
             mutatedInputReason: String,
             processIdentifier: pid_t?,
-            restoreSynchronouslyOnMiss: Bool
+            tapLocation: CGEventTapLocation = .cghidEventTap,
+            restoreSynchronouslyOnMiss: Bool,
+            deferPasteboardRestoreOnMiss: Bool = true
         ) -> (verified: Bool, safeToContinue: Bool) {
             if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
                !reassertGhosttyTerminalHostProofFrontmostProcess(
@@ -11359,15 +11361,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return (false, false)
             }
 
-            guard Self.postCommandVKey(processIdentifier: processIdentifier) else {
+            let postedCommandV = tapLocation == .cghidEventTap
+                ? Self.postCommandVKey(processIdentifier: processIdentifier)
+                : Self.postCommandVKey(processIdentifier: processIdentifier, tapLocation: tapLocation)
+            guard postedCommandV else {
                 if restoreSynchronouslyOnMiss {
                     restoreOriginalPasteboard()
-                } else {
+                } else if deferPasteboardRestoreOnMiss {
                     schedulePasteboardRestore(
                         insertedText: acceptedText,
                         fallbackChangeCount: fallbackChangeCount,
                         originalItems: originalItems,
                         delaySeconds: 0.05
+                    )
+                } else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "source": "\(source)RestoreDeferredToNextAttempt",
+                            "verified": "false"
+                        ]
                     )
                 }
                 DiagnosticsLog.shared.record(
@@ -11423,7 +11437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             if restoreSynchronouslyOnMiss {
                 restoreOriginalPasteboard()
-            } else {
+            } else if deferPasteboardRestoreOnMiss {
                 schedulePasteboardRestore(
                     insertedText: acceptedText,
                     fallbackChangeCount: fallbackChangeCount,
@@ -11435,6 +11449,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     metadata: [
                         "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                         "source": "\(source)RestoreScheduled",
+                        "verified": String(promptStayedUnchanged)
+                    ]
+                )
+            } else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "\(source)RestoreDeferredToNextAttempt",
                         "verified": String(promptStayedUnchanged)
                     ]
                 )
@@ -11466,6 +11489,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard targetedPasteOutcome.safeToContinue else {
             return (false, false)
+        }
+
+        let shouldRunSessionTapPasteProbe =
+            ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE"] == "1"
+        if shouldRunSessionTapPasteProbe {
+            let sessionPasteOutcome = tryPasteboardCommandV(
+                source: "pasteboardCommandVSession",
+                baselineSource: "pasteboardCommandVSessionBaseline",
+                failedReason: "pasteboard-command-v-session-failed",
+                mutatedInputReason: "pasteboard-session-unverified-mutated-input",
+                processIdentifier: nil,
+                tapLocation: .cgSessionEventTap,
+                restoreSynchronouslyOnMiss: false,
+                deferPasteboardRestoreOnMiss: false
+            )
+            if sessionPasteOutcome.verified {
+                return (true, false)
+            }
+            guard sessionPasteOutcome.safeToContinue else {
+                return (false, false)
+            }
+        } else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "session-tap-probe-disabled",
+                    "source": "pasteboardCommandVSession"
+                ]
+            )
         }
 
         let globalPasteOutcome = tryPasteboardCommandV(
@@ -13139,7 +13193,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if let processIdentifier {
                 keyDown.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
                 keyUp.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
             } else {
                 keyDown.post(tap: .cghidEventTap)
                 Thread.sleep(forTimeInterval: 0.012)
@@ -13178,10 +13234,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyUp.flags = stroke.flags
             if let processIdentifier {
                 keyDown.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
                 keyUp.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
             } else {
                 keyDown.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
                 keyUp.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
             }
         }
 
@@ -13441,6 +13501,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     nonisolated private static func postCommandVKey(processIdentifier: pid_t? = nil) -> Bool {
+        postCommandVKey(processIdentifier: processIdentifier, tapLocation: .cghidEventTap)
+    }
+
+    nonisolated private static func postCommandVKey(
+        processIdentifier: pid_t? = nil,
+        tapLocation: CGEventTapLocation
+    ) -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
@@ -13451,11 +13518,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.flags = .maskCommand
         if let processIdentifier {
             keyDown.postToPid(processIdentifier)
+            Thread.sleep(forTimeInterval: 0.018)
             keyUp.postToPid(processIdentifier)
         } else {
-            keyDown.post(tap: .cghidEventTap)
-            keyUp.post(tap: .cghidEventTap)
+            keyDown.post(tap: tapLocation)
+            Thread.sleep(forTimeInterval: 0.018)
+            keyUp.post(tap: tapLocation)
         }
+        Thread.sleep(forTimeInterval: 0.012)
         return true
     }
 
