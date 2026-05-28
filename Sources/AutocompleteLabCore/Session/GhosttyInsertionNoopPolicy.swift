@@ -8,6 +8,8 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
     public let systemEventsBulkSafeToContinue: Bool
     public let pasteboardVerified: Bool
     public let pasteboardSafeToContinue: Bool
+    public let inProcessInputTextVerified: Bool
+    public let inProcessInputTextSafeToContinue: Bool
     public let promptStayedUnchanged: Bool
     public let runsExtendedProbes: Bool
 
@@ -19,6 +21,8 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         systemEventsBulkSafeToContinue: Bool,
         pasteboardVerified: Bool,
         pasteboardSafeToContinue: Bool,
+        inProcessInputTextVerified: Bool,
+        inProcessInputTextSafeToContinue: Bool,
         promptStayedUnchanged: Bool,
         runsExtendedProbes: Bool
     ) {
@@ -29,6 +33,8 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         self.systemEventsBulkSafeToContinue = systemEventsBulkSafeToContinue
         self.pasteboardVerified = pasteboardVerified
         self.pasteboardSafeToContinue = pasteboardSafeToContinue
+        self.inProcessInputTextVerified = inProcessInputTextVerified
+        self.inProcessInputTextSafeToContinue = inProcessInputTextSafeToContinue
         self.promptStayedUnchanged = promptStayedUnchanged
         self.runsExtendedProbes = runsExtendedProbes
     }
@@ -50,6 +56,8 @@ public struct GhosttyInsertionNoopPolicy: Equatable, Sendable {
             && input.systemEventsBulkSafeToContinue
             && !input.pasteboardVerified
             && input.pasteboardSafeToContinue
+            && !input.inProcessInputTextVerified
+            && input.inProcessInputTextSafeToContinue
             && input.promptStayedUnchanged
     }
 }
