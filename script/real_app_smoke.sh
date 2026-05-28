@@ -2501,6 +2501,12 @@ run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe() {
   [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
   [[ -n "$proof_text" ]] || return 0
 
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_TAB_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe skipped for proof-only accept driver; set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_TAB_PROBE=1 to opt in." >&2
+    return 0
+  fi
+
   if ! wait_for_log_fields_optional \
     "$start_line" \
     "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_SCHEDULE_SECONDS:-1}" \
@@ -12026,7 +12032,17 @@ tell application "System Events"
   end if
 end tell
 APPLESCRIPT
-  probe_claude_code_terminal_host_key_capture "$host_name" || return 1
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "proof-only-driver-enabled" ||
+      return 1
+    return 0
+  fi
+  if ! probe_claude_code_terminal_host_key_capture "$host_name"; then
+    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "key-capture-probe-miss" ||
+      return 1
+    return 0
+  fi
   probe_start_line="$(line_count "$LOG_PATH")"
   echo "Claude Code $host_name proof pressing CGEvent Tab for hot accept."
   if ! press_key_code_cgevent_with_timeout \
@@ -12205,6 +12221,56 @@ APPLESCRIPT
 
   CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"
   echo "Claude Code $host_name fallback System Events Tab produced no immediate key=tab diagnostic; refreshing the disposable prompt." >&2
+  return 1
+}
+
+try_steadytype_proof_only_accept_next_word_driver() {
+  local suggestion_line="${1:-0}"
+  local host_name="${2:-$(claude_code_host_display_name)}"
+  local reason="${3:-manual}"
+  local app_binary command_start_line
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] || return 1
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS:-0}" != "1" ]]; then
+    echo "Claude Code $host_name proof-only accept driver requires AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1 on the SteadyType launch." >&2
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept driver not enabled in app launch"
+    return 1
+  fi
+  if [[ "$suggestion_line" != "0" ]] &&
+    log_since_has_fields "$suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion before proof-only accept driver"
+    echo "Claude Code $host_name suggestion hid before proof-only accept command; refreshing the disposable prompt." >&2
+    return 1
+  fi
+  settle_claude_code_terminal_proof_focus "proof-only accept command" || return 1
+
+  app_binary="$(steadytype_app_binary)"
+  if [[ ! -x "$app_binary" ]]; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept driver app binary missing"
+    echo "SteadyType app binary is missing for proof-only accept command: $app_binary" >&2
+    return 1
+  fi
+
+  command_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name proof using SteadyType proof-only accept command after $reason."
+  if ! "$app_binary" --proof-only-accept-next-word; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept command failed to post"
+    return 1
+  fi
+  if wait_for_log_fields_optional \
+    "$command_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_SECONDS:-4}" \
+    "proof-only-accept-command-result" \
+    "app=com.anthropic.claude-code" \
+    "handled=true"; then
+    return 0
+  fi
+
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept command did not handle"
+  echo "Claude Code $host_name proof-only accept command did not produce handled=true." >&2
   return 1
 }
 
@@ -14074,7 +14140,9 @@ launch_current_steadytype_with_smoke_env() {
     AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING \
     AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
+    AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS \
     AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER \
     AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS \
     AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE \
     AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE \
@@ -14090,6 +14158,11 @@ launch_current_steadytype_with_smoke_env() {
       launch_env+=("$env_key=${!env_key}")
     fi
   done
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! -n "${AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS+x}" ]]; then
+    launch_env+=(AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1)
+    export AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1
+  fi
 
   env "${launch_env[@]}" \
     nohup "$app_binary" >"$launch_log" 2>&1 </dev/null &
@@ -14357,7 +14430,7 @@ run_claude_code_terminal_host_smoke() {
   require_claude_code_host_if_requested
 
   local runtime_start_line start_line trace_start_line suggestion_start_line pre_trigger_suggestion_start_line accept_start_line proof_text marker host_name
-  local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready stale_blocker_line stale_blocker_reason
+  local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready stale_blocker_line stale_blocker_reason relaxed_suggestion_start_line
   local ghostty_key_capture_miss_count ghostty_max_key_capture_misses
   local post_suggestion_failure_reason post_suggestion_failure_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
@@ -14481,6 +14554,7 @@ run_claude_code_terminal_host_smoke() {
     fi
     if [[ "$suggestion_ready" != "1" &&
           "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+          "${CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN:-0}" != "1" &&
           "$pre_trigger_suggestion_start_line" != "$suggestion_start_line" ]]; then
       if find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"; then
         accept_start_line="$pre_trigger_suggestion_start_line"
@@ -14489,9 +14563,13 @@ run_claude_code_terminal_host_smoke() {
     fi
     if [[ "$suggestion_ready" != "1" &&
           "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
-      if find_recent_claude_code_terminal_suggestion_line_optional "$start_line" ||
-         find_claude_code_terminal_suggestion_line_optional "$start_line"; then
-        accept_start_line="$start_line"
+      relaxed_suggestion_start_line="$start_line"
+      if [[ "${CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN:-0}" == "1" ]]; then
+        relaxed_suggestion_start_line="$suggestion_start_line"
+      fi
+      if find_recent_claude_code_terminal_suggestion_line_optional "$relaxed_suggestion_start_line" ||
+         find_claude_code_terminal_suggestion_line_optional "$relaxed_suggestion_start_line"; then
+        accept_start_line="$relaxed_suggestion_start_line"
         suggestion_ready=1
       fi
     fi

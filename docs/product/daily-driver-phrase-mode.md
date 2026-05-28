@@ -1184,6 +1184,24 @@ the event tap. The next Ghostty attempt should not be another tap-location
 shuffle; it should test an actually observable key source or the separate
 proof-only accept-command path.
 
+The proof-only accept-command path now separates accept routing from Ghostty
+insertion. `20260528T230747Z-ghostty` reached the prompt-row suggestion but
+posted the command only after the full key-probe ladder; by then the visible
+suggestion was gone, so SteadyType refused it. The patched rerun,
+`20260528T231520Z-ghostty`, bypassed the probe ladder when the proof-only driver
+is enabled and posted `--proof-only-accept-next-word` immediately. SteadyType
+logged `proof-only-accept-command-received` with `hasVisibleSuggestion=true`,
+accepted the next-word prefix, scheduled deferred insertion, and logged
+`proof-only-accept-command-result ... handled=true` at diagnostics line
+`1080242`. The run still failed because the post-Tab/pre-insert native mutation
+probe could not restore the prompt and the first app-owned insertion rung timed
+out. Ghostty remains unsupported, but the next red bar is now verified app-owned
+insertion after a handled accept, not Tab routing.
+The wrapper rerun `20260528T232204Z-ghostty` added one harness guardrail: when
+the proof-only driver also ran the slow pre-accept System Events comparator, the
+suggestion hid before the command arrived and SteadyType refused it. Detached
+proof-only runs now default that comparator off unless explicitly opted in.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

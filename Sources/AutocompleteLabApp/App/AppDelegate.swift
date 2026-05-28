@@ -486,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toggleAppMenuItem: NSMenuItem?
     private var workspaceFocusObservers: [NSObjectProtocol] = []
     private var screenGeometryObserver: NSObjectProtocol?
+    private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
     private var pollTimer: Timer?
     private var resourceDiagnosticsTimer: Timer?
     private let resourceDiagnosticsSampler = ProcessResourceDiagnosticsSampler()
@@ -594,6 +595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadAcceptedAndKeptLearning()
         loadAcceptedTextStyleMemory()
         loadProofModeOverrides()
+        startProofOnlyAcceptCommandObserver()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
@@ -637,6 +639,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manualSuggestionRetryTask?.cancel()
         stopWorkspaceFocusObservers()
         stopScreenGeometryObserver()
+        stopProofOnlyAcceptCommandObserver()
         stopKeyboardEventTapNow(reason: "terminate")
         fieldStatusIndicator.hide()
     }
@@ -761,6 +764,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NotificationCenter.default.removeObserver(observer)
         screenGeometryObserver = nil
+    }
+
+    private func startProofOnlyAcceptCommandObserver() {
+        guard ProofOnlyAcceptCommand.isEnabled(),
+              proofOnlyAcceptCommandObserver == nil else {
+            return
+        }
+
+        proofOnlyAcceptCommandObserver = DistributedNotificationCenter.default().addObserver(
+            forName: ProofOnlyAcceptCommand.notificationName,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleProofOnlyAcceptNextWordCommand()
+            }
+        }
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-listener-started",
+            metadata: [
+                "enabled": "true"
+            ]
+        )
+    }
+
+    private func stopProofOnlyAcceptCommandObserver() {
+        guard let observer = proofOnlyAcceptCommandObserver else {
+            return
+        }
+
+        DistributedNotificationCenter.default().removeObserver(observer)
+        proofOnlyAcceptCommandObserver = nil
+    }
+
+    private func handleProofOnlyAcceptNextWordCommand() {
+        guard ProofOnlyAcceptCommand.isEnabled() else {
+            DiagnosticsLog.shared.record(
+                "proof-only-accept-command-refused",
+                metadata: [
+                    "reason": "disabled"
+                ]
+            )
+            return
+        }
+
+        guard activeAppProofBundleIdentifiers.contains(ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier),
+              currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+              currentProfile?.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+              suggestionSession.hasVisibleSuggestion else {
+            DiagnosticsLog.shared.record(
+                "proof-only-accept-command-refused",
+                metadata: [
+                    "reason": "precondition-failed",
+                    "app": currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "unknown",
+                    "hasVisibleSuggestion": String(suggestionSession.hasVisibleSuggestion),
+                    "proofModeEnabled": String(
+                        activeAppProofBundleIdentifiers.contains(
+                            ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                        )
+                    )
+                ]
+            )
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-received",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "action": KeyboardAction.acceptNextWord.diagnosticName,
+                "hasVisibleSuggestion": String(suggestionSession.hasVisibleSuggestion),
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown"
+            ]
+        )
+        let result = handleAutocompleteKey(.tab)
+        let handled: Bool
+        let resultName: String
+        switch result {
+        case .handled:
+            handled = true
+            resultName = "handled"
+        case let .replayOriginalKey(reason):
+            handled = false
+            resultName = "replay-\(reason.rawValue)"
+        case let .dropOriginalKey(reason):
+            handled = false
+            resultName = "drop-\(reason.rawValue)"
+        }
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-result",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "handled": String(handled),
+                "result": resultName
+            ]
+        )
     }
 
     private func handleScreenGeometryChange() {
