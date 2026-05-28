@@ -163,6 +163,36 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts daily-driver reach-test phrases instantly")
+    func predictsDailyDriverReachTestPhrasesInstantly() {
+        let cases: [(String, String, String)] = [
+            ("The difference is", " whether it feels magical", "the difference is"),
+            ("What would make me install it is", " predicting my exact next words", "what would make me install it is"),
+            ("This breaks trust when", " it appears in the wrong field", "this breaks trust when"),
+            ("The reach test is", " whether i keep using it", "the reach test is"),
+            ("I would miss it if", " it disappeared tomorrow", "i would miss it if"),
+            ("The fastest version is", " already waiting with the phrase", "the fastest version is"),
+            ("When suggestions are wrong they", " break trust immediately", "when suggestions are wrong they"),
+            ("The daily driver bar is", " would i miss it tomorrow", "the daily driver bar is"),
+            ("I should be able to", " keep typing without thinking", "i should be able to"),
+            ("A useful autocomplete should", " finish the thought in motion", "a useful autocomplete should")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 3)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Predicts first-person daily-driver trust and feeling shapes")
     func predictsFirstPersonDailyDriverTrustAndFeelingShapes() {
         let cases: [(String, String, String)] = [
@@ -344,7 +374,12 @@ struct CommonPhraseContinuationPredictorTests {
             ("The useful version is", .docsProse, " small fast and reliable", "intent-writing-flow-useful-version"),
             ("Before I move on I should", .notes, " capture the next step", "intent-writing-flow-before-moving-on"),
             ("This note is really about", .docsProse, " the decision we need", "intent-writing-flow-note-about"),
-            ("The next pass should", .docsProse, " make the point clearer", "intent-writing-flow-next-pass")
+            ("The next pass should", .docsProse, " make the point clearer", "intent-writing-flow-next-pass"),
+            ("The thing I keep missing is", .notes, " the shape of the problem", "intent-writing-flow-thing-i-keep-missing"),
+            ("What I need next is", .docsProse, " a clearer path forward", "intent-writing-flow-what-i-need-next"),
+            ("The part that matters is", .docsProse, " where the user gets stuck", "intent-writing-flow-part-that-matters"),
+            ("A better way to say this is", .notes, " keep it simple and direct", "intent-writing-flow-better-way-to-say-this"),
+            ("The tradeoff is", .docsProse, " speed without losing trust", "intent-writing-flow-tradeoff-is")
         ]
 
         for (context, profile, expected, match) in cases {

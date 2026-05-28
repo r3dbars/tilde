@@ -353,6 +353,45 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Model failure preserves visible fast fallback for same request")
+    func modelFailurePreservesVisibleFastFallbackForSameRequest() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let ticket = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "I just wanted to", suggestionID: "fast")
+        ).ticket
+
+        #expect(orchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+            suggestionID: "fast",
+            currentSuggestionID: "fast",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+            suggestionID: "fast",
+            currentSuggestionID: "other",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+            suggestionID: "fast",
+            currentSuggestionID: "fast",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: nil,
+            hasVisibleSuggestion: true
+        ))
+    }
+
+    @MainActor
     @Test("Invalidating clears the current request and blocks stale tickets")
     func invalidateClearsCurrentRequestAndBlocksTickets() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
