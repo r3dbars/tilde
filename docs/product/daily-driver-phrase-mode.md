@@ -535,12 +535,23 @@ probe can inherit the caller process group and receive SIGTERM mid-proof. The pr
 harness now uses HID CGEvent Unicode text for Ghostty setup typing, records the
 diagnostics line immediately before the final trigger character, refuses older
 prompt-row suggestions from before that trigger, bounds stale cleanup and
-fallback Tab paths, rejects low-y/header suggestions unless the app has emitted
+fallback Tab paths, persists each detached run's disposable Claude/Ghostty
+artifacts under `proof-artifacts/` so `claude.pid`, `claude.exit`, and
+`ghostty-launch.log` survive smoke temp cleanup, rejects low-y/header
+suggestions unless the app has emitted
 `source=terminal-screen-prompt`, and can bridge same-line prompt-prefix
 suggestions after the final trigger. The app side also re-verifies
 proof-sensitive Claude Code prompt input after Ghostty AX identity wobble and
 preserves one-word key capture for virtual Claude Code proof suggestions across
 host-profile churn.
+
+The latest comparator attempt, `20260528T194141Z-ghostty`, proved the durable
+artifact path by keeping both disposable `ghostty-launch.log` files after
+cleanup. Each reached `configured-window-created`, `script-wrote-pidfile`,
+`script-starting-claude`, and `shell-delay-finished`, then still failed before
+Tab with `textNodes=0`, `markerWindows=0`, and no marker, so the next Ghostty
+lane is prompt AX readiness after shell-started Claude, before another
+insertion-ladder change.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

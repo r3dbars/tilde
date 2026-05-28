@@ -74,9 +74,14 @@ and no marker. That keeps the next proof lane split in two: first make the
 script-owned/no-restore launch reliably reach the prompt row, then rerun the
 post-Tab comparator before changing the insertion ladder again. Detached runs
 now persist each disposable `claude.pid`, `claude.exit`, and
-`ghostty-launch.log` under the run directory's `proof-artifacts/` folder, so
-the next launch failure keeps the exact stage breadcrumbs instead of losing
-them with temporary smoke cleanup.
+`ghostty-launch.log` under the run directory's `proof-artifacts/` folder. The
+rerun `20260528T194141Z-ghostty` proved those artifacts survive cleanup for two
+disposable contexts and captured the launch stages through
+`configured-window-created`, `script-wrote-pidfile`, `script-starting-claude`,
+and `shell-delay-finished`; the proof still failed before Tab with
+`textNodes=0`, `markerWindows=0`, and no marker, so the next blocker is prompt
+AX readiness after a shell-started Claude process, not missing launch-stage
+evidence.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
