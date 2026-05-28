@@ -10,13 +10,17 @@ inputs only. Do not raise a score unless the evidence in the row changes.
 Stale proof can explain progress, but it cannot make a row green.
 
 Current strict manual smoke is partly refreshed after the latest source changes.
-`./script/manual_smoke_status.sh --strict`: failed with 9 target app pass(es)
-stale or pending on 2026-05-28; Obsidian default is current on
-`707b7c95c614` with diagnostics lines `932538`-`932695`, trace lines
-`30739`-`30761`, 2 accepted insertions, and strict visual trace evidence. That
-Obsidian proof used the disposable proof-vault lane with Electron renderer
+`./script/manual_smoke_status.sh --strict`: failed with 7 target app pass(es)
+stale or pending on 2026-05-28 after TextEdit, Obsidian theme, and Obsidian
+panes refreshed on `f81c34d22c2e`; Notes title/body/checklist, Obsidian
+default, Obsidian long note, Chrome textarea, and Chrome contenteditable still
+need current-source proof. TextEdit is current with diagnostics lines
+`933094`-`933189`, trace lines `30815`-`30837`, 2 accepted insertions, and
+strict visual trace evidence. The earlier Obsidian default proof on
+`707b7c95c614` used the disposable proof-vault lane with Electron renderer
 accessibility forced because Obsidian 1.12.7 initially exposed only window
-chrome to macOS Accessibility when launched normally.
+chrome to macOS Accessibility when launched normally, but it is stale again
+after the reply-fallback and harness source changes.
 
 Current Ghostty terminal-host evidence is sharper but still red. Local probes
 showed Ghostty `input text` can return success without mutating a fresh shell,
