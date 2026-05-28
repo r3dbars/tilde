@@ -100,6 +100,25 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh status --run-dir "$PENDING_RUN" >"$TMP_DIR/pending-status.txt"
 require_contains "$TMP_DIR/pending-status.txt" "runner_process=pending"
 
+DEAD_RUN="$TMP_DIR/proofs/dead-run"
+mkdir -p "$DEAD_RUN"
+cat >"$DEAD_RUN/status.env" <<EOF
+state=running
+pid=999999
+started_at=2026-05-27T00:00:03Z
+run_dir=$DEAD_RUN
+launcher=terminal
+command=AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+note=Detached wrapper stores status and child output only; custom proof text is not persisted here.
+EOF
+printf 'dead detached log\n' >"$DEAD_RUN/proof.log"
+AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+  script/claude_code_ghostty_detached_proof.sh status --run-dir "$DEAD_RUN" >"$TMP_DIR/dead-status.txt"
+require_contains "$TMP_DIR/dead-status.txt" "state=failed"
+require_contains "$TMP_DIR/dead-status.txt" "exit_status=1"
+require_contains "$TMP_DIR/dead-status.txt" "Detached proof runner exited before writing a final status."
+require_contains "$TMP_DIR/dead-status.txt" "runner_process=not-running"
+
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
   script/claude_code_ghostty_detached_proof.sh tail >"$TMP_DIR/tail.txt"
 require_contains "$TMP_DIR/tail.txt" "fake detached log"
@@ -129,6 +148,8 @@ require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DEL
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS"
 require_contains "$SCRIPT_TEXT" "write_passthrough_env_exports"
+require_contains "$SCRIPT_TEXT" "repair_dead_runner_status_if_needed"
+require_contains "$SCRIPT_TEXT" "Detached proof runner exited before writing a final status."
 require_contains "$SCRIPT_TEXT" 'printf '\''export %s=%q\n'\'' "$key" "$value"'
 require_contains "$SCRIPT_TEXT" 'printf '\''command=%s\n'\'' "$SMOKE_COMMAND_SUMMARY"'
 require_contains "$SCRIPT_TEXT" 'nohup "$runner_script"'

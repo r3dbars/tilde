@@ -12921,7 +12921,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "posted": "false",
                         "reason": "ghostty-action-script-timeout-mutated-input",
                         "source": "ghosttyPerformActionTextTimeoutBaseline"
-                    ]
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
                 )
                 return (false, false)
             }
@@ -13002,13 +13007,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard promptStayedUnchanged else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
-                metadata: [
-                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": "ghostty-action-unverified-mutated-input",
-                    "source": baselineSource
-                ]
-            )
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-action-unverified-mutated-input",
+                        "source": baselineSource
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
+                )
             return (false, false)
         }
         return (false, true)

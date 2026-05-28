@@ -224,6 +224,7 @@ print_run_status() {
     return 1
   fi
 
+  repair_dead_runner_status_if_needed "$run_dir"
   cat "$status_file"
   pid="$(status_value "$status_file" pid)"
   state="$(status_value "$status_file" state)"
@@ -478,6 +479,20 @@ write_parent_final_status() {
   } >"$status_file"
 }
 
+repair_dead_runner_status_if_needed() {
+  local run_dir="$1"
+  local status_file state pid
+  status_file="$(status_file_for_run "$run_dir")"
+  [[ -f "$status_file" ]] || return 0
+  state="$(status_value "$status_file" state)"
+  pid="$(status_value "$status_file" pid)"
+  if [[ "$state" == "starting" || "$state" == "running" ]] &&
+     [[ -n "$pid" ]] &&
+     ! process_is_alive "$pid"; then
+    write_parent_final_status "$run_dir" failed 1 "Detached proof runner exited before writing a final status."
+  fi
+}
+
 start_run() {
   mkdir -p "$PROOF_ROOT"
 
@@ -650,6 +665,7 @@ wait_for_run() {
         ;;
       starting|running)
         if [[ -n "$pid" ]] && ! process_is_alive "$pid"; then
+          write_parent_final_status "$run_dir" failed 1 "Detached proof runner exited before writing a final status."
           print_run_status "$run_dir"
           return 1
         fi

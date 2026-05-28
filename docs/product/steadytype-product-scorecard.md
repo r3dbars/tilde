@@ -187,6 +187,42 @@ status `143`; that is harness failure evidence, not insertion evidence. The
 harness now builds both CGEvent keypress and text helpers behind
 timeout-bounded `swiftc` waits so the next detached proof fails fast instead of
 silently hanging before the real Ghostty insertion red bar.
+The follow-up after that hardening moved past helper warmup:
+`20260528T043930Z-ghostty` found a prompt-row suggestion at diagnostics line
+`839022`, but the detached worker exited before writing a final status and left
+`state=running`; `./script/claude_code_ghostty_detached_proof.sh status --run-dir
+dist/claude-code-ghostty-detached-proof/20260528T043930Z-ghostty` now repairs
+that stale status to failed with `exit_status=1`. A later run,
+`20260528T044123Z-ghostty`, hung after helper warmup and was stopped with exit
+status `143`; the harness now logs explicit warmed, stale-cleanup, and fresh
+context phases so the next detached proof points at the exact shell step rather
+than another silent pre-insertion stall.
+The next bounded run, `20260528T044446Z-ghostty`, confirmed those breadcrumbs
+and reached the insertion red bar: prompt-row suggestion at diagnostics line
+`841085`, deferred Tab accept at lines `842182`-`842184`, unchanged prompt
+mismatches through send-key, System Events, pasteboard, in-process native input,
+direct front-window input, and shell front-window input, then
+`ghosttyPerformActionText` failed verification at line `842224`. Its unchanged
+baseline failed at line `842225`, and the app failed closed with
+`ghostty-action-unverified-mutated-input`, `insert ... success=false`, and
+deferred `stage=insert-failed` at lines `842226`-`842228`. The smoke harness now
+waits for either success or explicit fail-closed insertion diagnostics, so this
+class of Ghostty proof should report the real insertion red bar instead of
+timing out while the app is still verifying. Typed prompt readiness now requires
+exact prompt text after marker stripping, and zero-window Ghostty reset is
+opt-in only, so stale or poisoned contexts cannot silently satisfy or terminate
+normal proof runs.
+The live follow-up `20260528T045213Z-ghostty` proved the new fail-closed wait
+path: it printed the warmed, stale-cleanup, and fresh-context breadcrumbs, found
+a prompt-row suggestion at diagnostics line `844141`, scheduled deferred Tab
+accept at lines `845236`-`845238`, and exited quickly when the app logged
+`insert ... success=false` at line `845306` plus deferred
+`stage=insert-failed` at line `845307` instead of timing out. That run also
+exposed the remaining ladder-ordering bug:
+native action text was still running before the safer front-window input rungs.
+The app ladder now runs action text after in-process, direct front-window, and
+shell-launched front-window native input, while keeping it before the slower
+marker-scanned native input and paste-action rungs.
 
 ## Scores
 
