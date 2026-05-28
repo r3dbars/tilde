@@ -740,6 +740,8 @@ if "repeat with candidateWindow in windows" not in screen_copy_block or 'if targ
     raise SystemExit("Claude Code Ghostty screen-copy verifier must scan for the title-marked proof window before copying")
 if "verificationSource\": \"ghosttyScreenCopy\"" not in app_delegate or "screenChars" not in app_delegate or "compactScreenChars" not in app_delegate:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must record only redacted shape metadata")
+if "ghosttyScreenCopyPlainText" not in app_delegate or '"screenCopyTransport": screenCopyText.transport' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must read Ghostty's copied screen file path before matching proof text")
 if "targetSelectionMode" not in screen_copy_block or '"true|targetSelection:" & targetSelectionMode' not in screen_copy_block:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must report the redacted target-selection path")
 if "frontWindowProofMatch" not in screen_copy_block or "ghosttyWindowCount" not in screen_copy_block:
