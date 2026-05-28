@@ -9851,6 +9851,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+            let runsExtendedGhosttyInsertionProbes =
+                ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES"] == "1"
+            let configuredGhosttyFastInsertionBudgetSeconds =
+                ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS"]
+                    .flatMap { TimeInterval($0) }
+            let ghosttyFastInsertionBudgetSeconds = max(
+                2.0,
+                configuredGhosttyFastInsertionBudgetSeconds ?? 8.0
+            )
+            let ghosttyFastInsertionStartedAt = Date()
+
+            func recordGhosttyFastFailClosed(reason: String) -> Bool {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": reason,
+                        "source": "ghosttyFastFailClosed"
+                    ]
+                )
+                return false
+            }
+
+            func shouldContinueGhosttyFastInsertion(before source: String) -> Bool {
+                guard !runsExtendedGhosttyInsertionProbes else {
+                    return true
+                }
+
+                let elapsedSeconds = Date().timeIntervalSince(ghosttyFastInsertionStartedAt)
+                guard elapsedSeconds <= ghosttyFastInsertionBudgetSeconds else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "ghostty-fast-insertion-budget-exceeded",
+                            "source": "ghosttyFastInsertionBudget",
+                            "nextSource": source,
+                            "elapsedMilliseconds": String(Int(elapsedSeconds * 1000)),
+                            "budgetMilliseconds": String(Int(ghosttyFastInsertionBudgetSeconds * 1000))
+                        ]
+                    )
+                    return false
+                }
+                return true
+            }
+
             let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9865,6 +9913,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyInProcessInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyInProcessInputTextOutcome = insertGhosttyTerminalHostProofInProcessInputText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9879,6 +9930,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyFrontWindowInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9893,6 +9947,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyLoginShellFrontWindowInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyLoginShellFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9908,6 +9965,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyPerformActionText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyActionTextOutcome = insertGhosttyTerminalHostProofActionText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9922,6 +9982,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyInputTextOutcome = insertGhosttyTerminalHostProofAppleScriptText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9936,6 +9999,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyLoginShellInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyLoginShellInputTextOutcome = insertGhosttyTerminalHostProofAppleScriptText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9951,6 +10017,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyPasteAction") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyPasteActionOutcome = insertGhosttyTerminalHostProofPasteAction(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9965,6 +10034,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySendKey") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9979,6 +10051,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsBulkKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyBulkSystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9995,6 +10070,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttySystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10010,6 +10088,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "cgHardwareKeyEventsToPid") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyTargetedHardwareOutcome = insertClaudeCodeTerminalHostProofHardwareKeyEvents(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10028,6 +10109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "cgHardwareKeyEventsGlobal") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
             let ghosttyGlobalHardwareOutcome = insertClaudeCodeTerminalHostProofHardwareKeyEvents(
                 acceptedText,
@@ -10047,6 +10131,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "bundledCGEventTextHelperHID") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let bundledHelperOutcome = insertClaudeCodeTerminalHostProofBundledTextEventHelper(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10062,6 +10149,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "bundledCGEventTextHelperSession") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let bundledSessionHelperOutcome = insertClaudeCodeTerminalHostProofBundledTextEventHelper(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -10077,6 +10167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsLoginShellBulkKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             let ghosttyShellBulkSystemEventsOutcome =
                 insertGhosttyTerminalHostProofSystemEventsKeystroke(
                     acceptedText,
@@ -10095,6 +10188,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
 
+            guard shouldContinueGhosttyFastInsertion(before: "cgUnicodeKeyEventsPerCharacterGlobal") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
             keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
             if Self.postUnicodeTextKeyEventsPerCharacter(acceptedText) {
                 let verified = verifyClaudeCodeTerminalHostProofInsertion(
@@ -10144,16 +10240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            DiagnosticsLog.shared.record(
-                "claude-code-terminal-host-proof-insert",
-                metadata: [
-                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                    "posted": "false",
-                    "reason": "ghostty-fast-verified-insertion-failed",
-                    "source": "ghosttyFastFailClosed"
-                ]
-            )
-            return false
+            return recordGhosttyFastFailClosed(reason: "ghostty-fast-verified-insertion-failed")
         }
 
         if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",

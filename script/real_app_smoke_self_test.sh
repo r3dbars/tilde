@@ -620,6 +620,16 @@ if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText") >
     raise SystemExit("Claude Code Ghostty fast proof must try pasteboard insertion before slow System Events fallbacks")
 if "ghosttyFastFailClosed" not in fast_ghostty_block or "ghostty-fast-verified-insertion-failed" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must fail closed before generic insertion fallbacks")
+if "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must keep the long insertion ladder behind an explicit opt-in flag")
+if "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must allow an explicit bounded insertion budget override")
+if "ghosttyFastInsertionBudget" not in fast_ghostty_block or "ghostty-fast-insertion-budget-exceeded" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must log a bounded fail-closed insertion miss")
+if 'shouldContinueGhosttyFastInsertion(before: "ghosttyPerformActionText")' not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must budget-gate slower native action text probes")
+if 'shouldContinueGhosttyFastInsertion(before: "cgUnicodeKeyEventsPerCharacterGlobal")' not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must budget-gate the final global Unicode key-event probe")
 if "postHardwareTextKeyEvents" not in hardware_helper_block or "mutatedInputReason" not in hardware_helper_block:
     raise SystemExit("Claude Code Ghostty hardware key proof must be verified and fail closed on unexpected mutation")
 if "FrontmostPidReassertion" not in hardware_helper_block:
