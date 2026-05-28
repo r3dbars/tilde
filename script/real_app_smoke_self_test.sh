@@ -2983,6 +2983,7 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'probing CGEvent session key capture with non-mutating Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent session key capture probe produced no diagnostic; retrying with HID Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'combined-session key capture probe produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with System Events Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_terminal_key_capture_permission_ui_since()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_claude_code_terminal_key_capture_permission_ui_since()' script/real_app_smoke.sh >/dev/null ||
@@ -3003,6 +3004,7 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS' script/real_app_smoke.sh >/dev/null ||
@@ -3038,6 +3040,21 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
 fi
 if ! grep -F '${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Ghostty-host Claude Code proof to preserve the real Tab failure reason when retrying the disposable context" >&2
+  exit 1
+fi
+if ! awk '
+  /probe_claude_code_terminal_host_key_capture\(\)/ { in_func = 1 }
+  /^}/ && in_func { in_func = 0 }
+  in_func && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE/ { saw_opt_in_guard = 1 }
+  in_func && saw_opt_in_guard && /return 1/ { saw_guard_return = 1 }
+  in_func && /settle_claude_code_terminal_proof_focus "System Events key-capture probe"/ {
+    if (saw_guard_return) {
+      found = 1
+    }
+  }
+  END { exit found ? 0 : 1 }
+' script/real_app_smoke.sh; then
+  echo "real app smoke self-test expected Ghostty System Events key-capture probing to stay opt-in before the System Events focus/probe path" >&2
   exit 1
 fi
 if ! awk '

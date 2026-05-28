@@ -611,9 +611,13 @@ that can reach SteadyType's event tap at all before Tab delivery can be judged.
 
 The follow-up key-source pass keeps that boundary honest. The CGEvent helper now
 accepts an explicit source state, so the non-mutating Shift sentinel can try
-session HID-state events, HID-tap HID-state events, session-tap combined-session
-events, and finally a guarded System Events Shift before Tab. The detached
-wrapper also forwards and reports the key-capture probe knobs. A launcher
+session HID-state events, HID-tap HID-state events, and session-tap
+combined-session events before Tab. The System Events Shift probe remains
+available behind
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1`, but
+the detached proof skips it by default because it can trigger macOS permission
+UI and steal focus from the disposable prompt. The detached wrapper also
+forwards and reports the key-capture probe knobs. A launcher
 comparison run, `20260528T204242Z-ghostty`, used `nohup` instead of launchd and
 failed earlier: it reached prompt typing, verified a pre-accept native Ghostty
 mutation, but could not restore the original prompt, so it never reached
@@ -646,6 +650,9 @@ just after the generic key-capture miss is printed. `20260528T211636Z-ghostty`
 confirmed the same bounded path and late focus-change timing, so the final
 post-suggestion failure aggregator now also waits briefly and rewrites the final
 reason when permission UI is the real focus thief.
+The next default proof pass should keep that lane permission-safe: if CGEvent
+Shift still misses the event tap, the harness reports a plain key-source miss
+and only runs System Events Shift when explicitly opted in.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
@@ -1060,6 +1067,15 @@ and the run relaunched a fresh disposable context before being stopped after
 capturing that evidence. Ghostty remains unsupported; the next red bar is Tab
 delivery / visible-suggestion retention under the launchd detached lane, not
 prompt AX readiness.
+
+The follow-up key-capture guard keeps that red lane less disruptive. After
+session, HID, and combined-session CGEvent Shift probes miss SteadyType's event
+tap, the harness now skips the System Events Shift probe by default because it
+can trigger macOS permission UI and steal focus from the disposable prompt. The
+System Events key-capture probe is still available behind
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1`, but
+default Ghostty runs now fail closed and refresh the prompt instead of inviting a
+permission dialog into the proof loop.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh

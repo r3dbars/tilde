@@ -126,6 +126,10 @@ focus-change diagnostics before printing the final reason.
 `20260528T211636Z-ghostty` confirmed the same bounded path and late System
 Settings focus-change timing, so the final post-suggestion failure aggregator
 now also rewrites the final reason when permission UI is the real focus thief.
+The default detached probe now skips System Events Shift because it can trigger
+macOS permission UI and steal focus; use
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1` only
+for an explicit permission-risk key-source experiment.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -841,7 +845,8 @@ suggestion evidence again, but a non-mutating Shift sentinel did not reach
 SteadyType's event tap through either session or HID CGEvents, so the harness
 failed before Tab with `key capture probe did not reach event tap`. The key
 source probe now also tries combined-session CGEvents and guarded System Events
-Shift before Tab, and the detached wrapper forwards those probe knobs. Launcher
+Shift only when explicitly opted in before Tab, and the detached wrapper
+forwards those probe knobs. Launcher
 comparison run `20260528T204242Z-ghostty` used `nohup`, reached prompt typing,
 verified a pre-accept native Ghostty mutation, then failed because it could not
 restore the original prompt before suggestion proof. Post-patch launchd run
@@ -871,7 +876,13 @@ probe so that focus-steal evidence is not missed.
 Latest run `20260528T211636Z-ghostty` confirmed the same bounded prompt-row
 suggestion and late System Settings focus-change timing; the final
 post-suggestion failure aggregator now also waits briefly and rewrites the final
-reason when permission UI is the real focus thief.
+reason when permission UI is the real focus thief. The follow-up harness guard
+now makes the System Events Shift key-capture probe opt-in with
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1`;
+default Ghostty proof runs stop after the session/HID/combined-session CGEvent
+sentinels miss the event tap, report `key capture probe did not reach event
+tap`, and refresh the disposable prompt instead of triggering macOS permission
+UI by default.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
