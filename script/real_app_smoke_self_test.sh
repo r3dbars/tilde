@@ -2914,6 +2914,10 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof owns no-restore host pid(s):' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'wait_for_ghostty_process_tree_child_optional' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'no-restore-host-no-child-process' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'describe_claude_code_ghostty_process_tree' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'root_pid=$root_pid' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code Ghostty proof cleaning no-restore host pid(s):' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"' script/real_app_smoke.sh >/dev/null ||
