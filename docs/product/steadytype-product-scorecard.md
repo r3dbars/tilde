@@ -144,6 +144,12 @@ event tap, and skipped System Events with the default opt-out env. The run was
 stopped after it continued into extra disposable contexts; the detached wrapper
 now defaults `AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=1` so the next
 key-source proof exits after one clean red sample unless explicitly overridden.
+The follow-up source slice adds process-id breadcrumbs to the app-side
+`keyboard-event-tap-latency` diagnostics when macOS exposes them:
+`eventSourcePID` and `eventTargetPID`. This does not make Ghostty green because
+the current synthetic Ghostty key sources still do not reach the event tap, but
+it will make the next observed key-capture sample distinguish helper-origin,
+target-process, and user-key paths without logging typed text.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced

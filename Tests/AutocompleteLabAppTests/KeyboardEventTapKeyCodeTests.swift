@@ -1,4 +1,5 @@
 import Testing
+import ApplicationServices
 import AutocompleteLabCore
 @testable import AutocompleteLabApp
 
@@ -128,5 +129,21 @@ struct KeyboardEventTapKeyCodeTests {
 
         #expect(mappedKey == .controlBacktick)
         #expect(action == .requestSuggestionNow)
+    }
+
+    @Test("Event tap diagnostics include source and target process ids")
+    func eventTapDiagnosticsIncludeProcessIDs() throws {
+        let event = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 48,
+            keyDown: true
+        ))
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: 1234)
+        event.setIntegerValueField(.eventTargetUnixProcessID, value: 5678)
+
+        let metadata = keyboardEventTapDiagnosticMetadata(event: event)
+
+        #expect(metadata["eventSourcePID"] == "1234")
+        #expect(metadata["eventTargetPID"] == "5678")
     }
 }

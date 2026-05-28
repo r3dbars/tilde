@@ -428,6 +428,11 @@ if 'if key != .other' in keyboard_tap:
     raise SystemExit("keyboard event tap latency must include normal typed-key categories")
 if '"keyboard-event-tap-latency"' not in keyboard_tap or '"key": key.diagnosticName' not in keyboard_tap:
     raise SystemExit("keyboard event tap latency must log key category and duration")
+keyboard_tap_tests = Path("Tests/AutocompleteLabAppTests/KeyboardEventTapKeyCodeTests.swift").read_text()
+if 'keyboardEventTapDiagnosticMetadata(event:' not in keyboard_tap or 'eventSourcePID' not in keyboard_tap or 'eventTargetPID' not in keyboard_tap:
+    raise SystemExit("keyboard event tap latency diagnostics must include redacted source and target process ids")
+if 'Event tap diagnostics include source and target process ids' not in keyboard_tap_tests:
+    raise SystemExit("keyboard event tap process-id diagnostics must stay covered by a focused Swift test")
 
 default_start = source.index('run_textedit_default_model_latency()')
 default_end = source.index('run_chrome_fixture()', default_start)
