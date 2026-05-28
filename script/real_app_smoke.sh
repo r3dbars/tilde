@@ -71,6 +71,9 @@ CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
 CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
 CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=0
+CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
+CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=0
 CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
 SMOKE_PHASE="startup"
 
@@ -9582,6 +9585,7 @@ open_claude_code_terminal_proof() {
       ghostty_command_open_ready=0
       : >"$ghostty_launch_stage_file"
       if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         [[ "${CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN:-0}" != "1" ]] &&
          [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
          ! pgrep -x ghostty >/dev/null 2>&1; then
         echo "Claude Code Ghostty proof opening no-restore host directly with proof command."
@@ -9612,6 +9616,7 @@ open_claude_code_terminal_proof() {
              ghostty_window_api_reports_visible_window; then
             printf '%s\n' "no-restore-command-open-frontmost" >>"$ghostty_launch_stage_file"
             ghostty_command_open_ready=1
+            CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=1
           else
             printf '%s\n' "no-restore-command-open-not-frontmost" >>"$ghostty_launch_stage_file"
             echo "Claude Code Ghostty proof no-restore command host wrote pidfile but did not expose a frontmost window; falling back to script-owned window launch." >&2
@@ -10073,6 +10078,8 @@ cleanup_claude_code_terminal_proof() {
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
   CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
   CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+  CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=0
+  CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
   CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 }
@@ -10390,6 +10397,12 @@ open_fresh_claude_code_terminal_proof_context() {
     fi
     if ! try_wait_for_claude_code_terminal_prompt; then
       echo "Claude Code $host_name proof prompt was not ready for fresh context attempt $launch_attempt." >&2
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+            "${CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT:-0}" == "1" ]]; then
+        echo "Claude Code Ghostty proof direct command-open left launch-command text in AX; retrying without direct command-open." >&2
+        CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=1
+        CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
+      fi
       continue
     fi
     if settle_claude_code_terminal_proof_focus "fresh proof context"; then
@@ -10405,6 +10418,7 @@ open_fresh_claude_code_terminal_proof_context() {
 try_wait_for_claude_code_terminal_prompt() {
   local proof_pid
   local -a proof_pid_args prompt_marker_args
+  CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
 
   if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
     echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
@@ -10452,6 +10466,11 @@ try_wait_for_claude_code_terminal_prompt() {
         fi
       fi
       if ((prompt_wait_status != 0)); then
+        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+              "${CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN:-0}" == "1" &&
+              "$prompt_wait_output" == *"rejectedShellCommand=true"* ]]; then
+          CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=1
+        fi
         printf '%s\n' "$prompt_wait_output" >&2
         return 1
       fi
@@ -10490,6 +10509,18 @@ assert_claude_code_terminal_prompt_ready() {
     --require-exact-text \
     "${proof_pid_args[@]}" \
     --discovery-timeout "$(claude_code_terminal_text_wait_seconds)"
+}
+
+try_claude_code_terminal_prompt_ready_quiet() {
+  local proof_text="$1"
+  local timeout_seconds="${2:-}"
+
+  if [[ -n "$timeout_seconds" ]]; then
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS="$timeout_seconds" \
+      assert_claude_code_terminal_prompt_ready "$proof_text" >/dev/null 2>&1
+  else
+    assert_claude_code_terminal_prompt_ready "$proof_text" >/dev/null 2>&1
+  fi
 }
 
 claude_code_terminal_text_wait_seconds() {
@@ -10585,14 +10616,40 @@ type_claude_code_terminal_ghostty_paste_then_key_text() {
   CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_FINAL_TRIGGER_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]]; then
     echo "Claude Code Ghostty proof typing final trigger with native terminal input."
-    if type_claude_code_terminal_ghostty_native_final_character "$final_character"; then
-      return
+    if ! type_claude_code_terminal_ghostty_native_final_character "$final_character"; then
+      echo "Claude Code Ghostty proof native final trigger failed; falling back to CGEvent typing."
+      settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
+      type_text_cgevent "$final_character"
     fi
-    echo "Claude Code Ghostty proof native final trigger failed; falling back to CGEvent typing."
+  else
+    settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
+    type_text_cgevent "$final_character"
   fi
 
-  settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
-  type_text_cgevent "$final_character"
+  sleep "$drain_seconds"
+  if try_claude_code_terminal_prompt_ready_quiet "$text" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TYPING_VERIFY_SECONDS:-3}"; then
+    return
+  fi
+
+  echo "Claude Code Ghostty proof native typed prompt was incomplete; retrying with System Events bulk typing."
+  if clear_claude_code_terminal_prompt_line; then
+    CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 \
+      type_claude_code_terminal_raw_smoke_text "$text" || return 1
+    sleep "$drain_seconds"
+    if try_claude_code_terminal_prompt_ready_quiet "$text" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TYPING_VERIFY_SECONDS:-3}"; then
+      return
+    fi
+  fi
+
+  echo "Claude Code Ghostty proof bulk typing was incomplete; retrying with paced System Events typing."
+  if clear_claude_code_terminal_prompt_line; then
+    CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
+    type_claude_code_terminal_raw_smoke_text "$text" || return 1
+    sleep "$drain_seconds"
+  fi
 }
 
 type_claude_code_terminal_ghostty_native_text() {
@@ -10734,12 +10791,15 @@ APPLESCRIPT
 }
 
 clear_claude_code_terminal_prompt_line() {
+  local ghostty_native_clear_posted=1
+  local ghostty_system_events_clear_posted=1
+
   settle_claude_code_terminal_proof_focus "prompt clearing" || return 1
   if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
     if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_CLEAR_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
        clear_claude_code_terminal_ghostty_native_line; then
+      ghostty_native_clear_posted=0
       sleep "$(claude_code_ghostty_event_drain_seconds)"
-      return
     fi
     AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
     AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
@@ -10760,7 +10820,9 @@ tell application "System Events"
   keystroke "u" using control down
 end tell
 APPLESCRIPT
+    ghostty_system_events_clear_posted=$?
     sleep "$(claude_code_ghostty_event_drain_seconds)"
+    ((ghostty_native_clear_posted == 0 || ghostty_system_events_clear_posted == 0))
     return
   fi
 
