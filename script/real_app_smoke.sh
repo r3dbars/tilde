@@ -2391,6 +2391,44 @@ run_claude_code_ghostty_pre_accept_external_mutation_probe() {
   fi
 }
 
+run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe() {
+  local proof_text="$1"
+  local start_line="$2"
+  local native_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_TEXT:-p}"
+  local system_events_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_TEXT:-q}"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$proof_text" ]] || return 0
+
+  if ! wait_for_log_fields_optional \
+    "$start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_SCHEDULE_SECONDS:-1}" \
+    "claude-code-terminal-host-proof-deferred-accept" \
+    "app=com.anthropic.claude-code" \
+    "stage=scheduled"; then
+    echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe saw no deferred insert schedule yet; skipping comparator." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe checking whether the prompt is still externally writable before SteadyType insertion." >&2
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "post-Tab/pre-insert native" \
+      "$native_probe_text" \
+      type_claude_code_terminal_ghostty_native_text || return 1
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "post-Tab/pre-insert System Events" \
+      "$system_events_probe_text" \
+      type_claude_code_terminal_raw_smoke_text || return 1
+  fi
+}
+
 run_claude_code_ghostty_post_fail_external_insertion_probe() {
   local proof_text="$1"
   local start_line="${2:-0}"
@@ -13698,6 +13736,10 @@ run_claude_code_terminal_host_smoke() {
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
         if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
           retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab injection" || break
+          continue
+        fi
+        if ! run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe "$proof_text" "$accept_start_line"; then
+          retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "post-Tab/pre-insert external mutability probe could not restore the prompt" || break
           continue
         fi
       else
