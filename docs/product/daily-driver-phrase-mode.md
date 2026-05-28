@@ -642,7 +642,10 @@ also showed macOS Accessibility/System Settings taking focus during that key
 probe window. The harness now classifies that permission-UI focus steal
 explicitly when it happens, with a short post-probe flush wait added after
 `20260528T210954Z-ghostty` showed the System Settings focus-change line can land
-just after the generic key-capture miss is printed.
+just after the generic key-capture miss is printed. `20260528T211636Z-ghostty`
+confirmed the same bounded path and late focus-change timing, so the final
+post-suggestion failure aggregator now also waits briefly and rewrites the final
+reason when permission UI is the real focus thief.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation

@@ -3045,10 +3045,13 @@ if ! awk '
   /^}/ && in_smoke { in_smoke = 0 }
   in_smoke && /post_suggestion_failure_reason=/ { saw_reason = 1 }
   in_smoke && /post_suggestion_failure_start_line="\$suggestion_line"/ { saw_line = 1 }
+  in_smoke && /post_suggestion_failure_reason" == "key capture probe did not reach event tap"/ { saw_key_miss_guard = 1 }
+  in_smoke && /wait_for_claude_code_terminal_key_capture_permission_ui_since/ { saw_permission_wait = 1 }
+  in_smoke && /post_suggestion_failure_reason="key capture probe lost focus to macOS permission UI"/ { saw_permission_reason = 1 }
   in_smoke && /failed after a visible prompt-row suggestion/ { saw_message = 1 }
   in_smoke && /keyboard-event-tap-latency app=com.anthropic.claude-code key=tab or key=other/ { saw_required = 1 }
   in_smoke && /tail -n \+"\$\(\(post_suggestion_failure_start_line \+ 1\)\)"/ { saw_tail = 1 }
-  END { exit (saw_reason && saw_line && saw_message && saw_required && saw_tail) ? 0 : 1 }
+  END { exit (saw_reason && saw_line && saw_key_miss_guard && saw_permission_wait && saw_permission_reason && saw_message && saw_required && saw_tail) ? 0 : 1 }
 ' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Ghostty proof to fail on the post-suggestion key-capture miss with the real reason and suggestion-line diagnostics" >&2
   exit 1

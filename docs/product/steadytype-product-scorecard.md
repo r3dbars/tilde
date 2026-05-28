@@ -123,6 +123,9 @@ that permission-UI focus steal separately from a plain no-diagnostic key miss.
 Follow-up run `20260528T210954Z-ghostty` kept the proof bounded and reached the
 same prompt-row key-probe miss; the classifier now waits briefly for late
 focus-change diagnostics before printing the final reason.
+`20260528T211636Z-ghostty` confirmed the same bounded path and late System
+Settings focus-change timing, so the final post-suggestion failure aggregator
+now also rewrites the final reason when permission UI is the real focus thief.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -865,6 +868,10 @@ run `20260528T210954Z-ghostty` stayed bounded and again reached a prompt-row
 suggestion, then showed the System Settings focus-change line can flush just
 after the generic key-capture miss; the classifier now waits briefly after the
 probe so that focus-steal evidence is not missed.
+Latest run `20260528T211636Z-ghostty` confirmed the same bounded prompt-row
+suggestion and late System Settings focus-change timing; the final
+post-suggestion failure aggregator now also waits briefly and rewrites the final
+reason when permission UI is the real focus thief.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
