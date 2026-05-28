@@ -9072,6 +9072,53 @@ describe_claude_code_terminal_proof_process_state() {
   fi
 }
 
+describe_claude_code_ghostty_launch_state() {
+  local proof_title="$1"
+  local launch_state
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$proof_title" ]] || return 0
+
+  launch_state="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$proof_title" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_STATE_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty proof launch state" <<'APPLESCRIPT' 2>/dev/null || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set windowCount to 0
+set matchedWindowCount to 0
+set frontWindowHasProofTitle to false
+set focusedTerminalWorkingDirectoryPresent to false
+tell application id "com.mitchellh.ghostty"
+  set windowCount to count windows
+  try
+    set frontWindowName to name of front window as text
+    if frontWindowName contains proofTitle then set frontWindowHasProofTitle to true
+  end try
+  repeat with candidateWindow in windows
+    try
+      set windowName to name of candidateWindow as text
+      if windowName contains proofTitle then
+        set matchedWindowCount to matchedWindowCount + 1
+        try
+          set targetTab to selected tab of candidateWindow
+          set targetTerminal to focused terminal of targetTab
+          set terminalDirectory to working directory of targetTerminal as text
+          if terminalDirectory is not "" then set focusedTerminalWorkingDirectoryPresent to true
+        end try
+      end if
+    end try
+  end repeat
+end tell
+return "windows=" & (windowCount as text) & " proofTitleWindows=" & (matchedWindowCount as text) & " frontWindowHasProofTitle=" & (frontWindowHasProofTitle as text) & " focusedTerminalWorkingDirectoryPresent=" & (focusedTerminalWorkingDirectoryPresent as text)
+APPLESCRIPT
+)"
+  if [[ -n "$launch_state" ]]; then
+    echo "Claude Code Ghostty proof launch state: $launch_state" >&2
+  else
+    echo "Claude Code Ghostty proof launch state unavailable." >&2
+  fi
+}
+
 wait_for_claude_code_terminal_pidfile_process_optional() {
   local timeout="${1:-3}"
   local timeout_seconds="${timeout%%.*}"
@@ -9345,6 +9392,10 @@ APPLESCRIPT
         fi
         if ! wait_for_claude_code_terminal_pidfile_process_optional \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_PID_SECONDS:-6}"; then
+          describe_claude_code_terminal_proof_process_state \
+            "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" \
+            "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
+          describe_claude_code_ghostty_launch_state "$proof_title"
           echo "Claude Code Ghostty proof shell did not exec the disposable proof command." >&2
           return 1
         fi

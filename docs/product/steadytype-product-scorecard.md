@@ -267,6 +267,15 @@ stayed `state=starting` with no `pid`. The detached proof wrapper now repairs
 stale no-pid `starting` runs after the startup grace window; `status` marks that
 run failed with a clear startup-grace-expired note, and `wait` returns instead
 of hanging.
+The next `nohup` detached run, `20260528T052542Z-ghostty`, proved the worker can
+start without Terminal but failed before insertion because the disposable
+Ghostty shell did not execute the proof command. The launch harness now logs a
+redacted Ghostty launch-state snapshot when that happens. The focused one-attempt
+verification run `20260528T053230Z-ghostty` failed cleanly with the pidfile
+missing and launch state `windows=3 proofTitleWindows=1
+frontWindowHasProofTitle=true focusedTerminalWorkingDirectoryPresent=false`,
+which proves the title-marked window existed but no ready terminal working
+directory / proof command execution was visible. Ghostty remains unsupported.
 
 ## Scores
 
