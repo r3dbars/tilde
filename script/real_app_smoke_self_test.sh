@@ -3119,6 +3119,11 @@ for expected in (
         raise SystemExit(1)
 if 'if type_claude_code_terminal_ghostty_native_final_character "$final_character"; then\n      return' in typing_block:
     raise SystemExit(1)
+raw_type_start = source.index("type_claude_code_terminal_raw_smoke_text()")
+raw_type_end = source.index("\nclear_claude_code_terminal_ghostty_native_line()", raw_type_start)
+raw_type_block = source[raw_type_start:raw_type_end]
+if "run_osascript_with_timeout" not in raw_type_block or "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TYPE_TIMEOUT_SECONDS:-4" not in raw_type_block:
+    raise SystemExit(1)
 
 start = source.index("clear_claude_code_terminal_prompt_line()")
 end = source.index("\npress_claude_code_terminal_host_tab()", start)
@@ -3137,7 +3142,11 @@ if 'keystroke "u" using control down' not in ghostty_block:
     raise SystemExit(1)
 if 'sleep "$(claude_code_ghostty_event_drain_seconds)"' not in ghostty_block:
     raise SystemExit(1)
+if 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SYSTEM_EVENTS_CLEAR_ENABLED:-0' not in ghostty_block:
+    raise SystemExit(1)
 if 'ghostty_native_clear_posted=0' not in ghostty_block or 'ghostty_system_events_clear_posted=$?' not in ghostty_block:
+    raise SystemExit(1)
+if 'ghostty_native_clear_posted=0\n      sleep "$(claude_code_ghostty_event_drain_seconds)"\n      return 0' not in ghostty_block:
     raise SystemExit(1)
 if ghostty_block.index('clear_claude_code_terminal_ghostty_native_line') > ghostty_block.index('keystroke "u" using control down'):
     raise SystemExit(1)
@@ -3218,6 +3227,10 @@ if '"$prompt_wait_output" == *"rejectedShellCommand=true"*' not in prompt_wait:
     raise SystemExit(1)
 if "CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN" not in prompt_wait:
     raise SystemExit(1)
+if 'run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output"' not in prompt_wait:
+    raise SystemExit(1)
+if "accepted native screen-copy prompt readiness" not in prompt_wait:
+    raise SystemExit(1)
 cleanup = source[
     source.index("cleanup_claude_code_terminal_proof()"):
     source.index("\nghostty_window_api_reports_visible_window()", source.index("cleanup_claude_code_terminal_proof()"))
@@ -3235,6 +3248,28 @@ if ! awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /^}/ 
 fi
 if ! awk '/assert_claude_code_terminal_prompt_ready\(\)/ { in_assert = 1 } /^}/ && in_assert { in_assert = 0 } in_assert && /expected_prompt_text=/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected typed Claude Code prompt readiness to strip the marker before exact text matching" >&2
+  exit 1
+fi
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+assert_block = source[
+    source.index("assert_claude_code_terminal_prompt_ready()"):
+    source.index("\ntry_claude_code_terminal_prompt_ready_quiet()", source.index("assert_claude_code_terminal_prompt_ready()"))
+]
+for expected in (
+    'if prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait',
+    'prompt_wait_status=$?',
+    'run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output" "$expected_prompt_text"',
+    'accepted native screen-copy typed prompt readiness after AX miss',
+    "return \"$prompt_wait_status\"",
+):
+    if expected not in assert_block:
+        raise SystemExit(f"missing typed prompt screen-copy fallback: {expected}")
+PY
+then
+  echo "real app smoke self-test expected typed Ghostty prompt readiness to fall back to exact native screen-copy proof after an AX miss" >&2
   exit 1
 fi
 if ! grep -F "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS" script/real_app_smoke.sh >/dev/null; then
@@ -3390,6 +3425,8 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'my recordStage(launchStageFile, "retry-launch-action-start")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'my recordStage(launchStageFile, "retry-launch-action-enter-sent")' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "script-wrote-pidfile" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PERMISSION_MODE:-plan' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '%q --permission-mode %q' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'if launchAction is not "" then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'perform action launchAction on targetTerminal' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'delay launchActionDrain' script/real_app_smoke.sh >/dev/null ||
@@ -3438,6 +3475,16 @@ if ! grep -F "close_claude_code_ghostty_proof_window_by_title" script/real_app_s
   exit 1
 fi
 if ! grep -F "wait_for_claude_code_terminal_pidfile_process_optional" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "run_claude_code_ghostty_prompt_screen_copy_probe" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'perform action "write_screen_file:copy,plain" on targetTerminal' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Claude Code Ghostty prompt screen-copy readiness:" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "hasMarker=" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "hasExpected=" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "rejectedShellCommand=" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'targetSelection:proofTitle' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "ready=" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "/private/var/folders/*" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "screenChars=" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "working directory of targetTerminal" script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'if terminalDirectory is not "" then' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "set terminalReady to true" script/real_app_smoke.sh >/dev/null ||

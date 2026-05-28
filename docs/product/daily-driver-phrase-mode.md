@@ -958,6 +958,22 @@ attempts failed before prompt readiness with `textNodes=0`, `markerWindows=0`,
 and no marker. The comparator remains the right next proof, but only after the
 no-restore Ghostty launch path reliably reaches a Claude prompt row.
 
+The next Ghostty prompt-readiness pass moved that blocker forward without
+turning Ghostty green. The harness now falls back to Ghostty's native
+`write_screen_file:copy,plain` screen copy when AX reports `textNodes=0`,
+restores the pasteboard, rejects launcher-command scrollback, and requires the
+expected prompt text or a title-scoped prompt screen. It also launches Claude in
+`--permission-mode plan`, avoids the old unbounded System Events clear path, and
+times out optional raw System Events typing probes. `20260528T201412Z-ghostty`
+proved screen-copy readiness for both the empty prompt and the typed prompt,
+then verified a pre-accept native Ghostty mutation and restore. The run still
+lost the visible suggestion during Tab injection: CGEvent Tab produced no
+`key=tab` diagnostic, System Events Tab also produced no immediate `key=tab`,
+and the run relaunched a fresh disposable context before being stopped after
+capturing that evidence. Ghostty remains unsupported; the next red bar is Tab
+delivery / visible-suggestion retention under the launchd detached lane, not
+prompt AX readiness.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

@@ -787,6 +787,23 @@ the proof failed closed at lines `999973`-`999976`. App coverage stays at `83`;
 Ghostty is still unsupported until a detached proof exits `0` with verified
 one-word no-submit insertion.
 
+The current Ghostty prompt-readiness pass moves the red bar again, but still
+does not broaden support. The harness now uses Ghostty native
+`write_screen_file:copy,plain` as a pasteboard-restoring fallback when AX prompt
+discovery returns `textNodes=0`, allows safe macOS temp screen-file paths,
+rejects launcher-command scrollback, logs only redacted shape metadata, and
+requires the expected prompt text for typed prompt proof. The Ghostty launch path
+also starts Claude with `--permission-mode plan`, returns immediately after a
+successful native clear, leaves System Events clear opt-in, and bounds raw
+System Events typing probes. Live run `20260528T201412Z-ghostty` proved empty
+and typed prompt readiness through native screen copy, then verified and
+restored a pre-accept native Ghostty prompt mutation. It still did not prove
+accept: CGEvent Tab produced no `key=tab` diagnostic, System Events Tab produced
+no immediate `key=tab`, the visible suggestion was lost during Tab injection,
+and the detached retry loop was stopped after the second disposable context
+began. App coverage stays at `83`; the next Ghostty blocker is Tab delivery /
+suggestion retention in the detached launchd lane, not prompt AX discovery.
+
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding
 the instant email/casual-chat reply layer with safe short continuations such as
