@@ -489,7 +489,12 @@ terminal-scanning System Events script, but `20260528T120508Z-ghostty` and the
 diagnostic `AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN=0`
 `20260528T120653Z-ghostty` were both terminated by `SIGTERM` during
 build/relaunch before reaching insertion, so they do not count as proof for
-that new rung.
+that new rung. After the smoke cleanup path started stopping its exclusive
+interference guard, `20260528T120818Z-ghostty` survived build/relaunch, found a
+prompt-row suggestion at diagnostics line `908782`, handled Tab, exercised the
+new `ghosttyFocusedSystemEventsBulkKeystroke` rung at line `908826`, and proved
+it exited `0` but still left the prompt unchanged before the known no-op cluster
+failed closed.
 
 ## Scores
 

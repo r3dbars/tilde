@@ -762,6 +762,11 @@ cleanup_smoke() {
     wait "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
     SMOKE_QUARANTINE_GUARD_PID=""
   fi
+  if [[ -n "$SMOKE_INTERFERENCE_GUARD_PID" ]]; then
+    kill "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
+    wait "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
+    SMOKE_INTERFERENCE_GUARD_PID=""
+  fi
 
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
