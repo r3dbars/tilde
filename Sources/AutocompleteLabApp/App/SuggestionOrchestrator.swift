@@ -442,6 +442,7 @@ final class SuggestionOrchestrator {
         currentPresentedAt: Date?,
         currentScore: Double?,
         proposedScore: Double,
+        currentSuggestionInvalidatedByUserTyping: Bool = false,
         now: Date = Date()
     ) -> SuggestionReplacementDecision {
         let currentAgeMilliseconds = currentPresentedAt.map {
@@ -454,7 +455,8 @@ final class SuggestionOrchestrator {
             proposedSuggestionID: proposedSuggestionID,
             currentAgeMilliseconds: currentAgeMilliseconds,
             currentScore: currentScore,
-            proposedScore: proposedScore
+            proposedScore: proposedScore,
+            currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserTyping
         )
     }
 

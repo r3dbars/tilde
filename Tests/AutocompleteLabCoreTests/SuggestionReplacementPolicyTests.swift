@@ -73,6 +73,26 @@ struct SuggestionReplacementPolicyTests {
         #expect(decision.metadata["replacementCurrentAgeMs"] == "2100")
     }
 
+    @Test("Allows replacement after user typing invalidates the current suggestion")
+    func allowsReplacementAfterUserTypingInvalidatesCurrentSuggestion() {
+        let policy = SuggestionReplacementPolicy()
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " calm and steady",
+            currentSuggestionID: "old",
+            proposedSuggestionID: "new",
+            currentAgeMilliseconds: 120,
+            currentScore: 1.20,
+            proposedScore: 0.90,
+            currentSuggestionInvalidatedByUserTyping: true
+        )
+
+        #expect(decision.shouldPresent)
+        #expect(decision.reason == nil)
+        #expect(decision.metadata["replacementDecision"] == "present")
+        #expect(decision.metadata["replacementSuppressionReason"] == nil)
+    }
+
     @Test("Suppresses low margin replacements while visible text is fresh")
     func suppressesLowMarginFreshReplacements() {
         let policy = SuggestionReplacementPolicy(

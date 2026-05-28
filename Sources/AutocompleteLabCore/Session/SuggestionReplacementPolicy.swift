@@ -66,8 +66,13 @@ public struct SuggestionReplacementPolicy: Equatable, Sendable {
         proposedSuggestionID: String,
         currentAgeMilliseconds: Int?,
         currentScore: Double?,
-        proposedScore: Double
+        proposedScore: Double,
+        currentSuggestionInvalidatedByUserTyping: Bool = false
     ) -> SuggestionReplacementDecision {
+        if currentSuggestionInvalidatedByUserTyping {
+            return SuggestionReplacementDecision(shouldPresent: true)
+        }
+
         guard let currentVisibleText,
               !currentVisibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return SuggestionReplacementDecision(shouldPresent: true)
