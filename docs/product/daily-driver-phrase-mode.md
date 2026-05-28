@@ -1090,6 +1090,10 @@ proof harness now starts fresh disposable Obsidian proof launches with
 same AX path SteadyType relies on. This keeps the proof lane moving, but normal
 Obsidian daily-driver support should stay caveated until default-launch
 renderer accessibility is proven or guided.
+The helper now also prints a redacted AX snapshot when it cannot resolve the
+focused editor: window count, text-entry count, visited-node count, and role
+counts only. That turns "could not read editor" into an actionable renderer
+accessibility miss without leaking note text.
 
 TextEdit proof freshness moved forward on the same pass. The first rerun
 exposed a proof-harness seed bug where TextEdit's native completion expanded

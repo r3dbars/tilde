@@ -2006,6 +2006,13 @@ if ! grep -F "swift script/obsidian_ax_editor.swift reset" script/real_app_smoke
   echo "real app smoke self-test expected Obsidian seeding, reset, and append helpers to use the same guarded disposable text" >&2
   exit 1
 fi
+if ! grep -F "Obsidian editor AX snapshot:" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F "textEntries=0" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F -- "--force-renderer-accessibility" script/obsidian_ax_editor.swift >/dev/null ||
+   ! grep -F "roleCounts" script/obsidian_ax_editor.swift >/dev/null; then
+  echo "real app smoke self-test expected Obsidian editor misses to print a redacted AX snapshot with renderer-accessibility guidance" >&2
+  exit 1
+fi
 if ! grep -F "wait_for_obsidian_long_note_second_suggestion" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "visible viewport beforeChars>=\${min_visible_before_chars}" script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Obsidian long-note proof to allow viewport-only CodeMirror AX counts while requiring afterChars=0" >&2

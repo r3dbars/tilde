@@ -87,6 +87,77 @@ func isTextEntry(_ element: AXUIElement) -> Bool {
         || role == "AXWebArea"
 }
 
+struct AXTreeSummary {
+    var visitedCount = 0
+    var windowCount = 0
+    var textEntryCount = 0
+    var roleCounts: [String: Int] = [:]
+}
+
+func collectAXTreeSummary(
+    from element: AXUIElement,
+    depth: Int = 0,
+    maxDepth: Int = 7,
+    maxNodes: Int = 400,
+    summary: inout AXTreeSummary
+) {
+    guard depth <= maxDepth,
+          summary.visitedCount < maxNodes else {
+        return
+    }
+
+    AXUIElementSetMessagingTimeout(element, 0.15)
+    summary.visitedCount += 1
+    let elementRole = role(of: element) ?? "unknown"
+    summary.roleCounts[elementRole, default: 0] += 1
+    if isTextEntry(element) {
+        summary.textEntryCount += 1
+    }
+
+    for child in children(of: element) {
+        collectAXTreeSummary(
+            from: child,
+            depth: depth + 1,
+            maxDepth: maxDepth,
+            maxNodes: maxNodes,
+            summary: &summary
+        )
+    }
+}
+
+func summarizedRoles(_ counts: [String: Int]) -> String {
+    counts
+        .sorted {
+            if $0.value == $1.value {
+                return $0.key < $1.key
+            }
+            return $0.value > $1.value
+        }
+        .prefix(8)
+        .map { "\($0.key)=\($0.value)" }
+        .joined(separator: ",")
+}
+
+func obsidianEditorAXSnapshot(appElement: AXUIElement) -> String {
+    var summary = AXTreeSummary()
+    let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
+    summary.windowCount = windows.count
+
+    if windows.isEmpty {
+        collectAXTreeSummary(from: appElement, maxDepth: 4, summary: &summary)
+    } else {
+        for window in windows.prefix(5) {
+            collectAXTreeSummary(from: window, summary: &summary)
+        }
+    }
+
+    let roles = summarizedRoles(summary.roleCounts)
+    return """
+    Obsidian editor AX snapshot: windows=\(summary.windowCount) textEntries=\(summary.textEntryCount) visited=\(summary.visitedCount) roles=\(roles.isEmpty ? "none" : roles).
+    If windows are present but textEntries=0, Obsidian may be exposing only window chrome; relaunch the proof lane with --force-renderer-accessibility or enable Electron renderer accessibility before counting support.
+    """
+}
+
 func containsMarker(_ element: AXUIElement) -> Bool {
     containsNormalized(textValue(of: element), normalizedMarker)
 }
@@ -228,7 +299,7 @@ let systemWide = AXUIElementCreateSystemWide()
 AXUIElementSetMessagingTimeout(systemWide, 1.0)
 
 guard let editor = resolveEditor(appElement: appElement, systemWide: systemWide) else {
-    fputs("Could not read the focused Obsidian editor.\n", stderr)
+    fputs("Could not read the focused Obsidian editor.\n\(obsidianEditorAXSnapshot(appElement: appElement))\n", stderr)
     exit(3)
 }
 
