@@ -329,7 +329,8 @@ breaks.
 Fast typing bursts now keep the instant loop alive. Partial-word completions can
 still show during the type-accept-type loop, and phrase continuations get one
 zero-latency fallback attempt before the heavier model phrase is paused for the
-burst.
+burst. The default detector now catches roughly 70 wpm typing by watching for 6
+inserted characters inside a 1.1 second window.
 
 The live status text is less mysterious too. The menu tooltip and Settings
 `Why:` row now say whether the shown suggestion is a word, phrase, or sentence,
