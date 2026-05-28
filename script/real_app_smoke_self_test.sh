@@ -1478,6 +1478,17 @@ if ! grep -F 'stop_current_steadytype_app_bundle' script/real_app_smoke.sh >/dev
   echo "real app smoke self-test expected TextEdit proof to stop the old app before opening its disposable target" >&2
   exit 1
 fi
+if ! grep -F 'Smoke signal self pid=' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Smoke guard pids: interference=' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Tracked Claude Code terminal proof pids:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Smoke lock owner pid:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Signal process snapshot:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Smoke process group members:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Proof-related process snapshot:' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'smoke_signal_pid_list()' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected TERM diagnostics to include smoke, guard, proof, lock, process-group, and proof-related process snapshots" >&2
+  exit 1
+fi
 if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadytype_app_process_rows' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command_matches_steadytype_binary "$command" "$app_binary"' script/real_app_smoke.sh >/dev/null ||

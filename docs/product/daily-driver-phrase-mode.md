@@ -707,6 +707,11 @@ receives SIGTERM during `claude-code Ghostty open fresh disposable context`,
 after the stale-only host check and before prompt readiness. That keeps Ghostty
 unsupported, but it gives the next iteration a much narrower failure to chase:
 the disposable open lifecycle or the external TERM source.
+The TERM diagnostic path now reports smoke self/parent/process-group/session
+ids, guard pids, tracked proof pids, lock owner, process-group members, and
+nearby proof-related processes before cleanup. The next failed Ghostty run
+should identify whether TERM is coming from proof cleanup, wrapper/session
+teardown, or an outside watcher.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
