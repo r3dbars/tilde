@@ -643,7 +643,10 @@ final class SuggestionOrchestrator {
         )
         let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
-            && profile.requiresNoSubmitAcceptanceProof
+            && (
+                profile.requiresNoSubmitAcceptanceProof
+                    || (profile.supportsFullAcceptance && !profile.requiresNoSubmitAcceptanceProof)
+            )
             && request.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)
             && request.textAfterCursor.isEmpty
         let claudeCodeTerminalHostProofLatencyBypass =

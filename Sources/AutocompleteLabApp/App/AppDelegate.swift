@@ -139,6 +139,26 @@ struct CodexProofFocusedTargetPolicy {
     }
 }
 
+struct PromptProofFieldIdentityRefreshPolicy {
+    func canTrustRefresh(
+        requestFieldIdentity: FocusedFieldIdentity,
+        refreshedFieldIdentity: FocusedFieldIdentity,
+        profile: CompatibilityProfile,
+        proofModeEnabled: Bool,
+        allowsFullAcceptNoSubmitProofProfile: Bool
+    ) -> Bool {
+        guard profile.promptAppSafetyMode == .wordOnly,
+              proofModeEnabled,
+              requestFieldIdentity.bundleIdentifier == refreshedFieldIdentity.bundleIdentifier,
+              requestFieldIdentity.processIdentifier == refreshedFieldIdentity.processIdentifier else {
+            return false
+        }
+
+        return profile.requiresNoSubmitAcceptanceProof
+            || allowsFullAcceptNoSubmitProofProfile
+    }
+}
+
 private struct ObsidianPostAcceptanceSuppression {
     let textBeforeCursor: String
     let textAfterCursor: String
@@ -266,6 +286,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
+    private let promptProofFieldIdentityRefreshPolicy = PromptProofFieldIdentityRefreshPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
     private let personalCapturePolicy = PersonalCapturePolicy()
@@ -7989,11 +8010,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshedFieldIdentity: FocusedFieldIdentity,
         profile: CompatibilityProfile
     ) -> Bool {
-        profile.promptAppSafetyMode == .wordOnly
-            && profile.requiresNoSubmitAcceptanceProof
-            && activeAppProofBundleIdentifiers.contains(profile.bundleIdentifier)
-            && requestFieldIdentity.bundleIdentifier == refreshedFieldIdentity.bundleIdentifier
-            && requestFieldIdentity.processIdentifier == refreshedFieldIdentity.processIdentifier
+        promptProofFieldIdentityRefreshPolicy.canTrustRefresh(
+            requestFieldIdentity: requestFieldIdentity,
+            refreshedFieldIdentity: refreshedFieldIdentity,
+            profile: profile,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(profile.bundleIdentifier),
+            allowsFullAcceptNoSubmitProofProfile: isCodexFullAcceptNoSubmitProofProfile(profile)
+        )
     }
 
     private func frontmostAppMatchesSuggestion(

@@ -478,6 +478,25 @@ struct CompatibilityProfileTests {
         #expect(proofProfile.notes == "Proof-only full accept.")
     }
 
+    @Test("Proof-only Codex full accept keeps strict visual synthetic caret proof")
+    func proofOnlyCodexFullAcceptKeepsStrictVisualSyntheticCaretProof() throws {
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
+        let proofProfile = codex.replacingAcceptanceProofMode(
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false,
+            notes: "\(codex.notes) Proof-only Codex full-accept no-submit scenario is active."
+        )
+        let unprovenFullAccept = codex.replacingAcceptanceProofMode(
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false,
+            notes: "Proof-only full accept."
+        )
+
+        #expect(codex.allowsStrictVisualProofSyntheticCaretPlacement)
+        #expect(proofProfile.allowsStrictVisualProofSyntheticCaretPlacement)
+        #expect(!unprovenFullAccept.allowsStrictVisualProofSyntheticCaretPlacement)
+    }
+
     @Test("Insertion mode plans can skip failed primary modes")
     func insertionModePlansCanSkipFailedPrimaryModes() throws {
         let notes = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.Notes"))

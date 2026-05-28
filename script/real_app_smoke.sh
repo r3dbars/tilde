@@ -1921,6 +1921,132 @@ settle_keyboard_event_tap_if_started() {
   fi
 }
 
+codex_tab_diagnostic_seen() {
+  local start_line="$1"
+
+  log_since_has_fields "$start_line" \
+    "keyboard-action" \
+    "app=com.openai.codex" \
+    "key=tab" ||
+    log_since_has_fields "$start_line" \
+      "keyboard-event-tap-latency" \
+      "key=tab"
+}
+
+wait_for_codex_tab_diagnostic_optional() {
+  local start_line="$1"
+  local attempts="${2:-5}"
+  local delay_seconds="${3:-0.05}"
+  local attempt
+
+  if ! [[ "$attempts" =~ ^[0-9]+$ ]] || ((attempts < 1)); then
+    attempts=5
+  fi
+
+  for ((attempt = 0; attempt < attempts; attempt++)); do
+    if codex_tab_diagnostic_seen "$start_line"; then
+      return 0
+    fi
+    sleep "$delay_seconds"
+  done
+
+  return 1
+}
+
+press_codex_tab_for_smoke() {
+  local start_line="$1"
+
+  settle_keyboard_event_tap_if_started "$start_line" "Codex Tab acceptance"
+  press_key_code_cgevent_with_timeout \
+    48 \
+    "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
+    "Codex CGEvent Tab" \
+    "session" \
+    "warm" || true
+
+  if wait_for_codex_tab_diagnostic_optional "$start_line" \
+    "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_ATTEMPTS:-5}" \
+    "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_DELAY_SECONDS:-0.05}"; then
+    return 0
+  fi
+
+  echo "Codex CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab." >&2
+  assert_frontmost_app "Codex" "Codex proof System Events retry"
+  press_key_code 48
+}
+
+keyboard_event_tap_active_since() {
+  local start_line="$1"
+
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+
+  awk -v start="$start_line" '
+    NR <= start {
+      next
+    }
+    /keyboard-event-tap-started/ {
+      state = "started"
+    }
+    /keyboard-event-tap-stopped/ ||
+    /keyboard-event-tap-start-failed/ ||
+    /keyboard-event-tap-failed-closed/ {
+      state = "stopped"
+    }
+    END {
+      exit state == "started" ? 0 : 1
+    }
+  ' "$LOG_PATH" 2>/dev/null
+}
+
+assert_codex_full_accept_shortcut_safe() {
+  local tap_start_line="$1"
+  local suggestion_start_line="$2"
+  local label="$3"
+
+  if ! keyboard_event_tap_active_since "$tap_start_line"; then
+    echo "$label keyboard capture is not active; refusing to press accept-all." >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((tap_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+
+  if log_since_has_fields "$suggestion_start_line" "suggestion-hidden" "app=com.openai.codex"; then
+    echo "$label suggestion hid before accept-all; refusing to type the shortcut into Codex." >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((suggestion_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+}
+
+press_codex_full_accept_shortcut_for_smoke() {
+  local tap_start_line="$1"
+  local suggestion_start_line="$2"
+  local accept_shortcut="$3"
+  local shortcut_start_line
+
+  if wait_for_log_fields_optional "$suggestion_start_line" 2 "keyboard-event-tap-started"; then
+    sleep "${AUTOCOMPLETE_LAB_EVENT_TAP_SETTLE_SECONDS:-0.2}"
+  elif ! keyboard_event_tap_active_since "$tap_start_line"; then
+    echo "Codex full accept did not start keyboard capture for the visible phrase." >&2
+  fi
+  assert_codex_full_accept_shortcut_safe "$tap_start_line" "$suggestion_start_line" "Codex full accept"
+  shortcut_start_line="$(line_count "$LOG_PATH")"
+  press_accept_all_shortcut
+
+  if wait_for_log_fields_optional "$shortcut_start_line" 1 \
+    "keyboard-event-tap-latency" \
+    "key=$accept_shortcut" \
+    "decision=passthrough-unsupported"; then
+    echo "Codex full accept shortcut passed through instead of being captured." >&2
+    echo "Required fields: keyboard-action app=com.openai.codex key=$accept_shortcut action=acceptAllVisible handled=true" >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((tap_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+}
+
 wait_for_claude_code_terminal_tab_acceptance() {
   local start_line="$1"
   local host_name="$2"
@@ -2826,6 +2952,40 @@ drop_stale_same_value_launchctl_previous() {
   return 1
 }
 
+proof_scenario_is_smoke_owned() {
+  local scenario="$1"
+
+  case "$scenario" in
+    codex-full-accept-no-submit|\
+    textedit-model-latency|\
+    textedit-default-model-latency|\
+    chrome-*-model-latency|\
+    codex-model-latency|\
+    claude-code-model-latency|\
+    claude-model-latency)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+prepare_default_proof_scenario_baseline() {
+  local previous_scenario
+
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    previous_scenario="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if proof_scenario_is_smoke_owned "$previous_scenario"; then
+      previous_scenario=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$previous_scenario"
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  unset AUTOCOMPLETE_LAB_PROOF_SCENARIO
+  launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY" >/dev/null 2>&1 || true
+}
+
 prepare_temporary_app_enablement() {
   local bundle_ids
   bundle_ids="$(smoke_target_bundle_ids | paste -sd, -)"
@@ -2852,6 +3012,7 @@ prepare_temporary_app_enablement() {
   export AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS="$bundle_ids"
   launchctl setenv "$TEMP_ENABLE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
   launchctl setenv "$PROOF_MODE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
+  prepare_default_proof_scenario_baseline
   echo "Temporary app enablement for smoke: $bundle_ids"
   echo "Temporary proof mode for smoke: $bundle_ids"
   prepare_accept_all_shortcut_default
@@ -12944,7 +13105,7 @@ run_codex() {
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
   assert_frontmost_app "Codex" "Codex proof"
   sleep 0.05
-  press_key_code_cgevent 48
+  press_codex_tab_for_smoke "$start_line"
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \
     "keyboard-action" \
     "app=com.openai.codex" \
@@ -12968,7 +13129,7 @@ run_codex_full_accept() {
     exit 2
   fi
 
-  local runtime_start_line start_line trace_start_line proof_text backup_dir accept_shortcut
+  local runtime_start_line start_line suggestion_start_line trace_start_line proof_text backup_dir accept_shortcut
   runtime_start_line="$(line_count "$LOG_PATH")"
   proof_text="$(codex_full_accept_proof_text)"
   backup_dir="$(make_tmp_dir)"
@@ -12991,16 +13152,17 @@ run_codex_full_accept() {
     CODEX_DRAFT_BACKUP_ACTIVE=1
   fi
   focus_codex_proof_prompt
-  wait_for_log_fields "$start_line" "Codex full accept phrase suggestion" 24 \
+  suggestion_start_line="$start_line"
+  wait_for_log_fields "$suggestion_start_line" "Codex full accept phrase suggestion" 24 \
     "suggestion-presented" \
     "app=com.openai.codex" \
     "requestMode=phraseContinuation"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex full accept proof"
+  wait_for_screenshot_capture_if_enabled "$suggestion_start_line" "com.openai.codex" "Codex full accept proof"
   assert_frontmost_app "Codex" "Codex full accept proof"
   sleep 0.05
   accept_shortcut="$(accept_all_shortcut)"
-  press_accept_all_shortcut
-  wait_for_log_fields "$start_line" "Codex full accept acceptance" 12 \
+  press_codex_full_accept_shortcut_for_smoke "$start_line" "$suggestion_start_line" "$accept_shortcut"
+  wait_for_log_fields "$suggestion_start_line" "Codex full accept acceptance" 12 \
     "keyboard-action" \
     "app=com.openai.codex" \
     "key=$accept_shortcut" \
