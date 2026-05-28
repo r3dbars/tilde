@@ -669,6 +669,8 @@ if "focusGhosttyTerminalHostProofPromptByClickIfAvailable" not in fast_ghostty_b
     raise SystemExit("Claude Code Ghostty fast proof must click the proven prompt-row caret before app-owned insertion")
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep guarded System Events fallback rungs")
+if "insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty fast proof must try the smoke-equivalent raw System Events bundle rung first")
 if "insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the focused System Events bulk rung before the heavier terminal-scanning script")
 if "insertGhosttyTerminalHostProofInProcessInputText" not in fast_ghostty_block:
@@ -688,7 +690,7 @@ if "ghosttyAppleScriptLoginShellInputText" not in app_delegate or "ghosttyLoginS
 if "insertGhosttyTerminalHostProofPasteAction" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep Ghostty's native paste action as a verified fallback")
 if "insertGhosttyTerminalHostProofSendKey" not in fast_ghostty_block:
-    raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+    raise SystemExit("Claude Code Ghostty fast proof must keep terminal-scoped send key as a guarded fallback")
 if "insertClaudeCodeTerminalHostProofHardwareKeyEvents" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before bundled Unicode helpers")
 if "insertClaudeCodeTerminalHostProofBundledTextEventHelper" not in fast_ghostty_block:
@@ -719,8 +721,14 @@ if fast_ghostty_block.index("insertGhosttyTerminalHostProofPasteAction") > fast_
     raise SystemExit("Claude Code Ghostty fast proof must try Ghostty's native paste action before generic Command-V pasteboard probes")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofInProcessInputText"):
     raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before slow native text fallbacks")
-if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
-    raise SystemExit("Claude Code Ghostty fast proof must try terminal-scoped send key before System Events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke") > fast_ghostty_block.index("insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke"):
+    raise SystemExit("Claude Code Ghostty fast proof must try raw bundle System Events before exact-pid focused System Events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
+    raise SystemExit("Claude Code Ghostty fast proof must try raw bundle System Events before terminal-scoped send key")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
+    raise SystemExit("Claude Code Ghostty fast proof must try raw bundle System Events before terminal-scanning System Events")
+if fast_ghostty_block.index("insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey"):
+    raise SystemExit("Claude Code Ghostty fast proof must try focused System Events before terminal-scoped send key")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke") > fast_ghostty_block.index("insertGhosttyTerminalHostProofSystemEventsKeystroke"):
     raise SystemExit("Claude Code Ghostty fast proof must try focused System Events before terminal-scanning System Events")
 if fast_ghostty_block.index("insertGhosttyTerminalHostProofSendKey") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofPasteboardText"):
@@ -795,6 +803,8 @@ if "screenCopyOutcome.promptStayedUnchanged == true" not in focused_action_block
     raise SystemExit("Claude Code Ghostty focused native action proof must classify no-op only from native screen-copy original-prompt proof")
 if "ghosttyFocusedSystemEventsBulkKeystrokeBaseline" not in app_delegate or '"focusMode": "frontmostProcessOnly"' not in app_delegate:
     raise SystemExit("Claude Code Ghostty focused System Events proof must verify the unchanged baseline and diagnose the simpler frontmost-process mode")
+if "ghosttyBundleSystemEventsRawKeystrokeBaseline" not in app_delegate or '"focusMode": "frontmostBundleOnly"' not in app_delegate:
+    raise SystemExit("Claude Code Ghostty raw System Events proof must verify the unchanged baseline and diagnose the frontmost-bundle mode")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofHardwareKeyEvents") > fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper"):
     raise SystemExit("Claude Code Ghostty fast proof must try hardware key events before the bundled text helper")
 if fast_ghostty_block.index("insertClaudeCodeTerminalHostProofBundledTextEventHelper") > fast_ghostty_block.index("postUnicodeTextKeyEventsPerCharacter"):
@@ -1062,7 +1072,7 @@ if '"ghosttyPerformActionPasteFromClipboard"' not in terminal_insert_block or 'p
 if 'set actionPerformed to perform action "paste_from_clipboard" on targetTerminal' not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty native paste action must preserve Ghostty's returned action result")
 paste_action_start = app_delegate.index("private func insertGhosttyTerminalHostProofPasteAction(")
-paste_action_end = app_delegate.index("private func insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke(", paste_action_start)
+paste_action_end = app_delegate.index("private func insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke(", paste_action_start)
 paste_action_block = app_delegate[paste_action_start:paste_action_end]
 if ") -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool)" not in paste_action_block:
     raise SystemExit("Claude Code Ghostty native paste action must report native no-op classification")

@@ -874,6 +874,22 @@ mutation after the prompt-row refocus. Ghostty remains unsupported; the next
 useful slice is a different insertion architecture or a pre-fail path that
 avoids this no-op state entirely.
 
+The next Ghostty transport pass tested the closest app-owned version of the
+working external System Events shape before the exact-PID focused rung.
+SteadyType now tries a frontmost-bundle raw System Events keystroke first, then
+verifies the unchanged baseline before continuing. `20260528T183440Z-ghostty`
+made two fresh attempts: the first found a prompt-row suggestion at diagnostics
+line `984282` but lost the visible suggestion during Tab injection, while the
+second consumed Tab at line `989460`, clicked the prompt-row caret at line
+`989486`, then posted `ghosttyBundleSystemEventsRawKeystroke` at line `989490`.
+The new rung exited cleanly but verified `false`; its unchanged-prompt baseline
+verified `true` at line `989491`. Focused System Events and send-key then
+repeated the same unchanged result at lines `989493`-`989497`, the ladder failed
+closed at lines `989529`-`989532`, and the post-fail external native/System
+Events probes again could not mutate the prompt after caret refocus. Ghostty
+remains unsupported; raw bundle System Events is now ruled out as a default
+insertion fix.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit
