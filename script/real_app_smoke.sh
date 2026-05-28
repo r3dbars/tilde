@@ -14895,6 +14895,12 @@ run_obsidian() {
     launch_steadytype_after_chrome_setup "obsidian" "$start_line"
     wait_for_log_line_number "$start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
     start_line="$MATCHED_LOG_LINE"
+    prepare_obsidian_variant_state "$manual_app"
+    if [[ "$manual_app" == "obsidian-long-note" ]]; then
+      assert_obsidian_smoke_target "Smoke proof feels"
+    else
+      assert_obsidian_smoke_target
+    fi
   fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   activate_obsidian_for_smoke

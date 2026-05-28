@@ -10,10 +10,10 @@ production editor or chat support.
 Scale: 10 means beta-ready for normal people. 5 means promising but still easy
 to break or annoy users.
 
-Current proof freshness note: the latest 2026-05-28 refresh has 9 of 10
-beta-safe manual smoke rows current on commit `4cde8d3e8375`; Obsidian long
-note is the only remaining stale row after a rerun timed out waiting for its
-second verified insertion following focus drift.
+Current proof freshness note: the latest 2026-05-28 refresh has all 10
+beta-safe manual smoke rows current again, including Obsidian long-note after
+the harness reasserted the disposable scrolled note target after SteadyType
+launch.
 
 ## Executive Rating
 

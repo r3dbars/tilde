@@ -647,11 +647,12 @@ and `Thanks again` -> `for sending this`; prompt, search, form, and code
 profiles stay gated out of that fallback path.
 
 Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
-textedit`, `notes-title`, `chrome-textarea`, and `chrome-contenteditable`
-passed on 2026-05-28, and the proof sweep added current Notes checklist plus
-Obsidian default/theme/pane rows. The beta-safe proof grid is now 9 current / 1
-stale: only Obsidian long note remains red after a rerun timed out waiting for
-the second verified insertion while focus drifted away from Obsidian.
+textedit`, `notes-title`, `chrome-textarea`, `chrome-contenteditable`, and
+`obsidian-long-note` passed on 2026-05-28, and the proof sweep added current
+Notes body/checklist plus Obsidian default/theme/pane rows. The beta-safe proof
+grid is current again: TextEdit, Notes title/body/checklist, Chrome
+textarea/contenteditable, and Obsidian default/theme/pane/long-note all have
+strict visual rows with two verified accepts.
 
 ## Scores
 
