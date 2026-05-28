@@ -210,6 +210,11 @@ struct SuggestionAggressivenessTests {
             requestMode: .phraseContinuation
         ) == .request(delayMilliseconds: 180))
         #expect(obsidianTrigger.decision(
+            previousTextBeforeCursor: "Project note\nContext",
+            currentTextBeforeCursor: "Project note\nContext:",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 120))
+        #expect(obsidianTrigger.decision(
             previousTextBeforeCursor: "Tasks\n- TODO:",
             currentTextBeforeCursor: "Tasks\n- TODO: ",
             lineStartBehavior: .listItem,

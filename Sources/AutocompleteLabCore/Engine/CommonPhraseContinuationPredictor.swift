@@ -783,6 +783,18 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return intentCandidate("markdown-note-to-self", "keep the next step visible")
         case "why", "why this matters":
             return intentCandidate("markdown-why-this-matters", "connect it to the user")
+        case "summary", "summaries":
+            return intentCandidate("markdown-summary", "capture the useful version")
+        case "context":
+            return intentCandidate("markdown-context", "what led to this note")
+        case "next action", "next actions":
+            return intentCandidate("markdown-next-action", "take the smallest useful step")
+        case "evidence", "proof":
+            return intentCandidate("markdown-evidence", "link the current source of truth")
+        case "follow up", "follow-up":
+            return intentCandidate("markdown-follow-up", "close the loop today")
+        case "open loop", "open loops":
+            return intentCandidate("markdown-open-loop", "name what still needs attention")
         default:
             return nil
         }

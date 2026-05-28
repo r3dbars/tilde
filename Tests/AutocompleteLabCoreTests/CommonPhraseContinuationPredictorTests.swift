@@ -389,7 +389,13 @@ struct CommonPhraseContinuationPredictorTests {
             ("Reflection\nNote to self:", .docsProse, " keep the next step visible", "intent-markdown-note-to-self"),
             ("What matters today", .notes, " is the next clear step", "intent-markdown-what-matters-today"),
             ("Quick capture\nBefore I forget", .docsProse, " capture the important detail", "intent-markdown-before-i-forget"),
-            ("- Follow up on", .bullets, " the open thread today", "intent-markdown-follow-up-on")
+            ("- Follow up on", .bullets, " the open thread today", "intent-markdown-follow-up-on"),
+            ("Project note\nSummary:", .notes, " capture the useful version", "intent-markdown-summary"),
+            ("Daily note\nContext:", .notes, " what led to this note", "intent-markdown-context"),
+            ("- [ ] Next action:", .bullets, " take the smallest useful step", "intent-markdown-next-action"),
+            ("Research note\nEvidence:", .docsProse, " link the current source of truth", "intent-markdown-evidence"),
+            ("Project note\nFollow-up:", .docsProse, " close the loop today", "intent-markdown-follow-up"),
+            ("Weekly review\nOpen loops:", .notes, " name what still needs attention", "intent-markdown-open-loop")
         ]
 
         for (context, profile, expected, match) in cases {
