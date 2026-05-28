@@ -2918,6 +2918,7 @@ if ! grep -F 'perform action "new_window" on sourceTerminal' script/real_app_smo
    ! grep -F 'no-restore-host-initial-window-disabled' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'configured-window-start' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'configured-window-created' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'zero-window-reset-deferred-for-configured-window' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'new window with configuration proofConfig' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'command:launchScriptPath' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'steadyTypeGhosttyProbeMarker' script/real_app_smoke.sh >/dev/null ||

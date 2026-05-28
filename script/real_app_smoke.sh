@@ -9527,7 +9527,11 @@ open_claude_code_terminal_proof() {
         return "$ghostty_preflight_status"
       fi
       reset_stale_only_claude_code_ghostty_proof_host
-      reset_zero_window_claude_code_ghostty_proof_host
+      if [[ "$ghostty_configured_window_first" == "1" ]]; then
+        printf '%s\n' "zero-window-reset-deferred-for-configured-window" >>"$ghostty_launch_stage_file"
+      else
+        reset_zero_window_claude_code_ghostty_proof_host
+      fi
       if ! run_osascript_with_timeout \
           "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
           "Claude Code Ghostty proof launch" \
