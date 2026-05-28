@@ -782,6 +782,16 @@ System Events, hardware, and bundled-helper rungs, and still failed closed at
 lines `932456`-`932457` with `reason=ghostty-fast-verified-insertion-failed`.
 That rules out another cheap reorder of the current Ghostty transport ladder.
 
+The latest Ghostty diagnostic fix made the failure less ambiguous. Ghostty's
+native `write_screen_file:copy,plain` action copies a temporary screen dump file
+path, so SteadyType now reads that file before matching proof text and records
+`screenCopyTransport=screenFile`. The rerun `20260528T160018Z-ghostty` found a
+prompt-row suggestion at diagnostics line `945015`, handled Tab, and the native
+screen dump at `16:02:53Z` confirmed `containsOriginal=true` and
+`containsExpected=false` on the title-marked proof window. Ghostty still fails
+closed at insertion, but the verifier now proves the target prompt is correct
+and unchanged instead of mistaking the copied file path for terminal content.
+
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
 obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit

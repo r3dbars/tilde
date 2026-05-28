@@ -13636,12 +13636,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let deadline = Date().addingTimeInterval(1.0)
-        var screenText = pasteboard.string(forType: .string) ?? ""
-        while screenText.isEmpty,
+        var rawScreenCopyText = pasteboard.string(forType: .string) ?? ""
+        while rawScreenCopyText.isEmpty,
               Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
-            screenText = pasteboard.string(forType: .string) ?? ""
+            rawScreenCopyText = pasteboard.string(forType: .string) ?? ""
         }
+        let screenCopyText = Self.ghosttyScreenCopyPlainText(from: rawScreenCopyText)
+        let screenText = screenCopyText.text
         guard !screenText.isEmpty else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
@@ -13691,6 +13693,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount),
             "posted": "true",
             "screenChars": String(screenText.count),
+            "screenCopyTransport": screenCopyText.transport,
             "source": source,
             "verified": String(containsExpected),
             "verificationSource": "ghosttyScreenCopy"
@@ -13721,6 +13724,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : (false, nil, true, highConfidenceNoProofContextNoop)
         }
         return (containsExpected, containsOriginal, true, nativeNoopClassified)
+    }
+
+    struct GhosttyScreenCopyText: Equatable {
+        let text: String
+        let transport: String
+    }
+
+    nonisolated static func ghosttyScreenCopyPlainText(
+        from pasteboardText: String,
+        fileManager: FileManager = .default
+    ) -> GhosttyScreenCopyText {
+        let trimmed = pasteboardText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains("\n"),
+              trimmed.hasPrefix("/") else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "pasteboardText")
+        }
+
+        let url = URL(fileURLWithPath: trimmed).standardizedFileURL
+        guard ghosttyScreenCopyFilePathAllowed(url.path) else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathRejected")
+        }
+
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let type = attributes[.type] as? FileAttributeType,
+              type == .typeRegular else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathUnreadable")
+        }
+
+        let fileSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        guard fileSize >= 0,
+              fileSize <= 1_000_000 else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathTooLarge")
+        }
+
+        guard let fileText = try? String(contentsOf: url, encoding: .utf8) else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathUnreadable")
+        }
+        return GhosttyScreenCopyText(text: fileText, transport: "screenFile")
+    }
+
+    nonisolated private static func ghosttyScreenCopyFilePathAllowed(_ path: String) -> Bool {
+        path.hasPrefix("/var/folders/")
+            || path.hasPrefix("/private/var/folders/")
+            || path.hasPrefix("/tmp/")
+            || path.hasPrefix("/private/tmp/")
     }
 
     nonisolated private static func ghosttyScreenCopyScriptMetadata(_ stdoutText: String) -> [String: String] {
