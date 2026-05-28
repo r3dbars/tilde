@@ -2033,7 +2033,29 @@ press_codex_full_accept_shortcut_for_smoke() {
   fi
   assert_codex_full_accept_shortcut_safe "$tap_start_line" "$suggestion_start_line" "Codex full accept"
   shortcut_start_line="$(line_count "$LOG_PATH")"
-  press_accept_all_shortcut
+  case "$accept_shortcut" in
+    backtick)
+      press_key_code_cgevent_with_timeout \
+        50 \
+        "${AUTOCOMPLETE_LAB_CODEX_FULL_ACCEPT_CGEVENT_BACKTICK_TIMEOUT_SECONDS:-2}" \
+        "Codex full accept CGEvent backtick" \
+        "session" \
+        "warm"
+      ;;
+    optionTab)
+      press_accept_all_shortcut
+      ;;
+  esac
+
+  if ! wait_for_log_fields_optional "$shortcut_start_line" 1 \
+    "keyboard-event-tap-latency" \
+    "key=$accept_shortcut"; then
+    echo "Codex full accept shortcut produced no key diagnostic." >&2
+    echo "Required fields: keyboard-action app=com.openai.codex key=$accept_shortcut action=acceptAllVisible handled=true" >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((tap_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
 
   if wait_for_log_fields_optional "$shortcut_start_line" 1 \
     "keyboard-event-tap-latency" \

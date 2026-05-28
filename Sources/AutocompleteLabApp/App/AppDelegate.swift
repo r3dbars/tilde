@@ -4088,7 +4088,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         guard focusedFieldMatchesCurrentSuggestion(
             allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
-            allowCodexProofSnapshotFastPath: action == .acceptNextWord,
+            allowCodexProofSnapshotFastPath: action.insertsSuggestionText,
             allowObsidianSnapshotFastPath: action.insertsSuggestionText
         ) else {
             setSuggestionDecision("Blocked: focus changed")
