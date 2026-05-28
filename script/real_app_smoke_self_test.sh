@@ -3035,6 +3035,15 @@ if ! grep -F 'process_id_or_tree_has_name "$proof_pid" "$expected_name"' script/
   echo "real app smoke self-test expected Claude Code terminal-host readiness to accept the proof pidfile wrapper or child process" >&2
   exit 1
 fi
+configured_window_stall_count="$(
+  grep -F 'Claude Code Ghostty proof configured-window API stalled before disposable window creation; skipping retry.' script/real_app_smoke.sh |
+    wc -l |
+    tr -d '[:space:]'
+)"
+if [[ ! "$configured_window_stall_count" =~ ^[0-9]+$ || "$configured_window_stall_count" -lt 2 ]]; then
+  echo "real app smoke self-test expected configured-window stalls to fail closed before retry and before pidfile retry" >&2
+  exit 1
+fi
 python3 - <<'PY'
 from pathlib import Path
 

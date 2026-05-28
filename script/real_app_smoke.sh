@@ -9694,6 +9694,14 @@ APPLESCRIPT
       fi
       if ! wait_for_claude_code_terminal_pidfile_process_optional \
         "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_PID_SECONDS:-8}"; then
+        if grep -Fxq "configured-window-start" "$ghostty_launch_stage_file" 2>/dev/null &&
+           ! grep -Fxq "configured-window-created" "$ghostty_launch_stage_file" 2>/dev/null; then
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
+          echo "Claude Code Ghostty proof configured-window API stalled before disposable window creation; skipping retry." >&2
+          return 42
+        fi
         if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-created"; then
           describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
           describe_claude_code_ghostty_launch_state "$proof_title"
