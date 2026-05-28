@@ -478,7 +478,12 @@ pasteboard no-op. The current red bar is verified Ghostty one-word insertion,
 not prompt readiness. Current-tree follow-ups `20260528T114501Z-ghostty` and
 `20260528T115241Z-ghostty` were both terminated by `SIGTERM` during the
 script-owned retry launch before prompt readiness, so they are not counted as
-insertion evidence.
+insertion evidence. `20260528T115530Z-ghostty` reached the script-owned
+no-restore prompt twice, found prompt-row suggestions at diagnostics lines
+`905520` and `906995`, retried after Tab delivery lost the first visible
+suggestion, then delivered Tab on attempt 2 and failed closed at
+`ghostty-initial-insertion-noop-cluster` after send-key, System Events,
+pasteboard, and in-process native input all left the prompt unchanged.
 
 ## Scores
 
