@@ -1573,21 +1573,25 @@ if not focus < wait < assert_front < assert_tab < assert_ax:
 
 chrome_fixture = function_body("run_chrome_fixture")
 before_tab = chrome_fixture.index('before_one_word_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"')
-focus_tab = chrome_fixture.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"', before_tab)
-wait_tab_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"', focus_tab)
+wait_tab_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"', before_tab)
 wait_tab_app = chrome_fixture.index('wait_for_frontmost_app "Google Chrome" 5', wait_tab_pid)
 press_tab = chrome_fixture.index('press_key_code 48', wait_tab_app)
-if not before_tab < focus_tab < wait_tab_pid < wait_tab_app < press_tab:
-    raise SystemExit("Chrome proof must refocus the editor immediately before Tab acceptance")
+tab_accept_preflight = chrome_fixture[before_tab:press_tab]
+if 'focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"' in tab_accept_preflight:
+    raise SystemExit("Chrome proof must not re-click/refocus the editor after a suggestion appears before Tab acceptance")
+if not before_tab < wait_tab_pid < wait_tab_app < press_tab:
+    raise SystemExit("Chrome proof must assert frontmost state before Tab acceptance")
 
 before_full = chrome_fixture.index('before_full_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"')
-focus_full = chrome_fixture.index('focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"', before_full)
-wait_full_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"', focus_full)
+wait_full_pid = chrome_fixture.index('wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"', before_full)
 wait_full_app = chrome_fixture.index('wait_for_frontmost_app "Google Chrome" 5', wait_full_pid)
 full_start = chrome_fixture.index('full_start_line="$(line_count "$LOG_PATH")"', wait_full_app)
 press_full = chrome_fixture.index('press_accept_all_shortcut', full_start)
-if not before_full < focus_full < wait_full_pid < wait_full_app < full_start < press_full:
-    raise SystemExit("Chrome proof must refocus the editor immediately before full acceptance")
+full_accept_preflight = chrome_fixture[before_full:press_full]
+if 'focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"' in full_accept_preflight:
+    raise SystemExit("Chrome proof must not re-click/refocus the editor after a suggestion appears before full acceptance")
+if not before_full < wait_full_pid < wait_full_app < full_start < press_full:
+    raise SystemExit("Chrome proof must assert frontmost state before full acceptance")
 PY
 if ! grep -F 'local backup_path="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F "focused AX verification is deferred to the click/refocus step" script/real_app_smoke.sh >/dev/null; then

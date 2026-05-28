@@ -15681,9 +15681,6 @@ APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
-  if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
-  fi
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
   else
@@ -15691,7 +15688,6 @@ APPLESCRIPT
   fi
   local before_one_word_accept_text
   before_one_word_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   if [[ -n "$chrome_pid" ]]; then
     wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"
   else
@@ -15803,9 +15799,6 @@ APPLESCRIPT
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion" 1
   fi
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
-  if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
-  fi
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
   else
@@ -15813,7 +15806,6 @@ APPLESCRIPT
   fi
   local before_full_accept_text
   before_full_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   if [[ -n "$chrome_pid" ]]; then
     wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"
   else
