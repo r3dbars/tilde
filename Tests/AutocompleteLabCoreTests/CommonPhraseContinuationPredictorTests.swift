@@ -409,10 +409,13 @@ struct CommonPhraseContinuationPredictorTests {
     func predictsGuardedNextSentencePhrasesAtSentenceBoundaries() {
         let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
             ("Suggestions feel too timid.", .docsProse, " It should predict the next phrase", "intent-sentence-boundary-timid-suggestions"),
+            ("Suggestions feel too timid. ", .docsProse, " It should predict the next phrase", "intent-sentence-boundary-timid-suggestions"),
             ("Placement keeps showing in the wrong field.", .docsProse, " That has to fail closed", "intent-sentence-boundary-wrong-field"),
+            ("Placement keeps showing in the wrong field. ", .docsProse, " That has to fail closed", "intent-sentence-boundary-wrong-field"),
             ("Typing feels slow when suggestions lag.", .docsProse, " Speed has to feel invisible", "intent-sentence-boundary-speed"),
             ("This would feel magical.", .notes, " It should know the next phrase", "intent-sentence-boundary-magic"),
-            ("The note is getting clearer.", .notes, " The next sentence should stay local", "intent-sentence-boundary-writing")
+            ("The note is getting clearer.", .notes, " The next sentence should stay local", "intent-sentence-boundary-writing"),
+            ("The note is getting clearer. ", .notes, " The next sentence should stay local", "intent-sentence-boundary-writing")
         ]
 
         for (context, profile, expected, match) in cases {
@@ -430,11 +433,11 @@ struct CommonPhraseContinuationPredictorTests {
         }
 
         #expect(predictor.selection(
-            for: "Suggestions feel too timid. ",
-            behaviorProfileID: .docsProse
+            for: "Email suggestions feel too timid.",
+            behaviorProfileID: .email
         ).suppressionReason == "not-word-boundary")
         #expect(predictor.selection(
-            for: "Email suggestions feel too timid.",
+            for: "Email suggestions feel too timid. ",
             behaviorProfileID: .email
         ).suppressionReason == "not-word-boundary")
         #expect(predictor.selection(
