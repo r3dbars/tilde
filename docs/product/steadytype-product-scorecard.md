@@ -912,6 +912,13 @@ passes after the sample gate started printing redacted instant phrase
 match-family counts such as writing-bridge, markdown, reply, sentence-boundary,
 daily-driver, and prior, without exposing `predictivePhraseMatch` text.
 
+Latest Obsidian proof-harness source delta:
+`script/obsidian_ax_editor.swift` now prints a redacted AX snapshot when it
+cannot resolve the focused editor, including window count, text-entry count,
+visited-node count, and role counts only. `./script/real_app_smoke_self_test.sh`
+guards the diagnostic and renderer-accessibility guidance, so Obsidian
+AX misses are actionable without leaking note text.
+
 Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
 textedit`, `notes-title`, `chrome-textarea`, `chrome-contenteditable`, and
 `obsidian-long-note` passed on 2026-05-28, and the proof sweep added current
