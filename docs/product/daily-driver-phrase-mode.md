@@ -852,6 +852,12 @@ suggestion appears, which preserves the caret at the accepted phrase.
 
 ## Scorecard
 
+Current proof freshness caveat: TextEdit default and Notes title have current
+strict visual proof on commit `76cd2b614de6`; the beta-safe grid is not green
+yet because Notes body/checklist, Obsidian default/theme/pane/long-note, and
+Chrome textarea/contenteditable still need current reruns after the latest
+app/source change.
+
 | Area | Current Read | Daily-Driver Bar | Next Proof |
 | --- | --- | --- | --- |
 | Suggestion magic | Better defaults plus retry repairs for bad 8-word phrase passes; the user-facing default now shows up to 8 words and model guidance treats that as a 3-8 word daily-driver phrase, not a one-word completion with a bigger cap; old 3-word and 5-word stored defaults migrate forward to the new short-phrase length; disposable local audit is green at 45/45; instant phrase fallback now covers more audit-aligned 3-6 word daily-driver contexts, including punctuation, list-shaped writing, complaint language, finish-my-thought sentence shapes, first-person trust/feeling shapes like feels wrong/falls short/use this every day/reaching for it, reusable writing-intent endings, guarded connector-thought phrases like because/so-that/which-means/the-fix-is, and Obsidian-style markdown labels like Next/TODO/Open questions/Decisions/Focus/Today/Waiting on/Blocked/Risks/Done/Idea/Note to self; Obsidian daily-driver triggers now ask after short list/checklist labels such as `- TODO:` and `- [ ] Next:` instead of waiting for generic list-word completion; very-proactive writing profiles now queue next-sentence phrase continuations after sentence boundaries while prompt surfaces stay quiet there; the same instant path now respects accepted-and-kept restraint before showing again after repeated local rejects; dogfood reports now fail timid phrase suggestions under 3 visible words | 3-8 words often feel like the user's next thought | Dogfood writing session with raw opt-in quality notes |
