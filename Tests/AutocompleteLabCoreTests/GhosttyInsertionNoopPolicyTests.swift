@@ -26,6 +26,9 @@ struct GhosttyInsertionNoopPolicyTests {
             focusedActionTextVerified: true
         )))
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            bundledGhosttyInputTextHelperVerified: true
+        )))
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
             inProcessInputTextVerified: true
         )))
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
@@ -37,6 +40,9 @@ struct GhosttyInsertionNoopPolicyTests {
     func unsafeInProcessInputMissDoesNotFailFast() {
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
             focusedActionTextSafeToContinue: false
+        )))
+        #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
+            bundledGhosttyInputTextHelperSafeToContinue: false
         )))
         #expect(!policy.shouldFailFastAfterInitialNoopCluster(.ghosttyNoopCluster(
             inProcessInputTextSafeToContinue: false
@@ -73,6 +79,8 @@ private extension GhosttyInitialInsertionNoopInput {
         focusedActionTextNativeNoopClassified: Bool = true,
         pasteboardVerified: Bool = false,
         pasteboardSafeToContinue: Bool = true,
+        bundledGhosttyInputTextHelperVerified: Bool = false,
+        bundledGhosttyInputTextHelperSafeToContinue: Bool = true,
         inProcessInputTextVerified: Bool = false,
         inProcessInputTextSafeToContinue: Bool = true,
         promptStayedUnchanged: Bool = true,
@@ -89,6 +97,8 @@ private extension GhosttyInitialInsertionNoopInput {
             focusedActionTextNativeNoopClassified: focusedActionTextNativeNoopClassified,
             pasteboardVerified: pasteboardVerified,
             pasteboardSafeToContinue: pasteboardSafeToContinue,
+            bundledGhosttyInputTextHelperVerified: bundledGhosttyInputTextHelperVerified,
+            bundledGhosttyInputTextHelperSafeToContinue: bundledGhosttyInputTextHelperSafeToContinue,
             inProcessInputTextVerified: inProcessInputTextVerified,
             inProcessInputTextSafeToContinue: inProcessInputTextSafeToContinue,
             promptStayedUnchanged: promptStayedUnchanged,

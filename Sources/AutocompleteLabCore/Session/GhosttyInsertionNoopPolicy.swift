@@ -11,6 +11,8 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
     public let focusedActionTextNativeNoopClassified: Bool
     public let pasteboardVerified: Bool
     public let pasteboardSafeToContinue: Bool
+    public let bundledGhosttyInputTextHelperVerified: Bool
+    public let bundledGhosttyInputTextHelperSafeToContinue: Bool
     public let inProcessInputTextVerified: Bool
     public let inProcessInputTextSafeToContinue: Bool
     public let promptStayedUnchanged: Bool
@@ -27,6 +29,8 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         focusedActionTextNativeNoopClassified: Bool,
         pasteboardVerified: Bool,
         pasteboardSafeToContinue: Bool,
+        bundledGhosttyInputTextHelperVerified: Bool,
+        bundledGhosttyInputTextHelperSafeToContinue: Bool,
         inProcessInputTextVerified: Bool,
         inProcessInputTextSafeToContinue: Bool,
         promptStayedUnchanged: Bool,
@@ -42,6 +46,8 @@ public struct GhosttyInitialInsertionNoopInput: Equatable, Sendable {
         self.focusedActionTextNativeNoopClassified = focusedActionTextNativeNoopClassified
         self.pasteboardVerified = pasteboardVerified
         self.pasteboardSafeToContinue = pasteboardSafeToContinue
+        self.bundledGhosttyInputTextHelperVerified = bundledGhosttyInputTextHelperVerified
+        self.bundledGhosttyInputTextHelperSafeToContinue = bundledGhosttyInputTextHelperSafeToContinue
         self.inProcessInputTextVerified = inProcessInputTextVerified
         self.inProcessInputTextSafeToContinue = inProcessInputTextSafeToContinue
         self.promptStayedUnchanged = promptStayedUnchanged
@@ -68,6 +74,8 @@ public struct GhosttyInsertionNoopPolicy: Equatable, Sendable {
             && input.focusedActionTextNativeNoopClassified
             && !input.pasteboardVerified
             && input.pasteboardSafeToContinue
+            && !input.bundledGhosttyInputTextHelperVerified
+            && input.bundledGhosttyInputTextHelperSafeToContinue
             && !input.inProcessInputTextVerified
             && input.inProcessInputTextSafeToContinue
             && input.promptStayedUnchanged
