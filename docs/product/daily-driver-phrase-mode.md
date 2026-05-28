@@ -113,14 +113,13 @@ Validation from the follow-up:
   passed.
 - `./script/real_app_smoke_self_test.sh` passed.
 - `./script/manual_smoke_status.sh --strict` now passes on commit
-  `e2da385b0ece`: TextEdit, Notes title/body/checklist, Obsidian
+  `1969992ddcf5`: TextEdit, Notes title/body/checklist, Obsidian
   default/theme/pane/long-note, Chrome textarea, and Chrome contenteditable are
-  all current.
-- The latest current rows include TextEdit diagnostics lines `936047`-`936183`,
-  Notes title/body/checklist lines `934963`-`935036`, `935094`-`935164`, and
-  `935424`-`935499`, Obsidian long-note lines `936188`-`936319`, Chrome
-  textarea lines `936380`-`936545`, and Chrome contenteditable lines
-  `936553`-`936730`.
+  all current or source-compatible.
+- The latest current rows include TextEdit diagnostics lines `952925`-`953019`,
+  Notes checklist lines `954328`-`954420`, Obsidian default/theme/pane/long-note
+  lines `954425`-`955313`, Chrome textarea lines `953772`-`953982`, and Chrome
+  contenteditable lines `953989`-`954228`.
 - Each refreshed row records 2 accepted insertions and strict visual trace
   evidence.
 
@@ -836,15 +835,12 @@ that change the first visible word, while still allowing same-first-word
 extensions. A current long-note rerun passed on 2026-05-28T14:11:56Z at commit
 `26eadc370ba2` with diagnostics lines `933827`-`933959`, trace lines
 `30954`-`30973`, 2 accepted insertions, and strict visual trace evidence.
-`./script/manual_smoke_status.sh --strict` now reports Obsidian long note
-and Notes title current, with 8 remaining stale beta-safe rows after the latest
-source changes.
-
 The strict beta-safe proof grid is current again after the latest harness
 hardening. `./script/manual_smoke_status.sh --strict` passed on 2026-05-28 at
-commit `e2da385b0ece`: TextEdit, Notes title/body/checklist, Obsidian
+commit `1969992ddcf5`: TextEdit, Notes title/body/checklist, Obsidian
 default/theme/pane/long-note, Chrome textarea, and Chrome contenteditable all
-have current rows with 2 accepted insertions and strict visual trace evidence.
+have current or source-compatible rows with 2 accepted insertions and strict
+visual trace evidence.
 This refresh also fixed two proof-trust issues: TextEdit undo proof now
 reasserts the disposable window and runs before screenshot waiting can expire
 rollback, and Chrome fixture accepts no longer re-click the editor after a
