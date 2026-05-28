@@ -103,6 +103,12 @@ the second native pre-accept probe, so the harness now records the active
 Claude Code prompt/Tab/insertion phase on SIGTERM instead of reporting the stale
 build phase. The next Ghostty lane is an observable accept driver for the
 prompt-row suggestion, not configured-window launch or AX prompt discovery.
+The post-commit one-attempt launchd proof `20260528T202618Z-ghostty` exited
+cleanly with status `1` and confirmed the new accept-driver diagnosis: prompt
+screen-copy readiness, exact typed prompt readiness, and native pre-accept
+mutation/restore all passed; session CGEvent Tab, HID CGEvent Tab, and System
+Events Tab all produced no `key=tab` diagnostic; the run failed with
+`Tab delivery did not reach key capture`.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
