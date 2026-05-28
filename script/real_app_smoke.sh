@@ -9318,16 +9318,20 @@ tell application id "com.mitchellh.ghostty"
   activate window proofWindow
   delay shellReadyDelay
   set targetTerminal to missing value
+  set terminalReady to false
   repeat with readyAttempt from 1 to 30
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
       set terminalDirectory to working directory of targetTerminal as text
-      if terminalDirectory is not "" then exit repeat
+      if terminalDirectory is not "" then
+        set terminalReady to true
+        exit repeat
+      end if
     end try
     delay 0.1
   end repeat
-  if targetTerminal is missing value then error "Ghostty proof terminal was not ready."
+  if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
   focus targetTerminal
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
@@ -9337,6 +9341,7 @@ tell application id "com.mitchellh.ghostty"
 end tell
 end run
 APPLESCRIPT
+        describe_claude_code_ghostty_launch_state "$proof_title"
         echo "Claude Code Ghostty proof could not create a script-owned disposable proof window." >&2
         return 1
       fi
@@ -9365,16 +9370,20 @@ tell application id "com.mitchellh.ghostty"
   activate window proofWindow
   delay shellReadyDelay
   set targetTerminal to missing value
+  set terminalReady to false
   repeat with readyAttempt from 1 to 30
     try
       set targetTab to selected tab of proofWindow
       set targetTerminal to focused terminal of targetTab
       set terminalDirectory to working directory of targetTerminal as text
-      if terminalDirectory is not "" then exit repeat
+      if terminalDirectory is not "" then
+        set terminalReady to true
+        exit repeat
+      end if
     end try
     delay 0.1
   end repeat
-  if targetTerminal is missing value then error "Ghostty proof terminal was not ready."
+  if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
   focus targetTerminal
   perform action ("set_surface_title:" & proofTitle) on targetTerminal
   perform action ("set_tab_title:" & proofTitle) on targetTerminal
@@ -9387,6 +9396,7 @@ tell application id "com.mitchellh.ghostty"
 end tell
 end run
 APPLESCRIPT
+          describe_claude_code_ghostty_launch_state "$proof_title"
           echo "Claude Code Ghostty proof could not retry the disposable proof command." >&2
           return 1
         fi
