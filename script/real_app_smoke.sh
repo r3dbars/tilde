@@ -14619,8 +14619,23 @@ seed_obsidian_proof_vault_note() {
   printf '%s\n' "$reset_text" >"$proof_note"
 }
 
+ensure_obsidian_smoke_renderer_accessibility_launch() {
+  if pgrep -x Obsidian >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local app_path="${AUTOCOMPLETE_LAB_OBSIDIAN_APP_PATH:-/Applications/Obsidian.app}"
+  if [[ -d "$app_path" ]]; then
+    open -na "$app_path" --args --force-renderer-accessibility
+  else
+    open -na Obsidian --args --force-renderer-accessibility
+  fi
+  sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_INITIAL_LAUNCH_WAIT_SECONDS:-2}"
+}
+
 open_obsidian_smoke_note_if_configured() {
   local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
+  ensure_obsidian_smoke_renderer_accessibility_launch
   if [[ -n "$smoke_uri" ]]; then
     open "$smoke_uri"
     sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
@@ -14636,7 +14651,6 @@ open_obsidian_smoke_note_if_configured() {
     return 0
   fi
 
-  open -a Obsidian
   sleep 0.2
   activate_obsidian_for_smoke
 }

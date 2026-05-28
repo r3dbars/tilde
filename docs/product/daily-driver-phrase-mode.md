@@ -370,6 +370,12 @@ continuations. This makes the instant path less like canned autocomplete and
 more able to finish a real thought, while still staying off prompt, search,
 form, and code profiles.
 
+The everyday reply layer is broader now too. Email and casual-chat writing
+profiles can produce safe short continuations for common reply starts like
+`Good call`, `All good`, `Let me know`, `Checking in`, `I'll take`, `I'm on`,
+`Appreciate you`, and `Thanks again`, while prompt, search, form, and code
+profiles still stay gated out of that fallback path.
+
 For the Obsidian lane, the instant predictor now recognizes markdown note
 labels and current-line note shapes. Trusted writing profiles can get
 zero-latency continuations for lines like `## Next:`, `TODO:`, `Open
@@ -740,6 +746,18 @@ native prefix/final-key probe, walked the later front-window/native/action/paste
 System Events, hardware, and bundled-helper rungs, and still failed closed at
 lines `932456`-`932457` with `reason=ghostty-fast-verified-insertion-failed`.
 That rules out another cheap reorder of the current Ghostty transport ladder.
+
+The Obsidian daily-driver lane got one current proof refresh too, but with a
+useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
+obsidian --manual-gate` passed on 2026-05-28T13:48:08Z at commit
+`707b7c95c614` with 2 accepted insertions, strict visual trace evidence,
+diagnostics lines `932538`-`932695`, and trace lines `30739`-`30761`. The first
+attempt exposed only Obsidian window chrome through macOS Accessibility; the
+proof harness now starts fresh disposable Obsidian proof launches with
+`--force-renderer-accessibility` so CodeMirror editor content is visible to the
+same AX path SteadyType relies on. This keeps the proof lane moving, but normal
+Obsidian daily-driver support should stay caveated until default-launch
+renderer accessibility is proven or guided.
 
 ## Scorecard
 

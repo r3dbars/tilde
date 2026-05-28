@@ -625,6 +625,30 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         if hasSuffix(["no", "worries"], in: words) {
             return intentCandidate("reply-no-worries", "at all")
         }
+        if hasSuffix(["good", "call"], in: words) {
+            return intentCandidate("reply-good-call", "that makes sense")
+        }
+        if hasSuffix(["all", "good"], in: words) {
+            return intentCandidate("reply-all-good", "on my end")
+        }
+        if hasSuffix(["let", "me", "know"], in: words) {
+            return intentCandidate("reply-let-me-know", "what you think")
+        }
+        if hasSuffix(["checking", "in"], in: words) {
+            return intentCandidate("reply-checking-in", "on this")
+        }
+        if hasAnySuffix([["i", "will", "take"], ["i", "ll", "take"]], in: words) {
+            return intentCandidate("reply-i-will-take", "a look")
+        }
+        if hasAnySuffix([["i", "am", "on"], ["i", "m", "on"]], in: words) {
+            return intentCandidate("reply-i-am-on", "it now")
+        }
+        if hasSuffix(["appreciate", "you"], in: words) {
+            return intentCandidate("reply-appreciate-you", "sending this over")
+        }
+        if hasSuffix(["thanks", "again"], in: words) {
+            return intentCandidate("reply-thanks-again", "for sending this")
+        }
 
         return nil
     }

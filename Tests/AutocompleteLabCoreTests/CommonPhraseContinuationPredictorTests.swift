@@ -327,7 +327,16 @@ struct CommonPhraseContinuationPredictorTests {
             ("Thread\nHappy to", .docsProse, " take a look", "intent-reply-take-a-look"),
             ("Thanks for", .email, " sending this over", "intent-reply-thanks-for"),
             ("Meeting move?\nYes please", .casualChat, " that works for me", "intent-reply-yes-please"),
-            ("No worries", .casualChat, " at all", "intent-reply-no-worries")
+            ("No worries", .casualChat, " at all", "intent-reply-no-worries"),
+            ("Good call", .casualChat, " that makes sense", "intent-reply-good-call"),
+            ("All good", .casualChat, " on my end", "intent-reply-all-good"),
+            ("Let me know", .email, " what you think", "intent-reply-let-me-know"),
+            ("Checking in", .casualChat, " on this", "intent-reply-checking-in"),
+            ("I will take", .email, " a look", "intent-reply-i-will-take"),
+            ("I'll take", .casualChat, " a look", "intent-reply-i-will-take"),
+            ("I'm on", .casualChat, " it now", "intent-reply-i-am-on"),
+            ("Appreciate you", .email, " sending this over", "intent-reply-appreciate-you"),
+            ("Thanks again", .casualChat, " for sending this", "intent-reply-thanks-again")
         ]
 
         for (context, profile, expected, match) in cases {
@@ -351,6 +360,14 @@ struct CommonPhraseContinuationPredictorTests {
         #expect(predictor.selection(
             for: "Search\nThanks for",
             behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Prompt\nLet me know",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Code comment\nGood call",
+            behaviorProfileID: .coding
         ).suppressionReason == "unsupported-profile")
     }
 

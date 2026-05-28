@@ -2006,6 +2006,12 @@ if not custom_open < custom_activate < custom_return < vault_open < vault_activa
     )
 PY
 
+if ! grep -F "ensure_obsidian_smoke_renderer_accessibility_launch()" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F -- "--force-renderer-accessibility" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Obsidian proof launch to force Electron renderer accessibility when starting a fresh app" >&2
+  exit 1
+fi
+
 if ! grep -F 'AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-optionTab}"' script/obsidian_deep_sweep.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.4}"' script/obsidian_deep_sweep.sh >/dev/null; then
   echo "real app smoke self-test expected Obsidian deep sweep to inherit the proven shortcut and focus settle defaults" >&2
