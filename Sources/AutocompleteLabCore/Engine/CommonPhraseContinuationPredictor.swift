@@ -458,6 +458,22 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return intentCandidate("markdown-open-questions", "capture what still feels unclear")
         case "meeting note", "meeting notes", "notes":
             return intentCandidate("markdown-meeting-notes", "capture decisions and next steps")
+        case "today", "daily note", "daily notes":
+            return intentCandidate("markdown-daily-note", "focus on the highest leverage fix")
+        case "focus", "focus today":
+            return intentCandidate("markdown-focus", "the next useful writing pass")
+        case "blocked", "blocker", "blockers":
+            return intentCandidate("markdown-blocked", "by the missing proof")
+        case "waiting", "waiting on":
+            return intentCandidate("markdown-waiting-on", "the response before moving forward")
+        case "risk", "risks":
+            return intentCandidate("markdown-risks", "the part that could break trust")
+        case "done", "shipped":
+            return intentCandidate("markdown-done", "capture what actually shipped today")
+        case "idea", "ideas":
+            return intentCandidate("markdown-ideas", "turn this into a small test")
+        case "note to self", "notes to self":
+            return intentCandidate("markdown-note-to-self", "keep the next step visible")
         case "why", "why this matters":
             return intentCandidate("markdown-why-this-matters", "connect it to the user")
         default:
