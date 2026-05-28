@@ -595,7 +595,14 @@ at diagnostics line `929688`, handled Tab at line `930715`, recorded
 `nativeNoopClassified=true` at lines `930741`-`930742`, proved unchanged
 baselines through `ghosttyInProcessInputText` at lines `930754`-`930758`, and
 failed closed at `ghostty-initial-insertion-noop-cluster` on lines
-`930759`-`930760`.
+`930759`-`930760`. An extended probe run, `20260528T134007Z-ghostty`, then
+disabled fail-fast and enabled the native prefix/final-key probe. It reached a
+prompt-row suggestion at diagnostics line `931345`, proved the prefix/final-key
+prefix was still a no-op at lines `932401`-`932404`, exercised the remaining
+front-window/native/action/paste/System Events/hardware/bundled helper rungs
+through line `932455`, and ended with `ghostty-fast-verified-insertion-failed`
+at lines `932456`-`932457`. This rules out a simple reorder of the current
+transport ladder on the stable script-owned launch path.
 
 ## Scores
 
