@@ -3738,6 +3738,17 @@ if ! grep -F "script/real_app_smoke.sh notes-title-undo --manual-gate" "$TMP_DIR
   exit 1
 fi
 
+if ! grep -F 'settle_keyboard_event_tap_if_started()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_keyboard_event_tap_if_started "$start_line" "Notes title Tab acceptance"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_keyboard_event_tap_if_started "$second_start_line" "Notes title full acceptance"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_keyboard_event_tap_if_started "$start_line" "Notes checklist Tab acceptance"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_keyboard_event_tap_if_started "$second_start_line" "Notes checklist full acceptance"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_keyboard_event_tap_if_started "$start_line" "Notes body Tab acceptance"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_keyboard_event_tap_if_started "$second_start_line" "Notes body full acceptance"' script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Notes accept paths to settle a fresh keyboard event tap before pressing accept keys" >&2
+  exit 1
+fi
+
 if AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROCESS_LIST=$'1 1 1 launchd\n' \
   AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_DIR="$TMP_DIR/obsidian-safety.lock" \
   script/real_app_smoke.sh obsidian >/dev/null 2>"$TMP_DIR/obsidian-fail.txt"; then

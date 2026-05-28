@@ -1910,6 +1910,17 @@ wait_for_log_fields_optional() {
   return 1
 }
 
+settle_keyboard_event_tap_if_started() {
+  local start_line="$1"
+  local label="$2"
+
+  if wait_for_log_fields_optional "$start_line" 2 "keyboard-event-tap-started"; then
+    sleep "${AUTOCOMPLETE_LAB_EVENT_TAP_SETTLE_SECONDS:-0.2}"
+  else
+    echo "$label did not log a fresh keyboard-event-tap-started marker before accept; pressing anyway." >&2
+  fi
+}
+
 wait_for_claude_code_terminal_tab_acceptance() {
   local start_line="$1"
   local host_name="$2"
@@ -14888,6 +14899,7 @@ run_notes() {
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title suggestion"
     assert_frontmost_app "Notes" "Notes title"
+    settle_keyboard_event_tap_if_started "$start_line" "Notes title Tab acceptance"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes title Tab acceptance" 12 \
       "keyboard-action" \
@@ -14910,6 +14922,7 @@ run_notes() {
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title second suggestion"
     assert_frontmost_app "Notes" "Notes title"
+    settle_keyboard_event_tap_if_started "$second_start_line" "Notes title full acceptance"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Notes title full acceptance" 12 \
@@ -14957,6 +14970,7 @@ run_notes() {
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist suggestion"
     assert_frontmost_app "Notes" "Notes checklist"
+    settle_keyboard_event_tap_if_started "$start_line" "Notes checklist Tab acceptance"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes checklist Tab acceptance" 12 \
       "keyboard-action" \
@@ -14984,6 +14998,7 @@ run_notes() {
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist second suggestion"
     assert_frontmost_app "Notes" "Notes checklist"
+    settle_keyboard_event_tap_if_started "$second_start_line" "Notes checklist full acceptance"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Notes checklist full acceptance" 12 \
@@ -15020,6 +15035,7 @@ run_notes() {
   type_notes_raw_smoke_text "$body_first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
   assert_frontmost_app "Notes" "Notes body"
+  settle_keyboard_event_tap_if_started "$start_line" "Notes body Tab acceptance"
   press_key_code 48
   wait_for_log_fields "$start_line" "Notes body Tab acceptance" 12 \
     "keyboard-action" \
@@ -15040,6 +15056,7 @@ run_notes() {
   type_notes_raw_smoke_text "$body_second_fragment"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
   assert_frontmost_app "Notes" "Notes body"
+  settle_keyboard_event_tap_if_started "$second_start_line" "Notes body full acceptance"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "Notes body full acceptance" 12 \
