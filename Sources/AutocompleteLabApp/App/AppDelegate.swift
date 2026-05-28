@@ -12938,6 +12938,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "\"\(escaped)\""
     }
 
+    private func claudeCodeTerminalHostProofVerificationInputText(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> (inputText: String?, source: String) {
+        let focusedInputText = claudeCodeTerminalHostProofInputText(
+            app: app,
+            context: context,
+            profile: profile
+        )
+        guard app.bundleIdentifier == "com.mitchellh.ghostty",
+              let terminalScreenText = accessibilityClient.focusedWindowText(for: app),
+              !terminalScreenText.isEmpty else {
+            return (focusedInputText, "focusedContext")
+        }
+
+        let proofContext = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: app.bundleIdentifier,
+            windowTitle: context.fingerprint.windowTitle ?? "",
+            focusedText: ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor
+            ),
+            rawTextBeforeCursor: context.textBeforeCursor,
+            rawTextAfterCursor: context.textAfterCursor,
+            terminalScreenText: terminalScreenText,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            )
+        )
+        guard let screenFirstInputText =
+            ClaudeCodeTerminalHostProofPolicy.proofInputTextPreferringTerminalScreen(
+                for: proofContext
+            ) else {
+            return (focusedInputText, "focusedContext")
+        }
+
+        if screenFirstInputText != focusedInputText {
+            return (screenFirstInputText, "terminalScreen")
+        }
+        return (screenFirstInputText, "focusedContext")
+    }
+
     private func verifyClaudeCodeTerminalHostProofInsertion(
         expectedProofInputText: String,
         frontmostApp: RunningApplicationInfo,
@@ -12961,12 +13004,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 continue
             }
 
-            let currentProofInputText = claudeCodeTerminalHostProofInputText(
+            let verificationInput = claudeCodeTerminalHostProofVerificationInputText(
                 app: frontmostApp,
                 context: currentContext,
                 profile: profile
             )
-            if currentProofInputText == expectedProofInputText {
+            if verificationInput.inputText == expectedProofInputText {
+                if verificationInput.source == "terminalScreen" {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-verification",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "host": frontmostApp.bundleIdentifier,
+                            "source": verificationInput.source,
+                            "expectedChars": String(expectedProofInputText.count)
+                        ]
+                    )
+                }
                 return true
             }
         }

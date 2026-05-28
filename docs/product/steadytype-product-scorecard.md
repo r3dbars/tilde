@@ -111,6 +111,17 @@ posted at line `800768`, verified `false`, the unchanged-prompt baseline
 verified `true` at line `800769`, and the ladder still failed closed at line
 `800816` with `ghosttyFastFailClosed`. Ghostty remains unsupported until an
 app-owned transport mutates and verifies the disposable Claude prompt.
+The detached Ghostty follow-up now makes stale proof windows less likely to
+produce false evidence: insertion verification prefers the current
+terminal-screen prompt over stale focused text, the detached launcher assigns a
+unique proof title before running `claude`, the frontmost wait actively refocuses
+the exact title-marked Ghostty window, and the AX prompt helper can inspect the
+focused window/app tree. The live detached proof still failed honestly:
+`20260528T012221Z-ghostty` reached the exact frontmost Ghostty PID but the AX
+prompt-readiness snapshot only matched part of the typed proof text before the
+retry path, and `20260528T012819Z-ghostty` failed exact frontmost reactivation
+after title-PID resolution. Ghostty remains unsupported until the detached proof
+exits `0` with verified one-word no-submit insertion.
 
 ## Scores
 

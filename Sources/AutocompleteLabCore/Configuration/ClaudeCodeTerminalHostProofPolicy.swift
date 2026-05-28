@@ -499,6 +499,77 @@ public enum ClaudeCodeTerminalHostProofPolicy {
         )
     }
 
+    public static func proofInputTextPreferringTerminalScreen(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> String? {
+        guard evaluate(context) == .eligible else {
+            return nil
+        }
+
+        if let screenInputText = terminalScreenVerificationInputText(for: context) {
+            return screenInputText
+        }
+
+        return proofInputText(for: context)
+    }
+
+    private static func terminalScreenVerificationInputText(
+        for context: ClaudeCodeTerminalHostProofContext
+    ) -> String? {
+        guard context.proofModeEnabled,
+              !context.terminalScreenText.isEmpty else {
+            return nil
+        }
+
+        let hasTitleMarker = titleHasScopedProofMarker(context.windowTitle)
+        let hasScreenMarker = containsProofMarker(context.terminalScreenText)
+            || terminalScreenHasScopedProofHeaderMarker(context.terminalScreenText)
+        guard hasTitleMarker || hasScreenMarker else {
+            return nil
+        }
+
+        let fragments = lineFragments(context.terminalScreenText)
+        var trailingRowsArePromptChromeOnly = true
+        for offset in fragments.indices.reversed() {
+            let trimmed = fragments[offset].trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                continue
+            }
+
+            if isAllowedTrailingClaudePromptHint(trimmed) || looksLikeClaudePromptChromeLine(trimmed) {
+                continue
+            }
+
+            if trailingRowsArePromptChromeOnly,
+               let currentLine = titleScopedTerminalScreenPromptLine(
+                endingAt: offset,
+                fragments: fragments
+               ),
+               let inputText = safeTitleScopedPromptInputLine(currentLine) {
+                return inputText
+            }
+
+            trailingRowsArePromptChromeOnly = false
+        }
+
+        guard hasScreenMarker,
+              let promptSegment = recoveredMarkedTerminalScreenPromptSegmentLocation(
+                in: context.terminalScreenText
+              ) else {
+            return nil
+        }
+
+        let recovery = recoveredMarkedTerminalPromptInputAnalysis(from: promptSegment.text)
+        guard let inputText = recovery.inputText,
+              inputText
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isWhitespace)
+                .count >= 3 else {
+            return nil
+        }
+        return inputText
+    }
+
     private static func titleScopedInputLooksCompleteEnough(
         for context: ClaudeCodeTerminalHostProofContext
     ) -> Bool {
