@@ -457,6 +457,12 @@ fi
 
 set +e
 (
+  smoke_child_pid="${BASHPID:-$$}"
+  smoke_child_pgid="$(ps -o pgid= -p "$smoke_child_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  printf 'Detached Ghostty smoke child shell pid %s pgid %s entering real_app_smoke at %s\n' \
+    "$smoke_child_pid" "${smoke_child_pgid:-unknown}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  trap 'printf "\nDetached Ghostty smoke child shell received TERM at %s\n" "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"; exit 143' TERM
+  trap 'printf "\nDetached Ghostty smoke child shell received INT at %s\n" "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"; exit 130' INT
   AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-1}" \
   AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS="${protected_pgids:-}" \
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE="${AUTOCOMPLETE_LAB_SCREENSHOT_TRACE:-1}" \
@@ -467,6 +473,10 @@ set +e
   AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE="${AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE:-1}" \
   AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS="${AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS:-45}" \
     ./script/real_app_smoke.sh claude-code-ghostty --manual-gate
+  smoke_child_status=$?
+  printf 'Detached Ghostty smoke child shell real_app_smoke returned status %s at %s\n' \
+    "$smoke_child_status" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  exit "$smoke_child_status"
 ) >>"$LOG_FILE" 2>&1 &
 SMOKE_PID="$!"
 printf '%s\n' "$SMOKE_PID" >"$SMOKE_PID_FILE"

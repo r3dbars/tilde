@@ -257,6 +257,10 @@ require_contains "$SCRIPT_TEXT" "smoke_process=not-running"
 require_contains "$SCRIPT_TEXT" 'runner_pgid="$(ps -o pgid= -p "$$"'
 require_contains "$SCRIPT_TEXT" "Protected proof process groups:"
 require_contains "$SCRIPT_TEXT" 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_PROTECTED_PGIDS="${protected_pgids:-}"'
+require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell pid"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell received TERM"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell received INT"
+require_contains "$SCRIPT_TEXT" "Detached Ghostty smoke child shell real_app_smoke returned status"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof spawned smoke pid"
 require_contains "$SCRIPT_TEXT" "Detached Ghostty proof smoke pid"
 require_contains "$SCRIPT_TEXT" "Stopped orphaned detached Ghostty smoke process"

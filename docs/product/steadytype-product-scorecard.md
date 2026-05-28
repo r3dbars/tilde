@@ -303,12 +303,13 @@ script/claude_code_ghostty_detached_proof_self_test.sh`,
 --live`, and `git diff --check` passed after the hardening. The live follow-ups
 `20260528T063520Z-ghostty` and `20260528T063816Z-ghostty` still failed red
 before insertion because the runner/smoke handoff died before prompt setup. The
-latest bounded run, `20260528T064815Z-ghostty`, now shows a sharper red bar:
+latest bounded run, `20260528T065022Z-ghostty`, now shows a sharper red bar:
 the `nohup` runner wrote the proof header, logged protected proof process group
-`58736`, spawned smoke pid `58759`, then both the runner and smoke child exited
-before the child printed the real app smoke plan or wrote a final status.
-The next blocker is smoke-child startup/handoff diagnostics, not a green Ghostty
-insertion claim.
+`65594`, spawned smoke pid `65618`, and the smoke child shell logged that it was
+entering `real_app_smoke`, then both the runner and smoke child exited before
+the child printed the real app smoke plan or wrote a final status. The next
+blocker is the early smoke-script startup kill, not a green Ghostty insertion
+claim.
 Ghostty remains unsupported until a detached run reaches verified one-word
 no-submit insertion and exits `0`.
 
