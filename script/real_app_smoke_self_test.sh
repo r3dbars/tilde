@@ -670,7 +670,9 @@ if "focusGhosttyTerminalHostProofPromptByClickIfAvailable" not in fast_ghostty_b
 if "insertGhosttyTerminalHostProofSystemEventsKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must keep guarded System Events fallback rungs")
 if "insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke" not in fast_ghostty_block:
-    raise SystemExit("Claude Code Ghostty fast proof must try the smoke-equivalent raw System Events bundle rung first")
+    raise SystemExit("Claude Code Ghostty fast proof must keep the smoke-equivalent raw System Events bundle probe")
+if "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty raw System Events proof must stay behind an explicit opt-in probe flag")
 if "insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must try the focused System Events bulk rung before the heavier terminal-scanning script")
 if "insertGhosttyTerminalHostProofInProcessInputText" not in fast_ghostty_block:
@@ -823,6 +825,8 @@ if "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES" not in fast_ghostty_bloc
     raise SystemExit("Claude Code Ghostty fast proof must keep the long insertion ladder behind an explicit opt-in flag")
 if "AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty bundled input helper must stay behind an explicit opt-in probe flag")
+if "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE" not in fast_ghostty_block:
+    raise SystemExit("Claude Code Ghostty raw System Events helper must stay behind an explicit opt-in probe flag")
 if "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS" not in fast_ghostty_block:
     raise SystemExit("Claude Code Ghostty fast proof must allow an explicit bounded insertion budget override")
 if "ghosttyFastInsertionBudget" not in fast_ghostty_block or "ghostty-fast-insertion-budget-exceeded" not in fast_ghostty_block:
@@ -985,6 +989,7 @@ for env_key in [
     "AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES",
     "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS",
+    "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS",
     "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE",
     "AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE",
@@ -1156,6 +1161,7 @@ if ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE \' script/real_a
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE \' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE \' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected Ghostty proof env overrides to reach relaunched SteadyType" >&2
   exit 1
