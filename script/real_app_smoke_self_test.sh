@@ -731,6 +731,13 @@ if '"textTransport": "environment"' not in app_delegate or "ghostty-focused-acti
     raise SystemExit("Claude Code Ghostty focused native action proof must avoid argv text transport and fail closed on timeout mutation")
 if "ghosttyFocusedActionTextScreenCopy" not in app_delegate or 'perform action "write_screen_file:copy,plain" on targetTerminal' not in app_delegate:
     raise SystemExit("Claude Code Ghostty focused native action proof must use Ghostty's native screen-copy verifier before trusting AX misses")
+screen_copy_start = app_delegate.index("private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(")
+screen_copy_end = app_delegate.index("let deadline = Date().addingTimeInterval", screen_copy_start)
+screen_copy_block = app_delegate[screen_copy_start:screen_copy_end]
+if "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER" not in screen_copy_block or "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER" not in screen_copy_block:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must receive proof markers for title-scoped target selection")
+if "repeat with candidateWindow in windows" not in screen_copy_block or "if targetWindow is missing value then return false" not in screen_copy_block:
+    raise SystemExit("Claude Code Ghostty screen-copy verifier must scan for the title-marked proof window before copying")
 if "verificationSource\": \"ghosttyScreenCopy\"" not in app_delegate or "screenChars" not in app_delegate or "compactScreenChars" not in app_delegate:
     raise SystemExit("Claude Code Ghostty screen-copy verifier must record only redacted shape metadata")
 if "clearedChangeCount" not in app_delegate or '"pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount)' not in app_delegate:

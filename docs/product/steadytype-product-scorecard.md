@@ -539,6 +539,19 @@ paste-from-clipboard action, System Events, hardware, and bundled helper rungs,
 before failing closed on the explicit 45s budget at diagnostics lines
 `920618`-`920620`. Ghostty remains unsupported until a detached run exits `0`
 with verified one-word no-submit insertion.
+The next slice made the native screen-copy verifier use the same title-marker
+window scan as the marker-scanned Ghostty action/input rungs instead of relying
+only on `front window`. `20260528T125524Z-ghostty` rebuilt the app, reached a
+prompt-row suggestion at diagnostics line `921180`, consumed Tab, and scheduled
+deferred insertion at lines `922040`-`922042`. Even with marker-scanned window
+selection, `ghosttyFocusedActionTextScreenCopy` still copied a 90-character
+screen with no proof marker, no expected prompt, and no original prompt at
+lines `922067`-`922068`. The app correctly treated that as inconclusive,
+continued through the unchanged-prompt baseline at line `922084`, and then
+failed closed on the explicit 45s budget at lines `922125`-`922127`. The
+remaining Ghostty red bar is no longer just front-window targeting; Ghostty's
+native copied screen can still be detached from the proof prompt even after a
+title-marked target window is selected.
 
 ## Scores
 
