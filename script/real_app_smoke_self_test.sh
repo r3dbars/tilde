@@ -812,6 +812,8 @@ if "ghostty-system-events-proof-window-missing" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty System Events proof must fail closed when no title-marked proof window is found")
 if terminal_insert_block.count("focus targetTerminal") < 5 or terminal_insert_block.count("activate window targetWindow") < 5:
     raise SystemExit("Claude Code Ghostty native insertion fallbacks must re-focus the title-scoped terminal before posting input")
+if terminal_insert_block.count("\n            activate\n") < 5:
+    raise SystemExit("Claude Code Ghostty native insertion fallbacks must mirror the harness by activating Ghostty after terminal focus")
 if '"ghosttyPerformActionText"' not in terminal_insert_block or "perform action" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty proof must use Ghostty's native text action command")
 if "ghosttyPerformActionTextBaseline" not in terminal_insert_block:
