@@ -2948,8 +2948,12 @@ if ! grep -F 'claude_code_terminal_suggestion_cancelled_by_screen_geometry()' sc
 fi
 if ! grep -F 'press_key_code_cgevent()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'press_key_code_cgevent 48' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'steadytype-cgevent-keypress-v5' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'steadytype-cgevent-keypress-v6' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CommandLine.arguments.count <= 4' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'pid:<pid>' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'tapArgument.hasPrefix("pid:")' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyDown.postToPid(targetPid)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'keyUp.postToPid(targetPid)' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'let sourceArgument = CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : "hidSystem"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'sourceState = .hidSystemState' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'sourceState = .combinedSessionState' script/real_app_smoke.sh >/dev/null ||
@@ -2990,7 +2994,9 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'probing CGEvent session key capture with non-mutating Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent session key capture probe produced no diagnostic; retrying with HID Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift.' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'combined-session key capture probe produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with PID-targeted Shift for Ghostty pid' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-}' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key capture probes produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'combined-session key capture probe produced no diagnostic; retrying with System Events Shift.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'claude_code_terminal_key_capture_permission_ui_since()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'wait_for_claude_code_terminal_key_capture_permission_ui_since()' script/real_app_smoke.sh >/dev/null ||
@@ -3003,6 +3009,7 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'Claude Code terminal host is not frontmost for key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for HID key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for combined-session key capture probe.' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'Claude Code terminal host is not frontmost for PID-targeted key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for System Events key capture probe.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for HID CGEvent proof Tab.' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code terminal host is not frontmost for fallback proof Tab.' script/real_app_smoke.sh >/dev/null ||
@@ -3021,12 +3028,18 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent combined-session key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent PID-targeted key capture probe helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="System Events key capture probe timed out"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID Tab helper failed"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MAX_KEY_CAPTURE_MISSES' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'ghostty_key_capture_miss_count=$((ghostty_key_capture_miss_count + 1))' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key capture probe did not reach event tap after ${ghostty_key_capture_miss_count} prompt-row suggestion(s)' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'failing closed before launching another disposable context' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'key\ capture\ probe\ did\ not\ reach\ event\ tap*' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"session"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"hid"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F '"warm"' script/real_app_smoke.sh >/dev/null ||
@@ -3052,7 +3065,8 @@ fi
 if ! awk '
   /probe_claude_code_terminal_host_key_capture\(\)/ { in_func = 1 }
   /^}/ && in_func { in_func = 0 }
-  in_func && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE/ { saw_opt_in_guard = 1 }
+  in_func && /"pid:\$proof_pid"/ { saw_pid_probe = 1 }
+  in_func && saw_pid_probe && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE/ { saw_opt_in_guard = 1 }
   in_func && saw_opt_in_guard && /return 1/ { saw_guard_return = 1 }
   in_func && /settle_claude_code_terminal_proof_focus "System Events key-capture probe"/ {
     if (saw_guard_return) {

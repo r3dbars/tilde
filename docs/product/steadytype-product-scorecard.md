@@ -134,6 +134,16 @@ Live run `20260528T213048Z-ghostty` proved the new default path: it reached a
 prompt-row suggestion, tried session HID, HID-tap, and combined-session CGEvent
 Shift probes, skipped System Events Shift with the default opt-out env, and
 failed cleanly with `key capture probe did not reach event tap`.
+The next source delta adds a PID-targeted CGEvent Shift helper mode against the
+exact frontmost title-marked Ghostty proof process, so the next detached proof
+can rule in or rule out one more permission-safe key source before any System
+Events opt-in.
+Live run `20260528T214421Z-ghostty` ruled it out twice: attempts 1 and 2 reached
+prompt-row suggestions, targeted Ghostty pids `57277` and `91391`, missed the
+event tap, and skipped System Events with the default opt-out env. The run was
+stopped after it continued into extra disposable contexts; the detached wrapper
+now defaults `AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=1` so the next
+key-source proof exits after one clean red sample unless explicitly overridden.
 The current
 insertion pass adds two verified
 hardware-key sources, direct and shell-launched bulk System Events probes, paced
@@ -883,10 +893,17 @@ post-suggestion failure aggregator now also waits briefly and rewrites the final
 reason when permission UI is the real focus thief. The follow-up harness guard
 now makes the System Events Shift key-capture probe opt-in with
 `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1`;
-default Ghostty proof runs stop after the session/HID/combined-session CGEvent
-sentinels miss the event tap, report `key capture probe did not reach event
-tap`, and refresh the disposable prompt instead of triggering macOS permission
-UI by default.
+default Ghostty proof runs stop after the session/HID/combined-session and
+PID-targeted CGEvent sentinels miss the event tap, report `key capture probe did
+not reach event tap`, and refresh the disposable prompt instead of triggering
+macOS permission UI by default.
+The detached Ghostty wrapper now also forwards the foreground smoke path's
+key-capture focus-steal wait plus session/HID/fallback Tab probe windows. That
+keeps future long-running detached proof experiments tunable from one command
+instead of silently using foreground-only defaults. It also defaults
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=1`, after
+`20260528T214421Z-ghostty` showed repeated disposable contexts can spend minutes
+reconfirming the same key-source miss.
 
 Latest daily-driver source delta: `swift test --jobs 1 --filter
 CommonPhraseContinuationPredictorTests` passed on 2026-05-28 after expanding

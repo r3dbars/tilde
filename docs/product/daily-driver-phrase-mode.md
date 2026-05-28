@@ -655,6 +655,16 @@ The next default proof pass kept that lane permission-safe:
 HID-tap, and combined-session CGEvent Shift probes, skipped System Events Shift
 with `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=0`,
 and failed cleanly with `key capture probe did not reach event tap`.
+The next harness slice adds a PID-targeted CGEvent Shift probe against the exact
+frontmost title-marked Ghostty proof process before the System Events opt-in
+path, giving Ghostty one more permission-safe key source to prove or rule out.
+Live run `20260528T214421Z-ghostty` ruled it out twice: attempts 1 and 2 reached
+prompt-row suggestions, targeted Ghostty pids `57277` and `91391`, missed the
+event tap, and skipped System Events with
+`AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=0`. The
+run was stopped after it continued into extra disposable contexts, and the
+detached wrapper now defaults `AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS=1`
+so future key-source proofs stay bounded unless explicitly overridden.
 
 Live detached runs are still non-green, but the failure has moved again. The
 current branch now uses a title-marked Ghostty focus helper before activation
@@ -1071,13 +1081,18 @@ delivery / visible-suggestion retention under the launchd detached lane, not
 prompt AX readiness.
 
 The follow-up key-capture guard keeps that red lane less disruptive. After
-session, HID, and combined-session CGEvent Shift probes miss SteadyType's event
-tap, the harness now skips the System Events Shift probe by default because it
-can trigger macOS permission UI and steal focus from the disposable prompt. The
-System Events key-capture probe is still available behind
+session, HID, combined-session, and PID-targeted CGEvent Shift probes miss
+SteadyType's event tap, the harness now skips the System Events Shift probe by
+default because it can trigger macOS permission UI and steal focus from the
+disposable prompt. The System Events key-capture probe is still available behind
 `AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1`, but
 default Ghostty runs now fail closed and refresh the prompt instead of inviting a
 permission dialog into the proof loop.
+The detached wrapper now forwards the same key-capture focus-steal wait and
+session/HID/fallback Tab timing knobs used by the foreground smoke path, so the
+next Ghostty proof run can tune key-delivery windows without patching the
+runner. It also defaults detached Ghostty to one disposable context, keeping
+current key-source proof runs from spending minutes repeating the same miss.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
