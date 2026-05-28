@@ -45,9 +45,13 @@ require_contains "$TMP_DIR/dry-run.txt" "proof.log"
 require_contains "$TMP_DIR/dry-run.txt" "status.env"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
+AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1 \
+AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.18 \
 AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE=1 \
 AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=2 \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/passthrough-dry-run.txt"
+require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE=1"
+require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS=0.18"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE=1"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=2"
 require_contains "$TMP_DIR/passthrough-dry-run.txt" "script/real_app_smoke.sh claude-code-ghostty --manual-gate"
@@ -120,6 +124,8 @@ require_contains "$SCRIPT_TEXT" 'write_parent_final_status "$run_dir" failed 143
 require_contains "$SCRIPT_TEXT" "Run script/claude_code_ghostty_detached_proof.sh stop to terminate the active proof."
 require_contains "$SCRIPT_TEXT" "export PATH="
 require_contains "$SCRIPT_TEXT" "GHOSTTY_DETACHED_PASSTHROUGH_ENV_KEYS=("
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE"
+require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE"
 require_contains "$SCRIPT_TEXT" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS"
 require_contains "$SCRIPT_TEXT" "write_passthrough_env_exports"
