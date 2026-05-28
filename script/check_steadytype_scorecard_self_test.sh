@@ -68,6 +68,27 @@ do
   fi
 done
 
+STALE_DOGFOOD_MATCH_FAMILY="$TMP_DIR/stale-dogfood-match-family.md"
+python3 - "$SCORECARD" "$STALE_DOGFOOD_MATCH_FAMILY" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = source.replace("match-family counts", "family counts", 1)
+Path(sys.argv[2]).write_text(source, encoding="utf-8")
+PY
+
+if python3 script/check_steadytype_scorecard.py --scorecard "$STALE_DOGFOOD_MATCH_FAMILY" >"$TMP_DIR/stale-dogfood-match-family.txt" 2>&1; then
+  echo "scorecard self-test expected missing dogfood match-family evidence to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Suggestion quality: scorecard must name redacted instant phrase match-family counts" "$TMP_DIR/stale-dogfood-match-family.txt" >/dev/null; then
+  echo "scorecard self-test missing dogfood match-family failure" >&2
+  cat "$TMP_DIR/stale-dogfood-match-family.txt" >&2
+  exit 1
+fi
+
 MANUAL_LIVE="$TMP_DIR/manual-live.txt"
 PROOF_LIVE="$TMP_DIR/proof-live.txt"
 LATENCY_SELECTOR_LIVE="$TMP_DIR/latency-selector-live.txt"

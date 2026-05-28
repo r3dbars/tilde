@@ -32,6 +32,8 @@ REQUIRED_AREAS = [
 
 DAILY_DRIVER_LOCAL_QUALITY_REPORT = "docs/evals/daily-driver-local-quality-audit-2026-05-25.md"
 DAILY_DRIVER_LOCAL_QUALITY_GATE = "./script/check_daily_driver_local_quality_audit_report.sh"
+DAILY_DRIVER_DOGFOOD_GATE = "./script/daily_driver_dogfood_session_self_test.sh"
+DAILY_DRIVER_MATCH_FAMILY_EVIDENCE = "match-family counts"
 
 EVIDENCE_MARKERS = (
     "`./script/",
@@ -793,6 +795,15 @@ def validate_scorecard(
             if "local_quality_audit.py" in next_proof or "local quality audit" in next_proof.lower():
                 failures.append(
                     f"{raw_area}: next proof must move past the checked local audit toward real writing dogfood"
+                )
+            if DAILY_DRIVER_DOGFOOD_GATE not in source:
+                failures.append(
+                    f"{raw_area}: scorecard must name {DAILY_DRIVER_DOGFOOD_GATE} now that dogfood "
+                    "report visibility is a daily-driver gate"
+                )
+            if DAILY_DRIVER_MATCH_FAMILY_EVIDENCE not in source:
+                failures.append(
+                    f"{raw_area}: scorecard must name redacted instant phrase {DAILY_DRIVER_MATCH_FAMILY_EVIDENCE}"
                 )
 
     missing = [area for area in REQUIRED_AREAS if area not in seen]
