@@ -14657,12 +14657,15 @@ run_claude_code_terminal_host_smoke() {
         continue
       fi
       suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
-      settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
-      if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
-        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab refocus" || break
-        continue
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ]] ||
+         [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]; then
+        settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
+        if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
+          retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab refocus" || break
+          continue
+        fi
+        suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
       fi
-      suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
       if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
         SMOKE_PHASE="claude-code $host_name press Tab attempt $attempt"
         if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then

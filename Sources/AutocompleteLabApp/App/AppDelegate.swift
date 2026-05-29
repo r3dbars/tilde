@@ -10364,12 +10364,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             func shouldContinueGhosttyFastInsertion(before source: String) -> Bool {
-                guard !runsExtendedGhosttyInsertionProbes else {
-                    return true
-                }
-
                 let elapsedSeconds = Date().timeIntervalSince(ghosttyFastInsertionStartedAt)
-                guard elapsedSeconds <= ghosttyFastInsertionBudgetSeconds else {
+                if !runsExtendedGhosttyInsertionProbes,
+                   elapsedSeconds > ghosttyFastInsertionBudgetSeconds {
                     DiagnosticsLog.shared.record(
                         "claude-code-terminal-host-proof-insert",
                         metadata: [
@@ -10384,6 +10381,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     return false
                 }
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": source,
+                        "stage": "source-start",
+                        "elapsedMilliseconds": String(Int(elapsedSeconds * 1000)),
+                        "budgetMilliseconds": String(Int(ghosttyFastInsertionBudgetSeconds * 1000)),
+                        "extendedProbes": String(runsExtendedGhosttyInsertionProbes)
+                    ]
+                )
                 return true
             }
 
@@ -15488,22 +15496,127 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         end tell
         """
-        guard let script = NSAppleScript(source: scriptSource) else {
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-send-key-script-create-failed",
+                    "reason": "ghostty-send-key-osascript-missing",
                     "source": source
                 ]
             )
             return (false, true)
         }
 
-        var errorInfo: NSDictionary?
-        let result = script.executeAndReturnError(&errorInfo)
-        if let errorInfo {
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        stopKeyboardEventTapNow(reason: "ghostty-send-key-insertion")
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-send-key-script-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "ghosttySendKeyTimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-send-key-timeout-mutated-input",
+                        "source": "ghosttySendKeyTimeoutBaseline"
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
+                )
+                return (false, false)
+            }
+            return (false, true)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
@@ -15511,14 +15624,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "posted": "false",
                     "reason": "ghostty-send-key-script-failed",
                     "source": source,
-                    "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
-                    "errorMessage": errorInfo["NSAppleScriptErrorMessage"] as? String ?? ""
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
                 ]
             )
             return (false, true)
         }
 
-        guard result.booleanValue else {
+        guard stdoutText != "false" else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
