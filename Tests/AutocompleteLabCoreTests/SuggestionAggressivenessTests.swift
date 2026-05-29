@@ -63,7 +63,7 @@ struct SuggestionAggressivenessTests {
             previousTextBeforeCursor: "I feel ready now",
             currentTextBeforeCursor: "I feel ready now.",
             requestMode: .phraseContinuation
-        ) == .request(delayMilliseconds: 180))
+        ) == .request(delayMilliseconds: 180, lane: .longPauseThought))
     }
 
     @Test("normal starts suggestions sooner without using the most eager thresholds")
@@ -75,6 +75,7 @@ struct SuggestionAggressivenessTests {
         #expect(policy.wordCompletionDelayMilliseconds == 70)
         #expect(policy.wordBoundaryDelayMilliseconds == 160)
         #expect(policy.pauseDelayMilliseconds == 160)
+        #expect(policy.minimumPhrasePauseDelayMilliseconds == 280)
         #expect(policy.sentenceBoundaryDelayMilliseconds == 260)
         #expect(display.threshold(for: .wordCompletion) == 0.55)
         #expect(display.threshold(for: .phraseContinuation) == 1.15)
@@ -89,6 +90,7 @@ struct SuggestionAggressivenessTests {
         #expect(trigger.charactersBeforePauseRequest == 6)
         #expect(trigger.wordCompletionDelayMilliseconds == 140)
         #expect(trigger.wordBoundaryDelayMilliseconds == 240)
+        #expect(trigger.minimumPhrasePauseDelayMilliseconds == 360)
         #expect(trigger.sentenceBoundaryDelayMilliseconds == 450)
         #expect(display.threshold(for: .wordCompletion) == 0.75)
         #expect(display.threshold(for: .phraseContinuation) == 1.40)
@@ -104,6 +106,7 @@ struct SuggestionAggressivenessTests {
         #expect(trigger.wordCompletionDelayMilliseconds == 40)
         #expect(trigger.wordBoundaryDelayMilliseconds == 140)
         #expect(trigger.pauseDelayMilliseconds == 140)
+        #expect(trigger.minimumPhrasePauseDelayMilliseconds == 260)
         #expect(trigger.sentenceBoundaryDelayMilliseconds == 200)
         #expect(trigger.minimumWordCompletionCharacters == 2)
         #expect(trigger.allowsPlainLineStartWordCompletion)
@@ -129,6 +132,7 @@ struct SuggestionAggressivenessTests {
         let veryProactiveTrigger = veryProactive.triggerPolicy(supportPace: .eager)
         #expect(veryProactiveTrigger.wordCompletionDelayMilliseconds == 20)
         #expect(veryProactiveTrigger.wordBoundaryDelayMilliseconds == 80)
+        #expect(veryProactiveTrigger.minimumPhrasePauseDelayMilliseconds == 80)
         #expect(veryProactiveTrigger.sentenceBoundaryDelayMilliseconds == 180)
         #expect(veryProactiveTrigger.minimumWordCompletionCharacters == 2)
         #expect(veryProactiveTrigger.minimumPhraseContinuationWords == 2)
@@ -137,6 +141,7 @@ struct SuggestionAggressivenessTests {
 
         let maxTrigger = max.triggerPolicy(supportPace: .eager)
         #expect(maxTrigger.wordBoundaryDelayMilliseconds == 80)
+        #expect(maxTrigger.minimumPhrasePauseDelayMilliseconds == 80)
         #expect(maxTrigger.softPunctuationDelayMilliseconds == 120)
         #expect(maxTrigger.sentenceBoundaryDelayMilliseconds == 180)
         #expect(maxTrigger.pauseDelayMilliseconds == 80)
@@ -208,7 +213,7 @@ struct SuggestionAggressivenessTests {
             currentTextBeforeCursor: "Tasks\n- TODO:",
             lineStartBehavior: .listItem,
             requestMode: .phraseContinuation
-        ) == .request(delayMilliseconds: 180))
+        ) == .request(delayMilliseconds: 180, lane: .longPauseThought))
         #expect(obsidianTrigger.decision(
             previousTextBeforeCursor: "Project note\nContext",
             currentTextBeforeCursor: "Project note\nContext:",

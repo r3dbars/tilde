@@ -2762,10 +2762,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let delayMilliseconds: Int
+        let timingLane: SuggestionTimingLane
         if isManualSuggestionRequest {
             delayMilliseconds = 0
-        } else if case let .request(policyDelayMilliseconds) = triggerDecision {
+            if case let .request(_, policyTimingLane) = triggerDecision {
+                timingLane = policyTimingLane
+            } else {
+                timingLane = switch requestMode {
+                case .wordCompletion:
+                    .instantWord
+                case .sentenceContinuation:
+                    .longPauseThought
+                case .phraseContinuation:
+                    .pausePhrase
+                }
+            }
+        } else if case let .request(policyDelayMilliseconds, policyTimingLane) = triggerDecision {
             delayMilliseconds = policyDelayMilliseconds
+            timingLane = policyTimingLane
         } else {
             if suggestionSession.hasVisibleSuggestion {
                 setSuggestionDecision("Shown: waiting for cadence")
@@ -2788,7 +2802,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        setSuggestionDecision(isManualSuggestionRequest ? "Queued: asked once" : "Queued: \(requestMode.rawValue)")
+        setSuggestionDecision(
+            isManualSuggestionRequest
+                ? "Queued: asked once \(timingLane.rawValue)"
+                : "Queued: \(requestMode.rawValue) \(timingLane.rawValue)"
+        )
         showFieldStatusIndicator(.thinking, context: context)
         scheduleSuggestion(
             context: context,
@@ -2798,6 +2816,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: suggestionFieldClassification,
             renderMode: renderMode,
             delayMilliseconds: delayMilliseconds,
+            timingLane: timingLane,
             requestMode: requestMode,
             typingBurstDecision: typingBurstDecision,
             visiblePageContext: cachedVisiblePageContext(
@@ -6863,6 +6882,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fieldClassification: AXFieldClassification,
         renderMode: SuggestionRenderMode,
         delayMilliseconds: Int,
+        timingLane: SuggestionTimingLane,
         requestMode: CompletionRequestMode,
         typingBurstDecision: TypingBurstDecision = .idle,
         visiblePageContext: VisiblePageContext?,
@@ -6895,6 +6915,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let suggestionID = orchestration.suggestionID
         let fieldIdentityDescription = orchestration.fieldIdentityDescription
         let requestMetadata = orchestration.requestMetadata
+            .merging(timingLane.traceMetadata) { current, _ in current }
         suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
@@ -6992,6 +7013,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 allowPredictiveFallback: allowPredictiveFallback
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
+                .merging(timingLane.traceMetadata) { current, _ in current }
             if let fastSuggestion = fastSelection.suggestion {
                 guard !suggestionRepetitionSuppressor.shouldSuppress(
                     fastSuggestion.visibleText,
@@ -7056,6 +7078,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     candidateSelectionMetadata: fastSelectionMetadata,
                     refreshBeforePresenting: false
                 )
+                return
+            }
+
+            if timingLane == .instantWord {
+                let reason = "instant-word-no-local-candidate"
+                RawAutocompleteTraceLog.shared.record(
+                    type: .suggestionSuppressed,
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentityDescription,
+                    requestMode: request.mode.rawValue,
+                    triggerReason: "fast-word-completion",
+                    textBeforeCursor: request.textBeforeCursor,
+                    textAfterCursor: request.textAfterCursor,
+                    reason: reason,
+                    metadata: [
+                        "renderMode": renderMode.rawValue
+                    ]
+                    .merging(timingLane.traceMetadata) { current, _ in current }
+                    .merging(fastSelectionMetadata) { current, _ in current }
+                    .merging(requestMetadata) { current, _ in current }
+                )
+                if suggestionSession.hasVisibleSuggestion {
+                    setSuggestionDecision("Shown: no instant word replacement")
+                    repositionVisibleSuggestion(context: context, profile: profile)
+                    return
+                }
+
+                setSuggestionDecision("Waiting: no instant word match")
+                hideSuggestion()
                 return
             }
 
@@ -7158,6 +7210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
+                .merging(timingLane.traceMetadata) { current, _ in current }
             if let fastSuggestion = fastSelection.suggestion {
                 guard !suggestionRepetitionSuppressor.shouldSuppress(
                     fastSuggestion.visibleText,

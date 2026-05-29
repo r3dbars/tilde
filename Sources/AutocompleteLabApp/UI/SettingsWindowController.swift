@@ -160,6 +160,34 @@ struct SettingsCurrentAppState: Equatable {
         return "\(supportStatus.userFacingReason) Suggestions are paused in this app. Resume only where you want suggestions."
     }
 
+    var supportMatrixText: String {
+        guard bundleIdentifier != nil else {
+            return "Support: choose a writing app to see its lane."
+        }
+
+        switch supportStatus {
+        case let .supported(profile):
+            if profile.isSensitive || !profile.canPresentSuggestions || profile.supportLevel == .diagnosticsOnly {
+                return "Support: diagnostics only. Inline suggestions stay off; use check and copy flows only."
+            }
+
+            switch profile.supportLevel {
+            case .green:
+                return "Support: green target. Inline suggestions and one-word Tab are proven here."
+            case .yellow:
+                return "Support: yellow target. Suggestions are available, but checks and fallback matter."
+            case .diagnosticsOnly:
+                return "Support: diagnostics only. Inline suggestions stay off; use check and copy flows only."
+            case .unsupported:
+                return "Support: unsupported. Select text for Command Context copy fallback."
+            }
+        case .denylisted:
+            return "Support: blocked. SteadyType stays out of this app."
+        case .unsupported:
+            return "Support: unsupported. Select text for Command Context copy fallback."
+        }
+    }
+
     var modeText: String {
         guard bundleIdentifier != nil else {
             return "Mode: choose a writing app"
@@ -439,6 +467,10 @@ struct SettingsFirstRunTrustState: Equatable {
 
     var detailText: String {
         "Suggestions appear near the cursor. Tab accepts one word + space. Tab again accepts the next word. Esc dismisses. Pause Suggestions stops suggestions everywhere; Pause in Current App stops only that app."
+    }
+
+    var quickStartText: String {
+        "60-second path: Allow Accessibility, confirm Local Model is ready, Start TextEdit Practice, press Tab once, press Esc once, then Delete Local Logs."
     }
 
     var appsText: String {
@@ -817,6 +849,10 @@ struct SettingsSuggestionAggressivenessState: Equatable {
         tuning.detailText
     }
 
+    var boringGuardrailText: String {
+        "Guardrail: short, boring next words first. Raise sliders only after accepted-and-kept data supports it."
+    }
+
     var maxWordsText: String {
         "Words shown: \(tuning.maxVisibleWords)"
     }
@@ -942,6 +978,103 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 }
 
+struct SettingsSuggestionDecisionState: Equatable {
+    let rawDecision: String
+
+    init(_ rawDecision: String) {
+        self.rawDecision = rawDecision.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var statusText: String {
+        switch normalizedPrefix {
+        case "blocked":
+            return "Suggestion status: quiet"
+        case "waiting":
+            return "Suggestion status: waiting"
+        case "queued", "running":
+            return "Suggestion status: thinking locally"
+        case "shown", "kept current suggestion":
+            return "Suggestion status: visible"
+        case "accepted":
+            return "Suggestion status: accepted"
+        case "hidden":
+            return "Suggestion status: hidden"
+        case "paused":
+            return "Suggestion status: paused"
+        case "ready", "starting":
+            return "Suggestion status: ready"
+        default:
+            guard !displayPrefix.isEmpty else {
+                return "Suggestion status: ready"
+            }
+
+            return "Suggestion status: \(displayPrefix)"
+        }
+    }
+
+    var detailText: String {
+        switch normalizedPrefix {
+        case "blocked":
+            let reason = reasonText ?? "a safety or timing check paused suggestions"
+            return "Why quiet: \(reason). Keep typing, or use Command Context for copy-only fallback."
+        case "waiting":
+            let reason = reasonText ?? "the app needs a moment to settle"
+            return "Waiting: \(reason). This prevents jumpy suggestions."
+        case "queued", "running":
+            return "Thinking locally. Text stays on this Mac."
+        case "shown", "kept current suggestion":
+            return "Visible near the cursor. Tab accepts one word; Esc dismisses."
+        case "accepted":
+            return "Accepted. SteadyType will recompute after the field settles."
+        case "hidden":
+            return "Hidden. Keep typing to restart suggestions."
+        case "paused":
+            return "Paused. Resume suggestions when you want them again."
+        case "ready", "starting":
+            return "Ready when you type in a supported writing field."
+        default:
+            return "Latest local decision: \(rawDecision.isEmpty ? "ready" : rawDecision)"
+        }
+    }
+
+    private var displayPrefix: String {
+        guard let separatorIndex = rawDecision.firstIndex(of: ":") else {
+            return rawDecision
+        }
+
+        return String(rawDecision[..<separatorIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedPrefix: String {
+        let prefix = displayPrefix.lowercased()
+        if prefix.isEmpty {
+            return "ready"
+        }
+
+        if prefix.hasPrefix("kept current suggestion") {
+            return "kept current suggestion"
+        }
+
+        for knownPrefix in ["blocked", "waiting", "queued", "running", "shown", "accepted", "hidden", "paused", "ready", "starting"] {
+            if prefix == knownPrefix || prefix.hasPrefix("\(knownPrefix) ") {
+                return knownPrefix
+            }
+        }
+
+        return prefix
+    }
+
+    private var reasonText: String? {
+        guard let separatorIndex = rawDecision.firstIndex(of: ":") else {
+            return nil
+        }
+
+        let nextIndex = rawDecision.index(after: separatorIndex)
+        let reason = rawDecision[nextIndex...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty ? nil : reason
+    }
+}
+
 struct SettingsOnboardingState: Equatable {
     let isTrusted: Bool
     let suggestionsPaused: Bool
@@ -1011,6 +1144,7 @@ final class SettingsWindowController: NSObject {
     private let scrollDocumentView = FlippedSettingsDocumentView()
     private let firstRunTrustLabel = NSTextField(labelWithString: "")
     private let firstRunTrustDetailLabel = NSTextField(labelWithString: "")
+    private let firstRunTrustQuickStartLabel = NSTextField(labelWithString: "")
     private let firstRunTrustAppsLabel = NSTextField(labelWithString: "")
     private let permissionLabel = NSTextField(labelWithString: "")
     private let permissionDetailLabel = NSTextField(labelWithString: "")
@@ -1045,6 +1179,7 @@ final class SettingsWindowController: NSObject {
     private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
     private let currentAppLabel = NSTextField(labelWithString: "")
     private let currentAppDetailLabel = NSTextField(labelWithString: "")
+    private let currentAppSupportLabel = NSTextField(labelWithString: "")
     private let currentAppModeLabel = NSTextField(labelWithString: "")
     private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
     private let currentAppFallbackLabel = NSTextField(labelWithString: "")
@@ -1052,6 +1187,7 @@ final class SettingsWindowController: NSObject {
     private let currentAppProofCommandLabel = NSTextField(labelWithString: "")
     private let disabledAppsLabel = NSTextField(labelWithString: "")
     private let suggestionDecisionLabel = NSTextField(labelWithString: "")
+    private let suggestionDecisionDetailLabel = NSTextField(labelWithString: "")
     private let toggleCurrentAppButton = NSButton(
         checkboxWithTitle: "Suggestions in this app",
         target: nil,
@@ -1114,6 +1250,7 @@ final class SettingsWindowController: NSObject {
     private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
     private let aggressivenessLabel = NSTextField(labelWithString: "")
     private let aggressivenessDetailLabel = NSTextField(labelWithString: "")
+    private let boringGuardrailLabel = NSTextField(labelWithString: "")
     private let aggressivenessSlider = NSSlider()
     private let maxWordsLabel = NSTextField(labelWithString: "")
     private let maxWordsDetailLabel = NSTextField(labelWithString: "")
@@ -1362,6 +1499,7 @@ final class SettingsWindowController: NSObject {
         )
         firstRunTrustLabel.stringValue = firstRunTrust.statusText
         firstRunTrustDetailLabel.stringValue = firstRunTrust.detailText
+        firstRunTrustQuickStartLabel.stringValue = firstRunTrust.quickStartText
         firstRunTrustAppsLabel.stringValue = firstRunTrust.appsText
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
@@ -1372,7 +1510,9 @@ final class SettingsWindowController: NSObject {
         trustWhyLabel.stringValue = trust.whyText
         controlLabel.stringValue = pauseControl.settingsSummaryText
         controlDetailLabel.stringValue = pauseControl.settingsDetailText
-        suggestionDecisionLabel.stringValue = SuggestionDecisionPresentation(lastSuggestionDecision).settingsText
+        let suggestionDecision = SettingsSuggestionDecisionState(lastSuggestionDecision)
+        suggestionDecisionLabel.stringValue = suggestionDecision.statusText
+        suggestionDecisionDetailLabel.stringValue = suggestionDecision.detailText
         togglePauseButton.state = suggestionsPaused ? .off : .on
         togglePauseButton.title = pauseControl.toggleTitle
         pause15MinutesButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
@@ -1415,6 +1555,7 @@ final class SettingsWindowController: NSObject {
         practiceDeleteTracesButton.title = practice.deleteTracesButtonTitle
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
+        currentAppSupportLabel.stringValue = currentApp.supportMatrixText
         currentAppModeLabel.stringValue = currentApp.modeText
         currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
         currentAppFallbackLabel.stringValue = currentApp.fallbackText
@@ -1469,6 +1610,7 @@ final class SettingsWindowController: NSObject {
         cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
         aggressivenessLabel.stringValue = suggestionAggressiveness.statusText
         aggressivenessDetailLabel.stringValue = suggestionAggressiveness.detailText
+        boringGuardrailLabel.stringValue = suggestionAggressiveness.boringGuardrailText
         aggressivenessSlider.doubleValue = suggestionAggressiveness.aggressivenessSliderValue
         maxWordsLabel.stringValue = suggestionAggressiveness.maxWordsText
         maxWordsDetailLabel.stringValue = suggestionAggressiveness.maxWordsDetailText
@@ -1542,6 +1684,7 @@ final class SettingsWindowController: NSObject {
         title.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         firstRunTrustLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(firstRunTrustDetailLabel)
+        configureSecondaryLabel(firstRunTrustQuickStartLabel)
         configureSecondaryLabel(firstRunTrustAppsLabel)
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(permissionDetailLabel)
@@ -1574,6 +1717,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(firstRunLabel)
         currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(currentAppDetailLabel)
+        configureSecondaryLabel(currentAppSupportLabel)
         configureSecondaryLabel(currentAppModeLabel)
         configureSecondaryLabel(currentAppAcceptanceLabel)
         configureSecondaryLabel(currentAppFallbackLabel)
@@ -1581,6 +1725,7 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(currentAppProofCommandLabel)
         configureSecondaryLabel(disabledAppsLabel)
         configureSecondaryLabel(suggestionDecisionLabel)
+        configureSecondaryLabel(suggestionDecisionDetailLabel)
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(controlDetailLabel)
         configureSecondaryLabel(diagnosticsStatusLabel)
@@ -1608,6 +1753,7 @@ final class SettingsWindowController: NSObject {
         acceptAllShortcutLabel.textColor = .secondaryLabelColor
         aggressivenessLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(aggressivenessDetailLabel)
+        configureSecondaryLabel(boringGuardrailLabel)
         maxWordsLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(maxWordsDetailLabel)
         wordStartLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -1769,6 +1915,7 @@ final class SettingsWindowController: NSObject {
                 views: [
                     firstRunTrustLabel,
                     firstRunTrustDetailLabel,
+                    firstRunTrustQuickStartLabel,
                     firstRunTrustAppsLabel
                 ]
             ),
@@ -1824,6 +1971,7 @@ final class SettingsWindowController: NSObject {
                     fieldControlDetailLabel,
                     makeButtonRow([silenceFieldButton]),
                     suggestionDecisionLabel,
+                    suggestionDecisionDetailLabel,
                     firstRunLabel
                 ]
             ),
@@ -1832,6 +1980,7 @@ final class SettingsWindowController: NSObject {
                 views: [
                     currentAppLabel,
                     currentAppDetailLabel,
+                    currentAppSupportLabel,
                     currentAppModeLabel,
                     currentAppAcceptanceLabel,
                     currentAppFallbackLabel,
@@ -1883,6 +2032,7 @@ final class SettingsWindowController: NSObject {
                 views: [
                     aggressivenessLabel,
                     aggressivenessDetailLabel,
+                    boringGuardrailLabel,
                     aggressivenessSlider,
                     maxWordsLabel,
                     maxWordsDetailLabel,

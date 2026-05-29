@@ -346,6 +346,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 closingPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 140),
                 sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 240),
                 pauseDelayMilliseconds: min(responseSpeedDelays.pause, 100),
+                minimumPhrasePauseDelayMilliseconds: min(responseSpeedDelays.pause, 240),
                 minimumWordCompletionCharacters: wordStartCharacters,
                 minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
@@ -363,6 +364,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 closingPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 120),
                 sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 200),
                 pauseDelayMilliseconds: min(responseSpeedDelays.pause, 80),
+                minimumPhrasePauseDelayMilliseconds: min(responseSpeedDelays.pause, 220),
                 minimumWordCompletionCharacters: wordStartCharacters,
                 minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
@@ -490,6 +492,7 @@ public struct SuggestionTuning: Equatable, Sendable {
             closingPunctuationDelayMilliseconds: responseSpeedDelays.punctuation,
             sentenceBoundaryDelayMilliseconds: responseSpeedDelays.sentenceBoundary,
             pauseDelayMilliseconds: responseSpeedDelays.pause,
+            minimumPhrasePauseDelayMilliseconds: responseSpeedDelays.pause,
             minimumWordCompletionCharacters: wordStartCharacters,
             minimumPhraseContinuationWords: phraseStartWords,
             allowsPlainLineStartWordCompletion: true,
@@ -503,19 +506,20 @@ public struct SuggestionTuning: Equatable, Sendable {
         wordBoundary: Int,
         punctuation: Int,
         sentenceBoundary: Int,
-        pause: Int
+        pause: Int,
+        phrasePauseFloor: Int
     ) {
         switch responseSpeedLevel {
         case 1:
-            (120, 220, 220, 380, 220)
+            (120, 220, 220, 380, 220, 420)
         case 2:
-            (80, 180, 200, 300, 180)
+            (80, 180, 200, 300, 180, 340)
         case 4:
-            (20, 100, 140, 200, 100)
+            (20, 100, 140, 200, 100, 240)
         case 5:
-            (20, 80, 120, 180, 80)
+            (20, 80, 120, 180, 80, 220)
         default:
-            (40, 140, 180, 240, 140)
+            (40, 140, 180, 240, 140, 280)
         }
     }
 }
