@@ -12031,6 +12031,13 @@ press_claude_code_terminal_host_tab() {
   local probe_start_line
   CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"
 
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "proof-only-driver-enabled" ||
+      return 1
+    return 0
+  fi
+
   settle_claude_code_terminal_proof_focus "host Tab hot accept" || return 1
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
@@ -12046,12 +12053,6 @@ tell application "System Events"
   end if
 end tell
 APPLESCRIPT
-  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
-    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]; then
-    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "proof-only-driver-enabled" ||
-      return 1
-    return 0
-  fi
   if ! probe_claude_code_terminal_host_key_capture "$host_name"; then
     try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "key-capture-probe-miss" ||
       return 1
@@ -12259,7 +12260,9 @@ try_steadytype_proof_only_accept_next_word_driver() {
     echo "Claude Code $host_name suggestion hid before proof-only accept command; refreshing the disposable prompt." >&2
     return 1
   fi
-  settle_claude_code_terminal_proof_focus "proof-only accept command" || return 1
+  settle_claude_code_terminal_proof_focus \
+    "proof-only accept command" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_FOCUS_SECONDS:-1}" || return 1
 
   app_binary="$(steadytype_app_binary)"
   if [[ ! -x "$app_binary" ]]; then

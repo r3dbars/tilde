@@ -3031,6 +3031,7 @@ fi
 if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'try_steadytype_proof_only_accept_next_word_driver()' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_FOCUS_SECONDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'proof-only-accept-command-result' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'Claude Code $host_name proof using SteadyType proof-only accept command after $reason.' script/real_app_smoke.sh >/dev/null ||
@@ -3109,8 +3110,11 @@ if ! grep -F 'press_claude_code_terminal_host_tab()' script/real_app_smoke.sh >/
    ! grep -F '"decision=passthrough-modifier"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'local timeout="${2:-}"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'settle_claude_code_terminal_proof_focus "session key-capture probe" "$focus_seconds"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'settle_claude_code_terminal_proof_focus \' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_FOCUS_SECONDS:-1}" || return 1' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid before fallback Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'suggestion hid after CGEvent HID Tab; refreshing the disposable prompt' script/real_app_smoke.sh >/dev/null ||
+   ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "proof-only-driver-enabled"/ { saw_driver_call = 1 } in_fn && /settle_claude_code_terminal_proof_focus "host Tab hot accept"/ { if (!saw_driver_call) exit 1; found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER/ { saw_driver_guard = 1 } in_fn && saw_driver_guard && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "proof-only-driver-enabled"/ { saw_driver_call = 1 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1; if (saw_driver_call) found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /if ! probe_claude_code_terminal_host_key_capture "\$host_name"/ { saw_probe_guard = 1 } in_fn && saw_probe_guard && /try_steadytype_proof_only_accept_next_word_driver "\$suggestion_line" "\$host_name" "key-capture-probe-miss"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
    ! awk '/press_claude_code_terminal_host_tab\(\)/ { in_fn = 1 } /^}/ && in_fn { in_fn = 0 } in_fn && /press_key_code_cgevent_with_timeout/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||

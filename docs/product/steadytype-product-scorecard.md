@@ -123,6 +123,15 @@ proof-only command arrived, and SteadyType refused it with
 `hasVisibleSuggestion=false`. The detached wrapper now defaults that comparator
 off when the proof-only accept driver is enabled, while preserving explicit
 opt-in overrides for transport comparison runs.
+The current source pass adds a narrow recent-suggestion restore for that
+proof-only race: the app can revive the latest visible Claude Code/Ghostty
+suggestion for `--proof-only-accept-next-word` only when proof-only mode, virtual
+Claude Code bundle/profile, proof field classification, unchanged focused text,
+no user-key invalidation, and the short cache age all pass. The live rerun
+`20260528T235902Z-ghostty` did not need the restore because the command arrived
+while `hasVisibleSuggestion=true`, but it did handle accept at diagnostics lines
+`1089860`-`1089876` and then failed later while waiting for verified app-owned
+Ghostty insertion/result reporting. Ghostty remains red.
 The post-commit one-attempt launchd proof `20260528T202618Z-ghostty` exited
 cleanly with status `1` and confirmed the new accept-driver diagnosis: prompt
 screen-copy readiness, exact typed prompt readiness, and native pre-accept
@@ -1081,22 +1090,19 @@ guards the diagnostic and renderer-accessibility guidance, so Obsidian
 AX misses are actionable without leaking note text.
 
 Latest Ghostty proof-only source delta:
-`20260528T234152Z-ghostty` reached a prompt-row 5-word suggestion at diagnostics
-line `1086203`, handled the app-owned proof-only next-word accept at
-`1087077`-`1087093`, and then failed closed instead of hanging. The app now
-wraps Ghostty PID focus reassertion in a timeout-bounded `osascript` process;
-the live run records `ghostty-frontmost-pid-reassertion-timeout`, generic
-`insert ... success=false`, and deferred `stage=insert-failed` at
-`1087138`-`1087143`. This does not raise Ghostty support, but it moves the red
-bar from ambiguous timeout to verified app-owned insertion focus failure after a
-handled accept. The proof-only runner now skips pre-accept, post-Tab, and
-post-fail external comparator probes by default unless their explicit opt-ins
-are set.
-The immediate follow-up proof, `20260528T234656Z-ghostty`, did not reach that
-insertion path: it found a prompt-row suggestion, but the proof-only command was
-refused at line `1088565` because `hasVisibleSuggestion=false`. Keep Ghostty red
-until the accept-command timing race is solved and the activation-backed target
-verification path is exercised live.
+The app now keeps a short-lived proof-only recent-suggestion cache for the
+Claude Code/Ghostty virtual profile and restores it for
+`--proof-only-accept-next-word` only when the proof mode, bundle/profile,
+field-classification, unchanged focused-text snapshot, no user-key invalidation,
+non-empty next-word accept text, and age gates all pass. Focused tests cover the
+allow/block matrix and env-clamped grace window. The live rerun
+`20260528T235902Z-ghostty` reached a prompt-row suggestion at diagnostics line
+`1089041`, handled the proof-only accept command while the suggestion was still
+visible at `1089860`-`1089876`, and scheduled deferred insertion. It still exited
+red because app-owned Ghostty insertion never produced a verified result after
+the focus/click and System Events transport attempts timed out. Keep Ghostty red:
+the next proof must show verified insertion/result reporting after handled
+accept, and the recent-suggestion restore path still needs live race evidence.
 
 Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
 textedit`, `notes-title`, `chrome-textarea`, `chrome-contenteditable`, and

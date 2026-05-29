@@ -1219,6 +1219,23 @@ suggestion but did not reach insertion: the proof-only command arrived after the
 visible suggestion had already cleared, and the app refused it with
 `hasVisibleSuggestion=false` at diagnostics line `1088565`. That makes the next
 Ghostty red bar the proof-only accept timing race, not another insertion result.
+The source follow-up keeps that race bounded to the proof-only lane instead of
+loosening normal app behavior. SteadyType now caches the latest visible
+proof-only Claude Code/Ghostty suggestion and can restore it for an accept
+command only when proof-only mode is enabled, the current profile and cached
+suggestion both match the virtual Claude Code bundle, the proof field
+classification still matches, the text snapshot has not changed, no user keydown
+invalidated the suggestion, and the cache age is inside the short recent window.
+`swift test --filter ProofOnlyAcceptCommandTests` covers the allow/block cases.
+The live rerun, `20260528T235902Z-ghostty`, reached a prompt-row suggestion at
+diagnostics line `1089041` and received the proof-only command while the
+suggestion was still visible at line `1089860`, so it did not exercise the
+restore path. It did prove the current app handled accept and scheduled deferred
+insertion at lines `1089860`-`1089876`, then failed waiting for an app-owned
+insertion result after the Ghostty insertion transports timed out. Ghostty stays
+red; the next red bar is verified insertion/result reporting after a handled
+accept, with the recent-suggestion restore path source/test covered but still
+needing live race evidence.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh
