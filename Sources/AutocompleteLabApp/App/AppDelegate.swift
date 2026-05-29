@@ -280,6 +280,26 @@ private extension ProcessInfo.ThermalState {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private struct ProofOnlyAcceptRecentSuggestion {
+        let suggestion: CompletionSuggestion
+        let suggestionID: String
+        let appBundleIdentifier: String
+        let fieldIdentity: FocusedFieldIdentity
+        let requestMode: CompletionRequestMode
+        let textBeforeCursor: String
+        let acceptanceSnapshot: SuggestionAcceptanceSnapshot
+        let displayedText: String
+        let fieldClassification: AXFieldClassification?
+        let presentedAt: Date
+        let displayScoreFinal: Double?
+        let caretRect: CGRect?
+        let textLineRect: CGRect?
+        let clippingRect: CGRect?
+        let textStyle: FocusedTextStyle?
+        let renderMode: SuggestionRenderMode?
+        let geometrySnapshot: SuggestionGeometrySnapshot?
+    }
+
     private let accessibilityClient = AccessibilityClient()
     private let startupOnboardingPolicy = StartupOnboardingPolicy()
     private let appSettings = AppSettings()
@@ -324,6 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
+    private let proofOnlyAcceptRecentSuggestionPolicy = ProofOnlyAcceptRecentSuggestionPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
     private let obsidianTabPassthroughRepairPolicy = ObsidianTabPassthroughRepairPolicy()
@@ -546,6 +567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
     private var preservesResidualSuggestionAfterNextWordAccept = false
     private var obsidianPostAcceptanceSuppression: ObsidianPostAcceptanceSuppression?
     private var recentWordMemory = ScopedRecentWordMemory()
@@ -798,6 +820,140 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         proofOnlyAcceptCommandObserver = nil
     }
 
+    @discardableResult
+    private func restoreProofOnlyAcceptRecentSuggestionIfNeeded() -> Bool {
+        guard !suggestionSession.hasVisibleSuggestion else {
+            return false
+        }
+
+        guard let recentSuggestion = proofOnlyAcceptRecentSuggestion else {
+            return false
+        }
+
+        let ageMilliseconds = max(
+            0,
+            Int(Date().timeIntervalSince(recentSuggestion.presentedAt) * 1000)
+        )
+        let lastSnapshotMatchesShownText = proofOnlyAcceptRecentSuggestionStillMatchesShownText(
+            recentSuggestion
+        )
+        let decision = proofOnlyAcceptRecentSuggestionPolicy.decision(
+            for: ProofOnlyAcceptRecentSuggestionPolicy.RestoreInput(
+                proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                    ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                ),
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                suggestionBundleIdentifier: recentSuggestion.appBundleIdentifier,
+                currentProfileBundleIdentifier: currentProfile?.bundleIdentifier,
+                fieldClassification: recentSuggestion.fieldClassification,
+                ageMilliseconds: ageMilliseconds,
+                invalidatedByUserKeyDown: currentSuggestionInvalidatedByUserKeyDown,
+                suggestionText: recentSuggestion.suggestion.text,
+                lastSnapshotMatchesShownText: lastSnapshotMatchesShownText
+            )
+        )
+
+        switch decision {
+        case .allow:
+            break
+        case let .block(reason):
+            DiagnosticsLog.shared.record(
+                "proof-only-accept-command-restore-skipped",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "reason": reason.rawValue,
+                    "ageMilliseconds": String(ageMilliseconds),
+                    "lastSnapshotMatchesShownText": String(lastSnapshotMatchesShownText),
+                    "currentProfile": currentProfile?.bundleIdentifier ?? "unknown"
+                ]
+            )
+            return false
+        }
+
+        suggestionSession.present(recentSuggestion.suggestion)
+        currentSuggestionID = recentSuggestion.suggestionID
+        currentSuggestionAppBundleIdentifier = recentSuggestion.appBundleIdentifier
+        currentSuggestionFieldIdentity = recentSuggestion.fieldIdentity
+        currentSuggestionRequestMode = recentSuggestion.requestMode
+        currentSuggestionTextBeforeCursor = recentSuggestion.textBeforeCursor
+        currentSuggestionAcceptanceSnapshot = recentSuggestion.acceptanceSnapshot
+        currentSuggestionDisplayedText = recentSuggestion.displayedText
+        currentSuggestionFieldClassification = recentSuggestion.fieldClassification
+        currentSuggestionPresentedAt = recentSuggestion.presentedAt
+        currentSuggestionDisplayScoreFinal = recentSuggestion.displayScoreFinal
+        currentSuggestionInvalidatedByUserKeyDown = false
+        lastCaretRect = recentSuggestion.caretRect
+        lastTextLineRect = recentSuggestion.textLineRect
+        lastClippingRect = recentSuggestion.clippingRect
+        lastTextStyle = recentSuggestion.textStyle
+        lastRenderMode = recentSuggestion.renderMode
+        lastVisibleSuggestionGeometrySnapshot = recentSuggestion.geometrySnapshot
+        cancelKeyboardEventTapIdleStop()
+        updateKeyboardEventTapSnapshot()
+
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-restored-visible-suggestion",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "ageMilliseconds": String(ageMilliseconds),
+                "requestMode": recentSuggestion.requestMode.rawValue,
+                "visibleChars": String(recentSuggestion.displayedText.count)
+            ]
+        )
+        return true
+    }
+
+    private func proofOnlyAcceptRecentSuggestionStillMatchesShownText(
+        _ recentSuggestion: ProofOnlyAcceptRecentSuggestion
+    ) -> Bool {
+        guard let lastTextSnapshot else {
+            return false
+        }
+
+        return lastTextSnapshot.fieldIdentity == recentSuggestion.acceptanceSnapshot.fieldIdentity
+            && lastTextSnapshot.textBeforeCursor == recentSuggestion.acceptanceSnapshot.textBeforeCursor
+            && lastTextSnapshot.textAfterCursor == recentSuggestion.acceptanceSnapshot.textAfterCursor
+    }
+
+    private func cacheProofOnlyAcceptRecentSuggestionIfNeeded(
+        suggestion: CompletionSuggestion,
+        suggestionID: String,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode,
+        textBeforeCursor: String,
+        acceptanceSnapshot: SuggestionAcceptanceSnapshot,
+        displayedText: String,
+        fieldClassification: AXFieldClassification?,
+        presentedAt: Date,
+        displayScoreFinal: Double?
+    ) {
+        guard appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier else {
+            proofOnlyAcceptRecentSuggestion = nil
+            return
+        }
+
+        proofOnlyAcceptRecentSuggestion = ProofOnlyAcceptRecentSuggestion(
+            suggestion: suggestion,
+            suggestionID: suggestionID,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode,
+            textBeforeCursor: textBeforeCursor,
+            acceptanceSnapshot: acceptanceSnapshot,
+            displayedText: displayedText,
+            fieldClassification: fieldClassification,
+            presentedAt: presentedAt,
+            displayScoreFinal: displayScoreFinal,
+            caretRect: lastCaretRect,
+            textLineRect: lastTextLineRect,
+            clippingRect: lastClippingRect,
+            textStyle: lastTextStyle,
+            renderMode: lastRenderMode,
+            geometrySnapshot: lastVisibleSuggestionGeometrySnapshot
+        )
+    }
+
     private func handleProofOnlyAcceptNextWordCommand() {
         guard ProofOnlyAcceptCommand.isEnabled() else {
             DiagnosticsLog.shared.record(
@@ -809,7 +965,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard activeAppProofBundleIdentifiers.contains(ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier),
+        let restoredRecentSuggestion = restoreProofOnlyAcceptRecentSuggestionIfNeeded()
+        let proofModeEnabled = activeAppProofBundleIdentifiers.contains(
+            ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        )
+        guard proofModeEnabled,
               currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
               currentProfile?.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
               suggestionSession.hasVisibleSuggestion else {
@@ -819,11 +979,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "reason": "precondition-failed",
                     "app": currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "unknown",
                     "hasVisibleSuggestion": String(suggestionSession.hasVisibleSuggestion),
-                    "proofModeEnabled": String(
-                        activeAppProofBundleIdentifiers.contains(
-                            ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                        )
-                    )
+                    "proofModeEnabled": String(proofModeEnabled),
+                    "restoredRecentSuggestion": String(restoredRecentSuggestion),
+                    "recentSuggestionAvailable": String(proofOnlyAcceptRecentSuggestion != nil)
                 ]
             )
             return
@@ -7945,18 +8103,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionFieldIdentity = fieldIdentity
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
-        currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
+        let acceptanceSnapshot = SuggestionAcceptanceSnapshot(
             fieldIdentity: fieldIdentity,
             targetFingerprint: targetFingerprint(context: context),
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             selectedTextLength: context.selectedTextLength
         )
+        currentSuggestionAcceptanceSnapshot = acceptanceSnapshot
+        let presentedAt = Date()
         currentSuggestionDisplayedText = suggestion.visibleText
         currentSuggestionFieldClassification = displayFieldClassification
-        currentSuggestionPresentedAt = Date()
+        currentSuggestionPresentedAt = presentedAt
         currentSuggestionDisplayScoreFinal = displayScoreTrace.score.finalScore
         currentSuggestionInvalidatedByUserKeyDown = false
+        cacheProofOnlyAcceptRecentSuggestionIfNeeded(
+            suggestion: suggestion,
+            suggestionID: suggestionID,
+            appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: request.mode,
+            textBeforeCursor: request.textBeforeCursor,
+            acceptanceSnapshot: acceptanceSnapshot,
+            displayedText: suggestion.visibleText,
+            fieldClassification: displayFieldClassification,
+            presentedAt: presentedAt,
+            displayScoreFinal: displayScoreTrace.score.finalScore
+        )
         keyboardEventTap?.resetPassthroughObservation()
         updateKeyboardEventTapSnapshot()
         guard startKeyboardEventTapIfPossible() else {
@@ -16925,6 +17098,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             setSuggestionDecision("Hidden: \(reason)")
+        }
+
+        if currentSuggestionInvalidatedByUserKeyDown
+            || reason == "typed-over"
+            || reason == "stale-after-keydown"
+            || reason.hasPrefix("keyboard-event-tap-") {
+            proofOnlyAcceptRecentSuggestion = nil
         }
 
         suggestionSession.dismiss()
