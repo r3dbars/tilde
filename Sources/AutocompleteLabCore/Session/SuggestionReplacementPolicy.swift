@@ -2,6 +2,7 @@ import Foundation
 
 public enum SuggestionReplacementSuppressionReason: String, Equatable, Sendable {
     case freshVisibleSuggestion = "fresh-visible-suggestion"
+    case changedFirstWord = "changed-first-word"
     case lowScoreMargin = "low-score-margin"
 }
 
@@ -65,14 +66,15 @@ public struct SuggestionReplacementPolicy: Equatable, Sendable {
         proposedSuggestionID: String,
         currentAgeMilliseconds: Int?,
         currentScore: Double?,
-        proposedScore: Double
+        proposedScore: Double,
+        currentSuggestionInvalidatedByUserTyping: Bool = false
     ) -> SuggestionReplacementDecision {
-        guard let currentVisibleText,
-              !currentVisibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        if currentSuggestionInvalidatedByUserTyping {
             return SuggestionReplacementDecision(shouldPresent: true)
         }
 
-        if currentSuggestionID == proposedSuggestionID {
+        guard let currentVisibleText,
+              !currentVisibleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return SuggestionReplacementDecision(shouldPresent: true)
         }
 
@@ -87,6 +89,23 @@ public struct SuggestionReplacementPolicy: Equatable, Sendable {
         }
 
         let scoreMargin = currentScore.map { proposedScore - $0 }
+        if firstWord(in: currentText) != firstWord(in: proposedText) {
+            return SuggestionReplacementDecision(
+                shouldPresent: false,
+                reason: .changedFirstWord,
+                currentAgeMilliseconds: currentAgeMilliseconds,
+                scoreMargin: scoreMargin
+            )
+        }
+
+        if currentSuggestionID == proposedSuggestionID {
+            return SuggestionReplacementDecision(
+                shouldPresent: true,
+                currentAgeMilliseconds: currentAgeMilliseconds,
+                scoreMargin: scoreMargin
+            )
+        }
+
         if currentAgeMilliseconds < minimumFreshLifetimeMilliseconds {
             if let scoreMargin, scoreMargin >= minimumScoreMargin {
                 return SuggestionReplacementDecision(
@@ -126,5 +145,9 @@ public struct SuggestionReplacementPolicy: Equatable, Sendable {
             .split(whereSeparator: { $0.isWhitespace })
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func firstWord(in text: String) -> String? {
+        text.split(whereSeparator: { $0.isWhitespace }).first.map(String.init)
     }
 }

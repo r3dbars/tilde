@@ -80,6 +80,35 @@ struct AcceptedTextSafetyPolicyTests {
         #expect(policy.decision(acceptedText: " make this", profile: textEdit) == .allowed)
     }
 
+    @Test("Prompt full-accept proof profiles allow safe phrases")
+    func promptFullAcceptProofProfilesAllowSafePhrases() {
+        let promptFullAcceptProof = CompatibilityProfile(
+            bundleIdentifier: "com.example.PromptSafe",
+            displayName: "Prompt Safe",
+            supportLevel: .yellow,
+            supportReason: "Synthetic prompt-safe profile.",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false,
+            promptAppSafetyMode: .wordOnly,
+            notes: "Test profile."
+        )
+
+        #expect(
+            policy.decision(acceptedText: " validate this next", profile: promptFullAcceptProof)
+                == .allowed
+        )
+        #expect(
+            policy.decision(acceptedText: " validate && submit", profile: promptFullAcceptProof)
+                == .blocked(reason: "accepted-text-prompt-shell-metacharacter")
+        )
+        #expect(
+            policy.decision(acceptedText: " /review this", profile: promptFullAcceptProof)
+                == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+    }
+
     @Test("Disabled profiles block insertion")
     func disabledProfilesBlockInsertion() throws {
         let mail = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.mail"))
@@ -124,6 +153,27 @@ struct AcceptedTextSafetyPolicyTests {
         #expect(
             policy.decision(acceptedText: " deploy", profile: promptSafe)
                 == .blocked(reason: "accepted-text-prompt-action-word")
+        )
+        #expect(
+            policy.decision(
+                acceptedText: " deploy",
+                profile: promptSafe,
+                allowsPromptActionWords: true
+            ) == .allowed
+        )
+        #expect(
+            policy.decision(
+                acceptedText: " /review",
+                profile: promptSafe,
+                allowsPromptActionWords: true
+            ) == .blocked(reason: "accepted-text-prompt-command-prefix")
+        )
+        #expect(
+            policy.decision(
+                acceptedText: " keep|send",
+                profile: promptSafe,
+                allowsPromptActionWords: true
+            ) == .blocked(reason: "accepted-text-prompt-shell-metacharacter")
         )
         #expect(
             policy.decision(acceptedText: " keep|send", profile: promptSafe)

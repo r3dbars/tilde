@@ -36,7 +36,11 @@ struct SuggestionDecisionPresentation: Equatable {
 
     var statusKind: StatusKind {
         let trimmed = normalizedDecision
-        if trimmed.hasPrefix("Blocked:") {
+        if trimmed.hasPrefix("Blocked:")
+            || trimmed.hasPrefix("Quiet:")
+            || trimmed.hasPrefix("Hidden:")
+            || trimmed == "Paused"
+            || trimmed.hasPrefix("Paused:") {
             return .quiet
         }
         if trimmed.hasPrefix("Waiting:") {
@@ -68,11 +72,15 @@ struct SuggestionDecisionPresentation: Equatable {
             return "Accepted"
         }
 
-        for prefix in ["Blocked:", "Waiting:", "Ready:", "Queued:", "Paused:"] where trimmed.hasPrefix(prefix) {
+        for prefix in ["Blocked:", "Quiet:", "Hidden:", "Waiting:", "Ready:", "Queued:", "Paused:"] where trimmed.hasPrefix(prefix) {
             return Self.oneLine(
                 String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines),
                 maxLength: 96
             )
+        }
+
+        if trimmed == "Paused" {
+            return "paused"
         }
 
         return Self.oneLine(trimmed, maxLength: 96)

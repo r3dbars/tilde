@@ -145,6 +145,12 @@ struct AutocompleteBehaviorProfileTests {
             appBundleIdentifier: "com.apple.Notes"
         )).id == .notes)
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "com.apple.MobileSMS"
+        )).id == .casualChat)
+        #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "ru.keepcoder.Telegram"
+        )).id == .casualChat)
+        #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
             appBundleIdentifier: "com.openai.codex"
         )).id == .aiChat)
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(

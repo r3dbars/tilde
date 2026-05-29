@@ -98,7 +98,7 @@ public struct SuggestionTuning: Equatable, Sendable {
     public static let minimumAggressivenessLevel = 1
     public static let maximumAggressivenessLevel = 5
     public static let defaultAggressivenessLevel = 4
-    public static let defaultMaxVisibleWords = 3
+    public static let defaultMaxVisibleWords = 8
     public static let minimumWordStartCharacters = 1
     public static let maximumWordStartCharacters = 5
     public static let defaultWordStartCharacters = 2
@@ -321,7 +321,8 @@ public struct SuggestionTuning: Equatable, Sendable {
         supportPace: SuggestionPace,
         allowsSentenceBoundaryContinuation: Bool = true,
         minimumPhraseContinuationWords: Int? = nil,
-        allowsPlainLineStartPhraseContinuation: Bool = false
+        allowsPlainLineStartPhraseContinuation: Bool = false,
+        allowsListLabelPhraseContinuation: Bool = false
     ) -> SuggestionTriggerPolicy {
         guard supportPace == .eager else {
             return SuggestionTriggerPolicy(pace: supportPace)
@@ -349,6 +350,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
+                allowsListLabelPhraseContinuation: allowsListLabelPhraseContinuation,
                 allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         case 5:
@@ -365,6 +367,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
                 allowsPlainLineStartPhraseContinuation: allowsPlainLineStartPhraseContinuation,
+                allowsListLabelPhraseContinuation: allowsListLabelPhraseContinuation,
                 allowsSentenceBoundaryRequest: allowsSentenceBoundaryRequest
             )
         default:

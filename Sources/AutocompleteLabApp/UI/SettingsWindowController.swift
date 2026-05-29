@@ -306,6 +306,9 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if bundleIdentifier == "com.openai.codex" {
+            if profile.supportsFullAcceptance {
+                return "Check: use the guided prompt-app checks, press Tab or the whole-suggestion shortcut, and do not press Enter."
+            }
             return "Check: use the guided prompt-app check, press Tab once, and do not press Enter."
         }
 
@@ -366,6 +369,12 @@ struct SettingsCurrentAppState: Equatable {
             AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
             """
         case "com.openai.codex":
+            if profile.supportsFullAcceptance {
+                return """
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
+                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate
+                """
+            }
             return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
         case "com.anthropic.claudefordesktop":
             return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
@@ -813,8 +822,8 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var maxWordsDetailText: String {
-        if tuning.maxVisibleWords >= 12 {
-            let minimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: tuning.maxVisibleWords)
+        let minimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: tuning.maxVisibleWords)
+        if minimum > 1 {
             return "Aims for \(minimum)-\(tuning.maxVisibleWords) words when the sentence has enough context."
         }
 

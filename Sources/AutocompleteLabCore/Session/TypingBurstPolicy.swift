@@ -70,7 +70,7 @@ public struct TypingBurstPolicy: Equatable, Sendable {
     public let maximumSingleChangeCharacters: Int
 
     public init(
-        windowMilliseconds: Int = 650,
+        windowMilliseconds: Int = 1_100,
         minimumInsertedCharacters: Int = 6,
         minimumEvents: Int = 4,
         maximumSingleChangeCharacters: Int = 4

@@ -92,10 +92,21 @@ struct SuggestionReplacementVisibilityPolicyTests {
         ) == .hide)
     }
 
-    @Test("Only too-slow display suppression can preserve the current suggestion")
-    func onlyTooSlowDisplaySuppressionCanPreserveCurrentSuggestion() {
+    @Test("Low-confidence model suppression keeps a fresh current suggestion visible")
+    func lowConfidenceModelSuppressionKeepsFreshCurrentSuggestionVisible() {
         #expect(policy.action(
             forDisplaySuppressionReason: .lowConfidence,
+            hasVisibleSuggestion: true,
+            sameFieldAsCurrentSuggestion: true,
+            currentSuggestionAgeMilliseconds: 100,
+            maximumPreservedAgeMilliseconds: 5_000
+        ) == .keepCurrentVisible)
+    }
+
+    @Test("Risky display suppression does not preserve the current suggestion")
+    func riskyDisplaySuppressionDoesNotPreserveCurrentSuggestion() {
+        #expect(policy.action(
+            forDisplaySuppressionReason: .highRisk,
             hasVisibleSuggestion: true,
             sameFieldAsCurrentSuggestion: true,
             currentSuggestionAgeMilliseconds: 100,

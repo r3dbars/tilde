@@ -64,6 +64,10 @@ require_contains 'check_release_dmg_signature'
 require_contains 'check_release_archive_signature'
 require_contains 'run_check "Developer ID archive signature" check_release_archive_signature'
 require_contains 'check_runtime_no_egress_proof'
+require_contains 'with_privacy_export_proof_tree'
+require_contains 'AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS="$allowed_pgids" "$@"'
+require_contains 'run_check "Prompt app manifest proof gate" ./script/check_prompt_app_manifest_proof.sh'
+reject_contains 'run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh'
 require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_PROOF_JSON:-$ROOT_DIR/docs/product/runtime-network-egress-latest.json'
 require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_APP_BINARY:-$ROOT_DIR/dist/SteadyType.app/Contents/MacOS/SteadyType'
 require_contains 'AUTOCOMPLETE_LAB_NO_EGRESS_MAX_AGE_SECONDS:-86400'
@@ -91,6 +95,8 @@ reject_contains 'AUTOCOMPLETE_LAB_LOG_START_LINE:-'
 reject_contains 'AUTOCOMPLETE_LAB_TRACE_START_LINE:-'
 require_contains 'print_next_beta_readiness_lanes'
 require_contains './script/scorecard_next_proof_lanes.py --limit 5'
+require_contains './script/scorecard_next_proof_lanes.py --limit 5 --automation-ready'
+require_contains '== Automation-ready proof lanes =='
 require_contains 'onboarding_failed=1'
 require_contains './script/check_onboarding_walkthrough_proof.py --print-template'
 require_contains 'xcrun stapler validate "$PRIMARY_ARTIFACT"'
@@ -115,11 +121,11 @@ require_order 'run_check "Latency beta gate" latency_beta_gate' \
 require_order 'echo "Beta readiness check-only found $failures blocker(s)."' \
   'print_next_beta_readiness_lanes "$onboarding_failed"'
 require_order 'configure_readiness_scratch_path || exit 1' \
-  'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
+  'run_check "Controls and diagnostics readiness" with_privacy_export_proof_tree ./script/check_controls_diagnostics_readiness.sh'
 require_order 'run_check "Runtime production gate" env' \
   'run_check "Runtime no-egress proof" check_runtime_no_egress_proof'
 require_order 'run_check "Runtime no-egress proof" check_runtime_no_egress_proof' \
-  'run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh'
+  'run_check "Controls and diagnostics readiness" with_privacy_export_proof_tree ./script/check_controls_diagnostics_readiness.sh'
 require_order 'echo "== Runtime production gate =="' \
   'echo "== Runtime no-egress proof =="'
 require_order 'echo "== Runtime no-egress proof =="' \

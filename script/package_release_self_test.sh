@@ -54,7 +54,8 @@ require_contains "$SCRIPT_TEXT" 'create_zip "$verify_dir/SteadyType.app"'
 require_contains "$SCRIPT_TEXT" '--output-format json >/dev/null 2>&1'
 require_contains "$SCRIPT_TEXT" 'package_existing_app "archive"'
 require_contains "$SCRIPT_TEXT" 'package_existing_app "package-existing"'
-require_contains "$SCRIPT_TEXT" 'codesign --force --options runtime --timestamp --sign "$developer_id" "$APP_BUNDLE"'
+require_contains "$SCRIPT_TEXT" 'ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"'
+require_contains "$SCRIPT_TEXT" 'codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "$developer_id" "$APP_BUNDLE"'
 require_contains "$SCRIPT_TEXT" './script/check_app_bundle.sh --release "$APP_BUNDLE"'
 reject_contains "$SCRIPT_TEXT" "/tmp/autocomplete-notary-profile-check.txt"
 require_contains "$PROOF_TEMPLATE" "Deny Accessibility"

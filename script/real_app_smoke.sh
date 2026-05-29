@@ -21,6 +21,7 @@ CHROME_ACCESSIBILITY_MODE_WAS_SET=0
 CHROME_INCLUDE_DEFAULT_REAL_EDITOR_PROOF=0
 CHROME_MODEL_LATENCY=0
 CODEX_MODEL_LATENCY=0
+CODEX_FULL_ACCEPT_PROOF=0
 CLAUDE_CODE_MODEL_LATENCY=0
 CLAUDE_MODEL_LATENCY=0
 CHROME_REMOTE_DEBUGGING_PORT=""
@@ -67,6 +68,13 @@ CLAUDE_DRAFT_BACKUP_PATH=""
 CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
 CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
+CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
+CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=0
+CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
+CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=0
+CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
 SMOKE_PHASE="startup"
 
 allow_model_latency_skip_build() {
@@ -84,7 +92,7 @@ is_model_latency_lane() {
 
 usage() {
   cat <<'EOF'
-Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|codex|codex-model-latency|claude-code|claude-code-terminal|claude-code-model-latency|claude-code-terminal-model-latency|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-model-latency|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
+Usage: script/real_app_smoke.sh <textedit|textedit-light|textedit-dark|textedit-long-wrap|textedit-wrapped|textedit-narrow|textedit-scrolled|textedit-selected-suppression|textedit-undo-one-word|textedit-undo-full|textedit-fast-typing|textedit-model-latency|textedit-default-model-latency|chrome|chrome-textarea-model-latency|chrome-contenteditable-model-latency|notes-title|notes-title-short|notes-title-long|notes-body|notes-body-short|notes-body-long|notes-checklist|notes-checklist-checked|notes-checklist-long|notes-title-undo|notes-body-undo|notes-checklist-undo|notes|obsidian|obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on|codex|codex-full-accept|codex-model-latency|claude-code|claude-code-terminal|claude-code-model-latency|claude-code-terminal-model-latency|claude-code-iterm2|claude-code-warp|claude-code-ghostty|claude-code-kitty|claude-code-alacritty|claude-code-wezterm|claude|claude-model-latency|claude-empty|claude-long|claude-wrapped|claude-narrow|claude-context|claude-light|claude-dark> [--dry-run] [--manual-gate] [--skip-build] [--native-undo-proof] [--fixture <textarea|contenteditable|editor-like|monaco-like|prosemirror-like|monaco-real|prosemirror-real|textarea-public|contenteditable-public|production-text-fields|codemirror-official|monaco-official|prosemirror-official|chat-like|browser-chat-harness|google-docs|notion|browser-webmail|browser-gmail|browser-outlook|browser-chatgpt|browser-slack|browser-discord|all>] [--chrome-accessibility <forced|default>] [--include-default-real-editor-proof] [--host <terminal|iterm2|warp|ghostty|kitty|alacritty|wezterm|auto>]
 
 Runs a real app smoke pass where it is safe to automate. Notes title/body/
 checklist proof has guarded disposable-note drivers; Obsidian, Codex,
@@ -92,7 +100,8 @@ Claude Code, and Claude desktop are manual-gated so this script never types
 into private notes, vaults, terminal prompts, or agent prompts by surprise.
 The Codex and Terminal-host Claude Code lanes use targeted disposable proof
 helpers after the manual gate: they seed marked proof text, press Tab once, and
-never press Enter.
+never press Enter. Use codex-full-accept for the separate bounded no-submit
+full-accept proof lane; it is tagged with a proof-only runtime scenario.
 
 Notes proof must use notes-title, notes-body, notes-checklist, their
 notes-*-undo variants, or explicit Notes variant lanes such as
@@ -300,6 +309,10 @@ case "$APP" in
   codex-model-latency)
     APP="codex"
     CODEX_MODEL_LATENCY=1
+    ;;
+  codex-full-accept)
+    APP="codex"
+    CODEX_FULL_ACCEPT_PROOF=1
     ;;
   claude-model-latency)
     APP="claude"
@@ -537,6 +550,12 @@ if [[ "$APP" == "codex" && "$CODEX_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1"
   exit 2
 fi
 
+if [[ "$APP" == "codex" && "$CODEX_FULL_ACCEPT_PROOF" == "1" && "$SKIP_BUILD" == "1" ]]; then
+  echo "codex-full-accept cannot be combined with --skip-build because the app must relaunch with the codex-full-accept-no-submit proof scenario before accepting a whole suggestion." >&2
+  usage >&2
+  exit 2
+fi
+
 if [[ "$APP" == "claude" && "$CLAUDE_MODEL_LATENCY" == "1" && "$SKIP_BUILD" == "1" ]] && ! allow_model_latency_skip_build; then
   echo "claude-model-latency cannot be combined with --skip-build because the app must relaunch with fast word completions and phrase continuations disabled before sampling." >&2
   usage >&2
@@ -574,6 +593,20 @@ SMOKE_INTERFERENCE_GUARD_POLL_SECONDS="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_POLL_S
 SMOKE_SCRIPT_PID="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_SELF_PID:-${BASHPID:-$$}}"
 SMOKE_QUARANTINE_GUARD_PID=""
 EXCLUSIVE_PROOF_RUN="${AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN:-0}"
+SMOKE_STARTUP_MARKER_PATH="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_STARTUP_MARKER_PATH:-}"
+
+smoke_startup_marker() {
+  local phase="$1"
+  local pgid
+  [[ -n "$SMOKE_STARTUP_MARKER_PATH" ]] || return 0
+  mkdir -p "$(dirname "$SMOKE_STARTUP_MARKER_PATH")" >/dev/null 2>&1 || true
+  pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+  printf '%s phase=%s pid=%s pgid=%s app=%s\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$phase" "$SMOKE_SCRIPT_PID" "${pgid:-unknown}" "$APP" \
+    >>"$SMOKE_STARTUP_MARKER_PATH" 2>/dev/null || true
+}
+
+smoke_startup_marker "config-ready"
 
 if [[ ! "$SMOKE_LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_LOCK_WAIT_SECONDS must be a non-negative integer." >&2
@@ -729,6 +762,11 @@ cleanup_smoke() {
     wait "$SMOKE_QUARANTINE_GUARD_PID" >/dev/null 2>&1 || true
     SMOKE_QUARANTINE_GUARD_PID=""
   fi
+  if [[ -n "$SMOKE_INTERFERENCE_GUARD_PID" ]]; then
+    kill "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
+    wait "$SMOKE_INTERFERENCE_GUARD_PID" >/dev/null 2>&1 || true
+    SMOKE_INTERFERENCE_GUARD_PID=""
+  fi
 
   cleanup_smoke_textedit_windows
   restore_codex_draft_if_needed
@@ -846,10 +884,52 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
+smoke_signal_pid_list() {
+  local pid
+  for pid in "$@"; do
+    [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] || continue
+    printf '%s\n' "$pid"
+  done | awk '!seen[$0]++' | paste -sd, -
+}
+
 diagnose_smoke_signal() {
   local signal_name="$1"
+  local self_pid self_ppid self_pgid self_sess tracked_pids snapshot_pids lock_owner
+  self_pid="${SMOKE_SCRIPT_PID:-${BASHPID:-$$}}"
+  self_ppid="$(ps -o ppid= -p "$self_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  self_pgid="$(ps -o pgid= -p "$self_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  self_sess="$(ps -o sess= -p "$self_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  lock_owner=""
+  if [[ -f "$SMOKE_LOCK_DIR/pid" ]]; then
+    lock_owner="$(head -n 1 "$SMOKE_LOCK_DIR/pid" 2>/dev/null | tr -dc '0-9' || true)"
+  fi
+  tracked_pids="$(smoke_signal_pid_list \
+    "$self_pid" \
+    "$self_ppid" \
+    "$SMOKE_INTERFERENCE_GUARD_PID" \
+    "$SMOKE_QUARANTINE_GUARD_PID" \
+    "$lock_owner" \
+    ${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-})"
   echo "real_app_smoke received $signal_name during phase: $SMOKE_PHASE" >&2
+  echo "Smoke signal self pid=${self_pid:-unknown} ppid=${self_ppid:-unknown} pgid=${self_pgid:-unknown} session=${self_sess:-unknown}" >&2
+  echo "Smoke guard pids: interference=${SMOKE_INTERFERENCE_GUARD_PID:-none} quarantine=${SMOKE_QUARANTINE_GUARD_PID:-none}" >&2
+  echo "Tracked Claude Code terminal proof pids: ${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-none}" >&2
+  echo "Smoke lock owner pid: ${lock_owner:-none}" >&2
   echo "Smoke lock: $SMOKE_LOCK_DIR" >&2
+  snapshot_pids="$tracked_pids"
+  if [[ -n "$snapshot_pids" ]]; then
+    echo "Signal process snapshot:" >&2
+    ps -o pid=,ppid=,pgid=,sess=,stat=,etime=,command= -p "$snapshot_pids" >&2 || true
+  fi
+  if [[ -n "$self_pgid" ]]; then
+    echo "Smoke process group members:" >&2
+    ps ax -o pid=,ppid=,pgid=,sess=,stat=,etime=,command= 2>/dev/null |
+      awk -v pgid="$self_pgid" '$3 == pgid { print }' >&2 || true
+  fi
+  echo "Proof-related process snapshot:" >&2
+  ps ax -o pid=,ppid=,pgid=,sess=,stat=,etime=,command= 2>/dev/null |
+    awk '$0 ~ /(claude_code_ghostty_detached_proof|real_app_smoke|terminal_prompt_ax_proof_helper|Ghostty|ghostty|osascript|SteadyType)/ { print }' |
+    head -n 60 >&2 || true
   echo "Running SteadyType processes:" >&2
   ps ax -o pid=,ppid=,pgid=,etime=,command= 2>/dev/null |
     awk '$0 ~ /\/SteadyType\.app\/Contents\/MacOS\/SteadyType([[:space:]]|$)/ { print }' >&2
@@ -1076,13 +1156,17 @@ exclusive_proof_run_enabled() {
 }
 
 foreign_proof_process_lines() {
-  local current_pgid
+  local current_pgid protected_pgids
   current_pgid="$(ps -o pgid= -p "$SMOKE_SCRIPT_PID" 2>/dev/null | tr -d '[:space:]' || true)"
+  protected_pgids="$(current_process_family_pgids | tr '\n' ' ' || true)"
 
   ps -axo pid=,pgid=,command= 2>/dev/null |
     while read -r pid pgid command; do
       [[ -n "$pid" && "$pid" != "$SMOKE_SCRIPT_PID" ]] || continue
       [[ -n "$current_pgid" && "$pgid" == "$current_pgid" ]] && continue
+      case " $protected_pgids " in
+        *" $pgid "*) continue ;;
+      esac
 
       case "$command" in
         *script/real_app_smoke.sh*|*script/manual_proof_refresh.sh*|*script/obsidian_deep_sweep.sh*|*script/build_and_run.sh*|*script/local_quality_audit.py*|*script/local_completion_runtime.py*|*/SteadyType.app/Contents/MacOS/SteadyType*)
@@ -1095,6 +1179,9 @@ foreign_proof_process_lines() {
       local cwd
       cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
       if [[ "$cwd" == "$ROOT_DIR"* ]]; then
+        continue
+      fi
+      if [[ "$command" == "$ROOT_DIR"/dist/SteadyType.app/Contents/MacOS/SteadyType* ]]; then
         continue
       fi
 
@@ -1354,11 +1441,25 @@ make_tmp_dir() {
 
 make_claude_code_terminal_proof_dir() {
   local base_dir tmp_dir
+  base_dir="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROOF_ARTIFACT_DIR:-}"
+  if [[ -n "$base_dir" ]]; then
+    base_dir="${base_dir%/}"
+    mkdir -p "$base_dir"
+    tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
+    printf '%s\n' "$tmp_dir"
+    return 0
+  fi
+
   base_dir="${TMPDIR:-/tmp}"
   base_dir="${base_dir%/}"
   tmp_dir="$(mktemp -d "$base_dir/steadytype-claude-code-proof.XXXXXX")"
   SMOKE_TMP_DIRS+=("$tmp_dir")
   printf '%s\n' "$tmp_dir"
+}
+
+claude_code_terminal_proof_title_for_dir() {
+  local proof_dir="$1"
+  printf 'Claude Code %s %s\n' "$(claude_code_proof_marker)" "${proof_dir##*/}"
 }
 
 line_count() {
@@ -1421,6 +1522,33 @@ wait_for_log_line_number() {
   exit 1
 }
 
+wait_for_log_line_number_optional() {
+  local start_line="$1"
+  local pattern="$2"
+  local timeout_seconds="${3:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local matched_line
+  MATCHED_LOG_LINE=0
+
+  while ((SECONDS <= deadline)); do
+    if [[ -f "$LOG_PATH" ]]; then
+      matched_line="$(awk -v start="$start_line" -v pattern="$pattern" '
+        NR > start && $0 ~ pattern {
+          print NR
+          exit
+        }
+      ' "$LOG_PATH" 2>/dev/null || true)"
+      if [[ -n "$matched_line" ]]; then
+        MATCHED_LOG_LINE="$matched_line"
+        return 0
+      fi
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
 wait_for_log_pattern() {
   local start_line="$1"
   local pattern="$2"
@@ -1463,12 +1591,335 @@ log_since_has_fields() {
   local prefix="$2"
   shift 2
   local lines
-  lines="$(tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | grep -F "$prefix" || true)"
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+  lines="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk -v prefix="$prefix" '
+    index($0, prefix) {
+      print
+    }
+  ' 2>/dev/null || true)"
   local field
   for field in "$@"; do
     lines="$(grep -F "$field" <<<"$lines" || true)"
   done
   [[ -n "$lines" ]]
+}
+
+claude_code_terminal_suggestion_cancelled_by_screen_geometry() {
+  local start_line="$1"
+  log_since_has_fields "$start_line" "suggestion-request-cancelled" "reason=invalidate" &&
+    log_since_has_fields "$start_line" "screen-geometry-changed" "geometryInvalidationReason=screen-layout-changed"
+}
+
+line_has_all_fields() {
+  local line="$1"
+  shift
+  local field
+
+  for field in "$@"; do
+    [[ "$line" == *"$field"* ]] || return 1
+  done
+  return 0
+}
+
+find_claude_code_terminal_suggestion_line_optional() {
+  local start_line="$1"
+  local matched_line
+  MATCHED_LOG_LINE=0
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+
+  matched_line="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk \
+    -v start="$start_line" \
+    -v host_variant="$CLAUDE_CODE_HOST_VARIANT" '
+      {
+        absolute_line = NR + start
+        is_prompt_caret = index($0, "synthetic-caret") && index($0, "app=com.anthropic.claude-code") && index($0, "source=terminal-screen-prompt")
+        is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
+      }
+
+      is_prompt_caret != 0 {
+        saw_terminal_screen_prompt = 1
+      }
+
+      {
+        clear_candidate = 0
+        if (index($0, "suggestion-hidden") && index($0, "app=com.anthropic.claude-code")) {
+          clear_candidate = 1
+        }
+        if (index($0, "keyboard-action") && index($0, "app=com.anthropic.claude-code")) {
+          clear_candidate = 1
+        }
+        if (index($0, "insert ") && index($0, "app=com.anthropic.claude-code")) {
+          clear_candidate = 1
+        }
+        if (index($0, "screen-geometry-changed")) {
+          clear_candidate = 1
+        }
+        if (index($0, "workspace-focus-changed app=com.apple.Terminal")) {
+          clear_candidate = 1
+        }
+        if (candidate != "" && clear_candidate) {
+          candidate = ""
+        }
+      }
+
+      is_terminal_proof_suggestion == 0 {
+        next
+      }
+
+      (host_variant == "ghostty") && (saw_terminal_screen_prompt == 0) {
+        next
+      }
+
+      {
+        candidate = absolute_line
+        next
+      }
+
+      END {
+        if (candidate != "") {
+          print candidate
+        }
+      }
+    ' 2>/dev/null || true)"
+
+  if [[ -n "$matched_line" ]]; then
+    MATCHED_LOG_LINE="$matched_line"
+    return 0
+  fi
+
+  return 1
+}
+
+find_recent_claude_code_terminal_suggestion_line_optional() {
+  local preferred_start_line="$1"
+  local current_line recent_window_lines recent_start_line matched_line
+
+  recent_window_lines="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_RECENT_SUGGESTION_SCAN_LINES:-260}"
+  [[ "$recent_window_lines" =~ ^[0-9]+$ ]] || recent_window_lines=260
+  current_line="$(line_count "$LOG_PATH")"
+  recent_start_line=$((current_line > recent_window_lines ? current_line - recent_window_lines : 0))
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if ((recent_start_line < preferred_start_line)); then
+      recent_start_line="$preferred_start_line"
+    fi
+    matched_line="$(sed -n "$((recent_start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+      awk \
+      -v start="$recent_start_line" '
+        {
+          absolute_line = NR + start
+          is_terminal_proof_suggestion = index($0, "suggestion-presented") && index($0, "app=com.anthropic.claude-code") && index($0, "fieldKindReason=claude-code-terminal-host-proof") && index($0, "fieldKindSuppressed=false") && index($0, "placementAnchorSource=synthetic-caret")
+        }
+
+      index($0, "synthetic-caret") && index($0, "app=com.anthropic.claude-code") && index($0, "source=terminal-screen-prompt") {
+        saw_terminal_screen_prompt = 1
+      }
+
+      is_terminal_proof_suggestion != 0 {
+        if (saw_terminal_screen_prompt == 0) {
+          next
+        }
+        candidate = absolute_line
+        next
+      }
+
+        {
+          clear_candidate = 0
+          if (index($0, "suggestion-hidden") && index($0, "app=com.anthropic.claude-code")) {
+            clear_candidate = 1
+          }
+          if (index($0, "keyboard-action") && index($0, "app=com.anthropic.claude-code")) {
+            clear_candidate = 1
+          }
+          if (index($0, "insert ") && index($0, "app=com.anthropic.claude-code")) {
+            clear_candidate = 1
+          }
+          if (index($0, "screen-geometry-changed")) {
+            clear_candidate = 1
+          }
+          if (index($0, "workspace-focus-changed app=com.apple.Terminal")) {
+            clear_candidate = 1
+          }
+          if (candidate != "" && clear_candidate) {
+            candidate = ""
+          }
+        }
+
+        END {
+          if (candidate != "") {
+            print candidate
+          }
+        }
+      ' 2>/dev/null || true)"
+
+    if [[ -n "$matched_line" ]]; then
+      MATCHED_LOG_LINE="$matched_line"
+      return 0
+    fi
+
+    return 1
+  fi
+
+  if ((recent_start_line >= preferred_start_line)); then
+    return 1
+  fi
+
+  find_claude_code_terminal_suggestion_line_optional "$recent_start_line"
+}
+
+wait_for_claude_code_terminal_suggestion_line_optional() {
+  local start_line="$1"
+  local timeout_seconds="${2:-12}"
+  local deadline=$((SECONDS + timeout_seconds))
+  MATCHED_LOG_LINE=0
+  CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY=0
+
+  while ((SECONDS <= deadline)); do
+    if find_claude_code_terminal_suggestion_line_optional "$start_line"; then
+      return 0
+    fi
+    if find_recent_claude_code_terminal_suggestion_line_optional "$start_line"; then
+      return 0
+    fi
+    if claude_code_terminal_suggestion_cancelled_by_screen_geometry "$start_line"; then
+      CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY=1
+      return 1
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
+wait_for_claude_code_terminal_proof_suggestion_ready_optional() {
+  local start_line="$1"
+  local timeout_seconds="$2"
+
+  if wait_for_claude_code_terminal_suggestion_line_optional \
+    "$start_line" \
+    "$timeout_seconds"; then
+    return 0
+  fi
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    return 1
+  fi
+
+  wait_for_log_line_number_optional \
+    "$start_line" \
+    "suggestion-presented .*app=com.anthropic.claude-code .*fieldKindReason=claude-code-terminal-host-proof .*fieldKindSuppressed=false .*placementAnchorSource=synthetic-caret" \
+    2
+}
+
+wait_for_claude_code_terminal_log_flush_suggestion_line_optional() {
+  local start_line="$1"
+  local timeout_seconds="${2:-8}"
+  local deadline=$((SECONDS + timeout_seconds))
+  MATCHED_LOG_LINE=0
+
+  while ((SECONDS <= deadline)); do
+    if find_claude_code_terminal_suggestion_line_optional "$start_line"; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  return 1
+}
+
+find_recent_claude_code_terminal_stale_proof_blocker_optional() {
+  local preferred_start_line="$1"
+  local current_line recent_window_lines recent_start_line matched
+  MATCHED_LOG_LINE=0
+  MATCHED_LOG_REASON=""
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -f "$LOG_PATH" ]] || return 1
+
+  recent_window_lines="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_STALE_BLOCKER_SCAN_LINES:-700}"
+  [[ "$recent_window_lines" =~ ^[0-9]+$ ]] || recent_window_lines=700
+  current_line="$(line_count "$LOG_PATH")"
+  recent_start_line=$((current_line > recent_window_lines ? current_line - recent_window_lines : 0))
+  if [[ "$preferred_start_line" =~ ^[0-9]+$ && "$preferred_start_line" -gt 0 ]]; then
+    recent_start_line=$((recent_start_line < preferred_start_line ? recent_start_line : preferred_start_line))
+  fi
+
+  matched="$(sed -n "$((recent_start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk \
+    -v start="$recent_start_line" '
+      /suggestion-blocked/ && /app=com.anthropic.claude-code/ {
+        reason = ""
+        if (index($0, "reason=claude-code-terminal-host-missingProofMarker")) {
+          reason = "missingProofMarker"
+        } else if (index($0, "reason=claude-code-terminal-host-shellCommandDetected")) {
+          reason = "shellCommandDetected"
+        }
+        if (reason != "") {
+          candidate_line = NR + start
+          candidate_reason = reason
+        }
+      }
+
+      END {
+        if (candidate_line != "") {
+          print candidate_line "|" candidate_reason
+        }
+      }
+    ' 2>/dev/null || true)"
+
+  [[ -n "$matched" ]] || return 1
+  MATCHED_LOG_LINE="${matched%%|*}"
+  MATCHED_LOG_REASON="${matched#*|}"
+  return 0
+}
+
+print_claude_code_terminal_suggestion_diagnostics_tail() {
+  local start_line="$1"
+  local host_name="$2"
+  local attempt="$3"
+
+  [[ -f "$LOG_PATH" ]] || return 0
+
+  echo "Claude Code $host_name proof attempt $attempt recent prompt/suggestion diagnostics since line $start_line:" >&2
+  awk -v start="$start_line" '
+    NR <= start {
+      next
+    }
+
+    /claude-code-terminal-host-proof-input/ ||
+    (/synthetic-caret/ && /app=com.anthropic.claude-code/ && /source=terminal-screen-prompt/) ||
+    (/suggestion-request-scheduled/ && /app=com.anthropic.claude-code/) ||
+    (/mlx-completion/ && /app=com.anthropic.claude-code/) ||
+    (/suggestion-presented/ && /app=com.anthropic.claude-code/) ||
+    (/suggestion-blocked/ && /app=com.anthropic.claude-code/) ||
+    /focused-text-poll-throttled/ ||
+    /keyboard-event-tap-stopped/ {
+      lines[++count] = NR ":" $0
+      if (count > 18) {
+        delete lines[count - 18]
+      }
+    }
+
+    END {
+      first = count - 17
+      if (first < 1) {
+        first = 1
+      }
+      for (i = first; i <= count; i++) {
+        if (i in lines) {
+          print lines[i]
+        }
+      }
+    }
+  ' "$LOG_PATH" >&2 2>/dev/null || true
 }
 
 wait_for_log_fields() {
@@ -1510,11 +1961,176 @@ wait_for_log_fields_optional() {
   return 1
 }
 
+settle_keyboard_event_tap_if_started() {
+  local start_line="$1"
+  local label="$2"
+
+  if wait_for_log_fields_optional "$start_line" 2 "keyboard-event-tap-started"; then
+    sleep "${AUTOCOMPLETE_LAB_EVENT_TAP_SETTLE_SECONDS:-0.2}"
+  else
+    echo "$label did not log a fresh keyboard-event-tap-started marker before accept; pressing anyway." >&2
+  fi
+}
+
+codex_tab_diagnostic_seen() {
+  local start_line="$1"
+
+  log_since_has_fields "$start_line" \
+    "keyboard-action" \
+    "app=com.openai.codex" \
+    "key=tab" ||
+    log_since_has_fields "$start_line" \
+      "keyboard-event-tap-latency" \
+      "key=tab"
+}
+
+wait_for_codex_tab_diagnostic_optional() {
+  local start_line="$1"
+  local attempts="${2:-5}"
+  local delay_seconds="${3:-0.05}"
+  local attempt
+
+  if ! [[ "$attempts" =~ ^[0-9]+$ ]] || ((attempts < 1)); then
+    attempts=5
+  fi
+
+  for ((attempt = 0; attempt < attempts; attempt++)); do
+    if codex_tab_diagnostic_seen "$start_line"; then
+      return 0
+    fi
+    sleep "$delay_seconds"
+  done
+
+  return 1
+}
+
+press_codex_tab_for_smoke() {
+  local start_line="$1"
+
+  settle_keyboard_event_tap_if_started "$start_line" "Codex Tab acceptance"
+  press_key_code_cgevent_with_timeout \
+    48 \
+    "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
+    "Codex CGEvent Tab" \
+    "session" \
+    "warm" || true
+
+  if wait_for_codex_tab_diagnostic_optional "$start_line" \
+    "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_ATTEMPTS:-5}" \
+    "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_DELAY_SECONDS:-0.05}"; then
+    return 0
+  fi
+
+  echo "Codex CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab." >&2
+  assert_frontmost_app "Codex" "Codex proof System Events retry"
+  press_key_code 48
+}
+
+keyboard_event_tap_active_since() {
+  local start_line="$1"
+
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+
+  awk -v start="$start_line" '
+    NR <= start {
+      next
+    }
+    /keyboard-event-tap-started/ {
+      state = "started"
+    }
+    /keyboard-event-tap-stopped/ ||
+    /keyboard-event-tap-start-failed/ ||
+    /keyboard-event-tap-failed-closed/ {
+      state = "stopped"
+    }
+    END {
+      exit state == "started" ? 0 : 1
+    }
+  ' "$LOG_PATH" 2>/dev/null
+}
+
+assert_codex_full_accept_shortcut_safe() {
+  local tap_start_line="$1"
+  local suggestion_start_line="$2"
+  local label="$3"
+
+  if ! keyboard_event_tap_active_since "$tap_start_line"; then
+    echo "$label keyboard capture is not active; refusing to press accept-all." >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((tap_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+
+  if log_since_has_fields "$suggestion_start_line" "suggestion-hidden" "app=com.openai.codex"; then
+    echo "$label suggestion hid before accept-all; refusing to type the shortcut into Codex." >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((suggestion_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+}
+
+press_codex_full_accept_shortcut_for_smoke() {
+  local tap_start_line="$1"
+  local suggestion_start_line="$2"
+  local accept_shortcut="$3"
+  local shortcut_start_line
+
+  if wait_for_log_fields_optional "$suggestion_start_line" 2 "keyboard-event-tap-started"; then
+    sleep "${AUTOCOMPLETE_LAB_EVENT_TAP_SETTLE_SECONDS:-0.2}"
+  elif ! keyboard_event_tap_active_since "$tap_start_line"; then
+    echo "Codex full accept did not start keyboard capture for the visible phrase." >&2
+  fi
+  assert_codex_full_accept_shortcut_safe "$tap_start_line" "$suggestion_start_line" "Codex full accept"
+  shortcut_start_line="$(line_count "$LOG_PATH")"
+  case "$accept_shortcut" in
+    backtick)
+      press_key_code_cgevent_with_timeout \
+        50 \
+        "${AUTOCOMPLETE_LAB_CODEX_FULL_ACCEPT_CGEVENT_BACKTICK_TIMEOUT_SECONDS:-2}" \
+        "Codex full accept CGEvent backtick" \
+        "session" \
+        "warm"
+      ;;
+    optionTab)
+      press_accept_all_shortcut
+      ;;
+  esac
+
+  if ! wait_for_log_fields_optional "$shortcut_start_line" 1 \
+    "keyboard-event-tap-latency" \
+    "key=$accept_shortcut"; then
+    echo "Codex full accept shortcut produced no key diagnostic." >&2
+    echo "Required fields: keyboard-action app=com.openai.codex key=$accept_shortcut action=acceptAllVisible handled=true" >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((tap_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+
+  if wait_for_log_fields_optional "$shortcut_start_line" 1 \
+    "keyboard-event-tap-latency" \
+    "key=$accept_shortcut" \
+    "decision=passthrough-unsupported"; then
+    echo "Codex full accept shortcut passed through instead of being captured." >&2
+    echo "Required fields: keyboard-action app=com.openai.codex key=$accept_shortcut action=acceptAllVisible handled=true" >&2
+    echo "Log: $LOG_PATH" >&2
+    tail -n +"$((tap_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    exit 1
+  fi
+}
+
 wait_for_claude_code_terminal_tab_acceptance() {
   local start_line="$1"
   local host_name="$2"
   local timeout_seconds="$3"
-  local deadline=$((SECONDS + timeout_seconds))
+  local deadline
+
+  timeout_seconds="${timeout_seconds%%.*}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
+    timeout_seconds=30
+  fi
+  deadline=$((SECONDS + timeout_seconds))
 
   while ((SECONDS <= deadline)); do
     if log_since_has_fields "$start_line" \
@@ -1540,6 +2156,18 @@ wait_for_claude_code_terminal_tab_acceptance() {
       exit 1
     fi
 
+    if log_since_has_fields "$start_line" \
+      "keyboard-event-tap-latency" \
+      "key=tab" \
+      "decision=passthrough-after-typing"; then
+      echo "Claude Code $host_name Tab acceptance went stale before the app could accept it." >&2
+      echo "Required fields: keyboard-action app=com.anthropic.claude-code key=tab action=acceptNextWord handled=true" >&2
+      echo "Observed keyboard-event-tap-latency key=tab decision=passthrough-after-typing." >&2
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+      exit 1
+    fi
+
     sleep 0.2
   done
 
@@ -1548,6 +2176,438 @@ wait_for_claude_code_terminal_tab_acceptance() {
   echo "Log: $LOG_PATH" >&2
   tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
   exit 1
+}
+
+wait_for_claude_code_terminal_insertion_result() {
+  local start_line="$1"
+  local host_name="$2"
+  local timeout_seconds="$3"
+  local proof_text="${4:-}"
+  local deadline
+
+  timeout_seconds="${timeout_seconds%%.*}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
+    timeout_seconds=30
+  fi
+  deadline=$((SECONDS + timeout_seconds))
+
+  while ((SECONDS <= deadline)); do
+    if log_since_has_fields "$start_line" \
+      "insert" \
+      "app=com.anthropic.claude-code" \
+      "success=true"; then
+      return 0
+    fi
+
+    if log_since_has_fields "$start_line" \
+      "insert" \
+      "app=com.anthropic.claude-code" \
+      "success=false" ||
+       log_since_has_fields "$start_line" \
+         "claude-code-terminal-host-proof-deferred-accept" \
+         "app=com.anthropic.claude-code" \
+         "stage=insert-failed" ||
+       log_since_has_fields "$start_line" \
+         "claude-code-terminal-host-proof-insert" \
+         "app=com.anthropic.claude-code" \
+         "source=ghosttyFastFailClosed"; then
+      echo "Claude Code $host_name insertion failed closed." >&2
+      echo "Required fields: insert app=com.anthropic.claude-code success=true" >&2
+      echo "Observed insertion failure or fail-closed Ghostty proof diagnostics." >&2
+      run_claude_code_ghostty_post_fail_external_insertion_probe "$proof_text" "$start_line" || true
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
+      exit 1
+    fi
+
+    sleep 0.2
+  done
+
+  echo "Timed out waiting for Claude Code $host_name insertion result." >&2
+  echo "Required fields: insert app=com.anthropic.claude-code success=true or success=false" >&2
+  echo "Log: $LOG_PATH" >&2
+  tail -n +"$((start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
+  exit 1
+}
+
+find_claude_code_terminal_prompt_caret_point_optional() {
+  local start_line="$1"
+  local matched
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_X=""
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y=""
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH=""
+  CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT=""
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+
+  matched="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk '
+      /synthetic-caret/ && /app=com.anthropic.claude-code/ && /source=terminal-screen-prompt/ {
+        for (fieldIndex = 1; fieldIndex <= NF; fieldIndex++) {
+          if (index($fieldIndex, "caret=x=") == 1) {
+            caret = substr($fieldIndex, length("caret=x=") + 1)
+            split(caret, parts, ",")
+            x = parts[1]
+            y = parts[2]
+            w = parts[3]
+            h = parts[4]
+            sub(/^y=/, "", y)
+            sub(/^w=/, "", w)
+            sub(/^h=/, "", h)
+            candidate = x " " y " " w " " h
+          }
+        }
+      }
+
+      END {
+        if (candidate != "") {
+          print candidate
+        }
+      }
+    ' 2>/dev/null || true)"
+
+  [[ -n "$matched" ]] || return 1
+  read -r CLAUDE_CODE_TERMINAL_PROMPT_CARET_X \
+    CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y \
+    CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH \
+    CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT <<<"$matched"
+
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_X" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || return 1
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || return 1
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH=0
+  [[ "$CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT=0
+}
+
+click_screen_point_cgevent() {
+  local x="$1"
+  local y="$2"
+  local label="$3"
+
+  swift - "$x" "$y" <<'SWIFT' >/dev/null
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 3,
+      let x = Double(CommandLine.arguments[1]),
+      let y = Double(CommandLine.arguments[2]),
+      x.isFinite,
+      y.isFinite,
+      let source = CGEventSource(stateID: .hidSystemState) else {
+    fputs("screen point CGEvent click failed: invalid point or event source.\n", stderr)
+    exit(1)
+}
+
+let point = CGPoint(x: x, y: y)
+let events: [(CGEventType, useconds_t)] = [
+    (.mouseMoved, 20_000),
+    (.leftMouseDown, 35_000),
+    (.leftMouseUp, 80_000),
+]
+
+for (eventType, delay) in events {
+    guard let event = CGEvent(
+        mouseEventSource: source,
+        mouseType: eventType,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        fputs("screen point CGEvent click failed: could not create mouse event.\n", stderr)
+        exit(1)
+    }
+    event.post(tap: .cghidEventTap)
+    usleep(delay)
+}
+SWIFT
+}
+
+click_claude_code_ghostty_post_fail_prompt_caret() {
+  local start_line="$1"
+  local click_x click_y
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  if ! find_claude_code_terminal_prompt_caret_point_optional "$start_line"; then
+    echo "Claude Code Ghostty post-fail prompt-row refocus found no synthetic caret to click." >&2
+    return 1
+  fi
+
+  click_x="$(awk \
+    -v x="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_X" \
+    -v w="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_WIDTH" \
+    'BEGIN { offset = w + 0; if (offset < 1) offset = 1; printf "%.0f", x + offset }')"
+  click_y="$(awk \
+    -v y="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_Y" \
+    -v h="$CLAUDE_CODE_TERMINAL_PROMPT_CARET_HEIGHT" \
+    'BEGIN { offset = (h + 0) / 2; if (offset < 1) offset = 1; printf "%.0f", y + offset }')"
+
+  echo "Claude Code Ghostty post-fail prompt-row refocus clicking latest synthetic caret at x=$click_x y=$click_y before System Events probe." >&2
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  click_screen_point_cgevent "$click_x" "$click_y" "Claude Code Ghostty post-fail prompt-row refocus"
+}
+
+press_claude_code_terminal_external_backspace_key() {
+  local label="${1:-external mutation restore}"
+
+  settle_claude_code_terminal_proof_focus "$label" || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_RESTORE_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty pre-accept external restore" <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+tell application "System Events"
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
+    error "Claude Code terminal host is not frontmost for proof restore."
+  end if
+  key code 51
+end tell
+APPLESCRIPT
+}
+
+restore_claude_code_terminal_system_events_backspace() {
+  local proof_text="$1"
+  local label="${2:-external mutation restore}"
+  [[ -n "$proof_text" ]] || return 1
+  press_claude_code_terminal_external_backspace_key "$label"
+}
+
+restore_claude_code_terminal_ghostty_native_prompt_text() {
+  local proof_text="$1"
+  local label="${2:-native mutation restore}"
+  local clear_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}"
+
+  [[ -n "$proof_text" ]] || return 1
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RESTORE_TEXT="$proof_text" \
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="$clear_delay" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_RESTORE_TIMEOUT_SECONDS:-4}" \
+      "$label" <<'APPLESCRIPT' >/dev/null
+set restoreText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RESTORE_TEXT"
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  send key "u" modifiers "control" to targetTerminal
+  delay clearDelay
+  send key "u" modifiers "control" to targetTerminal
+  delay clearDelay
+  input text restoreText to targetTerminal
+  activate
+end tell
+APPLESCRIPT
+}
+
+run_claude_code_ghostty_pre_accept_external_mutation_probe_one() {
+  local proof_text="$1"
+  local label="$2"
+  local probe_text="$3"
+  local type_function="$4"
+  local restore_function="${5:-restore_claude_code_terminal_system_events_backspace}"
+  local verify_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_VERIFY_SECONDS:-3}"
+
+  [[ -n "$probe_text" ]] || return 0
+  if [[ "$probe_text" == *$'\n'* || "$probe_text" == *$'\r'* || ${#probe_text} -ne 1 ]]; then
+    echo "Claude Code Ghostty pre-accept external $label mutability probe refused non-single-character text." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty pre-accept external $label mutability probe typing one suffix without Enter." >&2
+  if ! "$type_function" "$probe_text"; then
+    echo "Claude Code Ghostty pre-accept external $label mutability probe could not post input." >&2
+    return 0
+  fi
+  sleep "$(claude_code_ghostty_typing_drain_seconds)"
+
+  if try_claude_code_terminal_prompt_ready_bounded_quiet \
+    "$proof_text$probe_text" \
+    "$verify_seconds" \
+    "Claude Code Ghostty pre-accept external $label mutation readiness"; then
+    echo "Claude Code Ghostty pre-accept external $label mutability probe verified prompt mutation before app-owned insertion." >&2
+    if ! "$restore_function" "$proof_text" "Ghostty pre-accept $label restore"; then
+      echo "Claude Code Ghostty pre-accept external $label mutability probe could not restore the original prompt." >&2
+      return 1
+    fi
+    sleep "$(claude_code_ghostty_typing_drain_seconds)"
+    if try_claude_code_terminal_prompt_ready_bounded_quiet \
+      "$proof_text" \
+      "$verify_seconds" \
+      "Claude Code Ghostty pre-accept external $label restore readiness"; then
+      echo "Claude Code Ghostty pre-accept external $label mutability probe restored the original prompt." >&2
+      return 0
+    fi
+    echo "Claude Code Ghostty pre-accept external $label mutability probe could not verify original prompt restore." >&2
+    return 1
+  fi
+
+  echo "Claude Code Ghostty pre-accept external $label mutability probe did not verify prompt mutation." >&2
+  if try_claude_code_terminal_prompt_ready_bounded_quiet \
+    "$proof_text" \
+    "$verify_seconds" \
+    "Claude Code Ghostty pre-accept external $label unchanged readiness"; then
+    return 0
+  fi
+  echo "Claude Code Ghostty pre-accept external $label mutability probe left the prompt in an unverified state." >&2
+  return 1
+}
+
+run_claude_code_ghostty_pre_accept_external_mutation_probe() {
+  local proof_text="$1"
+  local native_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_NATIVE_TEXT:-n}"
+  local system_events_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_SYSTEM_EVENTS_TEXT:-s}"
+
+  CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN=0
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$proof_text" ]] || return 0
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_PRE_ACCEPT_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty pre-accept external mutability probe skipped for proof-only accept driver; set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_PRE_ACCEPT_PROBE=1 to opt in." >&2
+    return 0
+  fi
+
+  CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN=1
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_NATIVE_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "native" \
+      "$native_probe_text" \
+      type_claude_code_terminal_ghostty_native_text \
+      restore_claude_code_terminal_ghostty_native_prompt_text || return 1
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "System Events" \
+      "$system_events_probe_text" \
+      type_claude_code_terminal_raw_smoke_text \
+      restore_claude_code_terminal_system_events_backspace || return 1
+  fi
+}
+
+run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe() {
+  local proof_text="$1"
+  local start_line="$2"
+  local native_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_TEXT:-p}"
+  local system_events_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_TEXT:-q}"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_MUTATION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$proof_text" ]] || return 0
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_TAB_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe skipped for proof-only accept driver; set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_TAB_PROBE=1 to opt in." >&2
+    return 0
+  fi
+
+  if ! wait_for_log_fields_optional \
+    "$start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_SCHEDULE_SECONDS:-1}" \
+    "claude-code-terminal-host-proof-deferred-accept" \
+    "app=com.anthropic.claude-code" \
+    "stage=scheduled"; then
+    echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe saw no deferred insert schedule yet; skipping comparator." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty post-Tab/pre-insert external mutability probe checking whether the prompt is still externally writable before SteadyType insertion." >&2
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_NATIVE_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "post-Tab/pre-insert native" \
+      "$native_probe_text" \
+      type_claude_code_terminal_ghostty_native_text \
+      restore_claude_code_terminal_ghostty_native_prompt_text || return 1
+  fi
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_TAB_PRE_INSERT_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    run_claude_code_ghostty_pre_accept_external_mutation_probe_one \
+      "$proof_text" \
+      "post-Tab/pre-insert System Events" \
+      "$system_events_probe_text" \
+      type_claude_code_terminal_raw_smoke_text \
+      restore_claude_code_terminal_system_events_backspace || return 1
+  fi
+}
+
+run_claude_code_ghostty_post_fail_external_insertion_probe() {
+  local proof_text="$1"
+  local start_line="${2:-0}"
+  local probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_TEXT:-x}"
+  local system_events_probe_text="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_TEXT:-z}"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_PROBE:-0}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$proof_text" ]] || return 0
+  [[ -n "$probe_text" ]] || return 0
+
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_FAIL_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty post-fail external insertion probe skipped for proof-only accept driver; set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_POST_FAIL_PROBE=1 to opt in." >&2
+    return 0
+  fi
+
+  if [[ "$probe_text" == *$'\n'* || "$probe_text" == *$'\r'* ]]; then
+    echo "Claude Code Ghostty post-fail external insertion probe refused multiline text." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty post-fail external native insertion probe typing one suffix without Enter." >&2
+  if ! type_claude_code_terminal_ghostty_native_text "$probe_text"; then
+    echo "Claude Code Ghostty post-fail external native insertion probe could not post input." >&2
+    return 0
+  fi
+  sleep "$(claude_code_ghostty_typing_drain_seconds)"
+
+  if try_claude_code_terminal_prompt_ready_quiet \
+    "$proof_text$probe_text" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_VERIFY_SECONDS:-3}"; then
+    echo "Claude Code Ghostty post-fail external native insertion probe verified prompt mutation after app-owned insertion failed." >&2
+    return 0
+  else
+    echo "Claude Code Ghostty post-fail external native insertion probe did not verify prompt mutation." >&2
+  fi
+
+  click_claude_code_ghostty_post_fail_prompt_caret "$start_line" || true
+
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_SYSTEM_EVENTS_PROBE:-1}" =~ ^(1|true|yes|on)$ ]] || return 0
+  [[ -n "$system_events_probe_text" ]] || return 0
+  if [[ "$system_events_probe_text" == *$'\n'* || "$system_events_probe_text" == *$'\r'* ]]; then
+    echo "Claude Code Ghostty post-fail external System Events insertion probe refused multiline text." >&2
+    return 0
+  fi
+
+  echo "Claude Code Ghostty post-fail external System Events insertion probe typing one suffix without Enter." >&2
+  if ! type_claude_code_terminal_raw_smoke_text "$system_events_probe_text"; then
+    echo "Claude Code Ghostty post-fail external System Events insertion probe could not post input." >&2
+    return 0
+  fi
+  sleep "$(claude_code_ghostty_typing_drain_seconds)"
+
+  if try_claude_code_terminal_prompt_ready_quiet \
+    "$proof_text$system_events_probe_text" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_VERIFY_SECONDS:-3}" ||
+    try_claude_code_terminal_prompt_ready_quiet \
+      "$proof_text$probe_text$system_events_probe_text" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_POST_FAIL_EXTERNAL_INSERTION_VERIFY_SECONDS:-3}"; then
+    echo "Claude Code Ghostty post-fail external System Events insertion probe verified prompt mutation after app-owned insertion failed." >&2
+  else
+    echo "Claude Code Ghostty post-fail external System Events insertion probe did not verify prompt mutation." >&2
+  fi
 }
 
 wait_for_obsidian_long_note_second_suggestion() {
@@ -1932,6 +2992,7 @@ wait_for_background_process() {
   local timeout_seconds="$2"
   local label="$3"
   local deadline=$((SECONDS + timeout_seconds))
+  local wait_status
 
   while kill -0 "$pid" >/dev/null 2>&1; do
     if ((SECONDS > deadline)); then
@@ -1945,11 +3006,9 @@ wait_for_background_process() {
     sleep 0.1
   done
 
-  if wait "$pid"; then
-    return 0
-  fi
-
-  return $?
+  wait "$pid"
+  wait_status=$?
+  return "$wait_status"
 }
 
 run_osascript_with_timeout() {
@@ -1957,12 +3016,30 @@ run_osascript_with_timeout() {
   local label="$2"
   shift 2
 
-  local run_dir stdout_path stderr_path status
+  local run_dir stdout_path stderr_path osascript_stdin_path status
+  local should_forward_stdin=0 arg
   run_dir="$(make_tmp_dir)"
   stdout_path="$run_dir/osascript-stdout.txt"
   stderr_path="$run_dir/osascript-stderr.txt"
+  osascript_stdin_path="$run_dir/osascript-stdin.applescript"
 
-  osascript "$@" >"$stdout_path" 2>"$stderr_path" &
+  if (($# == 0)); then
+    should_forward_stdin=1
+  else
+    for arg in "$@"; do
+      if [[ "$arg" == "-" ]]; then
+        should_forward_stdin=1
+        break
+      fi
+    done
+  fi
+
+  if [[ "$should_forward_stdin" == "1" ]]; then
+    cat >"$osascript_stdin_path"
+    osascript "$@" <"$osascript_stdin_path" >"$stdout_path" 2>"$stderr_path" &
+  else
+    osascript "$@" >"$stdout_path" 2>"$stderr_path" &
+  fi
   local osascript_pid="$!"
   if wait_for_background_process "$osascript_pid" "$timeout_seconds" "$label"; then
     cat "$stdout_path"
@@ -2048,6 +3125,9 @@ assert_frontmost_app() {
   local expected="$1"
   local label="$2"
   local frontmost
+  if try_wait_for_frontmost_app "$expected" 2; then
+    return 0
+  fi
   frontmost="$(run_osascript_with_timeout 2 "frontmost app assertion probe" \
     -e 'tell application "System Events"' \
     -e 'set frontProcess to first application process whose frontmost is true' \
@@ -2220,32 +3300,34 @@ claude_code_host_display_name() {
 }
 
 claude_code_host_bundle_id() {
+  local bundle_id=""
   case "$CLAUDE_CODE_HOST_VARIANT" in
     auto)
-      printf 'auto\n'
+      bundle_id="auto"
       ;;
     terminal)
-      printf 'com.apple.Terminal\n'
+      bundle_id="com.apple.Terminal"
       ;;
     iterm2)
-      printf 'com.googlecode.iterm2\n'
+      bundle_id="com.googlecode.iterm2"
       ;;
     warp)
-      printf 'dev.warp.Warp\n'
+      bundle_id="dev.warp.Warp"
       ;;
     ghostty)
-      printf 'com.mitchellh.ghostty\n'
+      bundle_id="com.mitchellh.ghostty"
       ;;
     kitty)
-      printf 'net.kovidgoyal.kitty\n'
+      bundle_id="net.kovidgoyal.kitty"
       ;;
     alacritty)
-      printf 'org.alacritty\n'
+      bundle_id="org.alacritty"
       ;;
     wezterm)
-      printf 'com.github.wez.wezterm\n'
+      bundle_id="com.github.wez.wezterm"
       ;;
   esac
+  printf '%s\n' "$bundle_id" || true
 }
 
 claude_code_host_proof_label() {
@@ -2325,6 +3407,40 @@ drop_stale_same_value_launchctl_previous() {
   return 1
 }
 
+proof_scenario_is_smoke_owned() {
+  local scenario="$1"
+
+  case "$scenario" in
+    codex-full-accept-no-submit|\
+    textedit-model-latency|\
+    textedit-default-model-latency|\
+    chrome-*-model-latency|\
+    codex-model-latency|\
+    claude-code-model-latency|\
+    claude-model-latency)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+prepare_default_proof_scenario_baseline() {
+  local previous_scenario
+
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    previous_scenario="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if proof_scenario_is_smoke_owned "$previous_scenario"; then
+      previous_scenario=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$previous_scenario"
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  unset AUTOCOMPLETE_LAB_PROOF_SCENARIO
+  launchctl unsetenv "$PROOF_SCENARIO_ENV_KEY" >/dev/null 2>&1 || true
+}
+
 prepare_temporary_app_enablement() {
   local bundle_ids
   bundle_ids="$(smoke_target_bundle_ids | paste -sd, -)"
@@ -2351,9 +3467,11 @@ prepare_temporary_app_enablement() {
   export AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS="$bundle_ids"
   launchctl setenv "$TEMP_ENABLE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
   launchctl setenv "$PROOF_MODE_ENV_KEY" "$bundle_ids" >/dev/null 2>&1 || true
+  prepare_default_proof_scenario_baseline
   echo "Temporary app enablement for smoke: $bundle_ids"
   echo "Temporary proof mode for smoke: $bundle_ids"
   prepare_accept_all_shortcut_default
+  prepare_proof_annoyance_learning_suppression
 
   if [[ "$NATIVE_UNDO_PROOF" =~ ^(1|true|yes|on)$ ]]; then
     if [[ "$UNDO_RECOVERY_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
@@ -2368,6 +3486,20 @@ prepare_temporary_app_enablement() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so temporary enablement/proof mode only applies if the app was launched with this environment." >&2
   fi
+}
+
+prepare_proof_annoyance_learning_suppression() {
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Proof smoke suppresses annoyance learning for synthetic proof keys."
 }
 
 prepare_accept_all_shortcut_default() {
@@ -2539,6 +3671,32 @@ prepare_codex_model_latency_runtime_options() {
   if [[ "$SKIP_BUILD" == "1" ]]; then
     echo "Note: --skip-build uses the already-running app, so Codex model-latency proof mode only applies if the app was launched with this environment." >&2
   fi
+}
+
+prepare_codex_full_accept_runtime_options() {
+  local scenario="codex-full-accept-no-submit"
+  if [[ "$PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SCENARIO_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SCENARIO_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SCENARIO_ENV_KEY" "$PROOF_SCENARIO_LAUNCHCTL_PREVIOUS" "$scenario"; then
+      PROOF_SCENARIO_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SCENARIO_LAUNCHCTL_WAS_PREPARED=1
+  fi
+  if [[ "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED" != "1" ]]; then
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS="$(launchctl getenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" 2>/dev/null || true)"
+    if drop_stale_same_value_launchctl_previous "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "$PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS" "1"; then
+      PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_PREVIOUS=""
+    fi
+    PROOF_SUPPRESS_ANNOYANCE_LAUNCHCTL_WAS_PREPARED=1
+  fi
+
+  export AUTOCOMPLETE_LAB_PROOF_SCENARIO="$scenario"
+  export AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING=1
+  launchctl setenv "$PROOF_SCENARIO_ENV_KEY" "$scenario" >/dev/null 2>&1 || true
+  launchctl setenv "$PROOF_SUPPRESS_ANNOYANCE_ENV_KEY" "1" >/dev/null 2>&1 || true
+  echo "Codex full accept no-submit proof scenario: $scenario"
+  echo "Codex full accept no-submit proof keeps prompt-app full accept proof-only for this launch."
+  echo "Codex full accept no-submit proof suppresses annoyance learning for synthetic prompt accept keys."
 }
 
 prepare_claude_code_model_latency_runtime_options() {
@@ -2895,7 +4053,12 @@ prepare_obsidian_pane_variant_if_needed() {
     return 0
   fi
 
-  osascript <<'APPLESCRIPT' >/dev/null
+  focus_obsidian_visible_tail_line
+  set_obsidian_caret_to_value_end
+
+  local attempt
+  for attempt in 1 2 3; do
+    osascript <<'APPLESCRIPT' >/dev/null
 tell application "System Events"
   tell application process "Obsidian"
     set frontmost to true
@@ -2903,14 +4066,18 @@ tell application "System Events"
   end tell
 end tell
 APPLESCRIPT
-  sleep 0.8
-  activate_obsidian_for_smoke
+    sleep 0.8
+    activate_obsidian_for_smoke
 
-  pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
-  if (( pane_count < 2 )); then
-    echo "Could not verify two Obsidian editor panes for pane proof." >&2
-    exit 3
-  fi
+    pane_count="$(obsidian_marker_text_area_count 2>/dev/null || echo 0)"
+    if (( pane_count >= 2 )); then
+      return 0
+    fi
+    focus_obsidian_visible_tail_line || true
+  done
+
+  echo "Could not verify two Obsidian editor panes for pane proof; marker text area count=$pane_count." >&2
+  exit 3
 }
 
 restore_obsidian_single_pane_if_needed() {
@@ -3017,11 +4184,11 @@ APPLESCRIPT
 }
 
 cgevent_keypress_helper_path() {
-  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v1}"
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-keypress-v6}"
 }
 
 ensure_cgevent_keypress_helper() {
-  local helper source
+  local helper source swiftc_pid build_timeout_seconds
   helper="$(cgevent_keypress_helper_path)"
   if [[ -x "$helper" ]]; then
     return 0
@@ -3033,23 +4200,82 @@ ensure_cgevent_keypress_helper() {
 import ApplicationServices
 import Foundation
 
-guard CommandLine.arguments.count == 2,
-      let keyCode = UInt16(CommandLine.arguments[1]),
-      let source = CGEventSource(stateID: .hidSystemState),
+guard CommandLine.arguments.count >= 2,
+      CommandLine.arguments.count <= 4,
+      let keyCode = UInt16(CommandLine.arguments[1]) else {
+    FileHandle.standardError.write(Data("usage: cgevent-keypress <keyCode> [hid|session|pid:<pid>] [hidSystem|combinedSession|private]\n".utf8))
+    exit(1)
+}
+
+let tapArgument = CommandLine.arguments.count >= 3 ? CommandLine.arguments[2] : "hid"
+let targetPid: pid_t?
+let tap: CGEventTapLocation?
+if tapArgument.hasPrefix("pid:") {
+    let pidString = String(tapArgument.dropFirst("pid:".count))
+    guard let pid = Int32(pidString), pid > 0 else {
+        FileHandle.standardError.write(Data("invalid target pid\n".utf8))
+        exit(2)
+    }
+    targetPid = pid_t(pid)
+    tap = nil
+} else {
+    targetPid = nil
+    switch tapArgument {
+    case "hid":
+        tap = .cghidEventTap
+    case "session":
+        tap = .cgSessionEventTap
+    default:
+        FileHandle.standardError.write(Data("unknown CGEvent tap location\n".utf8))
+        exit(2)
+    }
+}
+
+let sourceArgument = CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : "hidSystem"
+let sourceState: CGEventSourceStateID
+switch sourceArgument {
+case "hidSystem":
+    sourceState = .hidSystemState
+case "combinedSession":
+    sourceState = .combinedSessionState
+case "private":
+    sourceState = .privateState
+default:
+    FileHandle.standardError.write(Data("unknown CGEvent source state\n".utf8))
+    exit(3)
+}
+
+guard let source = CGEventSource(stateID: sourceState),
       let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
       let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
     FileHandle.standardError.write(Data("failed to create CGEvent key press\n".utf8))
-    exit(1)
+    exit(4)
 }
 
 keyDown.flags = []
 keyUp.flags = []
-keyDown.post(tap: .cghidEventTap)
+if let targetPid {
+    keyDown.postToPid(targetPid)
+} else if let tap {
+    keyDown.post(tap: tap)
+}
 usleep(20_000)
-keyUp.post(tap: .cghidEventTap)
+if let targetPid {
+    keyUp.postToPid(targetPid)
+} else if let tap {
+    keyUp.post(tap: tap)
+}
 SWIFT
 
-  if ! swiftc "$source" -o "$helper"; then
+  build_timeout_seconds="${AUTOCOMPLETE_LAB_CGEVENT_KEYPRESS_HELPER_BUILD_TIMEOUT_SECONDS:-8}"
+  build_timeout_seconds="${build_timeout_seconds%%.*}"
+  if ! [[ "$build_timeout_seconds" =~ ^[0-9]+$ ]] || ((build_timeout_seconds < 1)); then
+    build_timeout_seconds=8
+  fi
+
+  swiftc "$source" -o "$helper" &
+  swiftc_pid="$!"
+  if ! wait_for_background_process "$swiftc_pid" "$build_timeout_seconds" "CGEvent keypress helper compile"; then
     rm -f "$source" "$helper" >/dev/null 2>&1 || true
     return 1
   fi
@@ -3064,6 +4290,361 @@ press_key_code_cgevent() {
   ensure_cgevent_keypress_helper
   helper="$(cgevent_keypress_helper_path)"
   "$helper" "$key_code"
+}
+
+press_key_code_cgevent_with_timeout() {
+  local key_code="$1"
+  local timeout_seconds="$2"
+  local label="$3"
+  local tap_location="${4:-hid}"
+  local warm_policy="${5:-compile}"
+  local source_state="${6:-hidSystem}"
+  local helper pid
+
+  helper="$(cgevent_keypress_helper_path)"
+  if [[ "$warm_policy" == "warm" && ! -x "$helper" ]]; then
+    echo "$label helper is not warm; refusing to compile on the hot accept path." >&2
+    return 1
+  fi
+  ensure_cgevent_keypress_helper
+  "$helper" "$key_code" "$tap_location" "$source_state" &
+  pid="$!"
+  wait_for_background_process "$pid" "$timeout_seconds" "$label"
+}
+
+wait_for_claude_code_terminal_key_capture_modifier_probe() {
+  local start_line="$1"
+
+  wait_for_log_fields_optional \
+    "$start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=other" \
+    "decision=passthrough-modifier"
+}
+
+claude_code_terminal_key_capture_permission_ui_since() {
+  local start_line="$1"
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  if ! [[ "$start_line" =~ ^[0-9]+$ ]]; then
+    start_line=0
+  fi
+
+  awk -v start="$start_line" '
+    NR <= start {
+      next
+    }
+    /workspace-focus-changed/ &&
+      (/app=com.apple.accessibility.universalAccessAuthWarn/ ||
+       /frontmostApp=com.apple.accessibility.universalAccessAuthWarn/ ||
+       /app=com.apple.systempreferences/ ||
+       /frontmostApp=com.apple.systempreferences/) {
+      found = 1
+      exit
+    }
+    END {
+      exit found ? 0 : 1
+    }
+  ' "$LOG_PATH" 2>/dev/null
+}
+
+wait_for_claude_code_terminal_key_capture_permission_ui_since() {
+  local start_line="$1"
+  local timeout_seconds="${2:-1}"
+  local deadline
+
+  timeout_seconds="${timeout_seconds%%.*}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    if claude_code_terminal_key_capture_permission_ui_since "$start_line"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  return 1
+}
+
+probe_claude_code_terminal_host_key_capture() {
+  local host_name="${1:-$(claude_code_host_display_name)}"
+  local key_capture_start_line probe_start_line proof_pid focus_seconds
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ||
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE:-1}" == "0" ]]; then
+    return 0
+  fi
+
+  focus_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_SECONDS:-2}"
+  focus_seconds="${focus_seconds%%.*}"
+  if ! [[ "$focus_seconds" =~ ^[0-9]+$ ]] || ((focus_seconds < 1)); then
+    focus_seconds=2
+  fi
+  key_capture_start_line="$(line_count "$LOG_PATH")"
+
+  if ! settle_claude_code_terminal_proof_focus "session key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before key capture probe"
+    echo "Claude Code terminal host is not frontmost for key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name probing CGEvent session key capture with non-mutating Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent session key-capture probe" \
+    "session" \
+    "warm"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=other" \
+    "decision=passthrough-modifier"; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "HID key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before HID key capture probe"
+    echo "Claude Code terminal host is not frontmost for HID key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name CGEvent session key capture probe produced no diagnostic; retrying with HID Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent HID key-capture probe" \
+    "hid" \
+    "warm"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=other" \
+    "decision=passthrough-modifier"; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "combined-session key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before combined-session key capture probe"
+    echo "Claude Code terminal host is not frontmost for combined-session key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name CGEvent HID key capture probe produced no diagnostic; retrying with combined-session Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent combined-session key-capture probe" \
+    "session" \
+    "warm" \
+    "combinedSession"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent combined-session key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+    return 0
+  fi
+
+  proof_pid="$(claude_code_ghostty_frontmost_proof_process_id_by_title 2>/dev/null || true)"
+  proof_pid="$(printf '%s' "$proof_pid" | tr -dc '0-9')"
+  if [[ -z "$proof_pid" ]]; then
+    proof_pid="$(printf '%s\n' ${CLAUDE_CODE_TERMINAL_PROOF_PIDS:-} 2>/dev/null | head -n 1 | tr -dc '0-9')"
+  fi
+  if [[ -n "$proof_pid" ]]; then
+    if ! settle_claude_code_terminal_proof_focus "PID-targeted key-capture probe" "$focus_seconds"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before PID-targeted key capture probe"
+      echo "Claude Code terminal host is not frontmost for PID-targeted key capture probe." >&2
+      return 1
+    fi
+
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; retrying with PID-targeted Shift for Ghostty pid $proof_pid."
+    if ! press_key_code_cgevent_with_timeout \
+      56 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent PID-targeted key-capture probe" \
+      "pid:$proof_pid" \
+      "warm"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent PID-targeted key capture probe helper failed"
+      return 1
+    fi
+    if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+      return 0
+    fi
+  else
+    echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; could not resolve a Ghostty proof pid for PID-targeted Shift." >&2
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "private-source session key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source session key capture probe"
+    echo "Claude Code terminal host is not frontmost for private-source session key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name key capture probes produced no diagnostic; retrying with private-source session Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent private-source session key-capture probe" \
+    "session" \
+    "warm" \
+    "private"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source session key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+    return 0
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "private-source HID key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source HID key capture probe"
+    echo "Claude Code terminal host is not frontmost for private-source HID key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name private-source session key capture probe produced no diagnostic; retrying with private-source HID Shift."
+  if ! press_key_code_cgevent_with_timeout \
+    56 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_PROBE_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent private-source HID key-capture probe" \
+    "hid" \
+    "warm" \
+    "private"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source HID key capture probe helper failed"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+    return 0
+  fi
+
+  if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
+    echo "Claude Code $host_name key capture probes produced no diagnostic; skipping System Events Shift because it can trigger macOS permission UI. Set AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_PROBE=1 to opt in." >&2
+    echo "Claude Code $host_name key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "System Events key-capture probe" "$focus_seconds"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before System Events key capture probe"
+    echo "Claude Code terminal host is not frontmost for System Events key capture probe." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name combined-session key capture probe produced no diagnostic; retrying with System Events Shift."
+  if ! run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_SYSTEM_EVENTS_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name System Events key-capture probe" <<'APPLESCRIPT'
+tell application "System Events"
+  key code 56
+end tell
+APPLESCRIPT
+  then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="System Events key capture probe timed out"
+    return 1
+  fi
+  if wait_for_claude_code_terminal_key_capture_modifier_probe "$probe_start_line"; then
+    return 0
+  fi
+
+  if wait_for_claude_code_terminal_key_capture_permission_ui_since "$key_capture_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-2}"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe lost focus to macOS permission UI"
+    echo "Claude Code $host_name key capture probe lost focus to macOS Accessibility/System Settings permission UI before reaching the SteadyType event tap." >&2
+    return 1
+  fi
+
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="key capture probe did not reach event tap"
+  echo "Claude Code $host_name key capture probe did not reach the SteadyType event tap; refreshing the disposable prompt." >&2
+  return 1
+}
+
+cgevent_text_helper_path() {
+  printf '%s\n' "${AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER:-${TMPDIR:-/tmp}/steadytype-cgevent-text-v1}"
+}
+
+ensure_cgevent_text_helper() {
+  local helper source swiftc_pid build_timeout_seconds
+  helper="$(cgevent_text_helper_path)"
+  if [[ -x "$helper" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$helper")"
+  source="${helper}.$$.swift"
+  cat >"$source" <<'SWIFT'
+import ApplicationServices
+import Foundation
+
+guard CommandLine.arguments.count == 2,
+      let source = CGEventSource(stateID: .hidSystemState) else {
+    FileHandle.standardError.write(Data("failed to create CGEvent text source\n".utf8))
+    exit(1)
+}
+
+let text = CommandLine.arguments[1]
+let delayMicros: useconds_t = 12_000
+
+for character in text {
+    var units = Array(String(character).utf16)
+    guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+        FileHandle.standardError.write(Data("failed to create CGEvent text key\n".utf8))
+        exit(1)
+    }
+
+    keyDown.flags = []
+    keyUp.flags = []
+    keyDown.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+    keyUp.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
+    keyDown.post(tap: .cghidEventTap)
+    usleep(delayMicros)
+    keyUp.post(tap: .cghidEventTap)
+    usleep(delayMicros)
+}
+SWIFT
+
+  build_timeout_seconds="${AUTOCOMPLETE_LAB_CGEVENT_TEXT_HELPER_BUILD_TIMEOUT_SECONDS:-8}"
+  build_timeout_seconds="${build_timeout_seconds%%.*}"
+  if ! [[ "$build_timeout_seconds" =~ ^[0-9]+$ ]] || ((build_timeout_seconds < 1)); then
+    build_timeout_seconds=8
+  fi
+
+  swiftc "$source" -o "$helper" &
+  swiftc_pid="$!"
+  if ! wait_for_background_process "$swiftc_pid" "$build_timeout_seconds" "CGEvent text helper compile"; then
+    rm -f "$source" "$helper" >/dev/null 2>&1 || true
+    return 1
+  fi
+  chmod 700 "$helper" >/dev/null 2>&1 || true
+  rm -f "$source" >/dev/null 2>&1 || true
+}
+
+type_text_cgevent() {
+  local text="$1"
+  local helper
+
+  [[ -n "$text" ]] || return 0
+  ensure_cgevent_text_helper
+  helper="$(cgevent_text_helper_path)"
+  "$helper" "$text"
 }
 
 file_url() {
@@ -6156,7 +7737,10 @@ normalize_textedit_typed_seed_for_proof() {
   local expected_text="$2"
   local label="$3"
 
-  set_textedit_document_text "$window_title" "$expected_text"
+  set_textedit_document_text "$window_title" "$expected_text" || true
+  if ! wait_for_textedit_document_exact_or_return "$window_title" "$expected_text" 2; then
+    trim_textedit_native_completion_suffix "$window_title" "$expected_text" "$label typed seed normalize"
+  fi
   wait_for_textedit_document_exact "$window_title" "$expected_text" "$label typed seed normalize" 5
   move_textedit_caret_to_document_end "$window_title"
 }
@@ -6186,112 +7770,6 @@ verify_textedit_native_undo() {
   echo "Expected caret: $expected_caret" >&2
   echo "Actual caret: $(textedit_document_caret_location "$window_title")" >&2
   return 1
-}
-
-set_textedit_document_text() {
-  local window_title="$1"
-  local replacement_text="$2"
-
-  swift - "$window_title" "$replacement_text" <<'SWIFT'
-import AppKit
-import ApplicationServices
-import Foundation
-
-guard CommandLine.arguments.count == 3 else {
-    exit(2)
-}
-
-let targetTitle = CommandLine.arguments[1]
-let replacementText = CommandLine.arguments[2]
-
-func copyAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
-    var value: CFTypeRef?
-    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success else {
-        return nil
-    }
-    return value
-}
-
-func textEditTitleMatches(_ title: String?) -> Bool {
-    guard let title else {
-        return false
-    }
-    if title == targetTitle {
-        return true
-    }
-
-    let stem = (targetTitle as NSString).deletingPathExtension
-    let candidates = [targetTitle, stem].filter { !$0.isEmpty }
-    return candidates.contains { candidate in
-        title == candidate ||
-            title.hasPrefix(candidate + " ") ||
-            title.hasPrefix(candidate + " -")
-    }
-}
-
-func children(of element: AXUIElement) -> [AXUIElement] {
-    copyAttribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
-}
-
-func firstTextInput(in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
-    guard depth <= 8 else {
-        return nil
-    }
-
-    let role = copyAttribute(element, kAXRoleAttribute) as? String
-    if role == kAXTextAreaRole as String || role == kAXTextFieldRole as String {
-        return element
-    }
-
-    for child in children(of: element) {
-        if let found = firstTextInput(in: child, depth: depth + 1) {
-            return found
-        }
-    }
-
-    return nil
-}
-
-func moveCaret(_ element: AXUIElement, to location: Int) -> Bool {
-    var range = CFRange(location: location, length: 0)
-    guard let rangeValue = AXValueCreate(.cfRange, &range) else {
-        return false
-    }
-    return AXUIElementSetAttributeValue(
-        element,
-        kAXSelectedTextRangeAttribute as CFString,
-        rangeValue
-    ) == .success
-}
-
-for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier == "com.apple.TextEdit" {
-    let appElement = AXUIElementCreateApplication(app.processIdentifier)
-    AXUIElementSetMessagingTimeout(appElement, 0.5)
-    guard let windows = copyAttribute(appElement, kAXWindowsAttribute) as? [AXUIElement] else {
-        continue
-    }
-
-    for window in windows where textEditTitleMatches(copyAttribute(window, kAXTitleAttribute) as? String) {
-        guard let textInput = firstTextInput(in: window) else {
-            exit(1)
-        }
-        app.activate(options: [.activateAllWindows])
-        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-        AXUIElementSetAttributeValue(textInput, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-
-        let valueResult = AXUIElementSetAttributeValue(
-            textInput,
-            kAXValueAttribute as CFString,
-            replacementText as CFString
-        )
-        let caretResult = moveCaret(textInput, to: replacementText.utf16.count)
-        exit(valueResult == .success && caretResult ? 0 : 1)
-    }
-}
-
-exit(1)
-SWIFT
 }
 
 textedit_smoke_allows_ax_proof_typing() {
@@ -7703,6 +9181,20 @@ codex_proof_text() {
   printf '%s\n' "$proof_text"
 }
 
+codex_full_accept_proof_text() {
+  local proof_nonce="${AUTOCOMPLETE_LAB_CODEX_PROOF_NONCE:-$(date +%s)}"
+  local proof_text="${AUTOCOMPLETE_LAB_CODEX_FULL_ACCEPT_PROOF_TEXT:-AUTOCOMPLETE_LAB_CODEX_PROOF $proof_nonce full-accept I think the next step should}"
+  if [[ "$proof_text" != *"AUTOCOMPLETE_LAB_CODEX_PROOF"* ]]; then
+    echo "Codex full accept proof text must include AUTOCOMPLETE_LAB_CODEX_PROOF." >&2
+    exit 2
+  fi
+  if [[ "$proof_text" == *$'\n'* || "$proof_text" == *$'\r'* ]]; then
+    echo "Codex full accept proof text must be a single prompt line." >&2
+    exit 2
+  fi
+  printf '%s\n' "$proof_text"
+}
+
 codex_model_latency_proof_texts() {
   if [[ -n "${AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS:-}" ]]; then
     printf '%s\n' "$AUTOCOMPLETE_LAB_CODEX_MODEL_LATENCY_TEXTS"
@@ -7728,6 +9220,10 @@ EOF
 
 claude_code_proof_marker() {
   printf '%s\n' "${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-STEADYTYPECLAUDECODEPROOF}"
+}
+
+claude_code_compact_proof_marker() {
+  claude_code_proof_marker | tr -d '[:space:]'
 }
 
 claude_code_model_latency_proof_texts() {
@@ -7782,13 +9278,13 @@ claude_code_terminal_smoke_input_texts() {
   local marker
   marker="$(claude_code_proof_marker)"
   cat <<EOF
-Make this setting the feature
-Please make this
-This should feel
-What I want is
-It should almost always
-When I hit Tab it should
-The next suggestion should be a
+$marker Please make this
+$marker Make this setting the feature
+$marker This should feel
+$marker What I want is
+$marker It should almost always
+$marker When I hit Tab it should
+$marker The next suggestion should be a
 EOF
 }
 
@@ -7884,11 +9380,21 @@ assert_claude_prompt_retains_marker() {
 
 claude_code_terminal_ax_helper() {
   local action="$1"
+  local proof_pid
+  local -a proof_pid_args
   shift
+
+  proof_pid="$(claude_code_terminal_proof_primary_pid)"
+  proof_pid_args=()
+  if [[ -n "$proof_pid" ]]; then
+    proof_pid_args=(--pid "$proof_pid")
+  fi
+
   swift script/terminal_prompt_ax_proof_helper.swift "$action" \
     --bundle "$(claude_code_host_bundle_id)" \
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
+    "${proof_pid_args[@]}" \
     --hint "Claude Code" \
     --hint "Try \"fix lint errors\"" \
     --hint "for shortcuts" \
@@ -7980,15 +9486,69 @@ wait_for_new_terminal_pids() {
 }
 
 frontmost_process_id() {
-  osascript <<'APPLESCRIPT'
+  swift - <<'SWIFT'
+import AppKit
+print(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)
+SWIFT
+}
+
+frontmost_bundle_identifier() {
+  swift - <<'SWIFT'
+import AppKit
+print(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "")
+SWIFT
+}
+
+system_events_frontmost_process_id_matches() {
+  local target_pid="$1"
+  local result
+
+  [[ -n "$target_pid" ]] || return 1
+  result="$(AUTOCOMPLETE_LAB_TARGET_PID="$target_pid" \
+    run_osascript_with_timeout 1 "System Events frontmost pid probe" <<'APPLESCRIPT' || true
+set targetPid to (system attribute "AUTOCOMPLETE_LAB_TARGET_PID") as integer
 tell application "System Events"
-  get unix id of first application process whose frontmost is true
+  repeat with procRef in (application processes whose frontmost is true)
+    try
+      if unix id of procRef is targetPid then return true
+    end try
+  end repeat
 end tell
+return false
 APPLESCRIPT
+)"
+  [[ "$result" == "true" ]]
 }
 
 activate_process_id() {
   local target_pid="$1"
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+    focus_claude_code_ghostty_proof_window_by_title "$target_pid"; then
+    return 0
+  fi
+
+  local swift_activation_pid
+  {
+    swift - "$target_pid" <<'SWIFT' >/dev/null
+import AppKit
+
+guard CommandLine.arguments.count == 2,
+      let rawPID = Int32(CommandLine.arguments[1]),
+      let app = NSRunningApplication(processIdentifier: pid_t(rawPID)) else {
+    exit(1)
+}
+
+app.activate(options: [.activateAllWindows])
+SWIFT
+  } &
+  swift_activation_pid="$!"
+  wait_for_background_process "$swift_activation_pid" 2 "Swift activation for pid $target_pid" >/dev/null 2>&1 || true
+
+  if wait_for_appkit_activation_frontmost "$target_pid"; then
+    return 0
+  fi
+
   AUTOCOMPLETE_LAB_TARGET_PID="$target_pid" osascript <<'APPLESCRIPT'
 set targetPid to (system attribute "AUTOCOMPLETE_LAB_TARGET_PID") as integer
 tell application "System Events"
@@ -7997,14 +9557,266 @@ end tell
 APPLESCRIPT
 }
 
-wait_for_frontmost_claude_code_terminal_proof_process() {
-  local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
+focus_claude_code_ghostty_proof_window_by_title() {
+  local target_pid="${1:-}"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
+
+  local focus_result
+  focus_result="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$CLAUDE_CODE_TERMINAL_PROOF_TITLE" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID="$target_pid" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty title-marked proof focus" <<'APPLESCRIPT' || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set targetPidText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID"
+set targetPid to 0
+try
+  if targetPidText is not "" then set targetPid to targetPidText as integer
+end try
+set targetWindow to missing value
+set activatedTitleWindow to false
+tell application id "com.mitchellh.ghostty"
+  repeat with candidateWindow in windows
+    set windowName to name of candidateWindow as text
+    if windowName contains proofTitle then
+      set targetWindow to candidateWindow
+      exit repeat
+    end if
+  end repeat
+  if targetWindow is missing value then return false
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  select tab targetTab
+  focus targetTerminal
+  set activatedTitleWindow to true
+  activate
+end tell
+delay 0.05
+tell application "System Events"
+  if targetPid is not 0 then
+    repeat with procRef in application processes
+      try
+        if unix id of procRef is targetPid then
+          set frontmost of procRef to true
+          exit repeat
+        end if
+      end try
+    end repeat
+  end if
+  delay 0.05
+  set sawGhostty to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if targetPid is not 0 and unix id of frontApp is targetPid then return "exact"
+      if bundle identifier of frontApp is "com.mitchellh.ghostty" then set sawGhostty to true
+    end try
+  end repeat
+  if sawGhostty and activatedTitleWindow then return "bundle"
+end tell
+return "false"
+APPLESCRIPT
+)"
+  [[ "$focus_result" == "exact" || "$focus_result" == "bundle" || "$focus_result" == "true" ]]
+}
+
+focus_claude_code_ghostty_host_app_after_title_proof() {
+  local target_pid="${1:-}"
+  local host_focus_result
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ "${CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED:-0}" == "1" ]] || return 1
+
+  host_focus_result="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID="$target_pid" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_HOST_FOCUS_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty host focus after title proof" <<'APPLESCRIPT' || true
+set targetPidText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TARGET_PID"
+set targetPid to 0
+try
+  if targetPidText is not "" then set targetPid to targetPidText as integer
+end try
+tell application id "com.mitchellh.ghostty"
+  activate
+end tell
+delay 0.05
+tell application "System Events"
+  if targetPid is not 0 then
+    repeat with procRef in application processes
+      try
+        if unix id of procRef is targetPid then
+          set frontmost of procRef to true
+          exit repeat
+        end if
+      end try
+    end repeat
+  end if
+  delay 0.05
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is "com.mitchellh.ghostty" then return true
+    end try
+  end repeat
+end tell
+return false
+APPLESCRIPT
+)"
+  [[ "$host_focus_result" == "true" ]]
+}
+
+allow_claude_code_ghostty_proof_command_alert() {
+  local launch_script="$1"
+  local timeout_seconds="${2:-2}"
+  local allow_result
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$launch_script" ]] || return 1
+
+  allow_result="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_SCRIPT="$launch_script" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ALERT_TIMEOUT_SECONDS="$timeout_seconds" \
+    run_osascript_with_timeout \
+      "$timeout_seconds" \
+      "Claude Code Ghostty proof command alert allow" <<'APPLESCRIPT' || true
+set launchScript to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_SCRIPT"
+set timeoutSeconds to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ALERT_TIMEOUT_SECONDS") as real
+set deadline to (current date) + timeoutSeconds
+
+on appendIfText(existingText, candidateValue)
+  try
+    if candidateValue is not missing value then return existingText & " " & (candidateValue as text)
+  end try
+  return existingText
+end appendIfText
+
+repeat while (current date) < deadline
+  tell application "System Events"
+    if exists application process "Ghostty" then
+      tell application process "Ghostty"
+        if exists front window then
+          set windowText to ""
+          try
+            set windowText to my appendIfText(windowText, name of front window)
+          end try
+          try
+            set windowText to my appendIfText(windowText, value of front window)
+          end try
+          try
+            repeat with elementRef in static texts of front window
+              try
+                set windowText to my appendIfText(windowText, name of elementRef)
+              end try
+              try
+                set windowText to my appendIfText(windowText, value of elementRef)
+              end try
+            end repeat
+          end try
+          if windowText contains "Allow Ghostty to execute" and windowText contains launchScript then
+            if exists button "Allow" of front window then
+              click button "Allow" of front window
+              return "allowed"
+            end if
+          end if
+        end if
+      end tell
+    end if
+  end tell
+  delay 0.1
+end repeat
+
+return "not-present"
+APPLESCRIPT
+)"
+  if [[ "$allow_result" == "allowed" ]]; then
+    echo "Claude Code Ghostty proof allowed command execution alert for disposable proof command."
+    return 0
+  fi
+  return 1
+}
+
+frontmost_claude_code_terminal_proof_process_is_active() {
+  local frontmost_pid root_pid
+
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 1
+  frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+  frontmost_claude_code_terminal_proof_pid_matches "$frontmost_pid"
+}
+
+frontmost_claude_code_terminal_host_app_is_active() {
+  local frontmost_pid="${1:-}"
+  local host_app host_bundle frontmost_bundle host_process
+
+  guard_ghostty_frontmost_bundle_fallback || return 1
+  host_app="$(claude_code_host_open_app_name)"
+  host_bundle="$(claude_code_host_bundle_id)"
+  frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"
+  if [[ -n "$host_bundle" && "$frontmost_bundle" == "$host_bundle" ]]; then
+    return 0
+  fi
+  if [[ -n "$host_app" ]] && try_wait_for_frontmost_app "$host_app" 1; then
+    return 0
+  fi
+
+  host_process="$(claude_code_host_process_name)"
+  process_id_has_name "$frontmost_pid" "$host_process"
+}
+
+guard_ghostty_frontmost_bundle_fallback() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]
+}
+
+frontmost_claude_code_terminal_proof_pid_matches() {
+  local frontmost_pid="$1"
+  local root_pid
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if [[ "$frontmost_pid" == "$root_pid" ]]; then
+      return 0
+    fi
+  done
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+      if system_events_frontmost_process_id_matches "$root_pid"; then
+        return 0
+      fi
+    done
+  fi
+
+  frontmost_claude_code_terminal_host_app_is_active "$frontmost_pid"
+}
+
+frontmost_claude_code_terminal_proof_root_pid_matches() {
+  local frontmost_pid="$1"
+  local root_pid
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if [[ "$frontmost_pid" == "$root_pid" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+claude_code_terminal_proof_primary_pid() {
+  local root_pid
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    printf '%s\n' "$root_pid"
+    return 0
+  done
+
+  return 0
+}
+
+try_wait_for_frontmost_claude_code_terminal_proof_process() {
+  local timeout="${1:-${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}}"
   local timeout_seconds="${timeout%%.*}"
-  local deadline root_pid frontmost_pid
+  local deadline root_pid frontmost_pid activation_attempt
 
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
-    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
-    exit 1
+    return 1
   fi
   if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
     timeout_seconds=12
@@ -8014,23 +9826,167 @@ wait_for_frontmost_claude_code_terminal_proof_process() {
   fi
 
   for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      if focus_claude_code_ghostty_proof_window_by_title "$root_pid" >/dev/null 2>&1; then
+        return 0
+      fi
+      if focus_claude_code_ghostty_host_app_after_title_proof "$root_pid" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
     activate_process_id "$root_pid" >/dev/null 2>&1 || true
     break
   done
 
   deadline=$((SECONDS + timeout_seconds))
+  activation_attempt=0
   while ((SECONDS <= deadline)); do
     frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
-    for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
-      if [[ "$frontmost_pid" == "$root_pid" ]]; then
-        return 0
-      fi
-    done
+    if frontmost_claude_code_terminal_proof_pid_matches "$frontmost_pid"; then
+      return 0
+    fi
+    activation_attempt=$((activation_attempt + 1))
+    if ((activation_attempt % 3 == 0)); then
+      for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+          if focus_claude_code_ghostty_proof_window_by_title "$root_pid" >/dev/null 2>&1; then
+            return 0
+          fi
+          if focus_claude_code_ghostty_host_app_after_title_proof "$root_pid" >/dev/null 2>&1; then
+            return 0
+          fi
+        fi
+        activate_process_id "$root_pid" >/dev/null 2>&1 || true
+        break
+      done
+    fi
     sleep 0.2
   done
 
-  echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+  return 1
+}
+
+wait_for_frontmost_claude_code_terminal_proof_process() {
+  local frontmost_pid frontmost_bundle
+
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
+    exit 1
+  fi
+
+  if try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    return 0
+  fi
+
+  frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+  frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"
+  echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS (frontmost pid=${frontmost_pid:-unknown} bundle=${frontmost_bundle:-unknown})" >&2
   exit 1
+}
+
+settle_claude_code_terminal_proof_focus() {
+  local label="$1"
+  local timeout="${2:-}"
+  local host_name
+  host_name="$(claude_code_host_display_name)"
+
+  if [[ -n "$timeout" ]]; then
+    if try_wait_for_frontmost_claude_code_terminal_proof_process "$timeout"; then
+      return 0
+    fi
+  elif try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    return 0
+  fi
+
+  echo "Claude Code $host_name proof could not reactivate its disposable host process for $label." >&2
+  return 1
+}
+
+prepare_claude_code_terminal_suggestion_for_hot_accept() {
+  local suggestion_line="$1"
+  local host_name="$2"
+  local refresh_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SUGGESTION_WAIT_SECONDS:-4}"
+  local max_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_ATTEMPTS:-3}"
+  local attempt=1
+  local current_suggestion_line="$suggestion_line"
+  CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE="$suggestion_line"
+
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || ((max_attempts < 1)); then
+    max_attempts=1
+  fi
+
+  while ((attempt <= max_attempts)); do
+    if log_since_has_fields "$suggestion_line" \
+      "keyboard-action" \
+      "app=com.anthropic.claude-code" \
+      "key=escape" \
+      "action=dismiss" \
+      "handled=true" ||
+      log_since_has_fields "$suggestion_line" \
+        "field-suppressed" \
+        "app=com.anthropic.claude-code" \
+        "reason=escape"; then
+      echo "Claude Code $host_name suggestion was dismissed before Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
+    if log_since_has_fields "$current_suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code" \
+      "reason=focus-changed" ||
+      log_since_has_fields "$current_suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code" \
+        "reason=focus-lost"; then
+      echo "Claude Code $host_name suggestion hid after focus moved before Tab; refocusing for a fresh suggestion." >&2
+      if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
+        return 1
+      fi
+      if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
+        "$current_suggestion_line" \
+        "$refresh_wait_seconds"; then
+        current_suggestion_line="$MATCHED_LOG_LINE"
+        CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE="$current_suggestion_line"
+        attempt=$((attempt + 1))
+        continue
+      fi
+      return 1
+    fi
+
+    if log_since_has_fields "$current_suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+      echo "Claude Code $host_name suggestion is no longer visible before Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
+    if ! try_wait_for_frontmost_claude_code_terminal_proof_process 1; then
+      echo "Claude Code $host_name proof lost focus before Tab; reactivating the disposable host process for the hot accept." >&2
+      if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
+        return 1
+      fi
+      sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_REFOCUS_SETTLE_SECONDS:-0.4}"
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE="$current_suggestion_line"
+    MATCHED_LOG_LINE="$current_suggestion_line"
+    return 0
+  done
+
+  return 1
+}
+
+warm_claude_code_terminal_hot_accept_helpers() {
+  local host_name="$1"
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ]]; then
+    return 0
+  fi
+
+  echo "Claude Code $host_name proof warming CGEvent Tab helper before prompt suggestions."
+  ensure_cgevent_keypress_helper
 }
 
 process_tree_contains_name() {
@@ -8064,7 +10020,294 @@ process_id_has_name() {
   [[ "$command_name" == "$expected_name" || "$command_name" == "-$expected_name" ]]
 }
 
-wait_for_claude_code_terminal_process_name() {
+process_id_or_tree_has_name() {
+  local pid="$1"
+  local expected_name="$2"
+
+  [[ -z "$pid" || -z "$expected_name" ]] && return 1
+  process_id_has_name "$pid" "$expected_name" ||
+    process_tree_contains_name "$pid" "$expected_name"
+}
+
+process_tree_has_child() {
+  local root_pid="$1"
+
+  [[ -n "$root_pid" ]] || return 1
+  pgrep -P "$root_pid" >/dev/null 2>&1
+}
+
+ghostty_process_tree_has_child() {
+  local root_pid
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 1
+
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    if process_tree_has_child "$root_pid"; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+wait_for_ghostty_process_tree_child_optional() {
+  local timeout="${1:-2}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 1
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=2
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    if ghostty_process_tree_has_child; then
+      return 0
+    fi
+    sleep 0.2
+  done
+
+  return 1
+}
+
+describe_claude_code_ghostty_process_tree() {
+  local root_pid child
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]] || return 0
+
+  echo "Claude Code Ghostty proof process tree:" >&2
+  for root_pid in $CLAUDE_CODE_TERMINAL_PROOF_PIDS; do
+    echo "root_pid=$root_pid" >&2
+    ps -p "$root_pid" -o pid,ppid,pgid,stat,comm,args 2>/dev/null >&2 ||
+      echo "  root process unavailable to ps" >&2
+    while IFS= read -r child; do
+      [[ -n "$child" ]] || continue
+      ps -p "$child" -o pid,ppid,pgid,stat,comm,args 2>/dev/null >&2 ||
+        echo "  child process unavailable to ps: $child" >&2
+    done < <(pgrep -P "$root_pid" 2>/dev/null || true)
+  done
+}
+
+describe_claude_code_terminal_proof_process_state() {
+  local expected_name="$1"
+  local label="${2:-$expected_name}"
+  local proof_pid ps_line exit_state
+
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
+        -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+    proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+    if [[ -n "$proof_pid" ]]; then
+      ps_line="$(ps -p "$proof_pid" -o pid=,ppid=,stat=,comm=,args= 2>/dev/null || true)"
+      if [[ -n "$ps_line" ]]; then
+        echo "Claude Code Terminal proof pidfile process state: $ps_line" >&2
+      else
+        echo "Claude Code Terminal proof pidfile process no longer exists: $proof_pid" >&2
+      fi
+    fi
+  elif [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+    echo "Claude Code Terminal proof pidfile was not written: $CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" >&2
+  fi
+
+  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE" &&
+        -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE" ]]; then
+    exit_state="$(tr '\n' ' ' <"$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE" | head -c 240)"
+    echo "Claude Code Terminal proof $label exit state: $exit_state" >&2
+  fi
+}
+
+describe_claude_code_ghostty_launch_state() {
+  local proof_title="$1"
+  local launch_state
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$proof_title" ]] || return 0
+
+  launch_state="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$proof_title" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_STATE_TIMEOUT_SECONDS:-4}" \
+      "Claude Code Ghostty proof launch state" <<'APPLESCRIPT' 2>/dev/null || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set windowCount to 0
+set matchedWindowCount to 0
+set frontWindowHasProofTitle to false
+set focusedTerminalWorkingDirectoryPresent to false
+tell application id "com.mitchellh.ghostty"
+  set windowCount to count windows
+  try
+    set frontWindowName to name of front window as text
+    if frontWindowName contains proofTitle then set frontWindowHasProofTitle to true
+  end try
+  repeat with candidateWindow in windows
+    try
+      set windowName to name of candidateWindow as text
+      if windowName contains proofTitle then
+        set matchedWindowCount to matchedWindowCount + 1
+        try
+          set targetTab to selected tab of candidateWindow
+          set targetTerminal to focused terminal of targetTab
+          set terminalDirectory to working directory of targetTerminal as text
+          if terminalDirectory is not "" then set focusedTerminalWorkingDirectoryPresent to true
+        end try
+      end if
+    end try
+  end repeat
+end tell
+return "windows=" & (windowCount as text) & " proofTitleWindows=" & (matchedWindowCount as text) & " frontWindowHasProofTitle=" & (frontWindowHasProofTitle as text) & " focusedTerminalWorkingDirectoryPresent=" & (focusedTerminalWorkingDirectoryPresent as text)
+APPLESCRIPT
+)"
+  if [[ -n "$launch_state" ]]; then
+    echo "Claude Code Ghostty proof launch state: $launch_state" >&2
+  else
+    echo "Claude Code Ghostty proof launch state unavailable." >&2
+  fi
+}
+
+describe_claude_code_ghostty_launch_stages() {
+  local stage_file="$1"
+  local stages
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$stage_file" ]] || return 0
+
+  if [[ -s "$stage_file" ]]; then
+    stages="$(tr '\n' ' ' <"$stage_file" | sed 's/[[:space:]]*$//')"
+    echo "Claude Code Ghostty proof launch stages: $stages" >&2
+  else
+    echo "Claude Code Ghostty proof launch stages unavailable: $stage_file" >&2
+  fi
+}
+
+check_claude_code_ghostty_applescript_health() {
+  local stage_file="$1"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "$stage_file" ]] || return 42
+
+  if run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_APPLESCRIPT_PREFLIGHT_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty AppleScript preflight" \
+    - "$stage_file" <<'APPLESCRIPT' >/dev/null; then
+on recordStage(stageFile, stageName)
+  if stageFile is not "" then
+    try
+      do shell script "/bin/echo " & quoted form of stageName & " >> " & quoted form of stageFile
+    end try
+  end if
+end recordStage
+
+on run argv
+set launchStageFile to item 1 of argv
+recordStage(launchStageFile, "preflight-begin")
+tell application id "com.mitchellh.ghostty"
+  my recordStage(launchStageFile, "preflight-tell-entered")
+  set ghosttyVersion to version as text
+  my recordStage(launchStageFile, "preflight-version:" & ghosttyVersion)
+end tell
+recordStage(launchStageFile, "preflight-finished")
+end run
+APPLESCRIPT
+    if grep -Fxq "preflight-finished" "$stage_file" 2>/dev/null; then
+      return 0
+    fi
+
+    describe_claude_code_ghostty_launch_stages "$stage_file"
+    echo "Claude Code Ghostty AppleScript bridge preflight exited before recording completion." >&2
+    return 42
+  fi
+
+  describe_claude_code_ghostty_launch_stages "$stage_file"
+  echo "Claude Code Ghostty AppleScript bridge did not answer preflight before disposable launch." >&2
+  return 42
+}
+
+claude_code_ghostty_launch_stalled_before_stage() {
+  local stage_file="$1"
+  local required_stage="$2"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$stage_file" && -n "$required_stage" && -s "$stage_file" ]] || return 1
+
+  ! grep -Fx "$required_stage" "$stage_file" >/dev/null 2>&1
+}
+
+claude_code_ghostty_configured_window_shell_not_ready() {
+  local stage_file="$1"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$stage_file" && -s "$stage_file" ]] || return 1
+
+  grep -Fxq "configured-window-created" "$stage_file" 2>/dev/null &&
+    grep -Fxq "shell-delay-finished" "$stage_file" 2>/dev/null &&
+    ! grep -Fxq "terminal-ready" "$stage_file" 2>/dev/null
+}
+
+claude_code_ghostty_retry_window_shell_not_ready() {
+  local stage_file="$1"
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "$stage_file" && -s "$stage_file" ]] || return 1
+
+  grep -Fxq "retry-shell-delay-finished" "$stage_file" 2>/dev/null &&
+    ! grep -Fxq "retry-terminal-ready" "$stage_file" 2>/dev/null
+}
+
+wait_for_claude_code_terminal_pidfile_process_optional() {
+  local timeout="${1:-3}"
+  local timeout_seconds="${timeout%%.*}"
+  local deadline proof_pid
+
+  if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ||
+        -z "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" ]]; then
+    return 1
+  fi
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
+    timeout_seconds=3
+  fi
+  if ((timeout_seconds < 1)); then
+    timeout_seconds=1
+  fi
+
+  deadline=$((SECONDS + timeout_seconds))
+  while ((SECONDS <= deadline)); do
+    if [[ -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
+      proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
+      if process_id_or_tree_has_name "$proof_pid" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"; then
+        return 0
+      fi
+    fi
+    sleep 0.1
+  done
+
+  return 1
+}
+
+ghostty_text_action() {
+  local text="$1"
+  local byte action
+
+  action="text:"
+  while read -r byte; do
+    case "$byte" in
+      30|31|32|33|34|35|36|37|38|39|41|42|43|44|45|46|47|48|49|4a|4b|4c|4d|4e|4f|50|51|52|53|54|55|56|57|58|59|5a|61|62|63|64|65|66|67|68|69|6a|6b|6c|6d|6e|6f|70|71|72|73|74|75|76|77|78|79|7a)
+        action+="$(printf '%b' "\\x$byte")"
+        ;;
+      *)
+        action+="\\x$byte"
+        ;;
+    esac
+  done < <(LC_ALL=C printf '%s' "$text" | od -An -tx1 -v | tr ' ' '\n' | sed '/^$/d')
+
+  printf '%s\n' "$action"
+}
+
+try_wait_for_claude_code_terminal_process_name() {
   local expected_name="$1"
   local label="${2:-$expected_name}"
   local timeout="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
@@ -8073,7 +10316,7 @@ wait_for_claude_code_terminal_process_name() {
 
   if [[ -z "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" || -z "$expected_name" ]]; then
     echo "Claude Code Terminal proof did not record a disposable Terminal process." >&2
-    exit 1
+    return 1
   fi
   if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then
     timeout_seconds=20
@@ -8087,7 +10330,7 @@ wait_for_claude_code_terminal_process_name() {
     if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" &&
           -s "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" ]]; then
       proof_pid="$(head -n 1 "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE" | tr -dc '0-9')"
-      if process_id_has_name "$proof_pid" "$expected_name"; then
+      if process_id_or_tree_has_name "$proof_pid" "$expected_name"; then
         return 0
       fi
     fi
@@ -8099,18 +10342,259 @@ wait_for_claude_code_terminal_process_name() {
     sleep 0.2
   done
 
+  describe_claude_code_terminal_proof_process_state "$expected_name" "$label"
   echo "Claude Code Terminal proof did not start $label under disposable $(claude_code_host_display_name) pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
-  exit 1
+  return 1
+}
+
+wait_for_claude_code_terminal_process_name() {
+  try_wait_for_claude_code_terminal_process_name "$@" || exit 1
 }
 
 wait_for_claude_code_terminal_process() {
   wait_for_claude_code_terminal_process_name "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
 }
 
+run_claude_code_ghostty_prompt_screen_copy_probe() {
+  local prompt_wait_output="${1:-}"
+  local expected_text="${2:-}"
+  local target_pid proof_title proof_marker compact_marker old_pasteboard action_output raw_pasteboard
+  local screen_text screen_transport screen_chars compact_screen_chars has_marker has_compact_marker has_hint
+  local has_expected has_rejected_shell screen_ready screen_normalized expected_normalized tmp_prefix
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  if [[ -z "$expected_text" ||
+        ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROMPT_SCREEN_COPY_ON_TYPED_AX_FAILURE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    [[ "$prompt_wait_output" == *"textNodes=0"* ]] || return 1
+  fi
+  target_pid="$(claude_code_terminal_proof_primary_pid)"
+  proof_title="${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}"
+  proof_marker="$(claude_code_proof_marker)"
+  compact_marker="$(claude_code_compact_proof_marker)"
+  [[ -n "$target_pid" && -n "$proof_title" ]] || return 1
+
+  old_pasteboard="$(pbpaste 2>/dev/null || true)"
+  : | pbcopy >/dev/null 2>&1 || true
+  action_output="$(
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$proof_title" \
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$proof_marker" \
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER="$compact_marker" \
+      AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID="$target_pid" \
+      run_osascript_with_timeout \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROMPT_SCREEN_COPY_TIMEOUT_SECONDS:-3}" \
+        "Claude Code Ghostty prompt screen-copy readiness" <<'APPLESCRIPT' 2>/dev/null || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set proofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER"
+set targetPidText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"
+set targetProcessId to targetPidText as integer
+set targetSelectionMode to "none"
+set ghosttyWindowCount to 0
+tell application id "com.mitchellh.ghostty"
+  set ghosttyWindowCount to count windows
+  set targetWindow to missing value
+  repeat with candidateWindow in windows
+    try
+      set windowName to name of candidateWindow as text
+      if windowName contains proofTitle then
+        set targetWindow to candidateWindow
+        set targetSelectionMode to "proofTitle"
+        exit repeat
+      end if
+    end try
+  end repeat
+  if targetWindow is missing value then
+    repeat with candidateWindow in windows
+      try
+        set windowName to name of candidateWindow as text
+        if windowName contains proofMarker or windowName contains compactProofMarker then
+          set targetWindow to candidateWindow
+          set targetSelectionMode to "markerTitle"
+          exit repeat
+        end if
+      end try
+    end repeat
+  end if
+  if targetWindow is missing value and ghosttyWindowCount > 0 then
+    set targetWindow to front window
+    set targetSelectionMode to "frontWindow"
+  end if
+  if targetWindow is missing value then return "false|targetSelection:none|windowCount:" & (ghosttyWindowCount as text)
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  select tab targetTab
+  focus targetTerminal
+  activate
+end tell
+delay 0.04
+tell application "System Events"
+  set ghosttyProcess to first application process whose unix id is targetProcessId
+  if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+  set frontmost of ghosttyProcess to true
+end tell
+tell application id "com.mitchellh.ghostty"
+  set actionPerformed to perform action "write_screen_file:copy,plain" on targetTerminal
+  if actionPerformed is false then return "false|targetSelection:" & targetSelectionMode & "|windowCount:" & (ghosttyWindowCount as text)
+  return "true|targetSelection:" & targetSelectionMode & "|windowCount:" & (ghosttyWindowCount as text)
+end tell
+APPLESCRIPT
+  )"
+  raw_pasteboard="$(pbpaste 2>/dev/null || true)"
+  if [[ -n "$old_pasteboard" ]]; then
+    printf '%s' "$old_pasteboard" | pbcopy >/dev/null 2>&1 || true
+  else
+    : | pbcopy >/dev/null 2>&1 || true
+  fi
+
+  screen_transport="pasteboardText"
+  screen_text="$raw_pasteboard"
+  tmp_prefix="${TMPDIR:-/tmp}"
+  tmp_prefix="${tmp_prefix%/}"
+  if [[ -n "$raw_pasteboard" && -f "$raw_pasteboard" ]]; then
+    case "$raw_pasteboard" in
+      "$tmp_prefix"/*|/tmp/*|/private/tmp/*|/var/folders/*|/private/var/folders/*)
+        screen_text="$(cat "$raw_pasteboard" 2>/dev/null || true)"
+        screen_transport="screenFile"
+        ;;
+      *)
+        screen_transport="filePathRejected"
+        ;;
+    esac
+  fi
+
+  screen_chars="${#screen_text}"
+  compact_screen_chars="$(printf '%s' "$screen_text" | tr -d '\r\n' | wc -c | tr -d ' ')"
+  has_marker="false"
+  has_compact_marker="false"
+  has_hint="false"
+  has_expected="false"
+  has_rejected_shell="false"
+  screen_ready="false"
+  if [[ -n "$proof_marker" ]] && printf '%s' "$screen_text" | grep -Fqi "$proof_marker"; then
+    has_marker="true"
+  fi
+  if [[ -n "$compact_marker" ]] && printf '%s' "$screen_text" | tr -d '\r\n' | grep -Fqi "$compact_marker"; then
+    has_compact_marker="true"
+  fi
+  if printf '%s' "$screen_text" | grep -Eiq 'shortcuts|esc|enter'; then
+    has_hint="true"
+  fi
+  if printf '%s' "$screen_text" | grep -Eiq 'steadytype-claude-code-proof\.command| -e .*steadytype-claude-code-proof\.|exec .*steadytype-claude-code-proof\.'; then
+    has_rejected_shell="true"
+  fi
+  screen_normalized="$(printf '%s' "$screen_text" | awk '{$1=$1; print}')"
+  expected_normalized="$(printf '%s' "$expected_text" | awk '{$1=$1; print}')"
+  if [[ -z "$expected_normalized" ]] || printf '%s' "$screen_normalized" | grep -Fq "$expected_normalized"; then
+    has_expected="true"
+  fi
+  if [[ "$action_output" == true* &&
+        "$screen_chars" =~ ^[1-9][0-9]*$ &&
+        "$has_rejected_shell" == "false" &&
+        "$has_expected" == "true" &&
+        (
+          "$has_marker" == "true" ||
+          "$has_compact_marker" == "true" ||
+          "$has_hint" == "true" ||
+          ( "$action_output" == *"targetSelection:proofTitle"* && -n "$screen_normalized" )
+        ) ]]; then
+    screen_ready="true"
+  fi
+
+  echo "Claude Code Ghostty prompt screen-copy readiness: action=${action_output:-empty} transport=$screen_transport screenChars=$screen_chars compactScreenChars=$compact_screen_chars hasMarker=$has_marker hasCompactMarker=$has_compact_marker hasHint=$has_hint hasExpected=$has_expected rejectedShellCommand=$has_rejected_shell ready=$screen_ready" >&2
+  [[ "$screen_ready" == "true" ]]
+}
+
+run_claude_code_ghostty_prompt_anchor_diagnostics_probe() {
+  local proof_text="$1"
+  local start_line="${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}"
+  local expected_chars matched_line
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -f "$LOG_PATH" ]] || return 1
+  [[ "$start_line" =~ ^[0-9]+$ ]] || start_line=0
+  expected_chars="${#proof_text}"
+  ((expected_chars > 0)) || return 1
+
+  matched_line="$(sed -n "$((start_line + 1)),\$p" "$LOG_PATH" 2>/dev/null |
+    awk \
+      -v start="$start_line" \
+      -v expected="$expected_chars" '
+        index($0, "claude-code-terminal-host-proof-direct-prompt-anchor-used") &&
+        index($0, "app=com.anthropic.claude-code") &&
+        index($0, "host=com.mitchellh.ghostty") &&
+        $0 ~ ("beforeChars=" expected "([^0-9]|$)") &&
+        $0 ~ ("promptLineInputChars=" expected "([^0-9]|$)") {
+          candidate = NR + start
+        }
+        END {
+          if (candidate != "") {
+            print candidate
+          }
+        }
+      ' 2>/dev/null || true)"
+
+  if [[ -n "$matched_line" ]]; then
+    echo "Claude Code Ghostty proof accepted terminal prompt-anchor typed readiness at diagnostics line $matched_line (chars=$expected_chars)." >&2
+    return 0
+  fi
+
+  return 1
+}
+
+mark_claude_code_ghostty_proof_window_title() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
+
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_MARK_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty proof title mark" \
+    - "$CLAUDE_CODE_TERMINAL_PROOF_TITLE" <<'APPLESCRIPT' >/dev/null
+on run argv
+set proofTitle to item 1 of argv
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  perform action ("set_surface_title:" & proofTitle) on targetTerminal
+  perform action ("set_tab_title:" & proofTitle) on targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
+}
+
+claude_code_ghostty_frontmost_proof_process_id_by_title() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 1
+
+  local host_app host_bundle frontmost_bundle frontmost_pid
+  host_app="$(claude_code_host_open_app_name)"
+  host_bundle="$(claude_code_host_bundle_id)"
+
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=1
+  try_wait_for_frontmost_app "$host_app" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TITLE_FRONTMOST_SECONDS:-3}" || return 1
+
+  frontmost_bundle="$(frontmost_bundle_identifier 2>/dev/null || true)"
+  if [[ -n "$host_bundle" && "$frontmost_bundle" != "$host_bundle" ]]; then
+    return 1
+  fi
+
+  frontmost_pid="$(frontmost_process_id 2>/dev/null || true)"
+  frontmost_pid="$(printf '%s' "$frontmost_pid" | tr -dc '0-9')"
+  [[ -n "$frontmost_pid" ]] || return 1
+  printf '%s\n' "$frontmost_pid"
+}
+
 open_claude_code_terminal_proof() {
   local proof_dir="$1"
   local proof_title="$2"
   local claude_bin title_sequence launch_script terminal_pids_before host_process host_app
+  local ghostty_pid ghostty_launch_command ghostty_launch_action ghostty_launch_action_drain ghostty_launch_stage_file ghostty_shell_ready_delay ghostty_exit_hold_seconds ghostty_preflight_status ghostty_preflight_pids ghostty_configured_window_first ghostty_command_open_ready ghostty_claude_permission_mode
   claude_bin="$(command -v claude || true)"
   if [[ -z "$claude_bin" ]]; then
     echo "Claude Code CLI is not installed or not on PATH." >&2
@@ -8132,32 +10616,514 @@ open_claude_code_terminal_proof() {
 
   title_sequence=$'\033]0;'"$proof_title"$'\007'
   launch_script="$proof_dir/steadytype-claude-code-proof.command"
+  CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT="$launch_script"
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE="$proof_dir/claude.pid"
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE="$proof_dir/claude.exit"
+  ghostty_launch_stage_file="$proof_dir/ghostty-launch.log"
   {
     printf '#!/usr/bin/env bash\n'
+    printf 'printf '"'"'%%s\\n'"'"' script-started >> %q\n' "$ghostty_launch_stage_file"
     printf 'cd %q\n' "$ROOT_DIR"
     printf 'printf '"'"'%%s\\n'"'"' "$$" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE"
+    printf 'printf '"'"'%%s\\n'"'"' script-wrote-pidfile >> %q\n' "$ghostty_launch_stage_file"
     printf 'printf %q\n' "$title_sequence"
-    printf 'exec %q\n' "$claude_bin"
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      ghostty_exit_hold_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EXIT_HOLD_SECONDS:-20}"
+      ghostty_claude_permission_mode="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PERMISSION_MODE:-plan}"
+      printf 'printf '"'"'%%s\\n'"'"' script-starting-claude >> %q\n' "$ghostty_launch_stage_file"
+      printf '%q --permission-mode %q\n' "$claude_bin" "$ghostty_claude_permission_mode"
+      printf 'claude_status=$?\n'
+      printf 'printf '"'"'%%s\\n'"'"' "script-claude-returned:$claude_status" >> %q\n' "$ghostty_launch_stage_file"
+      printf 'printf '"'"'status=%%s finished_at=%%s\\n'"'"' "$claude_status" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > %q\n' "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE"
+      printf 'printf '"'"'\\n[SteadyType proof] Claude exited with status %%s; keeping Ghostty open for diagnostics.\\n'"'"' "$claude_status"\n'
+      printf 'sleep %q\n' "$ghostty_exit_hold_seconds"
+      printf 'exit "$claude_status"\n'
+    else
+      printf 'exec %q\n' "$claude_bin"
+    fi
   } >"$launch_script"
   chmod +x "$launch_script"
 
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
   terminal_pids_before="$(terminal_pid_list)"
   case "$CLAUDE_CODE_HOST_VARIANT" in
     terminal|iterm2)
+      CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
       open -na "$host_app" "$launch_script"
+      CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
       ;;
     ghostty)
-      open -na "$host_app" --args --title="$proof_title" --window-save-state=never -e "$launch_script"
+      CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
+      ghostty_launch_command="$(printf 'exec %q' "$launch_script")"
+      ghostty_launch_action=""
+      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_PROBE:-1}" =~ ^(1|true|yes|on)$ ]]; then
+        ghostty_launch_action="$(ghostty_text_action "$ghostty_launch_command")"
+      fi
+      ghostty_launch_action_drain="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_ACTION_DRAIN_SECONDS:-0.2}"
+      ghostty_shell_ready_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SHELL_READY_DELAY_SECONDS:-1.8}"
+      ghostty_configured_window_first=0
+      ghostty_command_open_ready=0
+      : >"$ghostty_launch_stage_file"
+      if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         [[ "${CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN:-0}" != "1" ]] &&
+         [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         ! pgrep -x ghostty >/dev/null 2>&1; then
+        echo "Claude Code Ghostty proof opening no-restore host directly with proof command."
+        printf '%s\n' "no-restore-command-open-start" >>"$ghostty_launch_stage_file"
+        open -na "$host_app" --args \
+          --window-save-state=never \
+          --quit-after-last-window-closed=true \
+          --working-directory="$ROOT_DIR" \
+          -e "$launch_script" >/dev/null 2>&1 || true
+        printf '%s\n' "no-restore-command-open-finished" >>"$ghostty_launch_stage_file"
+        sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_SETTLE_SECONDS:-1}"
+        allow_claude_code_ghostty_proof_command_alert \
+          "$launch_script" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_ALERT_SECONDS:-2}" || true
+        ghostty_preflight_pids="$(terminal_pid_list | tr '\n' ' ')"
+        ghostty_preflight_pids="${ghostty_preflight_pids% }"
+        if [[ -n "$ghostty_preflight_pids" ]]; then
+          CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+          CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_preflight_pids"
+          CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1
+          echo "Claude Code Ghostty proof owns no-restore command host pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS"
+        fi
+        if wait_for_claude_code_terminal_pidfile_process_optional \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_PID_SECONDS:-12}"; then
+          printf '%s\n' "no-restore-command-open-pidfile-present" >>"$ghostty_launch_stage_file"
+          if try_wait_for_frontmost_claude_code_terminal_proof_process \
+            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_OPEN_FRONTMOST_SECONDS:-5}" &&
+             ghostty_window_api_reports_visible_window; then
+            printf '%s\n' "no-restore-command-open-frontmost" >>"$ghostty_launch_stage_file"
+            ghostty_command_open_ready=1
+            CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=1
+          else
+            printf '%s\n' "no-restore-command-open-not-frontmost" >>"$ghostty_launch_stage_file"
+            echo "Claude Code Ghostty proof no-restore command host wrote pidfile but did not expose a frontmost window; falling back to script-owned window launch." >&2
+            if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+              kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
+              sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+            fi
+            CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+            CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
+            CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+            reset_zero_window_claude_code_ghostty_proof_host
+          fi
+        else
+          printf '%s\n' "no-restore-command-open-no-pidfile" >>"$ghostty_launch_stage_file"
+          if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+            echo "Claude Code Ghostty proof no-restore command host did not write pidfile; cleaning pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+            kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
+            sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+          fi
+          CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
+          CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=0
+          CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+        fi
+      fi
+      if [[ "$ghostty_command_open_ready" != "1" ]] &&
+         [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         ! pgrep -x ghostty >/dev/null 2>&1; then
+        : >"$ghostty_launch_stage_file"
+      fi
+      if [[ "$ghostty_command_open_ready" != "1" ]] &&
+         [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+         ! pgrep -x ghostty >/dev/null 2>&1; then
+        echo "Claude Code Ghostty proof opening host with window-save-state=never before AppleScript preflight."
+        if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_INITIAL_WINDOW_DISABLED:-1}" =~ ^(1|true|yes|on)$ ]]; then
+          ghostty_configured_window_first=1
+          printf '%s\n' "no-restore-host-initial-window-disabled" >>"$ghostty_launch_stage_file"
+          open -na "$host_app" --args --window-save-state=never --initial-window=false --quit-after-last-window-closed=true >/dev/null 2>&1 || true
+        else
+          open -na "$host_app" --args --window-save-state=never --quit-after-last-window-closed=true >/dev/null 2>&1 || true
+        fi
+        sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NO_RESTORE_OPEN_SETTLE_SECONDS:-1}"
+        ghostty_preflight_pids="$(terminal_pid_list | tr '\n' ' ')"
+        ghostty_preflight_pids="${ghostty_preflight_pids% }"
+        if [[ -n "$ghostty_preflight_pids" ]]; then
+          CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+          CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_preflight_pids"
+          CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=1
+          echo "Claude Code Ghostty proof owns no-restore host pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS"
+          if wait_for_ghostty_process_tree_child_optional \
+            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CHILD_PROCESS_READY_SECONDS:-2}"; then
+            echo "Claude Code Ghostty proof no-restore host has a child process before AppleScript preflight."
+            printf '%s\n' "no-restore-host-child-present" >>"$ghostty_launch_stage_file"
+          else
+            echo "Claude Code Ghostty proof no-restore host has no shell child before AppleScript preflight." >&2
+            printf '%s\n' "no-restore-host-no-child-process" >>"$ghostty_launch_stage_file"
+            describe_claude_code_ghostty_process_tree
+          fi
+        fi
+      fi
+      if [[ "$ghostty_command_open_ready" != "1" ]] &&
+         check_claude_code_ghostty_applescript_health "$ghostty_launch_stage_file"; then
+        ghostty_preflight_status=0
+      else
+        if [[ "$ghostty_command_open_ready" == "1" ]]; then
+          ghostty_preflight_status=0
+        else
+          ghostty_preflight_status=$?
+        fi
+      fi
+      if ((ghostty_preflight_status != 0)); then
+        return "$ghostty_preflight_status"
+      fi
+      if [[ "$ghostty_command_open_ready" != "1" ]]; then
+        reset_stale_only_claude_code_ghostty_proof_host
+        if [[ "$ghostty_configured_window_first" == "1" ]]; then
+          printf '%s\n' "zero-window-reset-deferred-for-configured-window" >>"$ghostty_launch_stage_file"
+        else
+          reset_zero_window_claude_code_ghostty_proof_host
+        fi
+      if ! run_osascript_with_timeout \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_TIMEOUT_SECONDS:-10}" \
+          "Claude Code Ghostty proof launch" \
+          - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" "$ghostty_launch_stage_file" "$ROOT_DIR" "$launch_script" "$ghostty_configured_window_first" <<'APPLESCRIPT' >/dev/null; then
+on recordStage(stageFile, stageName)
+  if stageFile is not "" then
+    try
+      do shell script "/bin/echo " & quoted form of stageName & " >> " & quoted form of stageFile
+    end try
+  end if
+end recordStage
+
+on run argv
+set launchCommand to item 1 of argv
+set shellReadyDelay to item 2 of argv as real
+set proofTitle to item 3 of argv
+set launchAction to item 4 of argv
+set launchActionDrain to item 5 of argv as real
+set launchStageFile to item 6 of argv
+set rootDirectory to item 7 of argv
+set launchScriptPath to item 8 of argv
+set configuredWindowFirst to item 9 of argv
+set commandAlreadyLaunched to false
+recordStage(launchStageFile, "launch-begin")
+tell application id "com.mitchellh.ghostty"
+  my recordStage(launchStageFile, "new-window-start")
+  if configuredWindowFirst is "1" then
+    my recordStage(launchStageFile, "configured-window-start")
+    set proofConfig to new surface configuration from {initial working directory:rootDirectory, command:launchScriptPath, wait after command:true}
+    set proofWindow to new window with configuration proofConfig
+    set commandAlreadyLaunched to true
+    my recordStage(launchStageFile, "configured-window-created")
+    my recordStage(launchStageFile, "new-window-created")
+  else
+    my recordStage(launchStageFile, "new-window-count-start")
+    set existingWindowCount to count windows
+    my recordStage(launchStageFile, "new-window-count:" & (existingWindowCount as text))
+    if existingWindowCount is 0 then
+      my recordStage(launchStageFile, "configured-window-start")
+      set proofConfig to new surface configuration from {initial working directory:rootDirectory, command:launchScriptPath, wait after command:true}
+      set proofWindow to new window with configuration proofConfig
+      set commandAlreadyLaunched to true
+      my recordStage(launchStageFile, "configured-window-created")
+      my recordStage(launchStageFile, "new-window-created")
+    else
+    my recordStage(launchStageFile, "new-window-front-window-start")
+    set sourceWindow to missing value
+    set sourceWindowCount to 0
+    repeat with sourceWindowAttempt from 1 to 20
+      try
+        set sourceWindowCount to count windows
+        if sourceWindowCount > 0 then
+          set sourceWindow to front window
+          exit repeat
+        end if
+      end try
+      delay 0.1
+    end repeat
+    my recordStage(launchStageFile, "new-window-source-window-count:" & (sourceWindowCount as text))
+    if sourceWindow is missing value then
+      my recordStage(launchStageFile, "new-window-no-source-window")
+      error "Ghostty proof has no source window for disposable launch."
+    end if
+    my recordStage(launchStageFile, "new-window-front-window-resolved")
+    my recordStage(launchStageFile, "new-window-selected-tab-start")
+    my recordStage(launchStageFile, "new-window-focused-terminal-start")
+    set sourceTerminal to missing value
+    set sourceTerminalReady to false
+    repeat with sourceTerminalAttempt from 1 to 20
+      try
+        set sourceTab to selected tab of sourceWindow
+        my recordStage(launchStageFile, "new-window-selected-tab-resolved")
+        set sourceTerminal to focused terminal of sourceTab
+        set sourceTerminalReady to true
+        exit repeat
+      end try
+      delay 0.1
+    end repeat
+    if sourceTerminal is missing value or sourceTerminalReady is false then
+      my recordStage(launchStageFile, "new-window-source-terminal-not-ready")
+      error "Ghostty proof source terminal was not ready for disposable launch."
+    end if
+    my recordStage(launchStageFile, "new-window-focused-terminal-resolved")
+    my recordStage(launchStageFile, "new-window-source-terminal-ready")
+    try
+      set sourceTerminalDirectory to working directory of sourceTerminal as text
+      if sourceTerminalDirectory is not "" then
+        my recordStage(launchStageFile, "new-window-source-terminal-working-directory-present")
+      else
+        my recordStage(launchStageFile, "new-window-source-terminal-working-directory-empty")
+      end if
+    on error
+      my recordStage(launchStageFile, "new-window-source-terminal-working-directory-unavailable")
+    end try
+    my recordStage(launchStageFile, "new-window-action-ready")
+    perform action "new_window" on sourceTerminal
+    my recordStage(launchStageFile, "new-window-action-finished")
+    delay 0.5
+    set proofWindow to front window
+    my recordStage(launchStageFile, "new-window-created")
+    end if
+  end if
+  activate window proofWindow
+  my recordStage(launchStageFile, "window-activated")
+  delay shellReadyDelay
+  my recordStage(launchStageFile, "shell-delay-finished")
+  set targetTerminal to missing value
+  set terminalReady to false
+  repeat with readyAttempt from 1 to 60
+    try
+      set targetTab to selected tab of proofWindow
+      set targetTerminal to focused terminal of targetTab
+      set terminalReady to true
+      exit repeat
+    end try
+    delay 0.1
+  end repeat
+  if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
+  my recordStage(launchStageFile, "terminal-ready")
+  try
+    set terminalDirectory to working directory of targetTerminal as text
+    if terminalDirectory is not "" then
+      my recordStage(launchStageFile, "terminal-working-directory-present")
+    else
+      my recordStage(launchStageFile, "terminal-working-directory-empty")
+    end if
+  on error
+    my recordStage(launchStageFile, "terminal-working-directory-unavailable")
+  end try
+  focus targetTerminal
+  my recordStage(launchStageFile, "terminal-focused")
+  perform action ("set_surface_title:" & proofTitle) on targetTerminal
+  perform action ("set_tab_title:" & proofTitle) on targetTerminal
+  my recordStage(launchStageFile, "title-marked")
+  if commandAlreadyLaunched is true then
+    my recordStage(launchStageFile, "configured-window-command-owned-launch")
+  else if launchAction is not "" then
+    my recordStage(launchStageFile, "launch-action-start")
+    perform action launchAction on targetTerminal
+    my recordStage(launchStageFile, "launch-action-finished")
+    send key "enter" to targetTerminal
+    my recordStage(launchStageFile, "launch-action-enter-sent")
+    delay launchActionDrain
+  else
+    my recordStage(launchStageFile, "input-text-start")
+    input text launchCommand to targetTerminal
+    my recordStage(launchStageFile, "input-text-finished")
+    send key "enter" to targetTerminal
+    my recordStage(launchStageFile, "enter-sent")
+  end if
+  activate
+  my recordStage(launchStageFile, "launch-finished")
+end tell
+end run
+APPLESCRIPT
+        describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+        describe_claude_code_ghostty_launch_state "$proof_title"
+        describe_claude_code_ghostty_process_tree
+        if grep -Fxq "configured-window-start" "$ghostty_launch_stage_file" 2>/dev/null &&
+           ! grep -Fxq "configured-window-created" "$ghostty_launch_stage_file" 2>/dev/null; then
+          echo "Claude Code Ghostty proof configured-window API stalled before disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        if grep -Fxq "new-window-no-source-window" "$ghostty_launch_stage_file" 2>/dev/null; then
+          echo "Claude Code Ghostty proof had no source window for disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        if grep -Fxq "new-window-source-terminal-not-ready" "$ghostty_launch_stage_file" 2>/dev/null; then
+          echo "Claude Code Ghostty proof source terminal was not ready for disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-start"; then
+          echo "Claude Code Ghostty proof AppleScript bridge stalled before disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        echo "Claude Code Ghostty proof could not create a script-owned disposable proof window." >&2
+        return 1
+      fi
+      if ! wait_for_claude_code_terminal_pidfile_process_optional \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_LAUNCH_PID_SECONDS:-8}"; then
+        if grep -Fxq "configured-window-start" "$ghostty_launch_stage_file" 2>/dev/null &&
+           ! grep -Fxq "configured-window-created" "$ghostty_launch_stage_file" 2>/dev/null; then
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
+          echo "Claude Code Ghostty proof configured-window API stalled before disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        if claude_code_ghostty_launch_stalled_before_stage "$ghostty_launch_stage_file" "new-window-created"; then
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
+          echo "Claude Code Ghostty proof AppleScript bridge stalled during disposable window creation; skipping retry." >&2
+          return 42
+        fi
+        if claude_code_ghostty_configured_window_shell_not_ready "$ghostty_launch_stage_file"; then
+          printf '%s\n' "configured-window-shell-not-ready" >>"$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
+          echo "Claude Code Ghostty proof configured window opened but did not become shell-ready; retrying command submission." >&2
+        fi
+        if ! run_osascript_with_timeout \
+            "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_LAUNCH_TIMEOUT_SECONDS:-10}" \
+            "Claude Code Ghostty proof launch retry" \
+            - "$ghostty_launch_command" "$ghostty_shell_ready_delay" "$proof_title" "$ghostty_launch_action" "$ghostty_launch_action_drain" "$ghostty_launch_stage_file" <<'APPLESCRIPT' >/dev/null; then
+on recordStage(stageFile, stageName)
+  if stageFile is not "" then
+    try
+      do shell script "/bin/echo " & quoted form of stageName & " >> " & quoted form of stageFile
+    end try
+  end if
+end recordStage
+
+on run argv
+set launchCommand to item 1 of argv
+set shellReadyDelay to item 2 of argv as real
+set proofTitle to item 3 of argv
+set launchAction to item 4 of argv
+set launchActionDrain to item 5 of argv as real
+set launchStageFile to item 6 of argv
+recordStage(launchStageFile, "retry-begin")
+tell application id "com.mitchellh.ghostty"
+  set proofWindow to missing value
+  repeat with candidateWindow in windows
+    try
+      set windowName to name of candidateWindow as text
+      if windowName contains proofTitle then
+        set proofWindow to candidateWindow
+        exit repeat
+      end if
+    end try
+  end repeat
+  if proofWindow is missing value then set proofWindow to front window
+  my recordStage(launchStageFile, "retry-window-selected")
+  activate window proofWindow
+  my recordStage(launchStageFile, "retry-window-activated")
+  delay shellReadyDelay
+  my recordStage(launchStageFile, "retry-shell-delay-finished")
+  set targetTerminal to missing value
+  set terminalReady to false
+  repeat with readyAttempt from 1 to 60
+    try
+      set targetTab to selected tab of proofWindow
+      set targetTerminal to focused terminal of targetTab
+      set terminalReady to true
+      exit repeat
+    end try
+    delay 0.1
+  end repeat
+  if targetTerminal is missing value or terminalReady is false then error "Ghostty proof terminal was not ready."
+  my recordStage(launchStageFile, "retry-terminal-ready")
+  try
+    set terminalDirectory to working directory of targetTerminal as text
+    if terminalDirectory is not "" then
+      my recordStage(launchStageFile, "retry-terminal-working-directory-present")
+    else
+      my recordStage(launchStageFile, "retry-terminal-working-directory-empty")
+    end if
+  on error
+    my recordStage(launchStageFile, "retry-terminal-working-directory-unavailable")
+  end try
+  focus targetTerminal
+  my recordStage(launchStageFile, "retry-terminal-focused")
+  perform action ("set_surface_title:" & proofTitle) on targetTerminal
+  perform action ("set_tab_title:" & proofTitle) on targetTerminal
+  my recordStage(launchStageFile, "retry-title-marked")
+  try
+    send key "u" modifiers "control" to targetTerminal
+    my recordStage(launchStageFile, "retry-clear-sent")
+  end try
+  if launchAction is not "" then
+    my recordStage(launchStageFile, "retry-launch-action-start")
+    perform action launchAction on targetTerminal
+    my recordStage(launchStageFile, "retry-launch-action-finished")
+    send key "enter" to targetTerminal
+    my recordStage(launchStageFile, "retry-launch-action-enter-sent")
+    delay launchActionDrain
+  else
+    my recordStage(launchStageFile, "retry-input-text-start")
+    input text launchCommand to targetTerminal
+    my recordStage(launchStageFile, "retry-input-text-finished")
+    send key "enter" to targetTerminal
+    my recordStage(launchStageFile, "retry-enter-sent")
+  end if
+  activate
+  my recordStage(launchStageFile, "retry-launch-finished")
+end tell
+end run
+APPLESCRIPT
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
+          echo "Claude Code Ghostty proof could not retry the disposable proof command." >&2
+          return 1
+        fi
+        if ! wait_for_claude_code_terminal_pidfile_process_optional \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_RETRY_PID_SECONDS:-10}"; then
+          if claude_code_ghostty_retry_window_shell_not_ready "$ghostty_launch_stage_file"; then
+            printf '%s\n' "retry-configured-window-shell-not-ready" >>"$ghostty_launch_stage_file"
+          fi
+          describe_claude_code_terminal_proof_process_state \
+            "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" \
+            "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"
+          describe_claude_code_ghostty_launch_stages "$ghostty_launch_stage_file"
+          describe_claude_code_ghostty_launch_state "$proof_title"
+          describe_claude_code_ghostty_process_tree
+          if claude_code_ghostty_retry_window_shell_not_ready "$ghostty_launch_stage_file"; then
+            echo "Claude Code Ghostty proof configured window never became shell-ready enough to exec the disposable proof command." >&2
+          else
+            echo "Claude Code Ghostty proof shell did not exec the disposable proof command." >&2
+          fi
+          return 1
+        fi
+      fi
+      fi
+      mark_claude_code_ghostty_proof_window_title || {
+        echo "Claude Code Ghostty proof could not mark the disposable proof window title." >&2
+        return 1
+      }
+      ghostty_pid="$(claude_code_ghostty_frontmost_proof_process_id_by_title 2>/dev/null || true)"
+      ghostty_pid="$(printf '%s' "$ghostty_pid" | tr -dc '0-9')"
+      if [[ -z "$ghostty_pid" ]]; then
+        if ! try_wait_for_frontmost_app "$host_app" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_FRONTMOST_SECONDS:-6}"; then
+          focus_claude_code_ghostty_proof_window_by_title || true
+        fi
+        if ! try_wait_for_frontmost_app "$host_app" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NEW_WINDOW_FRONTMOST_SECONDS:-6}"; then
+          echo "Claude Code Ghostty proof window did not become frontmost after script-owned launch." >&2
+          return 1
+        fi
+        ghostty_pid="$(frontmost_process_id 2>/dev/null || true)"
+        ghostty_pid="$(printf '%s' "$ghostty_pid" | tr -dc '0-9')"
+        if [[ -z "$ghostty_pid" ]]; then
+          echo "Claude Code Ghostty proof could not resolve the script-owned frontmost Ghostty pid." >&2
+          return 1
+        fi
+      fi
+      CLAUDE_CODE_TERMINAL_PROOF_PIDS="$ghostty_pid"
       ;;
     *)
       echo "Claude Code $(claude_code_host_display_name) proof does not have an automated disposable launch path yet." >&2
       exit 1
       ;;
   esac
-  CLAUDE_CODE_TERMINAL_PROOF_PIDS="$(wait_for_new_terminal_pids "$terminal_pids_before")"
-  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME="${claude_bin##*/}"
-  wait_for_frontmost_claude_code_terminal_proof_process
+  if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+    return 1
+  fi
 }
 
 cleanup_claude_code_terminal_proof() {
@@ -8174,7 +11140,11 @@ cleanup_claude_code_terminal_proof() {
     fi
   fi
 
-  if [[ -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+  if [[ "$CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS" == "1" &&
+        -n "$CLAUDE_CODE_TERMINAL_PROOF_PIDS" ]]; then
+    if [[ "$CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO" == "1" ]]; then
+      echo "Claude Code Ghostty proof cleaning no-restore host pid(s): $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+    fi
     kill $CLAUDE_CODE_TERMINAL_PROOF_PIDS >/dev/null 2>&1 || true
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
     local proof_pid
@@ -8184,6 +11154,15 @@ cleanup_claude_code_terminal_proof() {
       fi
     done
     sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    if [[ "$CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO" == "1" ]]; then
+      reset_zero_window_claude_code_ghostty_proof_host
+      reset_stale_only_claude_code_ghostty_proof_host
+    fi
+  elif [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    close_claude_code_ghostty_proof_window_by_title || true
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+    reset_stale_only_claude_code_ghostty_proof_host
+    reset_zero_window_claude_code_ghostty_proof_host
   elif [[ "$CLAUDE_CODE_TERMINAL_WAS_RUNNING" != "1" ]]; then
     local host_process
     host_process="$(claude_code_host_process_name)"
@@ -8194,15 +11173,249 @@ cleanup_claude_code_terminal_proof() {
   CLAUDE_CODE_TERMINAL_PROOF_PIDS=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME=""
   CLAUDE_CODE_TERMINAL_PROOF_PROCESS_PID_FILE=""
+  CLAUDE_CODE_TERMINAL_PROOF_PROCESS_EXIT_FILE=""
+  CLAUDE_CODE_TERMINAL_PROOF_OWNS_HOST_PROCESS=1
+  CLAUDE_CODE_GHOSTTY_PROOF_OPENED_HOST_FROM_ZERO=0
+  CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN=0
+  CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
+  CLAUDE_CODE_GHOSTTY_TITLE_FOCUS_CONFIRMED=0
   CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 }
 
-cleanup_stale_claude_code_terminal_proofs() {
-  local marker stale_pids stale_pid
+ghostty_window_api_reports_visible_window() {
+  local window_count
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  window_count="$(run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_WINDOW_CHECK_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty visible-window check" <<'APPLESCRIPT' 2>/dev/null || true
+tell application id "com.mitchellh.ghostty"
+  return (count windows) as text
+end tell
+APPLESCRIPT
+)"
+  window_count="$(printf '%s' "$window_count" | tr -d '[:space:]')"
+  [[ "$window_count" =~ ^[1-9][0-9]*$ ]]
+}
+
+reset_zero_window_claude_code_ghostty_proof_host() {
+  local ghostty_pids window_count ax_window_count proof_pid reset_reason
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_RESET_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+
+  ghostty_pids="$(pgrep -x ghostty 2>/dev/null || true)"
+  [[ -n "$ghostty_pids" ]] || return 0
+
+  window_count="$(run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ZERO_WINDOW_CHECK_TIMEOUT_SECONDS:-2}" \
+    "Claude Code Ghostty zero-window host check" <<'APPLESCRIPT' 2>/dev/null || true
+tell application id "com.mitchellh.ghostty"
+  return (count windows) as text
+end tell
+APPLESCRIPT
+)"
+  window_count="$(printf '%s' "$window_count" | tr -d '[:space:]')"
+  if [[ "$window_count" == "0" ]]; then
+    reset_reason="Ghostty window API reported zero windows"
+  else
+    ax_window_count="$(run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_AX_WINDOW_CHECK_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty AX zero-window host check" <<'APPLESCRIPT' 2>/dev/null || true
+tell application "System Events"
+  tell application process "Ghostty"
+    return (count windows) as text
+  end tell
+end tell
+APPLESCRIPT
+)"
+    ax_window_count="$(printf '%s' "$ax_window_count" | tr -d '[:space:]')"
+    [[ "$ax_window_count" == "0" ]] || return 0
+    reset_reason="System Events reported zero Ghostty AX windows while Ghostty window API reported ${window_count:-unavailable}"
+  fi
+
+  echo "Claude Code Ghostty proof resetting zero-window Ghostty host pid(s): $(printf '%s' "$ghostty_pids" | tr '\n' ' ') ($reset_reason)" >&2
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    kill "$proof_pid" >/dev/null 2>&1 || true
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    if kill -0 "$proof_pid" >/dev/null 2>&1; then
+      kill -KILL "$proof_pid" >/dev/null 2>&1 || true
+    fi
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+}
+
+close_claude_code_ghostty_proof_window_by_title() {
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  [[ -n "${CLAUDE_CODE_TERMINAL_PROOF_TITLE:-}" ]] || return 0
+
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE="$CLAUDE_CODE_TERMINAL_PROOF_TITLE" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$(claude_code_proof_marker)" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER="$(claude_code_compact_proof_marker)" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CLOSE_TIMEOUT_SECONDS:-4}" \
+      "Claude Code Ghostty proof window close" <<'APPLESCRIPT' >/dev/null || true
+set proofTitle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_TITLE"
+set proofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_COMPACT_PROOF_MARKER"
+tell application id "com.mitchellh.ghostty"
+  repeat with candidateWindow in windows
+    try
+      set windowName to name of candidateWindow as text
+      if windowName contains proofTitle or windowName contains proofMarker or windowName contains compactProofMarker then
+        close window candidateWindow
+        return true
+      end if
+    end try
+  end repeat
+end tell
+return false
+APPLESCRIPT
+}
+
+reset_stale_only_claude_code_ghostty_proof_host() {
+  local marker ghostty_pids ax_state ax_window_count unsafe_window_count proof_pid reset_reason
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 0
+  if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    return 0
+  fi
+
+  ghostty_pids="$(pgrep -x ghostty 2>/dev/null || true)"
+  [[ -n "$ghostty_pids" ]] || return 0
+
   marker="$(claude_code_proof_marker)"
-  stale_pids="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}" osascript <<'APPLESCRIPT' || true
+  ax_state="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_ONLY_RESET_CHECK_TIMEOUT_SECONDS:-2}" \
+      "Claude Code Ghostty stale-only host check" <<'APPLESCRIPT' 2>/dev/null || true
 set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set proofDirectoryMarker to "steadytype-claude-code-proof"
+set steadyTypeGhosttyProbeMarker to "steadytype-ghostty-"
+set appleScriptProbePrefix to "SteadyType AppleScript Probe"
+set submitProbePrefix to "SteadyType Submit Probe"
+set windowCount to 0
+set unsafeWindowCount to 0
+tell application "System Events"
+  if not (exists application process "Ghostty") then return "windows=0 unsafe=0"
+  tell application process "Ghostty"
+    set windowCount to count windows
+    repeat with candidateWindow in windows
+      set windowName to ""
+      try
+        set windowName to name of candidateWindow as text
+      end try
+      set isProofWindow to false
+      if markerText is not "" and windowName contains markerText then set isProofWindow to true
+      if windowName contains proofDirectoryMarker then set isProofWindow to true
+      if windowName contains steadyTypeGhosttyProbeMarker then set isProofWindow to true
+      if windowName starts with appleScriptProbePrefix then set isProofWindow to true
+      if windowName starts with submitProbePrefix then set isProofWindow to true
+      if isProofWindow is false then set unsafeWindowCount to unsafeWindowCount + 1
+    end repeat
+  end tell
+end tell
+return "windows=" & (windowCount as text) & " unsafe=" & (unsafeWindowCount as text)
+APPLESCRIPT
+)"
+  ax_window_count="$(printf '%s' "$ax_state" | sed -n 's/.*windows=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  unsafe_window_count="$(printf '%s' "$ax_state" | sed -n 's/.*unsafe=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+  if [[ ! "$ax_window_count" =~ ^[1-9][0-9]*$ || "$unsafe_window_count" != "0" ]]; then
+    if [[ "$ax_window_count" =~ ^[0-9]+$ && "$unsafe_window_count" =~ ^[0-9]+$ ]]; then
+      echo "Claude Code Ghostty proof not resetting stale-only host: AX windows=$ax_window_count unsafe=$unsafe_window_count" >&2
+    fi
+    return 0
+  fi
+
+  reset_reason="System Events reported only SteadyType proof/probe Ghostty AX windows (${ax_window_count})"
+  echo "Claude Code Ghostty proof resetting stale-only Ghostty host pid(s): $(printf '%s' "$ghostty_pids" | tr '\n' ' ') ($reset_reason)" >&2
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    kill "$proof_pid" >/dev/null 2>&1 || true
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  while IFS= read -r proof_pid; do
+    [[ -z "$proof_pid" ]] && continue
+    if kill -0 "$proof_pid" >/dev/null 2>&1; then
+      kill -KILL "$proof_pid" >/dev/null 2>&1 || true
+    fi
+  done <<<"$ghostty_pids"
+  sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+}
+
+cleanup_stale_claude_code_ghostty_proofs() {
+  local marker cleanup_legacy_tmp_windows closed_count
+  marker="$(claude_code_proof_marker)"
+  cleanup_legacy_tmp_windows="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-0}"
+
+  pgrep -x ghostty >/dev/null 2>&1 || return 0
+  reset_stale_only_claude_code_ghostty_proof_host
+  pgrep -x ghostty >/dev/null 2>&1 || return 0
+
+  closed_count="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="$cleanup_legacy_tmp_windows" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_STALE_CLEANUP_TIMEOUT_SECONDS:-4}" \
+      "Claude Code Ghostty stale proof window cleanup" <<'APPLESCRIPT' || true
+set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
+set proofDirectoryMarker to "steadytype-claude-code-proof"
+set steadyTypeGhosttyProbeMarker to "steadytype-ghostty-"
+set appleScriptProbePrefix to "SteadyType AppleScript Probe"
+set submitProbePrefix to "SteadyType Submit Probe"
+set closedCount to 0
+tell application id "com.mitchellh.ghostty"
+  repeat with windowIndex from (count windows) to 1 by -1
+    try
+      set candidateWindow to window windowIndex
+      set windowName to name of candidateWindow as text
+      if windowName contains markerText or windowName contains proofDirectoryMarker or windowName contains steadyTypeGhosttyProbeMarker or windowName starts with appleScriptProbePrefix or windowName starts with submitProbePrefix then
+        close candidateWindow
+        set closedCount to closedCount + 1
+      else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
+        close candidateWindow
+        set closedCount to closedCount + 1
+      end if
+    end try
+  end repeat
+end tell
+return closedCount as text
+APPLESCRIPT
+)"
+  if [[ "$closed_count" =~ ^[1-9][0-9]*$ ]]; then
+    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_SETTLE_SECONDS:-0.4}"
+  fi
+  reset_stale_only_claude_code_ghostty_proof_host
+  reset_zero_window_claude_code_ghostty_proof_host
+}
+
+cleanup_stale_claude_code_terminal_proofs() {
+  local marker stale_pids stale_pid cleanup_host_bundle cleanup_legacy_tmp_windows
+  marker="$(claude_code_proof_marker)"
+  cleanup_host_bundle="$(claude_code_host_bundle_id)"
+  cleanup_legacy_tmp_windows="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS:-1}"
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+        -z "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_LEGACY_TMP_WINDOWS+x}" ]]; then
+    cleanup_legacy_tmp_windows=0
+  fi
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    cleanup_stale_claude_code_ghostty_proofs
+    return
+  fi
+  stale_pids="$(AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER="$marker" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_HOST_BUNDLE="$cleanup_host_bundle" \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP="$cleanup_legacy_tmp_windows" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEANUP_TIMEOUT_SECONDS:-4}" \
+      "Claude Code terminal stale proof cleanup" <<'APPLESCRIPT' || true
+set markerText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER"
+set targetHostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_HOST_BUNDLE"
 set cleanupLegacyTmpWindows to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_CLEANUP_LEGACY_TMP"
 set proofDirectoryMarker to "steadytype-claude-code-proof"
 set stalePids to ""
@@ -8211,19 +11424,21 @@ tell application "System Events"
     try
       set terminalBundle to bundle identifier of terminalProcess
       if terminalBundle is "com.apple.Terminal" or terminalBundle is "com.googlecode.iterm2" or terminalBundle is "com.mitchellh.ghostty" then
-        set hasProofWindow to false
-        repeat with terminalWindow in windows of terminalProcess
-          try
-            set windowName to name of terminalWindow as text
-            if windowName contains markerText or windowName contains proofDirectoryMarker then
-              set hasProofWindow to true
-            else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
-              set hasProofWindow to true
-            end if
-          end try
-        end repeat
-        if hasProofWindow then
-          set stalePids to stalePids & ((unix id of terminalProcess) as text) & linefeed
+        if targetHostBundle is "auto" or terminalBundle is targetHostBundle then
+          set hasProofWindow to false
+          repeat with terminalWindow in windows of terminalProcess
+            try
+              set windowName to name of terminalWindow as text
+              if windowName contains markerText or windowName contains proofDirectoryMarker then
+                set hasProofWindow to true
+              else if cleanupLegacyTmpWindows is "1" and windowName starts with "tmp." then
+                set hasProofWindow to true
+              end if
+            end try
+          end repeat
+          if hasProofWindow then
+            set stalePids to stalePids & ((unix id of terminalProcess) as text) & linefeed
+          end if
         end if
       end if
     end try
@@ -8248,53 +11463,439 @@ APPLESCRIPT
   fi
 }
 
-wait_for_claude_code_terminal_prompt() {
-  wait_for_frontmost_claude_code_terminal_proof_process
-  wait_for_claude_code_terminal_process
+open_fresh_claude_code_terminal_proof_context() {
+  local host_name="$1"
+  local marker="$2"
+  local proof_dir launch_attempt max_launch_attempts open_status
+  max_launch_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CONTEXT_LAUNCH_ATTEMPTS:-2}"
+  if ! [[ "$max_launch_attempts" =~ ^[0-9]+$ ]] || ((max_launch_attempts < 1)); then
+    max_launch_attempts=1
+  fi
+
+  for launch_attempt in $(seq 1 "$max_launch_attempts"); do
+    cleanup_claude_code_terminal_proof
+    proof_dir="$(make_claude_code_terminal_proof_dir)"
+    CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"
+    if open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"; then
+      open_status=0
+    else
+      open_status=$?
+    fi
+    if ((open_status != 0)); then
+      echo "Claude Code $host_name proof could not launch disposable context attempt $launch_attempt." >&2
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" && "$open_status" == "42" ]]; then
+        echo "Claude Code $host_name proof skipped remaining disposable launches because Ghostty AppleScript bridge or disposable window launch failed." >&2
+        return "$open_status"
+      fi
+      continue
+    fi
+    if ! try_wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"; then
+      echo "Claude Code $host_name proof host app did not become frontmost for fresh context attempt $launch_attempt." >&2
+      continue
+    fi
+    if ! try_wait_for_claude_code_terminal_prompt; then
+      echo "Claude Code $host_name proof prompt was not ready for fresh context attempt $launch_attempt." >&2
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+            "${CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT:-0}" == "1" ]]; then
+        echo "Claude Code Ghostty proof direct command-open left launch-command text in AX; retrying without direct command-open." >&2
+        CLAUDE_CODE_GHOSTTY_SKIP_DIRECT_COMMAND_OPEN=1
+        CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
+        if ((launch_attempt >= max_launch_attempts)); then
+          max_launch_attempts=$((max_launch_attempts + 1))
+        fi
+      fi
+      continue
+    fi
+    if settle_claude_code_terminal_proof_focus "fresh proof context"; then
+      return 0
+    fi
+    echo "Claude Code $host_name proof could not keep its disposable host focused for fresh context attempt $launch_attempt." >&2
+  done
+
+  echo "Claude Code $host_name proof could not launch a fresh disposable context after $max_launch_attempts attempt(s)." >&2
+  return 1
+}
+
+try_wait_for_claude_code_terminal_prompt() {
+  local proof_pid
+  local -a proof_pid_args prompt_marker_args
+  CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=0
+
+  if ! try_wait_for_frontmost_claude_code_terminal_proof_process; then
+    echo "Claude Code Terminal proof process did not become frontmost: $CLAUDE_CODE_TERMINAL_PROOF_PIDS" >&2
+    return 1
+  fi
+  if ! try_wait_for_claude_code_terminal_process_name \
+    "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME" \
+    "$CLAUDE_CODE_TERMINAL_PROOF_PROCESS_NAME"; then
+    return 1
+  fi
+  proof_pid="$(claude_code_terminal_proof_primary_pid)"
+  proof_pid_args=()
+  if [[ -n "$proof_pid" ]]; then
+    proof_pid_args=(--pid "$proof_pid")
+  fi
+  prompt_marker_args=()
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    prompt_marker_args=(--allow-missing-marker-for-empty-text --reject-shell-command-text --hint "shortcuts")
+  fi
 
   case "$CLAUDE_CODE_HOST_VARIANT" in
-    terminal)
-      swift script/terminal_prompt_ax_proof_helper.swift wait \
+    terminal|iterm2|ghostty)
+      local prompt_wait_output prompt_wait_status
+      prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait \
         --bundle "$(claude_code_host_bundle_id)" \
         --display "$(claude_code_host_display_name)" \
         --marker "$(claude_code_proof_marker)" \
-        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}"
-      ;;
-    iterm2|ghostty)
+        "${proof_pid_args[@]}" \
+        "${prompt_marker_args[@]}" \
+        --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}" 2>&1)"
+      prompt_wait_status=$?
+      if ((prompt_wait_status != 0)) &&
+         [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+            "$prompt_wait_output" == *"rejectedShellCommand=true"* ]]; then
+        echo "Claude Code Ghostty proof prompt still contains launch-command text; clearing before readiness retry."
+        if clear_claude_code_terminal_prompt_line; then
+          prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait \
+            --bundle "$(claude_code_host_bundle_id)" \
+            --display "$(claude_code_host_display_name)" \
+            --marker "$(claude_code_proof_marker)" \
+            "${proof_pid_args[@]}" \
+            "${prompt_marker_args[@]}" \
+            --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_DISCOVERY_TIMEOUT_SECONDS:-20}" 2>&1)"
+          prompt_wait_status=$?
+        fi
+      fi
+      if ((prompt_wait_status != 0)); then
+        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+           run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output"; then
+          echo "Claude Code Ghostty proof accepted native screen-copy prompt readiness after AX textNodes=0." >&2
+          prompt_wait_status=0
+        fi
+      fi
+      if ((prompt_wait_status != 0)); then
+        if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+              "${CLAUDE_CODE_GHOSTTY_USED_DIRECT_COMMAND_OPEN:-0}" == "1" &&
+              "$prompt_wait_output" == *"rejectedShellCommand=true"* ]]; then
+          CLAUDE_CODE_GHOSTTY_DIRECT_COMMAND_OPEN_DIRTY_PROMPT=1
+        fi
+        printf '%s\n' "$prompt_wait_output" >&2
+        return 1
+      fi
       ;;
     *)
       echo "Claude Code $(claude_code_host_display_name) prompt readiness is not automated for this host." >&2
-      exit 1
+      return 1
       ;;
   esac
   sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_PROMPT_SETTLE_SECONDS:-3}"
 }
 
+wait_for_claude_code_terminal_prompt() {
+  try_wait_for_claude_code_terminal_prompt || exit 1
+}
+
 assert_claude_code_terminal_prompt_ready() {
   local proof_text="$1"
-  swift script/terminal_prompt_ax_proof_helper.swift wait \
+  local proof_pid marker expected_prompt_text
+  local -a proof_pid_args
+
+  settle_claude_code_terminal_proof_focus "typed prompt AX check" || return 1
+  proof_pid="$(claude_code_terminal_proof_primary_pid)"
+  marker="$(claude_code_proof_marker)"
+  expected_prompt_text="${proof_text//$marker/}"
+  expected_prompt_text="$(printf '%s' "$expected_prompt_text" | awk '{$1=$1; print}')"
+  proof_pid_args=()
+  if [[ -n "$proof_pid" ]]; then
+    proof_pid_args=(--pid "$proof_pid")
+  fi
+  local prompt_wait_output prompt_wait_status
+  if prompt_wait_output="$(swift script/terminal_prompt_ax_proof_helper.swift wait \
     --bundle "$(claude_code_host_bundle_id)" \
     --display "$(claude_code_host_display_name)" \
     --marker "$(claude_code_proof_marker)" \
-    --text "$proof_text" \
-    --discovery-timeout "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS:-4}"
+    --text "$expected_prompt_text" \
+    --require-exact-text \
+    "${proof_pid_args[@]}" \
+    --discovery-timeout "$(claude_code_terminal_text_wait_seconds)" 2>&1)"; then
+    prompt_wait_status=0
+  else
+    prompt_wait_status=$?
+  fi
+  if ((prompt_wait_status != 0)) &&
+     [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+     run_claude_code_ghostty_prompt_screen_copy_probe "$prompt_wait_output" "$expected_prompt_text"; then
+    echo "Claude Code Ghostty proof accepted native screen-copy typed prompt readiness after AX miss." >&2
+    return 0
+  fi
+  if ((prompt_wait_status != 0)) &&
+     [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+     run_claude_code_ghostty_prompt_anchor_diagnostics_probe "$proof_text"; then
+    return 0
+  fi
+  if ((prompt_wait_status != 0)); then
+    printf '%s\n' "$prompt_wait_output" >&2
+    return "$prompt_wait_status"
+  fi
+}
+
+try_claude_code_terminal_prompt_ready_quiet() {
+  local proof_text="$1"
+  local timeout_seconds="${2:-}"
+
+  if [[ -n "$timeout_seconds" ]]; then
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS="$timeout_seconds" \
+      assert_claude_code_terminal_prompt_ready "$proof_text" >/dev/null 2>&1
+  else
+    assert_claude_code_terminal_prompt_ready "$proof_text" >/dev/null 2>&1
+  fi
+}
+
+try_claude_code_terminal_prompt_ready_bounded_quiet() {
+  local proof_text="$1"
+  local timeout_seconds="${2:-}"
+  local label="${3:-Claude Code terminal prompt readiness}"
+  local guard_seconds pid status
+
+  guard_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROMPT_READY_GUARD_SECONDS:-}"
+  if [[ -z "$guard_seconds" ]]; then
+    guard_seconds="${timeout_seconds:-$(claude_code_terminal_text_wait_seconds)}"
+    guard_seconds="${guard_seconds%%.*}"
+    if ! [[ "$guard_seconds" =~ ^[0-9]+$ ]] || ((guard_seconds < 1)); then
+      guard_seconds=4
+    fi
+    guard_seconds=$((guard_seconds + 8))
+  fi
+  guard_seconds="${guard_seconds%%.*}"
+  if ! [[ "$guard_seconds" =~ ^[0-9]+$ ]] || ((guard_seconds < 1)); then
+    guard_seconds=12
+  fi
+
+  try_claude_code_terminal_prompt_ready_quiet "$proof_text" "$timeout_seconds" &
+  pid="$!"
+  wait_for_background_process "$pid" "$guard_seconds" "$label"
+  status=$?
+  if ((status == 124)); then
+    echo "$label timed out while verifying prompt readiness." >&2
+  fi
+  return "$status"
+}
+
+claude_code_terminal_text_wait_seconds() {
+  local wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TEXT_WAIT_SECONDS:-}"
+  if [[ -z "$wait_seconds" ]]; then
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      wait_seconds="12"
+    else
+      wait_seconds="4"
+    fi
+  fi
+  if [[ "$wait_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$wait_seconds"
+  else
+    printf '%s\n' "4"
+  fi
+}
+
+claude_code_terminal_accept_wait_seconds() {
+  local wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-}"
+  if [[ -z "$wait_seconds" ]]; then
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_ACCEPT_WAIT_SECONDS:-90}"
+    else
+      wait_seconds="30"
+    fi
+  fi
+  if [[ "$wait_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$wait_seconds"
+  else
+    printf '%s\n' "30"
+  fi
 }
 
 assert_claude_code_terminal_prompt_retains_marker() {
+  settle_claude_code_terminal_proof_focus "marker retention AX check" || return 1
   claude_code_terminal_ax_helper contains-marker
+}
+
+type_claude_code_terminal_smoke_text() {
+  local text="$1"
+  local typing_mode="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_TYPING_MODE:-auto}"
+
+  case "$typing_mode" in
+    bulk)
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
+      ;;
+    key-events)
+      type_claude_code_terminal_raw_smoke_text "$text"
+      ;;
+    auto)
+      case "$CLAUDE_CODE_HOST_VARIANT" in
+        terminal)
+          AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
+          ;;
+        iterm2)
+          type_claude_code_terminal_raw_smoke_text "$text"
+          ;;
+        ghostty)
+          type_claude_code_terminal_ghostty_paste_then_key_text "$text"
+          ;;
+        *)
+          AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$text"
+          ;;
+      esac
+      ;;
+    *)
+      echo "Unknown Claude Code terminal typing mode: $typing_mode" >&2
+      exit 2
+      ;;
+  esac
+}
+
+type_claude_code_terminal_ghostty_paste_then_key_text() {
+  local text="$1"
+  local prefix_text final_character drain_seconds
+
+  settle_claude_code_terminal_proof_focus "Ghostty proof CGEvent typing" || return 1
+  if (( ${#text} > 1 )); then
+    prefix_text="${text:0:${#text}-1}"
+    final_character="${text: -1}"
+  else
+    prefix_text=""
+    final_character="$text"
+  fi
+  drain_seconds="$(claude_code_ghostty_typing_drain_seconds)"
+
+  if [[ -n "$prefix_text" ]]; then
+    type_claude_code_terminal_ghostty_native_text "$prefix_text"
+    sleep "$drain_seconds"
+  fi
+
+  CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_FINAL_TRIGGER_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]]; then
+    echo "Claude Code Ghostty proof typing final trigger with native terminal input."
+    if ! type_claude_code_terminal_ghostty_native_final_character "$final_character"; then
+      echo "Claude Code Ghostty proof native final trigger failed; falling back to CGEvent typing."
+      settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
+      type_text_cgevent "$final_character"
+    fi
+  else
+    settle_claude_code_terminal_proof_focus "Ghostty proof final trigger typing" || return 1
+    type_text_cgevent "$final_character"
+  fi
+
+  sleep "$drain_seconds"
+  if try_claude_code_terminal_prompt_ready_quiet "$text" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TYPING_VERIFY_SECONDS:-3}"; then
+    return
+  fi
+
+  echo "Claude Code Ghostty proof native typed prompt was incomplete; retrying with System Events bulk typing."
+  if clear_claude_code_terminal_prompt_line; then
+    CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 \
+      type_claude_code_terminal_raw_smoke_text "$text" || return 1
+    sleep "$drain_seconds"
+    if try_claude_code_terminal_prompt_ready_quiet "$text" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TYPING_VERIFY_SECONDS:-3}"; then
+      return
+    fi
+  fi
+
+  echo "Claude Code Ghostty proof bulk typing was incomplete; retrying with paced System Events typing."
+  if clear_claude_code_terminal_prompt_line; then
+    CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE="$(line_count "$LOG_PATH")"
+    type_claude_code_terminal_raw_smoke_text "$text" || return 1
+    sleep "$drain_seconds"
+  fi
+}
+
+type_claude_code_terminal_ghostty_native_text() {
+  local text="$1"
+
+  [[ -n "$text" ]] || return 0
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_TYPE_TIMEOUT_SECONDS:-3}" \
+    "Claude Code Ghostty native proof typing" \
+    - "$text" <<'APPLESCRIPT' >/dev/null
+on run argv
+set rawText to item 1 of argv
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  input text rawText to targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
+}
+
+type_claude_code_terminal_ghostty_native_final_character() {
+  local text="$1"
+
+  [[ -n "$text" ]] || return 0
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_FINAL_TRIGGER_TIMEOUT_SECONDS:-3}" \
+    "Claude Code Ghostty native final trigger" \
+    - "$text" <<'APPLESCRIPT' >/dev/null
+on run argv
+set triggerText to item 1 of argv
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  input text triggerText to targetTerminal
+  activate
+end tell
+end run
+APPLESCRIPT
+}
+
+claude_code_ghostty_event_drain_seconds() {
+  local drain_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_EVENT_DRAIN_SECONDS:-8}"
+  if [[ "$drain_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$drain_seconds"
+  else
+    printf '%s\n' "8"
+  fi
+}
+
+claude_code_ghostty_typing_drain_seconds() {
+  local drain_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_TYPING_DRAIN_SECONDS:-0.8}"
+  if [[ "$drain_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\n' "$drain_seconds"
+  else
+    printf '%s\n' "0.8"
+  fi
 }
 
 type_claude_code_terminal_raw_smoke_text() {
   local text="$1"
 
+  settle_claude_code_terminal_proof_focus "proof typing" || return 1
   if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE:-0}" == "1" ]]; then
     AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+      run_osascript_with_timeout \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TYPE_TIMEOUT_SECONDS:-4}" \
+        "Claude Code terminal raw bulk proof typing" <<'APPLESCRIPT'
 set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not hostBundle then
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
     error "Claude Code terminal host is not frontmost for proof typing."
   end if
   keystroke rawText
@@ -8305,13 +11906,21 @@ APPLESCRIPT
 
   AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT="$text" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
-  AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY_SECONDS:-0.012}" osascript <<'APPLESCRIPT'
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY_SECONDS:-0.012}" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TYPE_TIMEOUT_SECONDS:-4}" \
+      "Claude Code terminal raw proof typing" <<'APPLESCRIPT'
 set rawText to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_RAW_TEXT"
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 set keyDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_KEY_DELAY") as real
 tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not hostBundle then
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
     error "Claude Code terminal host is not frontmost for proof typing."
   end if
   repeat with characterIndex from 1 to count characters of rawText
@@ -8322,14 +11931,85 @@ end tell
 APPLESCRIPT
 }
 
+clear_claude_code_terminal_ghostty_native_line() {
+  local clear_delay="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}"
+
+  focus_claude_code_ghostty_proof_window_by_title || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="$clear_delay" \
+    run_osascript_with_timeout \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_CLEAR_TIMEOUT_SECONDS:-3}" \
+      "Claude Code Ghostty native line clear" <<'APPLESCRIPT' >/dev/null
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
+tell application id "com.mitchellh.ghostty"
+  set targetWindow to front window
+  activate window targetWindow
+  set targetTab to selected tab of targetWindow
+  set targetTerminal to focused terminal of targetTab
+  focus targetTerminal
+  send key "u" modifiers "control" to targetTerminal
+  delay clearDelay
+  send key "u" modifiers "control" to targetTerminal
+  activate
+end tell
+APPLESCRIPT
+}
+
 clear_claude_code_terminal_prompt_line() {
+  local ghostty_native_clear_posted=1
+  local ghostty_system_events_clear_posted=1
+
+  settle_claude_code_terminal_proof_focus "prompt clearing" || return 1
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_NATIVE_CLEAR_ENABLED:-1}" =~ ^(1|true|yes|on)$ ]] &&
+       clear_claude_code_terminal_ghostty_native_line; then
+      ghostty_native_clear_posted=0
+      sleep "$(claude_code_ghostty_event_drain_seconds)"
+      return 0
+    fi
+    if [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SYSTEM_EVENTS_CLEAR_ENABLED:-0}" =~ ^(1|true|yes|on)$ ]]; then
+      return 1
+    fi
+    if AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
+      AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
+tell application "System Events"
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
+    error "Claude Code terminal host is not frontmost for proof line clearing."
+  end if
+  keystroke "u" using control down
+  delay clearDelay
+  keystroke "u" using control down
+end tell
+APPLESCRIPT
+    then
+      ghostty_system_events_clear_posted=0
+    else
+      ghostty_system_events_clear_posted=$?
+    fi
+    sleep "$(claude_code_ghostty_event_drain_seconds)"
+    ((ghostty_native_clear_posted == 0 || ghostty_system_events_clear_posted == 0))
+    return
+  fi
+
   AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" \
   AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY_SECONDS:-0.12}" osascript <<'APPLESCRIPT'
 set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
 set clearDelay to (system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_DELAY") as real
 tell application "System Events"
-  set frontApp to first application process whose frontmost is true
-  if bundle identifier of frontApp is not hostBundle then
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
     error "Claude Code terminal host is not frontmost for proof line clearing."
   end if
   key code 53
@@ -8343,6 +12023,272 @@ tell application "System Events"
   keystroke "u" using control down
 end tell
 APPLESCRIPT
+}
+
+press_claude_code_terminal_host_tab() {
+  local suggestion_line="${1:-0}"
+  local host_name="${2:-$(claude_code_host_display_name)}"
+  local probe_start_line
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="tab delivery did not reach key capture"
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "proof-only-driver-enabled" ||
+      return 1
+    return 0
+  fi
+
+  settle_claude_code_terminal_proof_focus "host Tab hot accept" || return 1
+  AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE="$(claude_code_host_bundle_id)" osascript <<'APPLESCRIPT'
+set hostBundle to system attribute "AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_BUNDLE"
+tell application "System Events"
+  set hostIsFrontmost to false
+  repeat with frontApp in (application processes whose frontmost is true)
+    try
+      if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+    end try
+  end repeat
+  if hostIsFrontmost is false then
+    error "Claude Code terminal host is not frontmost for proof Tab."
+  end if
+end tell
+APPLESCRIPT
+  if ! probe_claude_code_terminal_host_key_capture "$host_name"; then
+    try_steadytype_proof_only_accept_next_word_driver "$suggestion_line" "$host_name" "key-capture-probe-miss" ||
+      return 1
+    return 0
+  fi
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name proof pressing CGEvent Tab for hot accept."
+  if ! press_key_code_cgevent_with_timeout \
+    48 \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name CGEvent Tab" \
+    "session" \
+    "warm"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent session Tab helper failed"
+    return 1
+  fi
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS:-1}" \
+    "keyboard-event-tap-latency" \
+    "key=tab"; then
+    return 0
+  fi
+
+  if [[ "$suggestion_line" != "0" ]] &&
+    log_since_has_fields "$suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after CGEvent session Tab"
+    echo "Claude Code $host_name suggestion hid after CGEvent session Tab; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if ! settle_claude_code_terminal_proof_focus "HID CGEvent Tab hot accept"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before HID CGEvent Tab"
+      echo "Claude Code terminal host is not frontmost for HID CGEvent proof Tab." >&2
+      return 1
+    fi
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name CGEvent session Tab produced no key=tab diagnostic; retrying with CGEvent HID Tab."
+    if ! press_key_code_cgevent_with_timeout \
+      48 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent HID Tab" \
+      "hid" \
+      "warm"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent HID Tab helper failed"
+      return 1
+    fi
+    if wait_for_log_fields_optional \
+      "$probe_start_line" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_PROBE_SECONDS:-1}" \
+      "keyboard-event-tap-latency" \
+      "key=tab"; then
+      return 0
+    fi
+
+    if [[ "$suggestion_line" != "0" ]] &&
+      log_since_has_fields "$suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after CGEvent HID Tab"
+      echo "Claude Code $host_name suggestion hid after CGEvent HID Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
+    if ! settle_claude_code_terminal_proof_focus "private-source session CGEvent Tab hot accept"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source session CGEvent Tab"
+      echo "Claude Code terminal host is not frontmost for private-source session CGEvent proof Tab." >&2
+      return 1
+    fi
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name CGEvent HID Tab produced no key=tab diagnostic; retrying with private-source session CGEvent Tab."
+    if ! press_key_code_cgevent_with_timeout \
+      48 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent private-source session Tab" \
+      "session" \
+      "warm" \
+      "private"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source session Tab helper failed"
+      return 1
+    fi
+    if wait_for_log_fields_optional \
+      "$probe_start_line" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_TAB_PROBE_SECONDS:-1}" \
+      "keyboard-event-tap-latency" \
+      "key=tab"; then
+      return 0
+    fi
+
+    if [[ "$suggestion_line" != "0" ]] &&
+      log_since_has_fields "$suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after private-source session CGEvent Tab"
+      echo "Claude Code $host_name suggestion hid after private-source session CGEvent Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+
+    if ! settle_claude_code_terminal_proof_focus "private-source HID CGEvent Tab hot accept"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before private-source HID CGEvent Tab"
+      echo "Claude Code terminal host is not frontmost for private-source HID CGEvent proof Tab." >&2
+      return 1
+    fi
+    probe_start_line="$(line_count "$LOG_PATH")"
+    echo "Claude Code $host_name private-source session CGEvent Tab produced no key=tab diagnostic; retrying with private-source HID CGEvent Tab."
+    if ! press_key_code_cgevent_with_timeout \
+      48 \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_TIMEOUT_SECONDS:-2}" \
+      "Claude Code $host_name CGEvent private-source HID Tab" \
+      "hid" \
+      "warm" \
+      "private"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="CGEvent private-source HID Tab helper failed"
+      return 1
+    fi
+    if wait_for_log_fields_optional \
+      "$probe_start_line" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_CGEVENT_HID_TAB_PROBE_SECONDS:-1}" \
+      "keyboard-event-tap-latency" \
+      "key=tab"; then
+      return 0
+    fi
+
+    if [[ "$suggestion_line" != "0" ]] &&
+      log_since_has_fields "$suggestion_line" \
+        "suggestion-hidden" \
+        "app=com.anthropic.claude-code"; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion after private-source HID CGEvent Tab"
+      echo "Claude Code $host_name suggestion hid after private-source HID CGEvent Tab; refreshing the disposable prompt." >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$suggestion_line" != "0" ]] &&
+    log_since_has_fields "$suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion before fallback Tab"
+    echo "Claude Code $host_name suggestion hid before fallback Tab; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
+  if ! settle_claude_code_terminal_proof_focus "fallback Tab hot accept"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not refocus before fallback Tab"
+    echo "Claude Code terminal host is not frontmost for fallback proof Tab." >&2
+    return 1
+  fi
+
+  probe_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name CGEvent Tab attempts produced no key=tab diagnostic; retrying with System Events Tab."
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+    if ! focus_claude_code_ghostty_proof_window_by_title; then
+      CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="could not focus title-marked proof window before fallback Tab"
+      echo "Claude Code $host_name fallback could not focus the title-marked proof window." >&2
+      return 1
+    fi
+  fi
+  if ! run_osascript_with_timeout \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_FALLBACK_TAB_TIMEOUT_SECONDS:-2}" \
+    "Claude Code $host_name fallback Tab" <<'APPLESCRIPT'
+tell application "System Events"
+  key code 48
+end tell
+APPLESCRIPT
+  then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="fallback System Events Tab timed out"
+    echo "Claude Code $host_name fallback System Events Tab timed out; refreshing the disposable prompt." >&2
+    return 1
+  fi
+
+  if wait_for_log_fields_optional \
+    "$probe_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_FALLBACK_TAB_PROBE_SECONDS:-2}" \
+    "keyboard-event-tap-latency" \
+    "key=tab"; then
+    return 0
+  fi
+
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="Tab delivery did not reach key capture"
+  echo "Claude Code $host_name fallback System Events Tab produced no immediate key=tab diagnostic; refreshing the disposable prompt." >&2
+  return 1
+}
+
+try_steadytype_proof_only_accept_next_word_driver() {
+  local suggestion_line="${1:-0}"
+  local host_name="${2:-$(claude_code_host_display_name)}"
+  local reason="${3:-manual}"
+  local app_binary command_start_line
+
+  [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] || return 1
+  [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] || return 1
+  if [[ "${AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS:-0}" != "1" ]]; then
+    echo "Claude Code $host_name proof-only accept driver requires AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1 on the SteadyType launch." >&2
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept driver not enabled in app launch"
+    return 1
+  fi
+  if [[ "$suggestion_line" != "0" ]] &&
+    log_since_has_fields "$suggestion_line" \
+      "suggestion-hidden" \
+      "app=com.anthropic.claude-code"; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="lost its visible suggestion before proof-only accept driver"
+    echo "Claude Code $host_name suggestion hid before proof-only accept command; refreshing the disposable prompt." >&2
+    return 1
+  fi
+  settle_claude_code_terminal_proof_focus \
+    "proof-only accept command" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_FOCUS_SECONDS:-1}" || return 1
+
+  app_binary="$(steadytype_app_binary)"
+  if [[ ! -x "$app_binary" ]]; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept driver app binary missing"
+    echo "SteadyType app binary is missing for proof-only accept command: $app_binary" >&2
+    return 1
+  fi
+
+  command_start_line="$(line_count "$LOG_PATH")"
+  echo "Claude Code $host_name proof using SteadyType proof-only accept command after $reason."
+  if ! "$app_binary" --proof-only-accept-next-word; then
+    CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept command failed to post"
+    return 1
+  fi
+  if wait_for_log_fields_optional \
+    "$command_start_line" \
+    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER_SECONDS:-4}" \
+    "proof-only-accept-command-result" \
+    "app=com.anthropic.claude-code" \
+    "handled=true"; then
+    return 0
+  fi
+
+  CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON="proof-only accept command did not handle"
+  echo "Claude Code $host_name proof-only accept command did not produce handled=true." >&2
+  return 1
 }
 
 type_claude_raw_smoke_text() {
@@ -9966,6 +13912,11 @@ describe_plan() {
         echo "Safety: Codex model latency proof tags the runtime launch with scenario codex-model-latency so generic prompt samples cannot satisfy the strict selector."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; it runs the prompt no-submit gate on the same trace slice."
         echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
+      elif [[ "$CODEX_FULL_ACCEPT_PROOF" == "1" ]]; then
+        echo "Plan: manual-gated Codex prompt full-accept no-submit proof. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text, waits for a visible short phrase, presses the configured full-accept shortcut once, and validates that the phrase stayed in the composer."
+        echo "Safety: Codex full accept is enabled only for the proof-mode Codex bundle and runtime scenario codex-full-accept-no-submit."
+        echo "Safety: pass --manual-gate to continue. The helper never presses Enter; it runs the prompt full-accept no-submit gate on the same trace slice."
+        echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
       else
         echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
@@ -10206,11 +14157,29 @@ launch_current_steadytype_with_smoke_env() {
     AUTOCOMPLETE_LAB_PROOF_SUPPRESS_ANNOYANCE_LEARNING \
     AUTOCOMPLETE_LAB_TEMPORARILY_ENABLE_BUNDLE_IDS \
     AUTOCOMPLETE_LAB_PROOF_MODE_BUNDLE_IDS \
+    AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS \
+    AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION \
+    AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER \
+    AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS \
+    AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE \
+    AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE \
+    AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES \
+    AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS \
+    AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE \
+    AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE \
+    AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS \
+    AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE \
+    AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE \
     AUTOCOMPLETE_LAB_ACCEPTED_INSERTION_UNDO_RECOVERY; do
     if [[ -n "${!env_key+x}" ]]; then
       launch_env+=("$env_key=${!env_key}")
     fi
   done
+  if [[ "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]] &&
+     [[ ! -n "${AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS+x}" ]]; then
+    launch_env+=(AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1)
+    export AUTOCOMPLETE_LAB_PROOF_ONLY_ACCEPT_COMMANDS=1
+  fi
 
   env "${launch_env[@]}" \
     nohup "$app_binary" >"$launch_log" 2>&1 </dev/null &
@@ -10372,7 +14341,7 @@ run_codex() {
   wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
   assert_frontmost_app "Codex" "Codex proof"
   sleep 0.05
-  press_key_code_cgevent 48
+  press_codex_tab_for_smoke "$start_line"
   wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \
     "keyboard-action" \
     "app=com.openai.codex" \
@@ -10390,6 +14359,79 @@ run_codex() {
     ./script/manual_smoke_session.sh codex --check --visual
 }
 
+run_codex_full_accept() {
+  if [[ "$MANUAL_GATE" != "1" ]]; then
+    echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
+    exit 2
+  fi
+
+  local runtime_start_line start_line suggestion_start_line trace_start_line proof_text backup_dir accept_shortcut
+  runtime_start_line="$(line_count "$LOG_PATH")"
+  proof_text="$(codex_full_accept_proof_text)"
+  backup_dir="$(make_tmp_dir)"
+  CODEX_DRAFT_BACKUP_PATH="$backup_dir/codex-draft-backup.txt"
+  : >"$CODEX_DRAFT_BACKUP_PATH"
+  chmod 600 "$CODEX_DRAFT_BACKUP_PATH" >/dev/null 2>&1 || true
+
+  prepare_temporary_app_enablement
+  prepare_codex_full_accept_runtime_options
+  build_if_needed
+  wait_for_accessibility_ready "$runtime_start_line" "Codex full accept Accessibility readiness" 20 "$SKIP_BUILD"
+  wait_for_runtime_ready "$runtime_start_line" "Codex full accept runtime readiness" 60 "$SKIP_BUILD"
+  ensure_cgevent_keypress_helper
+
+  start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
+
+  seed_codex_proof_prompt "$proof_text" "$CODEX_DRAFT_BACKUP_PATH"
+  if [[ -s "$CODEX_DRAFT_BACKUP_PATH" ]]; then
+    CODEX_DRAFT_BACKUP_ACTIVE=1
+  fi
+  focus_codex_proof_prompt
+  suggestion_start_line="$start_line"
+  wait_for_log_fields "$suggestion_start_line" "Codex full accept phrase suggestion" 24 \
+    "suggestion-presented" \
+    "app=com.openai.codex" \
+    "requestMode=phraseContinuation"
+  wait_for_screenshot_capture_if_enabled "$suggestion_start_line" "com.openai.codex" "Codex full accept proof"
+  assert_frontmost_app "Codex" "Codex full accept proof"
+  sleep 0.05
+  accept_shortcut="$(accept_all_shortcut)"
+  press_codex_full_accept_shortcut_for_smoke "$start_line" "$suggestion_start_line" "$accept_shortcut"
+  wait_for_log_fields "$suggestion_start_line" "Codex full accept acceptance" 12 \
+    "keyboard-action" \
+    "app=com.openai.codex" \
+    "key=$accept_shortcut" \
+    "action=acceptAllVisible" \
+    "handled=true"
+  wait_for_log_pattern "$start_line" "insert .*app=com.openai.codex .*success=true" "Codex full accept successful insertion" 12
+  wait_for_log_pattern "$start_line" "insert-verification .*app=com.openai.codex .*result=verified" "Codex full accept verified insertion" 12
+  assert_codex_prompt_retains_marker
+
+  sleep 1
+  AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_PROMPT_FULL_ACCEPT_NO_SUBMIT_CONFIRMED=1 \
+  AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="full-accept" \
+  AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
+  AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
+    ./script/manual_smoke_session.sh codex-full-accept --check --visual
+}
+
+retry_claude_code_terminal_proof_context() {
+  local host_name="$1"
+  local marker="$2"
+  local attempt="$3"
+  local max_attempts="$4"
+  local reason="$5"
+
+  if ((max_attempts > 0 && attempt >= max_attempts)); then
+    echo "Claude Code $host_name proof attempt $attempt $reason; no disposable attempts remain."
+    return 1
+  fi
+  echo "Claude Code $host_name proof attempt $attempt $reason; launching a fresh disposable context."
+  open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+}
+
 run_claude_code_terminal_host_smoke() {
   if [[ "$MANUAL_GATE" != "1" ]]; then
     echo "${REQUESTED_APP:-$APP} real smoke requires --manual-gate because $(manual_gate_reason)." >&2
@@ -10404,74 +14446,296 @@ run_claude_code_terminal_host_smoke() {
 
   require_claude_code_host_if_requested
 
-  local runtime_start_line start_line trace_start_line accept_start_line proof_text marker proof_dir host_name
-  local attempt suggestion_wait_seconds found_suggestion
+  local runtime_start_line start_line trace_start_line suggestion_start_line pre_trigger_suggestion_start_line accept_start_line proof_text marker host_name
+  local attempt max_attempts suggestion_wait_seconds found_suggestion suggestion_line suggestion_ready stale_blocker_line stale_blocker_reason relaxed_suggestion_start_line
+  local ghostty_key_capture_miss_count ghostty_max_key_capture_misses
+  local post_suggestion_failure_reason post_suggestion_failure_start_line
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
-  proof_dir="$(make_claude_code_terminal_proof_dir)"
   host_name="$(claude_code_host_display_name)"
-  CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+  max_attempts="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS:-0}"
+  ghostty_key_capture_miss_count=0
+  ghostty_max_key_capture_misses="${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MAX_KEY_CAPTURE_MISSES:-2}"
   suggestion_wait_seconds="${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_SECONDS:-20}"
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_MAX_ATTEMPTS must be a non-negative integer." >&2
+    exit 2
+  fi
+  if ! [[ "$ghostty_max_key_capture_misses" =~ ^[0-9]+$ ]]; then
+    echo "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_MAX_KEY_CAPTURE_MISSES must be a non-negative integer." >&2
+    exit 2
+  fi
+  post_suggestion_failure_reason=""
+  post_suggestion_failure_start_line=0
 
   prepare_temporary_app_enablement
   build_if_needed
   wait_for_accessibility_ready "$runtime_start_line" "Claude Code Accessibility readiness" 20 "$SKIP_BUILD"
   wait_for_runtime_ready "$runtime_start_line" "Claude Code runtime readiness" 60 "$SKIP_BUILD"
+  SMOKE_PHASE="claude-code $host_name warm hot-accept helpers"
+  warm_claude_code_terminal_hot_accept_helpers "$host_name"
+  echo "Claude Code $host_name proof warmed CGEvent helpers."
 
+  SMOKE_PHASE="claude-code $host_name cleanup stale disposable contexts"
+  echo "Claude Code $host_name proof cleaning stale disposable contexts."
   cleanup_stale_claude_code_terminal_proofs
-  open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
-  wait_for_frontmost_app "$host_name" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
-  wait_for_claude_code_terminal_prompt
-  wait_for_frontmost_claude_code_terminal_proof_process
-  assert_frontmost_app "$host_name" "Claude Code $host_name proof"
+  echo "Claude Code $host_name proof stale context cleanup finished."
+  SMOKE_PHASE="claude-code $host_name open fresh disposable context"
+  echo "Claude Code $host_name proof opening fresh disposable context."
+  open_fresh_claude_code_terminal_proof_context "$host_name" "$marker"
+  echo "Claude Code $host_name proof fresh disposable context ready."
+  if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" && -n "${CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT:-}" ]]; then
+    allow_claude_code_ghostty_proof_command_alert \
+      "$CLAUDE_CODE_TERMINAL_PROOF_LAUNCH_SCRIPT" \
+      "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_COMMAND_ALERT_SECONDS:-2}" || true
+  fi
   attempt=0
   found_suggestion=0
   accept_start_line="$(line_count "$LOG_PATH")"
   while IFS= read -r proof_text; do
     [[ -n "$proof_text" ]] || continue
+    if ((max_attempts > 0 && attempt >= max_attempts)); then
+      break
+    fi
     attempt=$((attempt + 1))
     validate_claude_code_terminal_smoke_input_text "$proof_text"
 
+    SMOKE_PHASE="claude-code $host_name prompt focus attempt $attempt"
+    echo "Claude Code $host_name proof attempt $attempt waiting for disposable prompt focus."
     wait_for_frontmost_claude_code_terminal_proof_process
-    clear_claude_code_terminal_prompt_line
-    sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
+    SMOKE_PHASE="claude-code $host_name clear prompt attempt $attempt"
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_SKIP_FRESH_PROMPT_CLEAR:-1}" =~ ^(1|true|yes|on)$ ]]; then
+      echo "Claude Code $host_name proof attempt $attempt skipping fresh disposable prompt clear; typed-prompt readiness will catch dirty prompt state."
+    else
+      echo "Claude Code $host_name proof attempt $attempt clearing disposable prompt line."
+      if ! clear_claude_code_terminal_prompt_line; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while clearing" || break
+        continue
+      fi
+      echo "Claude Code $host_name proof attempt $attempt prompt line cleared."
+      sleep "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_CLEAR_SETTLE_SECONDS:-0.7}"
+    fi
 
     start_line="$(line_count "$LOG_PATH")"
     trace_start_line="$(line_count "$TRACE_PATH")"
-    accept_start_line="$(line_count "$LOG_PATH")"
 
-    AUTOCOMPLETE_LAB_CLAUDE_CODE_BULK_TYPE=1 type_claude_code_terminal_raw_smoke_text "$proof_text"
-    case "$CLAUDE_CODE_HOST_VARIANT" in
-      terminal)
-        assert_claude_code_terminal_prompt_ready "$proof_text"
-        ;;
-      iterm2|ghostty)
-        ;;
-    esac
-    if wait_for_log_pattern_optional \
-      "$accept_start_line" \
-      "suggestion-presented .*app=com.anthropic.claude-code" \
+    CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE=0
+    suggestion_start_line="$(line_count "$LOG_PATH")"
+    pre_trigger_suggestion_start_line="$suggestion_start_line"
+    SMOKE_PHASE="claude-code $host_name type proof text attempt $attempt"
+    echo "Claude Code $host_name proof attempt $attempt typing proof text."
+    if ! type_claude_code_terminal_smoke_text "$proof_text"; then
+      retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while typing" || break
+      continue
+    fi
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      suggestion_start_line="$pre_trigger_suggestion_start_line"
+    elif [[ "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" =~ ^[0-9]+$ &&
+          "${CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE:-0}" != "0" ]]; then
+      suggestion_start_line="$CLAUDE_CODE_TERMINAL_TYPING_TRIGGER_LINE"
+    fi
+    SMOKE_PHASE="claude-code $host_name prove typed prompt readiness attempt $attempt"
+    if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
+      retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove typed prompt readiness" || break
+      continue
+    fi
+    if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      SMOKE_PHASE="claude-code $host_name pre-accept external mutation probe attempt $attempt"
+      if ! run_claude_code_ghostty_pre_accept_external_mutation_probe "$proof_text"; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "pre-accept external mutation probe could not restore the prompt" || break
+        continue
+      fi
+      if [[ "${CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN:-0}" == "1" ]]; then
+        suggestion_start_line="$(line_count "$LOG_PATH")"
+        pre_trigger_suggestion_start_line="$suggestion_start_line"
+      fi
+    fi
+    accept_start_line="$suggestion_start_line"
+    suggestion_ready=0
+    SMOKE_PHASE="claude-code $host_name wait for suggestion attempt $attempt"
+    if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
+      "$suggestion_start_line" \
       "$suggestion_wait_seconds"; then
+      suggestion_ready=1
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      echo "Claude Code $host_name proof attempt $attempt primary suggestion wait ended; allowing diagnostics flush grace from line $suggestion_start_line."
+      if wait_for_claude_code_terminal_log_flush_suggestion_line_optional \
+        "$suggestion_start_line" \
+        "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_LOG_FLUSH_GRACE_SECONDS:-8}"; then
+        accept_start_line="$suggestion_start_line"
+        suggestion_ready=1
+      fi
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" &&
+          "${CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN:-0}" != "1" &&
+          "$pre_trigger_suggestion_start_line" != "$suggestion_start_line" ]]; then
+      if find_claude_code_terminal_suggestion_line_optional "$pre_trigger_suggestion_start_line"; then
+        accept_start_line="$pre_trigger_suggestion_start_line"
+        suggestion_ready=1
+      fi
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+      relaxed_suggestion_start_line="$start_line"
+      if [[ "${CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_MUTATION_PROBE_RAN:-0}" == "1" ]]; then
+        relaxed_suggestion_start_line="$suggestion_start_line"
+      fi
+      if find_recent_claude_code_terminal_suggestion_line_optional "$relaxed_suggestion_start_line" ||
+         find_claude_code_terminal_suggestion_line_optional "$relaxed_suggestion_start_line"; then
+        accept_start_line="$relaxed_suggestion_start_line"
+        suggestion_ready=1
+      fi
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "${CLAUDE_CODE_TERMINAL_SUGGESTION_WAIT_CANCELLED_BY_GEOMETRY:-0}" == "1" ]]; then
+      echo "Claude Code $host_name proof attempt $attempt had its pending suggestion invalidated by screen geometry; nudging the same prompt."
+      suggestion_start_line="$(line_count "$LOG_PATH")"
+      if ! type_claude_code_terminal_smoke_text " "; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while nudging after geometry invalidation" || break
+        continue
+      fi
+      if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove prompt readiness after geometry invalidation" || break
+        continue
+      fi
+      accept_start_line="$suggestion_start_line"
+      if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
+        "$suggestion_start_line" \
+        "$suggestion_wait_seconds"; then
+        suggestion_ready=1
+      fi
+      if [[ "$suggestion_ready" != "1" &&
+            "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+        echo "Claude Code $host_name proof attempt $attempt geometry nudge wait ended; allowing diagnostics flush grace from line $suggestion_start_line."
+        if wait_for_claude_code_terminal_log_flush_suggestion_line_optional \
+          "$suggestion_start_line" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_LOG_FLUSH_GRACE_SECONDS:-8}"; then
+          suggestion_ready=1
+        fi
+      fi
+    fi
+    if [[ "$suggestion_ready" != "1" &&
+          "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]] &&
+       find_recent_claude_code_terminal_stale_proof_blocker_optional "$suggestion_start_line"; then
+      stale_blocker_line="$MATCHED_LOG_LINE"
+      stale_blocker_reason="${MATCHED_LOG_REASON:-terminal-proof-gate}"
+      echo "Claude Code $host_name proof attempt $attempt was still gated by $stale_blocker_reason at diagnostics line $stale_blocker_line after typed prompt readiness; nudging the same prompt."
+      suggestion_start_line="$(line_count "$LOG_PATH")"
+      if ! type_claude_code_terminal_smoke_text " "; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost focus while nudging after stale proof blocker" || break
+        continue
+      fi
+      if ! assert_claude_code_terminal_prompt_ready "$proof_text"; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "could not prove prompt readiness after stale proof blocker" || break
+        continue
+      fi
+      accept_start_line="$suggestion_start_line"
+      if wait_for_claude_code_terminal_proof_suggestion_ready_optional \
+        "$suggestion_start_line" \
+        "$suggestion_wait_seconds"; then
+        suggestion_ready=1
+      fi
+      if [[ "$suggestion_ready" != "1" ]]; then
+        echo "Claude Code $host_name proof attempt $attempt stale blocker nudge wait ended; allowing diagnostics flush grace from line $suggestion_start_line."
+        if wait_for_claude_code_terminal_log_flush_suggestion_line_optional \
+          "$suggestion_start_line" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_LOG_FLUSH_GRACE_SECONDS:-8}"; then
+          suggestion_ready=1
+        fi
+      fi
+    fi
+    if [[ "$suggestion_ready" == "1" ]]; then
+      suggestion_line="$MATCHED_LOG_LINE"
+      echo "Claude Code $host_name proof attempt $attempt found prompt-row suggestion at diagnostics line $suggestion_line."
+      SMOKE_PHASE="claude-code $host_name prepare hot accept attempt $attempt"
+      if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
+        retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion before Tab" || break
+        continue
+      fi
+      suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" != "ghostty" ]] ||
+         [[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]; then
+        settle_claude_code_terminal_proof_focus "Tab hot accept" || exit 1
+        if ! prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"; then
+          retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "lost its visible suggestion during Tab refocus" || break
+          continue
+        fi
+        suggestion_line="${CLAUDE_CODE_TERMINAL_HOT_ACCEPT_SUGGESTION_LINE:-$suggestion_line}"
+      fi
+      if [[ "$CLAUDE_CODE_HOST_VARIANT" == "ghostty" ]]; then
+        SMOKE_PHASE="claude-code $host_name press Tab attempt $attempt"
+        if ! press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"; then
+          post_suggestion_failure_reason="${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}"
+          post_suggestion_failure_start_line="$suggestion_line"
+          if [[ "$post_suggestion_failure_reason" == "key capture probe did not reach event tap" ]]; then
+            ghostty_key_capture_miss_count=$((ghostty_key_capture_miss_count + 1))
+            if ((ghostty_max_key_capture_misses > 0 &&
+                 ghostty_key_capture_miss_count >= ghostty_max_key_capture_misses)); then
+              post_suggestion_failure_reason="key capture probe did not reach event tap after ${ghostty_key_capture_miss_count} prompt-row suggestion(s)"
+              echo "Claude Code $host_name proof reached $ghostty_key_capture_miss_count key capture miss(es); failing closed before launching another disposable context." >&2
+              break
+            fi
+          fi
+          retry_claude_code_terminal_proof_context \
+            "$host_name" \
+            "$marker" \
+            "$attempt" \
+            "$max_attempts" \
+            "${CLAUDE_CODE_TERMINAL_HOST_TAB_FAILURE_REASON:-Tab delivery failed during hot accept}" || break
+          continue
+        fi
+        SMOKE_PHASE="claude-code $host_name post-Tab external mutation probe attempt $attempt"
+        if ! run_claude_code_ghostty_post_tab_pre_insert_external_mutation_probe "$proof_text" "$accept_start_line"; then
+          retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "post-Tab/pre-insert external mutability probe could not restore the prompt" || break
+          continue
+        fi
+      else
+        press_key_code_cgevent 48
+      fi
+      wait_for_claude_code_terminal_tab_acceptance \
+        "$accept_start_line" \
+        "$host_name" \
+        "$(claude_code_terminal_accept_wait_seconds)"
       found_suggestion=1
       break
     fi
-    echo "Claude Code $host_name proof attempt $attempt produced no visible suggestion; trying the next disposable context."
+    SMOKE_PHASE="claude-code $host_name suggestion diagnostics attempt $attempt"
+    print_claude_code_terminal_suggestion_diagnostics_tail "$suggestion_start_line" "$host_name" "$attempt"
+    retry_claude_code_terminal_proof_context "$host_name" "$marker" "$attempt" "$max_attempts" "produced no visible suggestion" || break
   done < <(claude_code_terminal_smoke_input_texts)
 
   if [[ "$found_suggestion" != "1" ]]; then
+    if [[ -n "$post_suggestion_failure_reason" ]]; then
+      if [[ "$post_suggestion_failure_reason" == key\ capture\ probe\ did\ not\ reach\ event\ tap* ]] &&
+        wait_for_claude_code_terminal_key_capture_permission_ui_since \
+          "${post_suggestion_failure_start_line:-0}" \
+          "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_KEY_CAPTURE_FOCUS_STEAL_WAIT_SECONDS:-2}"; then
+        post_suggestion_failure_reason="key capture probe lost focus to macOS permission UI"
+      fi
+      echo "Claude Code $host_name proof failed after a visible prompt-row suggestion: $post_suggestion_failure_reason." >&2
+      echo "Required fields: keyboard-event-tap-latency app=com.anthropic.claude-code key=tab or key=other." >&2
+      echo "Suggestion diagnostics line: ${post_suggestion_failure_start_line:-unknown}" >&2
+      echo "Log: $LOG_PATH" >&2
+      tail -n +"$((post_suggestion_failure_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 100 >&2
+      exit 1
+    fi
     echo "Timed out waiting for Claude Code $host_name proof suggestion after $attempt disposable context(s)." >&2
     echo "Pattern: suggestion-presented .*app=com.anthropic.claude-code" >&2
     echo "Log: $LOG_PATH" >&2
-    tail -n +"$((accept_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
+    tail -n +"$((suggestion_start_line + 1))" "$LOG_PATH" 2>/dev/null | tail -n 80 >&2
     exit 1
   fi
 
-  press_key_code_cgevent 48
-  wait_for_claude_code_terminal_tab_acceptance \
+  SMOKE_PHASE="claude-code $host_name wait for insertion result"
+  wait_for_claude_code_terminal_insertion_result \
     "$accept_start_line" \
     "$host_name" \
-    "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACCEPT_WAIT_SECONDS:-30}"
-  wait_for_log_pattern "$accept_start_line" "insert .*app=com.anthropic.claude-code .*success=true" "Claude Code $host_name successful insertion" 12
+    "$(claude_code_terminal_accept_wait_seconds)" \
+    "$proof_text"
   wait_for_log_pattern "$accept_start_line" "insert-verification .*app=com.anthropic.claude-code .*result=verified" "Claude Code $host_name verified insertion" 12
   wait_for_screenshot_capture_if_enabled "$accept_start_line" "com.anthropic.claude-code" "Claude Code $host_name proof"
   assert_claude_code_terminal_prompt_retains_marker
@@ -10703,7 +14967,7 @@ run_claude_code_model_latency() {
   runtime_start_line="$(line_count "$LOG_PATH")"
   marker="$(claude_code_proof_marker)"
   proof_dir="$(make_claude_code_terminal_proof_dir)"
-  CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+  CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"
 
   prepare_temporary_app_enablement
   prepare_claude_code_model_latency_runtime_options
@@ -10751,7 +15015,7 @@ run_claude_code_model_latency() {
     if [[ "$fresh_prompt_per_sample" == "1" && "$prompt_is_fresh" != "1" ]]; then
       cleanup_claude_code_terminal_proof
       proof_dir="$(make_claude_code_terminal_proof_dir)"
-      CLAUDE_CODE_TERMINAL_PROOF_TITLE="Claude Code $marker"
+      CLAUDE_CODE_TERMINAL_PROOF_TITLE="$(claude_code_terminal_proof_title_for_dir "$proof_dir")"
       open_claude_code_terminal_proof "$proof_dir" "$CLAUDE_CODE_TERMINAL_PROOF_TITLE"
       wait_for_frontmost_app "Terminal" "${AUTOCOMPLETE_LAB_CLAUDE_CODE_TERMINAL_ACTIVATION_WAIT_SECONDS:-12}"
       wait_for_claude_code_terminal_prompt
@@ -11228,6 +15492,13 @@ APPLESCRIPT
 
 create_notes_smoke_note() {
   create_notes_blank_smoke_note
+}
+
+activate_notes_for_smoke() {
+  osascript <<'APPLESCRIPT' >/dev/null
+tell application "Notes" to activate
+APPLESCRIPT
+  wait_for_frontmost_app "Notes" 5
 }
 
 type_notes_raw_smoke_text() {
@@ -11752,8 +16023,23 @@ seed_obsidian_proof_vault_note() {
   printf '%s\n' "$reset_text" >"$proof_note"
 }
 
+ensure_obsidian_smoke_renderer_accessibility_launch() {
+  if pgrep -x Obsidian >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local app_path="${AUTOCOMPLETE_LAB_OBSIDIAN_APP_PATH:-/Applications/Obsidian.app}"
+  if [[ -d "$app_path" ]]; then
+    open -na "$app_path" --args --force-renderer-accessibility
+  else
+    open -na Obsidian --args --force-renderer-accessibility
+  fi
+  sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_INITIAL_LAUNCH_WAIT_SECONDS:-2}"
+}
+
 open_obsidian_smoke_note_if_configured() {
   local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
+  ensure_obsidian_smoke_renderer_accessibility_launch
   if [[ -n "$smoke_uri" ]]; then
     open "$smoke_uri"
     sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
@@ -11769,7 +16055,6 @@ open_obsidian_smoke_note_if_configured() {
     return 0
   fi
 
-  open -a Obsidian
   sleep 0.2
   activate_obsidian_for_smoke
 }
@@ -11905,6 +16190,12 @@ run_obsidian() {
     launch_steadytype_after_chrome_setup "obsidian" "$start_line"
     wait_for_log_line_number "$start_line" "app-proof-mode-env apps=.*md[.]obsidian" "Obsidian proof-mode launch" 20
     start_line="$MATCHED_LOG_LINE"
+    prepare_obsidian_variant_state "$manual_app"
+    if [[ "$manual_app" == "obsidian-long-note" ]]; then
+      assert_obsidian_smoke_target "Smoke proof feels"
+    else
+      assert_obsidian_smoke_target
+    fi
   fi
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=md.obsidian" "Obsidian suggestion"
   activate_obsidian_for_smoke
@@ -12109,7 +16400,9 @@ run_notes() {
     assert_notes_title_smoke_target
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes title"
+    settle_keyboard_event_tap_if_started "$start_line" "Notes title Tab acceptance"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes title Tab acceptance" 12 \
       "keyboard-action" \
@@ -12131,7 +16424,9 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes title second suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes title"
+    settle_keyboard_event_tap_if_started "$second_start_line" "Notes title full acceptance"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Notes title full acceptance" 12 \
@@ -12178,7 +16473,9 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$first_fragment"
     wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes checklist"
+    settle_keyboard_event_tap_if_started "$start_line" "Notes checklist Tab acceptance"
     press_key_code 48
     wait_for_log_fields "$start_line" "Notes checklist Tab acceptance" 12 \
       "keyboard-action" \
@@ -12205,7 +16502,9 @@ run_notes() {
     fi
     type_notes_raw_smoke_text "$second_fragment"
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes checklist second suggestion"
+    activate_notes_for_smoke
     assert_frontmost_app "Notes" "Notes checklist"
+    settle_keyboard_event_tap_if_started "$second_start_line" "Notes checklist full acceptance"
     full_start_line="$(line_count "$LOG_PATH")"
     press_accept_all_shortcut
     wait_for_log_fields "$full_start_line" "Notes checklist full acceptance" 12 \
@@ -12241,7 +16540,9 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_first_fragment"
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body suggestion"
+  activate_notes_for_smoke
   assert_frontmost_app "Notes" "Notes body"
+  settle_keyboard_event_tap_if_started "$start_line" "Notes body Tab acceptance"
   press_key_code 48
   wait_for_log_fields "$start_line" "Notes body Tab acceptance" 12 \
     "keyboard-action" \
@@ -12261,7 +16562,9 @@ run_notes() {
   assert_notes_body_smoke_target
   type_notes_raw_smoke_text "$body_second_fragment"
   wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.apple.Notes" "Notes body second suggestion"
+  activate_notes_for_smoke
   assert_frontmost_app "Notes" "Notes body"
+  settle_keyboard_event_tap_if_started "$second_start_line" "Notes body full acceptance"
   full_start_line="$(line_count "$LOG_PATH")"
   press_accept_all_shortcut
   wait_for_log_fields "$full_start_line" "Notes body full acceptance" 12 \
@@ -12414,12 +16717,14 @@ run_textedit() {
   SMOKE_PHASE="TextEdit Tab acceptance"
   wait_for_textedit_acceptance_with_stale_retry "$start_line" "TextEdit Tab acceptance" "tab" "acceptNextWord" "$textedit_window_title"
   wait_for_log_pattern "$start_line" "insert-verification .*app=com.apple.TextEdit .*result=verified" "TextEdit first verified insertion"
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   if native_undo_proof_requested; then
     verify_textedit_native_undo "$textedit_window_title" "$before_one_word_accept_text" "$start_line" "TextEdit one-word native undo" "acceptNextWord"
   elif [[ "$TEXTEDIT_VARIANT" != "undo-full" ]]; then
     local undo_start_line
     undo_start_line="$(line_count "$LOG_PATH")"
+    focus_textedit_smoke_editor "$textedit_window_title"
+    click_textedit_smoke_editor "$textedit_window_title"
+    assert_textedit_frontmost_window "$textedit_window_title" "TextEdit one-word undo"
     osascript <<'APPLESCRIPT'
 tell application "System Events"
   keystroke "z" using command down
@@ -12434,6 +16739,7 @@ APPLESCRIPT
       "accepted-insertion-undone" \
       "app=com.apple.TextEdit"
   fi
+  wait_for_screenshot_capture_if_enabled "$start_line" "com.apple.TextEdit" "TextEdit"
   local full_start_line full_accept_key second_start_line
   full_accept_key="$(accept_all_shortcut)"
   second_start_line="$(line_count "$LOG_PATH")"
@@ -12457,6 +16763,9 @@ APPLESCRIPT
   elif [[ "$TEXTEDIT_VARIANT" == "undo-full" ]]; then
     local full_undo_start_line
     full_undo_start_line="$(line_count "$LOG_PATH")"
+    focus_textedit_smoke_editor "$textedit_window_title"
+    click_textedit_smoke_editor "$textedit_window_title"
+    assert_textedit_frontmost_window "$textedit_window_title" "TextEdit full-accept undo"
     osascript <<'APPLESCRIPT'
 tell application "System Events"
   keystroke "z" using command down
@@ -12858,9 +17167,6 @@ APPLESCRIPT
 
   wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture suggestion"
   wait_for_screenshot_capture_if_enabled "$start_line" "com.google.Chrome" "Chrome $fixture"
-  if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
-  fi
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
   else
@@ -12868,7 +17174,6 @@ APPLESCRIPT
   fi
   local before_one_word_accept_text
   before_one_word_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   if [[ -n "$chrome_pid" ]]; then
     wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before Tab accept"
   else
@@ -12980,9 +17285,6 @@ APPLESCRIPT
     wait_for_log_pattern "$second_start_line" "suggestion-presented .*app=com.google.Chrome" "Chrome $fixture second suggestion" 1
   fi
   wait_for_screenshot_capture_if_enabled "$second_start_line" "com.google.Chrome" "Chrome $fixture second"
-  if [[ -z "$chrome_pid" ]]; then
-    focus_chrome_smoke_editor "$fixture" "" "$chrome_url"
-  fi
   if [[ -n "$chrome_pid" ]]; then
     assert_frontmost_process_id "$chrome_pid" "Chrome $fixture"
   else
@@ -12990,7 +17292,6 @@ APPLESCRIPT
   fi
   local before_full_accept_text
   before_full_accept_text="$(chrome_focused_editor_text "$fixture" "$chrome_pid")"
-  focus_chrome_smoke_editor "$fixture" "$chrome_pid" "$chrome_url"
   if [[ -n "$chrome_pid" ]]; then
     wait_for_frontmost_process_id "$chrome_pid" 5 "Chrome $fixture before full accept"
   else
@@ -13070,7 +17371,9 @@ run_chrome() {
   fi
 }
 
+smoke_startup_marker "before-describe-plan"
 describe_plan
+smoke_startup_marker "after-describe-plan"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
@@ -13083,11 +17386,17 @@ if [[ "$APP" == "chrome" ]] && chrome_fixture_is_blocked_high_value_surface "$CH
   exit 1
 fi
 
+smoke_startup_marker "before-exclusive-cleanup"
 terminate_foreign_proof_processes_for_exclusive_run
+smoke_startup_marker "after-exclusive-cleanup"
 start_foreign_worktree_quarantine_guard
+smoke_startup_marker "after-quarantine-guard"
 refuse_other_smoke_processes
+smoke_startup_marker "after-refuse-other-smoke"
 acquire_smoke_lock
+smoke_startup_marker "after-smoke-lock"
 start_smoke_interference_guard
+smoke_startup_marker "after-interference-guard"
 
 case "$APP" in
   textedit)
@@ -13099,6 +17408,8 @@ case "$APP" in
   codex)
     if [[ "$CODEX_MODEL_LATENCY" == "1" ]]; then
       run_codex_model_latency
+    elif [[ "$CODEX_FULL_ACCEPT_PROOF" == "1" ]]; then
+      run_codex_full_accept
     else
       run_codex
     fi

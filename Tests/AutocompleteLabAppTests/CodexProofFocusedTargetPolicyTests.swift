@@ -49,6 +49,30 @@ struct CodexProofFocusedTargetPolicyTests {
         ))
     }
 
+    @Test("Allows proof-only full accept profile for matching Codex prompt")
+    func allowsProofOnlyFullAcceptProfileForMatchingCodexPrompt() throws {
+        let profile = try codexProfile().replacingAcceptanceProofMode(
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false
+        )
+        let app = codexApp()
+        let fieldIdentity = identity()
+        let snapshot = proofSnapshot(fieldIdentity: fieldIdentity)
+        let context = focusedContext(textBeforeCursor: snapshot.textBeforeCursor)
+
+        #expect(policy.matches(
+            app: app,
+            profile: profile,
+            suggestionBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            requestMode: .phraseContinuation,
+            expectedFieldIdentity: fieldIdentity,
+            snapshot: snapshot,
+            focusedContext: context,
+            focusedFieldIdentity: fieldIdentity,
+            proofModeEnabled: true
+        ))
+    }
+
     @Test("Blocks a matching marker when another Codex field is focused")
     func blocksMatchingMarkerInWrongFocusedField() throws {
         let profile = try codexProfile()

@@ -43,6 +43,19 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Next words:"))
     }
 
+    @Test("Default daily-driver prompt asks for a three to eight word phrase")
+    func defaultDailyDriverPromptAsksForThreeToEightWordPhrase() {
+        let builder = CompletionPromptBuilder(maxVisibleWords: 8)
+        let prompt = builder.prompt(for: CompletionRequest(
+            textBeforeCursor: "This should feel",
+            maxVisibleWords: 8
+        ))
+
+        #expect(prompt.system.contains("next 8 words or fewer"))
+        #expect(prompt.system.contains("Length setting: medium. Prefer at least 3 words"))
+        #expect(prompt.user.hasSuffix("Next 3-8 words, or <NO_SUGGESTION>:"))
+    }
+
     @Test("Codex prompt avoids generic product filler")
     func codexPromptAvoidsGenericProductFiller() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)

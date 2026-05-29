@@ -8,7 +8,7 @@ struct SuggestionAggressivenessTests {
         let tuning = SuggestionTuning()
 
         #expect(tuning.aggressivenessLevel == 4)
-        #expect(tuning.maxVisibleWords == 3)
+        #expect(tuning.maxVisibleWords == 8)
         #expect(tuning.wordStartCharacters == 2)
         #expect(tuning.phraseStartWords == 2)
         #expect(tuning.responseSpeedLevel == 5)
@@ -16,6 +16,7 @@ struct SuggestionAggressivenessTests {
         #expect(tuning.learningRestraintLevel == 1)
         #expect(tuning.displayName == "Very Proactive")
         #expect(tuning.pace == .eager)
+        #expect(tuning.traceMetadata["suggestionMaxVisibleWords"] == "8")
 
         let activation = tuning.activationPolicy(supportPace: tuning.pace)
         #expect(activation.decision(
@@ -178,7 +179,8 @@ struct SuggestionAggressivenessTests {
         let obsidianTrigger = tuning.triggerPolicy(
             supportPace: .eager,
             minimumPhraseContinuationWords: 1,
-            allowsPlainLineStartPhraseContinuation: true
+            allowsPlainLineStartPhraseContinuation: true,
+            allowsListLabelPhraseContinuation: true
         )
         let obsidianActivation = tuning.activationPolicy(
             supportPace: .eager,
@@ -193,6 +195,29 @@ struct SuggestionAggressivenessTests {
         #expect(obsidianTrigger.decision(
             previousTextBeforeCursor: "Plan",
             currentTextBeforeCursor: "Plan ",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 80))
+        #expect(defaultTrigger.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO",
+            currentTextBeforeCursor: "Tasks\n- TODO:",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .skip)
+        #expect(obsidianTrigger.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO",
+            currentTextBeforeCursor: "Tasks\n- TODO:",
+            lineStartBehavior: .listItem,
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 180))
+        #expect(obsidianTrigger.decision(
+            previousTextBeforeCursor: "Project note\nContext",
+            currentTextBeforeCursor: "Project note\nContext:",
+            requestMode: .phraseContinuation
+        ) == .request(delayMilliseconds: 120))
+        #expect(obsidianTrigger.decision(
+            previousTextBeforeCursor: "Tasks\n- TODO:",
+            currentTextBeforeCursor: "Tasks\n- TODO: ",
+            lineStartBehavior: .listItem,
             requestMode: .phraseContinuation
         ) == .request(delayMilliseconds: 80))
         #expect(obsidianActivation.decision(

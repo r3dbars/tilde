@@ -185,6 +185,79 @@ struct SyntheticCaretEstimatorTests {
         #expect(caret.maxY <= 793)
     }
 
+    @Test("Places terminal screen prompt carets on the proof-marked prompt row")
+    func placesTerminalScreenPromptCaretsOnProofMarkedPromptRow() throws {
+        let anchor = ClaudeCodeTerminalScreenPromptAnchor(
+            inputText: "Make this setting the feature con",
+            promptLineInputText: "Make this setting the feature con",
+            lineIndex: 34,
+            lineCount: 38
+        )
+        let caret = try #require(TerminalScreenPromptCaretEstimator.caretRect(
+            promptAnchor: anchor,
+            elementRect: CGRect(x: 120, y: 60, width: 900, height: 760),
+            windowRect: CGRect(x: 100, y: 40, width: 940, height: 800),
+            lineHeight: 20,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(caret.minY >= 730)
+        #expect(caret.minY < 780)
+        #expect(caret.minX > 420)
+        #expect(caret.maxX <= 1_020)
+    }
+
+    @Test("Bottom-aligns sparse terminal screen prompt rows instead of using the header area")
+    func bottomAlignsSparseTerminalScreenPromptRows() throws {
+        let anchor = ClaudeCodeTerminalScreenPromptAnchor(
+            inputText: "Make this setting the feature con",
+            promptLineInputText: "Make this setting the feature con",
+            lineIndex: 4,
+            lineCount: 5
+        )
+        let caret = try #require(TerminalScreenPromptCaretEstimator.caretRect(
+            promptAnchor: anchor,
+            elementRect: CGRect(x: 120, y: 60, width: 900, height: 760),
+            windowRect: CGRect(x: 100, y: 40, width: 940, height: 800),
+            lineHeight: 20,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(caret.minY >= 780)
+        #expect(caret.minY <= 800)
+    }
+
+    @Test("Keeps terminal screen prompt carets stable when scrollback above the prompt changes")
+    func keepsTerminalScreenPromptCaretsStableWhenScrollbackAbovePromptChanges() throws {
+        let first = try #require(TerminalScreenPromptCaretEstimator.caretRect(
+            promptAnchor: ClaudeCodeTerminalScreenPromptAnchor(
+                inputText: "Make this setting the feature con",
+                promptLineInputText: "Make this setting the feature con",
+                lineIndex: 34,
+                lineCount: 38
+            ),
+            elementRect: CGRect(x: 120, y: 60, width: 900, height: 760),
+            windowRect: CGRect(x: 100, y: 40, width: 940, height: 800),
+            lineHeight: 20,
+            widthOfText: fixedWidth
+        ))
+        let afterScrollbackChange = try #require(TerminalScreenPromptCaretEstimator.caretRect(
+            promptAnchor: ClaudeCodeTerminalScreenPromptAnchor(
+                inputText: "Make this setting the feature con",
+                promptLineInputText: "Make this setting the feature con",
+                lineIndex: 35,
+                lineCount: 39
+            ),
+            elementRect: CGRect(x: 120, y: 60, width: 900, height: 760),
+            windowRect: CGRect(x: 100, y: 40, width: 940, height: 800),
+            lineHeight: 20,
+            widthOfText: fixedWidth
+        ))
+
+        #expect(afterScrollbackChange.origin.y == first.origin.y)
+        #expect(afterScrollbackChange.height == first.height)
+    }
+
     private func fixedWidth(_ text: String) -> CGFloat {
         CGFloat(text.count * 10)
     }

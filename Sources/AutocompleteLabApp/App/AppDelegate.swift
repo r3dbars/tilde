@@ -22,6 +22,16 @@ struct CodexProofFocusedTargetPolicy {
         requestMode == .wordCompletion || requestMode == .phraseContinuation
     }
 
+    static func allowsPromptProofProfile(_ profile: CompatibilityProfile) -> Bool {
+        profile.bundleIdentifier == bundleIdentifier
+            && profile.supportsOneWordAcceptance
+            && profile.insertionMode == .axValueReplacement
+            && (
+                (!profile.supportsFullAcceptance && profile.requiresNoSubmitAcceptanceProof)
+                    || (profile.supportsFullAcceptance && !profile.requiresNoSubmitAcceptanceProof)
+            )
+    }
+
     func matches(
         app: RunningApplicationInfo,
         profile: CompatibilityProfile,
@@ -38,10 +48,7 @@ struct CodexProofFocusedTargetPolicy {
         guard suggestionBundleIdentifier == Self.bundleIdentifier,
               Self.allowsOneWordProofRequestMode(requestMode),
               profile.bundleIdentifier == Self.bundleIdentifier,
-              profile.supportsOneWordAcceptance,
-              !profile.supportsFullAcceptance,
-              profile.requiresNoSubmitAcceptanceProof,
-              profile.insertionMode == .axValueReplacement,
+              Self.allowsPromptProofProfile(profile),
               proofModeEnabled,
               app.bundleIdentifier == Self.bundleIdentifier,
               app.processIdentifier == expectedFieldIdentity.processIdentifier,
@@ -129,6 +136,26 @@ struct CodexProofFocusedTargetPolicy {
             && abs(expectedBounds.width - actualBounds.width) <= maxGeometryDelta
             && expectedBounds.height > 0
             && actualBounds.height > 0
+    }
+}
+
+struct PromptProofFieldIdentityRefreshPolicy {
+    func canTrustRefresh(
+        requestFieldIdentity: FocusedFieldIdentity,
+        refreshedFieldIdentity: FocusedFieldIdentity,
+        profile: CompatibilityProfile,
+        proofModeEnabled: Bool,
+        allowsFullAcceptNoSubmitProofProfile: Bool
+    ) -> Bool {
+        guard profile.promptAppSafetyMode == .wordOnly,
+              proofModeEnabled,
+              requestFieldIdentity.bundleIdentifier == refreshedFieldIdentity.bundleIdentifier,
+              requestFieldIdentity.processIdentifier == refreshedFieldIdentity.processIdentifier else {
+            return false
+        }
+
+        return profile.requiresNoSubmitAcceptanceProof
+            || allowsFullAcceptNoSubmitProofProfile
     }
 }
 
@@ -253,12 +280,33 @@ private extension ProcessInfo.ThermalState {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private struct ProofOnlyAcceptRecentSuggestion {
+        let suggestion: CompletionSuggestion
+        let suggestionID: String
+        let appBundleIdentifier: String
+        let fieldIdentity: FocusedFieldIdentity
+        let requestMode: CompletionRequestMode
+        let textBeforeCursor: String
+        let acceptanceSnapshot: SuggestionAcceptanceSnapshot
+        let displayedText: String
+        let fieldClassification: AXFieldClassification?
+        let presentedAt: Date
+        let displayScoreFinal: Double?
+        let caretRect: CGRect?
+        let textLineRect: CGRect?
+        let clippingRect: CGRect?
+        let textStyle: FocusedTextStyle?
+        let renderMode: SuggestionRenderMode?
+        let geometrySnapshot: SuggestionGeometrySnapshot?
+    }
+
     private let accessibilityClient = AccessibilityClient()
     private let startupOnboardingPolicy = StartupOnboardingPolicy()
     private let appSettings = AppSettings()
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
+    private let promptProofFieldIdentityRefreshPolicy = PromptProofFieldIdentityRefreshPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
     private let personalCapturePolicy = PersonalCapturePolicy()
@@ -296,6 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let suggestionAcceptanceGuard = SuggestionAcceptanceGuard()
     private let acceptanceSafetyPolicy = AcceptanceSafetyPolicy()
     private let acceptedTextSafetyPolicy = AcceptedTextSafetyPolicy()
+    private let proofOnlyAcceptRecentSuggestionPolicy = ProofOnlyAcceptRecentSuggestionPolicy()
     private let suggestionReplacementVisibilityPolicy = SuggestionReplacementVisibilityPolicy()
     private let suggestionGeometryChangePolicy = SuggestionGeometryChangePolicy()
     private let obsidianTabPassthroughRepairPolicy = ObsidianTabPassthroughRepairPolicy()
@@ -458,6 +507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toggleAppMenuItem: NSMenuItem?
     private var workspaceFocusObservers: [NSObjectProtocol] = []
     private var screenGeometryObserver: NSObjectProtocol?
+    private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
     private var pollTimer: Timer?
     private var resourceDiagnosticsTimer: Timer?
     private let resourceDiagnosticsSampler = ProcessResourceDiagnosticsSampler()
@@ -489,12 +539,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debounceTask: Task<Void, Never>?
     private var debounceTaskSuggestionID: String?
     private var insertionVerificationTask: Task<Void, Never>?
+    private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
     private var acceptanceSurvivalTasks: [String: Task<Void, Never>] = [:]
     private var runtimeWarmTask: Task<Void, Never>?
     private var pauseExpirationTask: Task<Void, Never>?
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
+    private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
     private var isFocusedTextPollInFlight = false
     private var latestFocusedTextReadRequestID: UInt64?
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
@@ -515,6 +567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
     private var preservesResidualSuggestionAfterNextWordAccept = false
     private var obsidianPostAcceptanceSuppression: ObsidianPostAcceptanceSuppression?
     private var recentWordMemory = ScopedRecentWordMemory()
@@ -526,6 +579,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSuggestionDecision = "Starting"
     private var lastSyntheticCaretDiagnosticSignature: String?
     private var lastClaudeCodeTerminalProofInputSignature: String?
+    private var claudeCodeTerminalScreenPromptAnchorCache = ClaudeCodeTerminalScreenPromptAnchorCache()
     private var lastTextContextRepairDiagnosticSignature: String?
     private var lastEligibleTargetApp: RunningApplicationInfo?
     private var lastObservedSettingsApp: RunningApplicationInfo?
@@ -563,6 +617,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadAcceptedAndKeptLearning()
         loadAcceptedTextStyleMemory()
         loadProofModeOverrides()
+        startProofOnlyAcceptCommandObserver()
         configureStatusItem()
         DiagnosticsLog.shared.record("launch", metadata: launchDiagnosticsMetadata())
         DiagnosticsLog.shared.record("runtime-bootstrap", metadata: modelRuntimeBundle.diagnosticsMetadata)
@@ -595,6 +650,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseExpirationTask?.cancel()
         keyboardEventTapStopTask?.cancel()
         insertionVerificationTask?.cancel()
+        deferredTerminalHostAcceptanceTask?.cancel()
         acceptedInsertionUndoExpirationTask?.cancel()
         runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
@@ -605,6 +661,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manualSuggestionRetryTask?.cancel()
         stopWorkspaceFocusObservers()
         stopScreenGeometryObserver()
+        stopProofOnlyAcceptCommandObserver()
         stopKeyboardEventTapNow(reason: "terminate")
         fieldStatusIndicator.hide()
     }
@@ -729,6 +786,238 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NotificationCenter.default.removeObserver(observer)
         screenGeometryObserver = nil
+    }
+
+    private func startProofOnlyAcceptCommandObserver() {
+        guard ProofOnlyAcceptCommand.isEnabled(),
+              proofOnlyAcceptCommandObserver == nil else {
+            return
+        }
+
+        proofOnlyAcceptCommandObserver = DistributedNotificationCenter.default().addObserver(
+            forName: ProofOnlyAcceptCommand.notificationName,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleProofOnlyAcceptNextWordCommand()
+            }
+        }
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-listener-started",
+            metadata: [
+                "enabled": "true"
+            ]
+        )
+    }
+
+    private func stopProofOnlyAcceptCommandObserver() {
+        guard let observer = proofOnlyAcceptCommandObserver else {
+            return
+        }
+
+        DistributedNotificationCenter.default().removeObserver(observer)
+        proofOnlyAcceptCommandObserver = nil
+    }
+
+    @discardableResult
+    private func restoreProofOnlyAcceptRecentSuggestionIfNeeded() -> Bool {
+        guard !suggestionSession.hasVisibleSuggestion else {
+            return false
+        }
+
+        guard let recentSuggestion = proofOnlyAcceptRecentSuggestion else {
+            return false
+        }
+
+        let ageMilliseconds = max(
+            0,
+            Int(Date().timeIntervalSince(recentSuggestion.presentedAt) * 1000)
+        )
+        let lastSnapshotMatchesShownText = proofOnlyAcceptRecentSuggestionStillMatchesShownText(
+            recentSuggestion
+        )
+        let decision = proofOnlyAcceptRecentSuggestionPolicy.decision(
+            for: ProofOnlyAcceptRecentSuggestionPolicy.RestoreInput(
+                proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                    ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                ),
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                suggestionBundleIdentifier: recentSuggestion.appBundleIdentifier,
+                currentProfileBundleIdentifier: currentProfile?.bundleIdentifier,
+                fieldClassification: recentSuggestion.fieldClassification,
+                ageMilliseconds: ageMilliseconds,
+                invalidatedByUserKeyDown: currentSuggestionInvalidatedByUserKeyDown,
+                suggestionText: recentSuggestion.suggestion.text,
+                lastSnapshotMatchesShownText: lastSnapshotMatchesShownText
+            )
+        )
+
+        switch decision {
+        case .allow:
+            break
+        case let .block(reason):
+            DiagnosticsLog.shared.record(
+                "proof-only-accept-command-restore-skipped",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "reason": reason.rawValue,
+                    "ageMilliseconds": String(ageMilliseconds),
+                    "lastSnapshotMatchesShownText": String(lastSnapshotMatchesShownText),
+                    "currentProfile": currentProfile?.bundleIdentifier ?? "unknown"
+                ]
+            )
+            return false
+        }
+
+        suggestionSession.present(recentSuggestion.suggestion)
+        currentSuggestionID = recentSuggestion.suggestionID
+        currentSuggestionAppBundleIdentifier = recentSuggestion.appBundleIdentifier
+        currentSuggestionFieldIdentity = recentSuggestion.fieldIdentity
+        currentSuggestionRequestMode = recentSuggestion.requestMode
+        currentSuggestionTextBeforeCursor = recentSuggestion.textBeforeCursor
+        currentSuggestionAcceptanceSnapshot = recentSuggestion.acceptanceSnapshot
+        currentSuggestionDisplayedText = recentSuggestion.displayedText
+        currentSuggestionFieldClassification = recentSuggestion.fieldClassification
+        currentSuggestionPresentedAt = recentSuggestion.presentedAt
+        currentSuggestionDisplayScoreFinal = recentSuggestion.displayScoreFinal
+        currentSuggestionInvalidatedByUserKeyDown = false
+        lastCaretRect = recentSuggestion.caretRect
+        lastTextLineRect = recentSuggestion.textLineRect
+        lastClippingRect = recentSuggestion.clippingRect
+        lastTextStyle = recentSuggestion.textStyle
+        lastRenderMode = recentSuggestion.renderMode
+        lastVisibleSuggestionGeometrySnapshot = recentSuggestion.geometrySnapshot
+        cancelKeyboardEventTapIdleStop()
+        updateKeyboardEventTapSnapshot()
+
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-restored-visible-suggestion",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "ageMilliseconds": String(ageMilliseconds),
+                "requestMode": recentSuggestion.requestMode.rawValue,
+                "visibleChars": String(recentSuggestion.displayedText.count)
+            ]
+        )
+        return true
+    }
+
+    private func proofOnlyAcceptRecentSuggestionStillMatchesShownText(
+        _ recentSuggestion: ProofOnlyAcceptRecentSuggestion
+    ) -> Bool {
+        guard let lastTextSnapshot else {
+            return false
+        }
+
+        return lastTextSnapshot.fieldIdentity == recentSuggestion.acceptanceSnapshot.fieldIdentity
+            && lastTextSnapshot.textBeforeCursor == recentSuggestion.acceptanceSnapshot.textBeforeCursor
+            && lastTextSnapshot.textAfterCursor == recentSuggestion.acceptanceSnapshot.textAfterCursor
+    }
+
+    private func cacheProofOnlyAcceptRecentSuggestionIfNeeded(
+        suggestion: CompletionSuggestion,
+        suggestionID: String,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        requestMode: CompletionRequestMode,
+        textBeforeCursor: String,
+        acceptanceSnapshot: SuggestionAcceptanceSnapshot,
+        displayedText: String,
+        fieldClassification: AXFieldClassification?,
+        presentedAt: Date,
+        displayScoreFinal: Double?
+    ) {
+        guard appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier else {
+            proofOnlyAcceptRecentSuggestion = nil
+            return
+        }
+
+        proofOnlyAcceptRecentSuggestion = ProofOnlyAcceptRecentSuggestion(
+            suggestion: suggestion,
+            suggestionID: suggestionID,
+            appBundleIdentifier: appBundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: requestMode,
+            textBeforeCursor: textBeforeCursor,
+            acceptanceSnapshot: acceptanceSnapshot,
+            displayedText: displayedText,
+            fieldClassification: fieldClassification,
+            presentedAt: presentedAt,
+            displayScoreFinal: displayScoreFinal,
+            caretRect: lastCaretRect,
+            textLineRect: lastTextLineRect,
+            clippingRect: lastClippingRect,
+            textStyle: lastTextStyle,
+            renderMode: lastRenderMode,
+            geometrySnapshot: lastVisibleSuggestionGeometrySnapshot
+        )
+    }
+
+    private func handleProofOnlyAcceptNextWordCommand() {
+        guard ProofOnlyAcceptCommand.isEnabled() else {
+            DiagnosticsLog.shared.record(
+                "proof-only-accept-command-refused",
+                metadata: [
+                    "reason": "disabled"
+                ]
+            )
+            return
+        }
+
+        let restoredRecentSuggestion = restoreProofOnlyAcceptRecentSuggestionIfNeeded()
+        let proofModeEnabled = activeAppProofBundleIdentifiers.contains(
+            ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        )
+        guard proofModeEnabled,
+              currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+              currentProfile?.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+              suggestionSession.hasVisibleSuggestion else {
+            DiagnosticsLog.shared.record(
+                "proof-only-accept-command-refused",
+                metadata: [
+                    "reason": "precondition-failed",
+                    "app": currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? "unknown",
+                    "hasVisibleSuggestion": String(suggestionSession.hasVisibleSuggestion),
+                    "proofModeEnabled": String(proofModeEnabled),
+                    "restoredRecentSuggestion": String(restoredRecentSuggestion),
+                    "recentSuggestionAvailable": String(proofOnlyAcceptRecentSuggestion != nil)
+                ]
+            )
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-received",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "action": KeyboardAction.acceptNextWord.diagnosticName,
+                "hasVisibleSuggestion": String(suggestionSession.hasVisibleSuggestion),
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown"
+            ]
+        )
+        let result = handleAutocompleteKey(.tab)
+        let handled: Bool
+        let resultName: String
+        switch result {
+        case .handled:
+            handled = true
+            resultName = "handled"
+        case let .replayOriginalKey(reason):
+            handled = false
+            resultName = "replay-\(reason.rawValue)"
+        case let .dropOriginalKey(reason):
+            handled = false
+            resultName = "drop-\(reason.rawValue)"
+        }
+        DiagnosticsLog.shared.record(
+            "proof-only-accept-command-result",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "handled": String(handled),
+                "result": resultName
+            ]
+        )
     }
 
     private func handleScreenGeometryChange() {
@@ -1400,7 +1689,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return terminalProofProfile
         }
 
-        return profileStore.profile(for: app.bundleIdentifier)
+        guard let profile = profileStore.profile(for: app.bundleIdentifier) else {
+            return nil
+        }
+
+        if shouldUseCodexFullAcceptNoSubmitProofProfile(
+            appBundleIdentifier: app.bundleIdentifier,
+            profile: profile
+        ) {
+            return profile.replacingAcceptanceProofMode(
+                supportsFullAcceptance: true,
+                requiresNoSubmitAcceptanceProof: false,
+                notes: "\(profile.notes) Proof-only Codex full-accept no-submit scenario is active."
+            )
+        }
+
+        return profile
+    }
+
+    private func shouldUseCodexFullAcceptNoSubmitProofProfile(
+        appBundleIdentifier: String,
+        profile: CompatibilityProfile
+    ) -> Bool {
+        appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && runtimeProofOptions.allowsCodexPromptFullAcceptNoSubmitProof
+            && activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier)
+    }
+
+    private func isCodexFullAcceptNoSubmitProofProfile(_ profile: CompatibilityProfile) -> Bool {
+        profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+            && profile.supportsFullAcceptance
+            && !profile.requiresNoSubmitAcceptanceProof
+    }
+
+    private func allowsCodexProofInsertion(profile: CompatibilityProfile) -> Bool {
+        CodexProofFocusedTargetPolicy.allowsPromptProofProfile(profile)
+            && activeAppProofBundleIdentifiers.contains(CodexProofFocusedTargetPolicy.bundleIdentifier)
+            && (
+                profile.requiresNoSubmitAcceptanceProof
+                    || isCodexFullAcceptNoSubmitProofProfile(profile)
+            )
     }
 
     private func isSuggestionEnabled(
@@ -2500,9 +2829,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context.textBeforeCursor,
             context.textAfterCursor
         ].joined(separator: "\n")
-        let terminalScreenText = ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText)
-            ? ""
-            : (accessibilityClient.focusedWindowText(for: app) ?? "")
+        let proofModeEnabled = activeAppProofBundleIdentifiers.contains(
+            ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        )
+        let shouldReadTerminalScreenText = proofModeEnabled
+            && (app.bundleIdentifier == "com.mitchellh.ghostty"
+                || !ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText))
+        let terminalScreenText = shouldReadTerminalScreenText
+            ? (accessibilityClient.focusedWindowText(for: app) ?? "")
+            : ""
         return ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: app.bundleIdentifier,
             windowTitle: context.fingerprint.windowTitle ?? "",
@@ -2510,9 +2845,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rawTextBeforeCursor: context.textBeforeCursor,
             rawTextAfterCursor: context.textAfterCursor,
             terminalScreenText: terminalScreenText,
-            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
-                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            )
+            proofModeEnabled: proofModeEnabled
         )
     }
 
@@ -2568,18 +2901,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification,
               !context.isSecure,
               context.selectedTextLength == 0,
-              !suppressedFieldIdentities.contains(fieldIdentity),
-              claudeCodeTerminalHostProofInputSignature(
-                context: context,
-                hostBundleIdentifier: app.bundleIdentifier
-              ) == lastClaudeCodeTerminalProofInputSignature,
-              ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
-                proofInputText: context.textBeforeCursor
-              ) else {
+              !suppressedFieldIdentities.contains(fieldIdentity) else {
             return false
         }
 
-        return true
+        let inputSignature = claudeCodeTerminalHostProofInputSignature(
+            context: context,
+            hostBundleIdentifier: app.bundleIdentifier
+        )
+        if inputSignature == lastClaudeCodeTerminalProofInputSignature,
+           ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+            proofInputText: context.textBeforeCursor
+           ) {
+            return true
+        }
+
+        guard let proofContext = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ) else {
+            return false
+        }
+
+        return ClaudeCodeTerminalHostProofPolicy.allowsSensitiveActivationBypass(
+            for: proofContext,
+            proofInputText: context.textBeforeCursor
+        )
     }
 
     private func recordClaudeCodeTerminalHostProofSensitiveActivationBypass(
@@ -2845,7 +3193,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationMilliseconds: recommendation.pauseMilliseconds,
             policy: focusedTextPollingBackoffPolicy
         )
-        invalidatePendingSuggestionRequest()
+        let preservesPendingRequest = shouldPreserveClaudeCodeTerminalHostProofPendingRequestDuringFocusedTextPollingThrottle(
+            reason: reason,
+            pauseMilliseconds: recommendation.pauseMilliseconds
+        )
+        if !preservesPendingRequest {
+            invalidatePendingSuggestionRequest()
+        }
         if suggestionSession.hasVisibleSuggestion {
             let frontmostBundleIdentifier = accessibilityClient.frontmostApplication()?.bundleIdentifier
             if focusedTextPollingThrottleSuggestionVisibilityPolicy.shouldHideVisibleSuggestion(
@@ -2878,7 +3232,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "focused-text-poll-throttled",
             metadata: [
                 "reason": reason.rawValue,
-                "pauseMilliseconds": String(recommendation.pauseMilliseconds)
+                "pauseMilliseconds": String(recommendation.pauseMilliseconds),
+                "pendingRequestPreserved": String(preservesPendingRequest)
+            ]
+        )
+        return true
+    }
+
+    private func shouldPreserveClaudeCodeTerminalHostProofPendingRequestDuringFocusedTextPollingThrottle(
+        reason: FocusedTextPollingThrottleReason,
+        pauseMilliseconds: Int
+    ) -> Bool {
+        let pendingRequest = suggestionOrchestrator.currentRequest
+        guard ClaudeCodeTerminalHostProofPolicy.shouldPreservePendingRequestDuringFocusedTextPollingThrottle(
+            pendingRequestAppBundleIdentifier: pendingRequest?.appBundleIdentifier,
+            pendingRequestTextBeforeCursor: pendingRequest?.textBeforeCursor,
+            pendingRequestTextAfterCursor: pendingRequest?.textAfterCursor,
+            pendingRequestFieldKind: pendingRequest?.fieldKind,
+            pendingRequestMode: pendingRequest?.mode,
+            currentProfileBundleIdentifier: currentProfile?.bundleIdentifier,
+            currentTextBeforeCursor: lastTextSnapshot?.textBeforeCursor,
+            currentTextAfterCursor: lastTextSnapshot?.textAfterCursor
+        ) else {
+            return false
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-pending-request-preserved",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "reason": reason.rawValue,
+                "pauseMilliseconds": String(pauseMilliseconds),
+                "beforeChars": String(pendingRequest?.textBeforeCursor.count ?? 0),
+                "afterChars": String(pendingRequest?.textAfterCursor.count ?? 0),
+                "requestMode": pendingRequest?.mode.rawValue ?? "unknown"
             ]
         )
         return true
@@ -3009,11 +3396,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recordTextContextRepairIfNeeded(repair, context: context, profile: profile)
         }
 
+        var terminalScreenPromptAnchor = claudeCodeTerminalHostProofContext(
+            app: app,
+            context: context,
+            profile: profile
+        ).flatMap {
+            ClaudeCodeTerminalHostProofPolicy.terminalScreenPromptAnchor(for: $0)
+        }
+        if let terminalScreenPromptAnchor {
+            claudeCodeTerminalScreenPromptAnchorCache.remember(
+                terminalScreenPromptAnchor,
+                hostBundleIdentifier: app.bundleIdentifier
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-prompt-anchor-cache-remembered",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "inputChars": String(terminalScreenPromptAnchor.inputText.count),
+                    "promptLineInputChars": String(terminalScreenPromptAnchor.promptLineInputText.count),
+                    "lineIndex": String(terminalScreenPromptAnchor.lineIndex),
+                    "lineCount": String(terminalScreenPromptAnchor.lineCount)
+                ]
+            )
+        }
+
+        var repairedProofInputText: String?
         if let proofInputText = claudeCodeTerminalHostProofInputText(
             app: app,
             context: context,
             profile: profile
         ) {
+            repairedProofInputText = proofInputText
             context = contextReplacingText(
                 context,
                 textBeforeCursor: proofInputText,
@@ -3035,16 +3449,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: app,
             profile: profile
         )
+        if terminalScreenPromptAnchor == nil,
+           ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: app.bundleIdentifier
+           ),
+           let repairedProofInputText,
+           let cachedAnchor = claudeCodeTerminalScreenPromptAnchorCache.anchorForRepairedInput(
+            hostBundleIdentifier: app.bundleIdentifier,
+            inputText: repairedProofInputText
+           ) {
+            terminalScreenPromptAnchor = cachedAnchor
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-prompt-anchor-cache-used",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "beforeChars": String(context.textBeforeCursor.count),
+                    "promptLineInputChars": String(cachedAnchor.promptLineInputText.count),
+                    "lineIndex": String(cachedAnchor.lineIndex),
+                    "lineCount": String(cachedAnchor.lineCount)
+                ]
+            )
+        } else if terminalScreenPromptAnchor == nil,
+                  ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+                    hostBundleIdentifier: app.bundleIdentifier
+                  ),
+                  let repairedProofInputText,
+                  ClaudeCodeTerminalHostProofPolicy.allowsPreviouslyVerifiedSensitiveActivationBypass(
+                    proofInputText: repairedProofInputText
+                  ) {
+            terminalScreenPromptAnchor = ClaudeCodeTerminalScreenPromptAnchor(
+                inputText: repairedProofInputText,
+                promptLineInputText: ClaudeCodeTerminalHostProofPolicy
+                    .titleScopedDirectPromptLineInputText(for: repairedProofInputText),
+                lineIndex: 0,
+                lineCount: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-direct-prompt-anchor-used",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "beforeChars": String(context.textBeforeCursor.count),
+                    "promptLineInputChars": String(repairedProofInputText.count),
+                    "lineIndex": "0",
+                    "lineCount": "4"
+                ]
+            )
+        } else if terminalScreenPromptAnchor == nil,
+                  ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+                    hostBundleIdentifier: app.bundleIdentifier
+                  ),
+                  let repairedProofInputText {
+            var metadata = claudeCodeTerminalScreenPromptAnchorCache.diagnosticMetadata(
+                hostBundleIdentifier: app.bundleIdentifier,
+                inputText: repairedProofInputText
+            )
+            metadata.merge([
+                "app": profile.bundleIdentifier,
+                "host": app.bundleIdentifier,
+                "beforeChars": String(context.textBeforeCursor.count)
+            ]) { _, newValue in newValue }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-prompt-anchor-cache-missed",
+                metadata: metadata
+            )
+        }
+        if syntheticCaretBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+           ClaudeCodeTerminalHostProofPolicy.requiresTerminalScreenPromptCaret(
+            hostBundleIdentifier: app.bundleIdentifier
+           ),
+           terminalScreenPromptAnchor == nil {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-placement-blocked",
+                metadata: [
+                    "app": profile.bundleIdentifier,
+                    "host": app.bundleIdentifier,
+                    "reason": "missing-terminal-screen-prompt",
+                    "beforeChars": String(context.textBeforeCursor.count),
+                    "afterChars": String(context.textAfterCursor.count)
+                ]
+            )
+            return context
+        }
         guard supportsSyntheticTextAreaCaret(for: app, profile: profile),
               promptTextAreaMatch(for: app.bundleIdentifier, context: context).canSuggest,
               shouldUseSyntheticTextAreaCaret(for: app, profile: profile, context: context),
               let syntheticCaret = syntheticTextAreaCaretRect(
                 for: context,
-                bundleIdentifier: syntheticCaretBundleIdentifier
+                bundleIdentifier: syntheticCaretBundleIdentifier,
+                terminalScreenPromptAnchor: terminalScreenPromptAnchor
               ) else {
             return context
         }
 
+        let syntheticCaretSource = syntheticCaretBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            && terminalScreenPromptAnchor != nil
+            ? "terminal-screen-prompt"
+            : "text-area-estimate"
         let capabilities = FocusedTextCapabilities(
             canReadValue: context.capabilities.canReadValue,
             canReadSelectedTextRange: context.capabilities.canReadSelectedTextRange,
@@ -3053,7 +3555,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             canSetSelectedText: context.capabilities.canSetSelectedText
         )
 
-        recordSyntheticCaretIfNeeded(syntheticCaret, context: context, profile: profile)
+        recordSyntheticCaretIfNeeded(
+            syntheticCaret,
+            context: context,
+            profile: profile,
+            source: syntheticCaretSource
+        )
 
         return FocusedTextContext(
             elementIdentifier: context.elementIdentifier,
@@ -3252,7 +3759,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func syntheticTextAreaCaretRect(
         for context: FocusedTextContext,
-        bundleIdentifier: String
+        bundleIdentifier: String,
+        terminalScreenPromptAnchor: ClaudeCodeTerminalScreenPromptAnchor? = nil
     ) -> CGRect? {
         guard context.role == "AXTextArea",
               let elementRect = context.elementRect,
@@ -3264,6 +3772,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let tuning = syntheticTextAreaTuning(for: context, bundleIdentifier: bundleIdentifier)
         let font = tuning.font ?? syntheticTextAreaFont(for: context, bundleIdentifier: bundleIdentifier)
         let lineHeight = max(font.ascender - font.descender + font.leading, 20)
+
+        if bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+           let terminalScreenPromptAnchor,
+           let terminalScreenCaret = TerminalScreenPromptCaretEstimator.caretRect(
+            promptAnchor: terminalScreenPromptAnchor,
+            elementRect: elementRect,
+            windowRect: context.windowRect,
+            lineHeight: lineHeight,
+            horizontalPadding: tuning.horizontalPadding,
+            inlineGap: tuning.inlineGap,
+            widthOfText: { width(of: $0, font: font) }
+           ) {
+            return terminalScreenCaret
+        }
 
         if let obsidianScrolledCaret = obsidianScrolledCodeMirrorSyntheticCaretRect(
             for: context,
@@ -3475,16 +3997,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func recordSyntheticCaretIfNeeded(
         _ caret: CGRect,
         context: FocusedTextContext,
-        profile: CompatibilityProfile
+        profile: CompatibilityProfile,
+        source: String = "text-area-estimate"
     ) {
         let signature = [
             profile.bundleIdentifier,
             String(context.textBeforeCursor.count),
-            compactRectDescription(caret)
+            compactRectDescription(caret),
+            source
         ].joined(separator: "|")
 
-        guard signature != lastSyntheticCaretDiagnosticSignature else {
-            return
+        if source != "terminal-screen-prompt" {
+            guard signature != lastSyntheticCaretDiagnosticSignature else {
+                return
+            }
         }
 
         lastSyntheticCaretDiagnosticSignature = signature
@@ -3492,7 +4018,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "synthetic-caret",
             metadata: [
                 "app": profile.bundleIdentifier,
-                "source": "text-area-estimate",
+                "source": source,
                 "caret": compactRectDescription(caret),
                 "beforeChars": String(context.textBeforeCursor.count)
             ]
@@ -3581,7 +4107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DiagnosticsLog.shared.record(
                 "keyboard-event-tap-started",
                 metadata: [
-                    "diagnosticLayer": "keyCapture"
+                    "diagnosticLayer": "keyCapture",
+                    "tapLocation": eventTap.tapPlacement.rawValue
                 ]
             )
             return true
@@ -3598,11 +4125,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func keyboardEventTapSnapshot() -> KeyboardEventTapSnapshot {
-        KeyboardEventTapSnapshot(
+        let isClaudeCodeTerminalHostProofSuggestion =
+            ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+                currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                profileBundleIdentifier: currentProfile?.bundleIdentifier,
+                fieldClassification: currentSuggestionFieldClassification,
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            )
+        return KeyboardEventTapSnapshot(
             hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
-            supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true,
-            supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true,
+            supportsOneWordAcceptance: currentProfile?.supportsOneWordAcceptance == true
+                || isClaudeCodeTerminalHostProofSuggestion,
+            supportsFullAcceptance: currentProfile?.supportsFullAcceptance == true
+                && !isClaudeCodeTerminalHostProofSuggestion,
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
+            allowsAutocompleteKeyAfterPassthroughObservation: isClaudeCodeTerminalHostProofSuggestion,
             hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
             acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
         )
@@ -3686,10 +4223,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "observer") {
+            return
+        }
+
         currentSuggestionInvalidatedByUserKeyDown = true
         invalidatePendingSuggestionRequest()
         setSuggestionDecision("Shown: tracking typing")
         updateKeyboardEventTapSnapshot()
+    }
+
+    private func preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: String) -> Bool {
+        guard let preserveReason = claudeCodeTerminalHostProofPassthroughPreserveReason() else {
+            return false
+        }
+
+        keyboardEventTap?.resetPassthroughObservation()
+        currentSuggestionInvalidatedByUserKeyDown = false
+        updateKeyboardEventTapSnapshot()
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-passthrough-preserved",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "requestMode": currentSuggestionRequestMode?.rawValue ?? "unknown",
+                "fieldKindReason": currentSuggestionFieldClassification?.reason ?? "unknown",
+                "preserveReason": preserveReason,
+                "source": source
+            ]
+        )
+        return true
+    }
+
+    private func claudeCodeTerminalHostProofPassthroughPreserveReason() -> String? {
+        guard ClaudeCodeTerminalHostProofPolicy.shouldPreserveVisibleSuggestionAfterPassthroughKeyDown(
+            currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+            profileBundleIdentifier: currentProfile?.bundleIdentifier,
+            fieldClassification: currentSuggestionFieldClassification,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+        ) else {
+            return nil
+        }
+
+        if terminalHostProofSnapshotMatchesCurrentSuggestion() {
+            return "verified-snapshot"
+        }
+
+        guard let currentProfile,
+              ClaudeCodeTerminalHostProofPolicy.shouldBridgePassthroughAfterVolatileSnapshot(
+                  currentSuggestionBundleIdentifier: currentSuggestionAppBundleIdentifier,
+                  profileBundleIdentifier: currentProfile.bundleIdentifier,
+                  fieldClassification: currentSuggestionFieldClassification,
+                  hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+                  supportsOneWordAcceptance: currentProfile.supportsOneWordAcceptance,
+                  supportsFullAcceptance: currentProfile.supportsFullAcceptance,
+                  requiresNoSubmitAcceptanceProof: currentProfile.requiresNoSubmitAcceptanceProof,
+                  insertionMode: currentProfile.insertionMode
+              ) else {
+            return nil
+        }
+
+        return "volatile-snapshot-bridge"
     }
 
     private func handleAutocompleteKey(
@@ -3698,9 +4291,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         didObservePassthroughKeyDown: Bool = false
     ) -> KeyboardEventTapHandlingResult {
         if didObservePassthroughKeyDown {
-            currentSuggestionInvalidatedByUserKeyDown = true
-            preservesResidualSuggestionAfterNextWordAccept = false
-            clearPendingAcceptedInsertionUndo(reason: "typing")
+            if preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: "handler") {
+                preservesResidualSuggestionAfterNextWordAccept = false
+            } else {
+                currentSuggestionInvalidatedByUserKeyDown = true
+                preservesResidualSuggestionAfterNextWordAccept = false
+                clearPendingAcceptedInsertionUndo(reason: "typing")
+            }
         }
 
         let action = KeyboardActionRouter(shortcutConfiguration: keyboardShortcutConfiguration).action(
@@ -3747,7 +4344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         guard focusedFieldMatchesCurrentSuggestion(
             allowTerminalHostProofSnapshotFastPath: action == .acceptNextWord,
-            allowCodexProofSnapshotFastPath: action == .acceptNextWord,
+            allowCodexProofSnapshotFastPath: action.insertsSuggestionText,
             allowObsidianSnapshotFastPath: action.insertsSuggestionText
         ) else {
             setSuggestionDecision("Blocked: focus changed")
@@ -3866,7 +4463,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 key: key,
                 action: action
             )
+            if scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptedAt: acceptedAt,
+                action: action,
+                acceptanceProof: acceptanceProof,
+                verificationBaseline: verificationBaseline
+            ) {
+                suppressKey(key)
+                recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted-deferred-insert-scheduled")
+                return .handled
+            }
             guard insertAcceptedText(acceptedText, action: action) else {
+                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -3876,38 +4486,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 action: action
             )
 
-            armAcceptedInsertionUndo(
+            completeNextWordAcceptance(
                 acceptedText: acceptedText,
                 acceptanceID: acceptanceID,
                 acceptedAt: acceptedAt,
-                acceptMode: action.diagnosticName
-            )
-            suggestionSession.commitNextWordAcceptance(acceptedText)
-            recordAcceptedText(acceptedText)
-            armObsidianPostAcceptanceSuppressionIfNeeded()
-            advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
-            suggestionRepetitionSuppressor.recordAcceptance(
-                acceptedText,
-                mode: currentSuggestionRequestMode,
-                scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
-            )
-            recordRawAcceptance(
                 action: action,
-                acceptedText: acceptedText,
-                acceptanceID: acceptanceID,
-                acceptanceProof: acceptanceProof
+                acceptanceProof: acceptanceProof,
+                verificationBaseline: verificationBaseline
             )
-            recordAnnoyanceSignal(
-                .accepted,
-                context: currentAnnoyanceContext(),
-                suggestionID: currentSuggestionID ?? "",
-                reason: action.diagnosticName
-            )
-            refreshAfterNextWordAcceptance(
-                residualReason: "Accepted: next word; showing remainder",
-                emptyReason: "accepted-next-word"
-            )
-            scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
             suppressKey(key)
             recordKeyboardAction(key: key, action: action, handled: true, reason: "accepted")
             return .handled
@@ -3918,6 +4504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return .replayOriginalKey(.unsupportedAction)
             }
             if let blockReason = currentSuggestionAcceptanceDecision(
+                allowCodexProofSnapshotFastPath: true,
                 allowObsidianSnapshotFastPath: true
             ).blockReason {
                 recordAcceptanceGuardBlock(reason: blockReason)
@@ -3944,6 +4531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .acceptanceProofFailed)
             }
             guard insertAcceptedText(acceptedText, action: action) else {
+                suppressCurrentFieldAfterInsertionFailure(reason: "insert-failed")
                 recordKeyboardAction(key: key, action: action, handled: false, reason: "insert-failed")
                 return keyboardCaptureSafetyPolicy.handlingResult(forAcceptanceFailure: .insertionFailed)
             }
@@ -4436,11 +5024,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode),
               let currentProfile,
               currentProfile.bundleIdentifier == bundleIdentifier,
-              currentProfile.supportsOneWordAcceptance,
-              !currentProfile.supportsFullAcceptance,
-              currentProfile.requiresNoSubmitAcceptanceProof,
-              currentProfile.insertionMode == .axValueReplacement,
-              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              allowsCodexProofInsertion(profile: currentProfile),
               let currentSuggestionFieldIdentity,
               let lastTextSnapshot,
               lastTextSnapshot.fieldIdentity == currentSuggestionFieldIdentity,
@@ -4716,6 +5300,173 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.clearPendingAcceptedInsertionUndo(reason: "expired")
             self.scheduleKeyboardEventTapStopIfIdle()
         }
+    }
+
+    private func scheduleDeferredClaudeCodeTerminalHostProofNextWordAcceptance(
+        acceptedText: String,
+        acceptanceID: String,
+        acceptedAt: Date,
+        action: KeyboardAction,
+        acceptanceProof: SuggestionAcceptanceProof,
+        verificationBaseline: InsertionVerificationBaseline?
+    ) -> Bool {
+        guard ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_PROBE"] == "1",
+              let profile = currentProfile,
+              shouldUseClaudeCodeTerminalHostProofDirectInsertion(profile: profile, action: action),
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return false
+        }
+
+        let scheduledSuggestionID = currentSuggestionID
+        let scheduledFieldIdentity = currentSuggestionFieldIdentity
+        let scheduledRequestMode = currentSuggestionRequestMode
+        let delayMilliseconds = deferredGhosttyInsertionProbeDelayMilliseconds()
+        deferredTerminalHostAcceptanceTask?.cancel()
+        focusedTextPollingPause.pause(
+            now: Date(),
+            durationMilliseconds: delayMilliseconds + postInsertionPollPauseMilliseconds
+        )
+        keyboardEventTap?.suppressPassthroughObservation(for: TimeInterval(delayMilliseconds) / 1000.0 + 0.75)
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-deferred-accept",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "stage": "scheduled",
+                "acceptedChars": String(acceptedText.count),
+                "delayMilliseconds": String(delayMilliseconds),
+                "suggestionID": scheduledSuggestionID ?? "",
+                "requestMode": scheduledRequestMode?.rawValue ?? ""
+            ]
+        )
+
+        deferredTerminalHostAcceptanceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            guard !Task.isCancelled,
+                  let self else {
+                return
+            }
+            self.deferredTerminalHostAcceptanceTask = nil
+            guard self.suggestionSession.hasVisibleSuggestion,
+                  self.currentSuggestionID == scheduledSuggestionID,
+                  self.currentSuggestionFieldIdentity == scheduledFieldIdentity,
+                  self.currentSuggestionRequestMode == scheduledRequestMode,
+                  !self.currentSuggestionInvalidatedByUserKeyDown else {
+                self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                    stage: "aborted",
+                    metadata: [
+                        "reason": "suggestion-state-changed",
+                        "suggestionID": scheduledSuggestionID ?? ""
+                    ]
+                )
+                return
+            }
+
+            self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                stage: "insert-start",
+                metadata: [
+                    "acceptedChars": String(acceptedText.count),
+                    "suggestionID": scheduledSuggestionID ?? ""
+                ]
+            )
+            guard self.insertAcceptedText(acceptedText, action: action) else {
+                self.suppressCurrentFieldAfterInsertionFailure(reason: "ghostty-deferred-insert-failed")
+                self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                    stage: "insert-failed",
+                    metadata: [
+                        "acceptedChars": String(acceptedText.count),
+                        "suggestionID": scheduledSuggestionID ?? ""
+                    ]
+                )
+                self.setSuggestionDecision("Blocked: deferred Ghostty insert failed")
+                self.hideSuggestion(reason: "ghostty-deferred-insert-failed")
+                return
+            }
+
+            self.recordDeferredClaudeCodeTerminalHostProofAcceptance(
+                stage: "insert-succeeded",
+                metadata: [
+                    "acceptedChars": String(acceptedText.count),
+                    "suggestionID": scheduledSuggestionID ?? ""
+                ]
+            )
+            self.completeNextWordAcceptance(
+                acceptedText: acceptedText,
+                acceptanceID: acceptanceID,
+                acceptedAt: acceptedAt,
+                action: action,
+                acceptanceProof: acceptanceProof,
+                verificationBaseline: verificationBaseline,
+                residualReason: "Accepted: deferred Ghostty next word; showing remainder",
+                emptyReason: "accepted-ghostty-deferred-next-word"
+            )
+        }
+        return true
+    }
+
+    private func deferredGhosttyInsertionProbeDelayMilliseconds() -> Int {
+        let configuredDelaySeconds = ProcessInfo.processInfo.environment[
+            "AUTOCOMPLETE_LAB_GHOSTTY_DEFERRED_INSERTION_DELAY_SECONDS"
+        ].flatMap(TimeInterval.init)
+        let delaySeconds = min(3.0, max(0.02, configuredDelaySeconds ?? 0.12))
+        return Int((delaySeconds * 1000).rounded())
+    }
+
+    private func recordDeferredClaudeCodeTerminalHostProofAcceptance(
+        stage: String,
+        metadata extraMetadata: [String: String] = [:]
+    ) {
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-deferred-accept",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "stage": stage
+            ].merging(extraMetadata) { current, _ in current }
+        )
+    }
+
+    private func completeNextWordAcceptance(
+        acceptedText: String,
+        acceptanceID: String,
+        acceptedAt: Date,
+        action: KeyboardAction,
+        acceptanceProof: SuggestionAcceptanceProof,
+        verificationBaseline: InsertionVerificationBaseline?,
+        residualReason: String = "Accepted: next word; showing remainder",
+        emptyReason: String = "accepted-next-word"
+    ) {
+        armAcceptedInsertionUndo(
+            acceptedText: acceptedText,
+            acceptanceID: acceptanceID,
+            acceptedAt: acceptedAt,
+            acceptMode: action.diagnosticName
+        )
+        suggestionSession.commitNextWordAcceptance(acceptedText)
+        recordAcceptedText(acceptedText)
+        armObsidianPostAcceptanceSuppressionIfNeeded()
+        advanceCurrentSuggestionBaseline(afterAccepting: acceptedText)
+        suggestionRepetitionSuppressor.recordAcceptance(
+            acceptedText,
+            mode: currentSuggestionRequestMode,
+            scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
+        )
+        recordRawAcceptance(
+            action: action,
+            acceptedText: acceptedText,
+            acceptanceID: acceptanceID,
+            acceptanceProof: acceptanceProof
+        )
+        recordAnnoyanceSignal(
+            .accepted,
+            context: currentAnnoyanceContext(),
+            suggestionID: currentSuggestionID ?? "",
+            reason: action.diagnosticName
+        )
+        refreshAfterNextWordAcceptance(
+            residualReason: residualReason,
+            emptyReason: emptyReason
+        )
+        scheduleInsertionVerification(acceptedText: acceptedText, baseline: verificationBaseline)
     }
 
     private func clearPendingAcceptedInsertionUndo(reason: String) {
@@ -5447,11 +6198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !acceptedText.isEmpty,
               baseline.profile.bundleIdentifier == bundleIdentifier,
               CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(baseline.requestMode),
-              baseline.profile.supportsOneWordAcceptance,
-              !baseline.profile.supportsFullAcceptance,
-              baseline.profile.requiresNoSubmitAcceptanceProof,
-              baseline.profile.insertionMode == .axValueReplacement,
-              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              allowsCodexProofInsertion(profile: baseline.profile),
               frontmostAppMatchesSuggestion(
                   frontmostApp,
                   expectedBundleIdentifier: bundleIdentifier,
@@ -5672,9 +6419,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundleIdentifier = CodexProofFocusedTargetPolicy.bundleIdentifier
         let marker = CodexProofFocusedTargetPolicy.marker
         guard baseline.profile.bundleIdentifier == bundleIdentifier,
-              baseline.profile.requiresNoSubmitAcceptanceProof,
-              baseline.profile.insertionMode == .axValueReplacement,
-              activeAppProofBundleIdentifiers.contains(bundleIdentifier),
+              allowsCodexProofInsertion(profile: baseline.profile),
               baseline.previousTextBeforeCursor.contains(marker),
               baseline.previousTextAfterCursor.isEmpty,
               !acceptedText.isEmpty else {
@@ -6392,6 +7137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         var fastPhraseFallbackMetadata: [String: String] = [:]
+        var didPresentFastPhraseFallback = false
         if requestMode == .phraseContinuation,
            !disablesFastPhraseFallbackForProof {
             let allowsClaudeCodeProofPromptPrediction =
@@ -6523,7 +7269,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         candidateSelectionMetadata: fastPresentationMetadata,
                         refreshBeforePresenting: false
                     )
-                    return
+                    didPresentFastPhraseFallback = suggestionSession.hasVisibleSuggestion
+                        && currentSuggestionID == suggestionID
+                    fastPhraseFallbackMetadata = [
+                        "fastPhraseFallbackChecked": "true",
+                        "fastPhraseFallbackOutcome": didPresentFastPhraseFallback
+                            ? "shown-then-model"
+                            : "presentation-blocked-model-only",
+                        "fastPhraseFallbackVisibleWords": String(fastSuggestion.visibleWordCount)
+                    ]
+                    .merging(fastPresentationMetadata) { current, _ in current }
+                    if didPresentFastPhraseFallback {
+                        setSuggestionDecision("Shown: instant phrase; refining with model")
+                    }
                 }
             }
 
@@ -6549,6 +7307,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
+            if didPresentFastPhraseFallback {
+                let metadata = [
+                    "renderMode": renderMode.rawValue,
+                    "reason": "typing-burst-model-continuation-kept-fast-phrase"
+                ]
+                .merging(fieldClassification.traceMetadata) { current, _ in current }
+                .merging(typingBurstMetadata) { current, _ in current }
+                .merging(fastPhraseFallbackMetadata) { current, _ in current }
+                .merging(requestMetadata) { current, _ in current }
+                setSuggestionDecision("Shown: instant phrase while typing fast")
+                showFieldStatusIndicator(.shown, context: context)
+                RawAutocompleteTraceLog.shared.record(
+                    type: .suggestionSuppressed,
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentityDescription,
+                    requestMode: request.mode.rawValue,
+                    triggerReason: "typing-burst-policy",
+                    textBeforeCursor: request.textBeforeCursor,
+                    textAfterCursor: request.textAfterCursor,
+                    reason: "typing-burst-model-continuation-kept-fast-phrase",
+                    metadata: metadata
+                )
+                recordSuggestionEvent(
+                    "suggestion-blocked",
+                    context: context,
+                    profile: profile,
+                    metadata: metadata
+                )
+                repositionVisibleSuggestion(context: context, profile: profile)
+                updateKeyboardEventTapSnapshot()
+                return
+            }
+
             let metadata = [
                 "renderMode": renderMode.rawValue,
                 "reason": "typing-burst-model-continuation"
@@ -6818,6 +7610,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await MainActor.run {
                     self.suggestionOrchestrator.finishStreamingPresentation(suggestionID: suggestionID)
                     self.clearCompletedSuggestionTask(suggestionID: suggestionID)
+                    if self.suggestionOrchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+                        suggestionID: suggestionID,
+                        currentSuggestionID: self.currentSuggestionID,
+                        ticket: requestTicket,
+                        fieldIdentity: fieldIdentity,
+                        currentFieldIdentity: self.currentFieldIdentity,
+                        hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
+                    ) {
+                        self.setSuggestionDecision("Shown: kept instant phrase after model error")
+                        self.repositionVisibleSuggestion(context: context, profile: profile)
+                        self.updateKeyboardEventTapSnapshot()
+                        return
+                    }
                     guard self.suggestionOrchestrator.shouldHideVisibleSuggestionAfterFailure(
                         ticket: requestTicket,
                         failedRequestFieldIdentity: fieldIdentity,
@@ -7149,7 +7954,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             proposedSuggestionID: suggestionID,
             currentPresentedAt: currentSuggestionPresentedAt,
             currentScore: currentSuggestionDisplayScoreFinal,
-            proposedScore: displayScoreTrace.score.finalScore
+            proposedScore: displayScoreTrace.score.finalScore,
+            currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown
         )
         let replacementMetadata = replacementDecision.metadata
         let replacementVisibilityAction = suggestionReplacementVisibilityPolicy.action(
@@ -7297,18 +8103,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSuggestionFieldIdentity = fieldIdentity
         currentSuggestionRequestMode = request.mode
         currentSuggestionTextBeforeCursor = request.textBeforeCursor
-        currentSuggestionAcceptanceSnapshot = SuggestionAcceptanceSnapshot(
+        let acceptanceSnapshot = SuggestionAcceptanceSnapshot(
             fieldIdentity: fieldIdentity,
             targetFingerprint: targetFingerprint(context: context),
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor,
             selectedTextLength: context.selectedTextLength
         )
+        currentSuggestionAcceptanceSnapshot = acceptanceSnapshot
+        let presentedAt = Date()
         currentSuggestionDisplayedText = suggestion.visibleText
-        currentSuggestionFieldClassification = fieldClassification(for: context)
-        currentSuggestionPresentedAt = Date()
+        currentSuggestionFieldClassification = displayFieldClassification
+        currentSuggestionPresentedAt = presentedAt
         currentSuggestionDisplayScoreFinal = displayScoreTrace.score.finalScore
         currentSuggestionInvalidatedByUserKeyDown = false
+        cacheProofOnlyAcceptRecentSuggestionIfNeeded(
+            suggestion: suggestion,
+            suggestionID: suggestionID,
+            appBundleIdentifier: currentSuggestionAppBundleIdentifier ?? profile.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            requestMode: request.mode,
+            textBeforeCursor: request.textBeforeCursor,
+            acceptanceSnapshot: acceptanceSnapshot,
+            displayedText: suggestion.visibleText,
+            fieldClassification: displayFieldClassification,
+            presentedAt: presentedAt,
+            displayScoreFinal: displayScoreTrace.score.finalScore
+        )
         keyboardEventTap?.resetPassthroughObservation()
         updateKeyboardEventTapSnapshot()
         guard startKeyboardEventTapIfPossible() else {
@@ -7464,11 +8285,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshedFieldIdentity: FocusedFieldIdentity,
         profile: CompatibilityProfile
     ) -> Bool {
-        profile.promptAppSafetyMode == .wordOnly
-            && profile.requiresNoSubmitAcceptanceProof
-            && activeAppProofBundleIdentifiers.contains(profile.bundleIdentifier)
-            && requestFieldIdentity.bundleIdentifier == refreshedFieldIdentity.bundleIdentifier
-            && requestFieldIdentity.processIdentifier == refreshedFieldIdentity.processIdentifier
+        promptProofFieldIdentityRefreshPolicy.canTrustRefresh(
+            requestFieldIdentity: requestFieldIdentity,
+            refreshedFieldIdentity: refreshedFieldIdentity,
+            profile: profile,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(profile.bundleIdentifier),
+            allowsFullAcceptNoSubmitProofProfile: isCodexFullAcceptNoSubmitProofProfile(profile)
+        )
     }
 
     private func frontmostAppMatchesSuggestion(
@@ -8182,7 +9005,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let acceptedTextDecision = acceptedTextSafetyPolicy.decision(
             acceptedText: acceptedText,
-            profile: profile
+            profile: profile,
+            allowsPromptActionWords: shouldUseClaudeCodeTerminalHostProofDirectInsertion(
+                profile: profile,
+                action: action
+            )
         )
         if let blockReason = acceptedTextDecision.blockReason {
             setSuggestionDecision("Blocked: unsafe accepted text")
@@ -8467,21 +9294,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile: CompatibilityProfile,
         action: KeyboardAction?
     ) -> Bool {
-        currentSuggestionAppBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+        profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
             && action == .acceptNextWord
-            && currentSuggestionRequestMode != nil
+            && (
+                currentSuggestionRequestMode == .wordCompletion
+                    || currentSuggestionRequestMode == .phraseContinuation
+            )
             && profile.insertionMode == .clipboardFallbackOptIn
             && profile.requiresNoSubmitAcceptanceProof
+            && profile.promptAppSafetyMode == .wordOnly
     }
 
     private func shouldUseCodexProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
         currentSuggestionAppBundleIdentifier == "com.openai.codex"
             && profile.bundleIdentifier == "com.openai.codex"
             && CodexProofFocusedTargetPolicy.allowsOneWordProofRequestMode(currentSuggestionRequestMode)
-            && profile.insertionMode == .axValueReplacement
-            && profile.requiresNoSubmitAcceptanceProof
-            && activeAppProofBundleIdentifiers.contains("com.openai.codex")
+            && allowsCodexProofInsertion(profile: profile)
     }
 
     private func shouldUseClaudeDesktopProofDirectInsertion(profile: CompatibilityProfile) -> Bool {
@@ -8777,6 +9605,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && url.pathExtension == "md"
     }
 
+    private static func clonePasteboardItems(_ items: [NSPasteboardItem]?) -> [NSPasteboardItem] {
+        (items ?? []).map { item in
+            let clone = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    clone.setData(data, forType: type)
+                } else if let string = item.string(forType: type) {
+                    clone.setString(string, forType: type)
+                }
+            }
+            return clone
+        }
+    }
+
     private func insertObsidianSystemEventsPasteText(_ acceptedText: String) -> Bool {
         let bundleIdentifier = "md.obsidian"
         guard !acceptedText.isEmpty,
@@ -8798,9 +9640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
         func restoreOriginalPasteboard() {
             pasteboard.clearContents()
             if !originalItems.isEmpty {
@@ -9132,9 +9972,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
         func restoreOriginalPasteboard() {
             pasteboard.clearContents()
             if !originalItems.isEmpty {
@@ -9493,7 +10331,663 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return verified
         }
 
-        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" {
+        let prefersFastGhosttyPasteboardInsertion =
+            ClaudeCodeTerminalHostProofPolicy.shouldPreferFastPasteboardInsertion(
+                hostBundleIdentifier: frontmostApp.bundleIdentifier,
+                insertionMode: currentProfile?.insertionMode,
+                requiresNoSubmitAcceptanceProof: currentProfile?.requiresNoSubmitAcceptanceProof == true
+        )
+        if prefersFastGhosttyPasteboardInsertion {
+            keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+            let runsExtendedGhosttyInsertionProbes =
+                ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_EXTENDED_INSERTION_PROBES"] == "1"
+            let configuredGhosttyFastInsertionBudgetSeconds =
+                ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS"]
+                    .flatMap { TimeInterval($0) }
+            let ghosttyFastInsertionBudgetSeconds = max(
+                2.0,
+                configuredGhosttyFastInsertionBudgetSeconds ?? 8.0
+            )
+            let ghosttyFastInsertionStartedAt = Date()
+
+            func recordGhosttyFastFailClosed(reason: String) -> Bool {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": reason,
+                        "source": "ghosttyFastFailClosed"
+                    ]
+                )
+                return false
+            }
+
+            func shouldContinueGhosttyFastInsertion(before source: String) -> Bool {
+                let elapsedSeconds = Date().timeIntervalSince(ghosttyFastInsertionStartedAt)
+                if !runsExtendedGhosttyInsertionProbes,
+                   elapsedSeconds > ghosttyFastInsertionBudgetSeconds {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "ghostty-fast-insertion-budget-exceeded",
+                            "source": "ghosttyFastInsertionBudget",
+                            "nextSource": source,
+                            "elapsedMilliseconds": String(Int(elapsedSeconds * 1000)),
+                            "budgetMilliseconds": String(Int(ghosttyFastInsertionBudgetSeconds * 1000))
+                        ]
+                    )
+                    return false
+                }
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": source,
+                        "stage": "source-start",
+                        "elapsedMilliseconds": String(Int(elapsedSeconds * 1000)),
+                        "budgetMilliseconds": String(Int(ghosttyFastInsertionBudgetSeconds * 1000)),
+                        "extendedProbes": String(runsExtendedGhosttyInsertionProbes)
+                    ]
+                )
+                return true
+            }
+
+            if ProcessInfo.processInfo.environment[
+                "AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE"
+            ] == "1" {
+                guard shouldContinueGhosttyFastInsertion(
+                    before: "ghosttyPrePromptFocusBundleSystemEventsRawKeystroke"
+                ) else {
+                    return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+                }
+                let ghosttyPrePromptFocusRawOutcome =
+                    insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke(
+                        acceptedText,
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: currentProfile,
+                        source: "ghosttyPrePromptFocusBundleSystemEventsRawKeystroke",
+                        baselineSource: "ghosttyPrePromptFocusBundleSystemEventsRawKeystrokeBaseline",
+                        stopReason: nil
+                    )
+                if ghosttyPrePromptFocusRawOutcome.verified {
+                    return true
+                }
+                guard ghosttyPrePromptFocusRawOutcome.safeToContinue else {
+                    return false
+                }
+            }
+
+            guard prepareGhosttyTerminalHostProofInsertionTarget(
+                frontmostApp: frontmostApp,
+                originalProofInputText: originalProofInputText,
+                profile: currentProfile
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-fast-target-recheck-failed",
+                        "source": "ghosttyFocusReassertion"
+                    ]
+                )
+                return false
+            }
+
+            stopKeyboardEventTapNow(reason: "ghostty-fast-insertion-prompt-focus")
+            if focusGhosttyTerminalHostProofPromptByClickIfAvailable(
+                source: "ghosttyPromptFocusClick"
+            ) {
+                guard prepareGhosttyTerminalHostProofInsertionTarget(
+                    frontmostApp: frontmostApp,
+                    originalProofInputText: originalProofInputText,
+                    profile: currentProfile
+                ) else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "ghostty-fast-post-click-target-recheck-failed",
+                            "source": "ghosttyPromptFocusClick"
+                        ]
+                    )
+                    return false
+                }
+            }
+
+            if ProcessInfo.processInfo.environment[
+                "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE"
+            ] == "1" {
+                guard shouldContinueGhosttyFastInsertion(before: "ghosttyBundleSystemEventsRawKeystroke") else {
+                    return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+                }
+                let ghosttyBundleSystemEventsRawOutcome =
+                    insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke(
+                        acceptedText,
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: currentProfile
+                    )
+                if ghosttyBundleSystemEventsRawOutcome.verified {
+                    return true
+                }
+                guard ghosttyBundleSystemEventsRawOutcome.safeToContinue else {
+                    return false
+                }
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyFocusedSystemEventsBulkKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyFocusedSystemEventsOutcome = insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyFocusedSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyFocusedSystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySendKey") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttySendKeyOutcome.verified {
+                return true
+            }
+            guard ghosttySendKeyOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsBulkKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyBulkSystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                delayMilliseconds: 0,
+                bulkKeystroke: true
+            )
+            if ghosttyBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyBulkSystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyFocusedActionText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyFocusedActionTextOutcome = insertGhosttyTerminalHostProofFocusedActionText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyFocusedActionTextOutcome.verified {
+                return true
+            }
+            guard ghosttyFocusedActionTextOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyPasteAction") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyPasteActionOutcome = insertGhosttyTerminalHostProofPasteAction(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteActionOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteActionOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyPasteboardOutcome = insertClaudeCodeTerminalHostProofPasteboardText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteboardOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteboardOutcome.safeToContinue else {
+                return false
+            }
+
+            let runsBundledGhosttyInputTextHelperProbe =
+                ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_BUNDLED_INPUT_TEXT_HELPER_PROBE"] == "1"
+            let ghosttyBundledInputTextHelperOutcome: (verified: Bool, safeToContinue: Bool)
+            if runsBundledGhosttyInputTextHelperProbe {
+                guard shouldContinueGhosttyFastInsertion(before: "bundledGhosttyInputTextHelper") else {
+                    return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+                }
+                ghosttyBundledInputTextHelperOutcome =
+                    insertClaudeCodeTerminalHostProofBundledGhosttyInputTextHelper(
+                        acceptedText,
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: currentProfile
+                    )
+                if ghosttyBundledInputTextHelperOutcome.verified {
+                    return true
+                }
+                guard ghosttyBundledInputTextHelperOutcome.safeToContinue else {
+                    return false
+                }
+            } else {
+                ghosttyBundledInputTextHelperOutcome = (verified: false, safeToContinue: true)
+            }
+
+            if ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_PROBE"] == "1" {
+                guard shouldContinueGhosttyFastInsertion(before: "ghosttyNativePrefixFinalKeyText") else {
+                    return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+                }
+                let ghosttyNativePrefixFinalKeyAcceptedPrefixText = String(acceptedText.dropLast())
+                let ghosttyNativePrefixExpectedProofInputText = lastTextSnapshot.textBeforeCursor
+                    + ghosttyNativePrefixFinalKeyAcceptedPrefixText
+                    + lastTextSnapshot.textAfterCursor
+                let ghosttyNativePrefixFinalKeyOutcome = insertGhosttyTerminalHostProofNativePrefixFinalKeyText(
+                    acceptedText,
+                    prefixExpectedProofInputText: ghosttyNativePrefixExpectedProofInputText,
+                    expectedProofInputText: expectedProofInputText,
+                    originalProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile
+                )
+                if ghosttyNativePrefixFinalKeyOutcome.verified {
+                    return true
+                }
+                guard ghosttyNativePrefixFinalKeyOutcome.safeToContinue else {
+                    return false
+                }
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyInProcessInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyInProcessInputTextOutcome = insertGhosttyTerminalHostProofInProcessInputText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyInProcessInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyInProcessInputTextOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyFrontWindowInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyFrontWindowInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyFrontWindowInputTextOutcome.safeToContinue else {
+                return false
+            }
+
+            if !runsExtendedGhosttyInsertionProbes {
+                let promptStayedUnchangedAfterInitialNoopCluster =
+                    verifyClaudeCodeTerminalHostProofInsertion(
+                        expectedProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: currentProfile,
+                        attempts: 4
+                    )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "ghosttyInitialNoopClusterBaseline",
+                        "verified": String(promptStayedUnchangedAfterInitialNoopCluster)
+                    ]
+                )
+                guard promptStayedUnchangedAfterInitialNoopCluster else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "ghostty-initial-noop-cluster-mutated-input",
+                            "source": "ghosttyInitialNoopClusterBaseline"
+                        ]
+                    )
+                    return false
+                }
+
+                let initialNoopCluster = GhosttyInitialInsertionNoopInput(
+                    hostBundleIdentifier: frontmostApp.bundleIdentifier,
+                    proofProfileBundleIdentifier: currentProfile?.bundleIdentifier,
+                    sendKeyVerified: ghosttySendKeyOutcome.verified,
+                    systemEventsBulkVerified: ghosttyFocusedSystemEventsOutcome.verified
+                        || ghosttyBulkSystemEventsOutcome.verified,
+                    systemEventsBulkSafeToContinue: ghosttyFocusedSystemEventsOutcome.safeToContinue
+                        && ghosttyBulkSystemEventsOutcome.safeToContinue,
+                    focusedActionTextVerified: ghosttyFocusedActionTextOutcome.verified,
+                    focusedActionTextSafeToContinue: ghosttyFocusedActionTextOutcome.safeToContinue,
+                    focusedActionTextNativeNoopClassified: ghosttyFocusedActionTextOutcome.nativeNoopClassified,
+                    pasteActionVerified: ghosttyPasteActionOutcome.verified,
+                    pasteActionSafeToContinue: ghosttyPasteActionOutcome.safeToContinue,
+                    pasteActionNativeNoopClassified: ghosttyPasteActionOutcome.nativeNoopClassified,
+                    pasteboardVerified: ghosttyPasteboardOutcome.verified,
+                    pasteboardSafeToContinue: ghosttyPasteboardOutcome.safeToContinue,
+                    bundledGhosttyInputTextHelperVerified: ghosttyBundledInputTextHelperOutcome.verified,
+                    bundledGhosttyInputTextHelperSafeToContinue: ghosttyBundledInputTextHelperOutcome.safeToContinue,
+                    inProcessInputTextVerified: ghosttyInProcessInputTextOutcome.verified,
+                    inProcessInputTextSafeToContinue: ghosttyInProcessInputTextOutcome.safeToContinue,
+                    frontWindowInputTextVerified: ghosttyFrontWindowInputTextOutcome.verified,
+                    frontWindowInputTextSafeToContinue: ghosttyFrontWindowInputTextOutcome.safeToContinue,
+                    frontWindowInputTextNativeNoopClassified: ghosttyFrontWindowInputTextOutcome.nativeNoopClassified,
+                    promptStayedUnchanged: promptStayedUnchangedAfterInitialNoopCluster,
+                    runsExtendedProbes: runsExtendedGhosttyInsertionProbes
+                )
+                if GhosttyInsertionNoopPolicy().shouldFailFastAfterInitialNoopCluster(initialNoopCluster) {
+                    return recordGhosttyFastFailClosed(
+                        reason: GhosttyInsertionNoopPolicy.initialNoopClusterReason
+                    )
+                }
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyLoginShellFrontWindowInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyLoginShellFrontWindowInputTextOutcome = insertGhosttyTerminalHostProofFrontWindowInputText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                launchThroughShell: true
+            )
+            if ghosttyLoginShellFrontWindowInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyLoginShellFrontWindowInputTextOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyPerformActionText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyActionTextOutcome = insertGhosttyTerminalHostProofActionText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyActionTextOutcome.verified {
+                return true
+            }
+            guard ghosttyActionTextOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyInputTextOutcome = insertGhosttyTerminalHostProofAppleScriptText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyInputTextOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttyLoginShellInputText") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyLoginShellInputTextOutcome = insertGhosttyTerminalHostProofAppleScriptText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                launchThroughShell: true
+            )
+            if ghosttyLoginShellInputTextOutcome.verified {
+                return true
+            }
+            guard ghosttyLoginShellInputTextOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttySystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                delayMilliseconds: 0
+            )
+            if ghosttySystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttySystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "cgHardwareKeyEventsToPid") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyTargetedHardwareOutcome = insertClaudeCodeTerminalHostProofHardwareKeyEvents(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                processIdentifier: frontmostApp.processIdentifier,
+                source: "cgHardwareKeyEventsToPid",
+                baselineSource: "cgHardwareKeyEventsToPidBaseline",
+                mutatedInputReason: "hardware-to-pid-unverified-mutated-input"
+            )
+            if ghosttyTargetedHardwareOutcome.verified {
+                return true
+            }
+            guard ghosttyTargetedHardwareOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "cgHardwareKeyEventsGlobal") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+            let ghosttyGlobalHardwareOutcome = insertClaudeCodeTerminalHostProofHardwareKeyEvents(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                processIdentifier: nil,
+                source: "cgHardwareKeyEventsGlobal",
+                baselineSource: "cgHardwareKeyEventsGlobalBaseline",
+                mutatedInputReason: "hardware-global-unverified-mutated-input"
+            )
+            if ghosttyGlobalHardwareOutcome.verified {
+                return true
+            }
+            guard ghosttyGlobalHardwareOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "bundledCGEventTextHelperHID") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let bundledHelperOutcome = insertClaudeCodeTerminalHostProofBundledTextEventHelper(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                tapName: "hid"
+            )
+            if bundledHelperOutcome.verified {
+                return true
+            }
+            guard bundledHelperOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "bundledCGEventTextHelperSession") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let bundledSessionHelperOutcome = insertClaudeCodeTerminalHostProofBundledTextEventHelper(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                tapName: "session"
+            )
+            if bundledSessionHelperOutcome.verified {
+                return true
+            }
+            guard bundledSessionHelperOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "ghosttySystemEventsLoginShellBulkKeystroke") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            let ghosttyShellBulkSystemEventsOutcome =
+                insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                    acceptedText,
+                    expectedProofInputText: expectedProofInputText,
+                    originalProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile,
+                    delayMilliseconds: 0,
+                    bulkKeystroke: true,
+                    launchThroughShell: true
+                )
+            if ghosttyShellBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyShellBulkSystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
+            guard shouldContinueGhosttyFastInsertion(before: "cgUnicodeKeyEventsPerCharacterGlobal") else {
+                return recordGhosttyFastFailClosed(reason: "ghostty-fast-insertion-budget-exceeded")
+            }
+            keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+            if Self.postUnicodeTextKeyEventsPerCharacter(acceptedText) {
+                let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                    expectedProofInputText: expectedProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile,
+                    attempts: 24
+                )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "true",
+                        "source": "cgUnicodeKeyEventsPerCharacterGlobal",
+                        "verified": String(verified)
+                    ]
+                )
+                if verified {
+                    return true
+                }
+
+                let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                    expectedProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: currentProfile,
+                    attempts: 4
+                )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "cgUnicodeKeyEventsPerCharacterGlobalBaseline",
+                        "verified": String(promptStayedUnchanged)
+                    ]
+                )
+                guard promptStayedUnchanged else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "posted": "false",
+                            "reason": "unicode-per-character-global-unverified-mutated-input",
+                            "source": "cgUnicodeKeyEventsPerCharacterGlobalBaseline"
+                        ]
+                    )
+                    return false
+                }
+            }
+
+            return recordGhosttyFastFailClosed(reason: "ghostty-fast-verified-insertion-failed")
+        }
+
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           !prefersFastGhosttyPasteboardInsertion {
+            let ghosttyActionOutcome = insertGhosttyTerminalHostProofActionText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyActionOutcome.verified {
+                return true
+            }
+            guard ghosttyActionOutcome.safeToContinue else {
+                return false
+            }
+
             let ghosttyInputOutcome = insertGhosttyTerminalHostProofAppleScriptText(
                 acceptedText,
                 expectedProofInputText: expectedProofInputText,
@@ -9505,6 +10999,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
             guard ghosttyInputOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyPasteActionOutcome = insertGhosttyTerminalHostProofPasteAction(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttyPasteActionOutcome.verified {
+                return true
+            }
+            guard ghosttyPasteActionOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttySendKeyOutcome = insertGhosttyTerminalHostProofSendKey(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttySendKeyOutcome.verified {
+                return true
+            }
+            guard ghosttySendKeyOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttyBulkSystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile,
+                bulkKeystroke: true
+            )
+            if ghosttyBulkSystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttyBulkSystemEventsOutcome.safeToContinue else {
+                return false
+            }
+
+            let ghosttySystemEventsOutcome = insertGhosttyTerminalHostProofSystemEventsKeystroke(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+            if ghosttySystemEventsOutcome.verified {
+                return true
+            }
+            guard ghosttySystemEventsOutcome.safeToContinue else {
                 return false
             }
         }
@@ -9709,14 +11260,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        if insertClaudeCodeTerminalHostProofPasteboardText(
-            acceptedText,
-            expectedProofInputText: expectedProofInputText,
-            originalProofInputText: originalProofInputText,
-            frontmostApp: frontmostApp,
-            profile: currentProfile
-        ) {
+        let pasteboardOutcome = prefersFastGhosttyPasteboardInsertion
+            ? (verified: false, safeToContinue: true)
+            : insertClaudeCodeTerminalHostProofPasteboardText(
+                acceptedText,
+                expectedProofInputText: expectedProofInputText,
+                originalProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: currentProfile
+            )
+        if pasteboardOutcome.verified {
             return true
+        }
+        guard pasteboardOutcome.safeToContinue else {
+            return false
         }
 
         DiagnosticsLog.shared.record(
@@ -9731,13 +11288,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    private func insertClaudeCodeTerminalHostProofPasteboardText(
+    private func insertClaudeCodeTerminalHostProofHardwareKeyEvents(
         _ acceptedText: String,
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
-        profile: CompatibilityProfile?
-    ) -> Bool {
+        profile: CompatibilityProfile?,
+        processIdentifier: pid_t?,
+        source: String,
+        baselineSource: String,
+        mutatedInputReason: String
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           !reassertGhosttyTerminalHostProofFrontmostProcess(
+               frontmostApp: frontmostApp,
+               source: "\(source)FrontmostPidReassertion"
+           ) {
+            return (false, true)
+        }
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+
+        guard Self.postHardwareTextKeyEvents(
+            acceptedText,
+            processIdentifier: processIdentifier
+        ) else {
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": mutatedInputReason,
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertClaudeCodeTerminalHostProofBundledTextEventHelper(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        tapName: String
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let safeTapName = tapName == "session" ? "session" : "hid"
+        let source = safeTapName == "session"
+            ? "bundledCGEventTextHelperSession"
+            : "bundledCGEventTextHelperHID"
+        let baselineSource = "\(source)Baseline"
         guard !acceptedText.isEmpty,
               !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
@@ -9745,67 +11383,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "pasteboard-text-not-one-line",
-                    "source": "pasteboardCommandV"
+                    "reason": "bundled-helper-text-not-one-line",
+                    "source": source
                 ]
             )
-            return false
+            return (false, false)
+        }
+        guard let helperURL = Self.bundledTextEventHelperURL() else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-helper-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
         }
 
-        let pasteboard = NSPasteboard.general
-        let originalItems = pasteboard.pasteboardItems?.compactMap {
-            $0.copy() as? NSPasteboardItem
-        } ?? []
-        func restoreOriginalPasteboard() {
-            pasteboard.clearContents()
-            if !originalItems.isEmpty {
-                pasteboard.writeObjects(originalItems)
-            }
+        let process = Process()
+        process.executableURL = helperURL
+        process.arguments = [
+            "--tap", safeTapName,
+            "--frontmost-bundle", frontmostApp.bundleIdentifier,
+            "--pid", String(frontmostApp.processIdentifier)
+        ]
+        let inputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardError = errorPipe
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+           !reassertGhosttyTerminalHostProofFrontmostProcess(
+               frontmostApp: frontmostApp,
+               source: "\(source)FrontmostPidReassertion"
+           ) {
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "\(source)FrontmostPidReassertionBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            return (false, promptStayedUnchanged)
         }
 
-        func setPasteboardString(for source: String) -> Int? {
-            pasteboard.clearContents()
-            guard pasteboard.setString(acceptedText, forType: .string) else {
-                restoreOriginalPasteboard()
-                DiagnosticsLog.shared.record(
-                    "claude-code-terminal-host-proof-insert",
-                    metadata: [
-                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                        "posted": "false",
-                        "reason": "pasteboard-set-failed",
-                        "source": source
-                    ]
-                )
-                return nil
-            }
-            return pasteboard.changeCount
+        do {
+            try process.run()
+            inputPipe.fileHandleForWriting.write(Data(acceptedText.utf8))
+            try? inputPipe.fileHandleForWriting.close()
+            process.waitUntilExit()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-helper-launch-failed",
+                    "source": source
+                ]
+            )
+            return (false, true)
         }
 
-        func tryPasteboardCommandV(
-            source: String,
-            baselineSource: String,
-            failedReason: String,
-            mutatedInputReason: String,
-            processIdentifier: pid_t?
-        ) -> (verified: Bool, safeToContinue: Bool) {
-            guard let fallbackChangeCount = setPasteboardString(for: source) else {
-                return (false, false)
-            }
-
-            guard Self.postCommandVKey(processIdentifier: processIdentifier) else {
-                restoreOriginalPasteboard()
-                DiagnosticsLog.shared.record(
-                    "claude-code-terminal-host-proof-insert",
-                    metadata: [
-                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                        "posted": "false",
-                        "reason": failedReason,
-                        "source": source
-                    ]
-                )
-                return (false, true)
-            }
-
+        let helperErrorText = String(
+            data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderr = String(helperErrorText.prefix(120))
+        let helperExitedSuccessfully = process.terminationStatus == 0
+        if helperExitedSuccessfully {
             let verified = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: expectedProofInputText,
                 frontmostApp: frontmostApp,
@@ -9822,16 +11478,263 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             if verified {
-                schedulePasteboardRestore(
-                    insertedText: acceptedText,
-                    fallbackChangeCount: fallbackChangeCount,
-                    originalItems: originalItems,
-                    delaySeconds: 0.35
-                )
+                return (true, true)
+            }
+        } else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "exitStatus": String(process.terminationStatus),
+                    "helperError": String(stderr),
+                    "posted": "false",
+                    "reason": "bundled-helper-exited-nonzero",
+                    "source": source
+                ]
+            )
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-helper-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertClaudeCodeTerminalHostProofBundledGhosttyInputTextHelper(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "bundledGhosttyInputTextHelper"
+        let baselineSource = "bundledGhosttyInputTextHelperBaseline"
+        guard frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return (false, true)
+        }
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-ghostty-input-helper-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+        guard let helperURL = Self.bundledTextEventHelperURL() else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-ghostty-input-helper-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        guard reassertGhosttyTerminalHostProofFrontmostProcess(
+            frontmostApp: frontmostApp,
+            source: "\(source)FrontmostPidReassertion"
+        ) else {
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "\(source)FrontmostPidReassertionBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            return (false, promptStayedUnchanged)
+        }
+
+        let process = Process()
+        process.executableURL = helperURL
+        process.arguments = [
+            "--ghostty-input-text",
+            "--frontmost-bundle", frontmostApp.bundleIdentifier,
+            "--pid", String(frontmostApp.processIdentifier),
+            "--proof-marker", ClaudeCodeTerminalHostProofPolicy.proofMarker,
+            "--compact-proof-marker", ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        ]
+        let inputPipe = Pipe()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+            inputPipe.fileHandleForWriting.write(Data(acceptedText.utf8))
+            try? inputPipe.fileHandleForWriting.close()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-ghostty-input-helper-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.4,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-ghostty-input-helper-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "\(source)TimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            return (false, promptStayedUnchanged)
+        }
+
+        _ = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let helperErrorText = String(
+            data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderr = String(helperErrorText.prefix(160))
+        if process.terminationStatus == 0 {
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "helperMode": "ghosttyInputText",
+                    "posted": "true",
+                    "source": source,
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
                 return (true, false)
             }
+        } else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "exitStatus": String(process.terminationStatus),
+                    "helperError": stderr,
+                    "helperMode": "ghosttyInputText",
+                    "posted": "false",
+                    "reason": "bundled-ghostty-input-helper-exited-nonzero",
+                    "source": source
+                ]
+            )
+        }
 
-            restoreOriginalPasteboard()
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "bundled-ghostty-input-helper-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofNativePrefixFinalKeyText(
+        _ acceptedText: String,
+        prefixExpectedProofInputText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyNativePrefixFinalKeyText"
+        let baselineSource = "ghosttyNativePrefixFinalKeyTextBaseline"
+        func verifyOriginalPromptStillUnchanged(reason: String) -> Bool {
             let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: originalProofInputText,
                 frontmostApp: frontmostApp,
@@ -9846,56 +11749,260 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "verified": String(promptStayedUnchanged)
                 ]
             )
-            if !promptStayedUnchanged {
+            guard promptStayedUnchanged else {
                 DiagnosticsLog.shared.record(
                     "claude-code-terminal-host-proof-insert",
                     metadata: [
                         "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                         "posted": "false",
-                        "reason": mutatedInputReason,
+                        "reason": reason,
                         "source": baselineSource
                     ]
                 )
+                return false
             }
-            return (false, promptStayedUnchanged)
-        }
-
-        let targetedPasteOutcome = tryPasteboardCommandV(
-            source: "pasteboardCommandVToPid",
-            baselineSource: "pasteboardCommandVToPidBaseline",
-            failedReason: "pasteboard-command-v-to-pid-failed",
-            mutatedInputReason: "pasteboard-to-pid-unverified-mutated-input",
-            processIdentifier: frontmostApp.processIdentifier
-        )
-        if targetedPasteOutcome.verified {
             return true
         }
-        guard targetedPasteOutcome.safeToContinue else {
-            return false
+
+        guard acceptedText.count > 1,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-text-not-eligible",
+                    "source": source
+                ]
+            )
+            return (false, true)
         }
 
-        let globalPasteOutcome = tryPasteboardCommandV(
-            source: "pasteboardCommandV",
-            baselineSource: "pasteboardCommandVBaseline",
-            failedReason: "pasteboard-command-v-failed",
-            mutatedInputReason: "pasteboard-unverified-mutated-input",
-            processIdentifier: nil
-        )
-        if globalPasteOutcome.verified {
-            return true
+        let prefixText = String(acceptedText.dropLast())
+        let finalText = String(acceptedText.suffix(1))
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
         }
-        return false
+
+        let scriptSource = """
+        set acceptedPrefixText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_PREFIX_TEXT"
+        tell application id "com.mitchellh.ghostty"
+            set targetWindow to front window
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            focus targetTerminal
+            input text acceptedPrefixText to targetTerminal
+            activate
+            return true
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_PREFIX_TEXT"] = prefixText
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "acceptedChars": String(acceptedText.count),
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "prefixChars": String(prefixText.count),
+                "source": source,
+                "stage": "start"
+            ]
+        )
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-prefix-timeout",
+                    "source": source
+                ]
+            )
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-prefix-timeout-mutated-input"
+                )
+            )
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0, stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": process.terminationStatus == 0
+                        ? "ghostty-native-prefix-final-key-prefix-returned-false"
+                        : "ghostty-native-prefix-final-key-prefix-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-prefix-unverified-mutated-input"
+                )
+            )
+        }
+
+        let drainSeconds = ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_NATIVE_PREFIX_FINAL_KEY_DRAIN_SECONDS"]
+            .flatMap { TimeInterval($0) }
+            .map { min(max($0, 0.0), 10.0) } ?? 8.0
+        if drainSeconds > 0 {
+            Thread.sleep(forTimeInterval: drainSeconds)
+        }
+        let prefixVerified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: prefixExpectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24,
+            delaySeconds: 0.1
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "drainMilliseconds": String(Int(drainSeconds * 1000)),
+                "source": source,
+                "stage": "prefix-verified",
+                "verified": String(prefixVerified)
+            ]
+        )
+        guard prefixVerified else {
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-prefix-unverified-noop"
+                )
+            )
+        }
+
+        guard reassertGhosttyTerminalHostProofFrontmostProcess(
+            frontmostApp: frontmostApp,
+            source: "ghosttyNativePrefixFinalKeyFrontmostPidReassertion"
+        ) else {
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-frontmost-reassertion-mutated-input"
+                )
+            )
+        }
+
+        keyboardEventTap?.suppressPassthroughObservation(for: 0.5)
+        guard Self.postUnicodeTextKeyEventsPerCharacter(finalText) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-native-prefix-final-key-final-event-not-posted",
+                    "source": source
+                ]
+            )
+            return (
+                false,
+                verifyOriginalPromptStillUnchanged(
+                    reason: "ghostty-native-prefix-final-key-final-event-unverified-mutated-input"
+                )
+            )
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        return (
+            false,
+            verifyOriginalPromptStillUnchanged(
+                reason: "ghostty-native-prefix-final-key-unverified-mutated-input"
+            )
+        )
     }
 
-    private func insertGhosttyTerminalHostProofAppleScriptText(
+    private func insertGhosttyTerminalHostProofInProcessInputText(
         _ acceptedText: String,
         expectedProofInputText: String,
         originalProofInputText: String,
         frontmostApp: RunningApplicationInfo,
         profile: CompatibilityProfile?
     ) -> (verified: Bool, safeToContinue: Bool) {
-        let source = "ghosttyAppleScriptInputText"
-        let baselineSource = "ghosttyAppleScriptInputTextBaseline"
+        let source = "ghosttyInProcessInputText"
+        let baselineSource = "ghosttyInProcessInputTextBaseline"
         guard !acceptedText.isEmpty,
               !acceptedText.contains(where: \.isNewline) else {
             DiagnosticsLog.shared.record(
@@ -9903,47 +12010,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-apple-script-text-not-one-line",
+                    "reason": "ghostty-in-process-input-text-not-one-line",
                     "source": source
                 ]
             )
             return (false, false)
         }
 
-        DiagnosticsLog.shared.record(
-            "claude-code-terminal-host-proof-insert",
-            metadata: [
-                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
-                "acceptedChars": String(acceptedText.count),
-                "source": source,
-                "stage": "start"
-            ]
-        )
-
         let scriptSource = """
+        set acceptedText to \(Self.appleScriptStringLiteral(acceptedText))
+        set proofMarker to \(Self.appleScriptStringLiteral(ClaudeCodeTerminalHostProofPolicy.proofMarker))
+        set compactProofMarker to \(Self.appleScriptStringLiteral(ClaudeCodeTerminalHostProofPolicy.compactProofMarker))
+        set targetProcessId to \(frontmostApp.processIdentifier) as integer
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
         tell application id "com.mitchellh.ghostty"
-            if not frontmost then return false
-            if not (exists front window) then return false
-            set targetWindow to front window
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return false
             set targetTab to selected tab of targetWindow
             set targetTerminal to focused terminal of targetTab
-            input text \(Self.appleScriptStringLiteral(acceptedText)) to targetTerminal
+            activate window targetWindow
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            input text acceptedText to targetTerminal
             return true
         end tell
         """
+
         guard let script = NSAppleScript(source: scriptSource) else {
             DiagnosticsLog.shared.record(
                 "claude-code-terminal-host-proof-insert",
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-apple-script-create-failed",
+                    "reason": "ghostty-in-process-input-script-create-failed",
                     "source": source
                 ]
             )
             return (false, true)
         }
 
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "acceptedChars": String(acceptedText.count),
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": source,
+                "stage": "start"
+            ]
+        )
         var errorInfo: NSDictionary?
         let result = script.executeAndReturnError(&errorInfo)
         if let errorInfo {
@@ -9952,10 +12105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-apple-script-failed",
+                    "reason": "ghostty-in-process-input-script-failed",
                     "source": source,
                     "errorNumber": (errorInfo["NSAppleScriptErrorNumber"] as? NSNumber)?.stringValue ?? "",
-                    "errorMessage": errorInfo["NSAppleScriptErrorMessage"] as? String ?? ""
+                    "errorMessage": String((errorInfo["NSAppleScriptErrorMessage"] as? String ?? "").prefix(160))
                 ]
             )
             return (false, true)
@@ -9967,7 +12120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-apple-script-returned-false",
+                    "reason": "ghostty-in-process-input-proof-window-missing",
                     "source": source
                 ]
             )
@@ -10013,7 +12166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 metadata: [
                     "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
                     "posted": "false",
-                    "reason": "ghostty-apple-script-unverified-mutated-input",
+                    "reason": "ghostty-in-process-input-unverified-mutated-input",
                     "source": baselineSource
                 ]
             )
@@ -10022,11 +12175,3637 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return (false, true)
     }
 
+    private func insertGhosttyTerminalHostProofFrontWindowInputText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        launchThroughShell: Bool = false
+    ) -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool) {
+        let source = launchThroughShell
+            ? "ghosttyLoginShellFrontWindowInputText"
+            : "ghosttyFrontWindowInputText"
+        let baselineSource = launchThroughShell
+            ? "ghosttyLoginShellFrontWindowInputTextBaseline"
+            : "ghosttyFrontWindowInputTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false, false)
+        }
+
+        let shellPath = "/bin/zsh"
+        if launchThroughShell,
+           !FileManager.default.isExecutableFile(atPath: shellPath) {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-shell-missing",
+                    "source": source
+                ]
+            )
+            return (false, true, false)
+        }
+
+        let usesArgumentText = !launchThroughShell
+        let scriptSource = usesArgumentText
+            ? """
+            on run argv
+                set acceptedText to item 1 of argv
+                tell application id "com.mitchellh.ghostty"
+                    set targetWindow to front window
+                    activate window targetWindow
+                    set targetTab to selected tab of targetWindow
+                    set targetTerminal to focused terminal of targetTab
+                    focus targetTerminal
+                    input text acceptedText to targetTerminal
+                    activate
+                    return true
+                end tell
+            end run
+            """
+            : """
+            set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
+            tell application id "com.mitchellh.ghostty"
+                set targetWindow to front window
+                activate window targetWindow
+                set targetTab to selected tab of targetWindow
+                set targetTerminal to focused terminal of targetTab
+                focus targetTerminal
+                input text acceptedText to targetTerminal
+                activate
+                return true
+            end tell
+            """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let standardInput = Pipe()
+        let process = Process()
+        if launchThroughShell {
+            process.executableURL = URL(fileURLWithPath: shellPath)
+            process.arguments = ["-lc", "exec /usr/bin/osascript"]
+            process.standardInput = standardInput
+        } else if usesArgumentText {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-", acceptedText]
+            process.standardInput = standardInput
+        } else {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-e", scriptSource]
+        }
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        do {
+            try process.run()
+            if launchThroughShell || usesArgumentText {
+                standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
+                try? standardInput.fileHandleForWriting.close()
+            }
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true, false)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-front-window-input-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "ghosttyFrontWindowInputTextTimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            return (false, promptStayedUnchanged, false)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true, false)
+        }
+
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true, false)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "launchMode": launchThroughShell ? "shell" : "direct",
+                "textTransport": usesArgumentText ? "argv" : "environment"
+            ]
+        )
+        if verified {
+            return (true, false, true)
+        }
+
+        let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+            source: launchThroughShell
+                ? "ghosttyLoginShellFrontWindowInputTextScreenCopy"
+                : "ghosttyFrontWindowInputTextScreenCopy",
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp
+        )
+        if screenCopyOutcome.verified {
+            return (true, false, true)
+        }
+        guard screenCopyOutcome.safeToContinue else {
+            return (false, false, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-front-window-input-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false, false)
+        }
+        return (
+            false,
+            true,
+            screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true
+        )
+    }
+
+    private func focusGhosttyTerminalHostProofPromptByClickIfAvailable(source: String) -> Bool {
+        guard let caretBounds = currentSuggestionAcceptanceSnapshot?.targetFingerprint.caretBounds else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-prompt-focus-click-missing-caret",
+                    "source": source
+                ]
+            )
+            return false
+        }
+
+        let point = CGPoint(
+            x: CGFloat(caretBounds.x + max(1, caretBounds.width)),
+            y: CGFloat(caretBounds.y + max(1, caretBounds.height / 2))
+        )
+        guard point.x.isFinite, point.y.isFinite,
+              let eventSource = CGEventSource(stateID: .hidSystemState),
+              let mouseMove = CGEvent(
+                mouseEventSource: eventSource,
+                mouseType: .mouseMoved,
+                mouseCursorPosition: point,
+                mouseButton: .left
+              ),
+              let mouseDown = CGEvent(
+                mouseEventSource: eventSource,
+                mouseType: .leftMouseDown,
+                mouseCursorPosition: point,
+                mouseButton: .left
+              ),
+              let mouseUp = CGEvent(
+                mouseEventSource: eventSource,
+                mouseType: .leftMouseUp,
+                mouseCursorPosition: point,
+                mouseButton: .left
+              ) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-prompt-focus-click-event-create-failed",
+                    "source": source
+                ]
+            )
+            return false
+        }
+
+        mouseMove.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.02)
+        mouseDown.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.035)
+        mouseUp.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.08)
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "x": String(Int(point.x.rounded())),
+                "y": String(Int(point.y.rounded()))
+            ]
+        )
+        return true
+    }
+
+    private func prepareGhosttyTerminalHostProofInsertionTarget(
+        frontmostApp: RunningApplicationInfo,
+        originalProofInputText: String,
+        profile: CompatibilityProfile?
+    ) -> Bool {
+        guard frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return true
+        }
+
+        let activated = NSRunningApplication(processIdentifier: frontmostApp.processIdentifier)?
+            .activate(options: [.activateAllWindows]) ?? false
+        let pidReasserted = reassertGhosttyTerminalHostProofFrontmostProcess(
+            frontmostApp: frontmostApp,
+            source: "ghosttyFocusPidReassertion"
+        )
+        Thread.sleep(forTimeInterval: 0.04)
+        let proofPromptVerified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 6,
+            delaySeconds: 0.03
+        )
+        let verified = proofPromptVerified && (pidReasserted || activated)
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": "ghosttyFocusReassertion",
+                "activated": String(activated),
+                "pidReasserted": String(pidReasserted),
+                "proofPromptVerified": String(proofPromptVerified),
+                "verificationTrust": pidReasserted
+                    ? "pidReasserted"
+                    : (activated ? "activatedVerifiedPrompt" : "none"),
+                "verified": String(verified)
+            ]
+        )
+        return verified
+    }
+
+    private func reassertGhosttyTerminalHostProofFrontmostProcess(
+        frontmostApp: RunningApplicationInfo,
+        source: String
+    ) -> Bool {
+        guard frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return true
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-frontmost-pid-reassertion-osascript-missing",
+                    "source": source
+                ]
+            )
+            return false
+        }
+
+        let scriptSource = """
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess then
+                return "true"
+            end if
+        end tell
+        return "false"
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "pid": String(frontmostApp.processIdentifier),
+                    "posted": "false",
+                    "reason": "ghostty-frontmost-pid-reassertion-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return false
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.0,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            let exitedAfterTerminate = Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "pid": String(frontmostApp.processIdentifier),
+                    "posted": "false",
+                    "reason": exitedAfterTerminate
+                        ? "ghostty-frontmost-pid-reassertion-timeout"
+                        : "ghostty-frontmost-pid-reassertion-timeout-still-running",
+                    "source": source,
+                    "timeoutMilliseconds": "1000"
+                ]
+            )
+            return false
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let verified = process.terminationStatus == 0 && stdoutText == "true"
+        var metadata: [String: String] = [
+            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            "exitStatus": String(process.terminationStatus),
+            "pid": String(frontmostApp.processIdentifier),
+            "source": source,
+            "verified": String(verified)
+        ]
+        if !verified {
+            metadata["posted"] = "false"
+            metadata["reason"] = process.terminationStatus == 0
+                ? "ghostty-frontmost-pid-reassertion-not-frontmost"
+                : "ghostty-frontmost-pid-reassertion-script-failed"
+            metadata["scriptOutput"] = String(stdoutText.prefix(80))
+        }
+        if !stderrText.isEmpty {
+            metadata["errorMessage"] = String(stderrText.prefix(160))
+        }
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: metadata
+        )
+        return verified
+    }
+
+    private func insertClaudeCodeTerminalHostProofPasteboardText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "pasteboard-text-not-one-line",
+                    "source": "pasteboardCommandV"
+                ]
+            )
+            return (false, false)
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+
+        func setPasteboardString(for source: String) -> Int? {
+            pasteboard.clearContents()
+            guard pasteboard.setString(acceptedText, forType: .string) else {
+                restoreOriginalPasteboard()
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "pasteboard-set-failed",
+                        "source": source
+                    ]
+                )
+                return nil
+            }
+            return pasteboard.changeCount
+        }
+
+        func tryPasteboardCommandV(
+            source: String,
+            baselineSource: String,
+            failedReason: String,
+            mutatedInputReason: String,
+            processIdentifier: pid_t?,
+            tapLocation: CGEventTapLocation = .cghidEventTap,
+            restoreSynchronouslyOnMiss: Bool,
+            deferPasteboardRestoreOnMiss: Bool = true
+        ) -> (verified: Bool, safeToContinue: Bool) {
+            if frontmostApp.bundleIdentifier == "com.mitchellh.ghostty",
+               !reassertGhosttyTerminalHostProofFrontmostProcess(
+                   frontmostApp: frontmostApp,
+                   source: "\(source)FrontmostPidReassertion"
+               ) {
+                return (false, true)
+            }
+            guard let fallbackChangeCount = setPasteboardString(for: source) else {
+                return (false, false)
+            }
+
+            let postedCommandV = tapLocation == .cghidEventTap
+                ? Self.postCommandVKey(processIdentifier: processIdentifier)
+                : Self.postCommandVKey(processIdentifier: processIdentifier, tapLocation: tapLocation)
+            guard postedCommandV else {
+                if restoreSynchronouslyOnMiss {
+                    restoreOriginalPasteboard()
+                } else if deferPasteboardRestoreOnMiss {
+                    schedulePasteboardRestore(
+                        insertedText: acceptedText,
+                        fallbackChangeCount: fallbackChangeCount,
+                        originalItems: originalItems,
+                        delaySeconds: 0.05
+                    )
+                } else {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-insert",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "source": "\(source)RestoreDeferredToNextAttempt",
+                            "verified": "false"
+                        ]
+                    )
+                }
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": failedReason,
+                        "source": source
+                    ]
+                )
+                return (false, true)
+            }
+
+            let verified = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: expectedProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 24
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "true",
+                    "source": source,
+                    "verified": String(verified)
+                ]
+            )
+            if verified {
+                schedulePasteboardRestore(
+                    insertedText: acceptedText,
+                    fallbackChangeCount: fallbackChangeCount,
+                    originalItems: originalItems,
+                    delaySeconds: 0.35
+                )
+                return (true, false)
+            }
+
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            if restoreSynchronouslyOnMiss {
+                restoreOriginalPasteboard()
+            } else if deferPasteboardRestoreOnMiss {
+                schedulePasteboardRestore(
+                    insertedText: acceptedText,
+                    fallbackChangeCount: fallbackChangeCount,
+                    originalItems: originalItems,
+                    delaySeconds: 0.05
+                )
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "\(source)RestoreScheduled",
+                        "verified": String(promptStayedUnchanged)
+                    ]
+                )
+            } else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "source": "\(source)RestoreDeferredToNextAttempt",
+                        "verified": String(promptStayedUnchanged)
+                    ]
+                )
+            }
+            if !promptStayedUnchanged {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": mutatedInputReason,
+                        "source": baselineSource
+                    ]
+                )
+            }
+            return (false, promptStayedUnchanged)
+        }
+
+        let targetedPasteOutcome = tryPasteboardCommandV(
+            source: "pasteboardCommandVToPid",
+            baselineSource: "pasteboardCommandVToPidBaseline",
+            failedReason: "pasteboard-command-v-to-pid-failed",
+            mutatedInputReason: "pasteboard-to-pid-unverified-mutated-input",
+            processIdentifier: frontmostApp.processIdentifier,
+            restoreSynchronouslyOnMiss: true
+        )
+        if targetedPasteOutcome.verified {
+            return (true, false)
+        }
+        guard targetedPasteOutcome.safeToContinue else {
+            return (false, false)
+        }
+
+        let shouldRunSessionTapPasteProbe =
+            ProcessInfo.processInfo.environment["AUTOCOMPLETE_LAB_GHOSTTY_SESSION_TAP_PASTE_PROBE"] == "1"
+        if shouldRunSessionTapPasteProbe {
+            let sessionPasteOutcome = tryPasteboardCommandV(
+                source: "pasteboardCommandVSession",
+                baselineSource: "pasteboardCommandVSessionBaseline",
+                failedReason: "pasteboard-command-v-session-failed",
+                mutatedInputReason: "pasteboard-session-unverified-mutated-input",
+                processIdentifier: nil,
+                tapLocation: .cgSessionEventTap,
+                restoreSynchronouslyOnMiss: false,
+                deferPasteboardRestoreOnMiss: false
+            )
+            if sessionPasteOutcome.verified {
+                return (true, false)
+            }
+            guard sessionPasteOutcome.safeToContinue else {
+                return (false, false)
+            }
+        } else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "session-tap-probe-disabled",
+                    "source": "pasteboardCommandVSession"
+                ]
+            )
+        }
+
+        let globalPasteOutcome = tryPasteboardCommandV(
+            source: "pasteboardCommandV",
+            baselineSource: "pasteboardCommandVBaseline",
+            failedReason: "pasteboard-command-v-failed",
+            mutatedInputReason: "pasteboard-unverified-mutated-input",
+            processIdentifier: nil,
+            restoreSynchronouslyOnMiss: false
+        )
+        if globalPasteOutcome.verified {
+            return (true, false)
+        }
+        return (false, globalPasteOutcome.safeToContinue)
+    }
+
+    private func insertGhosttyTerminalHostProofPasteAction(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool) {
+        let source = "ghosttyPerformActionPasteFromClipboard"
+        let baselineSource = "ghosttyPerformActionPasteFromClipboardBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false, false)
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+
+        pasteboard.clearContents()
+        guard pasteboard.setString(acceptedText, forType: .string) else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-pasteboard-set-failed",
+                    "source": source
+                ]
+            )
+            return (false, false, false)
+        }
+        let fallbackChangeCount = pasteboard.changeCount
+
+        let scriptSource = """
+        set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
+        set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return false
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            activate window targetWindow
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set actionPerformed to perform action "paste_from_clipboard" on targetTerminal
+            return actionPerformed
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.proofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        do {
+            try process.run()
+        } catch {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-script-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true, false)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            let exitedAfterTerminate = Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            )
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": exitedAfterTerminate
+                        ? "ghostty-paste-action-script-timeout"
+                        : "ghostty-paste-action-script-timeout-still-running",
+                    "source": source
+                ]
+            )
+            guard exitedAfterTerminate else {
+                return (false, false, false)
+            }
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "ghosttyPerformActionPasteFromClipboardTimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-paste-action-timeout-mutated-input",
+                        "source": "ghosttyPerformActionPasteFromClipboardTimeoutBaseline"
+                    ]
+                )
+                return (false, false, false)
+            }
+            return (false, true, false)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-script-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true, false)
+        }
+
+        guard stdoutText != "false" else {
+            restoreOriginalPasteboard()
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-proof-window-missing",
+                    "source": source
+                ]
+            )
+            return (false, true, false)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "actionPerformed": "true",
+                "exitStatus": String(process.terminationStatus),
+                "errorMessage": String(stderrText.prefix(160))
+            ]
+        )
+        if verified {
+            schedulePasteboardRestore(
+                insertedText: acceptedText,
+                fallbackChangeCount: fallbackChangeCount,
+                originalItems: originalItems,
+                delaySeconds: 0.35
+            )
+            return (true, false, true)
+        }
+
+        restoreOriginalPasteboard()
+        let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+            source: "ghosttyPerformActionPasteFromClipboardScreenCopy",
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp
+        )
+        if screenCopyOutcome.verified {
+            return (true, false, true)
+        }
+        guard screenCopyOutcome.safeToContinue else {
+            return (false, false, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-paste-action-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false, false)
+        }
+        return (
+            false,
+            true,
+            screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true
+        )
+    }
+
+    private func insertGhosttyTerminalHostProofBundleSystemEventsRawKeystroke(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        source: String = "ghosttyBundleSystemEventsRawKeystroke",
+        baselineSource: String = "ghosttyBundleSystemEventsRawKeystrokeBaseline",
+        stopReason: String? = "ghostty-bundle-system-events-raw-insertion"
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-bundle-system-events-raw-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-bundle-system-events-raw-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let scriptSource = """
+        set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
+        set hostBundle to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_HOST_BUNDLE"
+        tell application "System Events"
+            set hostIsFrontmost to false
+            repeat with frontApp in (application processes whose frontmost is true)
+                try
+                    if bundle identifier of frontApp is hostBundle then set hostIsFrontmost to true
+                end try
+            end repeat
+            if hostIsFrontmost is false then error "Ghostty host is not frontmost for raw proof typing."
+            keystroke acceptedText
+        end tell
+        return true
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_HOST_BUNDLE"] = frontmostApp.bundleIdentifier
+        process.environment = environment
+
+        let stoppedKeyboardTap = stopReason != nil
+        if let stopReason {
+            stopKeyboardEventTapNow(reason: stopReason)
+        }
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-bundle-system-events-raw-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.5,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-bundle-system-events-raw-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-bundle-system-events-raw-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            return (false, promptStayedUnchanged)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-bundle-system-events-raw-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-bundle-system-events-raw-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "focusMode": "frontmostBundleOnly",
+                "keystrokeMode": "bulk",
+                "launchMode": "direct",
+                "textTransport": "environment",
+                "keyboardTapStopped": String(stoppedKeyboardTap),
+                "exitStatus": String(process.terminationStatus),
+                "errorMessage": String(stderrText.prefix(160))
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-bundle-system-events-raw-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofFocusedSystemEventsBulkKeystroke(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyFocusedSystemEventsBulkKeystroke"
+        let baselineSource = "ghosttyFocusedSystemEventsBulkKeystrokeBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-system-events-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-system-events-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let scriptSource = """
+        set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.06
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            keystroke acceptedText
+        end tell
+        return true
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+
+        stopKeyboardEventTapNow(reason: "ghostty-focused-system-events-bulk-insertion")
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-system-events-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.5,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-focused-system-events-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-system-events-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            return (false, promptStayedUnchanged)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-system-events-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-system-events-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "focusMode": "frontmostProcessOnly",
+                "keystrokeMode": "bulk",
+                "launchMode": "direct",
+                "textTransport": "environment",
+                "exitStatus": String(process.terminationStatus),
+                "errorMessage": String(stderrText.prefix(160))
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-system-events-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofSystemEventsKeystroke(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        delayMilliseconds: Int = 80,
+        keyDelayMilliseconds: Int = 18,
+        bulkKeystroke: Bool = false,
+        launchThroughShell: Bool = false
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source: String
+        let baselineSource: String
+        if launchThroughShell && bulkKeystroke {
+            source = "ghosttySystemEventsLoginShellBulkKeystroke"
+            baselineSource = "ghosttySystemEventsLoginShellBulkKeystrokeBaseline"
+        } else if bulkKeystroke {
+            source = "ghosttySystemEventsBulkKeystrokeShell"
+            baselineSource = "ghosttySystemEventsBulkKeystrokeShellBaseline"
+        } else {
+            source = "ghosttySystemEventsKeystrokeShell"
+            baselineSource = "ghosttySystemEventsKeystrokeShellBaseline"
+        }
+        let keystrokeMode = bulkKeystroke ? "bulk" : "perCharacter"
+        let mutatedInputReason = bulkKeystroke
+            ? "ghostty-system-events-bulk-unverified-mutated-input"
+            : "ghostty-system-events-unverified-mutated-input"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let shellPath = "/bin/zsh"
+        if launchThroughShell,
+           !FileManager.default.isExecutableFile(atPath: shellPath) {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-shell-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let proofMarker = ClaudeCodeTerminalHostProofPolicy.proofMarker
+        let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "stage": "delayed-start",
+                "source": source,
+                "delayMilliseconds": String(delayMilliseconds)
+            ]
+        )
+        Thread.sleep(forTimeInterval: TimeInterval(delayMilliseconds) / 1_000)
+        let scriptSource = """
+        set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
+        set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
+        set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        set keyDelay to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS") as real
+        set keystrokeMode to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_KEYSTROKE_MODE"
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return false
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            if keystrokeMode is "bulk" then
+                keystroke acceptedText
+            else
+                repeat with characterIndex from 1 to count characters of acceptedText
+                    keystroke character characterIndex of acceptedText
+                    delay keyDelay
+                end repeat
+            end if
+        end tell
+        return true
+        """
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let standardInput = Pipe()
+        let process = Process()
+        if launchThroughShell {
+            process.executableURL = URL(fileURLWithPath: shellPath)
+            process.arguments = ["-lc", "exec /usr/bin/osascript"]
+            process.standardInput = standardInput
+        } else {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-e", scriptSource]
+        }
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = proofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] = compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_KEY_DELAY_SECONDS"] =
+            String(format: "%.3f", Double(max(keyDelayMilliseconds, 0)) / 1_000)
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_KEYSTROKE_MODE"] = keystrokeMode
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        stopKeyboardEventTapNow(
+            reason: bulkKeystroke
+                ? "ghostty-system-events-bulk-insertion"
+                : "ghostty-system-events-insertion"
+        )
+
+        let keyDelaySeconds = Double(max(keyDelayMilliseconds, 0)) / 1_000
+        let scriptTimeoutSeconds = max(
+            1.5,
+            0.75 + TimeInterval(acceptedText.count) * (bulkKeystroke ? 0.02 : keyDelaySeconds + 0.05)
+        )
+
+        do {
+            try process.run()
+            if launchThroughShell {
+                standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
+                try? standardInput.fileHandleForWriting.close()
+            }
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-osascript-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: scriptTimeoutSeconds,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-system-events-osascript-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-osascript-timeout",
+                    "source": source,
+                    "timeoutMilliseconds": String(Int(scriptTimeoutSeconds * 1000))
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-system-events-timeout-mutated-input",
+                        "source": baselineSource
+                    ]
+                )
+                return (false, false)
+            }
+            return (false, true)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
+        let errorMessage = String(data: errorData, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-osascript-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(errorMessage.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-system-events-proof-window-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "frontWindowCheck": "skipped",
+                "keystrokeMode": keystrokeMode,
+                "launchMode": launchThroughShell ? "shell" : "direct",
+                "keyDelayMilliseconds": String(keyDelayMilliseconds),
+                "exitStatus": String(process.terminationStatus),
+                "errorMessage": String(errorMessage.prefix(160))
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": mutatedInputReason,
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofFocusedActionText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool, nativeNoopClassified: Bool) {
+        let source = "ghosttyFocusedActionText"
+        let baselineSource = "ghosttyFocusedActionTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false, false)
+        }
+
+        let scriptSource = """
+        set actionText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set targetWindow to front window
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set actionPerformed to perform action actionText on targetTerminal
+            return actionPerformed
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"] = Self.ghosttyTextAction(acceptedText)
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true, false)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.5,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-focused-action-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": baselineSource,
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-focused-action-timeout-mutated-input",
+                        "source": baselineSource
+                    ]
+                )
+                return (false, false, false)
+            }
+            return (false, promptStayedUnchanged, false)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true, false)
+        }
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true, false)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "actionPerformed": "true",
+                "focusMode": "frontmostTerminalOnly",
+                "launchMode": "direct",
+                "textTransport": "environment",
+                "exitStatus": String(process.terminationStatus),
+                "errorMessage": String(stderrText.prefix(160))
+            ]
+        )
+        if verified {
+            return (true, false, true)
+        }
+
+        let screenCopyOutcome = verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+            source: "ghosttyFocusedActionTextScreenCopy",
+            expectedProofInputText: expectedProofInputText,
+            originalProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp
+        )
+        if screenCopyOutcome.verified {
+            return (true, false, true)
+        }
+        guard screenCopyOutcome.safeToContinue else {
+            return (false, false, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-focused-action-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false, false)
+        }
+        return (
+            false,
+            true,
+            screenCopyOutcome.nativeNoopClassified || screenCopyOutcome.promptStayedUnchanged == true
+        )
+    }
+
+    private func verifyGhosttyTerminalHostProofWithNativeScreenCopy(
+        source: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo
+    ) -> (
+        verified: Bool,
+        promptStayedUnchanged: Bool?,
+        safeToContinue: Bool,
+        nativeNoopClassified: Bool
+    ) {
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, nil, true, false)
+        }
+
+        let pasteboard = NSPasteboard.general
+        let originalItems = Self.clonePasteboardItems(pasteboard.pasteboardItems)
+        func restoreOriginalPasteboard() {
+            pasteboard.clearContents()
+            if !originalItems.isEmpty {
+                pasteboard.writeObjects(originalItems)
+            }
+        }
+        pasteboard.clearContents()
+        let clearedChangeCount = pasteboard.changeCount
+        defer {
+            restoreOriginalPasteboard()
+        }
+
+        let scriptSource = """
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
+        set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        set targetSelectionMode to "missing"
+        set ghosttyWindowCount to 0
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set ghosttyWindowCount to count of windows
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    set targetSelectionMode to "frontProofTitle"
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        set targetSelectionMode to "markerTitleScan"
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return "false|targetSelection:" & targetSelectionMode & "|frontWindowProofMatch:" & (targetWindowNameIsProof as text) & "|windowCount:" & (ghosttyWindowCount as text)
+            activate window targetWindow
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set actionPerformed to perform action "write_screen_file:copy,plain" on targetTerminal
+            if actionPerformed is false then return "false|targetSelection:" & targetSelectionMode & "|frontWindowProofMatch:" & (targetWindowNameIsProof as text) & "|windowCount:" & (ghosttyWindowCount as text)
+            return "true|targetSelection:" & targetSelectionMode & "|frontWindowProofMatch:" & (targetWindowNameIsProof as text) & "|windowCount:" & (ghosttyWindowCount as text)
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.proofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, nil, true, false)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.5,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            let exitedAfterTerminate = Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": exitedAfterTerminate
+                        ? "ghostty-screen-copy-timeout"
+                        : "ghostty-screen-copy-timeout-still-running",
+                    "source": source
+                ]
+            )
+            return (false, nil, exitedAfterTerminate, false)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let screenCopyScriptMetadata = Self.ghosttyScreenCopyScriptMetadata(stdoutText)
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, nil, true, false)
+        }
+        guard stdoutText != "false",
+              !stdoutText.hasPrefix("false|") else {
+            var metadata = [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "false",
+                "reason": "ghostty-screen-copy-returned-false",
+                "source": source
+            ]
+            metadata.merge(screenCopyScriptMetadata) { current, _ in current }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: metadata
+            )
+            return (false, nil, true, false)
+        }
+
+        let deadline = Date().addingTimeInterval(1.0)
+        var rawScreenCopyText = pasteboard.string(forType: .string) ?? ""
+        while rawScreenCopyText.isEmpty,
+              Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+            rawScreenCopyText = pasteboard.string(forType: .string) ?? ""
+        }
+        let screenCopyText = Self.ghosttyScreenCopyPlainText(from: rawScreenCopyText)
+        let screenText = screenCopyText.text
+        guard !screenText.isEmpty else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-screen-copy-empty",
+                    "source": source,
+                    "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount)
+                ]
+            )
+            return (false, nil, true, false)
+        }
+
+        let compactScreenText = screenText
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+        let containsProofMarker = screenText.contains(ClaudeCodeTerminalHostProofPolicy.proofMarker)
+            || compactScreenText.contains(ClaudeCodeTerminalHostProofPolicy.proofMarker)
+        let containsCompactProofMarker = screenText.contains(ClaudeCodeTerminalHostProofPolicy.compactProofMarker)
+            || compactScreenText.contains(ClaudeCodeTerminalHostProofPolicy.compactProofMarker)
+        let containsExpected = screenText.contains(expectedProofInputText)
+            || compactScreenText.contains(expectedProofInputText)
+        let containsOriginal = screenText.contains(originalProofInputText)
+            || compactScreenText.contains(originalProofInputText)
+        let highConfidenceNoProofContextNoop =
+            !containsProofMarker
+            && !containsCompactProofMarker
+            && !containsExpected
+            && !containsOriginal
+            && screenCopyScriptMetadata["targetSelection"] == "frontProofTitle"
+            && screenCopyScriptMetadata["frontWindowProofMatch"] == "true"
+            && screenCopyScriptMetadata["windowCount"] == "1"
+        let nativeNoopClassified =
+            (!containsExpected && containsOriginal) || highConfidenceNoProofContextNoop
+        var verificationMetadata = [
+            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+            "containsCompactProofMarker": String(containsCompactProofMarker),
+            "containsExpected": String(containsExpected),
+            "containsOriginal": String(containsOriginal),
+            "containsProofMarker": String(containsProofMarker),
+            "compactScreenChars": String(compactScreenText.count),
+            "expectedChars": String(expectedProofInputText.count),
+            "exitStatus": String(process.terminationStatus),
+            "nativeNoopClassified": String(nativeNoopClassified),
+            "originalChars": String(originalProofInputText.count),
+            "pasteboardChanged": String(pasteboard.changeCount != clearedChangeCount),
+            "posted": "true",
+            "actionPerformed": "true",
+            "screenChars": String(screenText.count),
+            "screenCopyTransport": screenCopyText.transport,
+            "source": source,
+            "verified": String(containsExpected),
+            "verificationSource": "ghosttyScreenCopy"
+        ]
+        verificationMetadata.merge(screenCopyScriptMetadata) { current, _ in current }
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: verificationMetadata
+        )
+        guard containsExpected || containsOriginal else {
+            let hasProofContext = containsProofMarker || containsCompactProofMarker
+            var metadata = [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "false",
+                "reason": hasProofContext
+                    ? "ghostty-screen-copy-proof-context-mismatch"
+                    : "ghostty-screen-copy-no-proof-context",
+                "nativeNoopClassified": String(highConfidenceNoProofContextNoop),
+                "source": source
+            ]
+            metadata.merge(screenCopyScriptMetadata) { current, _ in current }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: metadata
+            )
+            return hasProofContext
+                ? (false, false, false, false)
+                : (false, nil, true, highConfidenceNoProofContextNoop)
+        }
+        return (containsExpected, containsOriginal, true, nativeNoopClassified)
+    }
+
+    struct GhosttyScreenCopyText: Equatable {
+        let text: String
+        let transport: String
+    }
+
+    nonisolated static func ghosttyScreenCopyPlainText(
+        from pasteboardText: String,
+        fileManager: FileManager = .default
+    ) -> GhosttyScreenCopyText {
+        let trimmed = pasteboardText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains("\n"),
+              trimmed.hasPrefix("/") else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "pasteboardText")
+        }
+
+        let url = URL(fileURLWithPath: trimmed).standardizedFileURL
+        guard ghosttyScreenCopyFilePathAllowed(url.path) else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathRejected")
+        }
+
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let type = attributes[.type] as? FileAttributeType,
+              type == .typeRegular else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathUnreadable")
+        }
+
+        let fileSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        guard fileSize >= 0,
+              fileSize <= 1_000_000 else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathTooLarge")
+        }
+
+        guard let fileText = try? String(contentsOf: url, encoding: .utf8) else {
+            return GhosttyScreenCopyText(text: pasteboardText, transport: "filePathUnreadable")
+        }
+        return GhosttyScreenCopyText(text: fileText, transport: "screenFile")
+    }
+
+    nonisolated private static func ghosttyScreenCopyFilePathAllowed(_ path: String) -> Bool {
+        path.hasPrefix("/var/folders/")
+            || path.hasPrefix("/private/var/folders/")
+            || path.hasPrefix("/tmp/")
+            || path.hasPrefix("/private/tmp/")
+    }
+
+    nonisolated private static func ghosttyScreenCopyScriptMetadata(_ stdoutText: String) -> [String: String] {
+        let allowedSelectionModes = Set(["frontProofTitle", "markerTitleScan", "missing"])
+        var metadata: [String: String] = [:]
+        let parts = stdoutText.split(separator: "|", omittingEmptySubsequences: true)
+        for part in parts.dropFirst() {
+            let keyValue = part.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            guard keyValue.count == 2 else {
+                continue
+            }
+            let key = String(keyValue[0])
+            let value = String(keyValue[1])
+            switch key {
+            case "targetSelection":
+                metadata["targetSelection"] = allowedSelectionModes.contains(value) ? value : "unknown"
+            case "frontWindowProofMatch":
+                metadata["frontWindowProofMatch"] = value == "true" ? "true" : "false"
+            case "windowCount":
+                metadata["windowCount"] = value.allSatisfy(\.isNumber) ? value : "unknown"
+            default:
+                continue
+            }
+        }
+        return metadata
+    }
+
+    private func insertGhosttyTerminalHostProofActionText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttyPerformActionText"
+        let baselineSource = "ghosttyPerformActionTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let scriptSource = """
+        set actionText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"
+        set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
+        set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return false
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            activate window targetWindow
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            set actionPerformed to perform action actionText on targetTerminal
+            return actionPerformed
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACTION_TEXT"] = Self.ghosttyTextAction(acceptedText)
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.proofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-script-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-action-script-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-script-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "ghosttyPerformActionTextTimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-action-script-timeout-mutated-input",
+                        "source": "ghosttyPerformActionTextTimeoutBaseline"
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
+                )
+                return (false, false)
+            }
+            return (false, true)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-script-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-action-script-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "actionPerformed": "true",
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-action-unverified-mutated-input",
+                        "source": baselineSource
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
+                )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func insertGhosttyTerminalHostProofAppleScriptText(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?,
+        launchThroughShell: Bool = false
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = launchThroughShell
+            ? "ghosttyAppleScriptLoginShellInputText"
+            : "ghosttyAppleScriptInputText"
+        let baselineSource = launchThroughShell
+            ? "ghosttyAppleScriptLoginShellInputTextBaseline"
+            : "ghosttyAppleScriptInputTextBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "acceptedChars": String(acceptedText.count),
+                "source": source,
+                "stage": "start"
+            ]
+        )
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+
+        let shellPath = "/bin/zsh"
+        if launchThroughShell,
+           !FileManager.default.isExecutableFile(atPath: shellPath) {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-shell-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let scriptSource = """
+        set acceptedText to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"
+        set proofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"
+        set compactProofMarker to system attribute "AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"
+        set targetProcessId to (system attribute "AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID") as integer
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains proofMarker or targetWindowName contains compactProofMarker then set targetWindowNameIsProof to true
+            end try
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains proofMarker or windowName contains compactProofMarker then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return false
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            activate window targetWindow
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            input text acceptedText to targetTerminal
+            return true
+        end tell
+        """
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let standardInput = Pipe()
+        let process = Process()
+        if launchThroughShell {
+            process.executableURL = URL(fileURLWithPath: shellPath)
+            process.arguments = ["-lc", "exec /usr/bin/osascript"]
+            process.standardInput = standardInput
+        } else {
+            process.executableURL = URL(fileURLWithPath: osascriptPath)
+            process.arguments = ["-e", scriptSource]
+        }
+        var environment = ProcessInfo.processInfo.environment
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_ACCEPTED_TEXT"] = acceptedText
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_PROOF_MARKER"] = ClaudeCodeTerminalHostProofPolicy.proofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_COMPACT_PROOF_MARKER"] =
+            ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        environment["AUTOCOMPLETE_LAB_GHOSTTY_TARGET_PID"] = String(frontmostApp.processIdentifier)
+        process.environment = environment
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        do {
+            try process.run()
+            if launchThroughShell {
+                standardInput.fileHandleForWriting.write(Data(scriptSource.utf8))
+                try? standardInput.fileHandleForWriting.close()
+            }
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-apple-script-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "ghosttyAppleScriptInputTextTimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-apple-script-timeout-mutated-input",
+                        "source": "ghosttyAppleScriptInputTextTimeoutBaseline"
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
+                )
+                return (false, false)
+            }
+            return (false, true)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified),
+                "launchMode": launchThroughShell ? "shell" : "direct"
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-apple-script-unverified-mutated-input",
+                    "source": baselineSource
+                ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                    expectedProofInputText: expectedProofInputText,
+                    originalProofInputText: originalProofInputText,
+                    frontmostApp: frontmostApp,
+                    profile: profile
+                )) { current, _ in current }
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    private func claudeCodeTerminalHostProofMutationShapeMetadata(
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> [String: String] {
+        guard let profile,
+              let currentContext = accessibilityClient.focusedTextContext(
+                for: frontmostApp,
+                allowDescendantTextFallback: profile.allowsDescendantTextFallback
+              ) else {
+            return [
+                "actualInputAvailable": "false",
+                "expectedChars": String(expectedProofInputText.count),
+                "originalChars": String(originalProofInputText.count)
+            ]
+        }
+
+        let verificationInput = claudeCodeTerminalHostProofVerificationInputText(
+            app: frontmostApp,
+            context: currentContext,
+            profile: profile
+        )
+        guard let actualProofInputText = verificationInput.inputText else {
+            return [
+                "actualInputAvailable": "false",
+                "actualInputSource": verificationInput.source,
+                "expectedChars": String(expectedProofInputText.count),
+                "originalChars": String(originalProofInputText.count)
+            ]
+        }
+
+        return [
+            "actualInputAvailable": "true",
+            "actualInputSource": verificationInput.source,
+            "actualChars": String(actualProofInputText.count),
+            "expectedChars": String(expectedProofInputText.count),
+            "originalChars": String(originalProofInputText.count),
+            "actualDeltaFromExpected": String(actualProofInputText.count - expectedProofInputText.count),
+            "actualDeltaFromOriginal": String(actualProofInputText.count - originalProofInputText.count),
+            "actualEqualsOriginal": String(actualProofInputText == originalProofInputText),
+            "actualHasExpectedPrefix": String(actualProofInputText.hasPrefix(expectedProofInputText)),
+            "expectedHasActualPrefix": String(expectedProofInputText.hasPrefix(actualProofInputText)),
+            "actualContainsExpected": String(actualProofInputText.contains(expectedProofInputText)),
+            "actualContainsOriginal": String(actualProofInputText.contains(originalProofInputText)),
+            "actualLineCount": String(actualProofInputText.components(separatedBy: .newlines).count),
+            "expectedLineCount": String(expectedProofInputText.components(separatedBy: .newlines).count)
+        ]
+    }
+
+    nonisolated private static func waitForProcessExit(
+        _ process: Process,
+        timeoutSeconds: TimeInterval,
+        pollIntervalSeconds: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: pollIntervalSeconds)
+        }
+        if process.isRunning {
+            return false
+        }
+        process.waitUntilExit()
+        return true
+    }
+
+    private func insertGhosttyTerminalHostProofSendKey(
+        _ acceptedText: String,
+        expectedProofInputText: String,
+        originalProofInputText: String,
+        frontmostApp: RunningApplicationInfo,
+        profile: CompatibilityProfile?
+    ) -> (verified: Bool, safeToContinue: Bool) {
+        let source = "ghosttySendKey"
+        let baselineSource = "ghosttySendKeyBaseline"
+        guard !acceptedText.isEmpty,
+              !acceptedText.contains(where: \.isNewline) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-text-not-one-line",
+                    "source": source
+                ]
+            )
+            return (false, false)
+        }
+        guard let keySteps = Self.ghosttySendKeySteps(acceptedText) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "acceptedChars": String(acceptedText.count),
+                    "posted": "false",
+                    "reason": "ghostty-send-key-text-unsupported",
+                    "unsupportedScalar": Self.firstUnsupportedGhosttySendKeyScalarDescription(acceptedText) ?? "",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let proofMarker = ClaudeCodeTerminalHostProofPolicy.proofMarker
+        let compactProofMarker = ClaudeCodeTerminalHostProofPolicy.compactProofMarker
+        let keyScriptLines = Self.ghosttySendKeyScriptLines(for: keySteps)
+        let scriptSource = """
+        set targetProcessId to \(frontmostApp.processIdentifier) as integer
+        set targetWindow to missing value
+        set targetWindowName to ""
+        set targetWindowNameIsProof to false
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+            try
+                set targetWindowName to name of front window of ghosttyProcess as text
+                if targetWindowName contains \(Self.appleScriptStringLiteral(proofMarker)) or targetWindowName contains \(Self.appleScriptStringLiteral(compactProofMarker)) then set targetWindowNameIsProof to true
+            end try
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            repeat with candidateWindow in windows
+                set windowName to name of candidateWindow as text
+                if targetWindowNameIsProof and targetWindowName is not "" and windowName is targetWindowName then
+                    set targetWindow to candidateWindow
+                    exit repeat
+                end if
+            end repeat
+            if targetWindow is missing value then
+                repeat with candidateWindow in windows
+                    set windowName to name of candidateWindow as text
+                    if windowName contains \(Self.appleScriptStringLiteral(proofMarker)) or windowName contains \(Self.appleScriptStringLiteral(compactProofMarker)) then
+                        set targetWindow to candidateWindow
+                        exit repeat
+                    end if
+                end repeat
+            end if
+            if targetWindow is missing value then return false
+            set targetTab to selected tab of targetWindow
+            set targetTerminal to focused terminal of targetTab
+            activate window targetWindow
+            select tab targetTab
+            focus targetTerminal
+            activate
+        end tell
+        delay 0.02
+        tell application "System Events"
+            set ghosttyProcess to first application process whose unix id is targetProcessId
+            if bundle identifier of ghosttyProcess is not "com.mitchellh.ghostty" then error "Target Ghostty process bundle mismatch."
+            set frontmost of ghosttyProcess to true
+            delay 0.04
+            if frontmost of ghosttyProcess is false then error "Target Ghostty process is not frontmost."
+        end tell
+        tell application id "com.mitchellh.ghostty"
+            \(keyScriptLines)
+            return true
+        end tell
+        """
+
+        let osascriptPath = "/usr/bin/osascript"
+        guard FileManager.default.isExecutableFile(atPath: osascriptPath) else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-osascript-missing",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: osascriptPath)
+        process.arguments = ["-e", scriptSource]
+        process.standardOutput = standardOutput
+        process.standardError = standardError
+
+        stopKeyboardEventTapNow(reason: "ghostty-send-key-insertion")
+
+        do {
+            try process.run()
+        } catch {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-launch-failed",
+                    "source": source,
+                    "errorMessage": String(String(describing: error).prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard Self.waitForProcessExit(
+            process,
+            timeoutSeconds: 1.2,
+            pollIntervalSeconds: 0.02
+        ) else {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.05)
+            if process.isRunning {
+                process.interrupt()
+            }
+            guard Self.waitForProcessExit(
+                process,
+                timeoutSeconds: 0.25,
+                pollIntervalSeconds: 0.02
+            ) else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-send-key-script-timeout-still-running",
+                        "source": source
+                    ]
+                )
+                return (false, false)
+            }
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-timeout",
+                    "source": source
+                ]
+            )
+            let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+                expectedProofInputText: originalProofInputText,
+                frontmostApp: frontmostApp,
+                profile: profile,
+                attempts: 4
+            )
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "source": "ghosttySendKeyTimeoutBaseline",
+                    "verified": String(promptStayedUnchanged)
+                ]
+            )
+            guard promptStayedUnchanged else {
+                DiagnosticsLog.shared.record(
+                    "claude-code-terminal-host-proof-insert",
+                    metadata: [
+                        "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                        "posted": "false",
+                        "reason": "ghostty-send-key-timeout-mutated-input",
+                        "source": "ghosttySendKeyTimeoutBaseline"
+                    ].merging(claudeCodeTerminalHostProofMutationShapeMetadata(
+                        expectedProofInputText: expectedProofInputText,
+                        originalProofInputText: originalProofInputText,
+                        frontmostApp: frontmostApp,
+                        profile: profile
+                    )) { current, _ in current }
+                )
+                return (false, false)
+            }
+            return (false, true)
+        }
+
+        let stdoutText = String(
+            data: standardOutput.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(
+            data: standardError.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-failed",
+                    "source": source,
+                    "exitStatus": String(process.terminationStatus),
+                    "errorMessage": String(stderrText.prefix(160))
+                ]
+            )
+            return (false, true)
+        }
+
+        guard stdoutText != "false" else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-script-returned-false",
+                    "source": source
+                ]
+            )
+            return (false, true)
+        }
+
+        let verified = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: expectedProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 24
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "posted": "true",
+                "source": source,
+                "verified": String(verified)
+            ]
+        )
+        if verified {
+            return (true, false)
+        }
+
+        let promptStayedUnchanged = verifyClaudeCodeTerminalHostProofInsertion(
+            expectedProofInputText: originalProofInputText,
+            frontmostApp: frontmostApp,
+            profile: profile,
+            attempts: 4
+        )
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-insert",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "source": baselineSource,
+                "verified": String(promptStayedUnchanged)
+            ]
+        )
+        guard promptStayedUnchanged else {
+            DiagnosticsLog.shared.record(
+                "claude-code-terminal-host-proof-insert",
+                metadata: [
+                    "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                    "posted": "false",
+                    "reason": "ghostty-send-key-unverified-mutated-input",
+                    "source": baselineSource
+                ]
+            )
+            return (false, false)
+        }
+        return (false, true)
+    }
+
+    nonisolated private static func ghosttyTextAction(_ text: String) -> String {
+        let encoded = text.utf8.map { byte -> String in
+            switch byte {
+            case 48...57, 65...90, 97...122:
+                return String(UnicodeScalar(byte))
+            default:
+                return String(format: "\\x%02x", byte)
+            }
+        }.joined()
+        return "text:\(encoded)"
+    }
+
+    private struct GhosttySendKeyStep {
+        let keyName: String
+        let modifiers: String?
+    }
+
+    nonisolated private static func ghosttySendKeyStep(for scalar: Unicode.Scalar) -> GhosttySendKeyStep? {
+        switch scalar.value {
+        case 32:
+            return GhosttySendKeyStep(keyName: "space", modifiers: nil)
+        case 39:
+            return GhosttySendKeyStep(keyName: "apostrophe", modifiers: nil)
+        case 48...57, 97...122:
+            return GhosttySendKeyStep(keyName: String(scalar), modifiers: nil)
+        case 65...90:
+            guard let lowercase = UnicodeScalar(scalar.value + 32) else {
+                return nil
+            }
+            return GhosttySendKeyStep(keyName: String(lowercase), modifiers: "shift")
+        default:
+            return nil
+        }
+    }
+
+    nonisolated private static func ghosttySendKeySteps(_ text: String) -> [GhosttySendKeyStep]? {
+        var steps: [GhosttySendKeyStep] = []
+        for scalar in text.unicodeScalars {
+            guard let step = ghosttySendKeyStep(for: scalar) else {
+                return nil
+            }
+            steps.append(step)
+        }
+        return steps.isEmpty ? nil : steps
+    }
+
+    nonisolated private static func firstUnsupportedGhosttySendKeyScalarDescription(_ text: String) -> String? {
+        for scalar in text.unicodeScalars where ghosttySendKeyStep(for: scalar) == nil {
+            return String(format: "U+%04X", scalar.value)
+        }
+        return nil
+    }
+
+    nonisolated private static func ghosttySendKeyScriptLines(for steps: [GhosttySendKeyStep]) -> String {
+        steps.map { step in
+            let modifiers = step.modifiers.map {
+                " modifiers \(appleScriptStringLiteral($0))"
+            } ?? ""
+            let key = appleScriptStringLiteral(step.keyName)
+            return """
+            send key \(key) action press\(modifiers) to targetTerminal
+            send key \(key) action release\(modifiers) to targetTerminal
+"""
+        }.joined(separator: "\n")
+    }
+
     nonisolated private static func appleScriptStringLiteral(_ text: String) -> String {
         let escaped = text
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
+    }
+
+    private func claudeCodeTerminalHostProofVerificationInputText(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile
+    ) -> (inputText: String?, source: String) {
+        let focusedInputText = claudeCodeTerminalHostProofInputText(
+            app: app,
+            context: context,
+            profile: profile
+        )
+        guard app.bundleIdentifier == "com.mitchellh.ghostty",
+              let terminalScreenText = accessibilityClient.focusedWindowText(for: app),
+              !terminalScreenText.isEmpty else {
+            return (focusedInputText, "focusedContext")
+        }
+
+        let proofContext = ClaudeCodeTerminalHostProofContext(
+            hostBundleIdentifier: app.bundleIdentifier,
+            windowTitle: context.fingerprint.windowTitle ?? "",
+            focusedText: ClaudeCodeTerminalHostProofPolicy.focusedInputLine(
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor
+            ),
+            rawTextBeforeCursor: context.textBeforeCursor,
+            rawTextAfterCursor: context.textAfterCursor,
+            terminalScreenText: terminalScreenText,
+            proofModeEnabled: activeAppProofBundleIdentifiers.contains(
+                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+            )
+        )
+        guard let screenFirstInputText =
+            ClaudeCodeTerminalHostProofPolicy.proofInputTextPreferringTerminalScreen(
+                for: proofContext
+            ) else {
+            return (focusedInputText, "focusedContext")
+        }
+
+        if screenFirstInputText != focusedInputText {
+            return (screenFirstInputText, "terminalScreen")
+        }
+        return (screenFirstInputText, "focusedContext")
     }
 
     private func verifyClaudeCodeTerminalHostProofInsertion(
@@ -10052,17 +15831,105 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 continue
             }
 
-            let currentProofInputText = claudeCodeTerminalHostProofInputText(
+            let verificationInput = claudeCodeTerminalHostProofVerificationInputText(
                 app: frontmostApp,
                 context: currentContext,
                 profile: profile
             )
-            if currentProofInputText == expectedProofInputText {
+            if verificationInput.inputText == expectedProofInputText {
+                if verificationInput.source == "terminalScreen" {
+                    DiagnosticsLog.shared.record(
+                        "claude-code-terminal-host-proof-verification",
+                        metadata: [
+                            "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                            "host": frontmostApp.bundleIdentifier,
+                            "source": verificationInput.source,
+                            "expectedChars": String(expectedProofInputText.count)
+                        ]
+                    )
+                }
                 return true
+            }
+            if attempt == attempts - 1, let currentProofInputText = verificationInput.inputText {
+                recordClaudeCodeTerminalHostProofVerificationMismatch(
+                    expectedProofInputText: expectedProofInputText,
+                    currentProofInputText: currentProofInputText,
+                    source: verificationInput.source,
+                    frontmostApp: frontmostApp,
+                    attempt: attempt + 1,
+                    attempts: attempts
+                )
             }
         }
 
         return false
+    }
+
+    private func recordClaudeCodeTerminalHostProofVerificationMismatch(
+        expectedProofInputText: String,
+        currentProofInputText: String,
+        source: String,
+        frontmostApp: RunningApplicationInfo,
+        attempt: Int,
+        attempts: Int
+    ) {
+        guard frontmostApp.bundleIdentifier == "com.mitchellh.ghostty" else {
+            return
+        }
+
+        DiagnosticsLog.shared.record(
+            "claude-code-terminal-host-proof-verification-mismatch",
+            metadata: [
+                "app": ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier,
+                "host": frontmostApp.bundleIdentifier,
+                "source": source,
+                "attempt": String(attempt),
+                "attempts": String(attempts),
+                "expectedChars": String(expectedProofInputText.count),
+                "currentChars": String(currentProofInputText.count),
+                "lengthDelta": String(currentProofInputText.count - expectedProofInputText.count),
+                "commonPrefixChars": String(
+                    Self.commonPrefixCharacterCount(expectedProofInputText, currentProofInputText)
+                ),
+                "commonSuffixChars": String(
+                    Self.commonSuffixCharacterCount(expectedProofInputText, currentProofInputText)
+                ),
+                "currentHasExpectedPrefix": String(currentProofInputText.hasPrefix(expectedProofInputText)),
+                "currentHasExpectedSuffix": String(currentProofInputText.hasSuffix(expectedProofInputText)),
+                "expectedHasCurrentPrefix": String(expectedProofInputText.hasPrefix(currentProofInputText)),
+                "expectedHasCurrentSuffix": String(expectedProofInputText.hasSuffix(currentProofInputText))
+            ]
+        )
+    }
+
+    nonisolated private static func commonPrefixCharacterCount(_ lhs: String, _ rhs: String) -> Int {
+        var count = 0
+        var lhsIndex = lhs.startIndex
+        var rhsIndex = rhs.startIndex
+        while lhsIndex < lhs.endIndex,
+              rhsIndex < rhs.endIndex,
+              lhs[lhsIndex] == rhs[rhsIndex] {
+            count += 1
+            lhs.formIndex(after: &lhsIndex)
+            rhs.formIndex(after: &rhsIndex)
+        }
+        return count
+    }
+
+    nonisolated private static func commonSuffixCharacterCount(_ lhs: String, _ rhs: String) -> Int {
+        var count = 0
+        var lhsIndex = lhs.endIndex
+        var rhsIndex = rhs.endIndex
+        while lhsIndex > lhs.startIndex,
+              rhsIndex > rhs.startIndex {
+            lhs.formIndex(before: &lhsIndex)
+            rhs.formIndex(before: &rhsIndex)
+            guard lhs[lhsIndex] == rhs[rhsIndex] else {
+                break
+            }
+            count += 1
+        }
+        return count
     }
 
     private func schedulePasteboardRestore(
@@ -10117,6 +15984,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    nonisolated private static func bundledTextEventHelperURL() -> URL? {
+        let helperName = "SteadyTypeTextEventHelper"
+        let fileManager = FileManager.default
+        if let auxiliaryURL = Bundle.main.url(forAuxiliaryExecutable: helperName),
+           fileManager.isExecutableFile(atPath: auxiliaryURL.path) {
+            return auxiliaryURL
+        }
+
+        let bundleCandidate = Bundle.main.bundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("MacOS", isDirectory: true)
+            .appendingPathComponent(helperName)
+        if fileManager.isExecutableFile(atPath: bundleCandidate.path) {
+            return bundleCandidate
+        }
+
+        guard let executablePath = CommandLine.arguments.first, !executablePath.isEmpty else {
+            return nil
+        }
+        let siblingURL = URL(fileURLWithPath: executablePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent(helperName)
+        if fileManager.isExecutableFile(atPath: siblingURL.path) {
+            return siblingURL
+        }
+        return nil
+    }
+
+    nonisolated private static func postUnicodeTextKeyEventsPerCharacter(
+        _ text: String,
+        processIdentifier: pid_t? = nil
+    ) -> Bool {
+        guard !text.isEmpty,
+              let source = CGEventSource(stateID: .hidSystemState) else {
+            return false
+        }
+
+        for character in text {
+            var units = Array(String(character).utf16)
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+                return false
+            }
+
+            keyDown.flags = []
+            keyUp.flags = []
+            units.withUnsafeMutableBufferPointer { buffer in
+                keyDown.keyboardSetUnicodeString(
+                    stringLength: buffer.count,
+                    unicodeString: buffer.baseAddress
+                )
+                keyUp.keyboardSetUnicodeString(
+                    stringLength: buffer.count,
+                    unicodeString: buffer.baseAddress
+                )
+            }
+            if let processIdentifier {
+                keyDown.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
+                keyUp.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
+            } else {
+                keyDown.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
+                keyUp.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
+            }
+        }
+
+        return true
+    }
+
     nonisolated private static func postHardwareTextKeyEvents(
         _ text: String,
         processIdentifier: pid_t? = nil
@@ -10144,10 +16083,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyUp.flags = stroke.flags
             if let processIdentifier {
                 keyDown.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
                 keyUp.postToPid(processIdentifier)
+                Thread.sleep(forTimeInterval: 0.012)
             } else {
                 keyDown.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
                 keyUp.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: 0.012)
             }
         }
 
@@ -10407,6 +16350,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     nonisolated private static func postCommandVKey(processIdentifier: pid_t? = nil) -> Bool {
+        postCommandVKey(processIdentifier: processIdentifier, tapLocation: .cghidEventTap)
+    }
+
+    nonisolated private static func postCommandVKey(
+        processIdentifier: pid_t? = nil,
+        tapLocation: CGEventTapLocation
+    ) -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
@@ -10417,11 +16367,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyUp.flags = .maskCommand
         if let processIdentifier {
             keyDown.postToPid(processIdentifier)
+            Thread.sleep(forTimeInterval: 0.018)
             keyUp.postToPid(processIdentifier)
         } else {
-            keyDown.post(tap: .cghidEventTap)
-            keyUp.post(tap: .cghidEventTap)
+            keyDown.post(tap: tapLocation)
+            Thread.sleep(forTimeInterval: 0.018)
+            keyUp.post(tap: tapLocation)
         }
+        Thread.sleep(forTimeInterval: 0.012)
         return true
     }
 
@@ -11260,6 +17213,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Hidden: \(reason)")
         }
 
+        if currentSuggestionInvalidatedByUserKeyDown
+            || reason == "typed-over"
+            || reason == "stale-after-keydown"
+            || reason.hasPrefix("keyboard-event-tap-") {
+            proofOnlyAcceptRecentSuggestion = nil
+        }
+
         suggestionSession.dismiss()
         currentSuggestionID = nil
         currentSuggestionAppBundleIdentifier = nil
@@ -11459,6 +17419,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let currentProfile,
               currentProfile.suppressesUntilBlurAfterEscape,
               let currentFieldIdentity else {
+            return
+        }
+
+        suppressField(currentFieldIdentity, profile: currentProfile, reason: reason)
+    }
+
+    private func suppressCurrentFieldAfterInsertionFailure(reason: String) {
+        guard let currentProfile,
+              let currentFieldIdentity,
+              !suppressedFieldIdentities.contains(currentFieldIdentity),
+              insertionFailureSuppressionPolicy.shouldSuppressField(
+                  profile: currentProfile,
+                  failureReason: reason
+              ) else {
             return
         }
 
@@ -12537,7 +18511,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             supportPace: effectiveSuggestionPace(for: profile),
             allowsSentenceBoundaryContinuation: allowsSentenceBoundaryContinuation(for: profile),
             minimumPhraseContinuationWords: minimumPhraseContinuationWords(for: profile),
-            allowsPlainLineStartPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile)
+            allowsPlainLineStartPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile),
+            allowsListLabelPhraseContinuation: usesDailyDriverLineStartPhraseContinuation(for: profile)
         )
     }
 
@@ -13360,7 +19335,7 @@ private extension AppDelegate {
     }
 
     static var currentSuggestionTuningDefaultsVersion: Int {
-        4
+        6
     }
 
     static var previousDefaultSuggestionAggressivenessLevel: Int {
@@ -13601,7 +19576,7 @@ private extension AppDelegate {
             level = SuggestionTuning.defaultAggressivenessLevel
         }
 
-        let maxVisibleWords: Int
+        var maxVisibleWords: Int
         if defaults.object(forKey: Self.suggestionMaxVisibleWordsDefaultsKey) != nil {
             maxVisibleWords = defaults.integer(forKey: Self.suggestionMaxVisibleWordsDefaultsKey)
         } else {
@@ -13625,6 +19600,9 @@ private extension AppDelegate {
             : SuggestionTuning.defaultLearningRestraintLevel
 
         if shouldMigrateDailyDriverDefaults {
+            if maxVisibleWords == 3 || maxVisibleWords == 5 {
+                maxVisibleWords = SuggestionTuning.defaultMaxVisibleWords
+            }
             if phraseStartWords == 3 {
                 phraseStartWords = SuggestionTuning.defaultPhraseStartWords
             }

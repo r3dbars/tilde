@@ -10,7 +10,7 @@ public struct VisibleSuggestionPersistencePolicy: Equatable, Sendable {
         maximumTransientEmptyContextAgeMilliseconds: Int = 1_200,
         maximumSameTextMiddleSplitAgeMilliseconds: Int = 5_000,
         maximumObsidianDocumentStartTeleportAgeMilliseconds: Int = 2_500,
-        maximumPromptProofTargetGeometryChurnAgeMilliseconds: Int = 5_000
+        maximumPromptProofTargetGeometryChurnAgeMilliseconds: Int = 10_000
     ) {
         self.maximumTransientEmptyContextAgeMilliseconds = maximumTransientEmptyContextAgeMilliseconds
         self.maximumSameTextMiddleSplitAgeMilliseconds = maximumSameTextMiddleSplitAgeMilliseconds

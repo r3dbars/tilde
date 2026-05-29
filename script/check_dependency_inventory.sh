@@ -8,7 +8,9 @@ DOC="$ROOT_DIR/docs/product/dependency-sdk-data-inventory.md"
 APP_BUNDLE="${AUTOCOMPLETE_LAB_APP_BUNDLE:-$ROOT_DIR/dist/SteadyType.app}"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/SteadyType"
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
+ENTITLEMENTS_TMP="$(mktemp)"
 RUN_DIR="$ROOT_DIR/docs/diagnostics/runs/dependency-inventory"
+trap 'rm -f "$ENTITLEMENTS_TMP"' EXIT
 
 require_file() {
   local path="$1"
@@ -38,6 +40,8 @@ for needle in \
   "swift-huggingface" \
   "swift-transformers" \
   "NSAccessibilityUsageDescription" \
+  "NSAppleEventsUsageDescription" \
+  "com.apple.security.automation.apple-events" \
   "No analytics SDK" \
   "No crash reporting SDK" \
   "download_mlx_model.py" \
@@ -68,6 +72,9 @@ if [[ ! -f "$INFO_PLIST" ]]; then
 fi
 
 /usr/libexec/PlistBuddy -c 'Print :NSAccessibilityUsageDescription' "$INFO_PLIST" >/tmp/autocomplete-accessibility-usage.txt
+/usr/libexec/PlistBuddy -c 'Print :NSAppleEventsUsageDescription' "$INFO_PLIST" >/tmp/autocomplete-apple-events-usage.txt
+codesign -d --entitlements :- "$APP_BUNDLE" >"$ENTITLEMENTS_TMP" 2>/dev/null
+/usr/libexec/PlistBuddy -c 'Print :com.apple.security.automation.apple-events' "$ENTITLEMENTS_TMP" >/tmp/autocomplete-apple-events-entitlement.txt
 
 for forbidden_key in \
   NSCameraUsageDescription \
