@@ -44,6 +44,14 @@ System-wide text expansion. Useful as a reliability reference for app-specific b
 
 ## AI Writing Adjacent
 
+### fujacob/tabby
+
+https://github.com/fujacob/tabby
+
+AGPL-3.0 licensed local-first Mac autocomplete app. Use as a public architecture
+and product reference only; do not copy code. See
+[`tabby-reference.md`](tabby-reference.md) for SteadyType-specific notes.
+
 ### theJayTea/WritingTools
 
 https://github.com/theJayTea/WritingTools
@@ -85,4 +93,3 @@ Local inspection of the installed app showed:
 Inferred architecture:
 
 Accessibility reads the active field and caret, local llama/ggml predicts, a floating or inline UI shows the suggestion, and hotkeys accept or dismiss.
-
