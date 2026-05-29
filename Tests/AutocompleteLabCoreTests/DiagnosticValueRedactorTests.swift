@@ -142,6 +142,34 @@ struct DiagnosticValueRedactorTests {
         )
     }
 
+    @Test("Diagnostics metadata keeps Ghostty screen copy target shape")
+    func diagnosticsMetadataKeepsGhosttyScreenCopyTargetShape() {
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "targetSelection",
+                value: "frontProofTitle"
+            ) == "frontProofTitle"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "frontWindowProofMatch",
+                value: "true"
+            ) == "true"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "windowCount",
+                value: "1"
+            ) == "1"
+        )
+        #expect(
+            DiagnosticsMetadataRedactor.logSafeValue(
+                forKey: "nativeNoopClassified",
+                value: "true"
+            ) == "true"
+        )
+    }
+
     @Test("Diagnostics metadata redacts local paths and directories by value")
     func diagnosticsMetadataRedactsLocalPathValues() {
         #expect(

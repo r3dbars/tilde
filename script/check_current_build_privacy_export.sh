@@ -91,13 +91,27 @@ current_process_ancestor_pids() {
   printf '%s\n' "${ancestors[@]}"
 }
 
+allowed_proof_pgids() {
+  local raw="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS:-}"
+  local token
+
+  raw="${raw//,/ }"
+  for token in $raw; do
+    if [[ "$token" =~ ^[0-9]+$ ]]; then
+      printf '%s\n' "$token"
+    fi
+  done
+}
+
 other_proof_process_lines() {
-  local process_list ancestor_pids
+  local process_list ancestor_pids allowed_pgids
   ancestor_pids="$(current_process_ancestor_pids || true)"
   ancestor_pids="${ancestor_pids//$'\n'/ }"
+  allowed_pgids="$(allowed_proof_pgids || true)"
+  allowed_pgids="${allowed_pgids//$'\n'/ }"
   process_list="$(ps -axo pid=,ppid=,pgid=,command= 2>/dev/null || true)"
 
-  awk -v self="${BASHPID:-$$}" -v ancestorPids="$ancestor_pids" '
+  awk -v self="${BASHPID:-$$}" -v ancestorPids="$ancestor_pids" -v allowedProofPgids="$allowed_pgids" '
     BEGIN {
       split(ancestorPids, rawAncestors, /[[:space:]]+/)
       for (i in rawAncestors) {
@@ -105,13 +119,21 @@ other_proof_process_lines() {
           ancestor[rawAncestors[i]] = 1
         }
       }
+      split(allowedProofPgids, rawAllowedProofPgids, /[[:space:]]+/)
+      for (i in rawAllowedProofPgids) {
+        if (rawAllowedProofPgids[i] != "") {
+          allowedPgid[rawAllowedProofPgids[i]] = 1
+        }
+      }
     }
     {
       pid = $1
       ppid = $2
+      pgid = $3
       command = $0
       rawLine[pid] = $0
       parent[pid] = ppid
+      processGroup[pid] = pgid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
       directScript[pid] = command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
@@ -137,6 +159,7 @@ other_proof_process_lines() {
     END {
       for (pid in rawLine) {
         if (relatedToSelf(pid)) continue
+        if (processGroup[pid] in allowedPgid) continue
         if (directScript[pid] || shellHasProofScript[pid]) {
           print rawLine[pid]
         }

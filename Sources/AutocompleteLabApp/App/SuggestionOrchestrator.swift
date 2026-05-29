@@ -193,6 +193,42 @@ final class SuggestionOrchestrator {
         currentFieldIdentity: FocusedFieldIdentity?,
         hasVisibleSuggestion: Bool
     ) -> Bool {
+        shouldKeepVisibleSuggestionForSameLiveRequest(
+            suggestionID: suggestionID,
+            currentSuggestionID: currentSuggestionID,
+            ticket: ticket,
+            fieldIdentity: fieldIdentity,
+            currentFieldIdentity: currentFieldIdentity,
+            hasVisibleSuggestion: hasVisibleSuggestion
+        )
+    }
+
+    func shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+        suggestionID: String,
+        currentSuggestionID: String?,
+        ticket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
+        shouldKeepVisibleSuggestionForSameLiveRequest(
+            suggestionID: suggestionID,
+            currentSuggestionID: currentSuggestionID,
+            ticket: ticket,
+            fieldIdentity: fieldIdentity,
+            currentFieldIdentity: currentFieldIdentity,
+            hasVisibleSuggestion: hasVisibleSuggestion
+        )
+    }
+
+    private func shouldKeepVisibleSuggestionForSameLiveRequest(
+        suggestionID: String,
+        currentSuggestionID: String?,
+        ticket: SuggestionRequestTicket,
+        fieldIdentity: FocusedFieldIdentity,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        hasVisibleSuggestion: Bool
+    ) -> Bool {
         hasVisibleSuggestion
             && currentSuggestionID == suggestionID
             && allows(ticket, fieldIdentity: fieldIdentity, currentFieldIdentity: currentFieldIdentity)
@@ -406,6 +442,7 @@ final class SuggestionOrchestrator {
         currentPresentedAt: Date?,
         currentScore: Double?,
         proposedScore: Double,
+        currentSuggestionInvalidatedByUserTyping: Bool = false,
         now: Date = Date()
     ) -> SuggestionReplacementDecision {
         let currentAgeMilliseconds = currentPresentedAt.map {
@@ -418,7 +455,8 @@ final class SuggestionOrchestrator {
             proposedSuggestionID: proposedSuggestionID,
             currentAgeMilliseconds: currentAgeMilliseconds,
             currentScore: currentScore,
-            proposedScore: proposedScore
+            proposedScore: proposedScore,
+            currentSuggestionInvalidatedByUserTyping: currentSuggestionInvalidatedByUserTyping
         )
     }
 
@@ -605,9 +643,18 @@ final class SuggestionOrchestrator {
         )
         let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
-            && profile.requiresNoSubmitAcceptanceProof
+            && (
+                profile.requiresNoSubmitAcceptanceProof
+                    || (profile.supportsFullAcceptance && !profile.requiresNoSubmitAcceptanceProof)
+            )
             && request.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)
             && request.textAfterCursor.isEmpty
+        let claudeCodeTerminalHostProofLatencyBypass =
+            request.appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
+                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+                && request.textAfterCursor.isEmpty
+        let proofLatencyBypass = promptProofLatencyBypass || claudeCodeTerminalHostProofLatencyBypass
         var confidenceMetadata = [
             "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
             "completionConfidenceScore": String(confidenceDecision.score),
@@ -616,17 +663,20 @@ final class SuggestionOrchestrator {
         if promptProofLatencyBypass {
             confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
         }
+        if claudeCodeTerminalHostProofLatencyBypass {
+            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
+        }
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
-            && !promptProofLatencyBypass
+            && !proofLatencyBypass
             && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
                 for: request,
                 suggestion: suggestion
             )
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
-            && !promptProofLatencyBypass
+            && !proofLatencyBypass
             && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && (!promptProofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
+            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,

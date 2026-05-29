@@ -630,6 +630,7 @@ OBSIDIAN_REQUIRED_MANIFEST="$TMP_DIR/obsidian-required.json"
 OBSIDIAN_PARTIAL_MANIFEST="$TMP_DIR/obsidian-partial.json"
 PROMPT_PASS_MANIFEST="$TMP_DIR/prompt-pass.json"
 PROMPT_FULL_ACCEPT_MANIFEST="$TMP_DIR/prompt-full-accept.json"
+PROMPT_FULL_ACCEPT_ALLOWED_MANIFEST="$TMP_DIR/prompt-full-accept-allowed.json"
 CHROME_CHAT_SUBMIT_MANIFEST="$TMP_DIR/chrome-chat-submit.json"
 PARTIAL_MANIFEST="$TMP_DIR/partial.json"
 PENDING_MANIFEST="$TMP_DIR/pending.json"
@@ -662,6 +663,18 @@ write_obsidian_required_manifest "$OBSIDIAN_REQUIRED_MANIFEST" complete
 write_obsidian_required_manifest "$OBSIDIAN_PARTIAL_MANIFEST" partial
 write_manifest "$PROMPT_PASS_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 1
 write_manifest "$PROMPT_FULL_ACCEPT_MANIFEST" complete "docs/product/visual-placement-screenshots/codex-inline.png" "$TRACE_PROOF_VERSION" "Codex" "com.openai.codex" "default" 1
+cp "$PROMPT_FULL_ACCEPT_MANIFEST" "$PROMPT_FULL_ACCEPT_ALLOWED_MANIFEST"
+python3 - "$PROMPT_FULL_ACCEPT_ALLOWED_MANIFEST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+manifest = json.loads(path.read_text(encoding="utf-8"))
+manual_smoke = manifest["surfaces"][0]["manualSmoke"]
+manual_smoke["requiresPromptFullAcceptNoSubmit"] = True
+path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
 write_manifest "$CHROME_CHAT_SUBMIT_MANIFEST" complete "docs/product/visual-placement-screenshots/chrome-chat-like.png" "$TRACE_PROOF_VERSION" "Chrome" "com.google.Chrome" "chat-like" 1 "Chrome chat-like composer"
 write_manifest "$PARTIAL_MANIFEST" partial "docs/product/visual-placement-screenshots/textedit-inline.png"
 write_manifest "$PENDING_MANIFEST" pending "docs/product/visual-placement-screenshots/textedit-inline.png"
@@ -1023,6 +1036,23 @@ fi
 if ! grep -F "no-submit-only prompt proof contains full accept" "$TMP_DIR/prompt-full-accept.out" >/dev/null; then
   echo "proof manifest self-test did not explain prompt full accept proof" >&2
   cat "$TMP_DIR/prompt-full-accept.out" >&2
+  exit 1
+fi
+
+sed 's/visual `strict-complete`/visual `strict-complete`; prompt full-accept no-submit confirmed/' \
+  "$MANUAL_SMOKE" >"$TMP_DIR/full-accept-manual-smoke.md"
+
+script/check_proof_manifest.sh \
+  --manifest "$PROMPT_FULL_ACCEPT_ALLOWED_MANIFEST" \
+  --manual-smoke "$TMP_DIR/full-accept-manual-smoke.md" \
+  --scorecard "$SCORECARD" \
+  --app-proof-matrix "$APP_PROOF_MATRIX" \
+  --skip-profile-coverage \
+  --strict >"$TMP_DIR/prompt-full-accept-allowed.out"
+
+if ! grep -F "Proof manifest verified." "$TMP_DIR/prompt-full-accept-allowed.out" >/dev/null; then
+  echo "proof manifest self-test did not verify separate full-accept no-submit proof" >&2
+  cat "$TMP_DIR/prompt-full-accept-allowed.out" >&2
   exit 1
 fi
 

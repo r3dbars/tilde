@@ -1,4 +1,5 @@
 import Testing
+import ApplicationServices
 import AutocompleteLabCore
 @testable import AutocompleteLabApp
 
@@ -42,6 +43,28 @@ struct KeyboardEventTapKeyCodeTests {
                 isInvalidatedByUserTyping: true,
                 acceptAllShortcut: .optionTab
             )
+        ))
+
+        #expect(!shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
+            snapshot: KeyboardEventTapSnapshot(
+                hasVisibleSuggestion: true,
+                supportsOneWordAcceptance: true,
+                supportsFullAcceptance: true,
+                isInvalidatedByUserTyping: true,
+                allowsAutocompleteKeyAfterPassthroughObservation: true,
+                acceptAllShortcut: .optionTab
+            )
+        ))
+
+        #expect(!shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
+            snapshot: KeyboardEventTapSnapshot(
+                hasVisibleSuggestion: true,
+                supportsOneWordAcceptance: true,
+                supportsFullAcceptance: true,
+                isInvalidatedByUserTyping: true,
+                acceptAllShortcut: .optionTab
+            ),
+            passthroughObservationAllowsAutocompleteKey: true
         ))
     }
 
@@ -106,5 +129,33 @@ struct KeyboardEventTapKeyCodeTests {
 
         #expect(mappedKey == .controlBacktick)
         #expect(action == .requestSuggestionNow)
+    }
+
+    @Test("Event tap diagnostics include source and target process ids")
+    func eventTapDiagnosticsIncludeProcessIDs() throws {
+        let event = try #require(CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: 48,
+            keyDown: true
+        ))
+        event.setIntegerValueField(.eventSourceUnixProcessID, value: 1234)
+        event.setIntegerValueField(.eventTargetUnixProcessID, value: 5678)
+
+        let metadata = keyboardEventTapDiagnosticMetadata(event: event)
+
+        #expect(metadata["eventSourcePID"] == "1234")
+        #expect(metadata["eventTargetPID"] == "5678")
+    }
+
+    @Test("Event tap placement defaults to session and accepts proof HID override")
+    func eventTapPlacementUsesProofOverride() {
+        let key = KeyboardEventTapPlacement.environmentKey
+
+        #expect(KeyboardEventTapPlacement.fromEnvironment([:]) == .session)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "session"]) == .session)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "cgSessionEventTap"]) == .session)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "hid"]) == .hid)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "cgHIDEventTap"]) == .hid)
+        #expect(KeyboardEventTapPlacement.fromEnvironment([key: "bogus"]) == .session)
     }
 }

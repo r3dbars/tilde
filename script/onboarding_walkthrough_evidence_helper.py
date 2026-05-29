@@ -94,6 +94,9 @@ def diagnostics_matches(path: Path) -> list[MatchedLine]:
     latest: dict[str, MatchedLine] = {}
     label_order = (
         "TextEdit practice started",
+        "Local model ready at practice start",
+        "TextEdit enabled at practice start",
+        "Suggestions unpaused at practice start",
         "TextEdit Tab accepted one word",
         "TextEdit Esc dismissed suggestion",
         "Pause Suggestions turned on",
@@ -103,6 +106,21 @@ def diagnostics_matches(path: Path) -> list[MatchedLine]:
     for number, line in enumerate(read_text_lines(path), start=1):
         if "textedit-practice-started" in line:
             latest["TextEdit practice started"] = MatchedLine(number, "TextEdit practice started")
+            if "model=ready" in line:
+                latest["Local model ready at practice start"] = MatchedLine(
+                    number,
+                    "Local model ready at practice start",
+                )
+            if "textEditEnabled=true" in line:
+                latest["TextEdit enabled at practice start"] = MatchedLine(
+                    number,
+                    "TextEdit enabled at practice start",
+                )
+            if "globalPaused=false" in line:
+                latest["Suggestions unpaused at practice start"] = MatchedLine(
+                    number,
+                    "Suggestions unpaused at practice start",
+                )
         if (
             "keyboard-action" in line
             and "action=acceptNextWord" in line
@@ -196,16 +214,29 @@ def before_delete_report(diagnostics_log: Path, trace_log: Path, require_ready: 
     matches = diagnostics_matches(diagnostics_log)
     trace = summarize_trace(trace_log)
 
-    labels = {match.label for match in matches}
+    match_by_label = {match.label: match for match in matches}
+    labels = set(match_by_label)
+    practice_start = match_by_label.get("TextEdit practice started")
+    practice_start_line = practice_start.number if practice_start is not None else None
     missing: list[str] = []
     for label in (
         "TextEdit practice started",
+        "Local model ready at practice start",
+        "TextEdit enabled at practice start",
+        "Suggestions unpaused at practice start",
+    ):
+        if label not in labels:
+            missing.append(label)
+    for label in (
         "TextEdit Tab accepted one word",
         "TextEdit Esc dismissed suggestion",
         "Pause Suggestions turned on",
     ):
-        if label not in labels:
+        match = match_by_label.get(label)
+        if match is None:
             missing.append(label)
+        elif practice_start_line is not None and match.number < practice_start_line:
+            missing.append(f"{label} after TextEdit practice started")
     if trace.presented == 0:
         missing.append("TextEdit suggestionPresented trace event")
     if trace.accepted_next_word == 0:
@@ -217,6 +248,8 @@ def before_delete_report(diagnostics_log: Path, trace_log: Path, require_ready: 
     print("This is not a pass row. It only checks redacted local evidence for the clean-user row.")
     print(f"Build proof: {current_build_proof()}")
     print(f"Diagnostics: {display_path(diagnostics_log)} lines {line_range(diagnostics_lines)}")
+    if practice_start_line is not None:
+        print(f"Latest TextEdit practice start line: {practice_start_line}")
     for match in matches:
         if match.label != "Delete Local Logs recorded":
             print(f"- line {match.number}: {match.label}")

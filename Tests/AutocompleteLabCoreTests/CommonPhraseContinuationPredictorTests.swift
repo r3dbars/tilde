@@ -163,6 +163,101 @@ struct CommonPhraseContinuationPredictorTests {
         }
     }
 
+    @Test("Predicts daily-driver reach-test phrases instantly")
+    func predictsDailyDriverReachTestPhrasesInstantly() {
+        let cases: [(String, String, String)] = [
+            ("The difference is", " whether it feels magical", "the difference is"),
+            ("What would make me install it is", " predicting my exact next words", "what would make me install it is"),
+            ("This breaks trust when", " it appears in the wrong field", "this breaks trust when"),
+            ("The reach test is", " whether i keep using it", "the reach test is"),
+            ("I would miss it if", " it disappeared tomorrow", "i would miss it if"),
+            ("The fastest version is", " already waiting with the phrase", "the fastest version is"),
+            ("When suggestions are wrong they", " break trust immediately", "when suggestions are wrong they"),
+            ("The daily driver bar is", " would i miss it tomorrow", "the daily driver bar is"),
+            ("I should be able to", " keep typing without thinking", "i should be able to"),
+            ("A useful autocomplete should", " finish the thought in motion", "a useful autocomplete should")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 3)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
+    @Test("Predicts field safety trust phrases instantly")
+    func predictsFieldSafetyTrustPhrasesInstantly() {
+        let cases: [(String, String, String)] = [
+            ("If the focused field looks risky, it should", " fail closed before typing", "intent-field-safety-risky-should"),
+            ("When the wrong field should", " stay silent until proof", "intent-field-safety-wrong-field"),
+            ("If placement feels weird, it should", " stay quiet until proof", "intent-field-safety-placement"),
+            ("When the cursor looks wrong, it should", " stay quiet until proof", "intent-field-safety-placement")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount == 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "If the focused field looks risky, it should",
+            behaviorProfileID: .email
+        ).suppressionReason == "no-match")
+        #expect(predictor.selection(
+            for: "If the focused field looks risky, it should",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Search field looks risky, it should",
+            behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+    }
+
+    @Test("Predicts first-person daily-driver trust and feeling shapes")
+    func predictsFirstPersonDailyDriverTrustAndFeelingShapes() {
+        let cases: [(String, String, String)] = [
+            ("This app feels wrong", " when placement breaks trust", "intent-daily-driver-feels-wrong"),
+            ("The suggestions fall short", " when suggestions feel generic", "intent-daily-driver-falls-short"),
+            ("SteadyType is not quite there", " because trust still breaks", "intent-daily-driver-not-there-yet"),
+            ("I would use this every day", " if it predicts my next thought", "intent-daily-driver-use-every-day"),
+            ("What would make me use this", " is trusting the next phrase", "intent-daily-driver-make-me-use-this"),
+            ("I keep reaching for it when", " it predicts my next thought", "intent-daily-driver-reach-for-it-when"),
+            ("As a daily driver", " it has to feel effortless", "intent-daily-driver-as-daily-driver"),
+            ("The typing flow feels heavy", " enough to break flow", "intent-daily-driver-feels-slow")
+        ]
+
+        for (context, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: .docsProse,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 4)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
     @Test("Predicts reusable writing intent patterns instantly")
     func predictsReusableWritingIntentPatternsInstantly() {
         let cases: [(String, String, String)] = [
@@ -222,16 +317,85 @@ struct CommonPhraseContinuationPredictorTests {
         ).suppressionReason == "unsupported-profile")
     }
 
+    @Test("Predicts short reply phrases for messaging and email shapes")
+    func predictsShortReplyPhrasesForMessagingAndEmailShapes() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Maya: Can you review this?\nSounds good", .casualChat, " to me", "intent-reply-sounds-good"),
+            ("Reply draft\nThat makes sense", .email, " to me", "intent-reply-that-makes-sense"),
+            ("Jordan: Could you check the note?\nI can", .casualChat, " take a look", "intent-reply-take-a-look"),
+            ("Quick reply\nLet me", .email, " take a look", "intent-reply-take-a-look"),
+            ("Thread\nHappy to", .docsProse, " take a look", "intent-reply-take-a-look"),
+            ("Thanks for", .email, " sending this over", "intent-reply-thanks-for"),
+            ("Meeting move?\nYes please", .casualChat, " that works for me", "intent-reply-yes-please"),
+            ("No worries", .casualChat, " at all", "intent-reply-no-worries"),
+            ("Good call", .casualChat, " that makes sense", "intent-reply-good-call"),
+            ("All good", .casualChat, " on my end", "intent-reply-all-good"),
+            ("Let me know", .email, " what you think", "intent-reply-let-me-know"),
+            ("Checking in", .casualChat, " on this", "intent-reply-checking-in"),
+            ("I will take", .email, " a look", "intent-reply-i-will-take"),
+            ("I'll take", .casualChat, " a look", "intent-reply-i-will-take"),
+            ("I'm on", .casualChat, " it now", "intent-reply-i-am-on"),
+            ("Appreciate you", .email, " sending this over", "intent-reply-appreciate-you"),
+            ("Thanks again", .casualChat, " for sending this", "intent-reply-thanks-again")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 2)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "Prompt\nSounds good",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Search\nThanks for",
+            behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Prompt\nLet me know",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Code comment\nGood call",
+            behaviorProfileID: .coding
+        ).suppressionReason == "unsupported-profile")
+    }
+
     @Test("Predicts Obsidian markdown note labels instantly")
     func predictsObsidianMarkdownNoteLabelsInstantly() {
         let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
             ("## Next:", .docsProse, " write the smallest concrete action", "intent-markdown-next"),
             ("- [ ] TODO:", .bullets, " make the next step concrete", "intent-markdown-action-items"),
+            ("1. [ ] TODO:", .bullets, " make the next step concrete", "intent-markdown-action-items"),
             ("# Open questions:", .docsProse, " capture what still feels unclear", "intent-markdown-open-questions"),
             ("Meeting notes\nDecisions:", .docsProse, " capture what changed today", "intent-markdown-decisions"),
+            ("Daily note\n## Focus", .docsProse, " the next useful writing pass", "intent-markdown-focus"),
+            ("Daily note\nToday:", .notes, " focus on the highest leverage fix", "intent-markdown-daily-note"),
+            ("Project notes\n- Waiting on", .bullets, " the response before moving forward", "intent-markdown-waiting-on"),
+            ("Project notes\n- Blocked:", .bullets, " by the missing proof", "intent-markdown-blocked"),
+            ("Launch notes\nRisks", .docsProse, " the part that could break trust", "intent-markdown-risks"),
+            ("Daily note\nDone:", .docsProse, " capture what actually shipped today", "intent-markdown-done"),
+            ("Scratchpad\nIdea", .notes, " turn this into a small test", "intent-markdown-ideas"),
+            ("Reflection\nNote to self:", .docsProse, " keep the next step visible", "intent-markdown-note-to-self"),
             ("What matters today", .notes, " is the next clear step", "intent-markdown-what-matters-today"),
             ("Quick capture\nBefore I forget", .docsProse, " capture the important detail", "intent-markdown-before-i-forget"),
-            ("- Follow up on", .bullets, " the open thread today", "intent-markdown-follow-up-on")
+            ("- Follow up on", .bullets, " the open thread today", "intent-markdown-follow-up-on"),
+            ("Project note\nSummary:", .notes, " capture the useful version", "intent-markdown-summary"),
+            ("Daily note\nContext:", .notes, " what led to this note", "intent-markdown-context"),
+            ("- [ ] Next action:", .bullets, " take the smallest useful step", "intent-markdown-next-action"),
+            ("Research note\nEvidence:", .docsProse, " link the current source of truth", "intent-markdown-evidence"),
+            ("Project note\nFollow-up:", .docsProse, " close the loop today", "intent-markdown-follow-up"),
+            ("Weekly review\nOpen loops:", .notes, " name what still needs attention", "intent-markdown-open-loop")
         ]
 
         for (context, profile, expected, match) in cases {
@@ -256,6 +420,148 @@ struct CommonPhraseContinuationPredictorTests {
             for: "Email\nNext:",
             behaviorProfileID: .email
         ).suppressionReason == "not-word-boundary")
+    }
+
+    @Test("Predicts Obsidian thinking-flow phrases instantly")
+    func predictsObsidianThinkingFlowPhrasesInstantly() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Daily note\nOne thing I noticed is", .docsProse, " that the flow breaks there", "intent-writing-flow-one-thing-i-noticed"),
+            ("Obsidian scratchpad\nWhat I know so far is", .notes, " the next step is clear", "intent-writing-flow-what-i-know"),
+            ("Private note\nI do not want to", .docsProse, " lose the thread here", "intent-writing-flow-do-not-want-to"),
+            ("Research log\nThis is probably worth", .docsProse, " turning into a small test", "intent-writing-flow-probably-worth"),
+            ("- The thing to watch is", .bullets, " where trust breaks first", "intent-writing-flow-thing-to-watch"),
+            ("I keep coming back to", .notes, " the same core problem", "intent-writing-flow-coming-back-to"),
+            ("The useful version is", .docsProse, " small fast and reliable", "intent-writing-flow-useful-version"),
+            ("Before I move on I should", .notes, " capture the next step", "intent-writing-flow-before-moving-on"),
+            ("This note is really about", .docsProse, " the decision we need", "intent-writing-flow-note-about"),
+            ("The next pass should", .docsProse, " make the point clearer", "intent-writing-flow-next-pass"),
+            ("The thing I keep missing is", .notes, " the shape of the problem", "intent-writing-flow-thing-i-keep-missing"),
+            ("What I need next is", .docsProse, " a clearer path forward", "intent-writing-flow-what-i-need-next"),
+            ("The part that matters is", .docsProse, " where the user gets stuck", "intent-writing-flow-part-that-matters"),
+            ("A better way to say this is", .notes, " keep it simple and direct", "intent-writing-flow-better-way-to-say-this"),
+            ("The tradeoff is", .docsProse, " speed without losing trust", "intent-writing-flow-tradeoff-is"),
+            ("Daily note\nI am thinking about", .notes, " what needs to happen next", "intent-writing-flow-thinking-about"),
+            ("What I actually want is", .docsProse, " the simplest version that works", "intent-writing-flow-actually-want"),
+            ("The thing I am worried about is", .notes, " where this breaks trust", "intent-writing-flow-worried-about"),
+            ("This is hard because", .docsProse, " the tradeoff is not obvious", "intent-writing-flow-hard-because"),
+            ("The simplest version is", .docsProse, " to make one small change", "intent-writing-flow-simplest-version"),
+            ("The next obvious move is", .notes, " to test it in context", "intent-writing-flow-next-obvious-move"),
+            ("What this unlocks is", .docsProse, " moving faster without losing trust", "intent-writing-flow-unlocks"),
+            ("The important detail is", .notes, " what happens after accept", "intent-writing-flow-important-detail")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect((3...8).contains(selection.suggestion?.visibleWordCount ?? 0))
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
+    @Test("Predicts everyday writing bridge phrases instantly")
+    func predictsEverydayWritingBridgePhrasesInstantly() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Daily note\nThe problem is", .docsProse, " where the current flow breaks", "intent-writing-bridge-problem-is"),
+            ("Obsidian scratchpad\nWhat I need is", .notes, " a clearer next step", "intent-writing-bridge-what-i-need-is"),
+            ("Private note\nI'm trying to figure out", .notes, " what needs to happen next", "intent-writing-bridge-trying-to-figure-out"),
+            ("Reflection\nI want to be able to", .docsProse, " write without losing the thread", "intent-writing-bridge-want-to-be-able-to"),
+            ("- The thing that matters is", .bullets, " where this helps in practice", "intent-writing-bridge-thing-that-matters"),
+            ("The right move is", .docsProse, " to test the next concrete step", "intent-writing-bridge-right-move-is"),
+            ("It would be useful if", .notes, " this showed up at the right time", "intent-writing-bridge-useful-if"),
+            ("This should help me", .docsProse, " finish the thought faster", "intent-writing-bridge-should-help-me"),
+            ("The next thing to make clear is", .docsProse, " what action comes next", "intent-writing-bridge-next-thing-clear"),
+            ("The reason this matters is", .notes, " what it changes for the user", "intent-writing-bridge-reason-this-matters")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect((3...8).contains(selection.suggestion?.visibleWordCount ?? 0))
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+    }
+
+    @Test("Predicts guarded next-sentence phrases at sentence boundaries")
+    func predictsGuardedNextSentencePhrasesAtSentenceBoundaries() {
+        let cases: [(String, AutocompleteBehaviorProfileID, String, String)] = [
+            ("Suggestions feel too timid.", .docsProse, " It should predict the next phrase", "intent-sentence-boundary-timid-suggestions"),
+            ("Suggestions feel too timid. ", .docsProse, " It should predict the next phrase", "intent-sentence-boundary-timid-suggestions"),
+            ("Placement keeps showing in the wrong field.", .docsProse, " That has to fail closed", "intent-sentence-boundary-wrong-field"),
+            ("Placement keeps showing in the wrong field. ", .docsProse, " That has to fail closed", "intent-sentence-boundary-wrong-field"),
+            ("Typing feels slow when suggestions lag.", .docsProse, " Speed has to feel invisible", "intent-sentence-boundary-speed"),
+            ("This would feel magical.", .notes, " It should know the next phrase", "intent-sentence-boundary-magic"),
+            ("The note is getting clearer.", .notes, " The next sentence should stay local", "intent-sentence-boundary-writing"),
+            ("The note is getting clearer. ", .notes, " The next sentence should stay local", "intent-sentence-boundary-writing")
+        ]
+
+        for (context, profile, expected, match) in cases {
+            let selection = predictor.selection(
+                for: context,
+                behaviorProfileID: profile,
+                maxVisibleWords: 8
+            )
+
+            #expect(selection.suggestion?.visibleText == expected)
+            #expect(selection.suggestion?.visibleWordCount ?? 0 >= 5)
+            #expect(selection.matchedContextSuffix == match)
+            #expect(selection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
+            #expect(selection.traceMetadata["candidateSuppressionReason"] == "none")
+        }
+
+        #expect(predictor.selection(
+            for: "Email suggestions feel too timid.",
+            behaviorProfileID: .email
+        ).suppressionReason == "not-word-boundary")
+        #expect(predictor.selection(
+            for: "Email suggestions feel too timid. ",
+            behaviorProfileID: .email
+        ).suppressionReason == "not-word-boundary")
+        #expect(predictor.selection(
+            for: "Prompt suggestions feel too timid.",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "Search suggestions feel too timid.",
+            behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "let suggestion = value.",
+            behaviorProfileID: .coding
+        ).suppressionReason == "unsupported-profile")
+    }
+
+    @Test("Blocks thinking-flow phrases in email chat prompt search form and code profiles")
+    func blocksThinkingFlowPhrasesOutsideWritingSurfaces() {
+        for profile in [
+            AutocompleteBehaviorProfileID.email,
+            .casualChat,
+            .aiChat,
+            .search,
+            .forms,
+            .coding
+        ] {
+            let selection = predictor.selection(
+                for: "Daily note\nWhat I know so far is",
+                behaviorProfileID: profile
+            )
+
+            #expect(selection.suggestion == nil)
+            #expect(selection.suppressionReason != nil)
+        }
     }
 
     @Test("Allows Notes and casual writing but blocks prompt, search, form, and code profiles")
@@ -285,6 +591,22 @@ struct CommonPhraseContinuationPredictorTests {
             for: "Can you",
             behaviorProfileID: .aiChat
         ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "This app feels wrong",
+            behaviorProfileID: .aiChat
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "The suggestions fall short",
+            behaviorProfileID: .search
+        ).suppressionReason == "unsupported-profile")
+        #expect(predictor.selection(
+            for: "The problem is",
+            behaviorProfileID: .email
+        ).suppressionReason == "no-match")
+        #expect(predictor.selection(
+            for: "The problem is",
+            behaviorProfileID: .casualChat
+        ).suppressionReason == "no-match")
     }
 
     @Test("Allows explicit prompt-app proof prediction while keeping prompt apps blocked by default")

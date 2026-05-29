@@ -79,6 +79,16 @@ public struct CommonPhraseContinuationPrior: Equatable, Sendable {
         CommonPhraseContinuationPrior(contextSuffix: "what makes this useful is", continuation: "getting the words right", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "when this feels magical it", continuation: "knows the next phrase", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "if i am writing fast i", continuation: "want help finishing thoughts", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the difference is", continuation: "whether it feels magical", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "what would make me install it is", continuation: "predicting my exact next words", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "this breaks trust when", continuation: "it appears in the wrong field", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the reach test is", continuation: "whether i keep using it", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "i would miss it if", continuation: "it disappeared tomorrow", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the fastest version is", continuation: "already waiting with the phrase", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "when suggestions are wrong they", continuation: "break trust immediately", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "the daily driver bar is", continuation: "would i miss it tomorrow", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "i should be able to", continuation: "keep typing without thinking", score: 0.28),
+        CommonPhraseContinuationPrior(contextSuffix: "a useful autocomplete should", continuation: "finish the thought in motion", score: 0.28),
         CommonPhraseContinuationPrior(contextSuffix: "the most important thing is to", continuation: "keep the scope small", score: 0.26),
         CommonPhraseContinuationPrior(contextSuffix: "i am trying to", continuation: "figure out how to", score: 0.26),
         CommonPhraseContinuationPrior(contextSuffix: "this sentence should continue", continuation: "without sounding too formal", score: 0.26),
@@ -178,22 +188,6 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
 
         let trimmed = textBeforeCursor.trimmingCharacters(in: .whitespacesAndNewlines)
         let clampedMaxWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
-        guard let last = trimmed.last, last.isLetter || last.isNumber else {
-            if let candidate = markdownLabelCandidate(
-                for: trimmed,
-                behaviorProfileID: behaviorProfileID
-            ) {
-                return selection(for: candidate, maxVisibleWords: clampedMaxWords)
-            }
-
-            return CommonPhraseContinuationSelection(
-                suggestion: nil,
-                matchedContextSuffix: nil,
-                score: nil,
-                suppressionReason: "not-word-boundary"
-            )
-        }
-
         let context = normalizedPhrase(trimmed)
         let words = words(in: context)
         guard !context.isEmpty else {
@@ -202,6 +196,30 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
                 matchedContextSuffix: nil,
                 score: nil,
                 suppressionReason: "empty-context"
+            )
+        }
+
+        guard let last = trimmed.last, last.isLetter || last.isNumber else {
+            if let candidate = markdownLabelCandidate(
+                for: trimmed,
+                behaviorProfileID: behaviorProfileID
+            ) {
+                return selection(for: candidate, maxVisibleWords: clampedMaxWords)
+            }
+
+            if let sentenceCandidate = sentenceBoundaryCandidate(
+                for: textBeforeCursor,
+                words: words,
+                behaviorProfileID: behaviorProfileID
+            ) {
+                return selection(for: sentenceCandidate, maxVisibleWords: clampedMaxWords)
+            }
+
+            return CommonPhraseContinuationSelection(
+                suggestion: nil,
+                matchedContextSuffix: nil,
+                score: nil,
+                suppressionReason: "not-word-boundary"
             )
         }
 
@@ -259,6 +277,35 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             behaviorProfileID: behaviorProfileID
         ) {
             return markdownCandidate
+        }
+
+        if let fieldSafetyCandidate = fieldSafetyCandidate(
+            for: words,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            return fieldSafetyCandidate
+        }
+
+        if let writingFlowCandidate = writingFlowCandidate(
+            for: words,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            return writingFlowCandidate
+        }
+
+        if let everydayWritingBridgeCandidate = everydayWritingBridgeCandidate(
+            for: words,
+            behaviorProfileID: behaviorProfileID
+        ) {
+            return everydayWritingBridgeCandidate
+        }
+
+        if let dailyDriverFeelingCandidate = dailyDriverFeelingCandidate(for: words) {
+            return dailyDriverFeelingCandidate
+        }
+
+        if let replyCandidate = messageReplyCandidate(for: words) {
+            return replyCandidate
         }
 
         return intentPatternCandidate(for: words)
@@ -336,6 +383,329 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         return nil
     }
 
+    private func writingFlowCandidate(
+        for words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsWritingFlowPrediction(for: behaviorProfileID),
+              words.count >= 3 else {
+            return nil
+        }
+
+        if hasSuffix(["one", "thing", "i", "noticed", "is"], in: words) {
+            return intentCandidate("writing-flow-one-thing-i-noticed", "that the flow breaks there")
+        }
+        if hasSuffix(["what", "i", "know", "so", "far", "is"], in: words) {
+            return intentCandidate("writing-flow-what-i-know", "the next step is clear")
+        }
+        if hasSuffix(["i", "do", "not", "want", "to"], in: words) {
+            return intentCandidate("writing-flow-do-not-want-to", "lose the thread here")
+        }
+        if hasSuffix(["this", "is", "probably", "worth"], in: words) {
+            return intentCandidate("writing-flow-probably-worth", "turning into a small test")
+        }
+        if hasSuffix(["the", "thing", "to", "watch", "is"], in: words) {
+            return intentCandidate("writing-flow-thing-to-watch", "where trust breaks first")
+        }
+        if hasSuffix(["i", "keep", "coming", "back", "to"], in: words) {
+            return intentCandidate("writing-flow-coming-back-to", "the same core problem")
+        }
+        if hasSuffix(["the", "useful", "version", "is"], in: words) {
+            return intentCandidate("writing-flow-useful-version", "small fast and reliable")
+        }
+        if hasSuffix(["before", "i", "move", "on", "i", "should"], in: words) {
+            return intentCandidate("writing-flow-before-moving-on", "capture the next step")
+        }
+        if hasSuffix(["this", "note", "is", "really", "about"], in: words) {
+            return intentCandidate("writing-flow-note-about", "the decision we need")
+        }
+        if hasSuffix(["the", "next", "pass", "should"], in: words) {
+            return intentCandidate("writing-flow-next-pass", "make the point clearer")
+        }
+        if hasSuffix(["the", "thing", "i", "keep", "missing", "is"], in: words) {
+            return intentCandidate("writing-flow-thing-i-keep-missing", "the shape of the problem")
+        }
+        if hasSuffix(["what", "i", "need", "next", "is"], in: words) {
+            return intentCandidate("writing-flow-what-i-need-next", "a clearer path forward")
+        }
+        if hasSuffix(["the", "part", "that", "matters", "is"], in: words) {
+            return intentCandidate("writing-flow-part-that-matters", "where the user gets stuck")
+        }
+        if hasSuffix(["a", "better", "way", "to", "say", "this", "is"], in: words) {
+            return intentCandidate("writing-flow-better-way-to-say-this", "keep it simple and direct")
+        }
+        if hasSuffix(["the", "tradeoff", "is"], in: words) {
+            return intentCandidate("writing-flow-tradeoff-is", "speed without losing trust")
+        }
+        if hasSuffix(["i", "am", "thinking", "about"], in: words) {
+            return intentCandidate("writing-flow-thinking-about", "what needs to happen next")
+        }
+        if hasSuffix(["what", "i", "actually", "want", "is"], in: words) {
+            return intentCandidate("writing-flow-actually-want", "the simplest version that works")
+        }
+        if hasSuffix(["the", "thing", "i", "am", "worried", "about", "is"], in: words) {
+            return intentCandidate("writing-flow-worried-about", "where this breaks trust")
+        }
+        if hasSuffix(["this", "is", "hard", "because"], in: words) {
+            return intentCandidate("writing-flow-hard-because", "the tradeoff is not obvious")
+        }
+        if hasSuffix(["the", "simplest", "version", "is"], in: words) {
+            return intentCandidate("writing-flow-simplest-version", "to make one small change")
+        }
+        if hasSuffix(["the", "next", "obvious", "move", "is"], in: words) {
+            return intentCandidate("writing-flow-next-obvious-move", "to test it in context")
+        }
+        if hasSuffix(["what", "this", "unlocks", "is"], in: words) {
+            return intentCandidate("writing-flow-unlocks", "moving faster without losing trust")
+        }
+        if hasSuffix(["the", "important", "detail", "is"], in: words) {
+            return intentCandidate("writing-flow-important-detail", "what happens after accept")
+        }
+
+        return nil
+    }
+
+    private func everydayWritingBridgeCandidate(
+        for words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsWritingFlowPrediction(for: behaviorProfileID),
+              words.count >= 3 else {
+            return nil
+        }
+
+        if hasSuffix(["the", "problem", "is"], in: words) {
+            return intentCandidate("writing-bridge-problem-is", "where the current flow breaks")
+        }
+        if hasSuffix(["what", "i", "need", "is"], in: words) {
+            return intentCandidate("writing-bridge-what-i-need-is", "a clearer next step")
+        }
+        if hasAnySuffix([
+            ["i", "am", "trying", "to", "figure", "out"],
+            ["i", "m", "trying", "to", "figure", "out"]
+        ], in: words) {
+            return intentCandidate("writing-bridge-trying-to-figure-out", "what needs to happen next")
+        }
+        if hasSuffix(["i", "want", "to", "be", "able", "to"], in: words) {
+            return intentCandidate("writing-bridge-want-to-be-able-to", "write without losing the thread")
+        }
+        if hasSuffix(["the", "thing", "that", "matters", "is"], in: words) {
+            return intentCandidate("writing-bridge-thing-that-matters", "where this helps in practice")
+        }
+        if hasSuffix(["the", "right", "move", "is"], in: words) {
+            return intentCandidate("writing-bridge-right-move-is", "to test the next concrete step")
+        }
+        if hasSuffix(["it", "would", "be", "useful", "if"], in: words) {
+            return intentCandidate("writing-bridge-useful-if", "this showed up at the right time")
+        }
+        if hasSuffix(["this", "should", "help", "me"], in: words) {
+            return intentCandidate("writing-bridge-should-help-me", "finish the thought faster")
+        }
+        if hasSuffix(["the", "next", "thing", "to", "make", "clear", "is"], in: words) {
+            return intentCandidate("writing-bridge-next-thing-clear", "what action comes next")
+        }
+        if hasSuffix(["the", "reason", "this", "matters", "is"], in: words) {
+            return intentCandidate("writing-bridge-reason-this-matters", "what it changes for the user")
+        }
+
+        return nil
+    }
+
+    private func sentenceBoundaryCandidate(
+        for rawContext: String,
+        words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        let trimmedRawContext = rawContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard allowsWritingFlowPrediction(for: behaviorProfileID),
+              words.count >= 4,
+              trimmedRawContext.last?.isSentenceBoundary == true,
+              containsDailyDriverTopic(words) || containsWritingMotionTopic(words) || containsFeelingTopic(words) else {
+            return nil
+        }
+
+        if containsAny(["wrong"], in: words),
+           containsAny(["field", "fields"], in: words) {
+            return intentCandidate("sentence-boundary-wrong-field", "That has to fail closed")
+        }
+        if containsAny(["placement", "caret"], in: words),
+           containsAny(["wrong", "off", "weird", "breaks", "broken"], in: words) {
+            return intentCandidate("sentence-boundary-placement-trust", "The next fix is caret proof")
+        }
+        if containsAny(["timid", "generic", "dumb"], in: words),
+           containsAny(["suggestion", "suggestions", "autocomplete"], in: words) {
+            return intentCandidate("sentence-boundary-timid-suggestions", "It should predict the next phrase")
+        }
+        if containsAny(["slow", "late", "lag", "lags", "laggy"], in: words),
+           containsAny(["typing", "suggestion", "suggestions", "autocomplete"], in: words) {
+            return intentCandidate("sentence-boundary-speed", "Speed has to feel invisible")
+        }
+        if containsAny(["magical", "magic"], in: words) {
+            return intentCandidate("sentence-boundary-magic", "It should know the next phrase")
+        }
+        if containsAny(["trust", "trusted", "reliable"], in: words) {
+            return intentCandidate("sentence-boundary-trust", "The next step is proof")
+        }
+        if containsAny(["note", "notes", "draft", "writing"], in: words) {
+            return intentCandidate("sentence-boundary-writing", "The next sentence should stay local")
+        }
+
+        return nil
+    }
+
+    private func dailyDriverFeelingCandidate(for words: [String]) -> CommonPhraseContinuationCandidate? {
+        guard words.count >= 3,
+              containsDailyDriverTopic(words) || containsWritingMotionTopic(words) || containsFeelingTopic(words) else {
+            return nil
+        }
+
+        if hasAnySuffix([
+            ["feels", "wrong"],
+            ["feels", "off"],
+            ["feels", "weird"]
+        ], in: words) {
+            return intentCandidate("daily-driver-feels-wrong", "when placement breaks trust")
+        }
+        if hasAnySuffix([
+            ["fall", "short"],
+            ["falls", "short"],
+            ["falling", "short"]
+        ], in: words) {
+            return intentCandidate("daily-driver-falls-short", "when suggestions feel generic")
+        }
+        if hasAnySuffix([
+            ["not", "quite", "there"],
+            ["not", "there", "yet"]
+        ], in: words) {
+            return intentCandidate("daily-driver-not-there-yet", "because trust still breaks")
+        }
+        if hasSuffix(["use", "this", "every", "day"], in: words) {
+            return intentCandidate("daily-driver-use-every-day", "if it predicts my next thought")
+        }
+        if hasAnySuffix([
+            ["make", "me", "use", "this"],
+            ["make", "me", "install", "this"],
+            ["make", "me", "keep", "this", "on"]
+        ], in: words) {
+            return intentCandidate("daily-driver-make-me-use-this", "is trusting the next phrase")
+        }
+        if hasAnySuffix([
+            ["keep", "reaching", "for", "it", "when"],
+            ["reach", "for", "it", "when"],
+            ["reaching", "for", "it", "when"]
+        ], in: words) {
+            return intentCandidate("daily-driver-reach-for-it-when", "it predicts my next thought")
+        }
+        if hasAnySuffix([
+            ["as", "a", "daily", "driver"],
+            ["like", "a", "daily", "driver"]
+        ], in: words) {
+            return intentCandidate("daily-driver-as-daily-driver", "it has to feel effortless")
+        }
+        if hasAnySuffix([
+            ["feels", "slow"],
+            ["feels", "heavy"]
+        ], in: words) {
+            return intentCandidate("daily-driver-feels-slow", "enough to break flow")
+        }
+
+        return nil
+    }
+
+    private func fieldSafetyCandidate(
+        for words: [String],
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> CommonPhraseContinuationCandidate? {
+        guard allowsWritingFlowPrediction(for: behaviorProfileID),
+              words.count >= 4,
+              containsAny(["field", "fields", "cursor", "caret", "placement"], in: words) else {
+            return nil
+        }
+
+        if hasAnySuffix([
+            ["looks", "risky", "it", "should"],
+            ["feels", "risky", "it", "should"],
+            ["is", "risky", "it", "should"],
+            ["looks", "unsafe", "it", "should"]
+        ], in: words) {
+            return intentCandidate("field-safety-risky-should", "fail closed before typing")
+        }
+
+        if hasAnySuffix([
+            ["wrong", "field", "should"],
+            ["wrong", "fields", "should"],
+            ["field", "is", "wrong", "it", "should"],
+            ["fields", "are", "wrong", "it", "should"]
+        ], in: words) {
+            return intentCandidate("field-safety-wrong-field", "stay silent until proof")
+        }
+
+        if hasAnySuffix([
+            ["placement", "is", "weird", "it", "should"],
+            ["placement", "feels", "weird", "it", "should"],
+            ["caret", "looks", "wrong", "it", "should"],
+            ["cursor", "looks", "wrong", "it", "should"]
+        ], in: words) {
+            return intentCandidate("field-safety-placement", "stay quiet until proof")
+        }
+
+        return nil
+    }
+
+    private func messageReplyCandidate(for words: [String]) -> CommonPhraseContinuationCandidate? {
+        guard words.count >= 2 else {
+            return nil
+        }
+
+        if hasSuffix(["sounds", "good"], in: words) {
+            return intentCandidate("reply-sounds-good", "to me")
+        }
+        if hasSuffix(["that", "makes", "sense"], in: words) {
+            return intentCandidate("reply-that-makes-sense", "to me")
+        }
+        if hasAnySuffix([["i", "can"], ["let", "me"], ["happy", "to"]], in: words) {
+            return intentCandidate("reply-take-a-look", "take a look")
+        }
+        if hasSuffix(["i", "can", "take"], in: words) {
+            return intentCandidate("reply-take-a-look", "a look")
+        }
+        if hasSuffix(["thanks", "for"], in: words) {
+            return intentCandidate("reply-thanks-for", "sending this over")
+        }
+        if hasSuffix(["yes", "please"], in: words) {
+            return intentCandidate("reply-yes-please", "that works for me")
+        }
+        if hasSuffix(["no", "worries"], in: words) {
+            return intentCandidate("reply-no-worries", "at all")
+        }
+        if hasSuffix(["good", "call"], in: words) {
+            return intentCandidate("reply-good-call", "that makes sense")
+        }
+        if hasSuffix(["all", "good"], in: words) {
+            return intentCandidate("reply-all-good", "on my end")
+        }
+        if hasSuffix(["let", "me", "know"], in: words) {
+            return intentCandidate("reply-let-me-know", "what you think")
+        }
+        if hasSuffix(["checking", "in"], in: words) {
+            return intentCandidate("reply-checking-in", "on this")
+        }
+        if hasAnySuffix([["i", "will", "take"], ["i", "ll", "take"]], in: words) {
+            return intentCandidate("reply-i-will-take", "a look")
+        }
+        if hasAnySuffix([["i", "am", "on"], ["i", "m", "on"]], in: words) {
+            return intentCandidate("reply-i-am-on", "it now")
+        }
+        if hasSuffix(["appreciate", "you"], in: words) {
+            return intentCandidate("reply-appreciate-you", "sending this over")
+        }
+        if hasSuffix(["thanks", "again"], in: words) {
+            return intentCandidate("reply-thanks-again", "for sending this")
+        }
+
+        return nil
+    }
+
     private func markdownLabelCandidate(
         for rawContext: String,
         behaviorProfileID: AutocompleteBehaviorProfileID?
@@ -395,8 +765,36 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             return intentCandidate("markdown-open-questions", "capture what still feels unclear")
         case "meeting note", "meeting notes", "notes":
             return intentCandidate("markdown-meeting-notes", "capture decisions and next steps")
+        case "today", "daily note", "daily notes":
+            return intentCandidate("markdown-daily-note", "focus on the highest leverage fix")
+        case "focus", "focus today":
+            return intentCandidate("markdown-focus", "the next useful writing pass")
+        case "blocked", "blocker", "blockers":
+            return intentCandidate("markdown-blocked", "by the missing proof")
+        case "waiting", "waiting on":
+            return intentCandidate("markdown-waiting-on", "the response before moving forward")
+        case "risk", "risks":
+            return intentCandidate("markdown-risks", "the part that could break trust")
+        case "done", "shipped":
+            return intentCandidate("markdown-done", "capture what actually shipped today")
+        case "idea", "ideas":
+            return intentCandidate("markdown-ideas", "turn this into a small test")
+        case "note to self", "notes to self":
+            return intentCandidate("markdown-note-to-self", "keep the next step visible")
         case "why", "why this matters":
             return intentCandidate("markdown-why-this-matters", "connect it to the user")
+        case "summary", "summaries":
+            return intentCandidate("markdown-summary", "capture the useful version")
+        case "context":
+            return intentCandidate("markdown-context", "what led to this note")
+        case "next action", "next actions":
+            return intentCandidate("markdown-next-action", "take the smallest useful step")
+        case "evidence", "proof":
+            return intentCandidate("markdown-evidence", "link the current source of truth")
+        case "follow up", "follow-up":
+            return intentCandidate("markdown-follow-up", "close the loop today")
+        case "open loop", "open loops":
+            return intentCandidate("markdown-open-loop", "name what still needs attention")
         default:
             return nil
         }
@@ -433,6 +831,15 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         }
     }
 
+    private func allowsWritingFlowPrediction(for behaviorProfileID: AutocompleteBehaviorProfileID?) -> Bool {
+        switch behaviorProfileID {
+        case .some(.docsProse), .some(.notes), .some(.bullets), .none:
+            true
+        case .some:
+            false
+        }
+    }
+
     private func normalizedPhrase(_ text: String) -> String {
         text
             .lowercased()
@@ -461,6 +868,7 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
             .lowercased()
             .replacingOccurrences(of: #"^\s*(#{1,6}\s*)?([-*+]\s*)?(\[[ xX]\]\s*)?"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"^\s*\d+[\.)]\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^\s*\[[ xX]\]\s*"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ":")))
     }
@@ -522,8 +930,37 @@ public struct CommonPhraseContinuationPredictor: Equatable, Sendable {
         )
     }
 
+    private func containsFeelingTopic(_ words: [String]) -> Bool {
+        containsAny(
+            [
+                "daily",
+                "driver",
+                "feel",
+                "feeling",
+                "feels",
+                "flow",
+                "install",
+                "magical",
+                "placement",
+                "reach",
+                "reaching",
+                "reliable",
+                "trust",
+                "use",
+                "useful"
+            ],
+            in: words
+        )
+    }
+
     private func containsAny(_ candidates: [String], in words: [String]) -> Bool {
         let wordSet = Set(words)
         return candidates.contains { wordSet.contains($0) }
+    }
+}
+
+private extension Character {
+    var isSentenceBoundary: Bool {
+        [".", "!", "?"].contains(self)
     }
 }

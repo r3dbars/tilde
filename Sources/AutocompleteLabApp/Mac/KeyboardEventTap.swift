@@ -31,15 +31,19 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var latencyStats = KeyboardEventTapLatencyStats()
     private let slowEventTapLatencyMicros = 8_000
     private let replayExpirationNanos: UInt64 = 1_000_000_000
+    private var passthroughObservationAllowsAutocompleteKey = false
+    let tapPlacement: KeyboardEventTapPlacement
 
     init(
         handler: @escaping Handler,
         passthroughKeyDownObserver: PassthroughKeyDownObserver? = nil,
-        disabledObserver: DisabledObserver? = nil
+        disabledObserver: DisabledObserver? = nil,
+        tapPlacement: KeyboardEventTapPlacement = .fromEnvironment()
     ) {
         self.handler = handler
         self.passthroughKeyDownObserver = passthroughKeyDownObserver
         self.disabledObserver = disabledObserver
+        self.tapPlacement = tapPlacement
     }
 
     deinit {
@@ -82,7 +86,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             let runLoop = CFRunLoopGetCurrent()
             let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
             guard let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap,
+                tap: self.tapPlacement.cgEventTapLocation,
                 place: .headInsertEventTap,
                 options: .defaultTap,
                 eventsOfInterest: eventMask,
@@ -166,6 +170,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     func resetPassthroughObservation() {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = false
+        passthroughObservationAllowsAutocompleteKey = false
         passthroughObservationSuppressedUntilNanos = nil
         passthroughLock.unlock()
     }
@@ -183,6 +188,7 @@ final class KeyboardEventTap: @unchecked Sendable {
             untilNanos
         )
         hasObservedPassthroughKeyDown = false
+        passthroughObservationAllowsAutocompleteKey = false
         passthroughLock.unlock()
     }
 
@@ -232,12 +238,14 @@ final class KeyboardEventTap: @unchecked Sendable {
         )
         let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         let replay = KeyboardEventReplay(keyCode: keyCode, flagsRawValue: event.flags.rawValue)
+        let eventMetadata = keyboardEventTapDiagnosticMetadata(event: event)
 
         if consumePendingReplay(replay) {
             return finish(
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "replay-passthrough",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
@@ -247,6 +255,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "passthrough-modifier",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
@@ -269,6 +278,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                     Unmanaged.passUnretained(event),
                     key: key,
                     decision: "passthrough-non-typing-chord",
+                    eventMetadata: eventMetadata,
                     startedAt: startedAt
                 )
             }
@@ -278,11 +288,15 @@ final class KeyboardEventTap: @unchecked Sendable {
                     Unmanaged.passUnretained(event),
                     key: key,
                     decision: "passthrough-synthetic-insert",
+                    eventMetadata: eventMetadata,
                     startedAt: startedAt
                 )
             }
 
-            markPassthroughObserved()
+            markPassthroughObserved(
+                allowingAutocompleteKey: currentSnapshot()
+                    .allowsAutocompleteKeyAfterPassthroughObservation
+            )
             markSnapshotInvalidatedByTyping()
             if let passthroughKeyDownObserver {
                 Task { @MainActor in
@@ -293,13 +307,17 @@ final class KeyboardEventTap: @unchecked Sendable {
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "passthrough-other",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
 
-        let hadPassthroughKeyDown = consumePassthroughObservation()
-        if hadPassthroughKeyDown {
-            if shouldPassThroughAutocompleteKeyAfterPassthroughObservation(snapshot: currentSnapshot()) {
+        let passthroughObservation = consumePassthroughObservation()
+        if passthroughObservation.observed {
+            if shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
+                snapshot: currentSnapshot(),
+                passthroughObservationAllowsAutocompleteKey: passthroughObservation.allowsAutocompleteKey
+            ) {
                 markSnapshotInvalidatedByTyping()
                 if let passthroughKeyDownObserver {
                     Task { @MainActor in
@@ -310,6 +328,7 @@ final class KeyboardEventTap: @unchecked Sendable {
                     Unmanaged.passUnretained(event),
                     key: key,
                     decision: "passthrough-after-typing",
+                    eventMetadata: eventMetadata,
                     startedAt: startedAt
                 )
             }
@@ -320,12 +339,13 @@ final class KeyboardEventTap: @unchecked Sendable {
                 Unmanaged.passUnretained(event),
                 key: key,
                 decision: "passthrough-unsupported",
+                eventMetadata: eventMetadata,
                 startedAt: startedAt
             )
         }
 
         Task { @MainActor in
-            let result = handler(key, isAutorepeat, hadPassthroughKeyDown)
+            let result = handler(key, isAutorepeat, passthroughObservation.observed)
             switch result {
             case .handled:
                 break
@@ -352,22 +372,29 @@ final class KeyboardEventTap: @unchecked Sendable {
                 )
             }
         }
-        return finish(nil, key: key, decision: "consume", startedAt: startedAt)
+        return finish(nil, key: key, decision: "consume", eventMetadata: eventMetadata, startedAt: startedAt)
     }
 
     private func finish(
         _ result: Unmanaged<CGEvent>?,
         key: AutocompleteKey,
         decision: String,
+        eventMetadata: [String: String],
         startedAt: UInt64
     ) -> Unmanaged<CGEvent>? {
-        recordEventTapLatency(key: key, decision: decision, startedAt: startedAt)
+        recordEventTapLatency(
+            key: key,
+            decision: decision,
+            eventMetadata: eventMetadata,
+            startedAt: startedAt
+        )
         return result
     }
 
     private func recordEventTapLatency(
         key: AutocompleteKey,
         decision: String,
+        eventMetadata: [String: String],
         startedAt: UInt64
     ) {
         let elapsedMicros = Int((DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000)
@@ -375,23 +402,19 @@ final class KeyboardEventTap: @unchecked Sendable {
         let summary = latencyStats.record(elapsedMicros)
         latencyLock.unlock()
 
+        var metadata = eventMetadata
+        metadata["key"] = key.diagnosticName
+        metadata["decision"] = decision
+        metadata["durationMicros"] = String(elapsedMicros)
         DiagnosticsLog.shared.record(
             "keyboard-event-tap-latency",
-            metadata: [
-                "key": key.diagnosticName,
-                "decision": decision,
-                "durationMicros": String(elapsedMicros)
-            ]
+            metadata: metadata
         )
 
         if elapsedMicros >= slowEventTapLatencyMicros {
             DiagnosticsLog.shared.record(
                 "keyboard-event-tap-latency-slow",
-                metadata: [
-                    "key": key.diagnosticName,
-                    "decision": decision,
-                    "durationMicros": String(elapsedMicros)
-                ]
+                metadata: metadata
             )
         }
 
@@ -493,9 +516,11 @@ final class KeyboardEventTap: @unchecked Sendable {
         snapshotLock.unlock()
     }
 
-    private func markPassthroughObserved() {
+    private func markPassthroughObserved(allowingAutocompleteKey: Bool) {
         passthroughLock.lock()
         hasObservedPassthroughKeyDown = true
+        passthroughObservationAllowsAutocompleteKey = passthroughObservationAllowsAutocompleteKey
+            || allowingAutocompleteKey
         passthroughLock.unlock()
     }
 
@@ -515,10 +540,17 @@ final class KeyboardEventTap: @unchecked Sendable {
         return false
     }
 
-    private func consumePassthroughObservation() -> Bool {
+    private func consumePassthroughObservation() -> (
+        observed: Bool,
+        allowsAutocompleteKey: Bool
+    ) {
         passthroughLock.lock()
-        let value = hasObservedPassthroughKeyDown
+        let value = (
+            observed: hasObservedPassthroughKeyDown,
+            allowsAutocompleteKey: passthroughObservationAllowsAutocompleteKey
+        )
         hasObservedPassthroughKeyDown = false
+        passthroughObservationAllowsAutocompleteKey = false
         passthroughLock.unlock()
         return value
     }
@@ -586,11 +618,44 @@ final class KeyboardEventTap: @unchecked Sendable {
     }
 }
 
+enum KeyboardEventTapPlacement: String, Sendable {
+    static let environmentKey = "AUTOCOMPLETE_LAB_KEYBOARD_EVENT_TAP_LOCATION"
+
+    case session
+    case hid
+
+    var cgEventTapLocation: CGEventTapLocation {
+        switch self {
+        case .session:
+            return .cgSessionEventTap
+        case .hid:
+            return .cghidEventTap
+        }
+    }
+
+    static func fromEnvironment(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> Self {
+        guard let rawValue = environment[environmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return .session
+        }
+
+        switch rawValue.lowercased() {
+        case "session", "cgsession", "cgsessioneventtap":
+            return .session
+        case "hid", "cghid", "cghideventtap":
+            return .hid
+        default:
+            return .session
+        }
+    }
+}
+
 struct KeyboardEventTapSnapshot: Equatable, Sendable {
     var hasVisibleSuggestion: Bool
     var supportsOneWordAcceptance: Bool
     var supportsFullAcceptance: Bool
     var isInvalidatedByUserTyping: Bool
+    var allowsAutocompleteKeyAfterPassthroughObservation: Bool
     var hasPendingAcceptedInsertionUndo: Bool
     var acceptAllShortcut: AcceptAllShortcut
 
@@ -599,6 +664,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         supportsOneWordAcceptance: Bool = false,
         supportsFullAcceptance: Bool = false,
         isInvalidatedByUserTyping: Bool = false,
+        allowsAutocompleteKeyAfterPassthroughObservation: Bool = false,
         hasPendingAcceptedInsertionUndo: Bool = false,
         acceptAllShortcut: AcceptAllShortcut = .backtick
     ) {
@@ -606,6 +672,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
         self.supportsFullAcceptance = supportsFullAcceptance
         self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
+        self.allowsAutocompleteKeyAfterPassthroughObservation = allowsAutocompleteKeyAfterPassthroughObservation
         self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
     }
@@ -719,9 +786,12 @@ func isModifierOnlyMacVirtualKeyCode(_ keyCode: Int64) -> Bool {
 }
 
 func shouldPassThroughAutocompleteKeyAfterPassthroughObservation(
-    snapshot: KeyboardEventTapSnapshot
+    snapshot: KeyboardEventTapSnapshot,
+    passthroughObservationAllowsAutocompleteKey: Bool = false
 ) -> Bool {
     snapshot.isInvalidatedByUserTyping
+        && !snapshot.allowsAutocompleteKeyAfterPassthroughObservation
+        && !passthroughObservationAllowsAutocompleteKey
 }
 
 func shouldTreatOtherKeyAsTypingPassthrough(
@@ -741,6 +811,21 @@ func shouldTreatOtherKeyAsTypingPassthrough(
     case .backtick, .z, .other:
         return true
     }
+}
+
+func keyboardEventTapDiagnosticMetadata(event: CGEvent) -> [String: String] {
+    var metadata: [String: String] = [:]
+    let eventSourcePID = event.getIntegerValueField(.eventSourceUnixProcessID)
+    let eventTargetPID = event.getIntegerValueField(.eventTargetUnixProcessID)
+
+    if eventSourcePID > 0 {
+        metadata["eventSourcePID"] = String(eventSourcePID)
+    }
+    if eventTargetPID > 0 {
+        metadata["eventTargetPID"] = String(eventTargetPID)
+    }
+
+    return metadata
 }
 
 private extension AutocompletePhysicalKey {

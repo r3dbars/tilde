@@ -36,6 +36,63 @@ struct SuggestionReplacementPolicyTests {
         #expect(decision.shouldPresent)
     }
 
+    @Test("Suppresses same suggestion updates that change the first visible word")
+    func suppressesSameSuggestionFirstWordChanges() {
+        let policy = SuggestionReplacementPolicy()
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " calm and steady",
+            currentSuggestionID: "same",
+            proposedSuggestionID: "same",
+            currentAgeMilliseconds: 9_000,
+            currentScore: 1.20,
+            proposedScore: 1.80
+        )
+
+        #expect(!decision.shouldPresent)
+        #expect(decision.reason == .changedFirstWord)
+        #expect(decision.metadata["replacementSuppressionReason"] == "changed-first-word")
+        #expect(decision.metadata["replacementCurrentAgeMs"] == "9000")
+        #expect(decision.metadata["replacementScoreMargin"] == "0.60")
+    }
+
+    @Test("Allows stale replacements that keep the first visible word")
+    func allowsStaleReplacementWhenFirstWordIsStable() {
+        let policy = SuggestionReplacementPolicy()
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " instant and reliable",
+            currentSuggestionID: "old",
+            proposedSuggestionID: "new",
+            currentAgeMilliseconds: 2_100,
+            currentScore: 1.20,
+            proposedScore: 1.25
+        )
+
+        #expect(decision.shouldPresent)
+        #expect(decision.metadata["replacementCurrentAgeMs"] == "2100")
+    }
+
+    @Test("Allows replacement after user typing invalidates the current suggestion")
+    func allowsReplacementAfterUserTypingInvalidatesCurrentSuggestion() {
+        let policy = SuggestionReplacementPolicy()
+        let decision = policy.decision(
+            currentVisibleText: " instant",
+            proposedVisibleText: " calm and steady",
+            currentSuggestionID: "old",
+            proposedSuggestionID: "new",
+            currentAgeMilliseconds: 120,
+            currentScore: 1.20,
+            proposedScore: 0.90,
+            currentSuggestionInvalidatedByUserTyping: true
+        )
+
+        #expect(decision.shouldPresent)
+        #expect(decision.reason == nil)
+        #expect(decision.metadata["replacementDecision"] == "present")
+        #expect(decision.metadata["replacementSuppressionReason"] == nil)
+    }
+
     @Test("Suppresses low margin replacements while visible text is fresh")
     func suppressesLowMarginFreshReplacements() {
         let policy = SuggestionReplacementPolicy(

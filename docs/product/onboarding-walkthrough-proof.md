@@ -50,7 +50,7 @@ The row still needs real observed values. Update the time, clean macOS user, and
 
 1. Run `./script/build_and_run.sh --verify`.
 2. Open Settings and complete Practice in TextEdit.
-3. Confirm Accessibility, local model ready, TextEdit opened, `Tab`, `Esc`, and Pause.
+3. Confirm Accessibility, local model ready, TextEdit enabled, global pause off, TextEdit opened, `Tab`, `Esc`, and Pause.
 4. Before clicking Delete Local Logs, run:
 
 ```bash
@@ -64,7 +64,7 @@ The row still needs real observed values. Update the time, clean macOS user, and
 ./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready
 ```
 
-7. Add one real row to the checklist using helper line ranges or counters, not raw typed text.
+7. Add one real row to the checklist using helper line ranges or counters, not raw typed text. The before-delete helper must show model ready, TextEdit enabled, suggestions unpaused at practice start, and Tab/Esc/Pause evidence after the latest TextEdit practice-start line.
 8. Run `./script/check_onboarding_walkthrough_proof.py`.
 
 ## Useful Commands

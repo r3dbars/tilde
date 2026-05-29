@@ -55,6 +55,7 @@ declare -a TARGETS=(
   "chrome-prosemirror-real-default|Chrome real ProseMirror default AX|Chrome|com.google.Chrome|prosemirror-real-default|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture prosemirror-real --chrome-accessibility default"
   "chrome-chat-like|Chrome chat-like no-submit|Chrome|com.google.Chrome|chat-like|full|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture chat-like"
   "codex|Codex|Codex|com.openai.codex|default|one-word|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
+  "codex-full-accept|Codex full accept no-submit|Codex|com.openai.codex|full-accept|prompt-full-accept|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate"
   "claude-code|Claude Code|Claude Code|com.anthropic.claude-code|default|one-word|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-code --manual-gate"
   "claude|Claude desktop|Claude|com.anthropic.claudefordesktop|default|one-word|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
   "claude-empty|Claude desktop empty composer|Claude|com.anthropic.claudefordesktop|claude-empty|one-word|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude-empty --manual-gate"
@@ -243,7 +244,7 @@ parse_entry() {
 
 verified_regex_for_kind() {
   case "$1" in
-    one-word)
+    one-word|prompt-full-accept)
       printf '1'
       ;;
     *)
@@ -384,6 +385,11 @@ classify_entry() {
     TARGET_STATUS_REASON="missing prompt no-submit confirmation"
     return 0
   fi
+  if [[ "$TARGET_KIND" == "prompt-full-accept" && "$line" != *"prompt full-accept no-submit confirmed"* ]]; then
+    TARGET_STATUS="pending"
+    TARGET_STATUS_REASON="missing prompt full-accept no-submit confirmation"
+    return 0
+  fi
 
   classify_current_commit_or_archive "$line"
 }
@@ -400,6 +406,10 @@ verify_entry() {
 
   if [[ "$TARGET_KIND" == "one-word" && "$line" != *"prompt no-submit confirmed"* ]]; then
     echo "$TARGET_DISPLAY proof is missing prompt no-submit confirmation" >&2
+    return 1
+  fi
+  if [[ "$TARGET_KIND" == "prompt-full-accept" && "$line" != *"prompt full-accept no-submit confirmed"* ]]; then
+    echo "$TARGET_DISPLAY proof is missing prompt full-accept no-submit confirmation" >&2
     return 1
   fi
 

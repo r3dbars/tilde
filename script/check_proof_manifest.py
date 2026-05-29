@@ -163,8 +163,7 @@ EXPECTED_GRADUATION_DECISIONS = {
         "proofState": "partial",
         "smokeCommand": "script/real_app_smoke.sh codex --manual-gate",
         "requiredProof": {
-            "more prompt layouts before raising beyond word-only",
-            "separate full-accept no-submit proof before enabling full accept",
+            "more prompt layouts before raising beyond the default Codex composer",
         },
     },
     "Obsidian long notes": {
@@ -726,6 +725,10 @@ def is_no_submit_only_prompt_surface(name: str, claim: dict) -> bool:
     return name.strip().lower() in {"codex", "claude code", "claude desktop"}
 
 
+def requires_prompt_full_accept_no_submit(claim: dict) -> bool:
+    return claim.get("requiresPromptFullAcceptNoSubmit") is True
+
+
 def verify_manual_trace_slice(
     name: str,
     claim: dict,
@@ -813,13 +816,32 @@ def verify_manual_trace_slice(
                 + ", ".join(submit_signals[:3])
             )
 
-        if is_no_submit_only_prompt_surface(name, claim):
-            full_accepts = [
-                event
-                for event in app_events
-                if event.get("type") in {"suggestionAccepted", "insertionVerified", "acceptedTextEdited"}
-                and is_full_accept_event(event)
-            ]
+        full_accepts = [
+            event
+            for event in app_events
+            if event.get("type") in {"suggestionAccepted", "insertionVerified", "acceptedTextEdited"}
+            and is_full_accept_event(event)
+        ]
+        full_accept_verified = [
+            event
+            for event in app_events
+            if event.get("type") == "insertionVerified"
+            and event.get("outcome") == "verified"
+            and is_full_accept_event(event)
+        ]
+        if requires_prompt_full_accept_no_submit(claim):
+            if "prompt full-accept no-submit confirmed" not in matched["traceSlice"]:
+                failures.append(
+                    f"{name}: full-accept prompt proof is missing "
+                    "prompt full-accept no-submit confirmed label"
+                )
+            if not full_accepts:
+                failures.append(f"{name}: full-accept prompt proof has no full accept trace event")
+            if not full_accept_verified:
+                failures.append(
+                    f"{name}: full-accept prompt proof has no verified full accept insertion"
+                )
+        elif is_no_submit_only_prompt_surface(name, claim):
             if full_accepts:
                 failures.append(
                     f"{name}: no-submit-only prompt proof contains full accept; "

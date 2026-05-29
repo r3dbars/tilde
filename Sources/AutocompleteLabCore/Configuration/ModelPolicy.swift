@@ -107,7 +107,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
             return 8
         case 9...:
             return 5
-        case 6...:
+        case 5...:
             return 3
         default:
             return minimumVisibleWords

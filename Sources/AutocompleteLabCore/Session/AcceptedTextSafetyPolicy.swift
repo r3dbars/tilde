@@ -22,7 +22,8 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
 
     public func decision(
         acceptedText: String,
-        profile: CompatibilityProfile
+        profile: CompatibilityProfile,
+        allowsPromptActionWords: Bool = false
     ) -> AcceptedTextSafetyDecision {
         let trimmedAcceptedText = acceptedText.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -60,14 +61,23 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
         }
 
         if profile.promptAppSafetyMode.isPromptSurface,
-           let reason = promptAppBlockReason(trimmedAcceptedText) {
+           let reason = promptAppBlockReason(
+               trimmedAcceptedText,
+               allowsWhitespace: profile.supportsFullAcceptance
+                   && !profile.requiresNoSubmitAcceptanceProof,
+               allowsPromptActionWords: allowsPromptActionWords
+           ) {
             return .blocked(reason: reason)
         }
 
         return .allowed
     }
 
-    private func promptAppBlockReason(_ text: String) -> String? {
+    private func promptAppBlockReason(
+        _ text: String,
+        allowsWhitespace: Bool = false,
+        allowsPromptActionWords: Bool = false
+    ) -> String? {
         let normalized = text.lowercased()
 
         if Self.promptCommandPrefixes.contains(where: { normalized.hasPrefix($0) }) {
@@ -82,11 +92,14 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
             return "accepted-text-prompt-shell-metacharacter"
         }
 
-        if !normalized.unicodeScalars.allSatisfy(isPromptSafeWordScalar) {
+        if !normalized.unicodeScalars.allSatisfy({ scalar in
+            isPromptSafeWordScalar(scalar, allowsWhitespace: allowsWhitespace)
+        }) {
             return "accepted-text-prompt-unsafe-token"
         }
 
-        if Self.promptActionWords.contains(normalized) {
+        if !allowsPromptActionWords,
+           Self.promptActionWords.contains(normalized) {
             return "accepted-text-prompt-action-word"
         }
 
@@ -101,10 +114,14 @@ public struct AcceptedTextSafetyPolicy: Equatable, Sendable {
         Self.promptShellMetacharacters.contains(scalar)
     }
 
-    private func isPromptSafeWordScalar(_ scalar: Unicode.Scalar) -> Bool {
+    private func isPromptSafeWordScalar(
+        _ scalar: Unicode.Scalar,
+        allowsWhitespace: Bool = false
+    ) -> Bool {
         CharacterSet.alphanumerics.contains(scalar)
             || scalar == "'"
             || scalar == "’"
+            || (allowsWhitespace && CharacterSet.whitespaces.contains(scalar))
     }
 
     private static func wordCount(in text: String) -> Int {

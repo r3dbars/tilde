@@ -85,7 +85,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["fieldKindReason"] == "test-compose")
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
         #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
-        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "3")
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
         #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
         #expect(orchestration.requestMetadata["visiblePageContextCaptureScope"] == "visible_screen")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
@@ -349,6 +349,45 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             currentFieldIdentity: field,
             hasVisibleSuggestion: false
+        ))
+    }
+
+    @MainActor
+    @Test("Model failure preserves visible fast fallback for same request")
+    func modelFailurePreservesVisibleFastFallbackForSameRequest() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.example.editor",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let ticket = orchestrator.beginRequest(
+            CompletionRequest(textBeforeCursor: "I just wanted to", suggestionID: "fast")
+        ).ticket
+
+        #expect(orchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+            suggestionID: "fast",
+            currentSuggestionID: "fast",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+            suggestionID: "fast",
+            currentSuggestionID: "other",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: field,
+            hasVisibleSuggestion: true
+        ))
+        #expect(!orchestrator.shouldKeepVisibleSuggestionAfterModelContinuationFailure(
+            suggestionID: "fast",
+            currentSuggestionID: "fast",
+            ticket: ticket,
+            fieldIdentity: field,
+            currentFieldIdentity: nil,
+            hasVisibleSuggestion: true
         ))
     }
 
@@ -733,6 +772,107 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Codex full-accept no-submit proof candidates bypass final latency suppression")
+    func codexFullAcceptNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(
+            CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier)?
+                .replacingAcceptanceProofMode(
+                    supportsFullAcceptance: true,
+                    requiresNoSubmitAcceptanceProof: false
+                )
+        )
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "\(CodexProofFocusedTargetPolicy.marker) I think the next step should",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "codex-full-accept-proof-late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " land the proof before broadening the surface", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_100,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "codex-proof-no-submit")
+    }
+
+    @MainActor
+    @Test("Claude Code terminal host proof candidates bypass final latency suppression")
+    func claudeCodeTerminalHostProofCandidatesBypassFinalLatencySuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = ClaudeCodeTerminalHostProofPolicy.proofProfile
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+        let request = CompletionRequest(
+            textBeforeCursor: "Make this setting the feature configurable",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .aiChat,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "claude-code-terminal-proof-late-final"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_600,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") == true)
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "claude-code-terminal-host-proof")
+    }
+
+    @MainActor
     @Test("Late streaming partials are not hard suppressed by the final latency cutoff")
     func lateStreamingPartialsAreNotHardSuppressedByFinalLatencyCutoff() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -996,6 +1136,20 @@ struct SuggestionOrchestratorTests {
         #expect(allowed.shouldPresent)
         #expect(allowed.reason == nil)
         #expect(allowed.metadata["replacementScoreMargin"] == "0.50")
+
+        let invalidated = orchestrator.replacementDecision(
+            currentVisibleText: " make this easier",
+            proposedVisibleText: " ship the follow up",
+            currentSuggestionID: "current",
+            proposedSuggestionID: "proposed",
+            currentPresentedAt: currentPresentedAt,
+            currentScore: 1.00,
+            proposedScore: 0.80,
+            currentSuggestionInvalidatedByUserTyping: true,
+            now: now
+        )
+        #expect(invalidated.shouldPresent)
+        #expect(invalidated.reason == nil)
     }
 
     @MainActor
@@ -1130,6 +1284,43 @@ struct SuggestionOrchestratorTests {
         #expect(proofedPresentation.renderMode == .inlineAdjacent)
         #expect(proofedPresentation.anchorSource == .syntheticCaret)
         #expect(proofedPresentation.reason == .healthy)
+    }
+
+    @MainActor
+    @Test("Codex full-accept proof profile keeps strict visual synthetic caret inline")
+    func codexFullAcceptProofProfileKeepsStrictVisualSyntheticCaretInline() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier))
+        let profile = codex.replacingAcceptanceProofMode(
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false,
+            notes: "\(codex.notes) Proof-only Codex full-accept no-submit scenario is active."
+        )
+        let learningAdjustment = CompatibilityLearningAdjustment(
+            profile: nil,
+            effectiveRenderMode: .inlineAdjacent
+        )
+        let context = makeContext(
+            textBeforeCursor: "\(CodexProofFocusedTargetPolicy.marker) I think the next step should",
+            textAfterCursor: "",
+            windowTitle: "Codex",
+            caretIsSynthetic: true
+        )
+
+        let plan = orchestrator.placementHealthPlan(
+            context: context,
+            profile: profile,
+            learningAdjustment: learningAdjustment,
+            screenshotTracingEnabled: true
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected proof-mode Codex synthetic caret to stay inline")
+            return
+        }
+        #expect(presentation.renderMode == .inlineAdjacent)
+        #expect(presentation.anchorSource == .syntheticCaret)
+        #expect(presentation.reason == .healthy)
     }
 
     @MainActor

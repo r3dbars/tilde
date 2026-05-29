@@ -31,7 +31,7 @@ struct SuggestionReplacementVisibilityPolicy: Equatable {
         currentSuggestionAgeMilliseconds: Int?,
         maximumPreservedAgeMilliseconds: Int
     ) -> SuggestionReplacementVisibilityAction {
-        guard reason == .tooSlowToDisplay,
+        guard preservesCurrentVisibleSuggestion(forDisplaySuppressionReason: reason),
               hasVisibleSuggestion,
               !currentSuggestionInvalidatedByUserTyping,
               sameFieldAsCurrentSuggestion,
@@ -41,5 +41,16 @@ struct SuggestionReplacementVisibilityPolicy: Equatable {
         }
 
         return .keepCurrentVisible
+    }
+
+    private func preservesCurrentVisibleSuggestion(
+        forDisplaySuppressionReason reason: DisplayScoreSuppressionReason?
+    ) -> Bool {
+        switch reason {
+        case .tooSlowToDisplay, .lowConfidence, .belowThreshold:
+            return true
+        case .highRisk, .highRepetition, .highInstability, .lowAcceptedAndKeptProbability, nil:
+            return false
+        }
     }
 }

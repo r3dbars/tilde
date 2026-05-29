@@ -223,6 +223,44 @@ public struct CompatibilityProfile: Equatable, Sendable {
         !isSensitive && supportLevel != .unsupported
     }
 
+    public func replacingAcceptanceProofMode(
+        supportsFullAcceptance: Bool,
+        requiresNoSubmitAcceptanceProof: Bool,
+        notes: String? = nil
+    ) -> CompatibilityProfile {
+        CompatibilityProfile(
+            bundleIdentifier: bundleIdentifier,
+            displayName: displayName,
+            appFamily: appFamily,
+            supportLevel: supportLevel,
+            graduationDecision: graduationDecision,
+            supportReason: supportReason,
+            renderMode: renderMode,
+            insertionMode: insertionMode,
+            fallbackRenderMode: fallbackRenderMode,
+            fallbackInsertionMode: fallbackInsertionMode,
+            fieldIdentityMode: fieldIdentityMode,
+            anchorLadder: anchorLadder,
+            knownFailureModes: knownFailureModes,
+            allowsFieldAnchor: allowsFieldAnchor,
+            allowsWindowAnchor: allowsWindowAnchor,
+            requiresValidatedCaret: requiresValidatedCaret,
+            supportsObserverUpdates: supportsObserverUpdates,
+            supportsOneWordAcceptance: supportsOneWordAcceptance,
+            supportsFullAcceptance: supportsFullAcceptance,
+            allowsUnknownFieldKind: allowsUnknownFieldKind,
+            requiresNoSubmitAcceptanceProof: requiresNoSubmitAcceptanceProof,
+            suppressesUntilBlurAfterEscape: suppressesUntilBlurAfterEscape,
+            suppressesAfterInsertionFailure: suppressesAfterInsertionFailure,
+            allowsDescendantTextFallback: allowsDescendantTextFallback,
+            allowsDetachedSuggestions: allowsDetachedSuggestions,
+            allowsSyntheticCaretPlacement: allowsSyntheticCaretPlacement,
+            isSensitive: isSensitive,
+            promptAppSafetyMode: promptAppSafetyMode,
+            notes: notes ?? self.notes
+        )
+    }
+
     public var userFacingSafetySummary: String {
         guard canPresentSuggestions, !isSensitive else {
             return "Suggestions stay off here."
@@ -265,10 +303,11 @@ public struct CompatibilityProfile: Equatable, Sendable {
 
     public var allowsStrictVisualProofSyntheticCaretPlacement: Bool {
         supportsOneWordAcceptance
-            && !supportsFullAcceptance
+            && (!supportsFullAcceptance || !requiresNoSubmitAcceptanceProof)
             && !allowsDetachedSuggestions
             && !allowsSyntheticCaretPlacement
             && !isSensitive
+            && promptAppSafetyMode == .wordOnly
             && anchorLadder == [.caret]
             && notes.contains("one-word no-submit proof")
     }
@@ -520,7 +559,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Codex",
             appFamily: .customCanvas,
             supportLevel: .yellow,
-            supportReason: "Codex prompt support is on for this installed app: one-word suggestions, no whole-suggestion accept, and prompt safety gates stay on.",
+            supportReason: "Codex prompt support is on for this installed app: Tab and whole-suggestion accept are available, and prompt safety gates stay on.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -530,12 +569,12 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsFieldAnchor: false,
             allowsWindowAnchor: false,
             supportsOneWordAcceptance: true,
-            supportsFullAcceptance: false,
-            requiresNoSubmitAcceptanceProof: true,
+            supportsFullAcceptance: true,
+            requiresNoSubmitAcceptanceProof: false,
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
-            notes: "Enabled for this local Codex build with one-word no-submit proof and one-word no-submit safety. Full accept, detached suggestions, generic key-event insertion, and clipboard fallback stay off."
+            notes: "Enabled for this local Codex build with one-word no-submit proof, full-accept no-submit proof, and prompt-safe accepted-text filtering. Detached suggestions, generic key-event insertion, and clipboard fallback stay off."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claude-code",

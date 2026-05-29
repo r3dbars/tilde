@@ -34,6 +34,16 @@ require_contains "AUTOCOMPLETE_LAB_QUARANTINE_OTHER_WORKTREES"
 require_contains "AUTOCOMPLETE_LAB_MOVE_STALE_APP_BUNDLES"
 require_contains "AUTOCOMPLETE_LAB_SKIP_STALE_APP_BUNDLE_SCAN"
 require_contains "AUTOCOMPLETE_LAB_DIST_DIR"
+require_contains 'HELPER_NAME="SteadyTypeTextEventHelper"'
+require_contains 'HELPER_BINARY="$APP_MACOS/$HELPER_NAME"'
+require_contains 'ENTITLEMENTS_PLIST="$ROOT_DIR/script/SteadyType.entitlements"'
+require_contains 'run_swift_build_product "$HELPER_NAME"'
+require_contains 'BUILD_HELPER_BINARY="$(swift_build_bin_path)/$HELPER_NAME"'
+require_contains 'cp "$BUILD_HELPER_BINARY" "$HELPER_BINARY"'
+require_contains 'codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$HELPER_BINARY"'
+require_contains 'codesign --force --options runtime --sign - "$HELPER_BINARY"'
+require_contains '--entitlements "$ENTITLEMENTS_PLIST" --sign "$identity" "$APP_BUNDLE"'
+require_contains '--entitlements "$ENTITLEMENTS_PLIST" --sign - "$APP_BUNDLE"'
 require_contains 'SWIFT_BUILD_ROOT="${AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH:-$ROOT_DIR/.build}"'
 require_contains 'MLX_METALLIB="$SWIFT_BUILD_ROOT/mlx-metal/default.metallib"'
 require_contains 'local mlx_checkout="$SWIFT_BUILD_ROOT/checkouts/mlx-swift"'

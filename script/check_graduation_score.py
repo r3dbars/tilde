@@ -191,8 +191,7 @@ EXPECTED_SURFACES: tuple[ExpectedSurface, ...] = (
         smoke_command="script/real_app_smoke.sh codex --manual-gate",
         profile_bundles=("com.openai.codex",),
         required_proof=(
-            "more prompt layouts before raising beyond word-only",
-            "separate full-accept no-submit proof before enabling full accept",
+            "more prompt layouts before raising beyond the default Codex composer",
         ),
     ),
     ExpectedSurface(

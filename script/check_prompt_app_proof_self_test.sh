@@ -11,6 +11,8 @@ PASS_TRACE="$TMP_DIR/prompt-pass.jsonl"
 FAIL_TRACE="$TMP_DIR/prompt-fail.jsonl"
 NO_PROMPT_TRACE="$TMP_DIR/no-prompt.jsonl"
 BROWSER_CHAT_TRACE="$TMP_DIR/browser-chat-pass.jsonl"
+FULL_ACCEPT_TRACE="$TMP_DIR/full-accept-pass.jsonl"
+FULL_ACCEPT_MISSING_TRACE="$TMP_DIR/full-accept-missing.jsonl"
 
 cat >"$PASS_TRACE" <<'JSONL'
 {"type":"suggestionPresented","suggestionID":"safe-one","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"safe","metadata":{"promptSafetyMode":"wordOnly"}}
@@ -37,6 +39,54 @@ for expected in \
     exit 1
   fi
 done
+
+cat >"$FULL_ACCEPT_TRACE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","displayedText":"finish this thought","metadata":{"promptSafetyMode":"fullAcceptProof"}}
+{"type":"suggestionAccepted","suggestionID":"full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"finish this thought","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","promptSafetyMode":"fullAcceptProof"}}
+{"type":"insertionVerified","suggestionID":"full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"finish this thought","outcome":"verified","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","promptSafetyMode":"fullAcceptProof"}}
+{"type":"acceptedTextEdited","suggestionID":"full-safe","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","acceptedText":"finish this thought","outcome":"exactKept","metadata":{"acceptMode":"acceptAllVisible","acceptedVisibleScope":"fullVisible","checkpoint":"10s","promptSafetyMode":"fullAcceptProof"}}
+JSONL
+
+./script/check_prompt_app_proof.sh \
+  --trace "$FULL_ACCEPT_TRACE" \
+  --allow-full-accept-proof \
+  --require-full-accept-proof >"$TMP_DIR/full-accept-pass.txt"
+
+for expected in \
+  "Full accept proof:" \
+  "- allowed: 1" \
+  "- required: 1" \
+  "- fullAcceptAcceptedCount: 1" \
+  "- fullAcceptVerifiedCount: 1" \
+  "fullAcceptWithoutProofCount: 0" \
+  "Prompt app proof gate passed."; do
+  if ! grep -F -- "$expected" "$TMP_DIR/full-accept-pass.txt" >/dev/null; then
+    echo "prompt proof self-test missing full-accept proof output: $expected" >&2
+    cat "$TMP_DIR/full-accept-pass.txt" >&2
+    exit 1
+  fi
+done
+
+cat >"$FULL_ACCEPT_MISSING_TRACE" <<'JSONL'
+{"type":"suggestionPresented","suggestionID":"not-full","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","displayedText":"safe","metadata":{"promptSafetyMode":"wordOnly"}}
+{"type":"suggestionAccepted","suggestionID":"not-full","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"safe","metadata":{"acceptMode":"acceptNextWord","promptSafetyMode":"wordOnly"}}
+{"type":"insertionVerified","suggestionID":"not-full","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","acceptedText":"safe","outcome":"verified","metadata":{"acceptMode":"acceptNextWord","promptSafetyMode":"wordOnly"}}
+JSONL
+
+if ./script/check_prompt_app_proof.sh \
+  --trace "$FULL_ACCEPT_MISSING_TRACE" \
+  --allow-full-accept-proof \
+  --require-full-accept-proof >"$TMP_DIR/full-accept-missing.txt" 2>&1; then
+  echo "prompt proof self-test expected missing full-accept proof to fail" >&2
+  cat "$TMP_DIR/full-accept-missing.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "missing full-accept suggestionAccepted event" "$TMP_DIR/full-accept-missing.txt" >/dev/null; then
+  echo "prompt proof self-test did not explain missing full-accept proof" >&2
+  cat "$TMP_DIR/full-accept-missing.txt" >&2
+  exit 1
+fi
 
 cat >"$FAIL_TRACE" <<'JSONL'
 {"type":"acceptedTextEdited","suggestionID":"accidental-submit","appBundleIdentifier":"com.openai.codex","reason":"field-send-finalized","metadata":{"checkpoint":"fieldSend"}}

@@ -54,6 +54,34 @@ struct TypingBurstPolicyTests {
         #expect(decision.traceMetadata["typingBurstEvents"] == "4")
     }
 
+    @Test("Default policy catches seventy word per minute typing")
+    func defaultPolicyCatchesSeventyWordPerMinuteTyping() {
+        let policy = TypingBurstPolicy()
+        var state = TypingBurstState()
+        let samples: [(String, String, Int)] = [
+            ("I", "I ", 0),
+            ("I ", "I w", 172),
+            ("I w", "I wr", 344),
+            ("I wr", "I wri", 516),
+            ("I wri", "I writ", 688),
+            ("I writ", "I write", 860)
+        ]
+
+        var decision = TypingBurstDecision.idle
+        for (previous, current, time) in samples {
+            decision = policy.observe(
+                previousTextBeforeCursor: previous,
+                currentTextBeforeCursor: current,
+                nowMilliseconds: time,
+                state: &state
+            )
+        }
+
+        #expect(decision == .burst(insertedCharacterCount: 6, eventCount: 6))
+        #expect(decision.shouldSuppress(requestMode: .phraseContinuation))
+        #expect(!decision.shouldSuppress(requestMode: .wordCompletion))
+    }
+
     @Test("Deletion resets burst tracking")
     func deletionResetsBurstTracking() {
         let policy = TypingBurstPolicy(windowMilliseconds: 500, minimumInsertedCharacters: 3, minimumEvents: 2)

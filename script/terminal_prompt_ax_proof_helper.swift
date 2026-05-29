@@ -8,18 +8,25 @@ struct Options {
     var displayName = "Terminal"
     var marker = ""
     var text = ""
+    var processIdentifier: pid_t?
     var discoveryTimeoutSeconds: TimeInterval = 0
     var hints: [String] = []
+    var allowsMissingMarkerForEmptyText = false
+    var requiresExactText = false
+    var rejectsShellCommandText = false
 }
 
 struct Snapshot {
     let frontmostBundleIdentifier: String?
+    let frontmostProcessIdentifier: pid_t?
+    let targetProcessIdentifier: pid_t?
     let textCount: Int
     let titleCount: Int
     let markerWindowCount: Int
     let hasMarker: Bool
     let hasText: Bool
     let hasHint: Bool
+    let hasRejectedShellCommandText: Bool
     let expectedTokenCount: Int
     let expectedTokenMatches: Int
 }
@@ -28,6 +35,7 @@ struct SearchState {
     let hasMarker: Bool
     let hasText: Bool
     let hasHint: Bool
+    let hasRejectedShellCommandText: Bool
     let expectedTokenCount: Int
     let expectedTokenMatches: Int
 
@@ -36,6 +44,7 @@ struct SearchState {
             + (hasText ? 1_000 : 0)
             + (hasHint ? 1_000 : 0)
             + expectedTokenMatches
+            - (hasRejectedShellCommandText ? 10_000 : 0)
     }
 }
 
@@ -45,7 +54,7 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
 }
 
 func usage() -> Never {
-    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS]")
+    print("Usage: swift script/terminal_prompt_ax_proof_helper.swift <wait|assert|contains-marker> --bundle BID --display NAME --marker MARKER [--pid PID] [--text TEXT] [--hint TEXT] [--discovery-timeout SECONDS] [--allow-missing-marker-for-empty-text] [--require-exact-text] [--reject-shell-command-text]")
     exit(0)
 }
 
@@ -80,8 +89,20 @@ func parseOptions() -> Options {
             options.marker = value()
         case "--text":
             options.text = value()
+        case "--pid":
+            let rawValue = value()
+            guard let pid = Int32(rawValue), pid > 0 else {
+                fail("--pid must be a positive process identifier", code: 2)
+            }
+            options.processIdentifier = pid_t(pid)
         case "--hint":
             options.hints.append(value())
+        case "--allow-missing-marker-for-empty-text":
+            options.allowsMissingMarkerForEmptyText = true
+        case "--require-exact-text":
+            options.requiresExactText = true
+        case "--reject-shell-command-text":
+            options.rejectsShellCommandText = true
         case "--discovery-timeout":
             let rawValue = value()
             guard let timeout = TimeInterval(rawValue), timeout >= 0 else {
@@ -130,6 +151,14 @@ func focusedElement(in appElement: AXUIElement) -> AXUIElement? {
     return (focusedValue as! AXUIElement)
 }
 
+func focusedWindow(in appElement: AXUIElement) -> AXUIElement? {
+    guard let focusedWindowValue = copyAttribute(appElement, kAXFocusedWindowAttribute),
+          CFGetTypeID(focusedWindowValue) == AXUIElementGetTypeID() else {
+        return nil
+    }
+    return (focusedWindowValue as! AXUIElement)
+}
+
 func collectText(from element: AXUIElement, depth: Int = 0, into values: inout [String]) {
     guard depth <= 10 else {
         return
@@ -162,7 +191,19 @@ func frontmostBundleIdentifier() -> String? {
     NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 }
 
+func frontmostProcessIdentifier() -> pid_t? {
+    NSWorkspace.shared.frontmostApplication?.processIdentifier
+}
+
 func targetRunningApplication(options: Options) -> NSRunningApplication? {
+    if let processIdentifier = options.processIdentifier {
+        guard let app = NSRunningApplication(processIdentifier: processIdentifier),
+              app.bundleIdentifier == options.bundleIdentifier else {
+            return nil
+        }
+        return app
+    }
+
     if let frontmostApplication = NSWorkspace.shared.frontmostApplication,
        frontmostApplication.bundleIdentifier == options.bundleIdentifier {
         return frontmostApplication
@@ -170,6 +211,58 @@ func targetRunningApplication(options: Options) -> NSRunningApplication? {
 
     return NSWorkspace.shared.runningApplications.first {
         $0.bundleIdentifier == options.bundleIdentifier
+    }
+}
+
+func activateIfNeeded(_ app: NSRunningApplication, options: Options) {
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    if frontmost?.processIdentifier == app.processIdentifier {
+        return
+    }
+
+    app.activate(options: [.activateAllWindows])
+    Thread.sleep(forTimeInterval: 0.08)
+    if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
+        return
+    }
+
+    activateWithSystemEvents(processIdentifier: app.processIdentifier)
+    Thread.sleep(forTimeInterval: 0.08)
+}
+
+func activateWithSystemEvents(processIdentifier: pid_t) {
+    let script = """
+    on run argv
+      set targetPID to (item 1 of argv) as integer
+      tell application "System Events"
+        repeat with procRef in application processes
+          try
+            if unix id of procRef is targetPID then
+              set frontmost of procRef to true
+              return
+            end if
+          end try
+        end repeat
+      end tell
+    end run
+    """
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    process.arguments = ["-", String(processIdentifier)]
+    let input = Pipe()
+    process.standardInput = input
+    process.standardOutput = Pipe()
+    process.standardError = Pipe()
+
+    do {
+        try process.run()
+        if let data = script.data(using: .utf8) {
+            input.fileHandleForWriting.write(data)
+        }
+        input.fileHandleForWriting.closeFile()
+        process.waitUntilExit()
+    } catch {
+        input.fileHandleForWriting.closeFile()
     }
 }
 
@@ -195,6 +288,95 @@ func containsText(_ haystack: String, _ needle: String, caseInsensitive: Bool = 
     return normalizedWhitespace(haystack).contains(normalizedWhitespace(needle))
 }
 
+func withoutProofMarker(_ text: String, marker: String) -> String {
+    guard !marker.isEmpty else {
+        return text
+    }
+    return text.replacingOccurrences(
+        of: marker,
+        with: "",
+        options: [.caseInsensitive]
+    )
+}
+
+func withoutTerminalPromptPrefix(_ text: String) -> String {
+    let normalized = normalizedWhitespace(text)
+    let promptPrefixes = ["❯", ">", "$", "%", "›", "»", "➜"]
+    for prefix in promptPrefixes {
+        if normalized == prefix {
+            return ""
+        }
+        let spacedPrefix = "\(prefix) "
+        if normalized.hasPrefix(spacedPrefix) {
+            return normalizedWhitespace(String(normalized.dropFirst(spacedPrefix.count)))
+        }
+    }
+    return normalized
+}
+
+func exactPromptTextCandidates(from rawText: String, marker: String) -> [String] {
+    let lines = rawText
+        .components(separatedBy: .newlines)
+        .flatMap { line -> [String] in
+            let withoutMarker = withoutProofMarker(line, marker: marker)
+            var candidates = [
+                normalizedWhitespace(line),
+                normalizedWhitespace(withoutMarker),
+                withoutTerminalPromptPrefix(line),
+                withoutTerminalPromptPrefix(withoutMarker),
+            ]
+            if let markerRange = line.range(of: marker, options: [.caseInsensitive]) {
+                let suffix = String(line[markerRange.upperBound...])
+                candidates.append(normalizedWhitespace(suffix))
+                candidates.append(withoutTerminalPromptPrefix(suffix))
+            }
+            return candidates
+        }
+    return Array(Set(lines)).filter { !$0.isEmpty }
+}
+
+func containsExactPromptText(in searchable: [String], options: Options) -> Bool {
+    let expected = normalizedWhitespace(options.text)
+    guard !expected.isEmpty else {
+        return true
+    }
+    return searchable.contains { value in
+        exactPromptTextCandidates(from: value, marker: options.marker).contains(expected)
+    }
+}
+
+func looksLikeSteadyTypeProofShellCommand(_ line: String) -> Bool {
+    let lowered = normalizedWhitespace(line).lowercased()
+    return lowered.contains("steadytype-claude-code-proof.command")
+        || (
+            lowered.contains(" -e ")
+                && lowered.contains("steadytype-claude-code-proof.")
+        )
+        || (
+            lowered.contains("exec ")
+                && lowered.contains("steadytype-claude-code-proof.")
+        )
+}
+
+func containsRejectedShellCommandText(in searchable: [String], options: Options) -> Bool {
+    guard options.rejectsShellCommandText else {
+        return false
+    }
+    let joinedSearchable = searchable.joined(separator: "\n")
+    if options.text.isEmpty,
+       !options.hints.isEmpty,
+       options.hints.contains(where: { hint in
+           containsText(joinedSearchable, hint, caseInsensitive: true)
+       }) {
+        return false
+    }
+    return searchable.contains { value in
+        value.components(separatedBy: .newlines).contains { line in
+            looksLikeSteadyTypeProofShellCommand(line)
+        }
+    }
+}
+
 func searchState(in searchable: [String], options: Options) -> SearchState {
     let joinedSearchable = searchable.joined(separator: "\n")
     let hasMarker = containsText(joinedSearchable, options.marker, caseInsensitive: true)
@@ -204,9 +386,12 @@ func searchState(in searchable: [String], options: Options) -> SearchState {
     }.count
     let hasNearCompleteText = expectedTokens.count >= 4
         && expectedTokenMatches >= expectedTokens.count - 1
+    let hasExactText = options.requiresExactText
+        ? containsExactPromptText(in: searchable, options: options)
+        : containsText(joinedSearchable, options.text)
     let hasText = options.text.isEmpty
-        || containsText(joinedSearchable, options.text)
-        || hasNearCompleteText
+        || hasExactText
+        || (!options.requiresExactText && hasNearCompleteText)
     let hasHint = options.hints.isEmpty || options.hints.contains { hint in
         containsText(joinedSearchable, hint, caseInsensitive: true)
     }
@@ -215,23 +400,50 @@ func searchState(in searchable: [String], options: Options) -> SearchState {
         hasMarker: hasMarker,
         hasText: hasText,
         hasHint: hasHint,
+        hasRejectedShellCommandText: containsRejectedShellCommandText(
+            in: searchable,
+            options: options
+        ),
         expectedTokenCount: expectedTokens.count,
         expectedTokenMatches: expectedTokenMatches
     )
 }
 
 func snapshot(options: Options) -> Snapshot {
-    let frontmost = frontmostBundleIdentifier()
-    guard frontmost == options.bundleIdentifier,
-          let app = targetRunningApplication(options: options) else {
+    guard let app = targetRunningApplication(options: options) else {
+        let frontmost = frontmostBundleIdentifier()
         return Snapshot(
             frontmostBundleIdentifier: frontmost,
+            frontmostProcessIdentifier: frontmostProcessIdentifier(),
+            targetProcessIdentifier: options.processIdentifier,
             textCount: 0,
             titleCount: 0,
             markerWindowCount: 0,
             hasMarker: false,
             hasText: false,
             hasHint: false,
+            hasRejectedShellCommandText: false,
+            expectedTokenCount: 0,
+            expectedTokenMatches: 0
+        )
+    }
+    activateIfNeeded(app, options: options)
+
+    let frontmost = frontmostBundleIdentifier()
+    let frontmostPID = frontmostProcessIdentifier()
+    guard frontmost == options.bundleIdentifier,
+          options.processIdentifier == nil || frontmostPID == app.processIdentifier else {
+        return Snapshot(
+            frontmostBundleIdentifier: frontmost,
+            frontmostProcessIdentifier: frontmostPID,
+            targetProcessIdentifier: app.processIdentifier,
+            textCount: 0,
+            titleCount: 0,
+            markerWindowCount: 0,
+            hasMarker: false,
+            hasText: false,
+            hasHint: false,
+            hasRejectedShellCommandText: false,
             expectedTokenCount: 0,
             expectedTokenMatches: 0
         )
@@ -242,7 +454,10 @@ func snapshot(options: Options) -> Snapshot {
 
     var texts: [String] = []
     var scopedSearchables: [[String]] = []
-    let allWindows = windows(from: appElement)
+    var allWindows = windows(from: appElement)
+    if let focusedWindow = focusedWindow(in: appElement) {
+        allWindows.insert(focusedWindow, at: 0)
+    }
     let markerWindows = allWindows.filter { window in
         containsText(stringAttribute(window, kAXTitleAttribute), options.marker, caseInsensitive: true)
     }
@@ -268,6 +483,13 @@ func snapshot(options: Options) -> Snapshot {
         }
     }
 
+    if texts.isEmpty {
+        var appTexts: [String] = []
+        collectText(from: appElement, into: &appTexts)
+        texts.append(contentsOf: appTexts)
+        scopedSearchables.append(appTexts)
+    }
+
     let titles = scopedWindows
         .map { stringAttribute($0, kAXTitleAttribute) }
         .filter { !$0.isEmpty }
@@ -278,12 +500,15 @@ func snapshot(options: Options) -> Snapshot {
 
     return Snapshot(
         frontmostBundleIdentifier: frontmost,
+        frontmostProcessIdentifier: frontmostPID,
+        targetProcessIdentifier: app.processIdentifier,
         textCount: texts.count,
         titleCount: titles.count,
         markerWindowCount: markerWindows.count,
         hasMarker: bestState.hasMarker,
         hasText: bestState.hasText,
         hasHint: bestState.hasHint,
+        hasRejectedShellCommandText: bestState.hasRejectedShellCommandText,
         expectedTokenCount: bestState.expectedTokenCount,
         expectedTokenMatches: bestState.expectedTokenMatches
     )
@@ -291,7 +516,9 @@ func snapshot(options: Options) -> Snapshot {
 
 func describeFailure(_ snapshot: Snapshot, options: Options) -> String {
     let frontmost = snapshot.frontmostBundleIdentifier ?? "none"
-    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), markerWindows=\(snapshot.markerWindowCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
+    let frontmostPID = snapshot.frontmostProcessIdentifier.map(String.init) ?? "none"
+    let targetPID = snapshot.targetProcessIdentifier.map(String.init) ?? "none"
+    return "\(options.displayName) proof AX check failed; frontmost=\(frontmost), frontmostPid=\(frontmostPID), targetPid=\(targetPID), textNodes=\(snapshot.textCount), titles=\(snapshot.titleCount), markerWindows=\(snapshot.markerWindowCount), marker=\(snapshot.hasMarker), text=\(snapshot.hasText), rejectedShellCommand=\(snapshot.hasRejectedShellCommandText), textTokens=\(snapshot.expectedTokenMatches)/\(snapshot.expectedTokenCount), hint=\(snapshot.hasHint)"
 }
 
 let options = parseOptions()
@@ -301,7 +528,7 @@ func waitForMatch(options: Options) -> Snapshot {
     var latest = snapshot(options: options)
     repeat {
         latest = snapshot(options: options)
-        if latest.hasMarker && latest.hasText && latest.hasHint {
+        if snapshotSatisfiesWait(latest, options: options) {
             return latest
         }
         Thread.sleep(forTimeInterval: 0.2)
@@ -309,10 +536,24 @@ func waitForMatch(options: Options) -> Snapshot {
     return latest
 }
 
+func snapshotSatisfiesWait(_ snapshot: Snapshot, options: Options) -> Bool {
+    let markerSatisfied = snapshot.hasMarker
+        || (
+            options.allowsMissingMarkerForEmptyText
+                && options.text.isEmpty
+                && snapshot.textCount > 0
+        )
+    let hintSatisfied = options.text.isEmpty || snapshot.hasHint
+    return markerSatisfied
+        && snapshot.hasText
+        && hintSatisfied
+        && !snapshot.hasRejectedShellCommandText
+}
+
 switch options.action {
 case "wait":
     let result = waitForMatch(options: options)
-    guard result.hasMarker && result.hasText && result.hasHint else {
+    guard snapshotSatisfiesWait(result, options: options) else {
         fail(describeFailure(result, options: options))
     }
 case "assert":

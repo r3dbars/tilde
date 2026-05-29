@@ -260,6 +260,10 @@ public struct AutocompleteBehaviorProfileResolver: Equatable, Sendable {
             return AutocompleteBehaviorProfile.profile(.notes)
         }
 
+        if Self.casualChatBundleIdentifiers.contains(appBundleIdentifier) {
+            return AutocompleteBehaviorProfile.profile(.casualChat)
+        }
+
         if Self.codingBundleIdentifiers.contains(appBundleIdentifier)
             || appBundleIdentifier.contains("xcode")
             || appBundleIdentifier.contains("vscode") {
@@ -277,6 +281,11 @@ public struct AutocompleteBehaviorProfileResolver: Equatable, Sendable {
         "com.openai.codex",
         "com.anthropic.claude-code",
         "com.anthropic.claudefordesktop"
+    ]
+
+    private static let casualChatBundleIdentifiers: Set<String> = [
+        "com.apple.mobilesms",
+        "ru.keepcoder.telegram"
     ]
 
     private static let codingBundleIdentifiers: Set<String> = [

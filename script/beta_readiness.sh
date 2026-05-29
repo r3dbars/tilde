@@ -95,6 +95,28 @@ run_check() {
   return 1
 }
 
+current_process_pgid() {
+  ps -o pgid= -p "${BASHPID:-$$}" 2>/dev/null | tr -d '[:space:]'
+}
+
+with_privacy_export_proof_tree() {
+  local pgid existing allowed_pgids
+
+  pgid="$(current_process_pgid || true)"
+  if [[ -z "$pgid" ]]; then
+    "$@"
+    return
+  fi
+
+  existing="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS:-}"
+  allowed_pgids="$pgid"
+  if [[ -n "$existing" ]]; then
+    allowed_pgids="$existing $pgid"
+  fi
+
+  AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS="$allowed_pgids" "$@"
+}
+
 check_clipboard_fallback_disabled() {
   local failed=0
 
@@ -475,6 +497,10 @@ print_next_beta_readiness_lanes() {
   echo "== Next proof lanes =="
   ./script/scorecard_next_proof_lanes.py --limit 5 || echo "Next proof lane listing failed."
 
+  echo
+  echo "== Automation-ready proof lanes =="
+  ./script/scorecard_next_proof_lanes.py --limit 5 --automation-ready || echo "Automation-ready proof lane listing failed."
+
   if [[ "$onboarding_failed" == "1" ]]; then
     echo
     echo "== Onboarding walkthrough row template =="
@@ -492,8 +518,8 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
   run_check "Runtime no-egress proof" check_runtime_no_egress_proof || failures=$((failures + 1))
-  run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
-  run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+  run_check "Controls and diagnostics readiness" with_privacy_export_proof_tree ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
+  run_check "Redacted report export" with_privacy_export_proof_tree ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || {
     failures=$((failures + 1))
@@ -501,7 +527,7 @@ if [[ "$MODE" == "check-only" ]]; then
   }
   run_check "Clipboard fallback disabled" check_clipboard_fallback_disabled || failures=$((failures + 1))
   run_check "Production mock fallback disabled" check_production_mock_fallback_disabled || failures=$((failures + 1))
-  run_check "Prompt app proof gate" ./script/check_prompt_app_proof.sh || failures=$((failures + 1))
+  run_check "Prompt app manifest proof gate" ./script/check_prompt_app_manifest_proof.sh || failures=$((failures + 1))
   run_check "Onboarding permission QA" ./script/check_onboarding_permission_qa.sh --check || failures=$((failures + 1))
   run_check "Manual app proof" ./script/manual_smoke_status.sh --require-all || failures=$((failures + 1))
   run_check "Visual placement proof" ./script/check_visual_placement_evidence.sh --require-all || failures=$((failures + 1))
@@ -524,7 +550,7 @@ if [[ "$MODE" == "check-only" ]]; then
   fi
 
   if [[ -s "$PRIMARY_ARTIFACT" ]]; then
-    run_check "Private beta packet" ./script/private_beta_packet.sh --check || failures=$((failures + 1))
+    run_check "Private beta packet" with_privacy_export_proof_tree ./script/private_beta_packet.sh --check || failures=$((failures + 1))
   else
     echo
     echo "== Private beta packet =="
@@ -585,8 +611,8 @@ echo "== Production mock fallback disabled =="
 check_production_mock_fallback_disabled
 
 echo
-echo "== Prompt app proof gate =="
-./script/check_prompt_app_proof.sh
+echo "== Prompt app manifest proof gate =="
+./script/check_prompt_app_manifest_proof.sh
 
 echo
 echo "== Onboarding permission QA =="
@@ -626,7 +652,7 @@ check_notarized_install_proof
 echo
 echo "== Private beta packet =="
 ./script/private_beta_packet.sh create
-./script/private_beta_packet.sh --check
+with_privacy_export_proof_tree ./script/private_beta_packet.sh --check
 
 echo
 echo "Beta readiness passed."
