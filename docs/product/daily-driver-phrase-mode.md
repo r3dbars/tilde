@@ -1236,6 +1236,20 @@ insertion result after the Ghostty insertion transports timed out. Ghostty stays
 red; the next red bar is verified insertion/result reporting after a handled
 accept, with the recent-suggestion restore path source/test covered but still
 needing live race evidence.
+The next source pass made that result path fast and observable. Proof-only
+detached Ghostty runs now default to an 8s insertion budget and skip the two raw
+System Events insertion probes unless explicitly opted in, while the app records
+`source-start` before each Ghostty insertion rung. Live run
+`20260529T001406Z-ghostty` used those fast values, found a prompt-row suggestion
+at diagnostics line `1092299`, handled the proof-only accept at
+`1093178`-`1093194`, then tried focused System Events, send-key, bulk System
+Events, and focused action text with source-start breadcrumbs at
+`1093207`/`1093210`/`1093213`/`1093217`. It hit the 8s budget before
+`ghosttyPasteAction`, logged `ghostty-fast-insertion-budget-exceeded` at
+`1093220`-`1093221`, emitted `insert ... success=false` at `1093222`, and
+recorded deferred `stage=insert-failed` at `1093224`. Ghostty remains red, but
+the failure is now a crisp fail-closed insertion budget result instead of a
+proof timeout.
 
 The Obsidian daily-driver lane got one current proof refresh too, but with a
 useful caveat. `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 ./script/real_app_smoke.sh

@@ -1147,6 +1147,17 @@ if "ghosttySendKeySteps" not in terminal_insert_block or "ghostty-send-key-text-
     raise SystemExit("Claude Code Ghostty send key proof must gate unsupported accepted text before falling back")
 if '"apostrophe"' not in terminal_insert_block or "unsupportedScalar" not in terminal_insert_block:
     raise SystemExit("Claude Code Ghostty send key proof must support safe apostrophes and log unsupported scalars")
+send_key_start = app_delegate.index("private func insertGhosttyTerminalHostProofSendKey(")
+send_key_end = app_delegate.index("nonisolated private static func ghosttySendKeyStep(", send_key_start)
+send_key_block = app_delegate[send_key_start:send_key_end]
+if "NSAppleScript(source:" in send_key_block:
+    raise SystemExit("Claude Code Ghostty send key proof must not use unbounded in-process NSAppleScript")
+if "/usr/bin/osascript" not in send_key_block or "Self.waitForProcessExit" not in send_key_block:
+    raise SystemExit("Claude Code Ghostty send key proof must run osascript with a timeout")
+if "ghostty-send-key-script-timeout" not in send_key_block or "ghostty-send-key-script-timeout-still-running" not in send_key_block:
+    raise SystemExit("Claude Code Ghostty send key proof must fail closed on script timeout")
+if "ghosttySendKeyTimeoutBaseline" not in send_key_block or "ghostty-send-key-timeout-mutated-input" not in send_key_block:
+    raise SystemExit("Claude Code Ghostty send key timeout must verify unchanged prompt before continuing")
 terminal_main_insert_start = app_delegate.index("private func insertClaudeCodeTerminalHostProofText(")
 terminal_main_insert_end = app_delegate.index("private func insertClaudeCodeTerminalHostProofPasteboardText(", terminal_main_insert_start)
 terminal_main_insert_block = app_delegate[terminal_main_insert_start:terminal_main_insert_end]
@@ -3927,14 +3938,27 @@ if ! awk '
   echo "real app smoke self-test expected Claude Code terminal-host Tab acceptance before screenshot waiting" >&2
   exit 1
 fi
-if ! awk '
-  /run_claude_code_terminal_host_smoke\(\)/ { in_smoke = 1; saw_settle = 0 }
-  /^}/ && in_smoke { in_smoke = 0 }
-  in_smoke && /settle_claude_code_terminal_proof_focus "Tab hot accept"/ { saw_settle = 1 }
-  in_smoke && saw_settle && /press_key_code_cgevent 48/ { found = 1 }
-  END { exit found ? 0 : 1 }
-' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Claude Code terminal-host Tab proof to reactivate the disposable process immediately before Tab" >&2
+if ! python3 - <<'PY'
+from pathlib import Path
+
+source = Path("script/real_app_smoke.sh").read_text()
+start = source.index("run_claude_code_terminal_host_smoke()")
+end = source.index("\nrun_codex_model_latency()", start)
+block = source[start:end]
+hot_accept = block.index('if [[ "$suggestion_ready" == "1" ]]; then')
+press = block.index('press_claude_code_terminal_host_tab "$suggestion_line" "$host_name"', hot_accept)
+pre_press = block[hot_accept:press]
+guard = '[[ ! "${AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER:-0}" =~ ^(1|true|yes|on)$ ]]'
+settle = 'settle_claude_code_terminal_proof_focus "Tab hot accept"'
+if guard not in pre_press or settle not in pre_press:
+    raise SystemExit(1)
+if pre_press.index(guard) > pre_press.index(settle):
+    raise SystemExit(1)
+if pre_press.count('prepare_claude_code_terminal_suggestion_for_hot_accept "$suggestion_line" "$host_name"') < 2:
+    raise SystemExit(1)
+PY
+then
+  echo "real app smoke self-test expected Claude Code terminal-host Tab proof to keep the generic refocus for normal Tab, while letting Ghostty proof-only accept skip straight to its own short settle" >&2
   exit 1
 fi
 if ! python3 - <<'PY'

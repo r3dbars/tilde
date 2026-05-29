@@ -132,6 +132,14 @@ no user-key invalidation, and the short cache age all pass. The live rerun
 while `hasVisibleSuggestion=true`, but it did handle accept at diagnostics lines
 `1089860`-`1089876` and then failed later while waiting for verified app-owned
 Ghostty insertion/result reporting. Ghostty remains red.
+The follow-up `20260529T001406Z-ghostty` proves the result path is now bounded:
+proof-only detached Ghostty defaults to an 8s insertion budget and skips raw
+System Events insertion probes unless explicitly opted in, the app logs
+per-rung `source-start`, the command handled at `1093178`-`1093194`, and the
+run failed closed with `ghostty-fast-insertion-budget-exceeded`,
+`insert ... success=false`, and deferred `stage=insert-failed` at
+`1093220`-`1093224`. This still does not make Ghostty supported, but it removes
+the insertion-result timeout as the active proof failure.
 The post-commit one-attempt launchd proof `20260528T202618Z-ghostty` exited
 cleanly with status `1` and confirmed the new accept-driver diagnosis: prompt
 screen-copy readiness, exact typed prompt readiness, and native pre-accept
@@ -1100,9 +1108,17 @@ allow/block matrix and env-clamped grace window. The live rerun
 `1089041`, handled the proof-only accept command while the suggestion was still
 visible at `1089860`-`1089876`, and scheduled deferred insertion. It still exited
 red because app-owned Ghostty insertion never produced a verified result after
-the focus/click and System Events transport attempts timed out. Keep Ghostty red:
-the next proof must show verified insertion/result reporting after handled
-accept, and the recent-suggestion restore path still needs live race evidence.
+the focus/click and System Events transport attempts timed out. The follow-up
+source/run pair makes that red bar cleaner: proof-only detached Ghostty now uses
+an 8s insertion budget by default, raw insertion probes are opt-in, and the app
+logs per-rung `source-start` breadcrumbs. `20260529T001406Z-ghostty` found a
+prompt-row suggestion at diagnostics line `1092299`, handled accept at
+`1093178`-`1093194`, attempted focused System Events, send-key, bulk System
+Events, and focused action text, then failed closed with
+`ghostty-fast-insertion-budget-exceeded`, `insert ... success=false`, and
+deferred `stage=insert-failed` at `1093220`-`1093224`. Keep Ghostty red: the
+next proof must find a verified insertion transport or keep it explicitly
+unsupported, but insertion-result timeout is no longer the active blocker.
 
 Latest manual proof refresh: `script/manual_proof_refresh.sh --verify-target
 textedit`, `notes-title`, `chrome-textarea`, `chrome-contenteditable`, and

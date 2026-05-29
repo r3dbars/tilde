@@ -122,6 +122,9 @@ AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs-proof-only-default"
 AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER=1 \
   script/claude_code_ghostty_detached_proof.sh start --dry-run >"$TMP_DIR/proof-only-default-dry-run.txt"
 require_contains "$TMP_DIR/proof-only-default-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PROOF_ONLY_ACCEPT_DRIVER=1"
+require_contains "$TMP_DIR/proof-only-default-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_FAST_INSERTION_BUDGET_SECONDS=8"
+require_contains "$TMP_DIR/proof-only-default-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_PRE_PROMPT_FOCUS_RAW_SYSTEM_EVENTS_INSERTION_PROBE=0"
+require_contains "$TMP_DIR/proof-only-default-dry-run.txt" "AUTOCOMPLETE_LAB_GHOSTTY_RAW_SYSTEM_EVENTS_INSERTION_PROBE=0"
 require_contains "$TMP_DIR/proof-only-default-dry-run.txt" "AUTOCOMPLETE_LAB_CLAUDE_CODE_GHOSTTY_PRE_ACCEPT_EXTERNAL_SYSTEM_EVENTS_PROBE=0"
 
 AUTOCOMPLETE_LAB_GHOSTTY_DETACHED_PROOF_DIR="$TMP_DIR/proofs" \
