@@ -26,7 +26,10 @@ struct CommandContextPanelStateTests {
             state.privacyText
                 == "Privacy: unsupported apps require selected text, use the local model, and copy only when you press Copy."
         )
-        #expect(state.normalTypingText == "Normal typing: untouched; this opens only from the menu or Settings.")
+        #expect(
+            state.normalTypingText
+                == "Fallback: this panel never auto-types. Copy is manual, and normal typing stays untouched."
+        )
         #expect(
             state.requestUnavailableReason
                 == "Select text first; unsupported apps do not read the whole field."

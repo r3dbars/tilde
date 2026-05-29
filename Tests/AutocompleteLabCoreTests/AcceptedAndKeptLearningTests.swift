@@ -17,6 +17,7 @@ struct AcceptedAndKeptLearningTests {
         #expect(phraseSignal.probability == 0.24)
         #expect(sentenceSignal.probability == 0.28)
         #expect(wordSignal.userAffinityAdjustment == 0)
+        #expect(wordSignal.guidanceText == "Learning: no local accepted-and-kept evidence yet.")
     }
 
     @Test("Kept and rejected outcomes move probability and affinity")
@@ -35,6 +36,7 @@ struct AcceptedAndKeptLearningTests {
         #expect(positive.probability > positive.priorProbability)
         #expect(positive.userAffinityAdjustment > 0)
         #expect(positive.utilityAdjustment > 0)
+        #expect(positive.guidanceText == "Learning: this surface is earning trust locally (2 kept, 0 rejected).")
 
         for _ in 0..<8 {
             _ = store.record(.rejected, key: learningKey, now: now)
@@ -48,6 +50,7 @@ struct AcceptedAndKeptLearningTests {
         #expect(negative.utilityAdjustment < 0)
         #expect(negative.traceMetadata["acceptedAndKeptSamples"] == "10")
         #expect(negative.traceMetadata["acceptedAndKeptUtilityAdjustment"] != nil)
+        #expect(negative.guidanceText == "Learning: this surface is getting quieter locally (2 kept, 8 rejected).")
     }
 
     @Test("Buckets are scoped by app field mode and behavior profile")
@@ -82,6 +85,7 @@ struct AcceptedAndKeptLearningTests {
         #expect(signal.keptCount == 1)
         #expect(signal.rejectedCount == 1)
         #expect(signal.decayFactor == 1)
+        #expect(signal.guidanceText == "Learning: mixed local signal (1 kept, 1 rejected).")
     }
 
     @Test("Old evidence decays toward the prior")
