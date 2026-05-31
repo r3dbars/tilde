@@ -97,6 +97,7 @@ struct HostCompatibilityPolicyTests {
         let betaSafeBundles = Set([
             "com.apple.TextEdit",
             "com.apple.Notes",
+            "com.apple.MobileSMS",
             "md.obsidian",
             "com.google.Chrome",
             "com.openai.codex"

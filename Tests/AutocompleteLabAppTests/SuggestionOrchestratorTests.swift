@@ -790,6 +790,118 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Max tuning shows late Messages chat suggestions")
+    func maxTuningShowsLateMessagesChatSuggestions() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.MobileSMS"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .singlelineCompose, reason: "singlelineComposeHint")
+        let request = CompletionRequest(
+            textBeforeCursor: "Yeah",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .casualChat,
+            maxVisibleWords: 14,
+            mode: .phraseContinuation,
+            suggestionID: "messages-late-chat"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+        let suggestion = CompletionSuggestion(text: " that sounds good to me", maxVisibleWords: 14)
+
+        let conservativeDisplay = orchestrator.displayScoreDecision(
+            suggestion: suggestion,
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_018,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+        let maxDisplay = orchestrator.displayScoreDecision(
+            suggestion: suggestion,
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_018,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
+        )
+
+        #expect(!conservativeDisplay.decision.shouldDisplay)
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(maxDisplay.decision.shouldDisplay)
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == "true")
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == nil)
+    }
+
+    @MainActor
+    @Test("Max tuning bypasses late suppression for universal word-only apps")
+    func maxTuningBypassesLateSuppressionForUniversalWordOnlyApps() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.example.UnknownEditor"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .singlelineCompose, reason: "singlelineComposeHint")
+        let request = CompletionRequest(
+            textBeforeCursor: "Yeah",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .casualChat,
+            maxVisibleWords: 14,
+            mode: .phraseContinuation,
+            suggestionID: "universal-word-only-late"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " that sounds good to me", maxVisibleWords: 14),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_018,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
+        )
+
+        #expect(profile.promptAppSafetyMode == .wordOnly)
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreMaxAggressiveBypass"] == "true")
+    }
+
+    @MainActor
     @Test("Codex no-submit proof candidates bypass final latency suppression")
     func codexNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

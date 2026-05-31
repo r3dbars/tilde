@@ -219,6 +219,22 @@ public struct CompatibilityProfile: Equatable, Sendable {
             && (supportsOneWordAcceptance || supportsFullAcceptance)
     }
 
+    public var allowsMaxAggressiveTuningBypass: Bool {
+        guard canPresentSuggestions, !isSensitive else {
+            return false
+        }
+
+        if promptAppSafetyMode == .notPrompt {
+            return true
+        }
+
+        return promptAppSafetyMode == .wordOnly
+            && graduationDecision == .wordOnly
+            && supportsOneWordAcceptance
+            && !supportsFullAcceptance
+            && !requiresNoSubmitAcceptanceProof
+    }
+
     public var allowsCopyOnlyCommandFallback: Bool {
         !isSensitive && supportLevel != .unsupported
     }
@@ -542,6 +558,31 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsDescendantTextFallback: true,
             isSensitive: true,
             notes: "Diagnostics-only rich-text compose target until Mail insertion has a verified safe adapter."
+        ),
+        CompatibilityProfile(
+            bundleIdentifier: "com.apple.MobileSMS",
+            displayName: "Messages",
+            appFamily: .nativeAppKit,
+            supportLevel: .yellow,
+            graduationDecision: .wordOnly,
+            supportReason: "Messages compose exposes a normal AX text field, but acceptance stays one-word-only because this is a sendable chat surface.",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .disabled,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.caret, .field],
+            knownFailureModes: ["single-line chat compose can move quickly after send", "whole-suggestion accept is off for chat safety"],
+            allowsFieldAnchor: true,
+            allowsWindowAnchor: false,
+            requiresValidatedCaret: false,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            suppressesAfterInsertionFailure: true,
+            allowsDescendantTextFallback: true,
+            allowsDetachedSuggestions: false,
+            allowsSyntheticCaretPlacement: true,
+            notes: "Yellow Messages target. Use floating mirror placement from the AXTextField/caret, allow aggressive phrase display, and keep Tab acceptance to one word so suggestions cannot submit a whole chat."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.openai.atlas",

@@ -2609,8 +2609,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
         }
 
-        if suggestionTuning.aggressivenessLevel >= 5,
-           !profile.promptAppSafetyMode.isPromptSurface {
+        if allowsMaxAggressiveTuningBypass(for: profile) {
             cancelPrefixCooldownRetry()
         } else {
             switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
@@ -2659,7 +2658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
         guard !quietMode.isActive
-                || (suggestionTuning.aggressivenessLevel >= 5 && !profile.promptAppSafetyMode.isPromptSurface) else {
+                || allowsMaxAggressiveTuningBypass(for: profile) else {
             setSuggestionDecision("Waiting: \(quietMode.traceReason)")
             showFieldStatusIndicator(.waiting, context: context)
             let metadata = suggestionFieldClassification.traceMetadata
@@ -7898,8 +7897,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: displayFieldClassification,
             profile: profile
         )
-        let bypassesRepeatedMiss = suggestionTuning.aggressivenessLevel >= 5
-            && !profile.promptAppSafetyMode.isPromptSurface
+        let bypassesRepeatedMiss = allowsMaxAggressiveTuningBypass(for: profile)
         let isRepeatedMiss = bypassesRepeatedMiss
             ? false
             : suggestionRepetitionSuppressor.shouldSuppress(
@@ -18504,15 +18502,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func allowsSentenceBoundaryContinuation(for profile: CompatibilityProfile) -> Bool {
         !profile.promptAppSafetyMode.isPromptSurface
+            || allowsMaxAggressiveTuningBypass(for: profile)
     }
 
     private func usesDailyDriverLineStartPhraseContinuation(for profile: CompatibilityProfile) -> Bool {
-        guard !profile.promptAppSafetyMode.isPromptSurface else {
+        guard !profile.promptAppSafetyMode.isPromptSurface
+                || allowsMaxAggressiveTuningBypass(for: profile) else {
             return false
         }
 
-        return suggestionTuning.aggressivenessLevel >= 5
+        return allowsMaxAggressiveTuningBypass(for: profile)
             || (profile.bundleIdentifier == "md.obsidian" && suggestionTuning.aggressivenessLevel >= 4)
+    }
+
+    private func allowsMaxAggressiveTuningBypass(for profile: CompatibilityProfile) -> Bool {
+        suggestionTuning.aggressivenessLevel >= SuggestionTuning.maximumAggressivenessLevel
+            && profile.allowsMaxAggressiveTuningBypass
     }
 
     private func minimumPhraseContinuationWords(for profile: CompatibilityProfile) -> Int {
