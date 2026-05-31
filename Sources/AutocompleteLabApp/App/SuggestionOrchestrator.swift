@@ -623,7 +623,7 @@ final class SuggestionOrchestrator {
             now: now
         )
         let maxAggressiveDisplayBypass = suggestionTuning?.aggressivenessLevel == SuggestionTuning.maximumAggressivenessLevel
-            && !profile.promptAppSafetyMode.isPromptSurface
+            && profile.allowsMaxAggressiveTuningBypass
             && latencyMilliseconds <= 1_500
         let score = displayScore(
             suggestion: suggestion,

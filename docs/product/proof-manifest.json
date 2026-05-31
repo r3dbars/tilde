@@ -8,7 +8,7 @@
     "runtimeProofVersion": "runtime-v2"
   },
   "hostPolicy": {
-    "policyVersion": "2026-05-23.1",
+    "policyVersion": "2026-05-31.1",
     "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
     "entries": [
       {
@@ -97,6 +97,25 @@
         "killSwitch": "diagnosticsOnly",
         "proofArtifacts": [],
         "notes": "Sensitive compose surface; suggestions remain off until insertion proof exists."
+      },
+      {
+        "bundle": "com.apple.MobileSMS",
+        "displayName": "Messages",
+        "versionState": "exact",
+        "hostVersion": "26.0",
+        "hostBuild": "1450.600.61.1.4",
+        "versionSource": "/System/Applications/Messages.app",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [
+          {
+            "kind": "manual-smoke",
+            "reference": "Messages/default"
+          }
+        ],
+        "notes": "AXTextField chat compose is enabled with floating placement and one-word acceptance only; full accept stays off."
       },
       {
         "bundle": "com.openai.atlas",
@@ -1034,6 +1053,15 @@
       "status": "blocked",
       "owner": "sensitive-compose lane",
       "safetyNote": "Mail compose remains diagnostics-only because private/sensitive content and insertion safety are not proven."
+    },
+    {
+      "bundle": "com.apple.MobileSMS",
+      "displayName": "Messages",
+      "supportLevel": "yellow",
+      "surface": "Messages chat compose",
+      "status": "partial",
+      "owner": "native chat adapter lane",
+      "safetyNote": "Messages uses AXTextField floating placement with one-word Tab acceptance only; full-suggestion accept remains off for chat safety."
     },
     {
       "bundle": "com.google.Chrome",
