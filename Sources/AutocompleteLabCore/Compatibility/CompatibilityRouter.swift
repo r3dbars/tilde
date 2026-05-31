@@ -58,7 +58,7 @@ public struct CompatibilityRoutingSettings: Equatable, Sendable {
     }
 
     public static let mvp = CompatibilityRoutingSettings(
-        enforceKnownApps: true,
+        enforceKnownApps: false,
         suppressSecureFields: true,
         minimumCharactersBeforeSuggestion: 3,
         suppressEmptyText: true,
@@ -224,7 +224,8 @@ public struct CompatibilityRouter: Equatable, Sendable {
             )
         }
 
-        if !context.hasCaretRect {
+        if !context.hasCaretRect,
+           !profile.defaultRung.allowsSuggestions {
             return CompatibilityDecision(
                 profile: profile,
                 rung: min(profile.defaultRung, .detect),

@@ -2609,41 +2609,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
         }
 
-        switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
-        case .allowed:
+        if suggestionTuning.aggressivenessLevel >= 5,
+           !profile.promptAppSafetyMode.isPromptSurface {
             cancelPrefixCooldownRetry()
-            break
-        case let .coolingDown(cooldown):
-            setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
-            showFieldStatusIndicator(.waiting, context: context)
-            schedulePrefixCooldownRetry(
-                for: snapshot,
-                cooldown: cooldown
-            )
-            let metadata = suggestionFieldClassification.traceMetadata
-                .merging(cooldown.metadata) { current, _ in current }
-                .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: UUID().uuidString,
-                appBundleIdentifier: profile.bundleIdentifier,
-                fieldIdentity: fieldIdentity.traceDescription,
-                requestMode: requestMode.rawValue,
-                triggerReason: "prefix-family-cooldown",
-                textBeforeCursor: context.textBeforeCursor,
-                textAfterCursor: context.textAfterCursor,
-                reason: cooldown.reason.rawValue,
-                metadata: metadata
-            )
-            recordBlockedSuggestionEvent(
-                "suggestion-blocked",
-                context: context,
-                profile: profile,
-                fieldIdentity: fieldIdentity,
-                metadata: metadata
-            )
-            hideSuggestion()
-            return
+        } else {
+            switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
+            case .allowed:
+                cancelPrefixCooldownRetry()
+                break
+            case let .coolingDown(cooldown):
+                setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
+                showFieldStatusIndicator(.waiting, context: context)
+                schedulePrefixCooldownRetry(
+                    for: snapshot,
+                    cooldown: cooldown
+                )
+                let metadata = suggestionFieldClassification.traceMetadata
+                    .merging(cooldown.metadata) { current, _ in current }
+                    .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
+                RawAutocompleteTraceLog.shared.record(
+                    type: .suggestionSuppressed,
+                    suggestionID: UUID().uuidString,
+                    appBundleIdentifier: profile.bundleIdentifier,
+                    fieldIdentity: fieldIdentity.traceDescription,
+                    requestMode: requestMode.rawValue,
+                    triggerReason: "prefix-family-cooldown",
+                    textBeforeCursor: context.textBeforeCursor,
+                    textAfterCursor: context.textAfterCursor,
+                    reason: cooldown.reason.rawValue,
+                    metadata: metadata
+                )
+                recordBlockedSuggestionEvent(
+                    "suggestion-blocked",
+                    context: context,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    metadata: metadata
+                )
+                hideSuggestion()
+                return
+            }
         }
 
         let annoyanceContext = annoyanceContext(
@@ -2653,7 +2658,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKind: suggestionFieldClassification.kind
         )
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
-        guard !quietMode.isActive else {
+        guard !quietMode.isActive
+                || (suggestionTuning.aggressivenessLevel >= 5 && !profile.promptAppSafetyMode.isPromptSurface) else {
             setSuggestionDecision("Waiting: \(quietMode.traceReason)")
             showFieldStatusIndicator(.waiting, context: context)
             let metadata = suggestionFieldClassification.traceMetadata
@@ -7892,11 +7898,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: displayFieldClassification,
             profile: profile
         )
-        let isRepeatedMiss = suggestionRepetitionSuppressor.shouldSuppress(
-            suggestion.visibleText,
-            mode: request.mode,
-            scope: request.appBundleIdentifier ?? profile.bundleIdentifier
-        )
+        let bypassesRepeatedMiss = suggestionTuning.aggressivenessLevel >= 5
+            && !profile.promptAppSafetyMode.isPromptSurface
+        let isRepeatedMiss = bypassesRepeatedMiss
+            ? false
+            : suggestionRepetitionSuppressor.shouldSuppress(
+                suggestion.visibleText,
+                mode: request.mode,
+                scope: request.appBundleIdentifier ?? profile.bundleIdentifier
+            )
         let orchestratedDisplayDecision = suggestionOrchestrator.displayScoreDecision(
             suggestion: suggestion,
             request: request,
@@ -7908,7 +7918,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latencyMilliseconds: latencyMilliseconds,
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss,
-            displayScorePolicy: displayScorePolicy
+            displayScorePolicy: displayScorePolicy,
+            suggestionTuning: suggestionTuning
         )
         let displayScoreDecision = orchestratedDisplayDecision.decision
         let displayScoreMetadata = orchestratedDisplayDecision.metadata
@@ -18496,9 +18507,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func usesDailyDriverLineStartPhraseContinuation(for profile: CompatibilityProfile) -> Bool {
-        profile.bundleIdentifier == "md.obsidian"
-            && suggestionTuning.aggressivenessLevel >= 4
-            && !profile.promptAppSafetyMode.isPromptSurface
+        guard !profile.promptAppSafetyMode.isPromptSurface else {
+            return false
+        }
+
+        return suggestionTuning.aggressivenessLevel >= 5
+            || (profile.bundleIdentifier == "md.obsidian" && suggestionTuning.aggressivenessLevel >= 4)
     }
 
     private func minimumPhraseContinuationWords(for profile: CompatibilityProfile) -> Int {
@@ -18624,6 +18638,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setSuggestionAggressivenessLevel(_ level: Int) {
+        if level == SuggestionTuning.maximumAggressivenessLevel {
+            setSuggestionTuning(
+                updatedSuggestionTuning(
+                    aggressivenessLevel: level,
+                    wordStartCharacters: SuggestionTuning.minimumWordStartCharacters,
+                    phraseStartWords: SuggestionTuning.minimumPhraseStartWords,
+                    responseSpeedLevel: SuggestionTuning.maximumResponseSpeedLevel,
+                    confidenceLevel: SuggestionTuning.maximumConfidenceLevel,
+                    learningRestraintLevel: SuggestionTuning.minimumLearningRestraintLevel
+                ),
+                reason: "aggressiveness-changed"
+            )
+            return
+        }
+
         setSuggestionTuning(
             updatedSuggestionTuning(aggressivenessLevel: level),
             reason: "aggressiveness-changed"
@@ -19550,25 +19579,31 @@ private extension AppDelegate {
             var selection = DisabledAppSelection(
                 persistedBundleIdentifiers: persisted
             )
-            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-            disabledBundleIdentifiers = selection.bundleIdentifiers
             appEnablementSetupCompleted = setupKeyExists
                 ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
                 : true
+            if !setupKeyExists {
+                selection.clear()
+            }
+            if !appEnablementSetupCompleted {
+                selection.clear()
+                appEnablementSetupCompleted = true
+            }
+            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
+            disabledBundleIdentifiers = selection.bundleIdentifiers
             defaults.set(appEnablementSetupCompleted, forKey: Self.appEnablementSetupCompletedDefaultsKey)
+            persistDisabledApps()
             return
         }
 
         var defaultOffSelection = DisabledAppSelection(
             defaultOffProfileStore: profileStore
         )
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
-        appEnablementSetupCompleted = false
-        defaults.set(false, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-        persistDisabledApps()
-
         defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
         disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
+        appEnablementSetupCompleted = true
+        defaults.set(true, forKey: Self.appEnablementSetupCompletedDefaultsKey)
+        persistDisabledApps()
     }
 
     func loadProofModeOverrides() {

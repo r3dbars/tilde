@@ -842,7 +842,7 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var statusText: String {
-        "Suggestions: \(tuning.aggressivenessLevel)/\(SuggestionTuning.maximumAggressivenessLevel) - \(tuning.displayName)"
+        "Tuning: \(tuning.aggressivenessLevel)/\(SuggestionTuning.maximumAggressivenessLevel) - \(tuning.displayName)"
     }
 
     var detailText: String {

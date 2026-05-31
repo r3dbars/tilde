@@ -12,15 +12,8 @@ public struct DisabledAppSelection: Equatable, Sendable {
     }
 
     public init(defaultOffProfileStore profileStore: CompatibilityProfileStore) {
-        self.init(bundleIdentifiers: Set(
-            profileStore.profiles.values.compactMap { profile in
-                guard profile.canPresentSuggestions, !profile.isSensitive else {
-                    return nil
-                }
-
-                return profile.bundleIdentifier
-            }
-        ))
+        _ = profileStore
+        self.init()
     }
 
     public init(

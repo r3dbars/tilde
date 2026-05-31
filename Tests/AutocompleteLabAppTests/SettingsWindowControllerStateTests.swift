@@ -265,21 +265,24 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(unsupported.statusText == "Current app: Unknown is unsupported")
-        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
+        #expect(unsupported.statusText == "Current app: Unknown is yellow and off")
+        #expect(
+            unsupported.detailText
+                == "Best-effort mode for normal text fields. Secure, search, URL, form, and sensitive fields stay blocked. Suggestions are paused in this app. Resume only where you want suggestions."
+        )
         #expect(
             unsupported.supportMatrixText
-                == "Support: unsupported. Select text for Command Context copy fallback."
+                == "Support: yellow target. Suggestions are available, but checks and fallback matter."
         )
-        #expect(unsupported.modeText == "Mode: not set up here")
-        #expect(unsupported.acceptanceText == "Acceptance: off here")
-        #expect(unsupported.fallbackText == "Fallback: unavailable until this app has a profile.")
-        #expect(unsupported.proofText == "Check: unavailable here.")
+        #expect(unsupported.modeText == "Mode: floating backup")
+        #expect(unsupported.acceptanceText == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion accept is off for safety.")
+        #expect(unsupported.fallbackText == "Fallback: off while this app is paused.")
+        #expect(unsupported.proofText == "Check: turn on suggestions for this app first.")
         #expect(unsupported.proofCommandText == nil)
         #expect(unsupported.proofCommandClipboardText == nil)
         #expect(!unsupported.canCopyProofCommand)
-        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
-        #expect(!unsupported.canToggle)
+        #expect(unsupported.menuToggleTitle == "Resume in Unknown")
+        #expect(unsupported.canToggle)
 
         let missing = SettingsCurrentAppState(
             displayName: "None",
@@ -997,16 +1000,16 @@ struct SettingsWindowControllerStateTests {
         let normal = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 2, maxVisibleWords: 12))
         let max = SettingsSuggestionAggressivenessState(tuning: SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 20))
 
-        #expect(quiet.statusText == "Suggestions: 1/5 - Quiet")
+        #expect(quiet.statusText == "Tuning: 1/5 - Quiet")
         #expect(quiet.detailText == "Fewer suggestions. Waits longer.")
         #expect(quiet.maxWordsText == "Words shown: 8")
         #expect(quiet.maxWordsDetailText == "Aims for 3-8 words when the sentence has enough context.")
-        #expect(normal.statusText == "Suggestions: 2/5 - Normal")
+        #expect(normal.statusText == "Tuning: 2/5 - Normal")
         #expect(normal.detailText == "Balanced suggestions.")
         #expect(normal.maxWordsText == "Words shown: 12")
         #expect(normal.maxWordsDetailText == "Aims for 8-12 words when the sentence has enough context.")
-        #expect(max.statusText == "Suggestions: 5/5 - Max")
-        #expect(max.detailText == "Most active. Shows whenever checks allow.")
+        #expect(max.statusText == "Tuning: 5/5 - Max")
+        #expect(max.detailText == "Most active when suggestions are resumed and this app is enabled.")
         #expect(max.maxWordsText == "Words shown: 20")
         #expect(max.maxWordsDetailText == "Aims for 12-20 words when the sentence has enough context.")
         #expect(max.wordStartText == "Word help starts after: 2 letters")

@@ -64,28 +64,30 @@ struct DisabledAppSelectionTests {
         #expect(selection.persistedBundleIdentifiers == [])
     }
 
-    @Test("Fresh install default off includes only suggestion capable apps")
-    func freshInstallDefaultOffIncludesOnlySuggestionCapableApps() {
+    @Test("Fresh install default is open for suggestion capable apps")
+    func freshInstallDefaultIsOpenForSuggestionCapableApps() {
         let selection = DisabledAppSelection(defaultOffProfileStore: .mvp)
 
-        #expect(selection.contains("com.apple.TextEdit"))
-        #expect(selection.contains("com.apple.Notes"))
-        #expect(selection.contains("md.obsidian"))
-        #expect(selection.contains("com.google.Chrome"))
+        #expect(selection.isEmpty)
+        #expect(!selection.contains("com.apple.TextEdit"))
+        #expect(!selection.contains("com.apple.Notes"))
+        #expect(!selection.contains("md.obsidian"))
+        #expect(!selection.contains("com.google.Chrome"))
         #expect(!selection.contains("com.apple.mail"))
         #expect(!selection.contains("com.apple.Safari"))
         #expect(!selection.contains("com.apple.Passwords"))
     }
 
-    @Test("Missing persisted defaults use the default off selection")
-    func missingPersistedDefaultsUseDefaultOffSelection() {
+    @Test("Missing persisted defaults start with no paused apps")
+    func missingPersistedDefaultsStartWithNoPausedApps() {
         let selection = DisabledAppSelection(
             persistedBundleIdentifiers: nil,
             defaultOffProfileStore: .mvp
         )
 
-        #expect(selection.contains("com.apple.TextEdit"))
-        #expect(selection.contains("com.apple.Notes"))
+        #expect(selection.isEmpty)
+        #expect(!selection.contains("com.apple.TextEdit"))
+        #expect(!selection.contains("com.apple.Notes"))
         #expect(!selection.contains("com.apple.mail"))
     }
 

@@ -206,7 +206,7 @@ public struct SuggestionTuning: Equatable, Sendable {
         case 4:
             "Fast and willing to guess."
         default:
-            "Most active. Shows whenever checks allow."
+            "Most active when suggestions are resumed and this app is enabled."
         }
     }
 
@@ -252,9 +252,9 @@ public struct SuggestionTuning: Equatable, Sendable {
             )
         default:
             DisplayScorePolicy(
-                wordCompletionThreshold: 0.35,
-                phraseContinuationThreshold: 0.90,
-                sentenceContinuationThreshold: 1.00
+                wordCompletionThreshold: 0.25,
+                phraseContinuationThreshold: 0.65,
+                sentenceContinuationThreshold: 0.75
             )
         }
         return basePolicy

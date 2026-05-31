@@ -24,8 +24,8 @@ struct CompatibilityRouterTests {
         #expect(!decision.allowsClipboardFallback)
     }
 
-    @Test("Unsupported apps are blocked instead of treated as default editors")
-    func unsupportedAppsAreBlocked() {
+    @Test("Unknown normal text apps can request best-effort suggestions")
+    func unknownNormalTextAppsCanRequestBestEffortSuggestions() {
         let decision = CompatibilityRouter().decision(
             for: CompatibilityEvaluationContext(
                 bundleIdentifier: "com.example.UnknownWriter",
@@ -37,9 +37,11 @@ struct CompatibilityRouterTests {
             )
         )
 
-        #expect(!decision.shouldRequestSuggestion)
-        #expect(decision.rung == .blocked)
-        #expect(decision.suppressionReason == .unsupportedApp("com.example.UnknownWriter"))
+        #expect(decision.profile.id == "fallback")
+        #expect(decision.shouldRequestSuggestion)
+        #expect(decision.rung == .suggest)
+        #expect(decision.suppressionReason == nil)
+        #expect(!decision.canAcceptSuggestion)
     }
 
     @Test("Browser and editor adapters start detect-only until real integrations exist")
@@ -106,8 +108,8 @@ struct CompatibilityRouterTests {
 
         #expect(secure.suppressionReason == .secureTextEntry)
         #expect(!secure.shouldRequestSuggestion)
-        #expect(missingCaret.suppressionReason == .missingCaretRect)
-        #expect(!missingCaret.shouldRequestSuggestion)
+        #expect(missingCaret.suppressionReason == nil)
+        #expect(missingCaret.shouldRequestSuggestion)
     }
 
     @Test("Unsafe field kinds are blocked before suggestions")

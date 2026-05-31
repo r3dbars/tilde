@@ -725,6 +725,71 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Max tuning bypasses low-confidence thin-context suppression")
+    func maxTuningBypassesLowConfidenceThinContextSuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Draft",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "max-thin-context"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let conservativeDisplay = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " ship this today", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 400,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+        let maxDisplay = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " ship this today", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 400,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
+        )
+
+        #expect(!conservativeDisplay.decision.shouldDisplay)
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
+        #expect(maxDisplay.decision.shouldDisplay)
+        #expect(maxDisplay.metadata["completionConfidenceBucket"] == "low")
+        #expect(maxDisplay.metadata["completionConfidenceReasons"]?.contains("thin-context") == true)
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == "true")
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveLowConfidenceBypass"] == "true")
+    }
+
+    @MainActor
     @Test("Codex no-submit proof candidates bypass final latency suppression")
     func codexNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
