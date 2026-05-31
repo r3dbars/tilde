@@ -125,7 +125,7 @@ final class AppSettings {
     private func registerDefaults() {
         defaults.register(defaults: [
             Key.suggestionsEnabled: true,
-            Key.enforceAllowlist: true,
+            Key.enforceAllowlist: false,
             Key.suppressSecureFields: true,
             Key.suppressShortText: true,
             Key.suppressAfterNewline: true,

@@ -126,7 +126,7 @@ struct SuggestionAggressivenessTests {
 
         #expect(proactive.displayScorePolicy.threshold(for: .phraseContinuation) == 1.00)
         #expect(veryProactive.displayScorePolicy.threshold(for: .phraseContinuation) == 0.90)
-        #expect(max.displayScorePolicy.threshold(for: .phraseContinuation) == 0.80)
+        #expect(max.displayScorePolicy.threshold(for: .phraseContinuation) == 0.55)
         #expect(max.maxVisibleWords == 20)
 
         let veryProactiveTrigger = veryProactive.triggerPolicy(supportPace: .eager)
@@ -295,6 +295,20 @@ struct SuggestionAggressivenessTests {
         ) == .block(.tooLittleContext))
         #expect(activation.decision(
             textBeforeCursor: "Yes that works ",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.phraseContinuation))
+
+        let oneWordPhraseActivation = SuggestionTuning(
+            aggressivenessLevel: 5,
+            wordStartCharacters: 1,
+            phraseStartWords: 1
+        )
+            .activationPolicy(supportPace: .eager)
+        #expect(oneWordPhraseActivation.decision(
+            textBeforeCursor: "Plan ",
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false,

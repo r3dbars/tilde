@@ -388,15 +388,85 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
     }
 
     public func supportStatus(for bundleIdentifier: String) -> CompatibilitySupportStatus {
+        guard !bundleIdentifier.isEmpty else {
+            return .unsupported
+        }
+
         if denylistedBundleIdentifiers.contains(bundleIdentifier) {
             return .denylisted
         }
 
         if let profile = profiles[bundleIdentifier] {
-            return .supported(profile)
+            return .supported(Self.bestEffortProfileIfUseful(profile) ?? profile)
         }
 
-        return .unsupported
+        return .supported(Self.universalFallbackProfile(for: bundleIdentifier))
+    }
+
+    public static func universalFallbackProfile(for bundleIdentifier: String) -> CompatibilityProfile {
+        CompatibilityProfile(
+            bundleIdentifier: bundleIdentifier,
+            displayName: "Universal App",
+            appFamily: .unknown,
+            supportLevel: .yellow,
+            graduationDecision: .wordOnly,
+            supportReason: "Best-effort mode for normal text fields. Secure, search, URL, form, and sensitive fields stay blocked.",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .disabled,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.caret, .line, .field, .window],
+            knownFailureModes: ["caret placement may be approximate", "acceptance may fail closed in custom editors"],
+            allowsFieldAnchor: true,
+            allowsWindowAnchor: true,
+            requiresValidatedCaret: false,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            allowsUnknownFieldKind: false,
+            suppressesAfterInsertionFailure: true,
+            allowsDescendantTextFallback: true,
+            allowsDetachedSuggestions: true,
+            allowsSyntheticCaretPlacement: true,
+            promptAppSafetyMode: .wordOnly,
+            notes: "Universal fallback profile. Show a floating suggestion for normal editable fields even without app-specific caret proof; keep sensitive field classification and one-word-only acceptance guardrails."
+        )
+    }
+
+    private static func bestEffortProfileIfUseful(_ profile: CompatibilityProfile) -> CompatibilityProfile? {
+        guard !profile.canPresentSuggestions,
+              !profile.isSensitive,
+              profile.promptAppSafetyMode == .notPrompt else {
+            return nil
+        }
+
+        return CompatibilityProfile(
+            bundleIdentifier: profile.bundleIdentifier,
+            displayName: profile.displayName,
+            appFamily: profile.appFamily,
+            supportLevel: .yellow,
+            graduationDecision: .wordOnly,
+            supportReason: "\(profile.supportReason) Using best-effort suggestions for normal text fields.",
+            renderMode: .floatingMirror,
+            insertionMode: .axValueReplacement,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .disabled,
+            fieldIdentityMode: .stableBounds,
+            anchorLadder: [.caret, .line, .field, .window],
+            knownFailureModes: profile.knownFailureModes + ["best-effort placement may be approximate"],
+            allowsFieldAnchor: true,
+            allowsWindowAnchor: true,
+            requiresValidatedCaret: false,
+            supportsOneWordAcceptance: true,
+            supportsFullAcceptance: false,
+            allowsUnknownFieldKind: false,
+            suppressesAfterInsertionFailure: true,
+            allowsDescendantTextFallback: true,
+            allowsDetachedSuggestions: true,
+            allowsSyntheticCaretPlacement: true,
+            promptAppSafetyMode: .wordOnly,
+            notes: "\(profile.notes) Best-effort fallback is enabled for normal text fields; sensitive field classification still blocks display and acceptance."
+        )
     }
 
     public static let mvp = CompatibilityProfileStore(profiles: [
@@ -865,7 +935,7 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         case .denylisted:
             return "blocked: denylisted app"
         case .unsupported:
-            return "blocked: no MVP compatibility profile"
+            return "unsupported: no compatibility profile"
         }
     }
 
@@ -898,7 +968,7 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         case .denylisted:
             return "Suggestions stay off here."
         case .unsupported:
-            return "Suggestions are intentionally off until this app has a compatibility profile."
+            return "Suggestions use best-effort mode only after SteadyType can identify a normal text field."
         }
     }
 
