@@ -17,7 +17,11 @@ spec.loader.exec_module(module)
 
 assert module.DEFAULT_MODEL_NAME == "Qwen3.5 4B"
 assert module.mlx_model_name("Qwen3.5 4B") == "mlx-community/Qwen3.5-4B-MLX-4bit"
+assert module.mlx_model_name("qwen35-4b") == "mlx-community/Qwen3.5-4B-MLX-4bit"
 assert module.mlx_model_name(" qwen3.5 9b ") == "mlx-community/Qwen3.5-9B-MLX-4bit"
+assert module.mlx_model_name("qwen3.5-9b") == "mlx-community/Qwen3.5-9B-MLX-4bit"
+assert module.mlx_model_name("qwen3-1.7b") == "mlx-community/Qwen3-1.7B-4bit"
+assert module.mlx_model_name("small-draft-1b") == "mlx-community/Qwen3-1.7B-4bit"
 assert module.mlx_model_name("Gemma 4 E2B") == "mlx-community/gemma-4-E2B-it-4bit"
 assert module.mlx_model_name("unknown") == module.DEFAULT_MLX_MODEL
 

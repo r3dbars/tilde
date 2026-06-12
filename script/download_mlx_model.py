@@ -35,6 +35,12 @@ MODELS = {
         "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
         "target": "Models/Qwen3Medium/MLX/qwen3-1.7b-4bit",
     },
+    "small-draft-1b": {
+        "canonical": "qwen3-1.7b",
+        "repo_id": "mlx-community/Qwen3-1.7B-4bit",
+        "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+        "target": "Models/Qwen3Medium/MLX/qwen3-1.7b-4bit",
+    },
     "qwen3-0.6b": {
         "repo_id": "mlx-community/Qwen3-0.6B-4bit",
         "revision": "73e3e38d981303bc594367cd910ea6eb48349da8",
