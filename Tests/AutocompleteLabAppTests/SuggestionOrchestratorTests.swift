@@ -790,6 +790,55 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Max tuning does not bypass short phrase guardrails")
+    func maxTuningDoesNotBypassShortPhraseGuardrails() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "The draft is almost ready for review",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "max-length-guard"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let shortDisplay = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " today", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 120,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
+        )
+
+        #expect(!shortDisplay.decision.shouldDisplay)
+        #expect(shortDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
+        #expect(shortDisplay.metadata["completionConfidenceReasons"]?.contains("too-short-daily-driver-phrase") == true)
+        #expect(shortDisplay.metadata["displayScoreMaxAggressiveLowConfidenceBypass"] == nil)
+    }
+
+    @MainActor
     @Test("Max tuning keeps over-budget Messages chat suggestions quiet")
     func maxTuningKeepsOverBudgetMessagesChatSuggestionsQuiet() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -852,6 +901,55 @@ struct SuggestionOrchestratorTests {
         #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
         #expect(maxDisplay.metadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] == "true")
+    }
+
+    @MainActor
+    @Test("Max tuning keeps the extended long phrase latency budget")
+    func maxTuningKeepsExtendedLongPhraseLatencyBudget() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "We should make the onboarding feel more calm and helpful",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 12,
+            mode: .phraseContinuation,
+            suggestionID: "max-extended-latency"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let display = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " while keeping the controls easy to trust today", maxVisibleWords: 12),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 900,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
+        )
+
+        #expect(display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(display.metadata["displayScoreMaxAggressiveBypass"] == "true")
+        #expect(display.metadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] == nil)
     }
 
     @MainActor

@@ -141,9 +141,9 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.graduationDecision == .blocked)
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.renderMode == .disabled)
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.promptAppSafetyMode == .disabled)
-        #expect(store.profile(for: "notion.id")?.supportLevel == .yellow)
-        #expect(store.profile(for: "notion.id")?.graduationDecision == .wordOnly)
-        #expect(store.profile(for: "notion.id")?.canPresentSuggestions == true)
+        #expect(store.profile(for: "notion.id")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "notion.id")?.graduationDecision == .blocked)
+        #expect(store.profile(for: "notion.id")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.hnc.Discord")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.hnc.Discord")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.hnc.DiscordPTB")?.canPresentSuggestions == false)
@@ -206,6 +206,8 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
         let unknown = try #require(store.profile(for: "com.example.UnknownEditor"))
 
+        #expect(store.hasExplicitProfile(for: "com.apple.TextEdit"))
+        #expect(!store.hasExplicitProfile(for: "com.example.UnknownEditor"))
         #expect(store.allows(bundleIdentifier: "com.example.UnknownEditor"))
         #expect(unknown.bundleIdentifier == "com.example.UnknownEditor")
         #expect(unknown.displayName == "Universal App")
@@ -221,6 +223,16 @@ struct CompatibilityProfileTests {
         #expect(unknown.allowsSyntheticCaretPlacement)
         #expect(!unknown.allowsUnknownFieldKind)
         #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
+    }
+
+    @Test("Known registry-only risky apps do not get universal fallback")
+    func knownRegistryOnlyRiskyAppsDoNotGetUniversalFallback() {
+        let store = CompatibilityProfileStore.mvp
+
+        #expect(store.supportStatus(for: "com.brave.Browser") == .unsupported)
+        #expect(store.profile(for: "com.brave.Browser") == nil)
+        #expect(store.supportStatus(for: "com.apple.finder") == .unsupported)
+        #expect(store.profile(for: "com.apple.finder") == nil)
     }
 
     @Test("MVP profiles do not allow unknown field kinds by default")
@@ -441,6 +453,7 @@ struct CompatibilityProfileTests {
             "com.openai.ChatGPT",
             "com.openai.atlas",
             "com.tinyspeck.slackmacgap",
+            "ru.keepcoder.Telegram",
             "com.hnc.Discord",
             "com.hnc.DiscordPTB",
             "com.hnc.DiscordCanary"

@@ -71,10 +71,20 @@ public struct DisabledAppSelection: Equatable, Sendable {
         bundleIdentifiers.removeAll(keepingCapacity: false)
     }
 
+    public mutating func removeLegacyDefaultOffBundleIdentifiers(profileStore: CompatibilityProfileStore) {
+        bundleIdentifiers.subtract(Self.legacyDefaultOffBundleIdentifiers(profileStore: profileStore))
+    }
+
     public mutating func temporarilyEnable(bundleIdentifiers rawValue: String?) {
         for bundleIdentifier in Self.parseBundleIdentifierList(rawValue) {
             set(bundleIdentifier, disabled: false)
         }
+    }
+
+    public func applyingTemporaryEnablement(bundleIdentifiers rawValue: String?) -> Self {
+        var selection = self
+        selection.temporarilyEnable(bundleIdentifiers: rawValue)
+        return selection
     }
 
     public static func parseBundleIdentifierList(_ rawValue: String?) -> [String] {
@@ -88,5 +98,19 @@ public struct DisabledAppSelection: Equatable, Sendable {
             }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    private static func legacyDefaultOffBundleIdentifiers(
+        profileStore: CompatibilityProfileStore
+    ) -> Set<String> {
+        Set(
+            profileStore.profiles.values.compactMap { profile in
+                guard profile.canPresentSuggestions, !profile.isSensitive else {
+                    return nil
+                }
+
+                return profile.bundleIdentifier
+            }
+        )
     }
 }

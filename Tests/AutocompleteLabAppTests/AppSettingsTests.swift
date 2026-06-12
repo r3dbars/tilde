@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import AutocompleteLabCore
 @testable import AutocompleteLabApp
 
 @MainActor
@@ -50,6 +51,27 @@ struct AppSettingsTests {
         #expect(routing.enforceKnownApps)
         #expect(!routing.suppressSecureFields)
         #expect(routing.minimumCharactersBeforeSuggestion == 1)
+    }
+
+    @Test("Allowlist scope keeps universal fallback opt-in")
+    func allowlistScopeKeepsUniversalFallbackOptIn() {
+        let store = CompatibilityProfileStore.mvp
+
+        #expect(AppDelegate.allowsProfileLookup(
+            for: "com.apple.TextEdit",
+            profileStore: store,
+            enforceAllowlist: true
+        ))
+        #expect(!AppDelegate.allowsProfileLookup(
+            for: "com.example.UnknownEditor",
+            profileStore: store,
+            enforceAllowlist: true
+        ))
+        #expect(AppDelegate.allowsProfileLookup(
+            for: "com.example.UnknownEditor",
+            profileStore: store,
+            enforceAllowlist: false
+        ))
     }
 
     private func isolatedDefaults() -> UserDefaults {

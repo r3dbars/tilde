@@ -10,6 +10,12 @@ struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
 @MainActor
 final class SuggestionOrchestrator {
     private static let maximumFinalModelDisplayLatencyMilliseconds = 750
+    private static let maxAggressiveLowConfidenceBypassBlockedReasons: Set<String> = [
+        "unsupported-app-profile",
+        "generic-or-assistant-like",
+        "too-short-daily-driver-phrase",
+        "too-many-visible-words"
+    ]
 
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
@@ -625,7 +631,10 @@ final class SuggestionOrchestrator {
         let maxAggressiveTuningEnabled = suggestionTuning?.aggressivenessLevel == SuggestionTuning.maximumAggressivenessLevel
             && profile.allowsMaxAggressiveTuningBypass
         let maxAggressiveLatencyBudgetExceeded = maxAggressiveTuningEnabled
-            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
+            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
+                for: request,
+                suggestion: suggestion
+            )
         let maxAggressiveDisplayBypass = maxAggressiveTuningEnabled
             && !maxAggressiveLatencyBudgetExceeded
         let score = displayScore(
@@ -697,8 +706,9 @@ final class SuggestionOrchestrator {
                     || confidenceDecision.reasons.contains("too-slow-to-display")
             )
         let maxAggressiveLowConfidenceBypass = maxAggressiveDisplayBypass
-            && !confidenceDecision.reasons.contains("unsupported-app-profile")
-            && !confidenceDecision.reasons.contains("generic-or-assistant-like")
+            && confidenceDecision.reasons.allSatisfy {
+                !Self.maxAggressiveLowConfidenceBypassBlockedReasons.contains($0)
+            }
         if maxAggressiveLowConfidenceBypass && !confidenceDecision.canDisplay {
             confidenceMetadata["displayScoreMaxAggressiveLowConfidenceBypass"] = "true"
         }
