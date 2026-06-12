@@ -461,6 +461,13 @@ short-phrase continuation instead of going quiet. Prompt surfaces keep the older
 sentence-boundary block, so Codex, Claude, and terminal-host proof lanes do not
 get broader phrase behavior from this change.
 
+Terminal-host proof lanes are parked as of June 12, 2026. The work below is
+useful evidence, but it is not beta readiness and should not pull energy away
+from the core writing-app loop. Terminal, iTerm2, Ghostty, and Claude Code stay
+proof-only or blocked unless a future task explicitly reopens terminal-host
+research. The current product path is TextEdit, Notes, Obsidian, and other
+boring writing fields.
+
 Ghostty-hosted Claude Code is still an honest host-specific proof gap as of
 May 27, 2026. The prior live run exposed the wrong trust shape: SteadyType
 showed a suggestion near Ghostty's top/header AX text while the real prompt was

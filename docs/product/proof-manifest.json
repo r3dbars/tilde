@@ -222,7 +222,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated, proof-mode-only, and one-word only. Normal terminal hosts remain blocked unless a current host-labeled proof is running."
+        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated, proof-mode-only, one-word only, and iceboxed from beta readiness. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -1088,7 +1088,7 @@
       "surface": "Claude Code",
       "status": "blocked",
       "owner": "terminal-host adapter lane",
-      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code proof is virtual, proof-mode-only, and host-labeled, while normal terminal hosts remain denylisted."
+      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code proof is virtual, proof-mode-only, host-labeled, and iceboxed from beta readiness, while normal terminal hosts remain denylisted."
     },
     {
       "bundle": "com.anthropic.claudefordesktop",

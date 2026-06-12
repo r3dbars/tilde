@@ -29,6 +29,12 @@ bounded prompt slices: default one-word Tab no-submit at traces lines
 Full accept stays limited to the proven Codex default composer; other prompt,
 chat, terminal, and hosted browser surfaces remain proof-gated.
 
+Terminal-host lanes are parked as of June 12, 2026. Terminal and iTerm2 proof
+rows are useful proof-mode evidence, Ghostty placement is partially proved, and
+Ghostty insertion transport remains unproven. These lanes are no longer part of
+the beta-readiness push; core writing-app quality in TextEdit, Notes, Obsidian,
+and other ordinary writing fields comes first.
+
 Current Ghostty terminal-host evidence is sharper but still red. Local probes
 showed Ghostty `input text` can return success without mutating a fresh shell,
 while Ghostty `perform action "text:..."` can type into a fresh shell. External
