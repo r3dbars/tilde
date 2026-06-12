@@ -22,8 +22,18 @@ gate:
 ./script/scorecard_next_proof_lanes.py --automation-ready
 ```
 
+For target-app coverage work, use the ranked app-surface queue:
+
+```bash
+./script/target_app_coverage_queue.py
+```
+
+That queue ranks value against proof risk and keeps beta-safe TextEdit, Notes,
+and Obsidian polish ahead of prompt, chat, terminal, and hosted browser claims.
+
 Self-test:
 
 ```bash
 ./script/scorecard_next_proof_lanes_self_test.sh
+./script/target_app_coverage_queue_self_test.sh
 ```
