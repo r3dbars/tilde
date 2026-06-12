@@ -8,11 +8,11 @@ struct SuggestionDecisionPresentation: Equatable {
     }
 
     var menuTitle: String {
-        "Why: \(summary)"
+        "Why now: \(Self.oneLine(summary, maxLength: 92))"
     }
 
     var settingsText: String {
-        "Why: \(summary)"
+        "Why now: \(Self.oneLine(summary, maxLength: 92))"
     }
 
     var diagnosticsText: String {

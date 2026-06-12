@@ -70,4 +70,13 @@ struct SuggestionStatusTextTests {
     func notShownStatusNormalizesUnknownReasons() {
         #expect(SuggestionStatusText.notShown(reason: "display-score") == "Blocked: display score")
     }
+
+    @Test("Not-shown status uses shared live-why reasons")
+    func notShownStatusUsesSharedLiveWhyReasons() {
+        #expect(SuggestionStatusText.notShown(reason: "too-slow-to-display") == "Blocked: too slow")
+        #expect(SuggestionStatusText.notShown(reason: "low-confidence") == "Blocked: low confidence")
+        #expect(SuggestionStatusText.notShown(reason: "prefix-family-cooldown") == "Waiting: recent prefix cooldown")
+        #expect(SuggestionStatusText.notShown(reason: "quiet-mode-field") == "Waiting: quiet mode")
+        #expect(SuggestionStatusText.notShown(reason: "secureField") == "Blocked: safety gate")
+    }
 }
