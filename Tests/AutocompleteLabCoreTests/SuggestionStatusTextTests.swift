@@ -3,8 +3,8 @@ import Testing
 
 @Suite("Suggestion status text")
 struct SuggestionStatusTextTests {
-    @Test("Shown status names instant phrase fallback")
-    func shownStatusNamesInstantPhraseFallback() {
+    @Test("Shown status de-emphasizes legacy instant phrase fallback")
+    func shownStatusDeemphasizesLegacyInstantPhraseFallback() {
         let text = SuggestionStatusText.shown(
             mode: .phraseContinuation,
             triggerReason: "predictive-phrase-fallback",
@@ -12,7 +12,19 @@ struct SuggestionStatusTextTests {
             metadata: ["candidateSelectionSource": "predictive-phrase-fallback"]
         )
 
-        #expect(text == "Shown: phrase instant fallback 0ms")
+        #expect(text == "Shown: phrase legacy instant 0ms")
+    }
+
+    @Test("Shown status names doc-local phrase prediction")
+    func shownStatusNamesDocLocalPhrasePrediction() {
+        let text = SuggestionStatusText.shown(
+            mode: .phraseContinuation,
+            triggerReason: "doc-local-ngram",
+            latencyMilliseconds: 0,
+            metadata: ["candidateSelectionSource": "doc-local-ngram"]
+        )
+
+        #expect(text == "Shown: phrase doc local 0ms")
     }
 
     @Test("Shown status names model backed phrase")

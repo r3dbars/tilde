@@ -43,7 +43,7 @@ cat >"$TRACE_PATH" <<'JSONL'
 {"timestamp":"2026-05-25T00:01:12Z","sessionID":"s","suggestionID":"s1","type":"acceptedTextEdited","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","metadata":{"acceptanceID":"a1","checkpoint":"10s","survivalClass":"exactKept","strongAcceptedAndKept":"true"}}
 {"timestamp":"2026-05-25T00:02:00Z","sessionID":"s","suggestionID":"s2","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":220,"metadata":{"candidateSelectionSource":"app-model-result","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"3","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:02:10Z","sessionID":"s","suggestionID":"s2","type":"suggestionHidden","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"escape-dismissed"}
-{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"predictive-phrase-fallback","predictivePhraseMatch":"intent-markdown-next","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
+{"timestamp":"2026-05-25T00:03:00Z","sessionID":"s","suggestionID":"s3","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","latencyMilliseconds":0,"metadata":{"candidateSelectionSource":"doc-local-ngram","docLocalNGramMatch":"order-3-before-cursor","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"5","supportState":"supported"}}
 {"timestamp":"2026-05-25T00:03:05Z","sessionID":"s","suggestionID":"s3","type":"suggestionSuppressed","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","triggerReason":"model-result","reason":"empty-suggestion","metadata":{"candidateSelectionSource":"app-model-result","fieldKind":"plain","keptVisibleStreamingSuggestion":"true"}}
 {"timestamp":"2026-05-25T00:03:20Z","sessionID":"s","suggestionID":"s3","type":"suggestionTypedOver","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"phraseContinuation","reason":"typed-against-visible-suggestion"}
 {"timestamp":"2026-05-25T00:04:00Z","sessionID":"s","suggestionID":"s4","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","fieldIdentity":"field","requestMode":"wordCompletion","latencyMilliseconds":240,"metadata":{"candidateSelectionSource":"fast-word-completion","effectiveRenderMode":"inlineAdjacent","fieldKind":"plain","visibleWordCount":"1","supportState":"supported"}}
@@ -187,7 +187,7 @@ for expected in \
   "Rows scanned: 18" \
   "Shown suggestions: 6 (minimum 5)" \
   "Phrase suggestions: 6 (minimum 1)" \
-  "Instant phrase fallback shown: 3 (minimum 1)" \
+  "Instant phrase source shown: 3 (minimum 1)" \
   "Instant phrase max latency: 0ms (maximum 1ms)" \
   "Instant phrase latency samples missing: 0" \
   "Accepted-kept shown rate: 16.7% (minimum 15%, 1/6)" \
@@ -199,7 +199,7 @@ for expected in \
   "Instant phrase learned restraint: 1" \
   "Instant phrase match families:" \
   "writing-bridge: 1" \
-  "markdown: 1" \
+  "doc-local-before-cursor: 1" \
   "prior: 1" \
   "No-show summary: suggestionSuppressed events by reason" \
   "Trust-killer preview: pass" \
@@ -319,9 +319,10 @@ for expected in \
   "Accepted-kept shown rate: 16.7% (minimum 15%, 1/6)" \
   "Source mix: shown / accepted / accepted-kept shown" \
   "app-model-result: 3 / 0 / 0" \
-  "predictive-phrase-fallback: 2 / 1 / 1" \
+  "doc-local-ngram: 1 / 0 / 0" \
+  "predictive-phrase-fallback: 1 / 1 / 1" \
   "fast-word-completion: 1 / 0 / 0" \
-  "Instant phrase fallback shown: 3 (minimum 1)" \
+  "Instant phrase source shown: 3 (minimum 1)" \
   "Instant phrase max latency: 0ms (maximum 1ms)" \
   "Instant phrase latency samples missing: 0" \
   "Instant phrase learned restraint: 1" \
@@ -335,7 +336,7 @@ for expected in \
   "fast-phrase-learning-restraint: 1" \
   "Instant phrase match families:" \
   "writing-bridge: 1" \
-  "markdown: 1" \
+  "doc-local-before-cursor: 1" \
   "prior: 1" \
   "Model-backed shown: 3" \
   "Word fallback shown: 1" \
@@ -445,7 +446,7 @@ do
   fi
 done
 
-sed 's/predictive-phrase-fallback/app-model-result/g' "$TRACE_PATH" >"$MODEL_ONLY_PHRASE_TRACE_PATH"
+sed -E 's/predictive-phrase-fallback|doc-local-ngram/app-model-result/g' "$TRACE_PATH" >"$MODEL_ONLY_PHRASE_TRACE_PATH"
 set +e
 "$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
   --trace "$MODEL_ONLY_PHRASE_TRACE_PATH" \
@@ -467,9 +468,9 @@ for expected in \
   "Gate: \`fail\`" \
   "Sample gate status: \`1\`" \
   "Phrase suggestions: 6 (minimum 1)" \
-  "Instant phrase fallback shown: 0 (minimum 1)" \
+  "Instant phrase source shown: 0 (minimum 1)" \
   "Instant phrase max latency: n/a (maximum 1ms)" \
-  "instant phrase fallback below minimum (0/1)"
+  "instant phrase source below minimum (0/1)"
 do
   if ! grep -q "$expected" "$MODEL_ONLY_PHRASE_REPORT_PATH"; then
     echo "dogfood self-test model-only phrase report missing: $expected" >&2
@@ -498,7 +499,7 @@ fi
 for expected in \
   "Gate: \`fail\`" \
   "Sample gate status: \`1\`" \
-  "Instant phrase fallback shown: 3 (minimum 1)" \
+  "Instant phrase source shown: 3 (minimum 1)" \
   "Instant phrase max latency: 5ms (maximum 1ms)" \
   "instant phrase latency above maximum (5/1 ms)"
 do
@@ -989,7 +990,7 @@ for expected in \
   "Phrase suggestions below word minimum: 0" \
   "Accepted-kept shown rate: 100% (minimum 0%, 1/1)" \
   "predictive-phrase-fallback: 1 / 1 / 1" \
-  "Instant phrase fallback shown: 1 (minimum 0)" \
+  "Instant phrase source shown: 1 (minimum 0)" \
   "Instant phrase max latency: 0ms (maximum 1ms)" \
   "Instant phrase latency samples missing: 0"
 do
