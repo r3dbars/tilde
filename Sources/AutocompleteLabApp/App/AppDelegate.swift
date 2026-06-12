@@ -358,6 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wordCompletionRanker: wordCompletionRanker,
         prefixFamilyCooldownPolicy: makePrefixFamilyCooldownPolicy()
     )
+    private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionTuning.displayScorePolicy
@@ -17071,7 +17072,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         var metadata = [
-            "typedSuffix": typedSuffix
+            "typedSuffixChars": String(typedSuffix.count)
         ]
         metadata.merge(recordPrefixFamilyCooldown(
             .typedOver,
@@ -17132,21 +17133,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let progress = suggestionTypingProgressPolicy.progress(
-            originalTextBeforeCursor: originalTextBeforeCursor,
-            displayedText: displayedText,
-            newTextBeforeCursor: context.textBeforeCursor
+        let baselineSnapshot = currentSuggestionAcceptanceSnapshot?.focusedTextSnapshot
+            ?? FocusedTextSnapshot(
+                fieldIdentity: fieldIdentity,
+                textBeforeCursor: originalTextBeforeCursor,
+                textAfterCursor: context.textAfterCursor
+            )
+        let transition = typeThroughPrefixStateMachine.apply(
+            to: &suggestionSession,
+            input: TypeThroughPrefixInput(
+                baselineSnapshot: baselineSnapshot,
+                currentSnapshot: snapshot
+            )
         )
 
-        if case let .typedThroughVisiblePrefix(typedSuffix) = progress {
-            guard suggestionSession.commitTypedVisiblePrefix(typedSuffix) else {
-                return false
-            }
-
+        switch transition {
+        case let .survived(survival):
             let hasRemainingSuggestion = suggestionSession.hasVisibleSuggestion
             lastTextSnapshot = snapshot
             invalidatePendingSuggestionRequest()
             currentSuggestionTextBeforeCursor = context.textBeforeCursor
+            currentSuggestionDisplayedText = suggestionSession.visibleSuggestion?.visibleText
             if let currentSuggestionAcceptanceSnapshot {
                 self.currentSuggestionAcceptanceSnapshot = currentSuggestionAcceptanceSnapshot.advancingTextRevision(
                     textBeforeCursor: context.textBeforeCursor,
@@ -17160,11 +17167,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "suggestion-typed-through",
                 context: context,
                 profile: profile,
-                metadata: [
-                    "reason": "visible-prefix-advanced",
-                    "typedSuffixChars": String(typedSuffix.count),
-                    "remainingVisibleChars": String(suggestionSession.visibleSuggestion?.visibleText.count ?? 0)
-                ]
+                metadata: survival.traceMetadata
+            )
+            recordPersonalCaptureSuggestionEpisodeAction(
+                suggestionID: currentSuggestionID ?? "",
+                appBundleIdentifier: profile.bundleIdentifier,
+                outcome: .shown,
+                reason: "survived_typethrough",
+                metadata: survival.traceMetadata
             )
             keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
             if hasRemainingSuggestion {
@@ -17174,7 +17184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             lastRequestedTextBeforeCursor = nil
             return false
-        } else if case .typedOver = progress {
+        case .invalidated(.mismatch):
             if shouldPreserveVisibleSuggestionWhileTyping(displayedText: displayedText) {
                 lastRequestedTextBeforeCursor = nil
                 setSuggestionDecision("Shown: refreshing while typing")
@@ -17197,6 +17207,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             hideSuggestion(reason: "typed-over")
+        case let .invalidated(reason):
+            hideSuggestion(
+                reason: "type-through-\(reason.rawValue)",
+                metadata: transition.traceMetadata
+            )
+        case let .suppressed(reason):
+            hideSuggestion(
+                reason: "type-through-\(reason.rawValue)",
+                metadata: transition.traceMetadata
+            )
+        case .unchanged:
+            return false
         }
 
         return false
