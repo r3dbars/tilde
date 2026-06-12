@@ -622,9 +622,12 @@ final class SuggestionOrchestrator {
             ),
             now: now
         )
-        let maxAggressiveDisplayBypass = suggestionTuning?.aggressivenessLevel == SuggestionTuning.maximumAggressivenessLevel
+        let maxAggressiveTuningEnabled = suggestionTuning?.aggressivenessLevel == SuggestionTuning.maximumAggressivenessLevel
             && profile.allowsMaxAggressiveTuningBypass
-            && latencyMilliseconds <= 1_500
+        let maxAggressiveLatencyBudgetExceeded = maxAggressiveTuningEnabled
+            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
+        let maxAggressiveDisplayBypass = maxAggressiveTuningEnabled
+            && !maxAggressiveLatencyBudgetExceeded
         let score = displayScore(
             suggestion: suggestion,
             request: request,
@@ -673,17 +676,26 @@ final class SuggestionOrchestrator {
         if maxAggressiveDisplayBypass {
             confidenceMetadata["displayScoreMaxAggressiveBypass"] = "true"
         }
+        if maxAggressiveLatencyBudgetExceeded {
+            confidenceMetadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] = "true"
+        }
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
             && !proofLatencyBypass
             && !maxAggressiveDisplayBypass
-            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
-                for: request,
-                suggestion: suggestion
+            && (
+                maxAggressiveLatencyBudgetExceeded
+                    || latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
+                        for: request,
+                        suggestion: suggestion
+                    )
             )
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
             && !proofLatencyBypass
             && !maxAggressiveDisplayBypass
-            && confidenceDecision.reasons.contains("too-slow-to-display")
+            && (
+                maxAggressiveLatencyBudgetExceeded
+                    || confidenceDecision.reasons.contains("too-slow-to-display")
+            )
         let maxAggressiveLowConfidenceBypass = maxAggressiveDisplayBypass
             && !confidenceDecision.reasons.contains("unsupported-app-profile")
             && !confidenceDecision.reasons.contains("generic-or-assistant-like")
