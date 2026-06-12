@@ -60,7 +60,7 @@ Options:
   --min-phrase-visible-words N
                     Minimum visible words for phrase/sentence suggestions. Default: 3.
   --min-instant-phrase-shown N
-                    Minimum predictive instant phrase suggestions shown. Default: 1.
+                    Minimum instant local phrase-source suggestions shown. Default: 1.
   --max-instant-phrase-latency-ms N
                     Maximum latency for instant phrase rows. Default: 1.
   --min-typing-feel-score N
@@ -689,7 +689,26 @@ def latency_milliseconds(event):
     return value if value >= 0 else None
 
 
+instant_phrase_sources = {
+    "predictive-phrase-fallback",
+    "doc-local-ngram",
+    "model-cache",
+    "model-session-cache",
+}
+
+
 def instant_phrase_match_family(event):
+    source = selection_source(event)
+    if source == "doc-local-ngram":
+        local_source = str(metadata(event).get("docLocalNGramMatch") or "").strip()
+        if local_source.endswith("before-cursor"):
+            return "doc-local-before-cursor"
+        if local_source.endswith("local-context"):
+            return "doc-local-context"
+        return "doc-local"
+    if source in {"model-cache", "model-session-cache"}:
+        return "model-cache"
+
     match = str(metadata(event).get("predictivePhraseMatch") or "").strip()
     if not match:
         return "none"
@@ -848,12 +867,11 @@ all_sources = sorted(
 )
 model_backed_sources = {"app-model-result", "model-candidate-ranker"}
 word_fallback_sources = {"fast-word-completion", "predictive-word-fallback"}
-instant_phrase_shown = presented_source_counts.get("predictive-phrase-fallback", 0)
 instant_phrase_presented = [
     (line_number, event)
     for line_number, event in matched
     if event.get("type") == "suggestionPresented"
-    and selection_source(event) == "predictive-phrase-fallback"
+    and selection_source(event) in instant_phrase_sources
 ]
 instant_phrase_first_line_by_key = {}
 instant_phrase_match_family_by_key = {}
@@ -984,7 +1002,7 @@ if len(phrase_presented) < min_phrase_shown:
     failures.append(f"phrase suggestions below minimum ({len(phrase_presented)}/{min_phrase_shown})")
 if instant_phrase_shown < min_instant_phrase_shown:
     failures.append(
-        "instant phrase fallback below minimum "
+        "instant phrase source below minimum "
         f"({instant_phrase_shown}/{min_instant_phrase_shown})"
     )
 if instant_phrase_missing_latency > 0:
@@ -1042,7 +1060,7 @@ if all_sources:
         )
 else:
     print("- none: 0 / 0 / 0")
-print(f"Instant phrase fallback shown: {instant_phrase_shown} (minimum {min_instant_phrase_shown})")
+print(f"Instant phrase source shown: {instant_phrase_shown} (minimum {min_instant_phrase_shown})")
 if instant_phrase_max_latency is None:
     print(f"Instant phrase max latency: n/a (maximum {max_instant_phrase_latency_ms}ms)")
 else:
