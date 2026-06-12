@@ -33,6 +33,31 @@ struct FieldStatusIndicatorState: Equatable {
         kind: .blocked,
         accessibilityLabel: "SteadyType is off in this field"
     )
+
+    func withReason(_ reason: String) -> FieldStatusIndicatorState {
+        let reason = Self.cleanReason(reason)
+        guard !reason.isEmpty else {
+            return self
+        }
+
+        return FieldStatusIndicatorState(
+            kind: kind,
+            accessibilityLabel: "\(accessibilityLabel): \(reason)"
+        )
+    }
+
+    private static func cleanReason(_ reason: String, maxLength: Int = 96) -> String {
+        let cleaned = reason
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.count > maxLength else {
+            return cleaned
+        }
+
+        let cutoff = cleaned.index(cleaned.startIndex, offsetBy: max(0, maxLength - 3))
+        return String(cleaned[..<cutoff]) + "..."
+    }
 }
 
 @MainActor
@@ -124,6 +149,9 @@ final class FieldStatusIndicatorController {
         let wasVisible = panel.isVisible
         badgeView.update(state: state)
         panel.contentView?.toolTip = state.accessibilityLabel
+        badgeView.toolTip = state.accessibilityLabel
+        badgeView.setAccessibilityElement(true)
+        badgeView.setAccessibilityLabel(state.accessibilityLabel)
         panel.setFrame(frame, display: true, animate: false)
         DiagnosticsLog.shared.record(
             "field-status-indicator-frame",
