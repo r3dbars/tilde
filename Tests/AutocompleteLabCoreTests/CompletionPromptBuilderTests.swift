@@ -17,7 +17,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Prefer enough high-confidence words"))
         #expect(prompt.system.contains("not obvious from the local text"))
         #expect(prompt.system.contains("weak guess, new topic"))
-        #expect(prompt.system.contains("Never suggest pressing Tab, Option-Tab, Backtick"))
+        #expect(prompt.system.contains("Never suggest pressing Tab, Shift-Tab, Option-Tab, Backtick"))
         #expect(prompt.system.contains("do not suggest accepting terms or permissions"))
         #expect(prompt.system.contains("Ordinary drafting with should or need"))
         #expect(prompt.system.contains("answer the user, issue an instruction"))

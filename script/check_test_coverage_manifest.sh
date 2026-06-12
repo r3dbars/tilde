@@ -110,7 +110,7 @@ require_pattern "Tests/AutocompleteLabCoreTests/SensitiveTextFieldPolicyTests.sw
 
 require_file "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift" "Option Tab passes through" "Option+Tab passthrough coverage"
-require_pattern "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift" "Backtick accepts all visible text" "full-accept key routing coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/KeyboardActionRouterTests.swift" "Shift Tab accepts all visible text by default" "full-accept key routing coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift" "Runtime production readiness requires native preferred runtime" "native-runtime readiness coverage"

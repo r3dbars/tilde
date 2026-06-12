@@ -425,6 +425,7 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             || normalized.hasPrefix("press enter")
             || normalized.hasPrefix("press return")
             || normalized.hasPrefix("press tab")
+            || normalized.hasPrefix("press shift-tab")
             || normalized.hasPrefix("press option-tab")
             || normalized.hasPrefix("use backtick")
             || normalized.hasPrefix("hit enter")
@@ -793,10 +794,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         "press enter",
         "press option-tab",
         "press return",
+        "press shift-tab",
         "press tab",
         "run this command",
         "send it",
         "send the prompt",
+        "shift-tab",
         "submit it",
         "submit the prompt",
         "use backtick"

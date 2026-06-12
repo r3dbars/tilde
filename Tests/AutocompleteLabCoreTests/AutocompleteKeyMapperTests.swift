@@ -20,17 +20,26 @@ struct AutocompleteKeyMapperTests {
         #expect(AcceptAllShortcut.optionTab.autocompleteKey == .optionTab)
     }
 
+    @Test("Shift Tab is recognized as the default full accept shortcut")
+    func shiftTabMapsToShiftTab() {
+        let mapper = AutocompleteKeyMapper()
+
+        #expect(mapper.key(physicalKey: .tab, modifiers: [.shift]) == .shiftTab)
+        #expect(mapper.key(physicalKey: .tab, modifiers: [.shift, .function]) == .shiftTab)
+        #expect(mapper.key(physicalKey: .tab, modifiers: [.shift, .control]) == .other)
+        #expect(AcceptAllShortcut.shiftTab.autocompleteKey == .shiftTab)
+    }
+
     @Test("System Tab shortcuts pass through")
     func systemTabShortcutsPassThrough() {
         let mapper = AutocompleteKeyMapper()
 
         #expect(mapper.key(physicalKey: .tab, modifiers: [.command]) == .other)
         #expect(mapper.key(physicalKey: .tab, modifiers: [.control]) == .other)
-        #expect(mapper.key(physicalKey: .tab, modifiers: [.shift]) == .other)
         #expect(mapper.key(physicalKey: .tab, modifiers: [.option, .shift]) == .other)
     }
 
-    @Test("Backtick and tilde accept all visible text")
+    @Test("Backtick and tilde remain printable passthrough keys")
     func backtickAndTildeMapToBacktick() {
         let mapper = AutocompleteKeyMapper()
 
@@ -83,16 +92,18 @@ struct AutocompleteKeyMapperTests {
         #expect(mapper.key(physicalKey: .escape, modifiers: [.command]) == .other)
     }
 
-    @Test("Shortcut configuration falls back to backtick")
-    func shortcutConfigurationFallsBackToBacktick() {
-        #expect(KeyboardShortcutConfiguration.default.acceptAllShortcut == .backtick)
+    @Test("Shortcut configuration falls back to Shift Tab")
+    func shortcutConfigurationFallsBackToShiftTab() {
+        #expect(KeyboardShortcutConfiguration.default.acceptAllShortcut == .shiftTab)
+        #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "shiftTab").acceptAllShortcut == .shiftTab)
         #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "optionTab").acceptAllShortcut == .optionTab)
         #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "disabled").acceptAllShortcut == .disabled)
-        #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "unknown").acceptAllShortcut == .backtick)
+        #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "backtick").acceptAllShortcut == .shiftTab)
+        #expect(KeyboardShortcutConfiguration(persistedAcceptAllShortcutRawValue: "unknown").acceptAllShortcut == .shiftTab)
         #expect(AcceptAllShortcut.disabled.autocompleteKey == .other)
-        #expect(AcceptAllShortcut.backtick.next == .optionTab)
+        #expect(AcceptAllShortcut.shiftTab.next == .optionTab)
         #expect(AcceptAllShortcut.optionTab.next == .disabled)
-        #expect(AcceptAllShortcut.disabled.next == .backtick)
+        #expect(AcceptAllShortcut.disabled.next == .shiftTab)
     }
 
     @Test("Shortcut conflict policy reflects per-app full accept profiles")
@@ -111,12 +122,12 @@ struct AutocompleteKeyMapperTests {
             supportsFullAcceptance: true
         )
 
-        let safe = policy.evaluation(acceptAllShortcut: .backtick, context: textEdit)
+        let safe = policy.evaluation(acceptAllShortcut: .shiftTab, context: textEdit)
         #expect(safe.level == .none)
         #expect(safe.statusText == "Conflict check: no known conflict in TextEdit")
         #expect(safe.perAppProfileText == "Per-app profile: TextEdit allows Tab one-word accept and whole-suggestion accept.")
 
-        let codexAllowed = policy.evaluation(acceptAllShortcut: .backtick, context: codex)
+        let codexAllowed = policy.evaluation(acceptAllShortcut: .shiftTab, context: codex)
         #expect(codexAllowed.level == .none)
         #expect(codexAllowed.statusText == "Conflict check: no known conflict in Codex")
         #expect(codexAllowed.perAppProfileText == "Per-app profile: Codex allows Tab one-word accept and whole-suggestion accept.")

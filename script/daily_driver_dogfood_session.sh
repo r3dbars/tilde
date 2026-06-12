@@ -356,7 +356,7 @@ SteadyType app: $app_status
 Dogfood readiness: $readiness
 $(print_readiness_next_step "$readiness")
 
-Now write normally for 10-20 minutes. Accept with Tab/backtick only when useful,
+Now write normally for 10-20 minutes. Accept with Tab/Shift-Tab only when useful,
 dismiss with Esc when wrong, and do not paste raw writing into the final report.
 
 Finish with:

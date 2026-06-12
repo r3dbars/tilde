@@ -39,7 +39,7 @@ struct KeyboardCaptureSafetyPolicyTests {
             .targetFingerprintChanged
         ]
 
-        for key in [AutocompleteKey.tab, .backtick, .optionTab] {
+        for key in [AutocompleteKey.tab, .shiftTab, .optionTab] {
             for reason in blockReasons {
                 #expect(
                     policy.handlingResult(forAcceptanceBlock: reason, key: key)
@@ -47,19 +47,28 @@ struct KeyboardCaptureSafetyPolicyTests {
                 )
             }
         }
+
+        #expect(
+            policy.handlingResult(forAcceptanceBlock: .appChanged, key: .backtick)
+                == .replayOriginalKey(.acceptanceTargetChanged)
+        )
     }
 
     @Test("Focus mismatch before accept drops consumed accept keys")
     func focusMismatchBeforeAcceptDropsConsumedAcceptKeys() {
         let policy = KeyboardCaptureSafetyPolicy()
 
-        for key in [AutocompleteKey.tab, .backtick, .optionTab] {
+        for key in [AutocompleteKey.tab, .shiftTab, .optionTab] {
             #expect(
                 policy.handlingResultForFocusMismatch(key: key)
                     == .dropOriginalKey(.acceptanceTargetChangedBeforeAccept)
             )
         }
 
+        #expect(
+            policy.handlingResultForFocusMismatch(key: .backtick)
+                == .replayOriginalKey(.focusChanged)
+        )
         #expect(
             policy.handlingResultForFocusMismatch(key: .escape)
                 == .replayOriginalKey(.focusChanged)
@@ -164,10 +173,11 @@ struct KeyboardCaptureSafetyPolicyTests {
         let policy = KeyboardEventTapConsumptionPolicy()
 
         for (key, shortcut) in [
-            (AutocompleteKey.tab, AcceptAllShortcut.backtick),
-            (.backtick, .backtick),
+            (AutocompleteKey.tab, AcceptAllShortcut.shiftTab),
+            (.shiftTab, .shiftTab),
+            (.backtick, .shiftTab),
             (.optionTab, .optionTab),
-            (.escape, .backtick)
+            (.escape, .shiftTab)
         ] {
             #expect(!policy.shouldConsume(KeyboardEventTapConsumptionInput(
                 key: key,
