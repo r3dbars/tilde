@@ -171,27 +171,6 @@ private struct ObsidianPostAcceptanceSuppression {
     }
 }
 
-struct SuggestionDebounceSchedule: Equatable, Sendable {
-    let policyDelayMilliseconds: Int
-    let scheduledDelayMilliseconds: Int
-
-    init(policyDelayMilliseconds: Int, renderMode: SuggestionRenderMode) {
-        let policyDelayMilliseconds = max(0, policyDelayMilliseconds)
-        self.policyDelayMilliseconds = policyDelayMilliseconds
-        self.scheduledDelayMilliseconds = renderMode == .inlineAdjacent
-            ? policyDelayMilliseconds
-            : max(policyDelayMilliseconds, 60)
-    }
-
-    var traceMetadata: [String: String] {
-        [
-            "delayMilliseconds": String(policyDelayMilliseconds),
-            "policyDelayMilliseconds": String(policyDelayMilliseconds),
-            "scheduledDelayMilliseconds": String(scheduledDelayMilliseconds)
-        ]
-    }
-}
-
 private final class ProcessResourceDiagnosticsSampler {
     private var previousCPUSeconds: Double?
     private var previousWallTime: Date?
@@ -314,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
+    private let suggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
@@ -6919,8 +6899,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
-        let debounceSchedule = SuggestionDebounceSchedule(
+        let requestSchedule = suggestionRequestSchedulingPolicy.schedule(
             policyDelayMilliseconds: delayMilliseconds,
+            timingLane: timingLane,
+            requestMode: request.mode,
             renderMode: renderMode
         )
         let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
@@ -6940,7 +6922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "renderMode": renderMode.rawValue
             ]
             .merging(typingBurstMetadata) { current, _ in current }
-            .merging(debounceSchedule.traceMetadata) { current, _ in current }
+            .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
 
@@ -7439,12 +7421,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
             .merging(typingBurstMetadata) { current, _ in current }
             .merging(fastPhraseFallbackMetadata) { current, _ in current }
-            .merging(debounceSchedule.traceMetadata) { current, _ in current }
+            .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
         debounceTaskSuggestionID = suggestionID
-        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, debounceSchedule] in
-            try? await Task.sleep(for: .milliseconds(debounceSchedule.scheduledDelayMilliseconds))
+        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
+            try? await Task.sleep(for: .milliseconds(requestSchedule.scheduledDelayMilliseconds))
             guard !Task.isCancelled else {
                 await MainActor.run {
                     self.clearCompletedSuggestionTask(suggestionID: suggestionID)
@@ -7508,6 +7490,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         currentFieldIdentity: self.currentFieldIdentity
                     ) else {
+                        return
+                    }
+
+                    if self.suggestionRequestSchedulingPolicy.shouldSuppressResult(
+                        latencyMilliseconds: latencyMilliseconds,
+                        schedule: requestSchedule
+                    ) {
+                        let shouldKeepStreamedSuggestion = self.suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+                            suggestionID: suggestionID,
+                            currentSuggestionID: self.currentSuggestionID,
+                            ticket: requestTicket,
+                            fieldIdentity: fieldIdentity,
+                            currentFieldIdentity: self.currentFieldIdentity,
+                            hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
+                        )
+                        let metadata = requestMetadata
+                            .merging(requestSchedule.traceMetadata) { current, _ in current }
+                            .merging([
+                                "resultLatencyBudgetExceeded": "true",
+                                "keptVisibleStreamingSuggestion": String(shouldKeepStreamedSuggestion)
+                            ]) { current, _ in current }
+                        RawAutocompleteTraceLog.shared.record(
+                            type: .suggestionSuppressed,
+                            suggestionID: suggestionID,
+                            appBundleIdentifier: appBundleIdentifier,
+                            fieldIdentity: fieldIdentityDescription,
+                            requestMode: request.mode.rawValue,
+                            triggerReason: "model-result",
+                            textBeforeCursor: request.textBeforeCursor,
+                            textAfterCursor: request.textAfterCursor,
+                            cleanedVisibleText: suggestion?.visibleText ?? "",
+                            displayedText: suggestion?.visibleText ?? "",
+                            latencyMilliseconds: latencyMilliseconds,
+                            reason: "latency-budget-exceeded",
+                            metadata: metadata
+                        )
+                        self.recordSuggestionEvent(
+                            "suggestion-blocked",
+                            context: context,
+                            profile: profile,
+                            metadata: [
+                                "reason": "latency-budget-exceeded"
+                            ].merging(metadata) { current, _ in current }
+                        )
+                        if shouldKeepStreamedSuggestion {
+                            self.setSuggestionDecision("Shown: kept streamed suggestion")
+                            self.repositionVisibleSuggestion(context: context, profile: profile)
+                            return
+                        }
+
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "latency-budget-exceeded"))
+                        self.hideSuggestion(reason: "latency-budget-exceeded")
                         return
                     }
 
