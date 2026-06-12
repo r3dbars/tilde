@@ -97,7 +97,6 @@ struct HostCompatibilityPolicyTests {
         let betaSafeBundles = Set([
             "com.apple.TextEdit",
             "com.apple.Notes",
-            "com.apple.MobileSMS",
             "md.obsidian",
             "com.google.Chrome",
             "com.openai.codex"
@@ -108,6 +107,8 @@ struct HostCompatibilityPolicyTests {
             .map(\.bundleIdentifier))
 
         #expect(userToggleBundles == betaSafeBundles)
+        #expect(try #require(catalog.policy(for: "com.apple.MobileSMS")).runtimeState == .proofModeOnly)
+        #expect(try #require(catalog.policy(for: "com.apple.MobileSMS")).killSwitch == .proofModeRequired)
         #expect(try #require(catalog.policy(for: "com.openai.codex")).runtimeState == .userToggleAllowed)
         #expect(try #require(catalog.policy(for: "com.anthropic.claudefordesktop")).runtimeState == .proofModeOnly)
         #expect(try #require(catalog.policy(for: "com.anthropic.claude-code")).runtimeState == .proofModeOnly)
