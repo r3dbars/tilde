@@ -790,8 +790,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Max tuning shows late Messages chat suggestions")
-    func maxTuningShowsLateMessagesChatSuggestions() throws {
+    @Test("Max tuning keeps over-budget Messages chat suggestions quiet")
+    func maxTuningKeepsOverBudgetMessagesChatSuggestionsQuiet() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.MobileSMS"))
         let field = FocusedFieldIdentity(
@@ -848,14 +848,15 @@ struct SuggestionOrchestratorTests {
 
         #expect(!conservativeDisplay.decision.shouldDisplay)
         #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
-        #expect(maxDisplay.decision.shouldDisplay)
-        #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == "true")
-        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == nil)
+        #expect(!maxDisplay.decision.shouldDisplay)
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] == "true")
     }
 
     @MainActor
-    @Test("Max tuning bypasses late suppression for universal word-only apps")
-    func maxTuningBypassesLateSuppressionForUniversalWordOnlyApps() throws {
+    @Test("Max tuning keeps over-budget universal word-only suggestions quiet")
+    func maxTuningKeepsOverBudgetUniversalWordOnlySuggestionsQuiet() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.example.UnknownEditor"))
         let field = FocusedFieldIdentity(
@@ -897,8 +898,10 @@ struct SuggestionOrchestratorTests {
         )
 
         #expect(profile.promptAppSafetyMode == .wordOnly)
-        #expect(display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreMaxAggressiveBypass"] == "true")
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(display.metadata["displayScoreMaxAggressiveBypass"] == nil)
+        #expect(display.metadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] == "true")
     }
 
     @MainActor
