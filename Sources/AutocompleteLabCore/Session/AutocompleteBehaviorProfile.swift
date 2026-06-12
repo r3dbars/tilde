@@ -260,6 +260,10 @@ public struct AutocompleteBehaviorProfileResolver: Equatable, Sendable {
             return AutocompleteBehaviorProfile.profile(.notes)
         }
 
+        if appBundleIdentifier == "md.obsidian" {
+            return AutocompleteBehaviorProfile.profile(.notes)
+        }
+
         if Self.casualChatBundleIdentifiers.contains(appBundleIdentifier) {
             return AutocompleteBehaviorProfile.profile(.casualChat)
         }

@@ -56,6 +56,10 @@ struct CompletionPredictionQualityEvalTests {
         #expect(names.contains("Password field negative"))
         #expect(names.contains("Code field negative"))
 
+        let obsidianCases = report.results.filter { $0.evalCase.surfaceName == "Obsidian" }
+        #expect(obsidianCases.count == 80)
+        #expect(obsidianCases.allSatisfy { $0.evalCase.behaviorProfileID == .notes })
+
         let negativeSummaries = report.surfaceSummaries.filter { $0.surfaceName.contains("negative") }
         #expect(negativeSummaries.allSatisfy { $0.expectedSilenceCount == 20 })
         #expect(negativeSummaries.allSatisfy { $0.noSuggestionCorrectCount == 20 })
