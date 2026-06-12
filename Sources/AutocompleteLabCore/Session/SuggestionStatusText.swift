@@ -52,8 +52,12 @@ public enum SuggestionStatusText {
         switch source {
         case "fast-word-completion", "predictive-word-fallback":
             return "fast fallback"
+        case "doc-local-ngram":
+            return "doc local"
+        case "model-cache", "model-session-cache":
+            return "model cache"
         case "predictive-phrase-fallback":
-            return "instant fallback"
+            return "legacy instant"
         case "app-model-result", "model-candidate-ranker", "model-result":
             return "model"
         default:
