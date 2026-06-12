@@ -7478,7 +7478,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 renderMode: renderMode,
                                 latencyMilliseconds: latencyMilliseconds,
                                 triggerReason: "model-stream",
-                                requestTicket: requestTicket
+                                requestTicket: requestTicket,
+                                candidateSelectionMetadata: self.suggestionOrchestrator
+                                    .streamingPresentationMetadata(suggestionID: suggestionID)
                             )
                         }
                     }

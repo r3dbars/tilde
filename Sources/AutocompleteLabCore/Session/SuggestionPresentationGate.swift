@@ -10,15 +10,21 @@ public struct StreamingPresentationState: Equatable, Sendable {
     public var presentedCount: Int
     public var lastVisibleText: String
     public var lastPresentedAtMilliseconds: Int?
+    public var firstPartialLatencyMilliseconds: Int?
+    public var lastPartialLatencyMilliseconds: Int?
 
     public init(
         presentedCount: Int = 0,
         lastVisibleText: String = "",
-        lastPresentedAtMilliseconds: Int? = nil
+        lastPresentedAtMilliseconds: Int? = nil,
+        firstPartialLatencyMilliseconds: Int? = nil,
+        lastPartialLatencyMilliseconds: Int? = nil
     ) {
         self.presentedCount = presentedCount
         self.lastVisibleText = lastVisibleText
         self.lastPresentedAtMilliseconds = lastPresentedAtMilliseconds
+        self.firstPartialLatencyMilliseconds = firstPartialLatencyMilliseconds
+        self.lastPartialLatencyMilliseconds = lastPartialLatencyMilliseconds
     }
 }
 
@@ -122,9 +128,13 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
             return false
         }
 
+        if state.presentedCount == 0 {
+            state.firstPartialLatencyMilliseconds = latencyMilliseconds
+        }
         state.presentedCount += 1
         state.lastVisibleText = suggestion.visibleText
         state.lastPresentedAtMilliseconds = nowMilliseconds
+        state.lastPartialLatencyMilliseconds = latencyMilliseconds
         return true
     }
 
