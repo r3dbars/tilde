@@ -265,24 +265,21 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(unsupported.statusText == "Current app: Unknown is yellow and off")
-        #expect(
-            unsupported.detailText
-                == "Best-effort mode for normal text fields. Secure, search, URL, form, and sensitive fields stay blocked. Suggestions are paused in this app. Resume only where you want suggestions."
-        )
+        #expect(unsupported.statusText == "Current app: Unknown is unsupported")
+        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
         #expect(
             unsupported.supportMatrixText
-                == "Support: yellow target. Suggestions are available, but checks and fallback matter."
+                == "Support: unsupported. Select text for Command Context copy fallback."
         )
-        #expect(unsupported.modeText == "Mode: floating backup")
-        #expect(unsupported.acceptanceText == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion accept is off for safety.")
-        #expect(unsupported.fallbackText == "Fallback: off while this app is paused.")
-        #expect(unsupported.proofText == "Check: turn on suggestions for this app first.")
+        #expect(unsupported.modeText == "Mode: not set up here")
+        #expect(unsupported.acceptanceText == "Acceptance: off here")
+        #expect(unsupported.fallbackText == "Fallback: unavailable until this app has a profile.")
+        #expect(unsupported.proofText == "Check: unavailable here.")
         #expect(unsupported.proofCommandText == nil)
         #expect(unsupported.proofCommandClipboardText == nil)
         #expect(!unsupported.canCopyProofCommand)
-        #expect(unsupported.menuToggleTitle == "Resume in Unknown")
-        #expect(unsupported.canToggle)
+        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
+        #expect(!unsupported.canToggle)
 
         let missing = SettingsCurrentAppState(
             displayName: "None",
