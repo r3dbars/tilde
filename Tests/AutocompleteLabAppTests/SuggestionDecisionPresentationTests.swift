@@ -9,7 +9,7 @@ struct SuggestionDecisionPresentationTests {
 
         #expect(presentation.statusKind == .quiet)
         #expect(presentation.summary == "search fields stay quiet")
-        #expect(presentation.menuTitle == "Why: search fields stay quiet")
+        #expect(presentation.menuTitle == "Why now: search fields stay quiet")
     }
 
     @Test("Shown decisions hide suggestion-like detail")
@@ -18,7 +18,7 @@ struct SuggestionDecisionPresentationTests {
 
         #expect(presentation.statusKind == .shown)
         #expect(presentation.summary == "Shown")
-        #expect(presentation.menuTitle == "Why: Shown")
+        #expect(presentation.menuTitle == "Why now: Shown")
     }
 
     @Test("Quiet decisions stay visibly quiet")
@@ -27,7 +27,7 @@ struct SuggestionDecisionPresentationTests {
 
         #expect(presentation.statusKind == .quiet)
         #expect(presentation.summary == "no useful suggestion")
-        #expect(presentation.menuTitle == "Why: no useful suggestion")
+        #expect(presentation.menuTitle == "Why now: no useful suggestion")
         #expect(presentation.diagnosticsKind == "quiet")
     }
 

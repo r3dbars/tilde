@@ -370,7 +370,17 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         }
 
         let rawContentEnabled = rawContentTracingEnabled
-        let proofMetadata = metadata.merging(AutocompleteTraceProofMetadata.current) { _, current in
+        var traceMetadata = metadata
+        if type == .suggestionSuppressed {
+            traceMetadata.merge(
+                SuggestionSilenceExplanationPolicy().traceMetadata(
+                    forTraceReason: reason,
+                    metadata: metadata,
+                    triggerReason: triggerReason
+                )
+            ) { _, code in code }
+        }
+        let proofMetadata = traceMetadata.merging(AutocompleteTraceProofMetadata.current) { _, current in
             current
         }
         let event = AutocompleteTraceEvent(

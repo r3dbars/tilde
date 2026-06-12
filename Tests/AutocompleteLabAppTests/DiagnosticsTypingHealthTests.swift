@@ -30,7 +30,7 @@ struct DiagnosticsTypingHealthTests {
                 == """
                 Status:
                   Suggestions: quiet
-                  Why quiet now: field quieted
+                  Why now: field quieted
                   Next action: Resume this app if you want suggestions here
                   Accessibility: allowed
                   Suggestion pause: off
