@@ -154,18 +154,9 @@ public struct SuggestionSession: Equatable, Sendable {
             return false
         }
 
-        let suggestedPrefix = suggestion.text.prefix(typedText.count)
-        guard String(suggestedPrefix).folding(
-            options: [.caseInsensitive, .diacriticInsensitive],
-            locale: .current
-        ) == typedText.folding(
-            options: [.caseInsensitive, .diacriticInsensitive],
-            locale: .current
-        ) else {
+        guard let remainingText = suggestion.remainingTextAfterTypeThroughPrefix(typedText) else {
             return false
         }
-
-        let remainingText = suggestion.text.dropFirst(typedText.count)
 
         if remainingText.isEmpty {
             visibleSuggestion = nil

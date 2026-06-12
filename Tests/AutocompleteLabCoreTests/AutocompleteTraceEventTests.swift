@@ -104,6 +104,37 @@ struct AutocompleteTraceEventTests {
         #expect(!json.contains("/tmp/private.png"))
     }
 
+    @Test("Type-through survival signal survives default trace redaction")
+    func typeThroughSurvivalSignalSurvivesDefaultTraceRedaction() throws {
+        let event = AutocompleteTraceEvent(
+            timestamp: "2026-05-07T00:00:00Z",
+            sessionID: "session",
+            suggestionID: "suggestion",
+            type: .suggestionHidden,
+            textBeforeCursor: "private prefix",
+            displayedText: "private suggestion",
+            outcome: "survived",
+            reason: "survived_typethrough",
+            metadata: [
+                "reason": "survived_typethrough",
+                "typeThroughSurvival": "true",
+                "typedThroughChars": "4",
+                "remainingVisibleChars": "12"
+            ]
+        )
+
+        let redacted = event.redactedForDefaultTrace()
+        let json = String(decoding: try JSONEncoder().encode(redacted), as: UTF8.self)
+
+        #expect(redacted.outcome == "survived")
+        #expect(redacted.reason == "survived_typethrough")
+        #expect(redacted.metadata["reason"] == "survived_typethrough")
+        #expect(redacted.metadata["typeThroughSurvival"] == "true")
+        #expect(redacted.metadata["typedThroughChars"] == "4")
+        #expect(redacted.metadata["remainingVisibleChars"] == "12")
+        #expect(!json.contains("private"))
+    }
+
     @Test("Shared trace signal helpers classify trust signals")
     func sharedTraceSignalHelpersClassifyTrustSignals() {
         let kept = event(metadata: [
