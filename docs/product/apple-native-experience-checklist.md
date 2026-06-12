@@ -247,7 +247,7 @@ autocomplete suggestion.
 ### Checklist
 
 - [x] Tab accepts only while a suggestion is visible.
-- [x] Backtick/tilde accepts full visible suggestion.
+- [x] `Shift-Tab` accepts full visible suggestion; backtick/tilde stays normal typed text.
 - [x] Option-Tab passes through.
 - [x] Window switching shortcuts pass through.
 - [x] Selected text blocks suggestions and acceptance.

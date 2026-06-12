@@ -199,8 +199,8 @@ struct SuggestionSessionTests {
         #expect(session.visibleSuggestion?.visibleText == " make this feel instant")
     }
 
-    @Test("Backtick accepts all visible text and dismisses")
-    func backtickAcceptsAllVisibleText() {
+    @Test("Accept all visible text dismisses")
+    func acceptAllVisibleTextDismisses() {
         var session = SuggestionSession(
             visibleSuggestion: CompletionSuggestion(text: " keep it small", maxVisibleWords: 8)
         )

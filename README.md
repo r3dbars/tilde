@@ -16,6 +16,7 @@ beta-safe rows, so app support stays narrow and proof-gated.
 - reads the focused text field through Accessibility
 - shows a small suggestion near the cursor
 - uses `Tab` to accept one word
+- uses `Shift-Tab` to accept the whole visible suggestion
 - uses `Esc` to dismiss
 - runs local-first by default
 - keeps app support proof-gated instead of pretending it works everywhere

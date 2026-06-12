@@ -2085,16 +2085,15 @@ press_codex_full_accept_shortcut_for_smoke() {
   assert_codex_full_accept_shortcut_safe "$tap_start_line" "$suggestion_start_line" "Codex full accept"
   shortcut_start_line="$(line_count "$LOG_PATH")"
   case "$accept_shortcut" in
-    backtick)
-      press_key_code_cgevent_with_timeout \
-        50 \
-        "${AUTOCOMPLETE_LAB_CODEX_FULL_ACCEPT_CGEVENT_BACKTICK_TIMEOUT_SECONDS:-2}" \
-        "Codex full accept CGEvent backtick" \
-        "session" \
-        "warm"
+    shiftTab)
+      press_accept_all_shortcut
       ;;
     optionTab)
       press_accept_all_shortcut
+      ;;
+    *)
+      echo "Unknown Codex full accept shortcut '$accept_shortcut'; expected shiftTab or optionTab." >&2
+      exit 2
       ;;
   esac
 
@@ -3508,10 +3507,10 @@ prepare_accept_all_shortcut_default() {
     "")
       return 0
       ;;
-    backtick|optionTab)
+    shiftTab|optionTab)
       ;;
     *)
-      echo "Unknown accept-all shortcut '$configured'; expected backtick or optionTab." >&2
+      echo "Unknown accept-all shortcut '$configured'; expected shiftTab or optionTab." >&2
       exit 2
       ;;
   esac
@@ -3839,14 +3838,17 @@ accept_all_shortcut() {
   fi
 
   case "$configured" in
+    shiftTab)
+      printf 'shiftTab\n'
+      ;;
     optionTab)
       printf 'optionTab\n'
       ;;
     backtick|"")
-      printf 'backtick\n'
+      printf 'shiftTab\n'
       ;;
     *)
-      echo "Unknown accept-all shortcut '$configured'; expected backtick or optionTab." >&2
+      echo "Unknown accept-all shortcut '$configured'; expected shiftTab or optionTab." >&2
       exit 2
       ;;
   esac
@@ -3854,15 +3856,19 @@ accept_all_shortcut() {
 
 press_accept_all_shortcut() {
   case "$(accept_all_shortcut)" in
+    shiftTab)
+      osascript <<'APPLESCRIPT'
+tell application "System Events"
+  key code 48 using shift down
+end tell
+APPLESCRIPT
+      ;;
     optionTab)
       osascript <<'APPLESCRIPT'
 tell application "System Events"
   key code 48 using option down
 end tell
 APPLESCRIPT
-      ;;
-    backtick)
-      press_key_code 50
       ;;
   esac
 }
@@ -16127,7 +16133,7 @@ run_obsidian() {
     export AUTOCOMPLETE_LAB_OBSIDIAN_RESET_APPEND_NEWLINES=1
   fi
   if [[ "$manual_app" =~ ^obsidian-(long-note|run-on)$ && -z "${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-}" ]]; then
-    export AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=optionTab
+    export AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT=shiftTab
   fi
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_MARKER_BASE:-Autocomplete Lab Obsidian proof}"
   export AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_RESET_TEXT="$obsidian_marker"

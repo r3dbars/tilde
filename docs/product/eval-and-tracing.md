@@ -386,7 +386,7 @@ For Codex dogfooding, use:
 
 ```bash
 START_LINE=$(wc -l < "$HOME/Library/Logs/AutocompleteLab/traces.jsonl" | tr -d ' ')
-# type in the Codex message box, accept with Tab/backtick, but do not submit
+# type in the Codex message box, accept with Tab/Shift-Tab, but do not submit
 AUTOCOMPLETE_LAB_TRACE_START_LINE=$START_LINE \
 AUTOCOMPLETE_LAB_TRACE_REQUIRE_APP=com.openai.codex \
   ./script/check_trace_eval.sh

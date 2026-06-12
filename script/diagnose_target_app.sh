@@ -220,7 +220,8 @@ Observed:
 - Placement:
 - Font/color fit:
 - Tab accepts next word:
-- Backtick/tilde accepts all visible:
+- Shift-Tab accepts all visible:
+- Backtick/tilde stays typed text:
 - Esc dismisses:
 - Any app-specific conflict:
 

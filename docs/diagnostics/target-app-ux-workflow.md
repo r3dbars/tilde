@@ -15,7 +15,7 @@ The goal is to capture enough visual and runtime context to debug placement, acc
 
 | Target | Script profile | What to check |
 | --- | --- | --- |
-| TextEdit | `textedit` | Baseline native text field behavior, caret alignment, `Tab`, backtick/tilde, `Esc`. |
+| TextEdit | `textedit` | Baseline native text field behavior, caret alignment, `Tab`, `Shift-Tab`, backtick passthrough, `Esc`. |
 | Notes | `notes` | Rich text behavior, focus changes, and whether suggestions feel too jumpy. |
 | Codex/ChatGPT composer | `composer` | Multiline composer behavior, submit controls nearby, and whether `Tab` conflicts with UI focus. |
 | Browsers | `browser` | Textarea/contenteditable behavior in Safari, Chrome, Arc, Firefox, Brave, or Edge. |
@@ -42,7 +42,7 @@ The goal is to capture enough visual and runtime context to debug placement, acc
    ```
 
 4. Wait for the suggestion to appear, then crop the screenshot tightly around the caret and suggestion.
-5. Test `Tab`, backtick/tilde, and `Esc`.
+5. Test `Tab`, `Shift-Tab`, backtick passthrough, and `Esc`.
 6. Open the generated `notes.md` and record what felt wrong.
 
 ## Example Commands

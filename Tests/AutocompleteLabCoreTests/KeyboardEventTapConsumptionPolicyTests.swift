@@ -7,7 +7,7 @@ struct KeyboardEventTapConsumptionPolicyTests {
 
     @Test("Passes through all keys when no suggestion is visible")
     func passesThroughWithoutVisibleSuggestion() {
-        for key in [AutocompleteKey.tab, .backtick, .optionTab, .escape, .commandZ, .other] {
+        for key in [AutocompleteKey.tab, .shiftTab, .backtick, .optionTab, .escape, .commandZ, .other] {
             #expect(!policy.shouldConsume(input(
                 key: key,
                 hasVisibleSuggestion: false,
@@ -31,7 +31,7 @@ struct KeyboardEventTapConsumptionPolicyTests {
 
     @Test("Passes through all keys after user typing invalidates the suggestion")
     func passesThroughAfterUserTypingInvalidatesSuggestion() {
-        for key in [AutocompleteKey.tab, .backtick, .optionTab, .escape, .commandZ, .other] {
+        for key in [AutocompleteKey.tab, .shiftTab, .backtick, .optionTab, .escape, .commandZ, .other] {
             #expect(!policy.shouldConsume(input(
                 key: key,
                 supportsOneWordAcceptance: true,
@@ -51,10 +51,10 @@ struct KeyboardEventTapConsumptionPolicyTests {
     @Test("Prompt-safe profiles do not consume full accept shortcuts")
     func promptSafeProfilesDoNotConsumeFullAcceptShortcuts() {
         #expect(!policy.shouldConsume(input(
-            key: .backtick,
+            key: .shiftTab,
             supportsOneWordAcceptance: true,
             supportsFullAcceptance: false,
-            acceptAllShortcut: .backtick
+            acceptAllShortcut: .shiftTab
         )))
         #expect(!policy.shouldConsume(input(
             key: .optionTab,
@@ -67,14 +67,19 @@ struct KeyboardEventTapConsumptionPolicyTests {
     @Test("Full accept shortcuts consume only the configured shortcut")
     func fullAcceptConsumesOnlyConfiguredShortcut() {
         #expect(policy.shouldConsume(input(
-            key: .backtick,
+            key: .shiftTab,
             supportsFullAcceptance: true,
-            acceptAllShortcut: .backtick
+            acceptAllShortcut: .shiftTab
         )))
         #expect(!policy.shouldConsume(input(
             key: .optionTab,
             supportsFullAcceptance: true,
-            acceptAllShortcut: .backtick
+            acceptAllShortcut: .shiftTab
+        )))
+        #expect(!policy.shouldConsume(input(
+            key: .backtick,
+            supportsFullAcceptance: true,
+            acceptAllShortcut: .shiftTab
         )))
         #expect(policy.shouldConsume(input(
             key: .optionTab,
@@ -91,7 +96,7 @@ struct KeyboardEventTapConsumptionPolicyTests {
     @Test("Disabled full accept never consumes full accept keys")
     func disabledFullAcceptNeverConsumesFullAcceptKeys() {
         #expect(!policy.shouldConsume(input(
-            key: .backtick,
+            key: .shiftTab,
             supportsFullAcceptance: true,
             acceptAllShortcut: .disabled
         )))
@@ -116,7 +121,8 @@ struct KeyboardEventTapConsumptionPolicyTests {
     @Test("Unhandled consumed accept keys are dropped instead of replayed")
     func unhandledConsumedAcceptKeysAreDropped() {
         #expect(!policy.shouldReplayUnhandledConsumedKey(.tab))
-        #expect(!policy.shouldReplayUnhandledConsumedKey(.backtick))
+        #expect(!policy.shouldReplayUnhandledConsumedKey(.shiftTab))
+        #expect(policy.shouldReplayUnhandledConsumedKey(.backtick))
         #expect(!policy.shouldReplayUnhandledConsumedKey(.controlBacktick))
         #expect(!policy.shouldReplayUnhandledConsumedKey(.optionTab))
         #expect(!policy.shouldReplayUnhandledConsumedKey(.escape))
@@ -149,7 +155,7 @@ struct KeyboardEventTapConsumptionPolicyTests {
         supportsFullAcceptance: Bool = false,
         hasPendingAcceptedInsertionUndo: Bool = false,
         isInvalidatedByUserTyping: Bool = false,
-        acceptAllShortcut: AcceptAllShortcut = .backtick
+        acceptAllShortcut: AcceptAllShortcut = .shiftTab
     ) -> KeyboardEventTapConsumptionInput {
         KeyboardEventTapConsumptionInput(
             key: key,
