@@ -327,6 +327,25 @@ final class SuggestionOrchestrator {
         return true
     }
 
+    func streamingPresentationMetadata(suggestionID: String) -> [String: String] {
+        guard let state = streamingPresentationStates[suggestionID],
+              state.presentedCount > 0 else {
+            return [:]
+        }
+
+        var metadata = [
+            "streamingPartialIndex": String(state.presentedCount),
+            "streamingPartialVisibleCharacters": String(state.lastVisibleText.count)
+        ]
+        if let firstPartialLatencyMilliseconds = state.firstPartialLatencyMilliseconds {
+            metadata["streamingFirstPartialLatencyMilliseconds"] = String(firstPartialLatencyMilliseconds)
+        }
+        if let lastPartialLatencyMilliseconds = state.lastPartialLatencyMilliseconds {
+            metadata["streamingLastPartialLatencyMilliseconds"] = String(lastPartialLatencyMilliseconds)
+        }
+        return metadata
+    }
+
     func finishStreamingPresentation(suggestionID: String) {
         streamingPresentationStates[suggestionID] = nil
     }

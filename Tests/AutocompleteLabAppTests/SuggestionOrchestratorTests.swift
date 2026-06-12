@@ -1397,6 +1397,48 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Streaming partial metadata exposes first useful display latency")
+    func streamingPartialMetadataExposesFirstUsefulDisplayLatency() {
+        let orchestrator = SuggestionOrchestrator(
+            engine: EchoCompletionEngine(),
+            suggestionPresentationGate: SuggestionPresentationGate(
+                minimumStreamingPhraseWords: 2,
+                minimumStreamingPhraseCharacterDelta: 4,
+                minimumStreamingIntervalMilliseconds: 0,
+                maximumStreamingPartialPresentations: 2
+            )
+        )
+        orchestrator.startStreamingPresentation(suggestionID: "stream")
+
+        #expect(orchestrator.streamingPresentationMetadata(suggestionID: "stream").isEmpty)
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 100,
+            latencyMilliseconds: 135
+        ))
+
+        let firstMetadata = orchestrator.streamingPresentationMetadata(suggestionID: "stream")
+        #expect(firstMetadata["streamingPartialIndex"] == "1")
+        #expect(firstMetadata["streamingFirstPartialLatencyMilliseconds"] == "135")
+        #expect(firstMetadata["streamingLastPartialLatencyMilliseconds"] == "135")
+
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this useful", maxVisibleWords: 3),
+            suggestionID: "stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 120,
+            latencyMilliseconds: 210
+        ))
+
+        let secondMetadata = orchestrator.streamingPresentationMetadata(suggestionID: "stream")
+        #expect(secondMetadata["streamingPartialIndex"] == "2")
+        #expect(secondMetadata["streamingFirstPartialLatencyMilliseconds"] == "135")
+        #expect(secondMetadata["streamingLastPartialLatencyMilliseconds"] == "210")
+    }
+
+    @MainActor
     @Test("Beginning a new request clears older streaming state")
     func beginningNewRequestClearsOlderStreamingState() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

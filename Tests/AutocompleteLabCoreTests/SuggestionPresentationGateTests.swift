@@ -156,6 +156,39 @@ struct SuggestionPresentationGateTests {
         ))
     }
 
+    @Test("streaming partial state records first and latest accepted latency")
+    func streamingPartialStateRecordsFirstAndLatestAcceptedLatency() {
+        let gate = SuggestionPresentationGate(
+            minimumStreamingPhraseWords: 2,
+            minimumStreamingPhraseCharacterDelta: 4,
+            minimumStreamingIntervalMilliseconds: 0,
+            maximumStreamingPartialPresentations: 2
+        )
+        var state = StreamingPresentationState()
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 100,
+            latencyMilliseconds: 140
+        ))
+        #expect(state.presentedCount == 1)
+        #expect(state.firstPartialLatencyMilliseconds == 140)
+        #expect(state.lastPartialLatencyMilliseconds == 140)
+
+        #expect(gate.shouldPresentStreamingPartial(
+            CompletionSuggestion(text: " make this useful", maxVisibleWords: 3),
+            mode: .phraseContinuation,
+            state: &state,
+            nowMilliseconds: 120,
+            latencyMilliseconds: 190
+        ))
+        #expect(state.presentedCount == 2)
+        #expect(state.firstPartialLatencyMilliseconds == 140)
+        #expect(state.lastPartialLatencyMilliseconds == 190)
+    }
+
     @Test("late streaming partials are suppressed before they become visible")
     func lateStreamingPartialsAreSuppressedBeforeTheyBecomeVisible() {
         let gate = SuggestionPresentationGate(
