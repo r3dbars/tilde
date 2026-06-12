@@ -209,8 +209,8 @@ AUTOCOMPLETE_LAB_MODEL=qwen35-9b ./script/build_and_run.sh --verify
 
 Supported override names match the runtime and download helper:
 `qwen35-4b`, `qwen3.5-4b`, `qwen35-9b`, `qwen3.5-9b`,
-`qwen3-1.7b`, `qwen3-0.6b`, `gemma-4-e2b`, `gemma-4-e4b`,
-`gemma4-e4b`, `gemma-4-e4b-4bit`, `gemma-4-e4b-it-optiq`,
+`qwen3-1.7b`, `small-draft-1b`, `qwen3-0.6b`, `gemma-4-e2b`,
+`gemma-4-e4b`, `gemma4-e4b`, `gemma-4-e4b-4bit`, `gemma-4-e4b-it-optiq`,
 `gemma-4-e4b-it-optiq-4bit`, `gemma4-e4b-it-optiq`, and
 `gemma-4-26b`.
 
@@ -282,6 +282,28 @@ The checked daily-driver audit report is guarded in smoke tests:
 
 ```bash
 ./script/check_daily_driver_local_quality_audit_report.sh
+```
+
+Run the blind small-model audit separately from the daily-driver complaint
+fixtures:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_RUNTIME_BACKEND=mlx \
+AUTOCOMPLETE_LAB_RUNTIME_TIMEOUT=45 \
+  ./script/local_quality_audit.py \
+    --input docs/evals/small-model-blind-prompts-2026-06-12.jsonl \
+    --generate \
+    --model small-draft-1b \
+    --timeout 45 \
+    --min-overall 92 \
+    --min-relevance 72
+```
+
+Check the report and fixture guardrails:
+
+```bash
+./script/check_small_model_blind_audit_report.sh
 ```
 
 Wrong-field safety proof should stay in the default smoke path too:

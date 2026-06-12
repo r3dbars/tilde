@@ -464,7 +464,7 @@ def read_rows(path: Path) -> list[AuditRow]:
     return rows
 
 
-def generated_output(row: AuditRow, timeout: float) -> str:
+def generated_output(row: AuditRow, timeout: float, model: Optional[str]) -> str:
     payload = {"system": row.system, "user": row.user, "mode": row.mode}
     command = [
         str(ROOT_DIR / "script" / "local_completion_runtime.py"),
@@ -473,6 +473,8 @@ def generated_output(row: AuditRow, timeout: float) -> str:
         "--max-tokens",
         str(min(16, max(3, row.max_words + 6))),
     ]
+    if model:
+        command.extend(["--model", model])
     completed = subprocess.run(
         command,
         input=json.dumps(payload),
@@ -488,11 +490,16 @@ def generated_output(row: AuditRow, timeout: float) -> str:
     return completed.stdout.strip()
 
 
-def outputs_for_rows(rows: Iterable[AuditRow], generate: bool, timeout: float) -> list[tuple[AuditRow, str]]:
+def outputs_for_rows(
+    rows: Iterable[AuditRow],
+    generate: bool,
+    timeout: float,
+    model: Optional[str] = None,
+) -> list[tuple[AuditRow, str]]:
     pairs = []
     for row in rows:
         if generate:
-            output = display_output(row, generated_output(row, timeout))
+            output = display_output(row, generated_output(row, timeout, model))
         else:
             output = display_output(row, row.output or "")
         pairs.append((row, output))
@@ -626,6 +633,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run a local opt-in autocomplete quality audit.")
     parser.add_argument("--input", type=Path, help="JSONL disposable prompt set")
     parser.add_argument("--generate", action="store_true", help="Generate current local model output")
+    parser.add_argument("--model", help="Model alias for generated runs, for example small-draft-1b")
     parser.add_argument("--self-test", action="store_true", help="Run fixture self-test without opt-in env")
     parser.add_argument("--timeout", type=float, default=8)
     parser.add_argument("--min-overall", type=int, default=0)
@@ -650,10 +658,13 @@ def main() -> int:
             print("--input is required unless --self-test is used", file=sys.stderr)
             return 64
         rows = read_rows(args.input)
-        source = "current local model" if args.generate else "labeled local outputs"
+        if args.generate and args.model:
+            source = f"current local model ({args.model})"
+        else:
+            source = "current local model" if args.generate else "labeled local outputs"
         generate = args.generate
 
-    pairs = outputs_for_rows(rows, generate=generate, timeout=args.timeout)
+    pairs = outputs_for_rows(rows, generate=generate, timeout=args.timeout, model=args.model)
     scores = [score_row(row, output) for row, output in pairs]
     summary, overall, relevance = summarize(scores, source=source, include_raw=include_raw)
     print(summary)

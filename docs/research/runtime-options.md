@@ -68,6 +68,7 @@ These are useful for developer trials, not the default beta promise:
 - `qwen35-4b` or `qwen3.5-4b`: preferred Qwen3.5 4B beta asset.
 - `qwen35-9b` or `qwen3.5-9b`: Qwen3.5 9B 4-bit, better quality trial with higher cost.
 - `qwen3-1.7b`: smaller Qwen3 baseline.
+- `small-draft-1b`: named 1B-class draft lane alias for `qwen3-1.7b`.
 - `qwen3-0.6b`: very small smoke-test baseline.
 - `gemma-4-e2b`: historical Gemma E2B candidate.
 - `gemma-4-e4b`, `gemma4-e4b`, or `gemma-4-e4b-4bit`: Gemma 4 E4B MLX trial.
@@ -77,6 +78,32 @@ These are useful for developer trials, not the default beta promise:
 Gemma 4 E2B is no longer the beta target. It remains a historical candidate
 because earlier MLX loading did not make it the fastest path to a playable
 native build.
+
+## Small Draft Lane
+
+The small/faster experiment lane is `small-draft-1b`, which resolves to the
+pinned Qwen3 1.7B 4-bit MLX asset. This lane exists for speed and draft-quality
+experiments only. It must not replace the 4B default unless it wins on both
+blind quality and latency.
+
+Download or inspect the asset:
+
+```bash
+script/download_mlx_model.py --model small-draft-1b --print-target
+script/download_mlx_model.py --model small-draft-1b
+```
+
+Run the app with the small model:
+
+```bash
+AUTOCOMPLETE_LAB_MODEL=small-draft-1b ./script/build_and_run.sh --verify
+```
+
+Compare the small lane against the 4B default from redacted diagnostics:
+
+```bash
+./script/compare_local_models.py --small-draft-lane
+```
 
 ## Model Asset Format
 

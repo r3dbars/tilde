@@ -73,6 +73,17 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         reasoningEnabled: false
     )
 
+    public static let smallDraftExperiment = CompletionModelPolicy(
+        model: .qwen3Medium,
+        runtimeOwnership: .appOwnedEmbedded,
+        minimumMemoryGB: 8,
+        maxGeneratedTokens: 16,
+        maxVisibleWords: 5,
+        debounceMilliseconds: 10,
+        targetLatencyMilliseconds: 35,
+        reasoningEnabled: false
+    )
+
     public func supports(_ hardware: HardwareProfile) -> Bool {
         hardware.isAppleSilicon && hardware.memoryGB >= minimumMemoryGB
     }
