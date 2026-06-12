@@ -14,24 +14,42 @@ public enum SuggestionStatusText {
     }
 
     public static func notShown(reason: String) -> String {
-        switch reason {
-        case "empty-suggestion", "no-suggestion", "no-candidates", "low-top-score":
+        let policy = SuggestionSilenceExplanationPolicy()
+        switch policy.reasonCode(forTraceReason: reason) {
+        case .noUsefulSuggestion:
+            if reason == "no-fast-word-candidate" {
+                return "Quiet: no fast word match"
+            }
             return "Quiet: no useful suggestion"
-        case "no-fast-word-candidate":
-            return "Quiet: no fast word match"
-        case "missing-anchor":
+        case .placement where reason == "missing-anchor":
             return "Blocked: no cursor position"
-        case "repeated-miss":
+        case .placement:
+            return "Blocked: cursor placement"
+        case .repetition:
             return "Blocked: repeated miss"
-        case "fast-phrase-learning-restraint":
+        case .learnedRestraint:
             return "Quiet: recent rejects"
-        case "engine-error":
+        case .modelError:
             return "Blocked: model error"
-        case "stale-request", "stale-field", "stale-after-keydown", "stale-text", "stale-focused-context":
+        case .staleContext:
             return "Blocked: stale text"
-        case "too-slow-to-display":
+        case .latency:
             return "Blocked: too slow"
-        default:
+        case .confidence:
+            return "Blocked: low confidence"
+        case .displayScore:
+            return "Blocked: display score"
+        case .prefixCooldown:
+            return "Waiting: recent prefix cooldown"
+        case .quietMode:
+            return "Waiting: quiet mode"
+        case .safety:
+            return "Blocked: safety gate"
+        case .typingCadence:
+            return "Waiting: typing fast"
+        case .settingsOrRuntime:
+            return "Blocked: suggestions unavailable"
+        case .unknown:
             let normalized = normalizedLabel(reason)
             return "Blocked: \(normalized.isEmpty ? "unknown reason" : normalized)"
         }

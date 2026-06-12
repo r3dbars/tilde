@@ -34,4 +34,59 @@ struct SuggestionSilenceExplanationPolicyTests {
         #expect(policy.focusedTextUnavailable(isSecure: true) == "secure field")
         #expect(policy.focusedTextUnavailable(isSecure: false) == "no editable text field")
     }
+
+    @Test("Maps no-show decisions to one trace-safe reason code")
+    func mapsNoShowDecisionsToOneTraceSafeReasonCode() {
+        let cases: [(String, [String: String], String, SuggestionSilenceReasonCode)] = [
+            (
+                "too-slow-to-display",
+                ["displayScoreSuppressionReason": "too-slow-to-display"],
+                "model-result",
+                .latency
+            ),
+            (
+                "low-confidence",
+                ["displayScoreSuppressionReason": "low-confidence"],
+                "model-result",
+                .confidence
+            ),
+            (
+                "below-threshold",
+                ["displayScoreSuppressionReason": "below-threshold"],
+                "model-result",
+                .displayScore
+            ),
+            ("repeated-miss", [:], "model-result", .repetition),
+            ("typedOver", ["prefixCooldownReason": "typedOver"], "prefix-family-cooldown", .prefixCooldown),
+            ("quiet-mode-field", ["quietMode": "field"], "annoyance-quiet-mode", .quietMode),
+            ("fast-phrase-learning-restraint", [:], "predictive-phrase-fallback", .learnedRestraint),
+            ("secureField", [:], "activation-policy", .safety)
+        ]
+
+        for (reason, metadata, triggerReason, expectedCode) in cases {
+            let traceMetadata = policy.traceMetadata(
+                forTraceReason: reason,
+                metadata: metadata,
+                triggerReason: triggerReason
+            )
+
+            #expect(policy.reasonCode(
+                forTraceReason: reason,
+                metadata: metadata,
+                triggerReason: triggerReason
+            ) == expectedCode)
+            #expect(traceMetadata == [
+                SuggestionSilenceExplanationPolicy.traceReasonCodeMetadataKey: expectedCode.rawValue
+            ])
+        }
+    }
+
+    @Test("Reason code copy stays plain")
+    func reasonCodeCopyStaysPlain() {
+        #expect(SuggestionSilenceReasonCode.latency.userFacingReason == "too slow")
+        #expect(SuggestionSilenceReasonCode.prefixCooldown.userFacingReason == "recent prefix cooldown")
+        #expect(SuggestionSilenceReasonCode.quietMode.userFacingReason == "quiet mode")
+        #expect(SuggestionSilenceReasonCode.learnedRestraint.userFacingReason == "recent rejects")
+        #expect(SuggestionSilenceReasonCode.safety.userFacingReason == "safety gate")
+    }
 }

@@ -51,6 +51,7 @@ public enum DiagnosticsMetadataRedactor {
     private static func isShapeKey(_ key: String) -> Bool {
         let normalized = key.lowercased()
         return normalized.hasSuffix("chars")
+            || normalized.hasSuffix("reasoncode")
             || normalized.hasSuffix("count")
             || normalized.hasSuffix("length")
             || normalized.hasSuffix("milliseconds")
