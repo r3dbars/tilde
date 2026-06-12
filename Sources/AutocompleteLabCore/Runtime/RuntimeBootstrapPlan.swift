@@ -207,6 +207,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         "gemma-4-26b": .gemma4A4BMLX,
         "qwen3-0.6b": .qwen3SmallMLX,
         "qwen3-1.7b": .qwen3MediumMLX,
+        "small-draft-1b": .qwen3MediumMLX,
         "qwen35-4b": .qwen35FourBMLX,
         "qwen3.5-4b": .qwen35FourBMLX,
         "qwen35-9b": .qwen35NineBMLX,

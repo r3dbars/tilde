@@ -16,6 +16,19 @@ struct ModelPolicyTests {
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
 
+    @Test("Small draft experiment uses Qwen3 1.7B without changing the MVP default")
+    func smallDraftExperimentUsesQwen3Medium() {
+        let policy = CompletionModelPolicy.smallDraftExperiment
+
+        #expect(CompletionModelPolicy.mvp.model == .qwen35FourB)
+        #expect(policy.model == .qwen3Medium)
+        #expect(policy.runtimeOwnership == .appOwnedEmbedded)
+        #expect(policy.reasoningEnabled == false)
+        #expect(policy.minimumMemoryGB < CompletionModelPolicy.mvp.minimumMemoryGB)
+        #expect(policy.maxGeneratedTokens < CompletionModelPolicy.mvp.maxGeneratedTokens)
+        #expect(policy.maxVisibleWords < CompletionModelPolicy.mvp.maxVisibleWords)
+    }
+
     @Test("Model policy clamps visible completions to autocomplete size")
     func modelPolicyClampsVisibleCompletions() {
         let tiny = CompletionModelPolicy(
