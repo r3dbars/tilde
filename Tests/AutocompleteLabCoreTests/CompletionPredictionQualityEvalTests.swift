@@ -107,4 +107,50 @@ struct CompletionPredictionQualityEvalTests {
             #expect(checkedInReport.contains(required))
         }
     }
+
+    @Test("Daily-driver phrase corpus scores accept-worthy writing suggestions")
+    func dailyDriverPhraseCorpusScoresAcceptWorthyWritingSuggestions() {
+        let report = DailyDriverPhraseQualityEvaluator.evaluate()
+        let total = report.totalSummary
+
+        #expect(report.results.count == 30)
+        #expect(total.caseCount == 30)
+        #expect(total.displayEligibleCount == 24)
+        #expect(total.expectedSilenceCount == 6)
+        #expect(total.shownCount == 24)
+        #expect(total.phraseLengthPassCount == 24)
+        #expect(total.relevancePassCount == 24)
+        #expect(total.suffixNoiseFailureCount == 0)
+        #expect(total.expectedSilencePassCount == 6)
+        #expect(total.acceptWorthyCount == 30)
+        #expect(report.score == 100)
+        #expect(Set(report.surfaceSummaries.map(\.surfaceName)) == ["TextEdit", "Notes", "Obsidian"])
+        #expect(report.results.contains { $0.selectionSource == "predictive-phrase-fallback" })
+        #expect(report.results.contains { $0.selectionSource == "model-candidate-ranker" })
+    }
+
+    @Test("Daily-driver phrase report names acceptability and suffix-noise guardrails")
+    func dailyDriverPhraseReportNamesAcceptabilityAndSuffixNoiseGuardrails() throws {
+        let markdown = DailyDriverPhraseQualityEvaluator.evaluate().markdown
+        let reportPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("docs/evals/daily-driver-phrase-quality-2026-06-12.md")
+        let checkedInReport = try String(contentsOf: reportPath, encoding: .utf8)
+
+        for required in [
+            "Daily Driver Phrase Quality Eval - 30 Real Writing Cases",
+            "Score: 100/100",
+            "Rows scored: 30",
+            "Display-eligible rows: 24",
+            "Suppressed/no-suggestion rows: 6",
+            "Accept-worthy rows: 30/30",
+            "3-8 word phrase rate: 100%",
+            "Suffix-noise failures: 0",
+            "| Total | 24/24 | 100% | 100% | 0 | 6/6 | 100% |",
+            "would this visible suggestion be worth accepting",
+            "not private dogfood"
+        ] {
+            #expect(markdown.contains(required))
+            #expect(checkedInReport.contains(required))
+        }
+    }
 }
