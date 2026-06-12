@@ -32,6 +32,20 @@ struct CompletionRequestTests {
         #expect(request.behaviorProfileTraceMetadata["requestFieldKind"] == "multilineCompose")
     }
 
+    @Test("Obsidian request metadata uses note-taking behavior profile")
+    func obsidianRequestMetadataUsesNotesProfile() {
+        let request = CompletionRequest(
+            textBeforeCursor: "The intro is enough.\n\nNew plan",
+            appBundleIdentifier: "md.obsidian",
+            fieldKind: .multilineCompose
+        )
+
+        #expect(request.behaviorProfile.id == .notes)
+        #expect(request.behaviorProfileTraceMetadata["behaviorProfile"] == "notes")
+        #expect(request.behaviorProfileTraceMetadata["behaviorProfileSuppressesFreshParagraphStart"] == "false")
+        #expect(request.behaviorProfileTraceMetadata["requestFieldKind"] == "multilineCompose")
+    }
+
     @Test("Trace metadata includes partial word shape only")
     func traceMetadataIncludesPartialWordShapeOnly() {
         let request = CompletionRequest(textBeforeCursor: "Please open Transcrip")
