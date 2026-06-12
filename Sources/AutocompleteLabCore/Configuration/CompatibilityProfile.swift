@@ -395,6 +395,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         return profile
     }
 
+    public func hasExplicitProfile(for bundleIdentifier: String) -> Bool {
+        profiles[bundleIdentifier] != nil
+    }
+
     public func allows(bundleIdentifier: String) -> Bool {
         guard let profile = profile(for: bundleIdentifier) else {
             return false
@@ -413,10 +417,25 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         }
 
         if let profile = profiles[bundleIdentifier] {
-            return .supported(Self.bestEffortProfileIfUseful(profile) ?? profile)
+            return .supported(profile)
+        }
+
+        if Self.knownRegistryProfileBlocksUniversalFallback(for: bundleIdentifier) {
+            return .unsupported
         }
 
         return .supported(Self.universalFallbackProfile(for: bundleIdentifier))
+    }
+
+    private static func knownRegistryProfileBlocksUniversalFallback(for bundleIdentifier: String) -> Bool {
+        let registryProfile = AppCompatibilityRegistry.default.profile(for: bundleIdentifier)
+        guard registryProfile.id != AppCompatibilityProfile.fallback.id else {
+            return false
+        }
+
+        return !registryProfile.defaultRung.allowsSuggestions
+            || registryProfile.textPath == .blocked
+            || registryProfile.acceptMode == .none
     }
 
     public static func universalFallbackProfile(for bundleIdentifier: String) -> CompatibilityProfile {
@@ -446,42 +465,6 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsSyntheticCaretPlacement: true,
             promptAppSafetyMode: .wordOnly,
             notes: "Universal fallback profile. Show a floating suggestion for normal editable fields even without app-specific caret proof; keep sensitive field classification and one-word-only acceptance guardrails."
-        )
-    }
-
-    private static func bestEffortProfileIfUseful(_ profile: CompatibilityProfile) -> CompatibilityProfile? {
-        guard !profile.canPresentSuggestions,
-              !profile.isSensitive,
-              profile.promptAppSafetyMode == .notPrompt else {
-            return nil
-        }
-
-        return CompatibilityProfile(
-            bundleIdentifier: profile.bundleIdentifier,
-            displayName: profile.displayName,
-            appFamily: profile.appFamily,
-            supportLevel: .yellow,
-            graduationDecision: .wordOnly,
-            supportReason: "\(profile.supportReason) Using best-effort suggestions for normal text fields.",
-            renderMode: .floatingMirror,
-            insertionMode: .axValueReplacement,
-            fallbackRenderMode: .floatingMirror,
-            fallbackInsertionMode: .disabled,
-            fieldIdentityMode: .stableBounds,
-            anchorLadder: [.caret, .line, .field, .window],
-            knownFailureModes: profile.knownFailureModes + ["best-effort placement may be approximate"],
-            allowsFieldAnchor: true,
-            allowsWindowAnchor: true,
-            requiresValidatedCaret: false,
-            supportsOneWordAcceptance: true,
-            supportsFullAcceptance: false,
-            allowsUnknownFieldKind: false,
-            suppressesAfterInsertionFailure: true,
-            allowsDescendantTextFallback: true,
-            allowsDetachedSuggestions: true,
-            allowsSyntheticCaretPlacement: true,
-            promptAppSafetyMode: .wordOnly,
-            notes: "\(profile.notes) Best-effort fallback is enabled for normal text fields; sensitive field classification still blocks display and acceptance."
         )
     }
 

@@ -1518,13 +1518,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func targetAppForControls() -> RunningApplicationInfo? {
         if let app = accessibilityClient.frontmostApplication(),
-           profileStore.allows(bundleIdentifier: app.bundleIdentifier) {
+           allowsAppForCurrentScope(bundleIdentifier: app.bundleIdentifier) {
             rememberEligibleTargetApp(app)
             return app
         }
 
         guard let app = lastEligibleTargetApp,
-              profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
+              allowsAppForCurrentScope(bundleIdentifier: app.bundleIdentifier) else {
             return nil
         }
 
@@ -1532,11 +1532,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rememberEligibleTargetApp(_ app: RunningApplicationInfo) {
-        guard profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
+        guard allowsAppForCurrentScope(bundleIdentifier: app.bundleIdentifier) else {
             return
         }
 
         lastEligibleTargetApp = app
+    }
+
+    private func allowsAppForCurrentScope(bundleIdentifier: String) -> Bool {
+        guard let profile = profileStore.profile(for: bundleIdentifier),
+              Self.allowsProfileLookup(
+                  for: bundleIdentifier,
+                  profileStore: profileStore,
+                  enforceAllowlist: appSettings.enforceAllowlist
+              ) else {
+            return false
+        }
+
+        return profile.canPresentSuggestions && !profile.isSensitive
     }
 
     private func rememberFieldControlTarget(
@@ -1693,6 +1706,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        guard Self.allowsProfileLookup(
+            for: app.bundleIdentifier,
+            profileStore: profileStore,
+            enforceAllowlist: appSettings.enforceAllowlist
+        ) else {
+            return nil
+        }
+
         if shouldUseCodexFullAcceptNoSubmitProofProfile(
             appBundleIdentifier: app.bundleIdentifier,
             profile: profile
@@ -1721,6 +1742,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
             && profile.supportsFullAcceptance
             && !profile.requiresNoSubmitAcceptanceProof
+    }
+
+    static func allowsProfileLookup(
+        for bundleIdentifier: String,
+        profileStore: CompatibilityProfileStore,
+        enforceAllowlist: Bool
+    ) -> Bool {
+        !enforceAllowlist || profileStore.hasExplicitProfile(for: bundleIdentifier)
     }
 
     private func allowsCodexProofInsertion(profile: CompatibilityProfile) -> Bool {
@@ -18804,7 +18833,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func nudgeCurrentAppSuggestion(dx: Double, dy: Double) {
         guard let bundleIdentifier = visibleSuggestionBundleIdentifier
                 ?? targetAppForControls()?.bundleIdentifier,
-              profileStore.allows(bundleIdentifier: bundleIdentifier) else {
+              allowsAppForCurrentScope(bundleIdentifier: bundleIdentifier) else {
             DiagnosticsLog.shared.record(
                 "compatibility-learning-nudge-skipped",
                 metadata: ["reason": "no-eligible-app"]
@@ -18901,7 +18930,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     private func toggleCurrentApp() {
         guard let app = targetAppForControls(),
-              profileStore.allows(bundleIdentifier: app.bundleIdentifier) else {
+              allowsAppForCurrentScope(bundleIdentifier: app.bundleIdentifier) else {
             return
         }
 
@@ -19587,28 +19616,29 @@ private extension AppDelegate {
             appEnablementSetupCompleted = setupKeyExists
                 ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
                 : true
-            if !setupKeyExists {
-                selection.clear()
-            }
             if !appEnablementSetupCompleted {
-                selection.clear()
+                selection.removeLegacyDefaultOffBundleIdentifiers(profileStore: profileStore)
                 appEnablementSetupCompleted = true
             }
-            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-            disabledBundleIdentifiers = selection.bundleIdentifiers
+            let runtimeSelection = selection.applyingTemporaryEnablement(
+                bundleIdentifiers: temporarilyEnabledBundleIDs
+            )
+            disabledBundleIdentifiers = runtimeSelection.bundleIdentifiers
             defaults.set(appEnablementSetupCompleted, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-            persistDisabledApps()
+            defaults.set(selection.persistedBundleIdentifiers, forKey: Self.disabledAppsDefaultsKey)
             return
         }
 
-        var defaultOffSelection = DisabledAppSelection(
+        let defaultOffSelection = DisabledAppSelection(
             defaultOffProfileStore: profileStore
         )
-        defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
+        let runtimeSelection = defaultOffSelection.applyingTemporaryEnablement(
+            bundleIdentifiers: temporarilyEnabledBundleIDs
+        )
+        disabledBundleIdentifiers = runtimeSelection.bundleIdentifiers
         appEnablementSetupCompleted = true
         defaults.set(true, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-        persistDisabledApps()
+        defaults.set(defaultOffSelection.persistedBundleIdentifiers, forKey: Self.disabledAppsDefaultsKey)
     }
 
     func loadProofModeOverrides() {

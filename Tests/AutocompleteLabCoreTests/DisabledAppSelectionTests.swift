@@ -53,6 +53,23 @@ struct DisabledAppSelectionTests {
         #expect(selection.persistedBundleIdentifiers == [])
     }
 
+    @Test("Legacy default-off migration preserves custom pauses")
+    func legacyDefaultOffMigrationPreservesCustomPauses() {
+        var selection = DisabledAppSelection(
+            bundleIdentifiers: [
+                "com.apple.TextEdit",
+                "md.obsidian",
+                "example.custom.Writer"
+            ]
+        )
+
+        selection.removeLegacyDefaultOffBundleIdentifiers(profileStore: .mvp)
+
+        #expect(!selection.contains("com.apple.TextEdit"))
+        #expect(!selection.contains("md.obsidian"))
+        #expect(selection.contains("example.custom.Writer"))
+    }
+
     @Test("Empty bundle IDs are ignored")
     func emptyBundleIDsAreIgnored() {
         var selection = DisabledAppSelection()
@@ -117,6 +134,24 @@ struct DisabledAppSelectionTests {
         #expect(!selection.contains("com.apple.TextEdit"))
         #expect(selection.contains("com.google.Chrome"))
         #expect(!selection.contains("md.obsidian"))
+    }
+
+    @Test("Temporary enablement keeps persisted selection unchanged")
+    func temporaryEnablementKeepsPersistedSelectionUnchanged() {
+        let persistedSelection = DisabledAppSelection(
+            bundleIdentifiers: [
+                "com.apple.TextEdit",
+                "md.obsidian"
+            ]
+        )
+
+        let runtimeSelection = persistedSelection.applyingTemporaryEnablement(
+            bundleIdentifiers: "com.apple.TextEdit"
+        )
+
+        #expect(persistedSelection.persistedBundleIdentifiers == ["com.apple.TextEdit", "md.obsidian"])
+        #expect(!runtimeSelection.contains("com.apple.TextEdit"))
+        #expect(runtimeSelection.contains("md.obsidian"))
     }
 
     @Test("Temporary enable override parses comma space and newline lists")
