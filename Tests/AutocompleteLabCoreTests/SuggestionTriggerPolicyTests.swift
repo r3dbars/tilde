@@ -403,6 +403,25 @@ struct SuggestionTriggerPolicyTests {
         ) == .request(delayMilliseconds: 120, lane: .instantWord))
     }
 
+    @Test("Obsidian note behavior asks sooner at fresh paragraph starts")
+    func obsidianNoteBehaviorAsksSoonerAtFreshParagraphStarts() {
+        let resolver = AutocompleteBehaviorProfileResolver()
+        let policy = SuggestionTriggerPolicy()
+        let context = "The intro is enough.\n\nNew plan"
+        let profileID = resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "md.obsidian",
+            fieldKind: .multilineCompose,
+            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: context)
+        )).id
+
+        #expect(profileID == .notes)
+        #expect(policy.decision(
+            previousTextBeforeCursor: "The intro is enough.\n\nNew pla",
+            currentTextBeforeCursor: context,
+            behaviorProfileID: profileID
+        ) == .request(delayMilliseconds: 120, lane: .instantWord))
+    }
+
     @Test("Line start behavior follows profile and list shape")
     func lineStartBehaviorFollowsProfileAndListShape() {
         #expect(SuggestionLineStartBehavior.behavior(
