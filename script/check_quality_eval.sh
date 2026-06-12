@@ -57,3 +57,27 @@ for required in \
     exit 1
   fi
 done
+
+PHRASE_REPORT_PATH="docs/evals/daily-driver-phrase-quality-2026-06-12.md"
+if [[ ! -f "$PHRASE_REPORT_PATH" ]]; then
+  echo "daily-driver phrase quality report missing: $PHRASE_REPORT_PATH" >&2
+  exit 1
+fi
+
+for required in \
+  "Daily Driver Phrase Quality Eval - 30 Real Writing Cases" \
+  "Score: 100/100" \
+  "Rows scored: 30" \
+  "Display-eligible rows: 24" \
+  "Suppressed/no-suggestion rows: 6" \
+  "Accept-worthy rows: 30/30" \
+  "3-8 word phrase rate: 100%" \
+  "Suffix-noise failures: 0" \
+  "| Total | 24/24 | 100% | 100% | 0 | 6/6 | 100% |" \
+  "would this visible suggestion be worth accepting" \
+  "not private dogfood"; do
+  if ! grep -F "$required" "$PHRASE_REPORT_PATH" >/dev/null; then
+    echo "daily-driver phrase quality report missing required section: $required" >&2
+    exit 1
+  fi
+done

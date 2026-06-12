@@ -33,6 +33,46 @@ struct CompletionConfidencePolicyTests {
         #expect(decision.bucket == .high)
     }
 
+    @Test("Blocks one and two word nubs in daily-driver phrase mode")
+    func blocksShortNubsInDailyDriverPhraseMode() {
+        let oneWordDecision = policy.decision(
+            suggestion: CompletionSuggestion(text: " ready", maxVisibleWords: 8),
+            mode: .phraseContinuation,
+            textBeforeCursor: "The draft is almost",
+            latencyMilliseconds: 120,
+            supportLevel: .green
+        )
+        let twoWordDecision = policy.decision(
+            suggestion: CompletionSuggestion(text: " follow up", maxVisibleWords: 8),
+            mode: .phraseContinuation,
+            textBeforeCursor: "I just wanted to",
+            latencyMilliseconds: 120,
+            supportLevel: .green
+        )
+
+        #expect(!oneWordDecision.canDisplay)
+        #expect(!twoWordDecision.canDisplay)
+        #expect(oneWordDecision.bucket == .low)
+        #expect(twoWordDecision.bucket == .low)
+        #expect(oneWordDecision.reasons.contains("too-short-daily-driver-phrase"))
+        #expect(twoWordDecision.reasons.contains("too-short-daily-driver-phrase"))
+    }
+
+    @Test("Allows preferred length daily-driver phrases")
+    func allowsPreferredLengthDailyDriverPhrases() {
+        let decision = policy.decision(
+            suggestion: CompletionSuggestion(text: " ready for review today", maxVisibleWords: 8),
+            mode: .phraseContinuation,
+            textBeforeCursor: "The draft is almost",
+            latencyMilliseconds: 120,
+            supportLevel: .green
+        )
+
+        #expect(decision.canDisplay)
+        #expect(decision.bucket == .high)
+        #expect(!decision.reasons.contains("too-short-daily-driver-phrase"))
+    }
+
     @Test("Blocks thin-context phrase continuations")
     func blocksThinContextPhraseContinuations() {
         let decision = policy.decision(
