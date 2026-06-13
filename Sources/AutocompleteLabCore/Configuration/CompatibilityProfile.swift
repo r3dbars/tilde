@@ -486,10 +486,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Obsidian",
             appFamily: .electron,
             supportLevel: .yellow,
-            supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
-            renderMode: .floatingMirror,
+            supportReason: "Electron editors can hide caret bounds, so this uses caret-locked inline placement or stays hidden.",
+            renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
-            fallbackRenderMode: .floatingMirror,
+            fallbackRenderMode: nil,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
@@ -501,7 +501,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsDescendantTextFallback: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and key-event insertion because CodeMirror AX values can represent only the visible viewport in long virtualized notes. Do not show detached suggestions when CodeMirror hides usable caret bounds."
+            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and key-event insertion because CodeMirror AX values can represent only the visible viewport in long virtualized notes. Obsidian is inline-or-hidden: do not fall back to a mirror or detached whole-editor suggestion when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
