@@ -57,7 +57,7 @@ What this proves:
 - a suggestion is shown with the expected render mode
 - `Control-Backtick` can be used as an explicit "Suggest Now" check in manual
   smoke without inserting text by itself
-- Tab and, where the profile allows it, the full-accept key are handled only
+- Tab and, where the profile allows it, the full-accept key (`Shift-Tab` by default) are handled only
   while a suggestion is visible
 - insertion is verified in diagnostics and traces
 - strict screenshot trace evidence can be required with `--visual` through the

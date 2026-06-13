@@ -666,7 +666,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         isInvalidatedByUserTyping: Bool = false,
         allowsAutocompleteKeyAfterPassthroughObservation: Bool = false,
         hasPendingAcceptedInsertionUndo: Bool = false,
-        acceptAllShortcut: AcceptAllShortcut = .backtick
+        acceptAllShortcut: AcceptAllShortcut = .shiftTab
     ) {
         self.hasVisibleSuggestion = hasVisibleSuggestion
         self.supportsOneWordAcceptance = supportsOneWordAcceptance

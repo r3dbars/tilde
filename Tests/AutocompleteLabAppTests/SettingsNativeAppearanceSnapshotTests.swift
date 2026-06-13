@@ -68,7 +68,7 @@ struct SettingsNativeAppearanceSnapshotTests {
                 diagnosticsPath: "/Users/example/Library/Logs/SteadyType/diagnostics.log",
                 tracePath: "/Users/example/Library/Logs/SteadyType/events.jsonl"
             ),
-            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .shiftTab),
             suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
             lastSuggestionDecision: "Shown"
         )

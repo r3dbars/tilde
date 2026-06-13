@@ -20,7 +20,7 @@ The MVP goal is not broad support. It is a small allowlist that proves the writi
 | 0 | Blocked | The app should not request or show suggestions. | Default for unknown, secure, or unsafe surfaces. |
 | 1 | Detect | The lab can identify the frontmost app, focused editable element, nearby text, and caret rectangle. | No raw text leakage in logs, and no suggestions in the wrong app. |
 | 2 | Suggest | A local suggestion appears near the caret and dismisses cleanly. | `Esc`, continued typing, and app switch all remove the suggestion. |
-| 3 | Accept | The user can accept text without breaking the editor. | `Tab` accepts the next word, backtick/tilde accepts the visible suggestion, and no literal tab is inserted. |
+| 3 | Accept | The user can accept text without breaking the editor. | `Tab` accepts the next word, `Shift-Tab` accepts the visible suggestion, backtick stays normal typed text, and no literal tab is inserted. |
 | 4 | Stable Beta | The app survives normal writing in that editor. | 15 minutes of typing with no stuck panel, wrong-field insert, clipboard damage, crash, or focus theft. |
 | 5 | Supported Candidate | The editor is safe enough to consider default support. | Two testers pass Rung 4 on separate machines and report that suggestions help more than they annoy. |
 
@@ -57,7 +57,8 @@ An app passes its rung only when all criteria below that rung also pass.
 - `Esc` dismisses without inserting text.
 - Continued typing refreshes or dismisses without leaving a stale suggestion.
 - `Tab` accepts the next word only while a suggestion is visible.
-- Backtick/tilde accepts the whole visible suggestion only while a suggestion is visible.
+- `Shift-Tab` accepts the whole visible suggestion only while a suggestion is visible.
+- Backtick/tilde stays normal typed text, including in Markdown editors.
 - Clipboard fallback preserves the user's clipboard.
 - Switching apps or losing focus clears the suggestion.
 - Local logs do not contain raw typed text.

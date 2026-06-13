@@ -21,7 +21,7 @@ LOG_PATH="${AUTOCOMPLETE_LAB_LOG:-$HOME/Library/Logs/SteadyType/diagnostics.log}
 TRACE_PATH="${AUTOCOMPLETE_LAB_TRACE_PATH:-$HOME/Library/Logs/SteadyType/traces.jsonl}"
 REPORT_PATH="${AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT:-docs/product/manual-smoke-runs.md}"
 PROOF_LABEL="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-default}"
-ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-backtick}"
+ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-shiftTab}"
 CODEX_PROOF_MARKER="${AUTOCOMPLETE_LAB_CODEX_PROOF_MARKER:-AUTOCOMPLETE_LAB_CODEX_PROOF}"
 CLAUDE_CODE_PROOF_MARKER="${AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF_MARKER:-AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF}"
 CLAUDE_CODE_HOST_VARIANT="${AUTOCOMPLETE_LAB_CLAUDE_CODE_HOST_VARIANT:-auto}"
@@ -326,11 +326,11 @@ else
 fi
 
 case "$ACCEPT_ALL_SHORTCUT" in
-  backtick|optionTab)
+  shiftTab|optionTab)
     ;;
   *)
     echo "unknown accept-all shortcut: $ACCEPT_ALL_SHORTCUT" >&2
-    echo "expected backtick or optionTab" >&2
+    echo "expected shiftTab or optionTab" >&2
     exit 2
     ;;
 esac

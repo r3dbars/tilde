@@ -13,7 +13,7 @@ The first prototype should feel like a quiet writing assist, not a chatbot.
 3. Local model predicts a short continuation.
 4. Suggestion appears near the cursor.
 5. User presses `Tab` to accept the next word.
-6. User presses backtick/tilde to accept the whole visible suggestion.
+6. User presses `Shift-Tab` to accept the whole visible suggestion.
 7. User presses `Esc` or keeps typing to dismiss/refresh.
 
 ## Prototype Milestones
@@ -30,7 +30,7 @@ The first prototype should feel like a quiet writing assist, not a chatbot.
 ### 2. Insertion
 
 - accept next word with `Tab`
-- accept the whole visible suggestion with backtick/tilde
+- accept the whole visible suggestion with `Shift-Tab`
 - dismiss with `Esc`
 - insert through AX selected text when possible
 - fall back to synthetic key events when safer for the target app

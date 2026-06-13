@@ -48,7 +48,7 @@ manual proof pass.
 - Keep test text local and disposable.
 - Watch `~/Library/Logs/SteadyType/diagnostics.log` for `suggestion-presented`, `keyboard-action`, `insert`, and `insert-verification`.
 - Watch `~/Library/Logs/SteadyType/traces.jsonl` for matching `suggestionPresented`, `suggestionAccepted`, and `insertionVerified` events.
-- Prefer a real hardware key press for Tab and the configured full-accept shortcut. Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
+- Prefer a real hardware key press for Tab and the configured full-accept shortcut (`Shift-Tab` by default). Some automation paths can set text or insert a literal tab without going through the app's event tap, which is useful to catch but does not count as an accept pass.
 - Use `Control-Backtick` for the on-demand "Suggest Now" lane. It may request
   one suggestion, but it must not insert text and it must not change Tab's
   one-word-only behavior.

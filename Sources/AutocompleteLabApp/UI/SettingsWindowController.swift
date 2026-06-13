@@ -638,15 +638,21 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var acceptAllStatusText: String {
-        "\(acceptAllShortcut.displayName) accepts whole suggestion"
+        if acceptAllShortcut == .disabled {
+            return "Whole-suggestion accept is off"
+        }
+
+        return "\(acceptAllShortcut.displayName) accepts whole suggestion"
     }
 
     var cycleButtonTitle: String {
         switch acceptAllShortcut {
-        case .backtick:
+        case .shiftTab:
             return "Use Option-Tab"
-        case .optionTab, .disabled:
-            return "Use Backtick"
+        case .optionTab:
+            return "Turn Off"
+        case .disabled:
+            return "Use Shift-Tab"
         }
     }
 

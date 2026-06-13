@@ -2193,7 +2193,7 @@ if ! grep -F "ensure_obsidian_smoke_renderer_accessibility_launch()" script/real
   exit 1
 fi
 
-if ! grep -F 'AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-optionTab}"' script/obsidian_deep_sweep.sh >/dev/null ||
+if ! grep -F 'AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="${AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT:-shiftTab}"' script/obsidian_deep_sweep.sh >/dev/null ||
    ! grep -F 'AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS="${AUTOCOMPLETE_LAB_OBSIDIAN_FOCUS_SETTLE_SECONDS:-0.4}"' script/obsidian_deep_sweep.sh >/dev/null; then
   echo "real app smoke self-test expected Obsidian deep sweep to inherit the proven shortcut and focus settle defaults" >&2
   exit 1
@@ -2506,8 +2506,7 @@ if ! awk '/run_codex_full_accept\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smo
 fi
 if ! grep -F "assert_codex_full_accept_shortcut_safe" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "keyboard_event_tap_active_since" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "Codex full accept CGEvent backtick" script/real_app_smoke.sh >/dev/null ||
-   ! grep -F "AUTOCOMPLETE_LAB_CODEX_FULL_ACCEPT_CGEVENT_BACKTICK_TIMEOUT_SECONDS" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "key code 48 using shift down" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "keyboard capture is not active; refusing to press accept-all" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "suggestion hid before accept-all; refusing to type the shortcut into Codex" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "decision=passthrough-unsupported" script/real_app_smoke.sh >/dev/null; then

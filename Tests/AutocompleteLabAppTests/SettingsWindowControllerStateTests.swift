@@ -701,7 +701,7 @@ struct SettingsWindowControllerStateTests {
                 diagnosticsPath: "/tmp/diagnostics.log",
                 tracePath: "/tmp/traces.jsonl"
             ),
-            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .shiftTab),
             suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
             lastSuggestionDecision: "Blocked"
         )
@@ -845,14 +845,14 @@ struct SettingsWindowControllerStateTests {
 
     @Test("Keyboard shortcut copy supports direct accept-all editing")
     func keyboardShortcutCopySupportsDirectAcceptAllEditing() {
-        let backtick = SettingsKeyboardShortcutState(acceptAllShortcut: .backtick)
+        let shiftTab = SettingsKeyboardShortcutState(acceptAllShortcut: .shiftTab)
 
-        #expect(backtick.statusText == "Shortcuts: Tab accepts one word + space | Control-Backtick asks once")
-        #expect(backtick.acceptAllStatusText == "Backtick accepts whole suggestion")
-        #expect(backtick.conflictText == "Conflict check: choose an app")
-        #expect(backtick.perAppProfileText == "Per-app profile: choose an app to check whole-suggestion accept.")
-        #expect(backtick.acceptAllPickerLabel == "Whole suggestion:")
-        #expect(backtick.cycleButtonTitle == "Use Option-Tab")
+        #expect(shiftTab.statusText == "Shortcuts: Tab accepts one word + space | Control-Backtick asks once")
+        #expect(shiftTab.acceptAllStatusText == "Shift-Tab accepts whole suggestion")
+        #expect(shiftTab.conflictText == "Conflict check: choose an app")
+        #expect(shiftTab.perAppProfileText == "Per-app profile: choose an app to check whole-suggestion accept.")
+        #expect(shiftTab.acceptAllPickerLabel == "Whole suggestion:")
+        #expect(shiftTab.cycleButtonTitle == "Use Option-Tab")
 
         let optionTab = SettingsKeyboardShortcutState(acceptAllShortcut: .optionTab)
 
@@ -860,11 +860,15 @@ struct SettingsWindowControllerStateTests {
         #expect(optionTab.acceptAllStatusText == "Option-Tab accepts whole suggestion")
         #expect(optionTab.conflictDetailText == "Open a writing app to check the shortcut against that app profile.")
         #expect(optionTab.acceptAllPickerLabel == "Whole suggestion:")
-        #expect(optionTab.cycleButtonTitle == "Use Backtick")
+        #expect(optionTab.cycleButtonTitle == "Turn Off")
+
+        let disabled = SettingsKeyboardShortcutState(acceptAllShortcut: .disabled)
+        #expect(disabled.acceptAllStatusText == "Whole-suggestion accept is off")
+        #expect(disabled.cycleButtonTitle == "Use Shift-Tab")
 
         let store = CompatibilityProfileStore.mvp
         let textEdit = SettingsKeyboardShortcutState(
-            acceptAllShortcut: .backtick,
+            acceptAllShortcut: .shiftTab,
             currentApp: SettingsCurrentAppState(
                 displayName: "TextEdit",
                 bundleIdentifier: "com.apple.TextEdit",
@@ -877,7 +881,7 @@ struct SettingsWindowControllerStateTests {
         #expect(textEdit.perAppProfileText == "Per-app profile: TextEdit allows Tab one-word accept and whole-suggestion accept.")
 
         let codex = SettingsKeyboardShortcutState(
-            acceptAllShortcut: .backtick,
+            acceptAllShortcut: .shiftTab,
             currentApp: SettingsCurrentAppState(
                 displayName: "Codex",
                 bundleIdentifier: "com.openai.codex",
@@ -1216,7 +1220,7 @@ struct SettingsWindowControllerStateTests {
                 diagnosticsPath: "/tmp/diagnostics.log",
                 tracePath: "/tmp/traces.jsonl"
             ),
-            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .shiftTab),
             suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
             lastSuggestionDecision: "Shown"
         )
@@ -1270,7 +1274,7 @@ struct SettingsWindowControllerStateTests {
                 diagnosticsPath: "/tmp/diagnostics.log",
                 tracePath: "/tmp/traces.jsonl"
             ),
-            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .backtick),
+            keyboardShortcuts: SettingsKeyboardShortcutState(acceptAllShortcut: .shiftTab),
             suggestionAggressiveness: SettingsSuggestionAggressivenessState(tuning: SuggestionTuning()),
             lastSuggestionDecision: "Shown"
         )

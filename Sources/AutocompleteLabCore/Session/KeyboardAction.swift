@@ -37,6 +37,7 @@ public enum KeyboardAction: Equatable, Sendable {
 
 public enum AutocompleteKey: Equatable, Sendable {
     case tab
+    case shiftTab
     case optionTab
     case backtick
     case controlBacktick
@@ -48,6 +49,8 @@ public enum AutocompleteKey: Equatable, Sendable {
         switch self {
         case .tab:
             "tab"
+        case .shiftTab:
+            "shiftTab"
         case .optionTab:
             "optionTab"
         case .backtick:
@@ -65,14 +68,14 @@ public enum AutocompleteKey: Equatable, Sendable {
 }
 
 public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
-    case backtick
+    case shiftTab
     case optionTab
     case disabled
 
     public var autocompleteKey: AutocompleteKey {
         switch self {
-        case .backtick:
-            .backtick
+        case .shiftTab:
+            .shiftTab
         case .optionTab:
             .optionTab
         case .disabled:
@@ -82,8 +85,8 @@ public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .backtick:
-            "Backtick"
+        case .shiftTab:
+            "Shift-Tab"
         case .optionTab:
             "Option-Tab"
         case .disabled:
@@ -93,12 +96,12 @@ public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
 
     public var next: AcceptAllShortcut {
         switch self {
-        case .backtick:
+        case .shiftTab:
             .optionTab
         case .optionTab:
             .disabled
         case .disabled:
-            .backtick
+            .shiftTab
         }
     }
 }
@@ -106,7 +109,7 @@ public enum AcceptAllShortcut: String, CaseIterable, Equatable, Sendable {
 public struct KeyboardShortcutConfiguration: Equatable, Sendable {
     public var acceptAllShortcut: AcceptAllShortcut
 
-    public init(acceptAllShortcut: AcceptAllShortcut = .backtick) {
+    public init(acceptAllShortcut: AcceptAllShortcut = .shiftTab) {
         self.acceptAllShortcut = acceptAllShortcut
     }
 
@@ -114,7 +117,7 @@ public struct KeyboardShortcutConfiguration: Equatable, Sendable {
 
     public init(persistedAcceptAllShortcutRawValue: String?) {
         self.acceptAllShortcut = persistedAcceptAllShortcutRawValue
-            .flatMap(AcceptAllShortcut.init(rawValue:)) ?? .backtick
+            .flatMap(AcceptAllShortcut.init(rawValue:)) ?? .shiftTab
     }
 }
 
@@ -218,7 +221,7 @@ public struct KeyboardShortcutConflictPolicy: Equatable, Sendable {
             return KeyboardShortcutConflictEvaluation(
                 level: .warning,
                 statusText: "Conflict check: Option-Tab may overlap app shortcuts",
-                detailText: "Backtick is quieter if Option-Tab already means something in this app.",
+                detailText: "Shift-Tab is safer if Option-Tab already means something in this app.",
                 perAppProfileText: "Per-app profile: \(context.appDisplayName) allows Tab one-word accept and whole-suggestion accept."
             )
         }
@@ -265,6 +268,13 @@ public struct AutocompleteKeyMapper: Equatable, Sendable {
         case .tab:
             if modifiers.isEmpty {
                 return .tab
+            }
+
+            if modifiers.contains(.shift),
+               !modifiers.contains(.option),
+               !modifiers.contains(.control),
+               !modifiers.contains(.command) {
+                return .shiftTab
             }
 
             if modifiers.contains(.option),
@@ -329,10 +339,12 @@ public struct KeyboardActionRouter: Equatable, Sendable {
         switch key {
         case .tab:
             return .acceptNextWord
+        case .shiftTab:
+            return shortcutConfiguration.acceptAllShortcut == .shiftTab ? .acceptAllVisible : .passThrough
         case .optionTab:
             return shortcutConfiguration.acceptAllShortcut == .optionTab ? .acceptAllVisible : .passThrough
         case .backtick:
-            return shortcutConfiguration.acceptAllShortcut == .backtick ? .acceptAllVisible : .passThrough
+            return .passThrough
         case .controlBacktick:
             return .requestSuggestionNow
         case .commandZ:
