@@ -8,6 +8,7 @@ Use this in the first 10 minutes of a private beta session.
   supported writing apps. They do not become document text until you accept
   them.
 - `Tab` accepts one word.
+- `Shift-Tab` accepts the whole visible suggestion.
 - `Esc` dismisses the suggestion.
 - Pause Suggestions stops suggestions everywhere.
 - Pause Current App stops suggestions only in the frontmost app.
@@ -29,8 +30,11 @@ Use this in the first 10 minutes of a private beta session.
 7. Type disposable text in the local TextEdit practice file.
 8. Confirm the floating suggestion appears next to the cursor.
 9. Press `Tab` once when the next word is clearly useful.
-10. Press `Esc` when a suggestion feels wrong.
-11. Export only the redacted Privacy Bundle if feedback needs diagnostics.
+10. Press `Shift-Tab` once when the whole visible suggestion is clearly useful.
+11. Press `Esc` when a suggestion feels wrong.
+12. Type a backtick in Obsidian or Markdown-flavored text and confirm it stays
+    normal typed text.
+13. Export only the redacted Privacy Bundle if feedback needs diagnostics.
 
 After a tester walkthrough, record the row in
 `docs/product/onboarding-permission-qa-checklist.md` and run
@@ -88,5 +92,6 @@ Do not describe first-run proof as complete yet.
 Stop the session if a suggestion appears in the wrong app, wrong field, wrong
 spot, search, login, payment, address, URL, secure, or private field.
 
-Also stop if `Tab` submits a prompt, inserts more than expected, duplicates
-text, or makes the tester trust the text field less.
+Also stop if `Tab` submits a prompt, `Shift-Tab` inserts more than the visible
+suggestion, backtick accepts a suggestion instead of typing a backtick, text is
+duplicated, or the tester trusts the text field less.

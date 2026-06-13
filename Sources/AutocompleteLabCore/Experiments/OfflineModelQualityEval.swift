@@ -517,6 +517,7 @@ public enum OfflineModelQualityEvaluator {
             "press enter",
             "press option-tab",
             "press return",
+            "press shift-tab",
             "press tab",
             "private key",
             "run this command",

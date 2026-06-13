@@ -27,6 +27,14 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .passThrough)
     }
 
+    @Test("Shift Tab accepts all visible text by default")
+    func shiftTabAcceptsAllVisibleTextByDefault() {
+        let router = KeyboardActionRouter()
+
+        #expect(router.action(for: .shiftTab, hasVisibleSuggestion: true) == .acceptAllVisible)
+        #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .passThrough)
+    }
+
     @Test("Other keys pass through even when a suggestion is visible")
     func otherKeysPassThrough() {
         let router = KeyboardActionRouter()
@@ -42,11 +50,11 @@ struct KeyboardActionRouterTests {
         #expect(router.action(for: .controlBacktick, hasVisibleSuggestion: true) == .requestSuggestionNow)
     }
 
-    @Test("Backtick accepts all visible text when a suggestion is visible")
-    func backtickAcceptsAllVisibleText() {
+    @Test("Backtick remains a typing key when a suggestion is visible")
+    func backtickPassesThroughVisibleSuggestions() {
         let router = KeyboardActionRouter()
 
-        #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .acceptAllVisible)
+        #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .passThrough)
     }
 
     @Test("Full accept can be disabled")
@@ -56,6 +64,7 @@ struct KeyboardActionRouterTests {
         )
 
         #expect(router.action(for: .tab, hasVisibleSuggestion: true) == .acceptNextWord)
+        #expect(router.action(for: .shiftTab, hasVisibleSuggestion: true) == .passThrough)
         #expect(router.action(for: .backtick, hasVisibleSuggestion: true) == .passThrough)
         #expect(router.action(for: .optionTab, hasVisibleSuggestion: true) == .passThrough)
     }
@@ -71,6 +80,7 @@ struct KeyboardActionRouterTests {
     @Test("Keyboard diagnostics use stable names")
     func keyboardDiagnosticsUseStableNames() {
         #expect(AutocompleteKey.tab.diagnosticName == "tab")
+        #expect(AutocompleteKey.shiftTab.diagnosticName == "shiftTab")
         #expect(AutocompleteKey.backtick.diagnosticName == "backtick")
         #expect(AutocompleteKey.controlBacktick.diagnosticName == "controlBacktick")
         #expect(AutocompleteKey.commandZ.diagnosticName == "commandZ")
@@ -95,6 +105,7 @@ struct KeyboardActionRouterTests {
         let router = KeyboardActionRouter()
 
         #expect(router.action(for: .tab, hasVisibleSuggestion: false) == .passThrough)
+        #expect(router.action(for: .shiftTab, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .optionTab, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .backtick, hasVisibleSuggestion: false) == .passThrough)
         #expect(router.action(for: .escape, hasVisibleSuggestion: false) == .passThrough)

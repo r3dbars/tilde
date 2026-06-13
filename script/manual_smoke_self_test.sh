@@ -31,7 +31,7 @@ write_passing_log() {
 2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=5 previousBeforeChars=6 currentBeforeChars=11
 2026-04-26T08:00:03Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
-2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:04Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=shiftTab reason=accepted
 2026-04-26T08:00:04Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:05Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
 EOF
@@ -49,7 +49,7 @@ write_undo_passing_log() {
 2026-04-26T08:00:03Z keyboard-action action=undoAcceptedInsertion app=$bundle_id handled=true key=cmdZ reason=accepted-insertion-undone
 2026-04-26T08:00:03Z accepted-insertion-undone app=$bundle_id acceptedTextLength=3 restoredTextLength=23
 2026-04-26T08:00:04Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=caret placementConfidenceBand=high hasCaretRect=true
-2026-04-26T08:00:05Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:05Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=shiftTab reason=accepted
 2026-04-26T08:00:05Z insert app=$bundle_id success=true mode=axSelectedText
 2026-04-26T08:00:06Z insert-verification app=$bundle_id result=verified acceptedChars=12 previousBeforeChars=11 currentBeforeChars=23
 EOF
@@ -127,7 +127,7 @@ write_prompt_full_accept_log() {
 
   cat >"$LOG_PATH" <<EOF
 2026-04-26T08:00:00Z suggestion-presented app=$bundle_id effectiveRenderMode=$render_mode placementAnchorSource=synthetic-caret placementConfidenceBand=medium hasCaretRect=true requestMode=phraseContinuation
-2026-04-26T08:00:01Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=backtick reason=accepted
+2026-04-26T08:00:01Z keyboard-action action=acceptAllVisible app=$bundle_id handled=true key=shiftTab reason=accepted
 2026-04-26T08:00:01Z insert app=$bundle_id success=true mode=axValueReplacement
 2026-04-26T08:00:02Z insert-verification app=$bundle_id result=verified acceptedChars=18 previousBeforeChars=42 currentBeforeChars=60
 EOF

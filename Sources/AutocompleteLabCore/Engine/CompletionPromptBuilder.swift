@@ -107,7 +107,7 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(lengthGuidance)
         Return exactly \(Self.noSuggestionToken) when the continuation is not obvious from the local text.
         Only exception: return exactly \(Self.noSuggestionToken) when unsafe, chatty, or likely to answer the prompt instead of continuing it.
-        Never suggest pressing Tab, Option-Tab, Backtick, or accepting all visible text.
+        Never suggest pressing Tab, Shift-Tab, Option-Tab, Backtick, or accepting all visible text.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
         \(styleGuidance)
         \(styleLengthGuidance)

@@ -47,8 +47,10 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
         switch input.key {
         case .tab:
             return input.supportsOneWordAcceptance
+        case .shiftTab:
+            return input.supportsFullAcceptance && input.acceptAllShortcut == .shiftTab
         case .backtick:
-            return input.supportsFullAcceptance && input.acceptAllShortcut == .backtick
+            return false
         case .controlBacktick:
             return true
         case .escape:
@@ -64,9 +66,9 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
 
     public func shouldReplayUnhandledConsumedKey(_ key: AutocompleteKey) -> Bool {
         switch key {
-        case .tab, .backtick, .controlBacktick, .optionTab, .escape:
+        case .tab, .shiftTab, .controlBacktick, .optionTab, .escape:
             false
-        case .commandZ, .other:
+        case .backtick, .commandZ, .other:
             true
         }
     }
