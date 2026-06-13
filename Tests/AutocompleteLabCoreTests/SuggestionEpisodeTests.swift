@@ -116,6 +116,30 @@ struct SuggestionEpisodeTests {
         #expect(scorecard.markdown.contains("Score:"))
     }
 
+    @Test("Type-through survival remains a shown episode signal")
+    func typeThroughSurvivalRemainsShownEpisodeSignal() {
+        var record = makeRecord(id: "type-through", index: 0)
+
+        record.appendAction(
+            .shown,
+            timestamp: "2026-05-24T12:00:01Z",
+            reason: "survived_typethrough",
+            metadata: [
+                "typeThroughSurvival": "true",
+                "typedThroughChars": "4",
+                "remainingVisibleChars": "8"
+            ]
+        )
+
+        let scorecard = SuggestionEpisodeScorecard(records: [record])
+
+        #expect(record.outcome == .shown)
+        #expect(record.actions.last?.reason == "survived_typethrough")
+        #expect(record.actions.last?.metadata["typeThroughSurvival"] == "true")
+        #expect(scorecard.shown == 1)
+        #expect(scorecard.typedPast == 0)
+    }
+
     @Test("Eval generator uses only accepted and kept local examples")
     func evalGeneratorUsesOnlyAcceptedAndKeptLocalExamples() {
         var kept = makeRecord(id: "kept", index: 0)
