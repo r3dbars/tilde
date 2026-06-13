@@ -613,6 +613,7 @@ final class SuggestionOrchestrator {
         suggestionTuning: SuggestionTuning? = nil,
         now: Date = Date()
     ) -> SuggestionDisplayScoreDecision {
+        _ = suggestionTuning
         let prefixEagernessAdjustment = prefixFamilyCooldownPolicy.eagernessAdjustment(
             for: PrefixFamilyCooldownInput(
                 appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
@@ -622,12 +623,6 @@ final class SuggestionOrchestrator {
             ),
             now: now
         )
-        let maxAggressiveTuningEnabled = suggestionTuning?.aggressivenessLevel == SuggestionTuning.maximumAggressivenessLevel
-            && profile.allowsMaxAggressiveTuningBypass
-        let maxAggressiveLatencyBudgetExceeded = maxAggressiveTuningEnabled
-            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds
-        let maxAggressiveDisplayBypass = maxAggressiveTuningEnabled
-            && !maxAggressiveLatencyBudgetExceeded
         let score = displayScore(
             suggestion: suggestion,
             request: request,
@@ -640,7 +635,7 @@ final class SuggestionOrchestrator {
             isRepeatedMiss: isRepeatedMiss
         )
         let adjustedPolicy = displayScorePolicy
-            .adjustingThresholds(by: maxAggressiveDisplayBypass ? 0 : prefixEagernessAdjustment.thresholdAdjustment)
+            .adjustingThresholds(by: prefixEagernessAdjustment.thresholdAdjustment)
         let confidenceDecision = completionConfidencePolicy.decision(
             suggestion: suggestion,
             mode: request.mode,
@@ -673,37 +668,16 @@ final class SuggestionOrchestrator {
         if claudeCodeTerminalHostProofLatencyBypass {
             confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
         }
-        if maxAggressiveDisplayBypass {
-            confidenceMetadata["displayScoreMaxAggressiveBypass"] = "true"
-        }
-        if maxAggressiveLatencyBudgetExceeded {
-            confidenceMetadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] = "true"
-        }
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
             && !proofLatencyBypass
-            && !maxAggressiveDisplayBypass
-            && (
-                maxAggressiveLatencyBudgetExceeded
-                    || latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
-                        for: request,
-                        suggestion: suggestion
-                    )
+            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
+                for: request,
+                suggestion: suggestion
             )
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
             && !proofLatencyBypass
-            && !maxAggressiveDisplayBypass
-            && (
-                maxAggressiveLatencyBudgetExceeded
-                    || confidenceDecision.reasons.contains("too-slow-to-display")
-            )
-        let maxAggressiveLowConfidenceBypass = maxAggressiveDisplayBypass
-            && !confidenceDecision.reasons.contains("unsupported-app-profile")
-            && !confidenceDecision.reasons.contains("generic-or-assistant-like")
-        if maxAggressiveLowConfidenceBypass && !confidenceDecision.canDisplay {
-            confidenceMetadata["displayScoreMaxAggressiveLowConfidenceBypass"] = "true"
-        }
+            && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && !maxAggressiveLowConfidenceBypass
             && (!proofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(

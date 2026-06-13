@@ -47,8 +47,8 @@ struct AppCompatibilityProfileTests {
         let registry = AppCompatibilityRegistry.default
 
         #expect(registry.profile(for: "example.unknown.Writer").id == "fallback")
-        #expect(registry.profile(for: "example.unknown.Writer").defaultRung == .suggest)
-        #expect(registry.profile(for: "example.unknown.Writer").textPath == .nativeAccessibility)
+        #expect(registry.profile(for: "example.unknown.Writer").defaultRung == .blocked)
+        #expect(registry.profile(for: "example.unknown.Writer").textPath == .blocked)
         #expect(registry.profile(for: nil).id == "fallback")
     }
 

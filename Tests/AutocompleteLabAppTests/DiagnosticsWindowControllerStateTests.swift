@@ -49,7 +49,7 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(overview.text.contains("Accessibility: On"))
         #expect(overview.text.contains("Suggestion pause: off"))
         #expect(overview.text.contains("Local model: ready"))
-        #expect(overview.text.contains("Current app: No focused app | unsupported: no compatibility profile | disabled"))
+        #expect(overview.text.contains("Current app: No focused app | blocked: no MVP compatibility profile | disabled"))
         #expect(overview.text.contains("Local recording: recording on | placement screenshots on | events 12 | accept 50% | useful 25%"))
         #expect(!overview.text.contains("private phrase"))
         #expect(lines.allSatisfy { $0.count <= 160 })

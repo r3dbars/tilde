@@ -5,12 +5,12 @@ import Testing
 @MainActor
 @Suite("App settings")
 struct AppSettingsTests {
-    @Test("Defaults are local first and open to normal apps")
-    func defaultsAreLocalFirstAndOpenToNormalApps() {
+    @Test("Defaults are local first and allowlisted")
+    func defaultsAreLocalFirstAndAllowlisted() {
         let settings = AppSettings(defaults: isolatedDefaults())
 
         #expect(settings.suggestionsEnabled)
-        #expect(!settings.enforceAllowlist)
+        #expect(settings.enforceAllowlist)
         #expect(settings.suppressSecureFields)
         #expect(settings.suppressShortText)
         #expect(settings.suppressAfterNewline)
@@ -35,7 +35,7 @@ struct AppSettingsTests {
         let privacy = settings.privacySettings(allowedBundleIdentifiers: ["com.apple.TextEdit"])
         let routing = settings.compatibilityRoutingSettings()
 
-        #expect(settings.enforceAllowlist)
+        #expect(!settings.enforceAllowlist)
         #expect(!settings.suppressSecureFields)
         #expect(!settings.suppressShortText)
         #expect(!settings.suppressAfterNewline)
@@ -43,11 +43,11 @@ struct AppSettingsTests {
         #expect(settings.minimumCharacters == 1)
         #expect(settings.runtimeMode == .appOwnedLocalModel)
         #expect(settings.runtimeMode.menuTitle == "App-Owned Local Model")
-        #expect(privacy.isAppAllowlistEnabled)
+        #expect(!privacy.isAppAllowlistEnabled)
         #expect(privacy.minimumCharactersBeforeSuggestion == 1)
         #expect(!privacy.suppressEmptyText)
         #expect(!privacy.suppressImmediatelyAfterNewline)
-        #expect(routing.enforceKnownApps)
+        #expect(!routing.enforceKnownApps)
         #expect(!routing.suppressSecureFields)
         #expect(routing.minimumCharactersBeforeSuggestion == 1)
     }

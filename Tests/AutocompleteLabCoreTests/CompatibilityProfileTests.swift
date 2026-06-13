@@ -50,8 +50,8 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.MobileSMS")?.insertionMode == .axValueReplacement)
         #expect(store.profile(for: "com.apple.MobileSMS")?.supportsOneWordAcceptance == true)
         #expect(store.profile(for: "com.apple.MobileSMS")?.supportsFullAcceptance == false)
-        #expect(store.profile(for: "com.apple.MobileSMS")?.promptAppSafetyMode == .notPrompt)
-        #expect(store.profile(for: "com.apple.MobileSMS")?.allowsMaxAggressiveTuningBypass == true)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.requiresNoSubmitAcceptanceProof == true)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.openai.atlas")?.displayName == "ChatGPT Atlas")
         #expect(store.profile(for: "com.openai.atlas")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.openai.atlas")?.graduationDecision == .blocked)
@@ -141,9 +141,9 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.graduationDecision == .blocked)
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.renderMode == .disabled)
         #expect(store.profile(for: "ru.keepcoder.Telegram")?.promptAppSafetyMode == .disabled)
-        #expect(store.profile(for: "notion.id")?.supportLevel == .yellow)
-        #expect(store.profile(for: "notion.id")?.graduationDecision == .wordOnly)
-        #expect(store.profile(for: "notion.id")?.canPresentSuggestions == true)
+        #expect(store.profile(for: "notion.id")?.supportLevel == .diagnosticsOnly)
+        #expect(store.profile(for: "notion.id")?.graduationDecision == .blocked)
+        #expect(store.profile(for: "notion.id")?.canPresentSuggestions == false)
         #expect(store.profile(for: "com.hnc.Discord")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.hnc.Discord")?.graduationDecision == .blocked)
         #expect(store.profile(for: "com.hnc.DiscordPTB")?.canPresentSuggestions == false)
@@ -201,25 +201,12 @@ struct CompatibilityProfileTests {
         }
     }
 
-    @Test("Unknown normal apps get a best-effort profile while sensitive explicit apps stay blocked")
-    func unknownNormalAppsGetBestEffortProfile() throws {
+    @Test("Unknown apps are not globally enabled during the MVP")
+    func unknownAppsAreNotEnabled() {
         let store = CompatibilityProfileStore.mvp
-        let unknown = try #require(store.profile(for: "com.example.UnknownEditor"))
 
-        #expect(store.allows(bundleIdentifier: "com.example.UnknownEditor"))
-        #expect(unknown.bundleIdentifier == "com.example.UnknownEditor")
-        #expect(unknown.displayName == "Universal App")
-        #expect(unknown.supportLevel == .yellow)
-        #expect(unknown.renderMode == .floatingMirror)
-        #expect(unknown.fallbackRenderMode == .floatingMirror)
-        #expect(unknown.insertionMode == .axValueReplacement)
-        #expect(unknown.supportsOneWordAcceptance)
-        #expect(!unknown.supportsFullAcceptance)
-        #expect(unknown.promptAppSafetyMode == .wordOnly)
-        #expect(unknown.allowsMaxAggressiveTuningBypass)
-        #expect(unknown.allowsDetachedSuggestions)
-        #expect(unknown.allowsSyntheticCaretPlacement)
-        #expect(!unknown.allowsUnknownFieldKind)
+        #expect(!store.allows(bundleIdentifier: "com.example.UnknownEditor"))
+        #expect(store.profile(for: "com.example.UnknownEditor") == nil)
         #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
 
@@ -236,7 +223,7 @@ struct CompatibilityProfileTests {
 
         #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
         #expect(store.supportStatus(for: "com.openai.atlas").summary == "diagnostics only: ChatGPT Atlas")
-        #expect(store.supportStatus(for: "com.example.UnknownEditor").summary == "yellow: Universal App")
+        #expect(store.supportStatus(for: "com.example.UnknownEditor") == .unsupported)
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
         #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
     }
@@ -285,12 +272,12 @@ struct CompatibilityProfileTests {
         #expect(chatGPT.menuText(appDisplayName: "ChatGPT", isEnabled: true) == "ChatGPT diagnostics-only")
         #expect(!chatGPT.canToggleSuggestions)
 
-        let universal = store.supportStatus(for: "com.example.UnknownEditor")
-        #expect(universal.supportLevel == .yellow)
-        #expect(universal.userFacingSummary == "Yellow: Universal App")
-        #expect(universal.userFacingReason == "Best-effort mode for normal text fields. Secure, search, URL, form, and sensitive fields stay blocked.")
-        #expect(universal.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown yellow on")
-        #expect(universal.canToggleSuggestions)
+        let unsupported = store.supportStatus(for: "com.example.UnknownEditor")
+        #expect(unsupported.supportLevel == .unsupported)
+        #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
+        #expect(unsupported.userFacingReason == "No compatibility profile yet.")
+        #expect(unsupported.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown unsupported")
+        #expect(!unsupported.canToggleSuggestions)
     }
 
     @Test("Profiles expose debug summaries with primary and fallback paths")
@@ -362,12 +349,10 @@ struct CompatibilityProfileTests {
         #expect(codex.allowsSyntheticCaretPlacement == false)
         #expect(codex.isSensitive == false)
         #expect(codex.promptAppSafetyMode == .wordOnly)
-        #expect(codex.allowsMaxAggressiveTuningBypass == false)
         #expect(codex.allowsStrictVisualProofSyntheticCaretPlacement == true)
         #expect(claude.notes.contains("Same-slice one-word no-submit proof exists"))
         #expect(claude.notes.contains("normal beta use"))
         #expect(claude.promptAppSafetyMode == .wordOnly)
-        #expect(claude.allowsMaxAggressiveTuningBypass == false)
         #expect(claude.allowsStrictVisualProofSyntheticCaretPlacement == true)
 
         #expect(claudeCode.supportReason.contains("terminal host"))
@@ -408,6 +393,13 @@ struct CompatibilityProfileTests {
             #expect(profile.promptAppSafetyMode == .disabled)
             #expect(profile.canPresentSuggestions == false)
         }
+
+        let messages = try #require(store.profile(for: "com.apple.MobileSMS"))
+        #expect(messages.graduationDecision == .wordOnly)
+        #expect(messages.promptAppSafetyMode == .wordOnly)
+        #expect(messages.supportsOneWordAcceptance)
+        #expect(!messages.supportsFullAcceptance)
+        #expect(messages.requiresNoSubmitAcceptanceProof)
     }
 
     @Test("High-value writing surfaces have explicit graduation decisions")
@@ -424,6 +416,7 @@ struct CompatibilityProfileTests {
         }
 
         let wordOnlyBundles = [
+            "com.apple.MobileSMS",
             "com.anthropic.claudefordesktop"
         ]
         for bundleIdentifier in wordOnlyBundles {
@@ -462,7 +455,7 @@ struct CompatibilityProfileTests {
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let mailStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.mail")
         let atlasStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.openai.atlas")
-        let universalStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.example.UnknownEditor")
+        let unsupportedStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.example.UnknownEditor")
 
         #expect(
             textEdit.userFacingSafetySummary
@@ -479,8 +472,8 @@ struct CompatibilityProfileTests {
         #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(
-            universalStatus.userFacingSafetySummary
-                == "Mirror only until caret placement proof is current. Full accept stays off until no-submit proof exists. Prompt safety mode is word-only. Insertion fails closed if the primary method is not verified."
+            unsupportedStatus.userFacingSafetySummary
+                == "Suggestions are intentionally off until this app has a compatibility profile."
         )
     }
 
@@ -642,31 +635,6 @@ struct CompatibilityProfileTests {
         #expect(chrome.placementTrustPolicy(input: CompatibilityPlacementTrustInput(
             hasTrustedVisualAdjustment: true
         )).allowsLowConfidencePlacement)
-    }
-
-    @Test("Universal fallback can present from field bounds when caret is missing")
-    func universalFallbackCanPresentFromFieldBoundsWhenCaretIsMissing() throws {
-        let universal = try #require(CompatibilityProfileStore.mvp.profile(for: "com.example.UnknownEditor"))
-
-        let plan = PlacementHealth.plan(
-            requestedRenderMode: universal.renderMode,
-            fallbackRenderMode: universal.fallbackRenderMode,
-            caretRect: nil,
-            elementRect: CGRect(x: 100, y: 200, width: 500, height: 180),
-            windowRect: nil,
-            textLineRect: nil,
-            allowsDetachedSuggestions: universal.allowsDetachedSuggestions,
-            trustPolicy: universal.placementTrustPolicy()
-        )
-
-        guard case let .present(presentation) = plan else {
-            Issue.record("Expected universal fallback to present from field bounds")
-            return
-        }
-        #expect(presentation.renderMode == .floatingMirror)
-        #expect(presentation.anchorSource == .element)
-        #expect(presentation.reason == .healthy)
-        #expect(presentation.metadata["placementConfidenceBand"] == "medium")
     }
 
     @Test("Chrome trusts proofed synthetic text-area caret placement without trusting detached fallback")
