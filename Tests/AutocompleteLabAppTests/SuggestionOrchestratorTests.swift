@@ -725,6 +725,137 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Max tuning still respects low-confidence thin-context suppression")
+    func maxTuningStillRespectsLowConfidenceThinContextSuppression() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Draft",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 8,
+            mode: .phraseContinuation,
+            suggestionID: "max-thin-context"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        let conservativeDisplay = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " ship this today", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 400,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+        let maxDisplay = orchestrator.displayScoreDecision(
+            suggestion: CompletionSuggestion(text: " ship this today", maxVisibleWords: 8),
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 400,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
+        )
+
+        #expect(!conservativeDisplay.decision.shouldDisplay)
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
+        #expect(!maxDisplay.decision.shouldDisplay)
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "low-confidence")
+        #expect(maxDisplay.metadata["completionConfidenceBucket"] == "low")
+        #expect(maxDisplay.metadata["completionConfidenceReasons"]?.contains("thin-context") == true)
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveLowConfidenceBypass"] == nil)
+    }
+
+    @MainActor
+    @Test("Max tuning keeps over-budget Messages chat suggestions quiet")
+    func maxTuningKeepsOverBudgetMessagesChatSuggestionsQuiet() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.MobileSMS"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .singlelineCompose, reason: "singlelineComposeHint")
+        let request = CompletionRequest(
+            textBeforeCursor: "Yeah",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .casualChat,
+            maxVisibleWords: 14,
+            mode: .phraseContinuation,
+            suggestionID: "messages-late-chat"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+        let suggestion = CompletionSuggestion(text: " that sounds good to me", maxVisibleWords: 14)
+
+        let conservativeDisplay = orchestrator.displayScoreDecision(
+            suggestion: suggestion,
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_018,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: DisplayScorePolicy()
+        )
+        let maxDisplay = orchestrator.displayScoreDecision(
+            suggestion: suggestion,
+            request: request,
+            context: makeContext(textBeforeCursor: request.textBeforeCursor, textAfterCursor: ""),
+            fieldClassification: classification,
+            profile: profile,
+            fieldIdentity: field,
+            triggerReason: "model-result",
+            latencyMilliseconds: 1_018,
+            acceptedAndKeptSignal: signal,
+            isRepeatedMiss: false,
+            displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
+        )
+
+        #expect(!conservativeDisplay.decision.shouldDisplay)
+        #expect(conservativeDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(!maxDisplay.decision.shouldDisplay)
+        #expect(maxDisplay.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveBypass"] == nil)
+        #expect(maxDisplay.metadata["displayScoreMaxAggressiveLatencyBudgetExceeded"] == nil)
+    }
+
+    @MainActor
     @Test("Codex no-submit proof candidates bypass final latency suppression")
     func codexNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

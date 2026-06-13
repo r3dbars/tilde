@@ -2180,7 +2180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clearFocusedFieldState(resetBlockLogGate: false)
             currentProfile = profile
             setSuggestionDecision("Blocked: \(terminalHostBlockReason)")
-            showFieldStatusIndicator(.blocked, context: rawContext)
+            showFieldStatusIndicator(.blocked.withReason(terminalHostBlockReason), context: rawContext)
             var metadata = claudeCodeTerminalHostProofDiagnosticMetadata(
                 app: frontmostApp,
                 context: rawContext,
@@ -2207,7 +2207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clearFocusedFieldState(resetBlockLogGate: false)
             currentProfile = profile
             setSuggestionDecision("Blocked: \(promptMatch.reason)")
-            showFieldStatusIndicator(.blocked, context: rawContext)
+            showFieldStatusIndicator(.blocked.withReason(promptMatch.reason), context: rawContext)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: rawContext,
@@ -2245,7 +2245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clearFocusedFieldState(resetBlockLogGate: false)
         currentProfile = profile
         setSuggestionDecision("Blocked: \(hostedSurfaceBlock.userFacingReason)")
-        showFieldStatusIndicator(.blocked, context: rawContext)
+        showFieldStatusIndicator(.blocked.withReason(hostedSurfaceBlock.userFacingReason), context: rawContext)
         RawAutocompleteTraceLog.shared.record(
             type: .suggestionSuppressed,
             suggestionID: UUID().uuidString,
@@ -2435,7 +2435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard profile.canPresentSuggestions else {
             setSuggestionDecision("Blocked: profile diagnostics only")
-            showFieldStatusIndicator(.blocked, context: context)
+            showFieldStatusIndicator(.blocked.withReason("diagnostics only"), context: context)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -2452,7 +2452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let runtimeReport = runtimeReadinessReport
         guard runtimeReport.allowsSuggestions else {
             setSuggestionDecision("Blocked: runtime \(runtimeReport.stage.rawValue)")
-            showFieldStatusIndicator(.waiting, context: context)
+            showFieldStatusIndicator(.waiting.withReason(runtimeReport.summary), context: context)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -2537,7 +2537,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 userFacingReason = "field quieted"
             }
             setSuggestionDecision("Blocked: \(userFacingReason)")
-            showFieldStatusIndicator(.blocked, context: context)
+            showFieldStatusIndicator(.blocked.withReason(userFacingReason), context: context)
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: UUID().uuidString,
@@ -2615,7 +2615,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         case let .coolingDown(cooldown):
             setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
-            showFieldStatusIndicator(.waiting, context: context)
+            showFieldStatusIndicator(.waiting.withReason("recent miss cooldown"), context: context)
             schedulePrefixCooldownRetry(
                 for: snapshot,
                 cooldown: cooldown
@@ -2655,7 +2655,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
         guard !quietMode.isActive else {
             setSuggestionDecision("Waiting: \(quietMode.traceReason)")
-            showFieldStatusIndicator(.waiting, context: context)
+            showFieldStatusIndicator(.waiting.withReason("recent rejects"), context: context)
             let metadata = suggestionFieldClassification.traceMetadata
                 .merging(quietMode.metadata) { current, _ in current }
                 .merging(["reason": quietMode.traceReason]) { current, _ in current }
@@ -2690,7 +2690,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let baseRenderMode else {
             setSuggestionDecision("Blocked: missing inline capabilities")
-            showFieldStatusIndicator(.blocked, context: context)
+            showFieldStatusIndicator(.blocked.withReason("placement needs proof first"), context: context)
             recordBlockedSuggestionEvent(
                 "suggestion-blocked",
                 context: context,
@@ -2713,7 +2713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             renderMode: renderMode
         ) {
             setSuggestionDecision("Blocked: detached suggestion disabled")
-            showFieldStatusIndicator(.blocked, context: context)
+            showFieldStatusIndicator(.blocked.withReason("placement fallback unavailable"), context: context)
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: UUID().uuidString,
@@ -2789,7 +2789,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             setSuggestionDecision("Waiting: cadence policy")
-            showFieldStatusIndicator(.waiting, context: context)
+            showFieldStatusIndicator(.waiting.withReason("typing cadence"), context: context)
             recordSuggestionEvent(
                 "suggestion-trigger-skipped",
                 context: context,
@@ -7908,7 +7908,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latencyMilliseconds: latencyMilliseconds,
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss,
-            displayScorePolicy: displayScorePolicy
+            displayScorePolicy: displayScorePolicy,
+            suggestionTuning: suggestionTuning
         )
         let displayScoreDecision = orchestratedDisplayDecision.decision
         let displayScoreMetadata = orchestratedDisplayDecision.metadata
@@ -18496,9 +18497,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func usesDailyDriverLineStartPhraseContinuation(for profile: CompatibilityProfile) -> Bool {
-        profile.bundleIdentifier == "md.obsidian"
-            && suggestionTuning.aggressivenessLevel >= 4
-            && !profile.promptAppSafetyMode.isPromptSurface
+        guard !profile.promptAppSafetyMode.isPromptSurface else {
+            return false
+        }
+
+        return profile.bundleIdentifier == "md.obsidian" && suggestionTuning.aggressivenessLevel >= 4
     }
 
     private func minimumPhraseContinuationWords(for profile: CompatibilityProfile) -> Int {
