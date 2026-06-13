@@ -172,6 +172,11 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             return nil
         }
 
+        if let textBeforeCursor,
+           replaysCurrentSentenceSpan(candidateText, after: textBeforeCursor) {
+            return nil
+        }
+
         guard !isAdviceOrToneDriftPhrase(candidateText) else {
             return nil
         }
@@ -191,6 +196,12 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         if mode.isContinuation,
            let textBeforeCursor,
            duplicatesVisibleTypedWords(trimmedSuggestion, after: textBeforeCursor) {
+            return nil
+        }
+
+        if mode.isContinuation,
+           let textBeforeCursor,
+           replaysCurrentSentenceSpan(trimmedSuggestion, after: textBeforeCursor) {
             return nil
         }
 
@@ -672,6 +683,30 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
         }
 
         return Array(currentSentenceWords.prefix(3)) == Array(suggestionWords.prefix(3))
+    }
+
+    private func replaysCurrentSentenceSpan(_ suggestion: String, after textBeforeCursor: String) -> Bool {
+        let currentSentenceWords = normalizedWords(in: currentSentence(in: textBeforeCursor))
+        let suggestionWords = normalizedWords(in: suggestion)
+
+        guard currentSentenceWords.count >= 5,
+              suggestionWords.count >= 4 else {
+            return false
+        }
+
+        let windowSize = min(5, currentSentenceWords.count, suggestionWords.count)
+        for size in stride(from: windowSize, through: 4, by: -1) {
+            let currentWindows = Set(currentSentenceWords.windows(ofCount: size))
+            guard !currentWindows.isEmpty else {
+                continue
+            }
+
+            if suggestionWords.windows(ofCount: size).contains(where: { currentWindows.contains($0) }) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func currentSentence(in text: String) -> String {
