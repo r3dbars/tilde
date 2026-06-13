@@ -263,7 +263,7 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
             promptAppSafetyMode: .wordOnly,
-            notes: "Proof-only virtual Claude Code profile. It may be used only when a supported terminal host is frontmost, Claude Code proof mode is active, the proof marker is present, and the current input line is not shell or agent output. It prefers verified AX selected-text insertion, then verified Unicode key-event insertion, then verified hardware key-event insertion for typeable accepted text, so one-word completion text can be accepted without submitting the prompt."
+            notes: "Default-on virtual Claude Code profile. It may be used when a supported terminal host is frontmost, the terminal looks like Claude Code, and the current input line is not shell or agent output. It prefers verified AX selected-text insertion, then verified Unicode key-event insertion, then verified hardware key-event insertion for typeable accepted text, so one-word completion text can be accepted without submitting the prompt."
         )
     }
 
@@ -272,10 +272,6 @@ public enum ClaudeCodeTerminalHostProofPolicy {
     ) -> ClaudeCodeTerminalHostProofDecision {
         guard supportedTerminalHosts.contains(context.hostBundleIdentifier) else {
             return .blocked(.unsupportedTerminalHost)
-        }
-
-        guard context.proofModeEnabled else {
-            return .blocked(.proofModeRequired)
         }
 
         let focusedLine = effectiveFocusedInputLine(
@@ -308,7 +304,8 @@ public enum ClaudeCodeTerminalHostProofPolicy {
             context.terminalScreenText
         ].joined(separator: "\n")
 
-        guard containsProofMarker(searchableText) else {
+        guard containsProofMarker(searchableText)
+            || searchableText.localizedCaseInsensitiveContains("claude") else {
             return .blocked(.missingProofMarker)
         }
 
