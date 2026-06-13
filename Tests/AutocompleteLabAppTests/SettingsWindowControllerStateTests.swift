@@ -214,14 +214,14 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(claudeCode.statusText == "Current app: Claude Code is diagnostics-only")
+        #expect(claudeCode.statusText == "Current app: Claude Code is yellow and on")
         #expect(
             claudeCode.detailText
-                == "The installed Claude Code bundle is a background-only CLI helper; interactive Claude Code typing usually happens inside a terminal host, which is blocked until a separate safe adapter exists. Suggestions stay off here."
+                == "Claude Code is enabled for dogfood through the direct app profile and terminal-host adapter. Suggestions are on for this app."
         )
-        #expect(claudeCode.proofText == "Check: unavailable here.")
+        #expect(claudeCode.proofText == "Check: use disposable prompt text, press Tab once, and do not press Enter.")
         #expect(claudeCode.proofCommandText == nil)
-        #expect(!claudeCode.canToggle)
+        #expect(claudeCode.canToggle)
 
         let terminalHost = SettingsCurrentAppState(
             displayName: "iTerm2",
@@ -231,21 +231,21 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 0
         )
 
-        #expect(terminalHost.statusText == "Current app: iTerm2 is blocked outside Claude Code proof")
+        #expect(terminalHost.statusText == "Current app: iTerm2 is a Claude Code host and off")
         #expect(
             terminalHost.detailText
-                == "iTerm2 stays blocked for normal typing. Only an explicit Claude Code host proof check can use this terminal."
+                == "iTerm2 uses the Claude Code terminal adapter when the terminal looks like Claude Code. Shell commands still block."
         )
-        #expect(terminalHost.modeText == "Mode: Claude Code terminal-host proof only")
-        #expect(terminalHost.acceptanceText == "Keys: off except one-word Tab during an explicit proof check.")
-        #expect(terminalHost.fallbackText == "Fallback: unavailable outside the manual Claude Code proof lane.")
-        #expect(terminalHost.proofButtonTitle == "Manual Check Only")
+        #expect(terminalHost.modeText == "Mode: Claude Code terminal-host dogfood")
+        #expect(terminalHost.acceptanceText == "Keys: Tab accepts one word when Claude Code is detected.")
+        #expect(terminalHost.fallbackText == "Fallback: terminal adapter only; pause this host if placement or insertion is wrong.")
+        #expect(terminalHost.proofButtonTitle == "Enable Suggestions First")
         #expect(!terminalHost.canStartProof)
-        #expect(!terminalHost.canToggle)
+        #expect(terminalHost.canToggle)
         #expect(terminalHost.shouldShowCheckControls)
         #expect(
             terminalHost.proofText
-                == "Check: run the iTerm2 Claude Code proof, press Tab once, and do not press Enter."
+                == "Check: type in Claude Code in iTerm2, press Tab once, and do not press Enter."
         )
         #expect(
             terminalHost.proofCommandText
@@ -265,21 +265,21 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(unsupported.statusText == "Current app: Unknown is unsupported")
-        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
+        #expect(unsupported.statusText == "Current app: Unknown is yellow and off")
+        #expect(unsupported.detailText == "Default-on generic Accessibility path for apps without a custom profile. Suggestions are paused in this app. Resume only where you want suggestions.")
         #expect(
             unsupported.supportMatrixText
-                == "Support: unsupported. Select text for Command Context copy fallback."
+                == "Support: yellow target. Suggestions are available, but checks and fallback matter."
         )
-        #expect(unsupported.modeText == "Mode: not set up here")
-        #expect(unsupported.acceptanceText == "Acceptance: off here")
-        #expect(unsupported.fallbackText == "Fallback: unavailable until this app has a profile.")
-        #expect(unsupported.proofText == "Check: unavailable here.")
+        #expect(unsupported.modeText == "Mode: next to the cursor, floating backup fallback")
+        #expect(unsupported.acceptanceText == "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion shortcut works here.")
+        #expect(unsupported.fallbackText == "Fallback: off while this app is paused.")
+        #expect(unsupported.proofText == "Check: turn on suggestions for this app first.")
         #expect(unsupported.proofCommandText == nil)
         #expect(unsupported.proofCommandClipboardText == nil)
         #expect(!unsupported.canCopyProofCommand)
-        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
-        #expect(!unsupported.canToggle)
+        #expect(unsupported.menuToggleTitle == "Resume in Unknown")
+        #expect(unsupported.canToggle)
 
         let missing = SettingsCurrentAppState(
             displayName: "None",

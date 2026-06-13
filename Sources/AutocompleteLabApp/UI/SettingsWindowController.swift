@@ -118,7 +118,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if claudeCodeTerminalHostVariant != nil {
-            return "Current app: \(displayName) is blocked outside Claude Code proof"
+            return "Current app: \(displayName) is a Claude Code host and \(isEnabled ? "on" : "off")"
         }
 
         if isProofModeOnly {
@@ -138,7 +138,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if claudeCodeTerminalHostVariant != nil {
-            return "\(displayName) stays blocked for normal typing. Only an explicit Claude Code host proof check can use this terminal."
+            return "\(displayName) uses the Claude Code terminal adapter when the terminal looks like Claude Code. Shell commands still block."
         }
 
         if isProofModeOnly {
@@ -194,7 +194,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if claudeCodeTerminalHostVariant != nil {
-            return "Mode: Claude Code terminal-host proof only"
+            return "Mode: Claude Code terminal-host dogfood"
         }
 
         guard case let .supported(profile) = supportStatus else {
@@ -221,7 +221,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if claudeCodeTerminalHostVariant != nil {
-            return "Keys: off except one-word Tab during an explicit proof check."
+            return "Keys: Tab accepts one word when Claude Code is detected."
         }
 
         guard case let .supported(profile) = supportStatus,
@@ -244,7 +244,7 @@ struct SettingsCurrentAppState: Equatable {
 
     var fallbackText: String {
         if claudeCodeTerminalHostVariant != nil {
-            return "Fallback: unavailable outside the manual Claude Code proof lane."
+            return "Fallback: terminal adapter only; pause this host if placement or insertion is wrong."
         }
 
         return CommandFallbackPolicy().decision(
@@ -284,7 +284,7 @@ struct SettingsCurrentAppState: Equatable {
 
     var proofButtonTitle: String {
         if claudeCodeTerminalHostVariant != nil {
-            return "Manual Check Only"
+            return isEnabled ? "Check This App" : "Enable Suggestions First"
         }
 
         if bundleIdentifier == "com.apple.TextEdit", isEnabled {
@@ -316,7 +316,7 @@ struct SettingsCurrentAppState: Equatable {
         }
 
         if let hostVariant = claudeCodeTerminalHostVariant {
-            return "Check: run the \(hostVariant.displayName) Claude Code proof, press Tab once, and do not press Enter."
+            return "Check: type in Claude Code in \(hostVariant.displayName), press Tab once, and do not press Enter."
         }
 
         guard case let .supported(profile) = supportStatus,
