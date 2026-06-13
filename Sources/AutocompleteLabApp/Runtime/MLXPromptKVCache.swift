@@ -11,12 +11,22 @@ struct MLXPromptKVCacheConfiguration: Equatable, Sendable {
         self.isEnabled = isEnabled
     }
 
+    /// The prompt KV cache is on by default. It lets a typing session reuse the
+    /// prefilled system-prompt + prior-context KV across keystrokes, so only the
+    /// newly typed tokens are prefilled. This is the single biggest first-token
+    /// latency win for the app-owned runtime. Set the environment variable to an
+    /// explicit off value (`0`, `false`, `no`, `off`) to use the slower, fully
+    /// re-prefilling `ChatSession` path.
     static func fromEnvironment(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> Self {
         guard let value = environment[environmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+            return Self(isEnabled: true)
+        }
+
+        if ["0", "false", "no", "off"].contains(value) {
             return Self(isEnabled: false)
         }
 
-        return Self(isEnabled: ["1", "true", "yes", "on"].contains(value))
+        return Self(isEnabled: true)
     }
 }
 

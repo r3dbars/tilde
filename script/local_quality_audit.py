@@ -507,6 +507,67 @@ def generated_output(row: AuditRow, timeout: float, model: Optional[str]) -> str
     return completed.stdout.strip()
 
 
+def row_payload(row: AuditRow, model: Optional[str]) -> dict:
+    template = prompt_template_for_model(model)
+    payload = {
+        "id": row.row_id,
+        "system": row.system,
+        "user": row.user,
+        "mode": row.mode,
+        "template": template,
+        "promptIsBuilt": True,
+        "max_tokens": min(16, max(3, row.max_words + 6)),
+    }
+    if template == "raw_completion":
+        payload["rawPrompt"] = raw_completion_prompt(row.system, row.user)
+    return payload
+
+
+def generated_outputs_batch(
+    rows: list[AuditRow],
+    timeout: float,
+    model: Optional[str],
+) -> dict[str, str]:
+    """Generate all rows through one persistent model load.
+
+    Returns a mapping of row id -> raw output. Rows that error or time out are
+    omitted so the caller scores them as empty (no suggestion), exactly as a
+    failed single-row generation would.
+    """
+    command = [str(ROOT_DIR / "script" / "local_completion_batch.py")]
+    if model:
+        command.extend(["--model", model])
+    command.extend(["--row-timeout", str(timeout)])
+    payloads = "\n".join(json.dumps(row_payload(row, model)) for row in rows)
+    # Overall budget: one model load plus per-row work, with generous headroom
+    # so a healthy run never trips it but a wedged run still fails fast.
+    overall_timeout = float(os.environ.get("AUTOCOMPLETE_LAB_BATCH_LOAD_TIMEOUT", "900"))
+    overall_timeout += timeout * max(1, len(rows))
+    completed = subprocess.run(
+        command,
+        input=payloads,
+        cwd=ROOT_DIR,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=overall_timeout,
+        check=False,
+    )
+    if completed.returncode not in (0, 75):
+        raise RuntimeError(
+            f"batch runtime failed: {(completed.stderr or completed.stdout).strip().splitlines()[-1:] or ['unknown']}"
+        )
+    outputs: dict[str, str] = {}
+    for line in completed.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        record = json.loads(line)
+        if record.get("ok") and record.get("output") is not None:
+            outputs[str(record["id"])] = str(record["output"])
+    return outputs
+
+
 def prompt_template_for_model(model: Optional[str]) -> str:
     normalized = (model or "").strip().lower()
     if normalized in RAW_COMPLETION_MODEL_ALIASES:
@@ -527,7 +588,16 @@ def outputs_for_rows(
     generate: bool,
     timeout: float,
     model: Optional[str] = None,
+    batch: bool = False,
 ) -> list[tuple[AuditRow, str]]:
+    rows = list(rows)
+    if generate and batch:
+        raw_by_id = generated_outputs_batch(rows, timeout, model)
+        return [
+            (row, display_output(row, raw_by_id.get(row.row_id, "")))
+            for row in rows
+        ]
+
     pairs = []
     for row in rows:
         if generate:
@@ -666,6 +736,11 @@ def main() -> int:
     parser.add_argument("--input", type=Path, help="JSONL disposable prompt set")
     parser.add_argument("--generate", action="store_true", help="Generate current local model output")
     parser.add_argument("--model", help="Model alias for generated runs, for example small-draft-1b")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Generate all rows through one persistent model load (much faster).",
+    )
     parser.add_argument("--self-test", action="store_true", help="Run fixture self-test without opt-in env")
     parser.add_argument("--timeout", type=float, default=8)
     parser.add_argument("--min-overall", type=int, default=0)
@@ -696,7 +771,13 @@ def main() -> int:
             source = "current local model" if args.generate else "labeled local outputs"
         generate = args.generate
 
-    pairs = outputs_for_rows(rows, generate=generate, timeout=args.timeout, model=args.model)
+    pairs = outputs_for_rows(
+        rows,
+        generate=generate,
+        timeout=args.timeout,
+        model=args.model,
+        batch=args.batch,
+    )
     scores = [score_row(row, output) for row, output in pairs]
     summary, overall, relevance = summarize(scores, source=source, include_raw=include_raw)
     print(summary)
