@@ -514,6 +514,11 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["maxTokens"] = String(requestMaxGeneratedTokens)
         timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords(for: request))
         timingMetadata["promptTemplate"] = formattedPrompt.templateIdentifier
+        // Prompt-size proxies for prefill cost. On the default ChatSession path, prefill +
+        // first-token decode are fused inside `firstChunkMilliseconds` (streamResponse is
+        // opaque), so correlate first-chunk latency against these counts to estimate prefill.
+        timingMetadata["systemPromptChars"] = String(formattedPrompt.system.count)
+        timingMetadata["userPromptChars"] = String(formattedPrompt.user.count)
         timingMetadata["rawChars"] = String(rawOutput.count)
         timingMetadata["cleanedCandidateCount"] = String(cleanedCandidates.count)
         timingMetadata["candidateTopScore"] = Self.formattedCandidateScore(candidateTopScore)
@@ -712,6 +717,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             ],
             additionalContext: ["enable_thinking": false]
         ))
+        let preparedAt = Date()
         let promptTokens = preparedInput.text.tokens.asArray(Int.self)
         let lookup = stateQueue.sync {
             promptKVCacheOwner.lookup(
@@ -723,6 +729,11 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             )
         }
         var promptCacheTraceMetadata = promptCacheLookup.traceMetadata.merging(lookup.traceMetadata) { current, _ in current }
+        // Decompose the otherwise-lumped session setup so prefill cost is attributable on both
+        // cache hit and miss: tokenization (container.prepare) vs cache/iterator setup.
+        promptCacheTraceMetadata["preparePromptMilliseconds"] = String(Self.milliseconds(from: sessionStartedAt, to: preparedAt))
+        promptCacheTraceMetadata["promptTokenCount"] = String(promptTokens.count)
+        promptCacheTraceMetadata["appendTokenCount"] = String(lookup.appendTokens.count)
 
         let modelBox = await container.perform { context in
             MLXRuntimeSendableBox(context.model)
@@ -736,6 +747,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             : preparedInput
 
         let sessionBuiltAt = Date()
+        promptCacheTraceMetadata["cacheSetupMilliseconds"] = String(Self.milliseconds(from: preparedAt, to: sessionBuiltAt))
         let iterator = try TokenIterator(
             input: generationInput,
             model: model,
