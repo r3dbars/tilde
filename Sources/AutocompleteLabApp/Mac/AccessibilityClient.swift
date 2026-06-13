@@ -1118,7 +1118,7 @@ final class AccessibilityClient: @unchecked Sendable {
         options: FocusedTextReadOptions = .standard
     ) -> EditableTextSnapshot? {
         if options.preferDirectTextSnapshot,
-           let directSnapshot = directEditableTextSnapshot(
+           let directSnapshot = valueEditableTextSnapshot(
                in: element,
                role: role,
                bundleIdentifier: bundleIdentifier,
@@ -1138,28 +1138,18 @@ final class AccessibilityClient: @unchecked Sendable {
             return boundedSnapshot
         }
 
-        guard let text = editableText(
+        return valueEditableTextSnapshot(
             in: element,
             role: role,
             bundleIdentifier: bundleIdentifier,
             processIdentifier: processIdentifier,
             windowTitle: windowTitle,
-            allowDescendantTextFallback: allowDescendantTextFallback
-        ) else {
-            return nil
-        }
-
-        return EditableTextSnapshot(
-            slice: CursorTextSplitter.split(
-                text,
-                utf16Offset: selectedRange?.location ?? text.utf16.count
-            ),
-            utf16Length: text.utf16.count,
-            canReadValue: true
+            allowDescendantTextFallback: allowDescendantTextFallback,
+            selectedRange: selectedRange
         )
     }
 
-    private func directEditableTextSnapshot(
+    private func valueEditableTextSnapshot(
         in element: AXUIElement,
         role: String?,
         bundleIdentifier: String?,

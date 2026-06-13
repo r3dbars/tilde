@@ -415,22 +415,7 @@ final class DiagnosticsWindowController {
     }
 
     private func countBucketsText(title: String, buckets: [String: Int]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
-        }
-
-        return """
-        \(title):
-        \(buckets.sorted { lhs, rhs in
-            if lhs.value == rhs.value {
-                return lhs.key < rhs.key
-            }
-
-            return lhs.value > rhs.value
-        }.map { key, value in
-            "  \(key): \(value)"
-        }.joined(separator: "\n"))
-        """
+        DiagnosticsText.countBucketsText(title: title, buckets: buckets)
     }
 
     private func recentDiagnosticsText(_ events: [String]) -> String {
@@ -456,11 +441,11 @@ final class DiagnosticsWindowController {
     }
 
     private static func percent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
+        DiagnosticsText.percent(value)
     }
 
     private static func latency(_ value: Int?) -> String {
-        value.map { "\($0)ms" } ?? "n/a"
+        DiagnosticsText.latency(value)
     }
 
     @objc
@@ -606,7 +591,7 @@ struct DiagnosticsOverviewState: Equatable {
     }
 
     private static func percent(_ value: Double) -> String {
-        String(format: "%.0f%%", value * 100)
+        DiagnosticsText.percent(value)
     }
 }
 
@@ -776,7 +761,7 @@ struct DiagnosticsTraceHistory {
     }
 
     private static func latency(_ value: Int?) -> String {
-        value.map { "\($0)ms" } ?? "n/a"
+        DiagnosticsText.latency(value)
     }
 }
 
@@ -977,22 +962,7 @@ struct PlacementDiagnostics: Equatable {
     }
 
     private func countBucketsText(title: String, buckets: [String: Int]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
-        }
-
-        return """
-        \(title):
-        \(buckets.sorted { lhs, rhs in
-            if lhs.value == rhs.value {
-                return lhs.key < rhs.key
-            }
-
-            return lhs.value > rhs.value
-        }.map { key, value in
-            "  \(key): \(value)"
-        }.joined(separator: "\n"))
-        """
+        DiagnosticsText.countBucketsText(title: title, buckets: buckets)
     }
 
     private func nestedCountBucketsText(title: String, buckets: [String: [String: Int]]) -> String {
@@ -1041,7 +1011,7 @@ struct PlacementDiagnostics: Equatable {
     }
 
     private static func percent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
+        DiagnosticsText.percent(value)
     }
 }
 
@@ -1161,26 +1131,11 @@ struct SuggestionLearningDiagnostics: Equatable {
     }
 
     private func countBucketsText(title: String, buckets: [String: Int]) -> String {
-        guard !buckets.isEmpty else {
-            return "\(title): none yet"
-        }
-
-        return """
-        \(title):
-        \(buckets.sorted { lhs, rhs in
-            if lhs.value == rhs.value {
-                return lhs.key < rhs.key
-            }
-
-            return lhs.value > rhs.value
-        }.map { key, value in
-            "  \(key): \(value)"
-        }.joined(separator: "\n"))
-        """
+        DiagnosticsText.countBucketsText(title: title, buckets: buckets)
     }
 
     private static func percent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
+        DiagnosticsText.percent(value)
     }
 
     private static func score(_ value: Double) -> String {
@@ -1349,7 +1304,7 @@ struct DiagnosticsTypingHealth {
     }
 
     private func milliseconds(_ value: Int?) -> String {
-        value.map { "\($0)ms" } ?? "n/a"
+        DiagnosticsText.latency(value)
     }
 }
 
@@ -1359,5 +1314,34 @@ private extension Dictionary where Key == String, Value == String {
             return nil
         }
         return Int(value)
+    }
+}
+
+private enum DiagnosticsText {
+    static func countBucketsText(title: String, buckets: [String: Int]) -> String {
+        guard !buckets.isEmpty else {
+            return "\(title): none yet"
+        }
+
+        return """
+        \(title):
+        \(buckets.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key < rhs.key
+            }
+
+            return lhs.value > rhs.value
+        }.map { key, value in
+            "  \(key): \(value)"
+        }.joined(separator: "\n"))
+        """
+    }
+
+    static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    static func latency(_ value: Int?) -> String {
+        value.map { "\($0)ms" } ?? "n/a"
     }
 }
