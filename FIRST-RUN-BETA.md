@@ -52,23 +52,27 @@ field kind, timing, counters, failure labels, and text lengths.
 
 ## Test App Scope
 
-Write-test only in the currently enabled proof lanes for these apps:
+Best-proof targets:
 
 - TextEdit
 - Notes
 - Obsidian
 - Chrome local textarea/contenteditable practice fixtures
+- Codex
+- Claude desktop
+- Claude Code in supported terminal hosts
 
-Treat them as beta targets, not system-wide support. If the current proof gate
-marks a lane stale or pending, use it only for proof refresh.
+The app is now default-on for normal text fields through a generic Accessibility
+path. If an app looks wrong, pause that app, capture a screenshot, and fix that
+specific adapter.
 
-Do not write-test these as normal beta apps. Use them only as proof targets:
+Treat these as guarded one-word dogfood targets:
 
 - Codex
 - Claude
 - Claude Code terminal-host proof
 
-These stay off until proof says otherwise:
+These still stay off or guarded until a safe adapter exists:
 
 - Mail
 - Browser webmail, including Gmail and Outlook in a browser

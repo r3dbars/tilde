@@ -17,8 +17,8 @@ struct CommandFallbackPolicyTests {
         #expect(decision.statusText == "Fallback: not needed; cursor placement is available.")
     }
 
-    @Test("disabled and unsupported apps do not offer fallback helpers")
-    func disabledAndUnsupportedAppsDoNotOfferFallbackHelpers() {
+    @Test("disabled apps pause fallback and unknown apps use inline")
+    func disabledAppsPauseFallbackAndUnknownAppsUseInline() {
         let store = CompatibilityProfileStore.mvp
         let disabled = CommandFallbackPolicy().decision(
             supportStatus: store.supportStatus(for: "com.apple.TextEdit"),
@@ -32,9 +32,9 @@ struct CommandFallbackPolicyTests {
         #expect(disabled.availability == .unavailable)
         #expect(disabled.reason == .appDisabled)
         #expect(disabled.statusText == "Fallback: off while this app is paused.")
-        #expect(unsupported.availability == .unavailable)
-        #expect(unsupported.reason == .unsupportedApp)
-        #expect(unsupported.statusText == "Fallback: unavailable until this app has a profile.")
+        #expect(unsupported.availability == .inlineAvailable)
+        #expect(unsupported.reason == .inlineAvailable)
+        #expect(unsupported.statusText == "Fallback: not needed; cursor placement is available.")
     }
 
     @Test("sensitive apps and fields do not offer copy-only fallback")
