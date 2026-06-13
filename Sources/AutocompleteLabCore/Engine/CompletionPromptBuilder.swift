@@ -59,7 +59,11 @@ public enum CompletionPromptTemplate: String, Equatable, Sendable {
                 user: prompt.user
             )
         case .rawCompletion:
-            let rawPrompt = [prompt.system, prompt.user]
+            let rawPrompt = [
+                prompt.system,
+                "Complete only the text requested below. Return no label and no copied context.",
+                prompt.user
+            ]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
                 .joined(separator: "\n\n")
@@ -74,7 +78,7 @@ public enum CompletionPromptTemplate: String, Equatable, Sendable {
 }
 
 public struct CompletionPromptBuilder: Equatable, Sendable {
-    public static let promptStyleIdentifier = "screen-aware-continuation-v9"
+    public static let promptStyleIdentifier = "screen-aware-continuation-v10"
     public static let noSuggestionToken = "<NO_SUGGESTION>"
 
     public let maxContextCharacters: Int
@@ -191,6 +195,9 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         \(exampleGuidance)
         When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
         Do not repeat the Before cursor text.
+        Do not copy any 4-word span from the current sentence.
+        If the next text would mostly replay words already visible in the current sentence, return \(Self.noSuggestionToken).
+        Continue the thought with fresh, useful next words instead of restating its setup.
         \(sentenceGuidance) Do not answer, explain, greet, quote, reason, or restart.
         Do not brainstorm, rewrite, introduce a new topic, or complete the user's whole thought.
         """

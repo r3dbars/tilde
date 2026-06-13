@@ -3,9 +3,11 @@ import Testing
 
 @Suite("App compatibility profile")
 struct AppCompatibilityProfileTests {
-    @Test("Fallback profile stays blocked")
-    func fallbackProfileStaysBlocked() {
-        #expect(AppCompatibilityProfile.fallback.defaultRung == .blocked)
+    @Test("Fallback profile is default-on")
+    func fallbackProfileIsDefaultOn() {
+        #expect(AppCompatibilityProfile.fallback.defaultRung == .accept)
+        #expect(AppCompatibilityProfile.fallback.textPath == .nativeAccessibility)
+        #expect(AppCompatibilityProfile.fallback.acceptMode == .directAccessibility)
     }
 
     @Test("Selects known app profiles by bundle identifier")
@@ -52,8 +54,8 @@ struct AppCompatibilityProfileTests {
         let registry = AppCompatibilityRegistry.default
 
         #expect(registry.profile(for: "example.unknown.Writer").id == "fallback")
-        #expect(registry.profile(for: "example.unknown.Writer").defaultRung == .blocked)
-        #expect(registry.profile(for: "example.unknown.Writer").textPath == .blocked)
+        #expect(registry.profile(for: "example.unknown.Writer").defaultRung == .accept)
+        #expect(registry.profile(for: "example.unknown.Writer").textPath == .nativeAccessibility)
         #expect(registry.profile(for: nil).id == "fallback")
     }
 

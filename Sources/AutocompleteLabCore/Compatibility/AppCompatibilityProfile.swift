@@ -72,11 +72,13 @@ public struct AppCompatibilityProfile: Equatable, Sendable {
 
     public static let fallback = AppCompatibilityProfile(
         id: "fallback",
-        displayName: "Unsupported App",
+        displayName: "Generic App",
         bundleIdentifierPrefixes: [],
-        defaultRung: .blocked,
-        textPath: .blocked,
-        acceptMode: .none
+        defaultRung: .accept,
+        textPath: .nativeAccessibility,
+        acceptMode: .directAccessibility,
+        lineRectPolicy: .caretOnly,
+        boundaryClipPolicy: .clipToFocusedTextElementWhenCaretInside
     )
 }
 

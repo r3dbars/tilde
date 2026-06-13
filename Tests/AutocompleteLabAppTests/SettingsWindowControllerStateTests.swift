@@ -120,11 +120,14 @@ struct SettingsWindowControllerStateTests {
             disabledAppCount: 1
         )
 
-        #expect(unsupported.statusText == "Unknown: suggestions aren’t available here")
-        #expect(unsupported.detailText == "No compatibility profile yet. Suggestions stay off here.")
-        #expect(unsupported.menuToggleTitle == "Suggestions unavailable in Unknown")
+        #expect(unsupported.statusText == "Unknown: suggestions paused")
+        #expect(
+            unsupported.detailText
+                == "Default-on generic Accessibility path for apps without a custom profile. Suggestions are paused here — resume them whenever you like."
+        )
+        #expect(unsupported.menuToggleTitle == "Resume in Unknown")
         #expect(unsupported.blockedAppsText == "1 app is paused.")
-        #expect(!unsupported.canToggle)
+        #expect(unsupported.canToggle)
 
         let missing = SettingsCurrentAppState(
             displayName: "None",
