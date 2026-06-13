@@ -66,6 +66,9 @@ Last verified: 2026-06-12 from this page's prior history plus
   boundaries; prompt surfaces stay quiet there.
 - Fast typing bursts keep word completion and instant phrase fallback available
   while pausing heavier model continuations.
+- Instant phrase source order is doc-local n-gram first, canned writing bridges
+  second, and model refinement third. The doc-local corpus stays RAM-only per
+  focused writing field, and traces store only source and match-shape metadata.
 - Visible fallback phrases can survive soft model suppression when they are
   young, same-field, and not invalidated by typing.
 - Risky suppression still hides the suggestion.
