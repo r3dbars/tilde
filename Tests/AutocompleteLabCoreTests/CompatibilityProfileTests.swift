@@ -43,6 +43,15 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.mail")?.fieldIdentityMode == .stableBounds)
         #expect(store.profile(for: "com.apple.mail")?.allowsDescendantTextFallback == true)
         #expect(store.profile(for: "com.apple.mail")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.displayName == "Messages")
+        #expect(store.profile(for: "com.apple.MobileSMS")?.supportLevel == .yellow)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.graduationDecision == .wordOnly)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.insertionMode == .axValueReplacement)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.supportsOneWordAcceptance == true)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.supportsFullAcceptance == false)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.requiresNoSubmitAcceptanceProof == true)
+        #expect(store.profile(for: "com.apple.MobileSMS")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.openai.atlas")?.displayName == "ChatGPT Atlas")
         #expect(store.profile(for: "com.openai.atlas")?.supportLevel == .diagnosticsOnly)
         #expect(store.profile(for: "com.openai.atlas")?.graduationDecision == .blocked)
@@ -197,6 +206,7 @@ struct CompatibilityProfileTests {
         let store = CompatibilityProfileStore.mvp
 
         #expect(!store.allows(bundleIdentifier: "com.example.UnknownEditor"))
+        #expect(store.profile(for: "com.example.UnknownEditor") == nil)
         #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
 
@@ -383,6 +393,13 @@ struct CompatibilityProfileTests {
             #expect(profile.promptAppSafetyMode == .disabled)
             #expect(profile.canPresentSuggestions == false)
         }
+
+        let messages = try #require(store.profile(for: "com.apple.MobileSMS"))
+        #expect(messages.graduationDecision == .wordOnly)
+        #expect(messages.promptAppSafetyMode == .wordOnly)
+        #expect(messages.supportsOneWordAcceptance)
+        #expect(!messages.supportsFullAcceptance)
+        #expect(messages.requiresNoSubmitAcceptanceProof)
     }
 
     @Test("High-value writing surfaces have explicit graduation decisions")
@@ -399,6 +416,7 @@ struct CompatibilityProfileTests {
         }
 
         let wordOnlyBundles = [
+            "com.apple.MobileSMS",
             "com.anthropic.claudefordesktop"
         ]
         for bundleIdentifier in wordOnlyBundles {
@@ -415,7 +433,6 @@ struct CompatibilityProfileTests {
             "com.openai.chat",
             "com.openai.ChatGPT",
             "com.openai.atlas",
-            "notion.id",
             "com.tinyspeck.slackmacgap",
             "com.hnc.Discord",
             "com.hnc.DiscordPTB",

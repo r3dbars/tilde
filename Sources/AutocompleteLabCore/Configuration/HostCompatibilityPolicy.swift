@@ -92,7 +92,7 @@ public struct HostCompatibilityPolicy: Equatable, Sendable {
 }
 
 public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
-    public static let currentPolicyVersion = "2026-05-23.1"
+    public static let currentPolicyVersion = "2026-05-31.1"
 
     public let policyVersion: String
     public let policies: [String: HostCompatibilityPolicy]
@@ -162,6 +162,19 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             proofState: .blocked,
             killSwitch: .diagnosticsOnly,
             notes: "Sensitive compose surface; suggestions remain off until insertion proof exists."
+        ),
+        HostCompatibilityPolicy(
+            bundleIdentifier: "com.apple.MobileSMS",
+            displayName: "Messages",
+            hostVersion: .exact(shortVersion: "26.0", build: "1450.600.61.1.4", source: "/System/Applications/Messages.app"),
+            safetyMode: .wordOnly,
+            runtimeState: .proofModeOnly,
+            proofState: .partial,
+            killSwitch: .proofModeRequired,
+            proofArtifacts: [
+                HostProofArtifact(kind: "manual-smoke", reference: "Messages/default")
+            ],
+            notes: "AXTextField chat compose has partial one-word proof only. Normal support stays off; explicit proof mode is required and full accept stays off."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.openai.atlas",

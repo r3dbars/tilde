@@ -74,6 +74,14 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
 
         if mode == .phraseContinuation {
             let wordCount = suggestion.visibleWordCount
+            if suggestion.maxVisibleWords >= 5,
+               wordCount < CompletionModelPolicy.preferredMinimumVisibleWords(
+                   forVisibleWords: suggestion.maxVisibleWords
+               ) {
+                score -= 45
+                reasons.append("too-short-daily-driver-phrase")
+            }
+
             if suggestion.maxVisibleWords >= 12 {
                 if wordCount > suggestion.maxVisibleWords {
                     score -= 45

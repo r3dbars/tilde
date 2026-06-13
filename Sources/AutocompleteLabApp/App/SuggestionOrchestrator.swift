@@ -610,8 +610,10 @@ final class SuggestionOrchestrator {
         acceptedAndKeptSignal: AcceptedAndKeptLearningSignal,
         isRepeatedMiss: Bool,
         displayScorePolicy: DisplayScorePolicy,
+        suggestionTuning: SuggestionTuning? = nil,
         now: Date = Date()
     ) -> SuggestionDisplayScoreDecision {
+        _ = suggestionTuning
         let prefixEagernessAdjustment = prefixFamilyCooldownPolicy.eagernessAdjustment(
             for: PrefixFamilyCooldownInput(
                 appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
