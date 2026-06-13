@@ -59,7 +59,7 @@ struct SuggestionSilenceExplanationPolicyTests {
             ("repeated-miss", [:], "model-result", .repetition),
             ("typedOver", ["prefixCooldownReason": "typedOver"], "prefix-family-cooldown", .prefixCooldown),
             ("quiet-mode-field", ["quietMode": "field"], "annoyance-quiet-mode", .quietMode),
-            ("fast-phrase-learning-restraint", [:], "predictive-phrase-fallback", .learnedRestraint),
+            ("fast-phrase-learning-restraint", [:], "canned-bridge", .learnedRestraint),
             ("secureField", [:], "activation-policy", .safety)
         ]
 
