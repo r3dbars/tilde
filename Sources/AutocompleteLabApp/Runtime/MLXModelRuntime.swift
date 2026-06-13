@@ -12,6 +12,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private let fileManager: FileManager
     private let usesVisionLanguageFactory: Bool
     private let promptBuilder: CompletionPromptBuilder
+    private let promptTemplate: CompletionPromptTemplate
     private let cleaner: CompletionOutputCleaner
     private let candidateRanker: CompletionCandidateRanker
     private let lengthConfiguration: CompletionLengthConfiguration
@@ -66,6 +67,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         self.usesVisionLanguageFactory = usesVisionLanguageFactory
         self.lengthConfiguration = lengthConfiguration
         self.promptBuilder = promptBuilder ?? CompletionPromptBuilder(maxVisibleWords: lengthConfiguration.maxVisibleWords)
+        self.promptTemplate = CompletionPromptTemplate.template(for: modelManifest?.model ?? CompletionModelPolicy.mvp.model)
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.candidateRanker = candidateRanker
         self.integrityValidationCache = integrityValidationCache
@@ -371,12 +373,13 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
         let startedAt = Date()
         var prompt = promptBuilder.prompt(for: request)
+        var formattedPrompt = prompt.formatted(using: promptTemplate)
         let promptBuiltAt = Date()
         let requestCleaner = cleaner(for: request)
         let requestMaxGeneratedTokens = maxGeneratedTokens(for: request)
         var generation = try await generateRawCompletion(
             container: container,
-            prompt: prompt,
+            prompt: formattedPrompt,
             request: request,
             requestCleaner: requestCleaner,
             requestMaxGeneratedTokens: requestMaxGeneratedTokens,
@@ -428,7 +431,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
             let retryGeneration = try await generateRawCompletion(
                 container: container,
-                prompt: retryPrompt,
+                prompt: retryPrompt.formatted(using: promptTemplate),
                 request: request,
                 requestCleaner: requestCleaner,
                 requestMaxGeneratedTokens: requestMaxGeneratedTokens,
@@ -454,6 +457,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 (retrySelection.rankedCandidates.first?.score ?? 0) > (candidateSelection.rankedCandidates.first?.score ?? 0) {
                 retryUsed = true
                 prompt = retryPrompt
+                formattedPrompt = retryPrompt.formatted(using: promptTemplate)
                 generation = retryGeneration
                 rawOutput = retryGeneration.rawOutput
                 cleanedCandidates = retryCandidates
@@ -501,6 +505,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["totalMilliseconds"] = String(totalMilliseconds)
         timingMetadata["maxTokens"] = String(requestMaxGeneratedTokens)
         timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords(for: request))
+        timingMetadata["promptTemplate"] = formattedPrompt.templateIdentifier
         timingMetadata["rawChars"] = String(rawOutput.count)
         timingMetadata["cleanedCandidateCount"] = String(cleanedCandidates.count)
         timingMetadata["candidateTopScore"] = Self.formattedCandidateScore(candidateTopScore)
@@ -521,7 +526,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
         RawAutocompleteTraceLog.shared.recordModelResult(
             request: request,
-            prompt: prompt,
+            prompt: CompletionPrompt(system: formattedPrompt.system, user: formattedPrompt.user),
             rawOutput: rawOutput,
             cleanedSuggestion: cleanedSuggestion,
             cleanedCandidateCount: cleanedCandidates.count,
@@ -534,6 +539,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             extraMetadata: [
                 "retryAttempted": String(retryAttempted),
                 "retryUsed": String(retryUsed),
+                "promptTemplate": formattedPrompt.templateIdentifier,
+                "rawPromptChars": String(formattedPrompt.rawPrompt?.count ?? 0),
                 "wordCompletionFallbackUsed": String(wordCompletionFallbackUsed),
                 "wordCompletionFallbackSource": wordCompletionFallbackSource ?? "none"
             ]
@@ -554,7 +561,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func generateRawCompletion(
         container: ModelContainer,
-        prompt: CompletionPrompt,
+        prompt: FormattedCompletionPrompt,
         request: CompletionRequest,
         requestCleaner: CompletionOutputCleaner,
         requestMaxGeneratedTokens: Int,
