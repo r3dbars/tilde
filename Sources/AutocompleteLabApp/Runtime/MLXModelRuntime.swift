@@ -1,5 +1,6 @@
 import Foundation
 import AutocompleteLabCore
+import MLX
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
@@ -22,6 +23,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private var integrityValidationCache: ModelAssetIntegrityValidationCache
     private var container: ModelContainer?
     private var staticPromptCache = RuntimeStaticPromptCache()
+    private var promptKVCacheOwner: MLXPromptKVCacheOwner
     private var generation = 0
     private var warmTaskID = 0
     private var warmTask: (id: Int, task: Task<Void, Error>, gate: MLXRuntimeWarmGate)?
@@ -45,7 +47,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             integrityValidationCache: ModelAssetIntegrityValidationCache(),
             promptBuilder: promptBuilder,
             cleaner: cleaner,
-            candidateRanker: candidateRanker
+            candidateRanker: candidateRanker,
+            promptKVCacheConfiguration: .fromEnvironment()
         )
     }
 
@@ -58,7 +61,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         integrityValidationCache: ModelAssetIntegrityValidationCache,
         promptBuilder: CompletionPromptBuilder? = nil,
         cleaner: CompletionOutputCleaner? = nil,
-        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker()
+        candidateRanker: CompletionCandidateRanker = CompletionCandidateRanker(),
+        promptKVCacheConfiguration: MLXPromptKVCacheConfiguration = .fromEnvironment()
     ) {
         self.modelDirectoryURL = modelDirectoryURL
         self.modelManifest = modelManifest
@@ -69,6 +73,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         self.cleaner = cleaner ?? CompletionOutputCleaner(maxVisibleWords: lengthConfiguration.maxVisibleWords)
         self.candidateRanker = candidateRanker
         self.integrityValidationCache = integrityValidationCache
+        self.promptKVCacheOwner = MLXPromptKVCacheOwner(configuration: promptKVCacheConfiguration)
         self.storedState = .unavailable(reason: "MLX runtime has not been warmed.")
     }
 
@@ -184,6 +189,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                     container = nil
                     staticPromptCache = RuntimeStaticPromptCache()
                     storedState = .failed(candidate: .mlx, reason: error.localizedDescription)
+                    promptKVCacheOwner.clear()
                 }
             }
             DiagnosticsLog.shared.record(
@@ -254,6 +260,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             generation += 1
             container = nil
             staticPromptCache = RuntimeStaticPromptCache()
+            promptKVCacheOwner.clear()
             storedState = .failed(candidate: .mlx, reason: failureDescription)
         }
         DiagnosticsLog.shared.record(
@@ -337,6 +344,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             generation += 1
             container = nil
             staticPromptCache = RuntimeStaticPromptCache()
+            promptKVCacheOwner.clear()
             storedState = .unavailable(reason: "MLX runtime was canceled.")
             return task
         }
@@ -561,11 +569,56 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         cancellationEpoch: Int,
         onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void
     ) async throws -> RawCompletionGeneration {
-        let sessionStartedAt = Date()
         let promptCacheLookup = cachedStaticPrompt(systemPrompt: prompt.system)
+        let promptKVCacheEnabled = stateQueue.sync {
+            promptKVCacheOwner.configuration.isEnabled
+        }
+
+        guard promptKVCacheEnabled, !usesVisionLanguageFactory else {
+            let bypassReason: MLXPromptKVCacheMissReason = usesVisionLanguageFactory
+                ? .visionLanguageRuntime
+                : .envFlagOff
+            let promptCacheTraceMetadata = promptCacheLookup.traceMetadata.merging(
+                stateQueue.sync { promptKVCacheOwner.bypassMetadata(reason: bypassReason) }
+            ) { current, _ in current }
+            return try await generateRawCompletionWithChatSession(
+                container: container,
+                prompt: prompt,
+                request: request,
+                requestCleaner: requestCleaner,
+                requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+                cancellationEpoch: cancellationEpoch,
+                onPartialSuggestion: onPartialSuggestion,
+                promptCacheTraceMetadata: promptCacheTraceMetadata
+            )
+        }
+
+        return try await generateRawCompletionWithPromptKVCache(
+            container: container,
+            prompt: prompt,
+            request: request,
+            requestCleaner: requestCleaner,
+            requestMaxGeneratedTokens: requestMaxGeneratedTokens,
+            cancellationEpoch: cancellationEpoch,
+            onPartialSuggestion: onPartialSuggestion,
+            promptCacheLookup: promptCacheLookup
+        )
+    }
+
+    private func generateRawCompletionWithChatSession(
+        container: ModelContainer,
+        prompt: CompletionPrompt,
+        request: CompletionRequest,
+        requestCleaner: CompletionOutputCleaner,
+        requestMaxGeneratedTokens: Int,
+        cancellationEpoch: Int,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void,
+        promptCacheTraceMetadata: [String: String]
+    ) async throws -> RawCompletionGeneration {
+        let sessionStartedAt = Date()
         let session = ChatSession(
             container,
-            instructions: promptCacheLookup.systemPrompt,
+            instructions: prompt.system,
             generateParameters: GenerateParameters(
                 maxTokens: requestMaxGeneratedTokens,
                 temperature: 0
@@ -626,7 +679,155 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             sessionMilliseconds: Self.milliseconds(from: sessionStartedAt, to: sessionBuiltAt),
             generationMilliseconds: Self.milliseconds(from: sessionBuiltAt, to: generatedAt),
             generatedAt: generatedAt,
-            promptCacheTraceMetadata: promptCacheLookup.traceMetadata
+            promptCacheTraceMetadata: promptCacheTraceMetadata
+        )
+    }
+
+    private func generateRawCompletionWithPromptKVCache(
+        container: ModelContainer,
+        prompt: CompletionPrompt,
+        request: CompletionRequest,
+        requestCleaner: CompletionOutputCleaner,
+        requestMaxGeneratedTokens: Int,
+        cancellationEpoch: Int,
+        onPartialSuggestion: @escaping @Sendable (CompletionSuggestion) -> Void,
+        promptCacheLookup: RuntimeStaticPromptCacheLookup
+    ) async throws -> RawCompletionGeneration {
+        let sessionStartedAt = Date()
+        let generateParameters = GenerateParameters(
+            maxTokens: requestMaxGeneratedTokens,
+            temperature: 0
+        )
+        let preparedInput = try await container.prepare(input: UserInput(
+            chat: [
+                .system(promptCacheLookup.systemPrompt),
+                .user(prompt.user)
+            ],
+            additionalContext: ["enable_thinking": false]
+        ))
+        let promptTokens = preparedInput.text.tokens.asArray(Int.self)
+        let lookup = stateQueue.sync {
+            promptKVCacheOwner.lookup(
+                request: request,
+                promptTokens: promptTokens,
+                systemPrompt: promptCacheLookup.systemPrompt,
+                modelRevision: promptKVCacheModelRevision,
+                promptStyleIdentifier: CompletionPromptBuilder.promptStyleIdentifier
+            )
+        }
+        var promptCacheTraceMetadata = promptCacheLookup.traceMetadata.merging(lookup.traceMetadata) { current, _ in current }
+
+        let modelBox = await container.perform { context in
+            MLXRuntimeSendableBox(context.model)
+        }
+        let model = modelBox.consume()
+        let modelConfiguration = await container.configuration
+        let tokenizer = await container.tokenizer
+        let workingCache = lookup.reusableCache ?? model.newCache(parameters: generateParameters)
+        let generationInput = lookup.decision.isHit
+            ? LMInput(tokens: MLXArray(lookup.appendTokens))
+            : preparedInput
+
+        let sessionBuiltAt = Date()
+        let iterator = try TokenIterator(
+            input: generationInput,
+            model: model,
+            cache: workingCache,
+            parameters: generateParameters
+        )
+        let storeMetadata = stateQueue.sync {
+            promptKVCacheOwner.storePreparedPromptCache(
+                workingCache,
+                key: lookup.currentKey,
+                request: request,
+                promptTokens: lookup.promptTokens
+            )
+        }
+        promptCacheTraceMetadata.merge(storeMetadata) { current, _ in current }
+
+        var rawOutput = ""
+        var firstChunkMilliseconds: Int?
+        var lastPartialVisibleText = ""
+        let (stream, task) = generateTask(
+            promptTokenCount: lookup.promptTokens.count,
+            modelConfiguration: modelConfiguration,
+            tokenizer: tokenizer,
+            iterator: iterator
+        )
+
+        var stoppedEarly = false
+        do {
+            for await item in stream {
+                try cancellationCoordinator.check(epoch: cancellationEpoch)
+
+                guard case let .chunk(chunk) = item else {
+                    continue
+                }
+
+                if firstChunkMilliseconds == nil {
+                    firstChunkMilliseconds = Self.milliseconds(from: sessionBuiltAt, to: Date())
+                }
+
+                rawOutput += chunk
+
+                let partialSuggestion = requestCleaner.clean(
+                    rawOutput,
+                    after: request.textBeforeCursor,
+                    mode: request.mode
+                )
+
+                if let partialSuggestion,
+                   !partialSuggestion.isEmpty,
+                   partialSuggestion.visibleText != lastPartialVisibleText {
+                    try cancellationCoordinator.check(epoch: cancellationEpoch)
+                    lastPartialVisibleText = partialSuggestion.visibleText
+                    onPartialSuggestion(partialSuggestion)
+                }
+
+                if shouldStopEarly(partialSuggestion, rawOutput: rawOutput, request: request) {
+                    stoppedEarly = true
+                    break
+                }
+            }
+        } catch is CancellationError {
+            task.cancel()
+            await task.value
+            DiagnosticsLog.shared.record(
+                "mlx-completion-cancelled",
+                metadata: [
+                    "app": request.appBundleIdentifier ?? "unknown",
+                    "mode": request.mode.rawValue,
+                    "generationMilliseconds": String(Self.milliseconds(from: sessionBuiltAt, to: Date())),
+                    "rawChars": String(rawOutput.count)
+                ]
+            )
+            throw CancellationError()
+        } catch {
+            task.cancel()
+            await task.value
+            throw error
+        }
+        if stoppedEarly {
+            task.cancel()
+        }
+        await task.value
+
+        let latencyMetadata = stateQueue.sync {
+            promptKVCacheOwner.recordWarmAppendFirstToken(
+                milliseconds: firstChunkMilliseconds,
+                wasHit: lookup.decision.isHit
+            )
+        }
+        promptCacheTraceMetadata.merge(latencyMetadata) { current, _ in current }
+
+        let generatedAt = Date()
+        return RawCompletionGeneration(
+            rawOutput: rawOutput,
+            firstChunkMilliseconds: firstChunkMilliseconds,
+            sessionMilliseconds: Self.milliseconds(from: sessionStartedAt, to: sessionBuiltAt),
+            generationMilliseconds: Self.milliseconds(from: sessionBuiltAt, to: generatedAt),
+            generatedAt: generatedAt,
+            promptCacheTraceMetadata: promptCacheTraceMetadata
         )
     }
 
@@ -837,6 +1038,18 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
     }
 
+    private var promptKVCacheModelRevision: String {
+        if let source = modelManifest?.source {
+            return "\(source.repoID)@\(source.revision)"
+        }
+
+        if let model = modelManifest?.model {
+            return "\(model.rawValue)@local"
+        }
+
+        return "local-path@\(modelDirectoryURL.standardizedFileURL.path)"
+    }
+
     private func finishWarmTask(id: Int, gate: MLXRuntimeWarmGate, result: Result<Void, Error>) {
         stateQueue.sync {
             if warmTask?.id == id {
@@ -913,6 +1126,18 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         return warmed
+    }
+}
+
+private final class MLXRuntimeSendableBox<T>: @unchecked Sendable {
+    private let value: T
+
+    init(_ value: T) {
+        self.value = value
+    }
+
+    func consume() -> T {
+        value
     }
 }
 
