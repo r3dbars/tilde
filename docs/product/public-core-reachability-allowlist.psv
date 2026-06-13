@@ -4,7 +4,6 @@
 # Classification must be one of: experimental, research, proof-only.
 ManualDisableDefaultOffPolicy|research|Sources/AutocompleteLabCore/Configuration/ManualDisableDefaultOffPolicy.swift|Manual disable default-off behavior is not wired into the live app yet.
 TracePrivacyPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift|Raw trace privacy policy is covered by proof/export tests but app logging uses app-owned trace filtering.
-DocLocalNGramPhrasePredictor|research|Sources/AutocompleteLabCore/Engine/DocLocalNGramPhrasePredictor.swift|Document-local phrase prediction is evaluated in core but not used by the app path.
 LocalCompletionRuntimeConfiguration|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
 LocalCompletionRuntimeRunner|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
 LocalCompletionRuntimeError|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.

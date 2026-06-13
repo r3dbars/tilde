@@ -3,6 +3,11 @@ import Testing
 
 @Suite("Compatibility router")
 struct CompatibilityRouterTests {
+    @Test("MVP routing requires known apps")
+    func mvpRoutingRequiresKnownApps() {
+        #expect(CompatibilityRoutingSettings.mvp.enforceKnownApps)
+    }
+
     @Test("TextEdit can request and accept suggestions")
     func textEditCanRequestAndAccept() {
         let decision = CompatibilityRouter().decision(
