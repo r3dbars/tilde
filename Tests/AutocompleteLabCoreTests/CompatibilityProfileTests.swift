@@ -273,6 +273,12 @@ struct CompatibilityProfileTests {
         #expect(generic.userFacingReason == "Default-on generic Accessibility path for apps without a custom profile.")
         #expect(generic.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown yellow on")
         #expect(generic.canToggleSuggestions)
+
+        let denylisted = store.supportStatus(for: "com.apple.dt.Xcode")
+        #expect(denylisted == .denylisted)
+        #expect(denylisted.userFacingSummary == "Blocked: high-risk app")
+        #expect(denylisted.userFacingReason == "Blocked because this kind of app can expose secrets or shell input.")
+        #expect(!denylisted.canToggleSuggestions)
     }
 
     @Test("Profiles expose debug summaries with primary and fallback paths")
