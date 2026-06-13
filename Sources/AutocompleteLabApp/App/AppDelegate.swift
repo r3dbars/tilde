@@ -4141,7 +4141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
             allowsAutocompleteKeyAfterPassthroughObservation: isClaudeCodeTerminalHostProofSuggestion,
             hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
-            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
+            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
+            visibleSuggestionID: currentSuggestionID
         )
     }
 

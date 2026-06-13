@@ -132,9 +132,37 @@ struct PrefixFamilyCooldownPolicyTests {
         let cooldown = policy.record(.escapeDismissal, input: input, now: now)
 
         #expect(cooldown?.durationMilliseconds == 15_000)
+        #expect(cooldown?.metadata["prefixCooldownReason"] == "escape-cooldown")
         #expect(cooldown?.isEscalated == false)
         #expect(policy.decision(for: input, now: now.addingTimeInterval(14.9)).canRequest == false)
         #expect(policy.decision(for: input, now: now.addingTimeInterval(15.1)) == .allowed)
+    }
+
+    @Test("Escape cooldown is scoped to the dismissed field")
+    func escapeCooldownIsScopedToDismissedField() {
+        var policy = PrefixFamilyCooldownPolicy()
+        let now = Date(timeIntervalSince1970: 1_000)
+        let dismissed = input(textBeforeCursor: "Can you please")
+
+        _ = policy.record(.escapeDismissal, input: dismissed, now: now)
+
+        #expect(policy.decision(for: dismissed, now: now.addingTimeInterval(1)).canRequest == false)
+        #expect(policy.decision(
+            for: input(field: "field-two", textBeforeCursor: "Can you please"),
+            now: now.addingTimeInterval(1)
+        ) == .allowed)
+    }
+
+    @Test("Escape cooldown expires and allows the same prefix again")
+    func escapeCooldownExpiresAndAllowsSamePrefixAgain() {
+        var policy = PrefixFamilyCooldownPolicy(escapeCooldownMilliseconds: 500)
+        let now = Date(timeIntervalSince1970: 1_000)
+        let input = input(textBeforeCursor: "Can you please")
+
+        _ = policy.record(.escapeDismissal, input: input, now: now)
+
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(0.49)).canRequest == false)
+        #expect(policy.decision(for: input, now: now.addingTimeInterval(0.51)) == .allowed)
     }
 
     @Test("Repeated Escape escalates to a longer cooldown")
