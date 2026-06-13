@@ -194,7 +194,7 @@ def main() -> int:
     parser.add_argument(
         "--small-draft-lane",
         action="store_true",
-        help="Compare the 1B-class qwen3-1.7b draft lane against the qwen35-4b quality default.",
+        help="Compare the 1B-class qwen3-1.7b-base raw-completion lane against the qwen35-4b quality default.",
     )
     args = parser.parse_args()
 
@@ -205,7 +205,7 @@ def main() -> int:
 
     print("Local model comparison")
     if args.small_draft_lane:
-        print("Lane: small-draft-1b (qwen3-1.7b) versus qwen35-4b quality default")
+        print("Lane: qwen3-1.7b-base raw_completion versus qwen35-4b quality default")
         print("Decision guard: keep qwen35-4b as default unless the small lane wins on quality and latency.")
     print(f"Diagnostics log: {diagnostics_path}")
     print(f"Model root: {model_root}")

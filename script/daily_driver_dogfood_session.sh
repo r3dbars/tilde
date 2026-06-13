@@ -690,7 +690,7 @@ def latency_milliseconds(event):
 
 
 instant_phrase_sources = {
-    "predictive-phrase-fallback",
+    "canned-bridge",
     "doc-local-ngram",
     "model-cache",
     "model-session-cache",
@@ -709,7 +709,7 @@ def instant_phrase_match_family(event):
     if source in {"model-cache", "model-session-cache"}:
         return "model-cache"
 
-    match = str(metadata(event).get("predictivePhraseMatch") or "").strip()
+    match = str(metadata(event).get("cannedBridgeMatch") or "").strip()
     if not match:
         return "none"
     if match.startswith("intent-writing-bridge-"):
@@ -894,7 +894,7 @@ instant_phrase_learned_restraint = sum(
     1
     for event in suppressed_events
     if event_reason(event) == "fast-phrase-learning-restraint"
-    and selection_source(event) == "predictive-phrase-fallback"
+    and selection_source(event) == "canned-bridge"
 )
 instant_phrase_model_result_keys = set()
 instant_phrase_model_replacement_keys = set()
@@ -914,7 +914,7 @@ for line_number, event in matched:
     reason = event_reason(event)
     if (
         event.get("type") == "suggestionSuppressed"
-        and selection_source(event) == "predictive-phrase-fallback"
+        and selection_source(event) == "canned-bridge"
         and reason
     ):
         instant_phrase_outcome_by_key.setdefault(key, reason)
