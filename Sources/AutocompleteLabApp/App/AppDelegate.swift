@@ -4141,7 +4141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
             allowsAutocompleteKeyAfterPassthroughObservation: isClaudeCodeTerminalHostProofSuggestion,
             hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
-            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
+            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
+            visibleSuggestionID: currentSuggestionID
         )
     }
 
@@ -7187,6 +7188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
+                docLocalContextTexts: orchestration.docLocalContextTexts,
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
@@ -7206,7 +7208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         appBundleIdentifier: appBundleIdentifier,
                         fieldIdentity: fieldIdentityDescription,
                         requestMode: request.mode.rawValue,
-                        triggerReason: "predictive-phrase-fallback",
+                        triggerReason: "canned-bridge",
                         textBeforeCursor: request.textBeforeCursor,
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: fastSuggestion.visibleText,
@@ -7225,7 +7227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: profile,
                         metadata: [
                             "reason": "repeated-miss",
-                            "triggerReason": "predictive-phrase-fallback"
+                            "triggerReason": "canned-bridge"
                         ]
                     )
                     recordAnnoyanceSignal(
@@ -7268,7 +7270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         appBundleIdentifier: appBundleIdentifier,
                         fieldIdentity: fieldIdentityDescription,
                         requestMode: request.mode.rawValue,
-                        triggerReason: "predictive-phrase-fallback",
+                        triggerReason: "canned-bridge",
                         textBeforeCursor: request.textBeforeCursor,
                         textAfterCursor: request.textAfterCursor,
                         latencyMilliseconds: 0,
@@ -7285,7 +7287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: profile,
                         metadata: [
                             "reason": reason,
-                            "triggerReason": "predictive-phrase-fallback"
+                            "triggerReason": "canned-bridge"
                         ]
                         .merging(learningDecision.metadata) { current, _ in current }
                     )
@@ -7300,7 +7302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         renderMode: renderMode,
                         latencyMilliseconds: 0,
-                        triggerReason: "predictive-phrase-fallback",
+                        triggerReason: "canned-bridge",
                         requestTicket: requestTicket,
                         candidateSelectionMetadata: fastPresentationMetadata,
                         refreshBeforePresenting: false

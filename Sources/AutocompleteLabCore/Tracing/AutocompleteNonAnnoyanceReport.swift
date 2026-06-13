@@ -288,6 +288,7 @@ public struct AutocompleteNonAnnoyanceReporter: Equatable, Sendable {
         let cooldownReason = event.metadata["prefixCooldownReason"] ?? event.reason
         return cooldownReason == PrefixFamilyCooldownReason.typedOver.rawValue
             || cooldownReason == PrefixFamilyCooldownReason.escapeDismissal.rawValue
+            || cooldownReason == "escapeDismissal"
             || cooldownReason == PrefixFamilyCooldownReason.acceptedThenDeleted.rawValue
             || event.triggerReason == "annoyance-signal"
     }

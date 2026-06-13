@@ -3,16 +3,16 @@ import Testing
 
 @Suite("Suggestion status text")
 struct SuggestionStatusTextTests {
-    @Test("Shown status de-emphasizes legacy instant phrase fallback")
-    func shownStatusDeemphasizesLegacyInstantPhraseFallback() {
+    @Test("Shown status names canned bridge phrases")
+    func shownStatusNamesCannedBridgePhrases() {
         let text = SuggestionStatusText.shown(
             mode: .phraseContinuation,
-            triggerReason: "predictive-phrase-fallback",
+            triggerReason: "canned-bridge",
             latencyMilliseconds: 0,
-            metadata: ["candidateSelectionSource": "predictive-phrase-fallback"]
+            metadata: ["candidateSelectionSource": "canned-bridge"]
         )
 
-        #expect(text == "Shown: phrase legacy instant 0ms")
+        #expect(text == "Shown: phrase canned bridge 0ms")
     }
 
     @Test("Shown status names doc-local phrase prediction")
