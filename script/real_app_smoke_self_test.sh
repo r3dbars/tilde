@@ -2026,7 +2026,8 @@ if ! grep -F 'system attribute "AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"' script/real_ap
 fi
 
 script/real_app_smoke.sh obsidian --dry-run >"$TMP_DIR/obsidian.txt"
-if ! grep -F "manual-gated disposable Obsidian default-note smoke" "$TMP_DIR/obsidian.txt" >/dev/null; then
+if ! grep -F "guarded Obsidian stock default-note smoke" "$TMP_DIR/obsidian.txt" >/dev/null ||
+   ! grep -F "validates logs and traces as obsidian-stock proof" "$TMP_DIR/obsidian.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Obsidian manual gate" >&2
   exit 1
 fi
@@ -2187,9 +2188,11 @@ if not custom_open < custom_activate < custom_return < vault_open < vault_activa
     )
 PY
 
-if ! grep -F "ensure_obsidian_smoke_renderer_accessibility_launch()" script/real_app_smoke.sh >/dev/null ||
+if ! grep -F "ensure_obsidian_smoke_launch()" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Refusing Obsidian stock proof while Obsidian is already running with --force-renderer-accessibility." script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'manual_proof_label="obsidian-stock"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F -- "--force-renderer-accessibility" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Obsidian proof launch to force Electron renderer accessibility when starting a fresh app" >&2
+  echo "real app smoke self-test expected stock Obsidian proof to stay separate from forced renderer proof" >&2
   exit 1
 fi
 
