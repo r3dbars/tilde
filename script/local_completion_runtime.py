@@ -15,11 +15,20 @@ DEFAULT_MODEL_NAME = "Qwen3.5 4B"
 DEFAULT_MLX_MODEL = "mlx-community/Qwen3.5-4B-MLX-4bit"
 MLX_MODEL_BY_NAME = {
     "gemma 4 e2b": "mlx-community/gemma-4-E2B-it-4bit",
+    "gemma-4-e2b": "mlx-community/gemma-4-E2B-it-4bit",
     "gemma 4 e4b": "mlx-community/gemma-4-e4b-4bit",
+    "gemma-4-e4b": "mlx-community/gemma-4-e4b-4bit",
     "qwen3 0.6b": "mlx-community/Qwen3-0.6B-4bit",
+    "qwen3-0.6b": "mlx-community/Qwen3-0.6B-4bit",
     "qwen3 1.7b": "mlx-community/Qwen3-1.7B-4bit",
+    "qwen3-1.7b": "mlx-community/Qwen3-1.7B-4bit",
+    "small-draft-1b": "mlx-community/Qwen3-1.7B-4bit",
     "qwen3.5 4b": "mlx-community/Qwen3.5-4B-MLX-4bit",
+    "qwen3.5-4b": "mlx-community/Qwen3.5-4B-MLX-4bit",
+    "qwen35-4b": "mlx-community/Qwen3.5-4B-MLX-4bit",
     "qwen3.5 9b": "mlx-community/Qwen3.5-9B-MLX-4bit",
+    "qwen3.5-9b": "mlx-community/Qwen3.5-9B-MLX-4bit",
+    "qwen35-9b": "mlx-community/Qwen3.5-9B-MLX-4bit",
 }
 
 

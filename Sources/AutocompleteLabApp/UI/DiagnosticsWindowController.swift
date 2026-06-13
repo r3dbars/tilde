@@ -28,7 +28,7 @@ struct DiagnosticsInspectorState: Equatable {
         return """
         Status:
           Suggestions: \(decision.diagnosticsKind)
-          Why quiet now: \(decision.diagnosticsText)
+          Why now: \(decision.diagnosticsText)
           Next action: \(nextActionText)
           Accessibility: \(appTrusted ? "allowed" : "needed")
           \(pauseControl.statusText)
@@ -547,7 +547,7 @@ struct DiagnosticsOverviewState: Equatable {
         [
             "Status",
             "Suggestions: \(suggestionText)",
-            "Why quiet now: \(whyQuietText)",
+            "Why now: \(whyQuietText)",
             "Next action: \(nextActionText)",
             "Accessibility: \(accessibilityText)",
             "Suggestion pause: \(pauseText)",

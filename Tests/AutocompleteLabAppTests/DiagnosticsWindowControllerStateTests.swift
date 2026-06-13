@@ -44,7 +44,7 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(lines.count == 9)
         #expect(overview.text.contains("Status"))
         #expect(overview.text.contains("Suggestions: shown"))
-        #expect(overview.text.contains("Why quiet now: Shown"))
+        #expect(overview.text.contains("Why now: Shown"))
         #expect(overview.text.contains("Next action: Open TextEdit or another supported writing app"))
         #expect(overview.text.contains("Accessibility: On"))
         #expect(overview.text.contains("Suggestion pause: off"))

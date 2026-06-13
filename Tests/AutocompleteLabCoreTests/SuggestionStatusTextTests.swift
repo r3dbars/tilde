@@ -3,8 +3,8 @@ import Testing
 
 @Suite("Suggestion status text")
 struct SuggestionStatusTextTests {
-    @Test("Shown status names instant phrase fallback")
-    func shownStatusNamesInstantPhraseFallback() {
+    @Test("Shown status de-emphasizes legacy instant phrase fallback")
+    func shownStatusDeemphasizesLegacyInstantPhraseFallback() {
         let text = SuggestionStatusText.shown(
             mode: .phraseContinuation,
             triggerReason: "predictive-phrase-fallback",
@@ -12,7 +12,19 @@ struct SuggestionStatusTextTests {
             metadata: ["candidateSelectionSource": "predictive-phrase-fallback"]
         )
 
-        #expect(text == "Shown: phrase instant fallback 0ms")
+        #expect(text == "Shown: phrase legacy instant 0ms")
+    }
+
+    @Test("Shown status names doc-local phrase prediction")
+    func shownStatusNamesDocLocalPhrasePrediction() {
+        let text = SuggestionStatusText.shown(
+            mode: .phraseContinuation,
+            triggerReason: "doc-local-ngram",
+            latencyMilliseconds: 0,
+            metadata: ["candidateSelectionSource": "doc-local-ngram"]
+        )
+
+        #expect(text == "Shown: phrase doc local 0ms")
     }
 
     @Test("Shown status names model backed phrase")
@@ -57,5 +69,14 @@ struct SuggestionStatusTextTests {
     @Test("Not-shown status normalizes unknown reasons")
     func notShownStatusNormalizesUnknownReasons() {
         #expect(SuggestionStatusText.notShown(reason: "display-score") == "Blocked: display score")
+    }
+
+    @Test("Not-shown status uses shared live-why reasons")
+    func notShownStatusUsesSharedLiveWhyReasons() {
+        #expect(SuggestionStatusText.notShown(reason: "too-slow-to-display") == "Blocked: too slow")
+        #expect(SuggestionStatusText.notShown(reason: "low-confidence") == "Blocked: low confidence")
+        #expect(SuggestionStatusText.notShown(reason: "prefix-family-cooldown") == "Waiting: recent prefix cooldown")
+        #expect(SuggestionStatusText.notShown(reason: "quiet-mode-field") == "Waiting: quiet mode")
+        #expect(SuggestionStatusText.notShown(reason: "secureField") == "Blocked: safety gate")
     }
 }

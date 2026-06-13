@@ -9,6 +9,7 @@ for alias in \
   qwen35-9b \
   qwen3.5-9b \
   qwen3-1.7b \
+  small-draft-1b \
   qwen3-0.6b \
   gemma-4-e2b \
   gemma-4-e4b \
@@ -77,6 +78,18 @@ if ! grep -F "target=$HOME/Library/Application Support/SteadyType/Models/Qwen35N
 fi
 if ! grep -F "revision=938d8919941c6e7efd3c7150eff7fe9d12afa631" /tmp/autocomplete-download-model-target.txt >/dev/null; then
   echo "download helper did not pin qwen3.5-9b to the expected revision" >&2
+  cat /tmp/autocomplete-download-model-target.txt >&2
+  exit 1
+fi
+
+script/download_mlx_model.py --model small-draft-1b --print-target >/tmp/autocomplete-download-model-target.txt
+if ! grep -F "repo_id=mlx-community/Qwen3-1.7B-4bit" /tmp/autocomplete-download-model-target.txt >/dev/null; then
+  echo "download helper did not point small-draft-1b at the 1B-class repo" >&2
+  cat /tmp/autocomplete-download-model-target.txt >&2
+  exit 1
+fi
+if ! grep -F "canonical=qwen3-1.7b" /tmp/autocomplete-download-model-target.txt >/dev/null; then
+  echo "download helper did not normalize the small-draft-1b alias for receipts" >&2
   cat /tmp/autocomplete-download-model-target.txt >&2
   exit 1
 fi
