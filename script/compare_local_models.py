@@ -12,16 +12,18 @@ DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/SteadyType/Model
 DEFAULT_ALIASES = [
     "qwen3-0.6b",
     "qwen3-1.7b",
+    "qwen3-1.7b-base",
     "qwen35-4b",
     "qwen35-9b",
     "gemma-4-e4b",
     "gemma-4-e4b-it-optiq",
     "gemma-4-26b",
 ]
-SMALL_DRAFT_LANE_ALIASES = ["qwen3-1.7b", "qwen35-4b"]
+SMALL_DRAFT_LANE_ALIASES = ["qwen3-1.7b-base", "qwen35-4b"]
 MODEL_PATHS = {
     "qwen3-0.6b": "Qwen3Small/MLX/qwen3-0.6b-4bit",
     "qwen3-1.7b": "Qwen3Medium/MLX/qwen3-1.7b-4bit",
+    "qwen3-1.7b-base": "Qwen3Medium/MLX/qwen3-1.7b-4bit",
     "small-draft-1b": "Qwen3Medium/MLX/qwen3-1.7b-4bit",
     "qwen35-4b": "Qwen35FourB/MLX/Qwen3.5-4B-4bit",
     "qwen35-9b": "Qwen35NineB/MLX/Qwen3.5-9B-MLX-4bit",
@@ -32,6 +34,7 @@ MODEL_PATHS = {
 ASSET_ALIAS_HINTS = {
     "qwen3-0.6b": "qwen3-0.6b",
     "qwen3-1.7b": "qwen3-1.7b",
+    "qwen3-1.7b-base": "qwen3-1.7b-base",
     "small-draft-1b": "qwen3-1.7b",
     "qwen3.5-4b": "qwen35-4b",
     "qwen3.5-9b": "qwen35-9b",
