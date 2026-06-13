@@ -39,6 +39,7 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.doNotShipCounters["insertion-failed"] == 1)
         #expect(summary.acceptRate == 1.0 / 3.0)
         #expect(summary.usefulRate == 2.0 / 3.0)
+        #expect(summary.typeThroughSurvivalRate == 1.0 / 3.0)
         #expect(summary.acceptRateByApp["com.apple.TextEdit"] == 1.0 / 3.0)
         #expect(summary.acceptRateByMode["wordCompletion"] == 1.0 / 3.0)
         #expect(summary.usefulRateByApp["com.apple.TextEdit"] == 2.0 / 3.0)

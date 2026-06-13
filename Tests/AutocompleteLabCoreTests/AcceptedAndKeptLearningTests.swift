@@ -143,6 +143,28 @@ struct AcceptedAndKeptLearningTests {
         #expect(freshContext.learningRestraint == 0)
     }
 
+    @Test("Type-through survival is positive learning without accepted text")
+    func typeThroughSurvivalIsPositiveLearningWithoutAcceptedText() {
+        var store = AcceptedAndKeptLearningStore(priorWeight: 2)
+        let learningKey = key(mode: .phraseContinuation)
+        let before = store.signal(for: learningKey)
+
+        _ = store.record(.typeThroughSurvival, key: learningKey)
+        _ = store.record(.typeThroughSurvival, key: learningKey)
+        let after = store.signal(for: learningKey)
+
+        #expect(after.sampleCount == 2)
+        #expect(after.keptCount == 0)
+        #expect(after.rejectedCount == 0)
+        #expect(after.typeThroughSurvivalCount == 2)
+        #expect(after.probability > before.probability)
+        #expect(after.utilityAdjustment > 0)
+        #expect(after.typeThroughConfidenceCredit > 0)
+        #expect(after.traceMetadata["acceptedAndKeptTypeThroughSurvivals"] == "2")
+        #expect(after.traceMetadata["acceptedAndKeptTypeThroughCredit"] != nil)
+        #expect(after.guidanceText == "Learning: mixed local signal (0 kept, 2 typed through, 0 rejected).")
+    }
+
     private func key(
         appBundleIdentifier: String = "com.apple.TextEdit",
         fieldKind: AXFieldKind = .multilineCompose,
