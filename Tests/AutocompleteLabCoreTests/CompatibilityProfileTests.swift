@@ -21,12 +21,13 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.apple.Notes")?.graduationDecision == .supported)
         #expect(store.profile(for: "com.apple.Notes")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.apple.Notes")?.allowsDetachedSuggestions == false)
-        #expect(store.profile(for: "md.obsidian")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "md.obsidian")?.renderMode == .inlineAdjacent)
         #expect(store.profile(for: "md.obsidian")?.appFamily == .electron)
         #expect(store.profile(for: "md.obsidian")?.anchorLadder == [.caret])
         #expect(store.profile(for: "md.obsidian")?.supportLevel == .yellow)
         #expect(store.profile(for: "md.obsidian")?.graduationDecision == .supported)
         #expect(store.profile(for: "md.obsidian")?.insertionMode == .keyEvents)
+        #expect(store.profile(for: "md.obsidian")?.fallbackRenderMode == nil)
         #expect(store.profile(for: "md.obsidian")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "md.obsidian")?.suppressesAfterInsertionFailure == false)
         #expect(store.profile(for: "md.obsidian")?.fieldIdentityMode == .stableBounds)
@@ -569,6 +570,17 @@ struct CompatibilityProfileTests {
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
         ) == .floatingMirror)
+        let obsidian = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
+        #expect(RenderModePlan.effectiveMode(
+            for: obsidian,
+            supportsInlineSuggestions: true,
+            hasMirrorAnchor: true
+        ) == .inlineAdjacent)
+        #expect(RenderModePlan.effectiveMode(
+            for: obsidian,
+            supportsInlineSuggestions: false,
+            hasMirrorAnchor: true
+        ) == nil)
         #expect(RenderModePlan.effectiveMode(
             for: codex,
             supportsInlineSuggestions: true,

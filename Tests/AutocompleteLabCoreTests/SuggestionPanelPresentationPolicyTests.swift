@@ -61,6 +61,33 @@ struct SuggestionPanelPresentationPolicyTests {
         #expect(attempt.failureReason == SuggestionPanelPresentationPolicy.panelFrameUnusableReason)
     }
 
+    @Test("Inline-only profiles suppress instead of healing into mirror")
+    func inlineOnlyProfilesSuppressInsteadOfHealingIntoMirror() {
+        let initial = PlacementHealthPresentation(
+            requestedRenderMode: .inlineAdjacent,
+            renderMode: .inlineAdjacent,
+            anchorRect: CGRect(x: 1268, y: 420, width: 0, height: 22),
+            anchorSource: .syntheticCaret,
+            textLineRect: CGRect(x: 20, y: 420, width: 1248, height: 22),
+            clippingRect: CGRect(x: 0, y: 80, width: 1312, height: 740),
+            reason: .healthy
+        )
+        var shown: [SuggestionRenderMode] = []
+
+        let attempt = SuggestionPanelPresentationPolicy.attempt(
+            initialPlacement: initial,
+            fallbackRenderMode: nil
+        ) { placement in
+            shown.append(placement.renderMode)
+            return nil
+        }
+
+        #expect(!attempt.didPresent)
+        #expect(attempt.placement == initial)
+        #expect(attempt.failureReason == SuggestionPanelPresentationPolicy.panelFrameUnusableReason)
+        #expect(shown == [.inlineAdjacent])
+    }
+
     @Test("Reports cramped inline reason when fallback cannot render")
     func reportsCrampedInlineReasonWhenFallbackCannotRender() {
         let initial = inlinePlacement()
