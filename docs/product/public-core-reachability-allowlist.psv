@@ -76,4 +76,6 @@ TraceReplayLatencySlice|proof-only|Sources/AutocompleteLabCore/Tracing/Autocompl
 TraceReplayRequirement|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
 AutocompleteTraceReplayProfile|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
 AutocompleteTraceReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+TraceReplayDisplayDecisionDiff|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
+AutocompleteTraceDecisionReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceReplay|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.

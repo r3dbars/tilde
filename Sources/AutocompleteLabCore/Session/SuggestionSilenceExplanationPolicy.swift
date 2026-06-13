@@ -240,7 +240,7 @@ public struct SuggestionSilenceExplanationPolicy: Equatable, Sendable {
             return .confidence
         case .highRepetition:
             return .repetition
-        case .lowAcceptedAndKeptProbability:
+        case .learnedRestraint, .lowAcceptedAndKeptProbability:
             return .learnedRestraint
         case .highRisk:
             return .safety
