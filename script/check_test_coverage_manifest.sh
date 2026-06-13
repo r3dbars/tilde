@@ -98,6 +98,7 @@ require_source_coverage_ownership() {
 }
 
 require_source_coverage_ownership
+./script/check_public_core_wiring.py
 
 require_file "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionActivationPolicyTests.swift" "Blocks secure or suppressed fields" "secure-field activation coverage"

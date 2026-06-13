@@ -171,6 +171,7 @@ public enum AutocompleteTracePrivacyFilter {
         "dismissed",
         "display",
         "display-score",
+        "doc-local-ngram",
         "duplicate insertion",
         "duplicate text",
         "empty-model-result",
