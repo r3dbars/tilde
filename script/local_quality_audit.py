@@ -165,6 +165,12 @@ PRE_MODEL_SUPPRESSION_HINTS = [
     "shell command:",
     "terminal prompt:",
 ]
+RAW_COMPLETION_MODEL_ALIASES = {
+    "qwen3-0.6b",
+    "qwen3-1.7b",
+    "qwen3-1.7b-base",
+    "small-draft-1b",
+}
 DISPLAY_SUPPRESSION_PREFIXES = [
     "as an ai",
     "comes to life",
@@ -467,7 +473,16 @@ def read_rows(path: Path) -> list[AuditRow]:
 
 
 def generated_output(row: AuditRow, timeout: float, model: Optional[str]) -> str:
-    payload = {"system": row.system, "user": row.user, "mode": row.mode}
+    template = prompt_template_for_model(model)
+    payload = {
+        "system": row.system,
+        "user": row.user,
+        "mode": row.mode,
+        "template": template,
+        "promptIsBuilt": True,
+    }
+    if template == "raw_completion":
+        payload["rawPrompt"] = raw_completion_prompt(row.system, row.user)
     command = [
         str(ROOT_DIR / "script" / "local_completion_runtime.py"),
         "--max-words",
@@ -490,6 +505,21 @@ def generated_output(row: AuditRow, timeout: float, model: Optional[str]) -> str
     if completed.returncode != 0:
         raise RuntimeError(f"{row.row_id}: runtime failed: {completed.stderr.strip()}")
     return completed.stdout.strip()
+
+
+def prompt_template_for_model(model: Optional[str]) -> str:
+    normalized = (model or "").strip().lower()
+    if normalized in RAW_COMPLETION_MODEL_ALIASES:
+        return "raw_completion"
+    return "chat_instruct"
+
+
+def raw_completion_prompt(system: str, user: str) -> str:
+    return "\n\n".join(
+        part.strip()
+        for part in (system, user)
+        if part.strip()
+    )
 
 
 def outputs_for_rows(
