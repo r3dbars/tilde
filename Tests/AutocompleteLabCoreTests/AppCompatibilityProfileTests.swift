@@ -3,6 +3,11 @@ import Testing
 
 @Suite("App compatibility profile")
 struct AppCompatibilityProfileTests {
+    @Test("Fallback profile stays blocked")
+    func fallbackProfileStaysBlocked() {
+        #expect(AppCompatibilityProfile.fallback.defaultRung == .blocked)
+    }
+
     @Test("Selects known app profiles by bundle identifier")
     func selectsKnownProfiles() {
         let registry = AppCompatibilityRegistry.default
