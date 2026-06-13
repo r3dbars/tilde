@@ -6,4 +6,3 @@ Historical product notes live here.
 - Treat archived proof as context unless a current doc links to it as active
   evidence.
 - Prefer short archive introductions over rewriting old evidence.
-
