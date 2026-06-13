@@ -35,6 +35,28 @@ private final class FlippedSettingsDocumentView: NSView {
     }
 }
 
+/// A small, calm status dot that reads at a glance the same way a traffic-light
+/// dot reads in the menu bar: green for active, gray for paused, etc.
+private final class SettingsStatusDotView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = frameRect.height / 2
+        widthAnchor.constraint(equalToConstant: frameRect.width).isActive = true
+        heightAnchor.constraint(equalToConstant: frameRect.height).isActive = true
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(color: NSColor) {
+        layer?.backgroundColor = color.cgColor
+    }
+}
+
 struct SettingsCurrentAppState: Equatable {
     let displayName: String
     let bundleIdentifier: String?
@@ -63,49 +85,12 @@ struct SettingsCurrentAppState: Equatable {
         bundleIdentifier != nil && supportStatus.canToggleSuggestions
     }
 
-    private var claudeCodeTerminalHostVariant: ClaudeCodeTerminalHostVariant? {
-        guard let bundleIdentifier else {
-            return nil
-        }
-
-        return ClaudeCodeTerminalHostProofPolicy.hostVariant(for: bundleIdentifier)
-    }
-
-    var canOverrideMode: Bool {
+    var canChangePlacement: Bool {
         guard bundleIdentifier != nil,
               case let .supported(profile) = supportStatus,
               profile.canPresentSuggestions,
-              !profile.isSensitive else {
-            return false
-        }
-
-        if isProofModeOnly {
-            return renderModeOverride != nil
-        }
-
-        return profile.renderMode != .disabled
-    }
-
-    var canStartProof: Bool {
-        guard bundleIdentifier != nil,
-              case let .supported(profile) = supportStatus,
               !profile.isSensitive,
-              isEnabled else {
-            return false
-        }
-
-        return supportStatus.supportLevel != .unsupported
-    }
-
-    var shouldShowCheckControls: Bool {
-        if claudeCodeTerminalHostVariant != nil {
-            return true
-        }
-
-        guard bundleIdentifier != nil,
-              case let .supported(profile) = supportStatus,
-              profile.canPresentSuggestions,
-              !profile.isSensitive else {
+              profile.renderMode != .disabled else {
             return false
         }
 
@@ -114,42 +99,24 @@ struct SettingsCurrentAppState: Equatable {
 
     var statusText: String {
         guard bundleIdentifier != nil else {
-            return "Current app: no app selected"
+            return "No writing app in front"
         }
 
-        if claudeCodeTerminalHostVariant != nil {
-            return "Current app: \(displayName) is a Claude Code host and \(isEnabled ? "on" : "off")"
+        guard canToggle else {
+            return "\(displayName): suggestions aren’t available here"
         }
 
-        if isProofModeOnly {
-            return "Current app: \(displayName) is proof-only and checks are \(isEnabled ? "on" : "paused")"
-        }
-
-        guard supportStatus.canToggleSuggestions else {
-            return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName)"
-        }
-
-        return "Current app: \(displayName) is \(supportStatus.supportLevel.menuName) and \(isEnabled ? "on" : "off")"
+        return isEnabled
+            ? "\(displayName): suggestions on"
+            : "\(displayName): suggestions paused"
     }
 
     var detailText: String {
         guard bundleIdentifier != nil else {
-            return "Open a writing app to see whether suggestions are supported."
+            return "Open a writing app to see whether SteadyType can help there."
         }
 
-        if claudeCodeTerminalHostVariant != nil {
-            return "\(displayName) uses the Claude Code terminal adapter when the terminal looks like Claude Code. Shell commands still block."
-        }
-
-        if isProofModeOnly {
-            if isEnabled {
-                return "\(supportStatus.userFacingReason) Suggestions only run during an explicit proof check."
-            }
-
-            return "\(supportStatus.userFacingReason) Proof checks are paused in this app. Resume this app before running an explicit check."
-        }
-
-        guard supportStatus.canToggleSuggestions else {
+        guard canToggle else {
             return "\(supportStatus.userFacingReason) Suggestions stay off here."
         }
 
@@ -157,109 +124,30 @@ struct SettingsCurrentAppState: Equatable {
             return "\(supportStatus.userFacingReason) Suggestions are on for this app."
         }
 
-        return "\(supportStatus.userFacingReason) Suggestions are paused in this app. Resume only where you want suggestions."
+        return "\(supportStatus.userFacingReason) Suggestions are paused here — resume them whenever you like."
     }
 
-    var supportMatrixText: String {
-        guard bundleIdentifier != nil else {
-            return "Support: choose a writing app to see its lane."
-        }
-
-        switch supportStatus {
-        case let .supported(profile):
-            if profile.isSensitive || !profile.canPresentSuggestions || profile.supportLevel == .diagnosticsOnly {
-                return "Support: diagnostics only. Inline suggestions stay off; use check and copy flows only."
-            }
-
-            switch profile.supportLevel {
-            case .green:
-                return "Support: green target. Inline suggestions and one-word Tab are proven here."
-            case .yellow:
-                return "Support: yellow target. Suggestions are available, but checks and fallback matter."
-            case .diagnosticsOnly:
-                return "Support: diagnostics only. Inline suggestions stay off; use check and copy flows only."
-            case .unsupported:
-                return "Support: unsupported. Select text for Command Context copy fallback."
-            }
-        case .denylisted:
-            return "Support: blocked. SteadyType stays out of this app."
-        case .unsupported:
-            return "Support: unsupported. Select text for Command Context copy fallback."
-        }
-    }
-
-    var modeText: String {
-        guard bundleIdentifier != nil else {
-            return "Mode: choose a writing app"
-        }
-
-        if claudeCodeTerminalHostVariant != nil {
-            return "Mode: Claude Code terminal-host dogfood"
-        }
-
-        guard case let .supported(profile) = supportStatus else {
-            return "Mode: not set up here"
-        }
-
-        let primary = Self.renderModeName(profile.renderMode)
-        if let renderModeOverride {
-            return "Mode: \(Self.renderModeName(renderModeOverride)) forced (profile \(primary))"
-        }
-
-        guard let fallback = profile.fallbackRenderMode,
-              fallback != profile.renderMode,
-              fallback != .disabled else {
-            return "Mode: \(primary)"
-        }
-
-        return "Mode: \(primary), \(Self.renderModeName(fallback)) fallback"
-    }
-
-    var acceptanceText: String {
-        guard bundleIdentifier != nil else {
-            return "Acceptance: off until an app is selected"
-        }
-
-        if claudeCodeTerminalHostVariant != nil {
-            return "Keys: Tab accepts one word when Claude Code is detected."
-        }
-
-        guard case let .supported(profile) = supportStatus,
-              profile.canPresentSuggestions,
-              !profile.isSensitive else {
-            return "Acceptance: off here"
-        }
-
-        switch (profile.supportsOneWordAcceptance, profile.supportsFullAcceptance) {
-        case (true, true):
-            return "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion shortcut works here."
-        case (true, false):
-            return "Keys: Tab accepts one word + space. Press Tab again for the next word. Whole-suggestion accept is off for safety."
-        case (false, true):
-            return "Keys: whole-suggestion accept only"
-        case (false, false):
-            return "Acceptance: off here"
-        }
-    }
-
+    /// Short, plain tooltip used by the menu-bar “Pause in …” item.
     var fallbackText: String {
-        if claudeCodeTerminalHostVariant != nil {
-            return "Fallback: terminal adapter only; pause this host if placement or insertion is wrong."
+        guard bundleIdentifier != nil else {
+            return "Choose a writing app first."
         }
 
-        return CommandFallbackPolicy().decision(
-            supportStatus: supportStatus,
-            isEnabled: isEnabled,
-            hasCurrentApp: bundleIdentifier != nil
-        ).statusText
+        guard canToggle else {
+            return "Suggestions aren’t available in this app."
+        }
+
+        return isEnabled
+            ? "Suggestions are on in this app."
+            : "Suggestions are paused in this app."
     }
 
     var toggleTitle: String {
-        if isProofModeOnly {
-            return "Proof checks in this app"
+        guard canToggle else {
+            return "Suggestions unavailable in this app"
         }
 
-        return canToggle ? "Suggestions in this app" : "Suggestions unavailable in this app"
+        return "Suggest while I type here"
     }
 
     var menuToggleTitle: String {
@@ -271,176 +159,21 @@ struct SettingsCurrentAppState: Equatable {
             return "Suggestions unavailable in \(displayName)"
         }
 
-        if isProofModeOnly {
-            return isEnabled ? "Pause checks in \(displayName)" : "Resume checks in \(displayName)"
-        }
-
         return isEnabled ? "Pause in \(displayName)" : "Resume in \(displayName)"
     }
 
-    var modeButtonTitle: String {
-        renderModeOverride == .floatingMirror ? "Use Default Placement" : "Use Floating Backup"
-    }
-
-    var proofButtonTitle: String {
-        if claudeCodeTerminalHostVariant != nil {
-            return isEnabled ? "Check This App" : "Enable Suggestions First"
-        }
-
-        if bundleIdentifier == "com.apple.TextEdit", isEnabled {
-            return "Check TextEdit"
-        }
-
-        if bundleIdentifier == "com.google.Chrome", isEnabled {
-            return "Check Chrome"
-        }
-
-        if isProofModeOnly, !isEnabled {
-            return "Resume Checks First"
-        }
-
-        return isEnabled ? "Check This App" : "Enable Suggestions First"
-    }
-
-    var copyProofCommandButtonTitle: String {
-        canCopyProofCommand ? "Copy Check Command" : "No Check Command"
-    }
-
-    var canCopyProofCommand: Bool {
-        proofCommandClipboardText != nil
-    }
-
-    var proofText: String {
-        guard bundleIdentifier != nil else {
-            return "Check: choose a writing app first."
-        }
-
-        if let hostVariant = claudeCodeTerminalHostVariant {
-            return "Check: type in Claude Code in \(hostVariant.displayName), press Tab once, and do not press Enter."
-        }
-
-        guard case let .supported(profile) = supportStatus,
-              profile.canPresentSuggestions,
-              !profile.isSensitive else {
-            return "Check: unavailable here."
-        }
-
-        guard isEnabled else {
-            if isProofModeOnly {
-                return "Check: resume proof checks for this app first."
-            }
-
-            return "Check: turn on suggestions for this app first."
-        }
-
-        if bundleIdentifier == "com.openai.codex" {
-            if profile.supportsFullAcceptance {
-                return "Check: use the guided prompt-app checks, press Tab or the whole-suggestion shortcut, and do not press Enter."
-            }
-            return "Check: use the guided prompt-app check, press Tab once, and do not press Enter."
-        }
-
-        if profile.supportsOneWordAcceptance && !profile.supportsFullAcceptance {
-            return "Check: use disposable prompt text, press Tab once, and do not press Enter."
-        }
-
-        if profile.supportsOneWordAcceptance && profile.supportsFullAcceptance {
-            return "Check: use disposable text, press Tab once, then the whole-suggestion shortcut."
-        }
-
-        return "Check: use disposable text and confirm accepted text stays in the field."
-    }
-
-    var proofCommandText: String? {
-        guard let command = proofCommandClipboardText else {
-            return nil
-        }
-
-        if command.contains("\n") {
-            return "Manual checks: \(command.replacingOccurrences(of: "\n", with: "; "))"
-        }
-
-        if supportStatus.supportLevel == .yellow || claudeCodeTerminalHostVariant != nil {
-            return "Manual check: \(command)"
-        }
-
-        return "Check command: \(command)"
-    }
-
-    var proofCommandClipboardText: String? {
-        if let hostVariant = claudeCodeTerminalHostVariant {
-            return hostVariant.manualProofCommand
-        }
-
-        guard let bundleIdentifier,
-              isEnabled,
-              case let .supported(profile) = supportStatus,
-              profile.canPresentSuggestions,
-              !profile.isSensitive else {
-            return nil
-        }
-
-        switch bundleIdentifier {
-        case "com.apple.TextEdit":
-            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh textedit"
-        case "com.google.Chrome":
-            return """
-            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture textarea
-            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh chrome --fixture contenteditable
-            """
-        case "md.obsidian":
-            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
-        case "com.apple.Notes":
-            return """
-            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate
-            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate
-            AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate
-            """
-        case "com.openai.codex":
-            if profile.supportsFullAcceptance {
-                return """
-                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
-                AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex-full-accept --manual-gate
-                """
-            }
-            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate"
-        case "com.anthropic.claudefordesktop":
-            return "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh claude --manual-gate"
-        default:
-            return nil
-        }
+    var placementButtonTitle: String {
+        renderModeOverride == .floatingMirror ? "Show Inline Text" : "Show in a Floating Box"
     }
 
     var blockedAppsText: String {
         if disabledAppCount == 0 {
-            return "Paused apps: none"
+            return "No apps are paused."
         }
 
-        return "Paused apps: \(disabledAppCount)"
-    }
-
-    private var isProofModeOnly: Bool {
-        guard let bundleIdentifier,
-              let policy = HostCompatibilityPolicyCatalog.mvp.policy(for: bundleIdentifier),
-              policy.runtimeState == .proofModeOnly,
-              case let .supported(profile) = supportStatus,
-              profile.canPresentSuggestions,
-              !profile.isSensitive else {
-            return false
-        }
-
-        return true
-    }
-
-    private static func renderModeName(_ mode: SuggestionRenderMode) -> String {
-        switch mode {
-        case .inlineAdjacent:
-            return "next to the cursor"
-        case .floatingMirror:
-            return "floating backup"
-        case .disabled:
-            return "disabled"
-        }
+        return disabledAppCount == 1
+            ? "1 app is paused."
+            : "\(disabledAppCount) apps are paused."
     }
 }
 
@@ -448,33 +181,33 @@ struct SettingsPermissionState: Equatable {
     let isTrusted: Bool
 
     var statusText: String {
-        isTrusted ? "Accessibility permission: allowed" : "Accessibility permission: needed"
+        isTrusted ? "Accessibility: allowed" : "Accessibility: needed"
     }
 
     var detailText: String {
         if isTrusted {
-            return "SteadyType can read the focused text field and insert only after you accept. Text stays on this Mac. Screen Recording is not needed for normal use."
+            return "SteadyType can read the text field you’re typing in and only inserts text after you accept a suggestion. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
         }
 
-        return "Click Allow Accessibility when you are ready. macOS asks so SteadyType can read the focused text field and insert only after you accept. Text stays on this Mac. Screen Recording is not needed for normal use."
+        return "SteadyType needs Accessibility so it can see the text field you’re typing in and insert a suggestion only after you accept it. Nothing leaves your Mac. Screen Recording is not needed for everyday use."
     }
 }
 
 struct SettingsFirstRunTrustState: Equatable {
     var statusText: String {
-        "First run: practice in TextEdit"
+        "New here? Start in TextEdit"
     }
 
     var detailText: String {
-        "Suggestions appear near the cursor. Tab accepts one word + space. Tab again accepts the next word. Esc dismisses. Pause Suggestions stops suggestions everywhere; Pause in Current App stops only that app."
+        "Suggestions appear in light gray next to your cursor. Press Tab to accept one word, Tab again for the next word, and Esc to dismiss. Pause Suggestions stops them everywhere; Pause in Current App stops only that app."
     }
 
     var quickStartText: String {
-        "60-second path: Allow Accessibility, confirm Local Model is ready, Start TextEdit Practice, press Tab once, press Esc once, then Delete Local Logs."
+        "60-second path: Allow Accessibility, wait for the on-device model, Start TextEdit Practice, press Tab once, press Esc once, then Delete Local Logs."
     }
 
     var appsText: String {
-        "Text stays on this Mac. Start with TextEdit. Use Notes, Obsidian, and Chrome practice pages only when needed. Avoid random websites, search, login, payment, and private fields."
+        "Everything stays on this Mac. Start with TextEdit. Try Notes, Obsidian, and Chrome practice pages when you’re ready. Avoid random websites, search, login, payment, and private fields for now."
     }
 }
 
@@ -518,54 +251,46 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var statusText: String {
-        "Privacy: stays on this Mac"
+        "Everything stays on your Mac"
     }
 
     var diagnosticsStatusText: String {
-        let traceState = tracingPaused ? "paused" : "recording"
-        let screenshotState = screenshotTracingEnabled
-            ? (screenshotTracingExpiresAt == nil ? "screenshots on" : "screenshots on temporarily")
-            : "screenshots off"
-        return "Local check data: \(traceState), \(screenshotState)"
+        "Activity log: \(tracingPaused ? "paused" : "on")"
     }
 
     var contentStatusText: String {
         let state = rawContentTracingEnabled
-            ? (rawContentTracingExpiresAt == nil ? "on" : "on temporarily")
+            ? (rawContentTracingExpiresAt == nil ? "on" : "on for a short time")
             : "off"
-        return "Raw text in local logs: \(state)"
+        return "Exact text in logs: \(state)"
     }
 
     var visiblePageContextStatusText: String {
         if visiblePageContextEnabled && !screenCaptureAccessGranted {
-            return "Screen context: on, waiting for Screen Recording permission."
+            return "Reads nearby on-screen text: on — waiting for Screen Recording permission."
         }
 
-        return "Screen context: \(visiblePageContextEnabled ? "on" : "off"). OCR is local and only helps suggestions."
+        return "Reads nearby on-screen text: \(visiblePageContextEnabled ? "on" : "off"). This happens on your Mac and only improves suggestions."
     }
 
     var personalCaptureStatusText: String {
-        "Personal Capture: \(personalCaptureEnabled ? "on" : "off")"
+        "Writing journal: \(personalCaptureEnabled ? "on" : "off")"
     }
 
     var personalCaptureDetailText: String {
-        "Justin dogfood only. Saves daily Markdown on this Mac and stays separate from privacy bundles."
+        "Optional. Saves a daily Markdown file on this Mac so SteadyType can learn from your real writing. It stays out of any diagnostic report."
     }
 
     var sharingStatusText: String {
-        if rawContentTracingEnabled || screenshotTracingEnabled || visiblePageContextEnabled {
-            return "Nothing leaves automatically. Share Privacy Bundles, not raw logs or screenshots."
-        }
-
-        return "Nothing leaves automatically. Privacy Bundles exclude raw text and screenshots."
+        "Nothing is ever sent automatically. A diagnostic report you choose to export never includes your text or screenshots."
     }
 
     var localOnlyProofText: String {
-        "Proof: autocomplete uses the app-owned local model. No model server. Raw text is off by default. Privacy Bundles stay redacted."
+        "Suggestions come from a model that runs entirely on your Mac. There is no server, and exact text is off by default."
     }
 
     var learningStatusText: String {
-        "Learning: local usefulness scores only"
+        "SteadyType remembers which suggestions you keep — only on this Mac."
     }
 
     var screenRecordingPermissionText: String? {
@@ -574,26 +299,22 @@ struct SettingsPrivacyState: Equatable {
         }
 
         if visiblePageContextEnabled && !screenCaptureAccessGranted {
-            return "Screen Recording: required for screen context."
+            return "Screen Recording: needed to read nearby on-screen text."
         }
 
-        if screenshotTracingEnabled && screenshotTracingExpiresAt == nil {
-            return "Screen Recording: used only for local placement screenshots while enabled."
+        if visiblePageContextEnabled {
+            return "Screen Recording: used on your Mac to read nearby on-screen text."
         }
 
-        if screenshotTracingEnabled && !visiblePageContextEnabled {
-            return "Screen Recording: used only for temporary local placement screenshots."
-        }
-
-        return "Screen Recording: used only for local screenshots and screen context while enabled."
+        return "Screen Recording: used on your Mac to check where suggestions appear."
     }
 
     var pathText: String {
         guard !personalCapturePath.isEmpty else {
-            return "Diagnostics log: \(diagnosticsPath) | Check data: \(tracePath)"
+            return "Activity log: \(diagnosticsPath) | Event log: \(tracePath)"
         }
 
-        return "Diagnostics log: \(diagnosticsPath) | Check data: \(tracePath) | Personal Capture: \(personalCapturePath)"
+        return "Activity log: \(diagnosticsPath) | Event log: \(tracePath) | Writing journal: \(personalCapturePath)"
     }
 }
 
@@ -634,15 +355,15 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var statusText: String {
-        "Shortcuts: Tab accepts one word + space | \(summonShortcut.displayName) asks once"
+        "Tab accepts one word. Esc dismisses. \(summonShortcut.displayName) asks for a suggestion."
     }
 
     var acceptAllStatusText: String {
         if acceptAllShortcut == .disabled {
-            return "Whole-suggestion accept is off"
+            return "Accepting the whole suggestion is off."
         }
 
-        return "\(acceptAllShortcut.displayName) accepts whole suggestion"
+        return "\(acceptAllShortcut.displayName) accepts the whole suggestion."
     }
 
     var cycleButtonTitle: String {
@@ -657,7 +378,7 @@ struct SettingsKeyboardShortcutState: Equatable {
     }
 
     var acceptAllPickerLabel: String {
-        "Whole suggestion:"
+        "Accept the whole suggestion with:"
     }
 
     var conflictText: String {
@@ -683,26 +404,26 @@ struct SettingsTrustState: Equatable {
 
     var statusText: String {
         if !isTrusted {
-            return "Trust: waiting for Accessibility"
+            return "Waiting for Accessibility"
         }
 
         if suggestionsPaused {
-            return "Trust: suggestions are paused"
+            return "Suggestions are paused"
         }
 
-        return "Trust: local and quiet"
+        return "SteadyType is on"
     }
 
     var localModeText: String {
-        "Local mode: app-owned model, \(runtimeReport.summary.lowercased())."
+        "On-device model: \(runtimeReport.summary)."
     }
 
     var typedTextText: String {
         if privacy.rawContentTracingEnabled || privacy.personalCaptureEnabled {
-            return "Typed text storage: local opt-in capture is on."
+            return "Your text: a local journal or detailed log is on."
         }
 
-        return "Typed text storage: off by default."
+        return "Your text: never stored unless you turn it on."
     }
 
     var currentSurfaceText: String {
@@ -716,15 +437,15 @@ struct SettingsTrustState: Equatable {
 
 struct SettingsFeedbackState: Equatable {
     var statusText: String {
-        "Feedback: redacted Privacy Bundle only"
+        "Feedback shares a redacted report only"
     }
 
     var detailText: String {
-        "Use this for beta feedback. It excludes raw text, prompts, accepted text, and screenshots."
+        "Use this to send beta feedback. The report leaves out your text, prompts, accepted suggestions, and screenshots."
     }
 
     var buttonTitle: String {
-        "Export Privacy Bundle"
+        "Export Diagnostic Report…"
     }
 }
 
@@ -761,7 +482,7 @@ struct SettingsPracticeState: Equatable {
         }
 
         if !runtimeReport.allowsSuggestions {
-            return "Practice: local model not ready"
+            return "Practice: on-device model not ready"
         }
 
         if suggestionsPaused {
@@ -772,7 +493,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var detailText: String {
-        "Safe target: TextEdit. Start Practice opens a disposable local file and lets you try suggestions near the cursor. No Screen Recording needed."
+        "TextEdit is the safest place to start. Practice opens a throwaway local file so you can try suggestions near the cursor. No Screen Recording needed."
     }
 
     var modelText: String {
@@ -786,7 +507,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var stepsText: String {
-        "Try: press Tab once for one word, type again and press Esc to dismiss, then pause suggestions or delete local logs before leaving."
+        "Try it: press Tab once for one word, type more and press Esc to dismiss, then pause suggestions or delete local logs before you leave."
     }
 
     var primaryAction: SettingsPracticePrimaryAction {
@@ -819,7 +540,7 @@ struct SettingsPracticeState: Equatable {
         case .openTextEditPractice:
             return "Start TextEdit Practice"
         case .none:
-            return isModelInstallInProgress ? "Installing Model..." : "Practice Not Ready"
+            return isModelInstallInProgress ? "Setting Up Model…" : "Practice Not Ready"
         }
     }
 
@@ -848,7 +569,7 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var statusText: String {
-        "Tuning: \(tuning.aggressivenessLevel)/\(SuggestionTuning.maximumAggressivenessLevel) - \(tuning.displayName)"
+        "How eager: \(tuning.displayName)"
     }
 
     var detailText: String {
@@ -856,20 +577,20 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var boringGuardrailText: String {
-        "Guardrail: short, boring next words first. Raise sliders only after accepted-and-kept data supports it."
+        "These fine-tune the basics above. The defaults favor short, unsurprising suggestions; nudge them only if SteadyType feels too quiet or too busy."
     }
 
     var maxWordsText: String {
-        "Words shown: \(tuning.maxVisibleWords)"
+        "Longest suggestion: \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words")"
     }
 
     var maxWordsDetailText: String {
         let minimum = CompletionModelPolicy.preferredMinimumVisibleWords(forVisibleWords: tuning.maxVisibleWords)
         if minimum > 1 {
-            return "Aims for \(minimum)-\(tuning.maxVisibleWords) words when the sentence has enough context."
+            return "Aims for \(minimum)–\(tuning.maxVisibleWords) words when there’s enough context."
         }
 
-        return "Allows suggestions up to \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words")."
+        return "Allows suggestions up to \(tuning.maxVisibleWords) \(tuning.maxVisibleWords == 1 ? "word" : "words") long."
     }
 
     var aggressivenessSliderValue: Double {
@@ -881,43 +602,43 @@ struct SettingsSuggestionAggressivenessState: Equatable {
     }
 
     var wordStartText: String {
-        "Word help starts after: \(tuning.wordStartCharacters) \(tuning.wordStartCharacters == 1 ? "letter" : "letters")"
+        "Show word hints after: \(tuning.wordStartCharacters) \(tuning.wordStartCharacters == 1 ? "letter" : "letters")"
     }
 
     var wordStartDetailText: String {
-        "Lower means word suggestions show sooner."
+        "Lower shows word suggestions sooner."
     }
 
     var phraseStartText: String {
-        "Phrase help starts after: \(tuning.phraseStartWords) \(tuning.phraseStartWords == 1 ? "word" : "words")"
+        "Show phrase hints after: \(tuning.phraseStartWords) \(tuning.phraseStartWords == 1 ? "word" : "words")"
     }
 
     var phraseStartDetailText: String {
-        "Lower means phrase suggestions need less context."
+        "Lower offers longer phrase suggestions with less context."
     }
 
     var responseSpeedText: String {
-        "Wait after typing: \(responseSpeedName)"
+        "Suggestion delay: \(responseSpeedName)"
     }
 
     var responseSpeedDetailText: String {
-        "Higher feels faster. Lower waits for a clearer pause."
+        "Higher shows suggestions sooner; lower waits for a clearer pause."
     }
 
     var confidenceText: String {
-        "Guess strength: \(confidenceName)"
+        "How sure before showing: \(confidenceName)"
     }
 
     var confidenceDetailText: String {
-        "Loose shows more guesses. Strict hides more."
+        "Looser shows more guesses; stricter shows fewer."
     }
 
     var learningRestraintText: String {
-        "Learned caution: \(learningRestraintName)"
+        "Influence of your history: \(learningRestraintName)"
     }
 
     var learningRestraintDetailText: String {
-        "Lower lets ignored old suggestions matter less."
+        "Higher means suggestions you’ve ignored before are more likely to stay hidden."
     }
 
     var wordStartSliderValue: Double {
@@ -994,52 +715,52 @@ struct SettingsSuggestionDecisionState: Equatable {
     var statusText: String {
         switch normalizedPrefix {
         case "blocked":
-            return "Suggestion status: quiet"
+            return "Right now: quiet"
         case "waiting":
-            return "Suggestion status: waiting"
+            return "Right now: getting ready"
         case "queued", "running":
-            return "Suggestion status: thinking locally"
+            return "Right now: thinking on your Mac"
         case "shown", "kept current suggestion":
-            return "Suggestion status: visible"
+            return "Right now: showing a suggestion"
         case "accepted":
-            return "Suggestion status: accepted"
+            return "Right now: accepted"
         case "hidden":
-            return "Suggestion status: hidden"
+            return "Right now: hidden"
         case "paused":
-            return "Suggestion status: paused"
+            return "Right now: paused"
         case "ready", "starting":
-            return "Suggestion status: ready"
+            return "Right now: ready"
         default:
             guard !displayPrefix.isEmpty else {
-                return "Suggestion status: ready"
+                return "Right now: ready"
             }
 
-            return "Suggestion status: \(displayPrefix)"
+            return "Right now: \(displayPrefix)"
         }
     }
 
     var detailText: String {
         switch normalizedPrefix {
         case "blocked":
-            let reason = reasonText ?? "a safety or timing check paused suggestions"
-            return "Why quiet: \(reason). Keep typing, or use Command Context for copy-only fallback."
+            let reason = reasonText ?? "a safety or timing check is holding suggestions"
+            return "Quiet because \(reason). Keep typing and it’ll pick back up."
         case "waiting":
-            let reason = reasonText ?? "the app needs a moment to settle"
-            return "Waiting: \(reason). This prevents jumpy suggestions."
+            let reason = reasonText ?? "the field needs a moment to settle"
+            return "Getting ready: \(reason). This keeps suggestions from jumping around."
         case "queued", "running":
-            return "Thinking locally. Text stays on this Mac."
+            return "Thinking on your Mac. Your text never leaves it."
         case "shown", "kept current suggestion":
-            return "Visible near the cursor. Tab accepts one word; Esc dismisses."
+            return "A suggestion is next to your cursor. Tab accepts one word; Esc dismisses."
         case "accepted":
-            return "Accepted. SteadyType will recompute after the field settles."
+            return "Accepted. SteadyType will look for the next suggestion once the field settles."
         case "hidden":
-            return "Hidden. Keep typing to restart suggestions."
+            return "Hidden. Keep typing to bring suggestions back."
         case "paused":
-            return "Paused. Resume suggestions when you want them again."
+            return "Paused. Resume whenever you want suggestions again."
         case "ready", "starting":
-            return "Ready when you type in a supported writing field."
+            return "Ready as soon as you type in a supported field."
         default:
-            return "Latest local decision: \(rawDecision.isEmpty ? "ready" : rawDecision)"
+            return "Latest: \(rawDecision.isEmpty ? "ready" : rawDecision)"
         }
     }
 
@@ -1107,7 +828,7 @@ struct SettingsFieldControlState: Equatable {
 
     var statusText: String {
         guard hasFieldTarget else {
-            return "Current field: no writing field selected"
+            return "Current field: nothing selected yet"
         }
 
         let scope = isCurrentField ? "Current field" : "Last field"
@@ -1124,7 +845,7 @@ struct SettingsFieldControlState: Equatable {
 
     var detailText: String {
         guard hasFieldTarget else {
-            return "Click into a writing field to silence only that field."
+            return "Click into a writing field to silence just that field."
         }
 
         if isSilenced {
@@ -1146,118 +867,103 @@ struct SettingsFieldControlState: Equatable {
 @MainActor
 final class SettingsWindowController: NSObject {
     private let window: NSWindow
+    private let tabView = NSTabView()
+    private let tabSelector = NSSegmentedControl(
+        labels: ["General", "Privacy", "Advanced"],
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
     private let contentScrollView = NSScrollView()
     private let scrollDocumentView = FlippedSettingsDocumentView()
+
+    // Status header
+    private let statusDot = SettingsStatusDotView(frame: NSRect(x: 0, y: 0, width: 9, height: 9))
+    private let statusHeadlineLabel = NSTextField(labelWithString: "")
+    private let statusDetailLabel = NSTextField(labelWithString: "")
+
+    // Setup / onboarding
     private let firstRunTrustLabel = NSTextField(labelWithString: "")
     private let firstRunTrustDetailLabel = NSTextField(labelWithString: "")
     private let firstRunTrustQuickStartLabel = NSTextField(labelWithString: "")
     private let firstRunTrustAppsLabel = NSTextField(labelWithString: "")
     private let permissionLabel = NSTextField(labelWithString: "")
     private let permissionDetailLabel = NSTextField(labelWithString: "")
-    private let trustLabel = NSTextField(labelWithString: "")
-    private let trustLocalModeLabel = NSTextField(labelWithString: "")
-    private let trustTypedTextLabel = NSTextField(labelWithString: "")
-    private let trustCurrentSurfaceLabel = NSTextField(labelWithString: "")
-    private let trustWhyLabel = NSTextField(labelWithString: "")
-    private let runtimeLabel = NSTextField(labelWithString: "")
-    private let runtimeDetailLabel = NSTextField(labelWithString: "")
-    private let runtimeActionLabel = NSTextField(labelWithString: "")
-    private let runtimeTargetLabel = NSTextField(labelWithString: "")
-    private let modelDirectoryLabel = NSTextField(labelWithString: "")
-    private let modelInstallStatusLabel = NSTextField(labelWithString: "")
     private let practiceLabel = NSTextField(labelWithString: "")
     private let practiceDetailLabel = NSTextField(labelWithString: "")
-    private let practiceModelLabel = NSTextField(labelWithString: "")
-    private let practiceTextEditLabel = NSTextField(labelWithString: "")
     private let practiceStepsLabel = NSTextField(labelWithString: "")
     private let practicePrimaryButton = NSButton(title: "Start TextEdit Practice", target: nil, action: nil)
     private let practicePauseButton = NSButton(title: "Pause Suggestions", target: nil, action: nil)
     private let practiceDeleteTracesButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
-    private let controlLabel = NSTextField(labelWithString: "")
+    private let setupCardStack = NSStackView()
+    private var setupSection: NSStackView?
+
+    // Suggestions (General)
     private let controlDetailLabel = NSTextField(labelWithString: "")
-    private let togglePauseButton = NSButton(checkboxWithTitle: "Suggestions everywhere", target: nil, action: nil)
+    private let togglePauseButton = NSButton(checkboxWithTitle: "Show suggestions while I type", target: nil, action: nil)
     private let pause15MinutesButton = NSButton(title: "15 Minutes", target: nil, action: nil)
     private let pause1HourButton = NSButton(title: "1 Hour", target: nil, action: nil)
     private let pauseUntilTomorrowButton = NSButton(title: "Until Tomorrow", target: nil, action: nil)
-    private let fieldControlLabel = NSTextField(labelWithString: "")
-    private let fieldControlDetailLabel = NSTextField(labelWithString: "")
-    private let silenceFieldButton = NSButton(title: "Silence This Field", target: nil, action: nil)
-    private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
-    private let currentAppLabel = NSTextField(labelWithString: "")
-    private let currentAppDetailLabel = NSTextField(labelWithString: "")
-    private let currentAppSupportLabel = NSTextField(labelWithString: "")
-    private let currentAppModeLabel = NSTextField(labelWithString: "")
-    private let currentAppAcceptanceLabel = NSTextField(labelWithString: "")
-    private let currentAppFallbackLabel = NSTextField(labelWithString: "")
-    private let currentAppProofLabel = NSTextField(labelWithString: "")
-    private let currentAppProofCommandLabel = NSTextField(labelWithString: "")
-    private let disabledAppsLabel = NSTextField(labelWithString: "")
-    private let suggestionDecisionLabel = NSTextField(labelWithString: "")
-    private let suggestionDecisionDetailLabel = NSTextField(labelWithString: "")
-    private let toggleCurrentAppButton = NSButton(
-        checkboxWithTitle: "Suggestions in this app",
-        target: nil,
-        action: nil
-    )
-    private let forceMirrorModeButton = NSButton(title: "Use Floating Backup", target: nil, action: nil)
-    private let startAppProofButton = NSButton(title: "Check This App", target: nil, action: nil)
-    private let copyProofCommandButton = NSButton(title: "Copy Check Command", target: nil, action: nil)
-    private let enableAllAppsButton = NSButton(title: "Resume Every Paused App", target: nil, action: nil)
-    private let privacyLabel = NSTextField(labelWithString: "")
-    private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
-    private let rawContentStatusLabel = NSTextField(labelWithString: "")
-    private let visiblePageContextStatusLabel = NSTextField(labelWithString: "")
-    private let personalCaptureStatusLabel = NSTextField(labelWithString: "")
-    private let personalCaptureDetailLabel = NSTextField(labelWithString: "")
-    private let privacySharingStatusLabel = NSTextField(labelWithString: "")
-    private let localOnlyProofLabel = NSTextField(labelWithString: "")
-    private let learningStatusLabel = NSTextField(labelWithString: "")
-    private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
-    private let privacyPathLabel = NSTextField(labelWithString: "")
-    private let feedbackLabel = NSTextField(labelWithString: "")
-    private let feedbackDetailLabel = NSTextField(labelWithString: "")
-    private let exportPrivacyBundleButton = NSButton(title: "Export Privacy Bundle", target: nil, action: nil)
-    private let toggleTracingButton = NSButton(
-        checkboxWithTitle: "Record local check data",
-        target: nil,
-        action: nil
-    )
-    private let toggleRawTraceButton = NSButton(
-        checkboxWithTitle: "Include raw text in local logs",
-        target: nil,
-        action: nil
-    )
-    private let toggleScreenshotTraceButton = NSButton(
-        checkboxWithTitle: "Save placement screenshots",
-        target: nil,
-        action: nil
-    )
-    private let toggleVisiblePageContextButton = NSButton(
-        checkboxWithTitle: "Use screen context",
-        target: nil,
-        action: nil
-    )
-    private let togglePersonalCaptureButton = NSButton(
-        checkboxWithTitle: "Personal Capture",
-        target: nil,
-        action: nil
-    )
-    private let revealPersonalCaptureButton = NSButton(title: "Reveal Capture Folder", target: nil, action: nil)
-    private let deletePersonalCaptureButton = NSButton(title: "Delete Personal Capture", target: nil, action: nil)
-    private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
-    private let clearLearningDataButton = NSButton(title: "Clear Learned Suggestions", target: nil, action: nil)
-    private let shortcutLabel = NSTextField(labelWithString: "")
-    private let shortcutAcceptAllLabel = NSTextField(labelWithString: "")
-    private let shortcutConflictLabel = NSTextField(labelWithString: "")
-    private let shortcutConflictDetailLabel = NSTextField(labelWithString: "")
-    private let shortcutPerAppProfileLabel = NSTextField(labelWithString: "")
-    private let acceptAllShortcutLabel = NSTextField(labelWithString: "Whole suggestion:")
-    private let acceptAllShortcutPopup = NSPopUpButton()
-    private let cycleAcceptAllShortcutButton = NSButton(title: "Use Option-Tab", target: nil, action: nil)
     private let aggressivenessLabel = NSTextField(labelWithString: "")
     private let aggressivenessDetailLabel = NSTextField(labelWithString: "")
-    private let boringGuardrailLabel = NSTextField(labelWithString: "")
     private let aggressivenessSlider = NSSlider()
+
+    // This app (General)
+    private let currentAppLabel = NSTextField(labelWithString: "")
+    private let currentAppDetailLabel = NSTextField(labelWithString: "")
+    private let toggleCurrentAppButton = NSButton(
+        checkboxWithTitle: "Suggest while I type here",
+        target: nil,
+        action: nil
+    )
+    private let silenceFieldButton = NSButton(title: "Silence This Field", target: nil, action: nil)
+    private let fieldControlDetailLabel = NSTextField(labelWithString: "")
+    private let disabledAppsLabel = NSTextField(labelWithString: "")
+    private let enableAllAppsButton = NSButton(title: "Resume Paused Apps", target: nil, action: nil)
+
+    // Keyboard (General)
+    private let shortcutLabel = NSTextField(labelWithString: "")
+    private let acceptAllShortcutLabel = NSTextField(labelWithString: "Accept the whole suggestion with:")
+    private let acceptAllShortcutPopup = NSPopUpButton()
+    private let shortcutAcceptAllLabel = NSTextField(labelWithString: "")
+
+    // Live status detail (General)
+    private let suggestionDecisionDetailLabel = NSTextField(labelWithString: "")
+
+    // Privacy
+    private let privacyLabel = NSTextField(labelWithString: "")
+    private let localOnlyProofLabel = NSTextField(labelWithString: "")
+    private let visiblePageContextStatusLabel = NSTextField(labelWithString: "")
+    private let toggleVisiblePageContextButton = NSButton(
+        checkboxWithTitle: "Use nearby on-screen text to improve suggestions",
+        target: nil,
+        action: nil
+    )
+    private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
+    private let learningStatusLabel = NSTextField(labelWithString: "")
+    private let clearLearningDataButton = NSButton(title: "Forget What I’ve Taught It", target: nil, action: nil)
+    private let privacySharingStatusLabel = NSTextField(labelWithString: "")
+    private let feedbackLabel = NSTextField(labelWithString: "")
+    private let feedbackDetailLabel = NSTextField(labelWithString: "")
+    private let diagnosticsStatusLabel = NSTextField(labelWithString: "")
+    private let toggleTracingButton = NSButton(
+        checkboxWithTitle: "Keep a local activity log to help with bug reports",
+        target: nil,
+        action: nil
+    )
+    private let exportPrivacyBundleButton = NSButton(title: "Export Diagnostic Report…", target: nil, action: nil)
+    private let deleteLocalLogsButton = NSButton(title: "Delete Local Logs", target: nil, action: nil)
+
+    // Advanced
+    private let runtimeLabel = NSTextField(labelWithString: "")
+    private let runtimeDetailLabel = NSTextField(labelWithString: "")
+    private let runtimeActionLabel = NSTextField(labelWithString: "")
+    private let runtimeActionButton = NSButton(title: "Open Model Folder", target: nil, action: nil)
+    private let runtimeTargetLabel = NSTextField(labelWithString: "")
+    private let modelDirectoryLabel = NSTextField(labelWithString: "")
+    private let modelInstallStatusLabel = NSTextField(labelWithString: "")
+    private let boringGuardrailLabel = NSTextField(labelWithString: "")
+    private let resetTuningButton = NSButton(title: "Reset Fine-Tuning", target: nil, action: nil)
     private let maxWordsLabel = NSTextField(labelWithString: "")
     private let maxWordsDetailLabel = NSTextField(labelWithString: "")
     private let maxWordsSlider = NSSlider()
@@ -1276,7 +982,24 @@ final class SettingsWindowController: NSObject {
     private let learningRestraintLabel = NSTextField(labelWithString: "")
     private let learningRestraintDetailLabel = NSTextField(labelWithString: "")
     private let learningRestraintSlider = NSSlider()
-    private let firstRunLabel = NSTextField(wrappingLabelWithString: "")
+    private let placementDetailLabel = NSTextField(labelWithString: "")
+    private let placementButton = NSButton(title: "Show in a Floating Box", target: nil, action: nil)
+    private let advancedAccessibilityLabel = NSTextField(labelWithString: "")
+    private let requestPermissionButton = NSButton(title: "Allow Accessibility", target: nil, action: nil)
+    private let openAccessibilitySettingsButton = NSButton(title: "Open Privacy Settings", target: nil, action: nil)
+    private let advancedDiagnosticsLabel = NSTextField(labelWithString: "")
+    private let toggleRawTraceButton = NSButton(
+        checkboxWithTitle: "Include exact text in logs (only if support asks)",
+        target: nil,
+        action: nil
+    )
+    private let toggleScreenshotTraceButton = NSButton(
+        checkboxWithTitle: "Save placement screenshots",
+        target: nil,
+        action: nil
+    )
+    private let privacyPathLabel = NSTextField(labelWithString: "")
+
     private let requestPermission: () -> Void
     private let openAccessibilitySettings: () -> Void
     private let toggleSuggestionsPaused: () -> Void
@@ -1309,10 +1032,10 @@ final class SettingsWindowController: NSObject {
     private let setSuggestionResponseSpeedLevel: (Int) -> Void
     private let setSuggestionConfidenceLevel: (Int) -> Void
     private let setSuggestionLearningRestraintLevel: (Int) -> Void
+    private let resetSuggestionTuning: () -> Void
     private let layoutStyle = SettingsLayoutStyle.nativeUtility
     private var currentRuntimeAction: RuntimeReadinessAction = .none
     private var currentPracticePrimaryAction: SettingsPracticePrimaryAction = .none
-    private var currentProofCommandClipboardText: String?
 
     init(
         requestPermission: @escaping () -> Void,
@@ -1346,7 +1069,8 @@ final class SettingsWindowController: NSObject {
         setSuggestionPhraseStartWords: @escaping (Int) -> Void = { _ in },
         setSuggestionResponseSpeedLevel: @escaping (Int) -> Void = { _ in },
         setSuggestionConfidenceLevel: @escaping (Int) -> Void = { _ in },
-        setSuggestionLearningRestraintLevel: @escaping (Int) -> Void = { _ in }
+        setSuggestionLearningRestraintLevel: @escaping (Int) -> Void = { _ in },
+        resetSuggestionTuning: @escaping () -> Void = {}
     ) {
         self.requestPermission = requestPermission
         self.openAccessibilitySettings = openAccessibilitySettings
@@ -1380,6 +1104,7 @@ final class SettingsWindowController: NSObject {
         self.setSuggestionResponseSpeedLevel = setSuggestionResponseSpeedLevel
         self.setSuggestionConfidenceLevel = setSuggestionConfidenceLevel
         self.setSuggestionLearningRestraintLevel = setSuggestionLearningRestraintLevel
+        self.resetSuggestionTuning = resetSuggestionTuning
 
         let contentView = NSVisualEffectView(
             frame: NSRect(origin: .zero, size: SettingsLayoutStyle.nativeUtility.preferredContentSize)
@@ -1393,7 +1118,7 @@ final class SettingsWindowController: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "SteadyType"
+        window.title = "SteadyType Settings"
         window.contentView = contentView
         window.isReleasedWhenClosed = false
         window.contentMinSize = SettingsLayoutStyle.nativeUtility.minimumContentSize
@@ -1469,6 +1194,20 @@ final class SettingsWindowController: NSObject {
         runtimeDetailLabel.stringValue
     }
 
+    /// Switches the visible tab. Exposed for visual QA snapshots of non-default tabs.
+    func selectTab(at index: Int) {
+        guard index >= 0, index < tabView.numberOfTabViewItems else {
+            return
+        }
+
+        tabSelector.selectedSegment = index
+        tabView.selectTabViewItem(at: index)
+        if let view = tabView.selectedTabViewItem?.view {
+            view.needsLayout = true
+            view.layoutSubtreeIfNeeded()
+        }
+    }
+
     func refresh(
         isTrusted: Bool,
         suggestionsPaused: Bool,
@@ -1503,121 +1242,104 @@ final class SettingsWindowController: NSObject {
             pausedUntil: suggestionsPausedUntil,
             now: now
         )
+        let suggestionDecision = SettingsSuggestionDecisionState(lastSuggestionDecision)
+        let needsSetup = !isTrusted || !runtimeReport.allowsSuggestions
+
+        // Status header.
+        statusHeadlineLabel.stringValue = trust.statusText
+        statusDetailLabel.stringValue = needsSetup
+            ? SettingsOnboardingState(isTrusted: isTrusted, suggestionsPaused: suggestionsPaused, runtimeGuidance: guidance).text
+            : suggestionDecision.detailText
+        statusDot.update(color: statusDotColor(isTrusted: isTrusted, suggestionsPaused: suggestionsPaused, runtimeReport: runtimeReport))
+
+        // Setup card (only while there is something to finish).
         firstRunTrustLabel.stringValue = firstRunTrust.statusText
         firstRunTrustDetailLabel.stringValue = firstRunTrust.detailText
         firstRunTrustQuickStartLabel.stringValue = firstRunTrust.quickStartText
         firstRunTrustAppsLabel.stringValue = firstRunTrust.appsText
         permissionLabel.stringValue = permission.statusText
         permissionDetailLabel.stringValue = permission.detailText
-        trustLabel.stringValue = trust.statusText
-        trustLocalModeLabel.stringValue = trust.localModeText
-        trustTypedTextLabel.stringValue = trust.typedTextText
-        trustCurrentSurfaceLabel.stringValue = trust.currentSurfaceText
-        trustWhyLabel.stringValue = trust.whyText
-        controlLabel.stringValue = pauseControl.settingsSummaryText
-        controlDetailLabel.stringValue = pauseControl.settingsDetailText
-        let suggestionDecision = SettingsSuggestionDecisionState(lastSuggestionDecision)
-        suggestionDecisionLabel.stringValue = suggestionDecision.statusText
-        suggestionDecisionDetailLabel.stringValue = suggestionDecision.detailText
-        togglePauseButton.state = suggestionsPaused ? .off : .on
-        togglePauseButton.title = pauseControl.toggleTitle
-        pause15MinutesButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
-        pause1HourButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
-        pauseUntilTomorrowButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
-        fieldControlLabel.stringValue = fieldControl.statusText
-        fieldControlDetailLabel.stringValue = fieldControl.detailText
-        silenceFieldButton.title = fieldControl.buttonTitle
-        silenceFieldButton.isEnabled = fieldControl.canSilence
-        runtimeLabel.stringValue = "Local model: \(runtimeReport.summary)"
-        let runtimePresentation = RuntimeReadinessPresentation(report: runtimeReport)
-        runtimeDetailLabel.stringValue = runtimePresentation.settingsDetailText
-        runtimeDetailLabel.isHidden = runtimePresentation.settingsDetailText.isEmpty
-        if isModelInstallInProgress {
-            runtimeActionLabel.stringValue = "Next step: Wait for the model install or cancel it."
-            runtimeActionButton.title = "Cancel Install"
-            runtimeActionButton.isEnabled = true
-            currentRuntimeAction = .cancelModelInstall
-        } else {
-            runtimeActionLabel.stringValue = runtimeReport.action == .none
-                ? "Next step: Model ready."
-                : "Next step: \(runtimeReport.action.displayName)"
-            runtimeActionButton.title = guidance.actionTitle
-            runtimeActionButton.isEnabled = guidance.isActionEnabled
-            currentRuntimeAction = runtimeReport.action
-        }
-        runtimeTargetLabel.stringValue = "Runtime target: \(runtimeTargetSummary)"
-        modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
-        modelInstallStatusLabel.stringValue = modelInstallStatusText ?? ""
-        modelInstallStatusLabel.isHidden = modelInstallStatusText == nil
         practiceLabel.stringValue = practice.statusText
         practiceDetailLabel.stringValue = practice.detailText
-        practiceModelLabel.stringValue = practice.modelText
-        practiceTextEditLabel.stringValue = practice.textEditText
         practiceStepsLabel.stringValue = practice.stepsText
         currentPracticePrimaryAction = practice.primaryAction
         practicePrimaryButton.title = practice.primaryButtonTitle
         practicePrimaryButton.isEnabled = practice.isPrimaryButtonEnabled
         practicePauseButton.title = practice.pauseButtonTitle
         practiceDeleteTracesButton.title = practice.deleteTracesButtonTitle
+        setupSection?.isHidden = !needsSetup
+
+        // Suggestions.
+        controlDetailLabel.stringValue = pauseControl.settingsDetailText
+        togglePauseButton.state = suggestionsPaused ? .off : .on
+        pause15MinutesButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
+        pause1HourButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
+        pauseUntilTomorrowButton.isEnabled = pauseControl.shouldEnableTimedPauseButtons
+        aggressivenessLabel.stringValue = suggestionAggressiveness.statusText
+        aggressivenessDetailLabel.stringValue = suggestionAggressiveness.detailText
+        aggressivenessSlider.doubleValue = suggestionAggressiveness.aggressivenessSliderValue
+        suggestionDecisionDetailLabel.stringValue = suggestionDecision.detailText
+
+        // This app.
         currentAppLabel.stringValue = currentApp.statusText
         currentAppDetailLabel.stringValue = currentApp.detailText
-        currentAppSupportLabel.stringValue = currentApp.supportMatrixText
-        currentAppModeLabel.stringValue = currentApp.modeText
-        currentAppAcceptanceLabel.stringValue = currentApp.acceptanceText
-        currentAppFallbackLabel.stringValue = currentApp.fallbackText
-        currentAppProofLabel.stringValue = currentApp.proofText
-        currentAppProofLabel.isHidden = !currentApp.shouldShowCheckControls
-        currentAppProofCommandLabel.stringValue = currentApp.proofCommandText ?? ""
-        currentAppProofCommandLabel.isHidden = currentApp.proofCommandText == nil
-        currentProofCommandClipboardText = currentApp.proofCommandClipboardText
-        copyProofCommandButton.title = currentApp.copyProofCommandButtonTitle
-        copyProofCommandButton.isEnabled = currentApp.canCopyProofCommand
-        copyProofCommandButton.isHidden = !currentApp.canCopyProofCommand
         toggleCurrentAppButton.title = currentApp.toggleTitle
         toggleCurrentAppButton.state = currentApp.isEnabled ? .on : .off
         toggleCurrentAppButton.isEnabled = currentApp.canToggle
-        forceMirrorModeButton.title = currentApp.modeButtonTitle
-        forceMirrorModeButton.isEnabled = currentApp.canOverrideMode
-        forceMirrorModeButton.isHidden = !currentApp.canOverrideMode
-        startAppProofButton.title = currentApp.proofButtonTitle
-        startAppProofButton.isEnabled = currentApp.canStartProof
-        startAppProofButton.isHidden = !currentApp.shouldShowCheckControls
+        silenceFieldButton.title = fieldControl.buttonTitle
+        silenceFieldButton.isEnabled = fieldControl.canSilence
+        fieldControlDetailLabel.stringValue = fieldControl.detailText
         disabledAppsLabel.stringValue = currentApp.blockedAppsText
         enableAllAppsButton.isEnabled = currentApp.disabledAppCount > 0
+
+        // Keyboard.
+        shortcutLabel.stringValue = keyboardShortcuts.statusText
+        acceptAllShortcutLabel.stringValue = keyboardShortcuts.acceptAllPickerLabel
+        shortcutAcceptAllLabel.stringValue = keyboardShortcuts.acceptAllStatusText
+        refreshAcceptAllShortcutPopup(selected: keyboardShortcuts.acceptAllShortcut)
+
+        // Privacy.
         privacyLabel.stringValue = privacy.statusText
-        diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
-        rawContentStatusLabel.stringValue = privacy.contentStatusText
-        visiblePageContextStatusLabel.stringValue = privacy.visiblePageContextStatusText
-        personalCaptureStatusLabel.stringValue = privacy.personalCaptureStatusText
-        personalCaptureDetailLabel.stringValue = privacy.personalCaptureDetailText
-        privacySharingStatusLabel.stringValue = privacy.sharingStatusText
         localOnlyProofLabel.stringValue = privacy.localOnlyProofText
-        learningStatusLabel.stringValue = privacy.learningStatusText
+        visiblePageContextStatusLabel.stringValue = privacy.visiblePageContextStatusText
+        toggleVisiblePageContextButton.state = privacy.visiblePageContextEnabled ? .on : .off
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
         screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
-        privacyPathLabel.stringValue = privacy.pathText
+        learningStatusLabel.stringValue = privacy.learningStatusText
+        privacySharingStatusLabel.stringValue = privacy.sharingStatusText
         let feedback = SettingsFeedbackState()
         feedbackLabel.stringValue = feedback.statusText
         feedbackDetailLabel.stringValue = feedback.detailText
         exportPrivacyBundleButton.title = feedback.buttonTitle
+        diagnosticsStatusLabel.stringValue = privacy.diagnosticsStatusText
         toggleTracingButton.state = privacy.tracingPaused ? .off : .on
-        toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
-        toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
-        toggleVisiblePageContextButton.state = privacy.visiblePageContextEnabled ? .on : .off
-        togglePersonalCaptureButton.state = privacy.personalCaptureEnabled ? .on : .off
-        shortcutLabel.stringValue = keyboardShortcuts.statusText
-        shortcutAcceptAllLabel.stringValue = keyboardShortcuts.acceptAllStatusText
-        shortcutConflictLabel.stringValue = keyboardShortcuts.conflictText
-        shortcutConflictDetailLabel.stringValue = keyboardShortcuts.conflictDetailText
-        shortcutPerAppProfileLabel.stringValue = keyboardShortcuts.perAppProfileText
-        acceptAllShortcutLabel.stringValue = keyboardShortcuts.acceptAllPickerLabel
-        refreshAcceptAllShortcutPopup(selected: keyboardShortcuts.acceptAllShortcut)
-        cycleAcceptAllShortcutButton.title = keyboardShortcuts.cycleButtonTitle
-        aggressivenessLabel.stringValue = suggestionAggressiveness.statusText
-        aggressivenessDetailLabel.stringValue = suggestionAggressiveness.detailText
+
+        // Advanced — model.
+        runtimeLabel.stringValue = "On-device model: \(runtimeReport.summary)"
+        let runtimePresentation = RuntimeReadinessPresentation(report: runtimeReport)
+        runtimeDetailLabel.stringValue = runtimePresentation.settingsDetailText
+        runtimeDetailLabel.isHidden = runtimePresentation.settingsDetailText.isEmpty
+        if isModelInstallInProgress {
+            runtimeActionLabel.stringValue = "Next step: wait for the model to finish, or cancel."
+            runtimeActionButton.title = "Cancel Setup"
+            runtimeActionButton.isEnabled = true
+            currentRuntimeAction = .cancelModelInstall
+        } else {
+            runtimeActionLabel.stringValue = runtimeReport.action == .none
+                ? "The model is ready."
+                : "Next step: \(runtimeReport.action.displayName)"
+            runtimeActionButton.title = guidance.actionTitle
+            runtimeActionButton.isEnabled = guidance.isActionEnabled
+            currentRuntimeAction = runtimeReport.action
+        }
+        runtimeTargetLabel.stringValue = "Runs locally: \(runtimeTargetSummary)"
+        modelDirectoryLabel.stringValue = "Model folder: \(modelDirectoryPath)"
+        modelInstallStatusLabel.stringValue = modelInstallStatusText ?? ""
+        modelInstallStatusLabel.isHidden = modelInstallStatusText == nil
+
+        // Advanced — fine-tuning.
         boringGuardrailLabel.stringValue = suggestionAggressiveness.boringGuardrailText
-        aggressivenessSlider.doubleValue = suggestionAggressiveness.aggressivenessSliderValue
         maxWordsLabel.stringValue = suggestionAggressiveness.maxWordsText
         maxWordsDetailLabel.stringValue = suggestionAggressiveness.maxWordsDetailText
         maxWordsSlider.doubleValue = suggestionAggressiveness.maxWordsSliderValue
@@ -1636,11 +1358,20 @@ final class SettingsWindowController: NSObject {
         learningRestraintLabel.stringValue = suggestionAggressiveness.learningRestraintText
         learningRestraintDetailLabel.stringValue = suggestionAggressiveness.learningRestraintDetailText
         learningRestraintSlider.doubleValue = suggestionAggressiveness.learningRestraintSliderValue
-        firstRunLabel.stringValue = SettingsOnboardingState(
-            isTrusted: isTrusted,
-            suggestionsPaused: suggestionsPaused,
-            runtimeGuidance: guidance
-        ).text
+
+        // Advanced — placement.
+        placementDetailLabel.stringValue = currentApp.canChangePlacement
+            ? "Choose how suggestions appear in \(currentApp.displayName)."
+            : "Open a supported writing app to choose how suggestions appear there."
+        placementButton.title = currentApp.placementButtonTitle
+        placementButton.isEnabled = currentApp.canChangePlacement
+
+        // Advanced — setup + detailed diagnostics.
+        advancedAccessibilityLabel.stringValue = permission.statusText
+        requestPermissionButton.isEnabled = !isTrusted
+        toggleRawTraceButton.state = privacy.rawContentTracingEnabled ? .on : .off
+        toggleScreenshotTraceButton.state = privacy.screenshotTracingEnabled ? .on : .off
+        privacyPathLabel.stringValue = privacy.pathText
     }
 
     func nativeAppearanceSnapshotPNGData(appearanceName: NSAppearance.Name) -> Data? {
@@ -1668,97 +1399,306 @@ final class SettingsWindowController: NSObject {
     }
 
     private func buildContent(in contentView: NSView) {
-        contentScrollView.translatesAutoresizingMaskIntoConstraints = false
-        contentScrollView.drawsBackground = false
-        contentScrollView.borderType = .noBorder
-        contentScrollView.hasVerticalScroller = true
-        contentScrollView.hasHorizontalScroller = false
-        contentScrollView.autohidesScrollers = true
-        contentScrollView.verticalScrollElasticity = .allowed
-        contentScrollView.horizontalScrollElasticity = .none
-
-        scrollDocumentView.translatesAutoresizingMaskIntoConstraints = false
-        contentScrollView.documentView = scrollDocumentView
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = layoutStyle.sectionSpacing
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        configureControls()
 
         let title = NSTextField(labelWithString: "SteadyType")
-        title.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
-        firstRunTrustLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        title.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+        title.translatesAutoresizingMaskIntoConstraints = false
+
+        tabSelector.target = self
+        tabSelector.action = #selector(changeTab)
+        tabSelector.translatesAutoresizingMaskIntoConstraints = false
+        tabSelector.selectedSegment = 0
+
+        let statusHeader = makeStatusHeader()
+
+        tabView.translatesAutoresizingMaskIntoConstraints = false
+        tabView.tabViewType = .noTabsNoBorder
+        tabView.drawsBackground = false
+        tabView.addTabViewItem(makeTabItem(label: "General", view: makeGeneralTab()))
+        tabView.addTabViewItem(makeTabItem(label: "Privacy", view: makePrivacyTab()))
+        tabView.addTabViewItem(makeTabItem(label: "Advanced", view: makeAdvancedTab()))
+
+        let headerStack = NSStackView(views: [title, tabSelector, statusHeader])
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 12
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        headerStack.setHuggingPriority(.required, for: .vertical)
+
+        contentView.addSubview(headerStack)
+        contentView.addSubview(tabView)
+
+        let insets = layoutStyle.contentInsets
+        NSLayoutConstraint.activate([
+            headerStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: insets.top),
+            headerStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: insets.left),
+            headerStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -insets.right),
+            tabSelector.centerXAnchor.constraint(equalTo: headerStack.centerXAnchor),
+
+            tabView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 14),
+            tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+        ])
+    }
+
+    private func makeStatusHeader() -> NSView {
+        statusHeadlineLabel.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        statusDetailLabel.font = NSFont.systemFont(ofSize: 12)
+        statusDetailLabel.textColor = .secondaryLabelColor
+        statusDetailLabel.lineBreakMode = .byWordWrapping
+        statusDetailLabel.maximumNumberOfLines = 2
+        statusDetailLabel.preferredMaxLayoutWidth = layoutStyle.secondaryLabelMaxWidth
+
+        let textStack = NSStackView(views: [statusHeadlineLabel, statusDetailLabel])
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 2
+
+        let row = NSStackView(views: [statusDot, textStack])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+        return row
+    }
+
+    private func statusDotColor(
+        isTrusted: Bool,
+        suggestionsPaused: Bool,
+        runtimeReport: RuntimeReadinessReport
+    ) -> NSColor {
+        if !isTrusted || !runtimeReport.allowsSuggestions {
+            return .systemOrange
+        }
+
+        if suggestionsPaused {
+            return .systemGray
+        }
+
+        return .systemGreen
+    }
+
+    private func makeGeneralTab() -> NSView {
+        setupCardStack.orientation = .vertical
+        setupCardStack.alignment = .leading
+        setupCardStack.spacing = layoutStyle.sectionItemSpacing
+        [
+            firstRunTrustLabel,
+            firstRunTrustDetailLabel,
+            permissionLabel,
+            permissionDetailLabel,
+            practiceLabel,
+            practiceDetailLabel,
+            practiceStepsLabel,
+            makeButtonRow([practicePrimaryButton, practicePauseButton, practiceDeleteTracesButton]),
+            firstRunTrustQuickStartLabel,
+            firstRunTrustAppsLabel
+        ].forEach { setupCardStack.addArrangedSubview($0) }
+
+        let setup = makeSection(title: "Set Up", views: [setupCardStack])
+        setupSection = setup
+
+        let sections: [NSView] = [
+            setup,
+            makeSection(
+                title: "Suggestions",
+                views: [
+                    togglePauseButton,
+                    controlDetailLabel,
+                    makeButtonRow([pause15MinutesButton, pause1HourButton, pauseUntilTomorrowButton]),
+                    aggressivenessLabel,
+                    aggressivenessSlider,
+                    aggressivenessDetailLabel
+                ]
+            ),
+            makeSection(
+                title: "This App",
+                views: [
+                    currentAppLabel,
+                    currentAppDetailLabel,
+                    toggleCurrentAppButton,
+                    makeButtonRow([silenceFieldButton]),
+                    fieldControlDetailLabel,
+                    makeButtonRow([disabledAppsLabel, enableAllAppsButton])
+                ]
+            ),
+            makeSection(
+                title: "Keyboard",
+                views: [
+                    shortcutLabel,
+                    makeButtonRow([acceptAllShortcutLabel, acceptAllShortcutPopup]),
+                    shortcutAcceptAllLabel
+                ]
+            )
+        ]
+
+        return makeScrollingStack(sections, primaryScroll: true)
+    }
+
+    private func makePrivacyTab() -> NSView {
+        let sections: [NSView] = [
+            makeSection(
+                title: "On Your Mac",
+                views: [
+                    privacyLabel,
+                    localOnlyProofLabel
+                ]
+            ),
+            makeSection(
+                title: "On-Screen Context",
+                views: [
+                    toggleVisiblePageContextButton,
+                    visiblePageContextStatusLabel,
+                    screenRecordingPermissionLabel
+                ]
+            ),
+            makeSection(
+                title: "Learning",
+                views: [
+                    learningStatusLabel,
+                    makeButtonRow([clearLearningDataButton])
+                ]
+            ),
+            makeSection(
+                title: "Help Improve SteadyType",
+                views: [
+                    feedbackLabel,
+                    feedbackDetailLabel,
+                    privacySharingStatusLabel,
+                    toggleTracingButton,
+                    diagnosticsStatusLabel,
+                    makeButtonRow([exportPrivacyBundleButton, deleteLocalLogsButton])
+                ]
+            )
+        ]
+
+        return makeScrollingStack(sections)
+    }
+
+    private func makeAdvancedTab() -> NSView {
+        let sections: [NSView] = [
+            makeSection(
+                title: "Fine-Tuning",
+                views: [
+                    boringGuardrailLabel,
+                    maxWordsLabel,
+                    maxWordsSlider,
+                    maxWordsDetailLabel,
+                    responseSpeedLabel,
+                    responseSpeedSlider,
+                    responseSpeedDetailLabel,
+                    confidenceLabel,
+                    confidenceSlider,
+                    confidenceDetailLabel,
+                    wordStartLabel,
+                    wordStartSlider,
+                    wordStartDetailLabel,
+                    phraseStartLabel,
+                    phraseStartSlider,
+                    phraseStartDetailLabel,
+                    learningRestraintLabel,
+                    learningRestraintSlider,
+                    learningRestraintDetailLabel,
+                    makeButtonRow([resetTuningButton])
+                ]
+            ),
+            makeSection(
+                title: "Placement",
+                views: [
+                    placementDetailLabel,
+                    makeButtonRow([placementButton])
+                ]
+            ),
+            makeSection(
+                title: "On-Device Model",
+                views: [
+                    runtimeLabel,
+                    runtimeDetailLabel,
+                    runtimeActionLabel,
+                    makeButtonRow([runtimeActionButton]),
+                    modelInstallStatusLabel,
+                    runtimeTargetLabel,
+                    modelDirectoryLabel
+                ]
+            ),
+            makeSection(
+                title: "Permissions",
+                views: [
+                    advancedAccessibilityLabel,
+                    makeButtonRow([requestPermissionButton, openAccessibilitySettingsButton])
+                ]
+            ),
+            makeSection(
+                title: "Detailed Diagnostics",
+                views: [
+                    advancedDiagnosticsLabel,
+                    toggleRawTraceButton,
+                    toggleScreenshotTraceButton,
+                    privacyPathLabel
+                ]
+            )
+        ]
+
+        advancedDiagnosticsLabel.stringValue = "Only turn these on if support asks. They stay on this Mac and are off by default."
+
+        return makeScrollingStack(sections)
+    }
+
+    private func configureControls() {
+        statusHeadlineLabel.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+
         configureSecondaryLabel(firstRunTrustDetailLabel)
+        firstRunTrustLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(firstRunTrustQuickStartLabel)
         configureSecondaryLabel(firstRunTrustAppsLabel)
         permissionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(permissionDetailLabel)
-        trustLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(trustLocalModeLabel)
-        configureSecondaryLabel(trustTypedTextLabel)
-        configureSecondaryLabel(trustCurrentSurfaceLabel)
-        configureSecondaryLabel(trustWhyLabel)
+        practiceLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(practiceDetailLabel)
+        configureSecondaryLabel(practiceStepsLabel)
+
+        configureSecondaryLabel(controlDetailLabel)
+        aggressivenessLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(aggressivenessDetailLabel)
+        configureSecondaryLabel(suggestionDecisionDetailLabel)
+
+        currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(currentAppDetailLabel)
+        configureSecondaryLabel(fieldControlDetailLabel)
+        configureSecondaryLabel(disabledAppsLabel)
+
+        shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        acceptAllShortcutLabel.font = NSFont.systemFont(ofSize: 12)
+        acceptAllShortcutLabel.textColor = .secondaryLabelColor
+        configureSecondaryLabel(shortcutAcceptAllLabel)
+
+        privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(localOnlyProofLabel)
+        configureSecondaryLabel(visiblePageContextStatusLabel)
+        configureSecondaryLabel(screenRecordingPermissionLabel)
+        configureSecondaryLabel(learningStatusLabel)
+        configureSecondaryLabel(privacySharingStatusLabel)
+        feedbackLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        configureSecondaryLabel(feedbackDetailLabel)
+        configureSecondaryLabel(diagnosticsStatusLabel)
+
+        runtimeLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         runtimeLabel.lineBreakMode = .byWordWrapping
         runtimeLabel.maximumNumberOfLines = 0
-        runtimeLabel.preferredMaxLayoutWidth = 470
-        runtimeDetailLabel.font = NSFont.systemFont(ofSize: 12)
+        runtimeLabel.preferredMaxLayoutWidth = layoutStyle.secondaryLabelMaxWidth
         configureSecondaryLabel(runtimeDetailLabel)
         runtimeActionLabel.font = NSFont.systemFont(ofSize: 12)
         runtimeActionLabel.textColor = .secondaryLabelColor
         configureSecondaryLabel(runtimeTargetLabel)
         modelDirectoryLabel.lineBreakMode = .byTruncatingMiddle
         modelDirectoryLabel.maximumNumberOfLines = 1
-        modelDirectoryLabel.preferredMaxLayoutWidth = 470
+        modelDirectoryLabel.font = NSFont.systemFont(ofSize: 11)
+        modelDirectoryLabel.textColor = .secondaryLabelColor
+        modelDirectoryLabel.preferredMaxLayoutWidth = layoutStyle.secondaryLabelMaxWidth
         configureSecondaryLabel(modelInstallStatusLabel)
-        practiceLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(practiceDetailLabel)
-        configureSecondaryLabel(practiceModelLabel)
-        configureSecondaryLabel(practiceTextEditLabel)
-        configureSecondaryLabel(practiceStepsLabel)
-        controlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        fieldControlLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(fieldControlDetailLabel)
-        firstRunLabel.font = NSFont.systemFont(ofSize: 12)
-        configureSecondaryLabel(firstRunLabel)
-        currentAppLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(currentAppDetailLabel)
-        configureSecondaryLabel(currentAppSupportLabel)
-        configureSecondaryLabel(currentAppModeLabel)
-        configureSecondaryLabel(currentAppAcceptanceLabel)
-        configureSecondaryLabel(currentAppFallbackLabel)
-        configureSecondaryLabel(currentAppProofLabel)
-        configureSecondaryLabel(currentAppProofCommandLabel)
-        configureSecondaryLabel(disabledAppsLabel)
-        configureSecondaryLabel(suggestionDecisionLabel)
-        configureSecondaryLabel(suggestionDecisionDetailLabel)
-        privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(controlDetailLabel)
-        configureSecondaryLabel(diagnosticsStatusLabel)
-        configureSecondaryLabel(rawContentStatusLabel)
-        configureSecondaryLabel(visiblePageContextStatusLabel)
-        configureSecondaryLabel(personalCaptureStatusLabel)
-        configureSecondaryLabel(personalCaptureDetailLabel)
-        configureSecondaryLabel(privacySharingStatusLabel)
-        configureSecondaryLabel(localOnlyProofLabel)
-        configureSecondaryLabel(learningStatusLabel)
-        configureSecondaryLabel(screenRecordingPermissionLabel)
-        privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
-        privacyPathLabel.textColor = .secondaryLabelColor
-        privacyPathLabel.lineBreakMode = .byTruncatingMiddle
-        privacyPathLabel.maximumNumberOfLines = 1
-        privacyPathLabel.preferredMaxLayoutWidth = 470
-        feedbackLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(feedbackDetailLabel)
-        shortcutLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(shortcutAcceptAllLabel)
-        configureSecondaryLabel(shortcutConflictLabel)
-        configureSecondaryLabel(shortcutConflictDetailLabel)
-        configureSecondaryLabel(shortcutPerAppProfileLabel)
-        acceptAllShortcutLabel.font = NSFont.systemFont(ofSize: 12)
-        acceptAllShortcutLabel.textColor = .secondaryLabelColor
-        aggressivenessLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        configureSecondaryLabel(aggressivenessDetailLabel)
+
         configureSecondaryLabel(boringGuardrailLabel)
         maxWordsLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(maxWordsDetailLabel)
@@ -1772,318 +1712,174 @@ final class SettingsWindowController: NSObject {
         configureSecondaryLabel(confidenceDetailLabel)
         learningRestraintLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(learningRestraintDetailLabel)
+        configureSecondaryLabel(placementDetailLabel)
+        configureSecondaryLabel(advancedAccessibilityLabel)
+        configureSecondaryLabel(advancedDiagnosticsLabel)
+        privacyPathLabel.font = NSFont.systemFont(ofSize: 11)
+        privacyPathLabel.textColor = .secondaryLabelColor
+        privacyPathLabel.lineBreakMode = .byTruncatingMiddle
+        privacyPathLabel.maximumNumberOfLines = 1
+        privacyPathLabel.preferredMaxLayoutWidth = layoutStyle.secondaryLabelMaxWidth
 
-        let requestButton = NSButton(title: "Allow Accessibility", target: self, action: #selector(requestAccessibility))
-        requestButton.bezelStyle = .rounded
-        let openSettingsButton = NSButton(
-            title: "Open Privacy Settings",
-            target: self,
-            action: #selector(openAccessibilitySettingsPane)
-        )
-        openSettingsButton.bezelStyle = .rounded
+        configureButton(practicePrimaryButton, #selector(runPracticePrimaryAction))
+        configureButton(practicePauseButton, #selector(runPracticePauseAction))
+        configureButton(practiceDeleteTracesButton, #selector(runPracticeDeleteTracesAction))
+
         togglePauseButton.target = self
         togglePauseButton.action = #selector(togglePause)
-        togglePauseButton.toolTip = "Turns suggestions on or off immediately."
-        pause15MinutesButton.target = self
-        pause15MinutesButton.action = #selector(pauseFor15MinutesControl)
-        pause15MinutesButton.bezelStyle = .rounded
-        pause1HourButton.target = self
-        pause1HourButton.action = #selector(pauseFor1HourControl)
-        pause1HourButton.bezelStyle = .rounded
-        pauseUntilTomorrowButton.target = self
-        pauseUntilTomorrowButton.action = #selector(pauseUntilTomorrowControl)
-        pauseUntilTomorrowButton.bezelStyle = .rounded
+        togglePauseButton.toolTip = "Turns suggestions on or off right away."
+        configureButton(pause15MinutesButton, #selector(pauseFor15MinutesControl))
+        configureButton(pause1HourButton, #selector(pauseFor1HourControl))
+        configureButton(pauseUntilTomorrowButton, #selector(pauseUntilTomorrowControl))
         pauseUntilTomorrowButton.toolTip = "Pauses suggestions everywhere until tomorrow."
-        silenceFieldButton.target = self
-        silenceFieldButton.action = #selector(silenceFieldControl)
-        silenceFieldButton.bezelStyle = .rounded
-        silenceFieldButton.toolTip = "Stops suggestions only in the current field until focus changes."
-        runtimeActionButton.target = self
-        runtimeActionButton.action = #selector(runRuntimeAction)
-        runtimeActionButton.bezelStyle = .rounded
-        practicePrimaryButton.target = self
-        practicePrimaryButton.action = #selector(runPracticePrimaryAction)
-        practicePrimaryButton.bezelStyle = .rounded
-        practicePauseButton.target = self
-        practicePauseButton.action = #selector(runPracticePauseAction)
-        practicePauseButton.bezelStyle = .rounded
-        practiceDeleteTracesButton.target = self
-        practiceDeleteTracesButton.action = #selector(runPracticeDeleteTracesAction)
-        practiceDeleteTracesButton.bezelStyle = .rounded
+
         toggleCurrentAppButton.target = self
         toggleCurrentAppButton.action = #selector(toggleCurrentAppControl)
-        toggleCurrentAppButton.toolTip = "Adds or removes the current app from your blocked-app list."
-        forceMirrorModeButton.target = self
-        forceMirrorModeButton.action = #selector(toggleCurrentAppMirrorModeControl)
-        forceMirrorModeButton.bezelStyle = .rounded
-        forceMirrorModeButton.toolTip = "Uses the floating backup for this app, or returns to its default placement."
-        startAppProofButton.target = self
-        startAppProofButton.action = #selector(startAppProofControl)
-        startAppProofButton.bezelStyle = .rounded
-        startAppProofButton.toolTip = "Starts a local app check and opens Diagnostics."
-        copyProofCommandButton.target = self
-        copyProofCommandButton.action = #selector(copyProofCommandControl)
-        copyProofCommandButton.bezelStyle = .rounded
-        copyProofCommandButton.toolTip = "Copies the local check command for the current app."
-        enableAllAppsButton.target = self
-        enableAllAppsButton.action = #selector(enableAllAppsControl)
-        enableAllAppsButton.bezelStyle = .rounded
+        toggleCurrentAppButton.toolTip = "Pauses or resumes suggestions in the app you’re using now."
+        configureButton(silenceFieldButton, #selector(silenceFieldControl))
+        silenceFieldButton.toolTip = "Stops suggestions only in this field until you move on."
+        configureButton(enableAllAppsButton, #selector(enableAllAppsControl))
         enableAllAppsButton.toolTip = "Resumes every app you paused in SteadyType."
-        toggleTracingButton.target = self
-        toggleTracingButton.action = #selector(toggleTracingControl)
-        toggleTracingButton.toolTip = "Pauses diagnostics recording only. Suggestions use the Suggestion controls."
-        toggleRawTraceButton.target = self
-        toggleRawTraceButton.action = #selector(toggleRawTraceControl)
-        toggleRawTraceButton.toolTip = "Off by default. Turn on only when support asks for local raw-text logs."
-        toggleScreenshotTraceButton.target = self
-        toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
-        toggleScreenshotTraceButton.toolTip = "Saves local screenshots for placement checks."
-        toggleVisiblePageContextButton.target = self
-        toggleVisiblePageContextButton.action = #selector(toggleVisiblePageContextControl)
-        toggleVisiblePageContextButton.toolTip = "Uses local OCR around the active editor as extra suggestion context."
-        togglePersonalCaptureButton.target = self
-        togglePersonalCaptureButton.action = #selector(togglePersonalCaptureControl)
-        togglePersonalCaptureButton.toolTip = "Justin dogfood only. Saves daily Markdown locally."
-        revealPersonalCaptureButton.target = self
-        revealPersonalCaptureButton.action = #selector(revealPersonalCaptureControl)
-        revealPersonalCaptureButton.bezelStyle = .rounded
-        deletePersonalCaptureButton.target = self
-        deletePersonalCaptureButton.action = #selector(deletePersonalCaptureControl)
-        deletePersonalCaptureButton.bezelStyle = .rounded
-        deleteLocalLogsButton.target = self
-        deleteLocalLogsButton.action = #selector(deleteLocalLogsControl)
-        deleteLocalLogsButton.bezelStyle = .rounded
-        clearLearningDataButton.target = self
-        clearLearningDataButton.action = #selector(clearLearningDataControl)
-        clearLearningDataButton.bezelStyle = .rounded
-        exportPrivacyBundleButton.target = self
-        exportPrivacyBundleButton.action = #selector(exportPrivacyBundleControl)
-        exportPrivacyBundleButton.bezelStyle = .rounded
-        cycleAcceptAllShortcutButton.target = self
-        cycleAcceptAllShortcutButton.action = #selector(cycleAcceptAllShortcutControl)
-        cycleAcceptAllShortcutButton.bezelStyle = .rounded
+
         acceptAllShortcutPopup.target = self
         acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
+
+        toggleVisiblePageContextButton.target = self
+        toggleVisiblePageContextButton.action = #selector(toggleVisiblePageContextControl)
+        toggleVisiblePageContextButton.toolTip = "Reads nearby on-screen text on your Mac to make suggestions fit better."
+        configureButton(clearLearningDataButton, #selector(clearLearningDataControl))
+        toggleTracingButton.target = self
+        toggleTracingButton.action = #selector(toggleTracingControl)
+        toggleTracingButton.toolTip = "Keeps a local activity log. It never includes your text."
+        configureButton(exportPrivacyBundleButton, #selector(exportPrivacyBundleControl))
+        configureButton(deleteLocalLogsButton, #selector(deleteLocalLogsControl))
+
+        configureButton(runtimeActionButton, #selector(runRuntimeAction))
+        configureButton(resetTuningButton, #selector(resetTuningControl))
+        configureButton(placementButton, #selector(toggleCurrentAppMirrorModeControl))
+        placementButton.toolTip = "Switch between inline ghost text and a small floating box for this app."
+        configureButton(requestPermissionButton, #selector(requestAccessibility))
+        configureButton(openAccessibilitySettingsButton, #selector(openAccessibilitySettingsPane))
+        toggleRawTraceButton.target = self
+        toggleRawTraceButton.action = #selector(toggleRawTraceControl)
+        toggleRawTraceButton.toolTip = "Off by default. Turn on only when support asks for a log that includes your exact text."
+        toggleScreenshotTraceButton.target = self
+        toggleScreenshotTraceButton.action = #selector(toggleScreenshotTraceControl)
+        toggleScreenshotTraceButton.toolTip = "Saves local screenshots to check where suggestions appear."
+
         configureSlider(
             aggressivenessSlider,
             minimumValue: SuggestionTuning.minimumAggressivenessLevel,
             maximumValue: SuggestionTuning.maximumAggressivenessLevel,
             action: #selector(changeAggressivenessSlider)
         )
-        aggressivenessSlider.toolTip = "Adjusts how quickly and how often suggestions appear."
+        aggressivenessSlider.toolTip = "How quickly and how often suggestions appear."
         configureSlider(
             maxWordsSlider,
             minimumValue: CompletionModelPolicy.minimumVisibleWords,
             maximumValue: CompletionModelPolicy.maximumVisibleWords,
             action: #selector(changeMaxWordsSlider)
         )
-        maxWordsSlider.toolTip = "Sets the longest suggestion the app is allowed to show."
+        maxWordsSlider.toolTip = "The longest suggestion SteadyType will show."
         configureSlider(
             wordStartSlider,
             minimumValue: SuggestionTuning.minimumWordStartCharacters,
             maximumValue: SuggestionTuning.maximumWordStartCharacters,
             action: #selector(changeWordStartSlider)
         )
-        wordStartSlider.toolTip = "Sets how many typed letters are needed before word-completion suggestions."
+        wordStartSlider.toolTip = "How many letters you type before word hints appear."
         configureSlider(
             phraseStartSlider,
             minimumValue: SuggestionTuning.minimumPhraseStartWords,
             maximumValue: SuggestionTuning.maximumPhraseStartWords,
             action: #selector(changePhraseStartSlider)
         )
-        phraseStartSlider.toolTip = "Sets how many words are needed before phrase suggestions."
+        phraseStartSlider.toolTip = "How many words you type before phrase hints appear."
         configureSlider(
             responseSpeedSlider,
             minimumValue: SuggestionTuning.minimumResponseSpeedLevel,
             maximumValue: SuggestionTuning.maximumResponseSpeedLevel,
             action: #selector(changeResponseSpeedSlider)
         )
-        responseSpeedSlider.toolTip = "Sets how long SteadyType waits after typing before asking for suggestions."
+        responseSpeedSlider.toolTip = "How long SteadyType waits after you stop typing."
         configureSlider(
             confidenceSlider,
             minimumValue: SuggestionTuning.minimumConfidenceLevel,
             maximumValue: SuggestionTuning.maximumConfidenceLevel,
             action: #selector(changeConfidenceSlider)
         )
-        confidenceSlider.toolTip = "Sets how strong a guess must be before it appears."
+        confidenceSlider.toolTip = "How sure a guess must be before it appears."
         configureSlider(
             learningRestraintSlider,
             minimumValue: SuggestionTuning.minimumLearningRestraintLevel,
             maximumValue: SuggestionTuning.maximumLearningRestraintLevel,
             action: #selector(changeLearningRestraintSlider)
         )
-        learningRestraintSlider.toolTip = "Sets how much ignored/deleted history can hide future suggestions."
+        learningRestraintSlider.toolTip = "How much your past choices hide future suggestions."
+    }
 
-        [
-            title,
-            makeSection(
-                title: "First Run",
-                views: [
-                    firstRunTrustLabel,
-                    firstRunTrustDetailLabel,
-                    firstRunTrustQuickStartLabel,
-                    firstRunTrustAppsLabel
-                ]
-            ),
-            makeSection(
-                title: "Access",
-                views: [
-                    permissionLabel,
-                    permissionDetailLabel,
-                    makeButtonRow([requestButton, openSettingsButton])
-                ]
-            ),
-            makeSection(
-                title: "Trust",
-                views: [
-                    trustLabel,
-                    trustLocalModeLabel,
-                    trustTypedTextLabel,
-                    trustCurrentSurfaceLabel,
-                    trustWhyLabel
-                ]
-            ),
-            makeSection(
-                title: "Local Model",
-                views: [
-                    runtimeLabel,
-                    runtimeDetailLabel,
-                    runtimeActionLabel,
-                    makeButtonRow([runtimeActionButton]),
-                    modelInstallStatusLabel,
-                    runtimeTargetLabel,
-                    modelDirectoryLabel
-                ]
-            ),
-            makeSection(
-                title: "Practice",
-                views: [
-                    practiceLabel,
-                    practiceDetailLabel,
-                    practiceModelLabel,
-                    practiceTextEditLabel,
-                    practiceStepsLabel,
-                    makeButtonRow([practicePrimaryButton, practicePauseButton, practiceDeleteTracesButton])
-                ]
-            ),
-            makeSection(
-                title: "Suggestions",
-                views: [
-                    controlLabel,
-                    controlDetailLabel,
-                    togglePauseButton,
-                    makeButtonRow([pause15MinutesButton, pause1HourButton, pauseUntilTomorrowButton]),
-                    fieldControlLabel,
-                    fieldControlDetailLabel,
-                    makeButtonRow([silenceFieldButton]),
-                    suggestionDecisionLabel,
-                    suggestionDecisionDetailLabel,
-                    firstRunLabel
-                ]
-            ),
-            makeSection(
-                title: "Apps",
-                views: [
-                    currentAppLabel,
-                    currentAppDetailLabel,
-                    currentAppSupportLabel,
-                    currentAppModeLabel,
-                    currentAppAcceptanceLabel,
-                    currentAppFallbackLabel,
-                    currentAppProofLabel,
-                    currentAppProofCommandLabel,
-                    makeButtonRow([forceMirrorModeButton, startAppProofButton, copyProofCommandButton]),
-                    toggleCurrentAppButton,
-                    makeButtonRow([disabledAppsLabel, enableAllAppsButton])
-                ]
-            ),
-            makeSection(
-                title: "Privacy and Diagnostics",
-                views: [
-                    privacyLabel,
-                    diagnosticsStatusLabel,
-                    rawContentStatusLabel,
-                    visiblePageContextStatusLabel,
-                    personalCaptureStatusLabel,
-                    personalCaptureDetailLabel,
-                    privacySharingStatusLabel,
-                    localOnlyProofLabel,
-                    screenRecordingPermissionLabel,
-                    toggleTracingButton,
-                    toggleRawTraceButton,
-                    toggleScreenshotTraceButton,
-                    toggleVisiblePageContextButton,
-                    togglePersonalCaptureButton,
-                    makeButtonRow([revealPersonalCaptureButton, deletePersonalCaptureButton]),
-                    learningStatusLabel,
-                    privacyPathLabel,
-                    feedbackLabel,
-                    feedbackDetailLabel,
-                    makeButtonRow([exportPrivacyBundleButton, deleteLocalLogsButton, clearLearningDataButton])
-                ]
-            ),
-            makeSection(
-                title: "Keyboard",
-                views: [
-                    shortcutLabel,
-                    shortcutAcceptAllLabel,
-                    shortcutConflictLabel,
-                    shortcutConflictDetailLabel,
-                    shortcutPerAppProfileLabel,
-                    makeButtonRow([acceptAllShortcutLabel, acceptAllShortcutPopup, cycleAcceptAllShortcutButton])
-                ]
-            ),
-            makeSection(
-                title: "Tuning",
-                views: [
-                    aggressivenessLabel,
-                    aggressivenessDetailLabel,
-                    boringGuardrailLabel,
-                    aggressivenessSlider,
-                    maxWordsLabel,
-                    maxWordsDetailLabel,
-                    maxWordsSlider,
-                    wordStartLabel,
-                    wordStartDetailLabel,
-                    wordStartSlider,
-                    phraseStartLabel,
-                    phraseStartDetailLabel,
-                    phraseStartSlider,
-                    responseSpeedLabel,
-                    responseSpeedDetailLabel,
-                    responseSpeedSlider,
-                    confidenceLabel,
-                    confidenceDetailLabel,
-                    confidenceSlider,
-                    learningRestraintLabel,
-                    learningRestraintDetailLabel,
-                    learningRestraintSlider
-                ]
-            )
-        ].forEach {
-            stack.addArrangedSubview($0)
+    private func makeScrollingStack(_ sections: [NSView], primaryScroll: Bool = false) -> NSView {
+        let stack = NSStackView(views: sections)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = layoutStyle.sectionSpacing
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let scrollView: NSScrollView
+        let documentView: NSView
+        if primaryScroll {
+            scrollView = contentScrollView
+            documentView = scrollDocumentView
+        } else {
+            scrollView = NSScrollView()
+            documentView = FlippedSettingsDocumentView()
         }
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.verticalScrollElasticity = .allowed
+        scrollView.horizontalScrollElasticity = .none
 
-        contentView.addSubview(contentScrollView)
-        scrollDocumentView.addSubview(stack)
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
+        documentView.addSubview(stack)
 
+        let insets = layoutStyle.contentInsets
         NSLayoutConstraint.activate([
-            contentScrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            contentScrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            contentScrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            contentScrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            documentView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
 
-            scrollDocumentView.leadingAnchor.constraint(equalTo: contentScrollView.contentView.leadingAnchor),
-            scrollDocumentView.trailingAnchor.constraint(equalTo: contentScrollView.contentView.trailingAnchor),
-            scrollDocumentView.topAnchor.constraint(equalTo: contentScrollView.contentView.topAnchor),
-            scrollDocumentView.widthAnchor.constraint(equalTo: contentScrollView.contentView.widthAnchor),
-            scrollDocumentView.heightAnchor.constraint(greaterThanOrEqualTo: contentScrollView.contentView.heightAnchor),
-
-            stack.leadingAnchor.constraint(equalTo: scrollDocumentView.leadingAnchor, constant: layoutStyle.contentInsets.left),
-            stack.trailingAnchor.constraint(equalTo: scrollDocumentView.trailingAnchor, constant: -layoutStyle.contentInsets.right),
-            stack.topAnchor.constraint(equalTo: scrollDocumentView.topAnchor, constant: layoutStyle.contentInsets.top),
-            stack.bottomAnchor.constraint(equalTo: scrollDocumentView.bottomAnchor, constant: -layoutStyle.contentInsets.bottom)
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: insets.left),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -insets.right),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 4),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -insets.bottom)
         ])
+
+        return scrollView
+    }
+
+    private func makeTabItem(label: String, view: NSView) -> NSTabViewItem {
+        let item = NSTabViewItem(identifier: label)
+        item.label = label
+        // NSTabView sizes its item views with the autoresizing mask, so the container must
+        // be frame-driven; the scroll view inside it then resolves with Auto Layout.
+        let container = NSView(frame: NSRect(origin: .zero, size: layoutStyle.preferredContentSize))
+        container.autoresizingMask = [.width, .height]
+        container.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            view.topAnchor.constraint(equalTo: container.topAnchor),
+            view.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        item.view = container
+        return item
     }
 
     private func fitWindowInsideVisibleScreen() {
@@ -2120,8 +1916,14 @@ final class SettingsWindowController: NSObject {
         label.preferredMaxLayoutWidth = maxWidth
     }
 
+    private func configureButton(_ button: NSButton, _ action: Selector) {
+        button.target = self
+        button.action = action
+        button.bezelStyle = .rounded
+    }
+
     private func makeSection(title: String, views: [NSView]) -> NSStackView {
-        let titleLabel = NSTextField(labelWithString: title)
+        let titleLabel = NSTextField(labelWithString: title.uppercased())
         titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         titleLabel.textColor = .secondaryLabelColor
 
@@ -2167,6 +1969,12 @@ final class SettingsWindowController: NSObject {
             acceptAllShortcutPopup.lastItem?.representedObject = shortcut.rawValue
         }
         acceptAllShortcutPopup.selectItem(withTitle: selected.displayName)
+    }
+
+    @objc
+    private func changeTab() {
+        let index = max(0, min(tabSelector.selectedSegment, tabView.numberOfTabViewItems - 1))
+        tabView.selectTabViewItem(at: index)
     }
 
     @objc
@@ -2256,29 +2064,6 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
-    private func startAppProofControl() {
-        performStartAppProofAction()
-    }
-
-    func performStartAppProofAction() {
-        startCurrentAppProof()
-    }
-
-    func copyCurrentProofCommand(to pasteboard: NSPasteboard = .general) {
-        guard let currentProofCommandClipboardText else {
-            return
-        }
-
-        pasteboard.clearContents()
-        pasteboard.setString(currentProofCommandClipboardText, forType: .string)
-    }
-
-    @objc
-    private func copyProofCommandControl() {
-        copyCurrentProofCommand()
-    }
-
-    @objc
     private func enableAllAppsControl() {
         enableAllApps()
     }
@@ -2304,21 +2089,6 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
-    private func togglePersonalCaptureControl() {
-        togglePersonalCapture()
-    }
-
-    @objc
-    private func revealPersonalCaptureControl() {
-        revealPersonalCaptureFolder()
-    }
-
-    @objc
-    private func deletePersonalCaptureControl() {
-        deletePersonalCapture()
-    }
-
-    @objc
     private func deleteLocalLogsControl() {
         deleteLocalLogs()
     }
@@ -2334,8 +2104,8 @@ final class SettingsWindowController: NSObject {
     }
 
     @objc
-    private func cycleAcceptAllShortcutControl() {
-        cycleAcceptAllShortcut()
+    private func resetTuningControl() {
+        resetSuggestionTuning()
     }
 
     @objc
