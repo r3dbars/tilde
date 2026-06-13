@@ -32,7 +32,7 @@ docs/product/manual-smoke-runs.md and lists remaining sub-10 scorecard gaps.
 It separates insertion proof from screenshot-backed visual placement proof so
 real-app visual gaps stay visible after insertion passes.
 Notes title, body, and checklist are separate proof targets.
-Obsidian default, theme, pane, and long-note lanes are separate beta proof
+Obsidian stock default launch, theme, pane, and long-note lanes are separate beta proof
 targets.
 Chrome beta proof is limited to local textarea and contenteditable fixtures.
 Focused graduation decisions are printed separately so blocked or
@@ -50,7 +50,7 @@ declare -a APPS=(
   "Notes title|Notes|com.apple.Notes|full|notes-title|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-title --manual-gate"
   "Notes body|Notes|com.apple.Notes|full|notes-body|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-body --manual-gate"
   "Notes checklist|Notes|com.apple.Notes|full|notes-checklist|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist --manual-gate"
-  "Obsidian|Obsidian|md.obsidian|full|default|script/manual_smoke_session.sh obsidian --visual"
+  "Obsidian stock|Obsidian|md.obsidian|full|obsidian-stock|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
   "Obsidian theme|Obsidian|md.obsidian|full|obsidian-theme|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-theme --manual-gate"
   "Obsidian panes|Obsidian|md.obsidian|full|obsidian-pane|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-pane --manual-gate"
   "Obsidian long note|Obsidian|md.obsidian|full|obsidian-long-note|AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-long-note --manual-gate"

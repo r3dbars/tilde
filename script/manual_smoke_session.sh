@@ -36,7 +36,7 @@ a pass row to docs/product/manual-smoke-runs.md.
 
 Notes proof must be recorded as notes-title, notes-body, notes-checklist,
 their notes-*-undo variants, or explicit Notes variant lanes.
-Obsidian proof must keep default, theme, pane, long-note, font-zoom,
+Obsidian proof must keep stock default launch, theme, pane, long-note, font-zoom,
 markdown-bold, markdown-list, multiline, and run-on variants separate before
 the app can graduate past partial proof.
 Use --visual when the trace slice must include strict screenshot evidence.
@@ -526,6 +526,9 @@ case "$APP" in
     DISPLAY_NAME="Obsidian"
     EXPECTED_RENDER="floatingMirror"
     case "$PROOF_LABEL" in
+      obsidian-stock)
+        OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-default}"
+        ;;
       obsidian-theme)
         OBSIDIAN_VARIANT="${OBSIDIAN_VARIANT:-theme}"
         ;;
@@ -554,9 +557,13 @@ case "$APP" in
 
     case "$OBSIDIAN_VARIANT" in
       ""|default)
-        PROOF_LABEL="default"
+        if [[ "$PROOF_LABEL" == "obsidian-stock" ]]; then
+          PROOF_LABEL="obsidian-stock"
+        else
+          PROOF_LABEL="default"
+        fi
         SESSION_NAME="Obsidian"
-        STEPS=$'- Open a disposable Obsidian note in the proof vault.\n- Type a partial word like `dicta`.\n- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.\n- If a real caret-bound suggestion appears, use Tab once, then the configured full-accept shortcut.'
+        STEPS=$'- Open a disposable Obsidian note in the proof vault using a normal stock Obsidian launch with no `--force-renderer-accessibility` flag.\n- Type a partial word like `dicta`.\n- If CodeMirror does not expose caret bounds, confirm no detached floating bubble appears.\n- If a real caret-bound suggestion appears, use Tab once, then the configured full-accept shortcut.'
         ;;
       theme)
         PROOF_LABEL="obsidian-theme"
