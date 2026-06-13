@@ -22,6 +22,7 @@ MLX_MODEL_BY_NAME = {
     "qwen3-0.6b": "mlx-community/Qwen3-0.6B-4bit",
     "qwen3 1.7b": "mlx-community/Qwen3-1.7B-4bit",
     "qwen3-1.7b": "mlx-community/Qwen3-1.7B-4bit",
+    "qwen3-1.7b-base": "mlx-community/Qwen3-1.7B-4bit",
     "small-draft-1b": "mlx-community/Qwen3-1.7B-4bit",
     "qwen3.5 4b": "mlx-community/Qwen3.5-4B-MLX-4bit",
     "qwen3.5-4b": "mlx-community/Qwen3.5-4B-MLX-4bit",
@@ -102,6 +103,11 @@ def mlx_model_name(requested_model: str) -> str:
 
 
 def prompt_text(payload: dict[str, str]) -> str:
+    if prompt_template(payload) == "raw_completion":
+        raw_prompt = payload.get("rawPrompt") or payload.get("raw_prompt")
+        if raw_prompt:
+            return raw_prompt.strip()
+
     user = payload.get("user", "").strip()
     if bool(payload.get("promptIsBuilt") or payload.get("prompt_is_built")):
         return user
@@ -112,6 +118,9 @@ def prompt_text(payload: dict[str, str]) -> str:
 
 
 def system_prompt_text(payload: dict[str, str]) -> str:
+    if prompt_template(payload) == "raw_completion":
+        return ""
+
     system = payload.get("system", "").strip()
     if bool(payload.get("promptIsBuilt") or payload.get("prompt_is_built")):
         return system
@@ -146,6 +155,11 @@ def system_prompt_text(payload: dict[str, str]) -> str:
             "Return <NO_SUGGESTION> for passwords, secrets, private fields, search fields, terminal punctuation, weak guesses, new topics, full-sentence answers, or list markers.",
         ]
     return "\n".join([system, *rules]).strip()
+
+
+def prompt_template(payload: dict[str, str]) -> str:
+    template = str(payload.get("template") or payload.get("promptTemplate") or "").strip().lower()
+    return template or "chat_instruct"
 
 
 def run_command(command: list[str], timeout: float) -> str:
@@ -210,9 +224,17 @@ def run_litert(prompt: str, max_tokens: int, timeout: float) -> str:
     )
 
 
-def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float, requested_model: str) -> str:
+def run_mlx(
+    prompt: str,
+    system_prompt: str,
+    max_tokens: int,
+    timeout: float,
+    requested_model: str,
+    template: str = "chat_instruct",
+) -> str:
     executable = candidate_executable("AUTOCOMPLETE_LAB_MLX_BIN", ["mlx_lm.generate"])
     model = mlx_model_name(requested_model)
+    uses_raw_completion = template == "raw_completion"
 
     if executable:
         command = [
@@ -221,10 +243,6 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float, re
             model,
             "--prompt",
             prompt,
-            "--system-prompt",
-            system_prompt,
-            "--chat-template-config",
-            json.dumps({"enable_thinking": False}),
             "--max-tokens",
             str(max_tokens),
             "--temp",
@@ -245,10 +263,6 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float, re
             model,
             "--prompt",
             prompt,
-            "--system-prompt",
-            system_prompt,
-            "--chat-template-config",
-            json.dumps({"enable_thinking": False}),
             "--max-tokens",
             str(max_tokens),
             "--temp",
@@ -256,6 +270,14 @@ def run_mlx(prompt: str, system_prompt: str, max_tokens: int, timeout: float, re
             "--verbose",
             "False",
         ]
+
+    if not uses_raw_completion:
+        command.extend([
+            "--system-prompt",
+            system_prompt,
+            "--chat-template-config",
+            json.dumps({"enable_thinking": False}),
+        ])
 
     return run_command(command, timeout=timeout)
 
@@ -276,6 +298,7 @@ def main() -> int:
 
     prompt = prompt_text(payload)
     system_prompt = system_prompt_text(payload)
+    template = prompt_template(payload)
     timeout = float(os.environ.get("AUTOCOMPLETE_LAB_RUNTIME_TIMEOUT", "8"))
     backend = os.environ.get("AUTOCOMPLETE_LAB_RUNTIME_BACKEND", "auto").lower()
 
@@ -287,7 +310,7 @@ def main() -> int:
                 print(run_litert(prompt, args.max_tokens, timeout))
                 return 0
             if candidate == "mlx":
-                print(run_mlx(prompt, system_prompt, args.max_tokens, timeout, args.model))
+                print(run_mlx(prompt, system_prompt, args.max_tokens, timeout, args.model, template))
                 return 0
             errors.append(f"{candidate}: unsupported backend")
         except Exception as error:
