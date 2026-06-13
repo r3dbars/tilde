@@ -3,8 +3,8 @@ import Testing
 
 @Suite("Claude Code terminal-host proof policy")
 struct ClaudeCodeTerminalHostProofPolicyTests {
-    @Test("Terminal-host proof requires an explicit proof marker")
-    func terminalHostProofRequiresExplicitProofMarker() {
+    @Test("Terminal-host proof allows Claude Code title without explicit proof marker")
+    func terminalHostProofAllowsClaudeCodeTitleWithoutExplicitProofMarker() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.apple.Terminal",
             windowTitle: "Claude Code",
@@ -12,11 +12,11 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             proofModeEnabled: true
         )
 
-        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.missingProofMarker))
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
     }
 
-    @Test("Terminal-host proof is blocked outside proof mode")
-    func terminalHostProofIsBlockedOutsideProofMode() {
+    @Test("Terminal-host proof no longer requires proof mode")
+    func terminalHostProofNoLongerRequiresProofMode() {
         let context = ClaudeCodeTerminalHostProofContext(
             hostBundleIdentifier: "com.mitchellh.ghostty",
             windowTitle: "AUTOCOMPLETE_LAB_CLAUDE_CODE_PROOF",
@@ -24,7 +24,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             proofModeEnabled: false
         )
 
-        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.proofModeRequired))
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .eligible)
     }
 
     @Test("Terminal-host proof rejects shell prompts with commands")
@@ -99,7 +99,7 @@ struct ClaudeCodeTerminalHostProofPolicyTests {
             proofModeEnabled: true
         )
 
-        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.missingProofMarker))
+        #expect(ClaudeCodeTerminalHostProofPolicy.evaluate(context) == .blocked(.shellPromptDetected))
     }
 
     @Test("Terminal-host proof accepts Claude Code title marker when AX exposes placeholder line")

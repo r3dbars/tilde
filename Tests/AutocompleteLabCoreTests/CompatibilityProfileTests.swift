@@ -101,20 +101,20 @@ struct CompatibilityProfileTests {
         #expect(store.profile(for: "com.openai.codex")?.isSensitive == false)
         #expect(store.profile(for: "com.openai.codex")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claude-code")?.displayName == "Claude Code")
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .diagnosticsOnly)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.graduationDecision == .diagnosticsOnly)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .disabled)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .disabled)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .disabled)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportLevel == .yellow)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.graduationDecision == .wordOnly)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.renderMode == .floatingMirror)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackRenderMode == .floatingMirror)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.insertionMode == .clipboardFallbackOptIn)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.fallbackInsertionMode == .keyEvents)
         #expect(store.profile(for: "com.anthropic.claude-code")?.fieldIdentityMode == .stableBounds)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.anchorLadder == [.none])
-        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == false)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.anchorLadder == [.caret])
+        #expect(store.profile(for: "com.anthropic.claude-code")?.supportsOneWordAcceptance == true)
         #expect(store.profile(for: "com.anthropic.claude-code")?.supportsFullAcceptance == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == false)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.canPresentSuggestions == true)
         #expect(store.profile(for: "com.anthropic.claude-code")?.allowsDetachedSuggestions == false)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == true)
-        #expect(store.profile(for: "com.anthropic.claude-code")?.promptAppSafetyMode == .disabled)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.isSensitive == false)
+        #expect(store.profile(for: "com.anthropic.claude-code")?.promptAppSafetyMode == .wordOnly)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.displayName == "Claude")
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.supportLevel == .yellow)
         #expect(store.profile(for: "com.anthropic.claudefordesktop")?.graduationDecision == .wordOnly)
@@ -160,20 +160,18 @@ struct CompatibilityProfileTests {
     func denylistedAppsAreBlocked() {
         let store = CompatibilityProfileStore.mvp
 
-        #expect(!store.allows(bundleIdentifier: "com.apple.Terminal"))
+        #expect(store.allows(bundleIdentifier: "com.apple.Terminal"))
         #expect(!store.allows(bundleIdentifier: "com.1password.1password"))
         #expect(!store.allows(bundleIdentifier: "com.apple.Passwords"))
     }
 
-    @Test("Raw-control developer apps are denylisted by default")
-    func rawControlDeveloperAppsAreDenylisted() {
+    @Test("Highest-risk developer and system apps stay denylisted by default")
+    func highestRiskDeveloperAndSystemAppsStayDenylisted() {
         let store = CompatibilityProfileStore.mvp
         let highRiskBundleIdentifiers = [
             "com.apple.dt.Xcode",
-            "com.microsoft.VSCode",
             "com.microsoft.VSCodeInsiders",
             "com.visualstudio.code.oss",
-            "com.todesktop.230313mzl4w4u92",
             "com.exafunction.windsurf",
             "com.jetbrains.intellij",
             "com.jetbrains.AppCode",
@@ -187,12 +185,7 @@ struct CompatibilityProfileTests {
             "com.jetbrains.rider",
             "com.jetbrains.DataSpell",
             "com.jetbrains.aqua",
-            "com.jetbrains.gateway",
-            "dev.warp.Warp",
-            "com.mitchellh.ghostty",
-            "net.kovidgoyal.kitty",
-            "org.alacritty",
-            "com.github.wez.wezterm"
+            "com.jetbrains.gateway"
         ]
 
         for bundleIdentifier in highRiskBundleIdentifiers {
@@ -201,12 +194,13 @@ struct CompatibilityProfileTests {
         }
     }
 
-    @Test("Unknown apps are not globally enabled during the MVP")
-    func unknownAppsAreNotEnabled() {
+    @Test("Unknown apps use the default-on generic profile")
+    func unknownAppsUseDefaultOnGenericProfile() {
         let store = CompatibilityProfileStore.mvp
 
-        #expect(!store.allows(bundleIdentifier: "com.example.UnknownEditor"))
-        #expect(store.profile(for: "com.example.UnknownEditor") == nil)
+        #expect(store.allows(bundleIdentifier: "com.example.UnknownEditor"))
+        #expect(store.profile(for: "com.example.UnknownEditor")?.displayName == "Generic App")
+        #expect(store.profile(for: "com.example.UnknownEditor")?.bundleIdentifier == "com.example.UnknownEditor")
         #expect(!store.allows(bundleIdentifier: "com.openai.atlas"))
     }
 
@@ -221,9 +215,9 @@ struct CompatibilityProfileTests {
     func supportStatusExplainsBlockedApps() {
         let store = CompatibilityProfileStore.mvp
 
-        #expect(store.supportStatus(for: "com.apple.Terminal") == .denylisted)
+        #expect(store.supportStatus(for: "com.apple.Terminal").summary == "yellow: Generic App")
         #expect(store.supportStatus(for: "com.openai.atlas").summary == "diagnostics only: ChatGPT Atlas")
-        #expect(store.supportStatus(for: "com.example.UnknownEditor") == .unsupported)
+        #expect(store.supportStatus(for: "com.example.UnknownEditor").summary == "yellow: Generic App")
         #expect(store.supportStatus(for: "com.apple.TextEdit").summary == "green: TextEdit")
         #expect(store.supportStatus(for: "com.apple.mail").summary == "diagnostics only: Mail")
     }
@@ -272,12 +266,12 @@ struct CompatibilityProfileTests {
         #expect(chatGPT.menuText(appDisplayName: "ChatGPT", isEnabled: true) == "ChatGPT diagnostics-only")
         #expect(!chatGPT.canToggleSuggestions)
 
-        let unsupported = store.supportStatus(for: "com.example.UnknownEditor")
-        #expect(unsupported.supportLevel == .unsupported)
-        #expect(unsupported.userFacingSummary == "Unsupported: not tested yet")
-        #expect(unsupported.userFacingReason == "No compatibility profile yet.")
-        #expect(unsupported.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown unsupported")
-        #expect(!unsupported.canToggleSuggestions)
+        let generic = store.supportStatus(for: "com.example.UnknownEditor")
+        #expect(generic.supportLevel == .yellow)
+        #expect(generic.userFacingSummary == "Yellow: Generic App")
+        #expect(generic.userFacingReason == "Default-on generic Accessibility path for apps without a custom profile.")
+        #expect(generic.menuText(appDisplayName: "Unknown", isEnabled: true) == "Unknown yellow on")
+        #expect(generic.canToggleSuggestions)
     }
 
     @Test("Profiles expose debug summaries with primary and fallback paths")
@@ -310,7 +304,7 @@ struct CompatibilityProfileTests {
         #expect(InsertionModePlan.modes(for: chrome) == [.axThenKeyEvents, .axValueReplacement])
         #expect(InsertionModePlan.modes(for: obsidian) == [.keyEvents])
         #expect(InsertionModePlan.modes(for: codex) == [.axValueReplacement])
-        #expect(InsertionModePlan.modes(for: claudeCode) == [])
+        #expect(InsertionModePlan.modes(for: claudeCode) == [.keyEvents])
         #expect(InsertionModePlan.modes(for: claude) == [.axValueReplacement])
         #expect(InsertionModePlan.modes(for: mail) == [])
 
@@ -332,9 +326,10 @@ struct CompatibilityProfileTests {
         #expect(codex.supportsFullAcceptance == true)
         #expect(codex.requiresNoSubmitAcceptanceProof == false)
         #expect(codex.canPresentSuggestions == true)
-        #expect(claudeCode.supportsOneWordAcceptance == false)
+        #expect(claudeCode.supportsOneWordAcceptance == true)
         #expect(claudeCode.supportsFullAcceptance == false)
-        #expect(claudeCode.canPresentSuggestions == false)
+        #expect(claudeCode.requiresNoSubmitAcceptanceProof == true)
+        #expect(claudeCode.canPresentSuggestions == true)
         #expect(claude.supportsOneWordAcceptance == true)
         #expect(claude.supportsFullAcceptance == false)
         #expect(claude.requiresNoSubmitAcceptanceProof == true)
@@ -351,17 +346,17 @@ struct CompatibilityProfileTests {
         #expect(codex.promptAppSafetyMode == .wordOnly)
         #expect(codex.allowsStrictVisualProofSyntheticCaretPlacement == true)
         #expect(claude.notes.contains("Same-slice one-word no-submit proof exists"))
-        #expect(claude.notes.contains("normal beta use"))
+        #expect(claude.notes.contains("Default-on Claude desktop"))
         #expect(claude.promptAppSafetyMode == .wordOnly)
         #expect(claude.allowsStrictVisualProofSyntheticCaretPlacement == true)
 
-        #expect(claudeCode.supportReason.contains("terminal host"))
-        #expect(claudeCode.notes.contains("terminal-host adapter"))
+        #expect(claudeCode.supportReason.contains("terminal-host adapter"))
+        #expect(claudeCode.notes.contains("terminal adapter"))
         #expect(claudeCode.allowsStrictVisualProofSyntheticCaretPlacement == false)
     }
 
-    @Test("Required prompt and chat apps are disabled except Codex dogfood")
-    func requiredPromptAndChatAppsAreDisabledExceptCodexDogfood() throws {
+    @Test("Required prompt and chat apps are disabled except dogfood targets")
+    func requiredPromptAndChatAppsAreDisabledExceptDogfoodTargets() throws {
         let store = CompatibilityProfileStore.mvp
         let codex = try #require(store.profile(for: "com.openai.codex"))
         #expect(codex.supportLevel == .yellow)
@@ -377,7 +372,6 @@ struct CompatibilityProfileTests {
             "com.openai.chat",
             "com.openai.ChatGPT",
             "com.openai.atlas",
-            "com.anthropic.claude-code",
             "com.tinyspeck.slackmacgap",
             "ru.keepcoder.Telegram"
         ]
@@ -400,6 +394,11 @@ struct CompatibilityProfileTests {
         #expect(messages.supportsOneWordAcceptance)
         #expect(!messages.supportsFullAcceptance)
         #expect(messages.requiresNoSubmitAcceptanceProof)
+
+        let claudeCode = try #require(store.profile(for: "com.anthropic.claude-code"))
+        #expect(claudeCode.graduationDecision == .wordOnly)
+        #expect(claudeCode.promptAppSafetyMode == .wordOnly)
+        #expect(claudeCode.canPresentSuggestions)
     }
 
     @Test("High-value writing surfaces have explicit graduation decisions")
@@ -417,6 +416,7 @@ struct CompatibilityProfileTests {
 
         let wordOnlyBundles = [
             "com.apple.MobileSMS",
+            "com.anthropic.claude-code",
             "com.anthropic.claudefordesktop"
         ]
         for bundleIdentifier in wordOnlyBundles {
@@ -443,9 +443,9 @@ struct CompatibilityProfileTests {
         }
 
         #expect(store.profiles["com.microsoft.VSCode"]?.graduationDecision == .blocked)
-        #expect(store.supportStatus(for: "com.microsoft.VSCode") == .denylisted)
+        #expect(store.supportStatus(for: "com.microsoft.VSCode").supportLevel == .diagnosticsOnly)
         #expect(store.profiles["com.todesktop.230313mzl4w4u92"]?.graduationDecision == .blocked)
-        #expect(store.supportStatus(for: "com.todesktop.230313mzl4w4u92") == .denylisted)
+        #expect(store.supportStatus(for: "com.todesktop.230313mzl4w4u92").supportLevel == .diagnosticsOnly)
     }
 
     @Test("Safety summaries expose the practical current-app stance")
@@ -455,7 +455,7 @@ struct CompatibilityProfileTests {
         let codex = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let mailStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.apple.mail")
         let atlasStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.openai.atlas")
-        let unsupportedStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.example.UnknownEditor")
+        let genericStatus = CompatibilityProfileStore.mvp.supportStatus(for: "com.example.UnknownEditor")
 
         #expect(
             textEdit.userFacingSafetySummary
@@ -472,8 +472,8 @@ struct CompatibilityProfileTests {
         #expect(mailStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(atlasStatus.userFacingSafetySummary == "Suggestions stay off here.")
         #expect(
-            unsupportedStatus.userFacingSafetySummary
-                == "Suggestions are intentionally off until this app has a compatibility profile."
+            genericStatus.userFacingSafetySummary
+                == "Inline when caret proof is trusted; mirror fallback if inline is unsafe. Insertion fails closed if the primary method is not verified."
         )
     }
 
@@ -583,12 +583,12 @@ struct CompatibilityProfileTests {
             for: claudeCode,
             supportsInlineSuggestions: true,
             hasMirrorAnchor: true
-        ) == nil)
+        ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: claudeCode,
             supportsInlineSuggestions: false,
             hasMirrorAnchor: true
-        ) == nil)
+        ) == .floatingMirror)
         #expect(RenderModePlan.effectiveMode(
             for: claude,
             supportsInlineSuggestions: true,

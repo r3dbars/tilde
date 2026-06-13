@@ -1726,9 +1726,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier) {
-            return activeAppProofBundleIdentifiers.contains(
-                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            )
+            return !disabledBundleIdentifiers.contains(app.bundleIdentifier)
         }
 
         return ProofModeAppEnablementPolicy(
@@ -1741,10 +1739,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func claudeCodeTerminalHostProofProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
-        guard ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(app.bundleIdentifier),
-              activeAppProofBundleIdentifiers.contains(
-                  ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-              ) else {
+        guard ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(app.bundleIdentifier) else {
             return nil
         }
 
@@ -2833,9 +2828,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let proofModeEnabled = activeAppProofBundleIdentifiers.contains(
             ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
         )
-        let shouldReadTerminalScreenText = proofModeEnabled
-            && (app.bundleIdentifier == "com.mitchellh.ghostty"
-                || !ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText))
+        let shouldReadTerminalScreenText = app.bundleIdentifier == "com.mitchellh.ghostty"
+            || !ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText)
         let terminalScreenText = shouldReadTerminalScreenText
             ? (accessibilityClient.focusedWindowText(for: app) ?? "")
             : ""
