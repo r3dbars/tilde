@@ -49,6 +49,72 @@ struct TypeThroughPrefixStateMachineTests {
         #expect(session.visibleSuggestion?.visibleText == "quickly")
     }
 
+    @Test("Typing next word plus a boundary consumes a one-word suggestion")
+    func typingNextWordPlusBoundaryConsumesOneWordSuggestion() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "ship", maxVisibleWords: 8)
+        )
+
+        let transition = machine.apply(
+            to: &session,
+            input: input(
+                baselineBefore: "We should ",
+                currentBefore: "We should ship "
+            )
+        )
+
+        #expect(transition == .survived(TypeThroughPrefixSurvival(
+            typedCharacterCount: 5,
+            remainingVisibleCharacterCount: 0,
+            consumedFullSuggestion: true
+        )))
+        #expect(!session.hasVisibleSuggestion)
+    }
+
+    @Test("Double-space word boundary advances without storing text")
+    func doubleSpaceWordBoundaryAdvancesWithoutStoringText() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: "ship quickly", maxVisibleWords: 8)
+        )
+
+        let transition = machine.apply(
+            to: &session,
+            input: input(
+                baselineBefore: "We should ",
+                currentBefore: "We should ship  "
+            )
+        )
+
+        #expect(transition == .survived(TypeThroughPrefixSurvival(
+            typedCharacterCount: 6,
+            remainingVisibleCharacterCount: 7,
+            consumedFullSuggestion: false
+        )))
+        #expect(session.visibleSuggestion?.visibleText == "quickly")
+    }
+
+    @Test("Punctuation then space can consume a punctuation suggestion")
+    func punctuationThenSpaceCanConsumePunctuationSuggestion() {
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: ",", maxVisibleWords: 8)
+        )
+
+        let transition = machine.apply(
+            to: &session,
+            input: input(
+                baselineBefore: "Wait",
+                currentBefore: "Wait, "
+            )
+        )
+
+        #expect(transition == .survived(TypeThroughPrefixSurvival(
+            typedCharacterCount: 2,
+            remainingVisibleCharacterCount: 0,
+            consumedFullSuggestion: true
+        )))
+        #expect(!session.hasVisibleSuggestion)
+    }
+
     @Test("Typed word boundary invalidates when the suggestion continues the word")
     func typedWordBoundaryInvalidatesWhenSuggestionContinuesWord() {
         var session = SuggestionSession(
@@ -241,6 +307,7 @@ struct TypeThroughPrefixStateMachineTests {
         #expect(transition.traceMetadata["typedThroughChars"] == "3")
         #expect(transition.traceMetadata["remainingVisibleChars"] == "9")
         #expect(transition.traceMetadata["typeThroughConsumedFullSuggestion"] == "false")
+        #expect(transition.traceMetadata["typeThroughConfidenceCredit"] == "true")
     }
 
     private func input(

@@ -15,6 +15,8 @@ public struct DisplayScore: Equatable, Sendable {
     public let acceptedAndKeptProbability: Double?
     public let acceptedAndKeptSampleCount: Int
     public let acceptedAndKeptUtilityAdjustment: Double
+    public let typeThroughSurvivalCount: Int
+    public let typeThroughConfidenceCredit: Double
 
     public init(
         utility: Double,
@@ -27,7 +29,9 @@ public struct DisplayScore: Equatable, Sendable {
         learningRestraint: Double = 0,
         acceptedAndKeptProbability: Double? = nil,
         acceptedAndKeptSampleCount: Int = 0,
-        acceptedAndKeptUtilityAdjustment: Double = 0
+        acceptedAndKeptUtilityAdjustment: Double = 0,
+        typeThroughSurvivalCount: Int = 0,
+        typeThroughConfidenceCredit: Double = 0
     ) {
         self.utility = Self.component(utility)
         self.styleFit = Self.component(styleFit)
@@ -43,6 +47,8 @@ public struct DisplayScore: Equatable, Sendable {
             acceptedAndKeptUtilityAdjustment,
             to: -1...1
         )
+        self.typeThroughSurvivalCount = max(0, typeThroughSurvivalCount)
+        self.typeThroughConfidenceCredit = Self.bounded(typeThroughConfidenceCredit, to: 0...0.30)
     }
 
     public var rawScore: Double {
@@ -54,6 +60,7 @@ public struct DisplayScore: Equatable, Sendable {
             - repetition
             - instability
             - learningRestraint
+            + typeThroughConfidenceCredit
     }
 
     public var finalScore: Double {
@@ -78,6 +85,10 @@ public struct DisplayScore: Equatable, Sendable {
             metadata["displayScoreAcceptedAndKeptSamples"] = String(acceptedAndKeptSampleCount)
             metadata["displayScoreAcceptedAndKeptUtilityAdjustment"] =
                 Self.format(acceptedAndKeptUtilityAdjustment)
+        }
+        if typeThroughSurvivalCount > 0 || typeThroughConfidenceCredit > 0 {
+            metadata["displayScoreTypeThroughSurvivals"] = String(typeThroughSurvivalCount)
+            metadata["displayScoreTypeThroughCredit"] = Self.format(typeThroughConfidenceCredit)
         }
         return metadata
     }

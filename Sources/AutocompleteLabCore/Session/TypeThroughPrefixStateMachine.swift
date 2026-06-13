@@ -35,6 +35,8 @@ public struct TypeThroughPrefixInput: Equatable, Sendable {
 }
 
 public struct TypeThroughPrefixSurvival: Equatable, Sendable {
+    public static let confidenceCreditCharacterThreshold = 3
+
     public let typedCharacterCount: Int
     public let remainingVisibleCharacterCount: Int
     public let consumedFullSuggestion: Bool
@@ -55,8 +57,13 @@ public struct TypeThroughPrefixSurvival: Equatable, Sendable {
             "typeThroughSurvival": "true",
             "typedThroughChars": String(typedCharacterCount),
             "remainingVisibleChars": String(remainingVisibleCharacterCount),
-            "typeThroughConsumedFullSuggestion": String(consumedFullSuggestion)
+            "typeThroughConsumedFullSuggestion": String(consumedFullSuggestion),
+            "typeThroughConfidenceCredit": String(qualifiesForConfidenceCredit)
         ]
+    }
+
+    public var qualifiesForConfidenceCredit: Bool {
+        typedCharacterCount >= Self.confidenceCreditCharacterThreshold
     }
 }
 
@@ -173,7 +180,32 @@ enum TypeThroughPrefixMatcher {
         }
 
         var suggestionIndex = suggestionText.startIndex
-        for typedCharacter in typedPrefix {
+        var typedIndex = typedPrefix.startIndex
+        while typedIndex < typedPrefix.endIndex {
+            let typedCharacter = typedPrefix[typedIndex]
+
+            if typedCharacter.isWhitespace {
+                let nextTypedIndex = typedPrefix.index(after: typedIndex)
+                if suggestionIndex == suggestionText.endIndex {
+                    typedIndex = consumeWhitespace(in: typedPrefix, from: nextTypedIndex)
+                    guard typedIndex == typedPrefix.endIndex else {
+                        return nil
+                    }
+                    return suggestionText.endIndex
+                }
+
+                guard suggestionText[suggestionIndex].isWhitespace else {
+                    return nil
+                }
+
+                typedIndex = consumeWhitespace(in: typedPrefix, from: nextTypedIndex)
+                suggestionIndex = consumeWhitespace(
+                    in: suggestionText,
+                    from: suggestionText.index(after: suggestionIndex)
+                )
+                continue
+            }
+
             guard suggestionIndex < suggestionText.endIndex else {
                 return nil
             }
@@ -183,9 +215,21 @@ enum TypeThroughPrefixMatcher {
             }
 
             suggestionIndex = suggestionText.index(after: suggestionIndex)
+            typedIndex = typedPrefix.index(after: typedIndex)
         }
 
         return suggestionIndex
+    }
+
+    private static func consumeWhitespace(
+        in value: String,
+        from startIndex: String.Index
+    ) -> String.Index {
+        var index = startIndex
+        while index < value.endIndex, value[index].isWhitespace {
+            index = value.index(after: index)
+        }
+        return index
     }
 
     private static func normalized(_ value: String) -> String {

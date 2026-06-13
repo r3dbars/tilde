@@ -614,7 +614,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func generateRawCompletionWithChatSession(
         container: ModelContainer,
-        prompt: CompletionPrompt,
+        prompt: FormattedCompletionPrompt,
         request: CompletionRequest,
         requestCleaner: CompletionOutputCleaner,
         requestMaxGeneratedTokens: Int,
@@ -692,7 +692,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func generateRawCompletionWithPromptKVCache(
         container: ModelContainer,
-        prompt: CompletionPrompt,
+        prompt: FormattedCompletionPrompt,
         request: CompletionRequest,
         requestCleaner: CompletionOutputCleaner,
         requestMaxGeneratedTokens: Int,

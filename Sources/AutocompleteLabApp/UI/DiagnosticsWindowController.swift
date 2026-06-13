@@ -374,6 +374,7 @@ final class DiagnosticsWindowController {
           presented: \(summary.presentedCount)
           accepted: \(summary.acceptedCount)
           typed through: \(summary.typedThroughCount)
+          type-through survival rate: \(Self.percent(summary.typeThroughSurvivalRate))
           typed over: \(summary.typedOverCount)
           ignored: \(summary.ignoredCount)
           suppressed: \(summary.suppressedCount)
