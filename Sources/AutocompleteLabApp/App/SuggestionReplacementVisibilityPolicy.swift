@@ -47,7 +47,7 @@ struct SuggestionReplacementVisibilityPolicy: Equatable {
         forDisplaySuppressionReason reason: DisplayScoreSuppressionReason?
     ) -> Bool {
         switch reason {
-        case .tooSlowToDisplay, .lowConfidence, .belowThreshold:
+        case .tooSlowToDisplay, .lowConfidence, .learnedRestraint, .belowThreshold:
             return true
         case .highRisk, .highRepetition, .highInstability, .lowAcceptedAndKeptProbability, nil:
             return false

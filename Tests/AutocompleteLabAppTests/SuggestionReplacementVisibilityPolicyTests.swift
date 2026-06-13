@@ -103,6 +103,17 @@ struct SuggestionReplacementVisibilityPolicyTests {
         ) == .keepCurrentVisible)
     }
 
+    @Test("Learned restraint display suppression keeps a fresh current suggestion visible")
+    func learnedRestraintDisplaySuppressionKeepsFreshCurrentSuggestionVisible() {
+        #expect(policy.action(
+            forDisplaySuppressionReason: .learnedRestraint,
+            hasVisibleSuggestion: true,
+            sameFieldAsCurrentSuggestion: true,
+            currentSuggestionAgeMilliseconds: 100,
+            maximumPreservedAgeMilliseconds: 5_000
+        ) == .keepCurrentVisible)
+    }
+
     @Test("Risky display suppression does not preserve the current suggestion")
     func riskyDisplaySuppressionDoesNotPreserveCurrentSuggestion() {
         #expect(policy.action(
