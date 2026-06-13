@@ -48,6 +48,33 @@ struct KeyboardEventTapConsumptionPolicyTests {
         #expect(!policy.shouldConsume(input(key: .tab, supportsOneWordAcceptance: false)))
     }
 
+    @Test("Tab autorepeat does not consume a replacement suggestion")
+    func tabAutorepeatDoesNotConsumeReplacementSuggestion() {
+        #expect(policy.shouldConsume(input(
+            key: .tab,
+            isAutorepeat: true,
+            visibleSuggestionID: "suggestion-one",
+            keyDownSuggestionID: "suggestion-one"
+        )))
+        #expect(!policy.shouldConsume(input(
+            key: .tab,
+            isAutorepeat: true,
+            visibleSuggestionID: "suggestion-two",
+            keyDownSuggestionID: "suggestion-one"
+        )))
+    }
+
+    @Test("Shift Tab accept-all still consumes the configured shortcut")
+    func shiftTabAcceptAllStillConsumesConfiguredShortcut() {
+        #expect(policy.shouldConsume(input(
+            key: .shiftTab,
+            supportsFullAcceptance: true,
+            acceptAllShortcut: .shiftTab,
+            visibleSuggestionID: "suggestion-one",
+            keyDownSuggestionID: "suggestion-one"
+        )))
+    }
+
     @Test("Prompt-safe profiles do not consume full accept shortcuts")
     func promptSafeProfilesDoNotConsumeFullAcceptShortcuts() {
         #expect(!policy.shouldConsume(input(
@@ -155,7 +182,10 @@ struct KeyboardEventTapConsumptionPolicyTests {
         supportsFullAcceptance: Bool = false,
         hasPendingAcceptedInsertionUndo: Bool = false,
         isInvalidatedByUserTyping: Bool = false,
-        acceptAllShortcut: AcceptAllShortcut = .shiftTab
+        acceptAllShortcut: AcceptAllShortcut = .shiftTab,
+        isAutorepeat: Bool = false,
+        visibleSuggestionID: String? = nil,
+        keyDownSuggestionID: String? = nil
     ) -> KeyboardEventTapConsumptionInput {
         KeyboardEventTapConsumptionInput(
             key: key,
@@ -164,7 +194,10 @@ struct KeyboardEventTapConsumptionPolicyTests {
             supportsFullAcceptance: supportsFullAcceptance,
             isInvalidatedByUserTyping: isInvalidatedByUserTyping,
             hasPendingAcceptedInsertionUndo: hasPendingAcceptedInsertionUndo,
-            acceptAllShortcut: acceptAllShortcut
+            acceptAllShortcut: acceptAllShortcut,
+            isAutorepeat: isAutorepeat,
+            visibleSuggestionID: visibleSuggestionID,
+            keyDownSuggestionID: keyDownSuggestionID
         )
     }
 }
