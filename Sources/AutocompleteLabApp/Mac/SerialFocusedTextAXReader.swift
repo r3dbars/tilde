@@ -31,6 +31,10 @@ enum FocusedTextReadOptionsPolicy {
             return .syntheticTextAreaFastPath
         }
 
+        if profile.appFamily == .electron {
+            return FocusedTextReadOptions(manualAccessibilityWakeAppFamily: .electron)
+        }
+
         return .standard
     }
 }
