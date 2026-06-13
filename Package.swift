@@ -26,6 +26,7 @@ let package = Package(
         )
     ],
     dependencies: [
+        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMajor(from: "0.31.3")),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", .upToNextMajor(from: "3.31.3")),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", .upToNextMajor(from: "0.9.0")),
         .package(url: "https://github.com/huggingface/swift-transformers.git", .upToNextMajor(from: "1.3.0"))
@@ -62,6 +63,7 @@ let package = Package(
             name: "AutocompleteLabApp",
             dependencies: [
                 "AutocompleteLabCore",
+                .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXVLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
