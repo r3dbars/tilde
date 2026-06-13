@@ -367,6 +367,10 @@ internal punctuation and newlines, so audit-shaped writing like `Before we
 ship, we should`, quick reply drafts, decision logs, review notes, and checklist
 continuations can hit the fast path instead of missing because of commas or list
 breaks.
+The live instant phrase order is now doc-local n-gram first, canned writing
+bridges second, and model refinement third. The doc-local corpus stays
+RAM-only per focused writing field, and traces keep only source and match-shape
+metadata such as `doc-local-ngram` and `order-5-local-context`.
 
 Fast typing bursts now keep the instant loop alive. Partial-word completions can
 still show during the type-accept-type loop, and phrase continuations get one
