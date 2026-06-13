@@ -58,4 +58,14 @@ struct CompletionPrefixTrimmerTests {
 
         #expect(trimmed == "ould keep going")
     }
+
+    @Test("Removes echoed Obsidian line prefix")
+    func removesEchoedObsidianLinePrefix() {
+        let trimmed = CompletionPrefixTrimmer.trim(
+            "Intelligence features are you're doing great",
+            after: "hey how are things going I would like to\n\nIntelligence features are"
+        )
+
+        #expect(trimmed == " you're doing great")
+    }
 }
