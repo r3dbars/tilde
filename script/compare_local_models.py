@@ -12,16 +12,18 @@ DEFAULT_MODEL_ROOT = Path.home() / "Library/Application Support/SteadyType/Model
 DEFAULT_ALIASES = [
     "qwen3-0.6b",
     "qwen3-1.7b",
+    "qwen3-1.7b-base",
     "qwen35-4b",
     "qwen35-9b",
     "gemma-4-e4b",
     "gemma-4-e4b-it-optiq",
     "gemma-4-26b",
 ]
-SMALL_DRAFT_LANE_ALIASES = ["qwen3-1.7b", "qwen35-4b"]
+SMALL_DRAFT_LANE_ALIASES = ["qwen3-1.7b-base", "qwen35-4b"]
 MODEL_PATHS = {
     "qwen3-0.6b": "Qwen3Small/MLX/qwen3-0.6b-4bit",
     "qwen3-1.7b": "Qwen3Medium/MLX/qwen3-1.7b-4bit",
+    "qwen3-1.7b-base": "Qwen3Medium/MLX/qwen3-1.7b-4bit",
     "small-draft-1b": "Qwen3Medium/MLX/qwen3-1.7b-4bit",
     "qwen35-4b": "Qwen35FourB/MLX/Qwen3.5-4B-4bit",
     "qwen35-9b": "Qwen35NineB/MLX/Qwen3.5-9B-MLX-4bit",
@@ -32,6 +34,7 @@ MODEL_PATHS = {
 ASSET_ALIAS_HINTS = {
     "qwen3-0.6b": "qwen3-0.6b",
     "qwen3-1.7b": "qwen3-1.7b",
+    "qwen3-1.7b-base": "qwen3-1.7b-base",
     "small-draft-1b": "qwen3-1.7b",
     "qwen3.5-4b": "qwen35-4b",
     "qwen3.5-9b": "qwen35-9b",
@@ -191,7 +194,7 @@ def main() -> int:
     parser.add_argument(
         "--small-draft-lane",
         action="store_true",
-        help="Compare the 1B-class qwen3-1.7b draft lane against the qwen35-4b quality default.",
+        help="Compare the 1B-class qwen3-1.7b-base raw-completion lane against the qwen35-4b quality default.",
     )
     args = parser.parse_args()
 
@@ -202,7 +205,7 @@ def main() -> int:
 
     print("Local model comparison")
     if args.small_draft_lane:
-        print("Lane: small-draft-1b (qwen3-1.7b) versus qwen35-4b quality default")
+        print("Lane: qwen3-1.7b-base raw_completion versus qwen35-4b quality default")
         print("Decision guard: keep qwen35-4b as default unless the small lane wins on quality and latency.")
     print(f"Diagnostics log: {diagnostics_path}")
     print(f"Model root: {model_root}")

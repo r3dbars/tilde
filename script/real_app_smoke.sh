@@ -3915,6 +3915,10 @@ obsidian_session_app() {
   fi
 
   case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
+    obsidian-stock)
+      printf 'obsidian\n'
+      return 0
+      ;;
     obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
       printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
       return 0
@@ -3936,6 +3940,9 @@ Required Obsidian proof lanes:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate
+
+The default Obsidian lane records `obsidian-stock` proof and launches without
+--force-renderer-accessibility. Forced renderer proof rows do not satisfy it.
 EOF
 }
 
@@ -13905,7 +13912,7 @@ describe_plan() {
           echo "Plan: guarded Obsidian run-on/wrapped sentence proof. The script types after a long wrapping sentence and validates visual placement plus insertion."
           ;;
         *)
-          echo "Plan: manual-gated disposable Obsidian default-note smoke. The script prints the checklist and validates after you run it."
+          echo "Plan: guarded Obsidian stock default-note smoke. The script launches Obsidian without --force-renderer-accessibility, opens the disposable proof-vault note, types smoke fragments, then validates logs and traces as obsidian-stock proof."
           ;;
       esac
       echo "Safety: pass --manual-gate to continue. Use only a disposable vault note."
@@ -16029,23 +16036,57 @@ seed_obsidian_proof_vault_note() {
   printf '%s\n' "$reset_text" >"$proof_note"
 }
 
-ensure_obsidian_smoke_renderer_accessibility_launch() {
+obsidian_running_with_forced_renderer_accessibility() {
+  local pid command
+  while IFS= read -r pid; do
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" == *"--force-renderer-accessibility"* ]]; then
+      return 0
+    fi
+  done < <(pgrep -x Obsidian 2>/dev/null || true)
+
+  return 1
+}
+
+ensure_obsidian_smoke_launch() {
+  local manual_app="$1"
+  local forced_renderer_accessibility=0
+  if [[ "$manual_app" != "obsidian" ]]; then
+    forced_renderer_accessibility=1
+  fi
+
   if pgrep -x Obsidian >/dev/null 2>&1; then
+    if (( forced_renderer_accessibility == 0 )) && obsidian_running_with_forced_renderer_accessibility; then
+      echo "Refusing Obsidian stock proof while Obsidian is already running with --force-renderer-accessibility." >&2
+      echo "Quit that Obsidian process, then rerun the stock lane." >&2
+      exit 3
+    fi
     return 0
   fi
 
   local app_path="${AUTOCOMPLETE_LAB_OBSIDIAN_APP_PATH:-/Applications/Obsidian.app}"
-  if [[ -d "$app_path" ]]; then
-    open -na "$app_path" --args --force-renderer-accessibility
+
+  if (( forced_renderer_accessibility == 1 )); then
+    if [[ -d "$app_path" ]]; then
+      open -na "$app_path" --args --force-renderer-accessibility
+    else
+      open -na Obsidian --args --force-renderer-accessibility
+    fi
   else
-    open -na Obsidian --args --force-renderer-accessibility
+    if [[ -d "$app_path" ]]; then
+      open -na "$app_path"
+    else
+      open -na Obsidian
+    fi
   fi
   sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_INITIAL_LAUNCH_WAIT_SECONDS:-2}"
 }
 
 open_obsidian_smoke_note_if_configured() {
+  local manual_app
+  manual_app="$(obsidian_session_app)"
   local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
-  ensure_obsidian_smoke_renderer_accessibility_launch
+  ensure_obsidian_smoke_launch "$manual_app"
   if [[ -n "$smoke_uri" ]]; then
     open "$smoke_uri"
     sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
@@ -16305,11 +16346,16 @@ run_obsidian() {
 
   sleep 1
   local manual_check_args=("$manual_app" --check)
+  local manual_proof_label="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}"
+  if [[ "$manual_app" == "obsidian" ]]; then
+    manual_proof_label="obsidian-stock"
+  fi
   if screenshot_trace_requested; then
     manual_check_args+=(--visual)
   fi
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
+    AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$manual_proof_label" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh "${manual_check_args[@]}"
 }

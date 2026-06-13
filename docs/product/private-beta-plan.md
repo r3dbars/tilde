@@ -14,6 +14,17 @@ Run the full gate:
 ./script/beta_readiness.sh
 ```
 
+For the final proof lane before any tester invite, also run:
+
+```bash
+./script/beta_proof_closeout.sh
+```
+
+Use `docs/product/beta-proof-closeout.md` for the dogfood ledger and the
+3-5 tester wave checklist. Do not invite testers until onboarding is re-proven,
+packaged latency is proven on the notarized app, and the dogfood ledger has 5
+consecutive green days.
+
 The full gate archives locally, then stops before Apple upload unless
 `AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE=1` is set. Use the opt-in only when
 you intend to submit the current DMG for notarization.

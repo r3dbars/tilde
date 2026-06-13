@@ -152,6 +152,99 @@ struct DisplayScorePolicyTests {
         #expect(decision.metadata["displayScoreSuppressionReason"] == "high-risk")
     }
 
+    @Test("one brain preview keeps default behavior behind the flag")
+    func oneBrainPreviewKeepsDefaultBehaviorBehindTheFlag() {
+        let policy = DisplayScorePolicy()
+        let score = DisplayScore(
+            utility: 1.00,
+            styleFit: 1.00,
+            contextFit: 1.00,
+            userAffinity: 1.00,
+            risk: 0.00,
+            repetition: 0.90,
+            instability: 0.00
+        )
+
+        let currentDecision = policy.decision(for: score, mode: .phraseContinuation)
+        let previewDecision = policy.decision(
+            for: score,
+            mode: .phraseContinuation,
+            suppressionBrain: .oneBrainPreview
+        )
+
+        #expect(!currentDecision.shouldDisplay)
+        #expect(currentDecision.metadata["displayScoreSuppressionReason"] == "high-repetition")
+        #expect(previewDecision.shouldDisplay)
+        #expect(previewDecision.metadata["displayScoreDecision"] == "display")
+        #expect(DisplayScoreSuppressionBrain.fromEnvironment([:]) == .current)
+        #expect(DisplayScoreSuppressionBrain.fromEnvironment([
+            DisplayScoreSuppressionBrain.environmentFlag: "1"
+        ]) == .oneBrainPreview)
+    }
+
+    @Test("one brain preview keeps high risk as a hard safety veto")
+    func oneBrainPreviewKeepsHighRiskAsHardSafetyVeto() {
+        let policy = DisplayScorePolicy()
+        let score = DisplayScore(
+            utility: 1.00,
+            styleFit: 1.00,
+            contextFit: 1.00,
+            userAffinity: 1.00,
+            risk: 0.90,
+            repetition: 0.90,
+            instability: 0.00
+        )
+
+        let decision = policy.decision(
+            for: score,
+            mode: .phraseContinuation,
+            suppressionBrain: .oneBrainPreview
+        )
+
+        #expect(!decision.shouldDisplay)
+        #expect(decision.metadata["displayScoreSuppressionReason"] == "high-risk")
+    }
+
+    @Test("one brain preview emits one binding scored penalty reason")
+    func oneBrainPreviewEmitsOneBindingScoredPenaltyReason() {
+        let policy = DisplayScorePolicy()
+        let learnedRestraintDecision = policy.decision(
+            for: DisplayScore(
+                utility: 0.70,
+                styleFit: 0.40,
+                contextFit: 0.35,
+                userAffinity: 0.25,
+                risk: 0.10,
+                repetition: 0.05,
+                instability: 0.05,
+                learningRestraint: 0.75,
+                acceptedAndKeptProbability: 0.17,
+                acceptedAndKeptSampleCount: 4
+            ),
+            mode: .phraseContinuation,
+            suppressionBrain: .oneBrainPreview
+        )
+        let noSinglePenaltyDecision = policy.decision(
+            for: DisplayScore(
+                utility: 0.35,
+                styleFit: 0.20,
+                contextFit: 0.20,
+                userAffinity: 0.05,
+                risk: 0.10,
+                repetition: 0.10,
+                instability: 0.10
+            ),
+            mode: .phraseContinuation,
+            suppressionBrain: .oneBrainPreview
+        )
+
+        #expect(!learnedRestraintDecision.shouldDisplay)
+        #expect(learnedRestraintDecision.metadata["displayScoreSuppressionReason"] == "learned-restraint")
+        #expect(learnedRestraintDecision.metadata.filter { $0.key == "displayScoreSuppressionReason" }.count == 1)
+        #expect(!noSinglePenaltyDecision.shouldDisplay)
+        #expect(noSinglePenaltyDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
+    }
+
     @Test("word phrase and sentence modes use different thresholds")
     func wordPhraseAndSentenceModesUseDifferentThresholds() {
         let policy = DisplayScorePolicy()

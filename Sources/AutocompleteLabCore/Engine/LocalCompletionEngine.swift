@@ -5,18 +5,20 @@ public struct LocalCompletionRuntimeConfiguration: Equatable, Sendable {
     public let maxGeneratedTokens: Int
     public let maxVisibleWords: Int
     public let reasoningEnabled: Bool
+    public let promptTemplate: CompletionPromptTemplate
 
     public init(policy: CompletionModelPolicy = .mvp) {
         self.model = policy.model
         self.maxGeneratedTokens = CompletionModelPolicy.clampedGeneratedTokens(policy.maxGeneratedTokens)
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(policy.maxVisibleWords)
         self.reasoningEnabled = policy.reasoningEnabled
+        self.promptTemplate = CompletionPromptTemplate.template(for: policy.model)
     }
 }
 
 public protocol LocalCompletionRuntimeRunner: Sendable {
     func complete(
-        prompt: CompletionPrompt,
+        prompt: FormattedCompletionPrompt,
         mode: CompletionRequestMode,
         configuration: LocalCompletionRuntimeConfiguration
     ) async throws -> String
@@ -46,7 +48,7 @@ public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner,
     }
 
     public func complete(
-        prompt: CompletionPrompt,
+        prompt: FormattedCompletionPrompt,
         mode: CompletionRequestMode,
         configuration: LocalCompletionRuntimeConfiguration
     ) async throws -> String {
@@ -83,6 +85,8 @@ public final class ProcessCompletionRuntimeRunner: LocalCompletionRuntimeRunner,
             let payload = RuntimePromptPayload(
                 system: prompt.system,
                 user: prompt.user,
+                rawPrompt: prompt.rawPrompt,
+                template: prompt.templateIdentifier,
                 mode: mode,
                 promptIsBuilt: true
             )
@@ -128,8 +132,9 @@ public final class LocalCompletionEngine: CompletionEngine, @unchecked Sendable 
     public func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         do {
             let prompt = promptBuilder.prompt(for: request)
+            let formattedPrompt = prompt.formatted(using: configuration.promptTemplate)
             let rawOutput = try await runner.complete(
-                prompt: prompt,
+                prompt: formattedPrompt,
                 mode: request.mode,
                 configuration: configuration
             )
@@ -207,6 +212,8 @@ public struct CompletionEngineFactory: Sendable {
 private struct RuntimePromptPayload: Encodable {
     let system: String
     let user: String
+    let rawPrompt: String?
+    let template: String
     let mode: CompletionRequestMode
     let promptIsBuilt: Bool
 }
