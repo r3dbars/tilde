@@ -96,7 +96,7 @@ for (offset, line) in contents.split(whereSeparator: \.isNewline).enumerated() {
     }
 
     if let endLine, lineNumber > endLine {
-        continue
+        break
     }
 
     let event = try decoder.decode(AutocompleteTraceEvent.self, from: Data(line.utf8))

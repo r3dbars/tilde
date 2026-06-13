@@ -17,7 +17,7 @@ struct BetaFeedbackLinkTests {
         #expect(!url.localizedCaseInsensitiveContains("typed"))
         #expect(!url.localizedCaseInsensitiveContains("trace"))
         #expect(!url.localizedCaseInsensitiveContains("screenshot"))
-        #expect(BetaFeedbackLink.menuTitle == "Submit Feedback...")
+        #expect(BetaFeedbackLink.menuTitle == "Submit Feedback…")
         #expect(BetaFeedbackLink.privacyNote.contains("redacted Privacy Bundle"))
     }
 }
