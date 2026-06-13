@@ -8,6 +8,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 TRACE_PATH="$TMP_DIR/traces.jsonl"
 SHORT_PHRASE_TRACE_PATH="$TMP_DIR/short-phrase-traces.jsonl"
 MODEL_ONLY_PHRASE_TRACE_PATH="$TMP_DIR/model-only-phrase-traces.jsonl"
+MODEL_CACHE_TRACE_PATH="$TMP_DIR/model-cache-traces.jsonl"
 SLOW_INSTANT_TRACE_PATH="$TMP_DIR/slow-instant-traces.jsonl"
 TRUST_KILLER_TRACE_PATH="$TMP_DIR/trust-killer-traces.jsonl"
 MARK_PATH="$TMP_DIR/session.env"
@@ -18,6 +19,7 @@ HIGH_SCORE_REPORT_PATH="$TMP_DIR/high-score-report.md"
 REACH_REPORT_PATH="$TMP_DIR/reach-report.md"
 SHORT_PHRASE_REPORT_PATH="$TMP_DIR/short-phrase-report.md"
 MODEL_ONLY_PHRASE_REPORT_PATH="$TMP_DIR/model-only-phrase-report.md"
+MODEL_CACHE_REPORT_PATH="$TMP_DIR/model-cache-report.md"
 SLOW_INSTANT_REPORT_PATH="$TMP_DIR/slow-instant-report.md"
 TRUST_KILLER_REPORT_PATH="$TMP_DIR/trust-killer-report.md"
 NOT_READY_MARK_PATH="$TMP_DIR/not-ready-session.env"
@@ -442,6 +444,30 @@ for expected in \
 do
   if ! grep -q "$expected" "$SHORT_PHRASE_REPORT_PATH"; then
     echo "dogfood self-test short-phrase report missing: $expected" >&2
+    exit 1
+  fi
+done
+
+sed -E 's/predictive-phrase-fallback|doc-local-ngram/model-cache/g' "$TRACE_PATH" >"$MODEL_CACHE_TRACE_PATH"
+"$ROOT_DIR/script/daily_driver_dogfood_session.sh" finish \
+  --trace "$MODEL_CACHE_TRACE_PATH" \
+  --start-line 1 \
+  --end-line 19 \
+  --app com.apple.TextEdit \
+  --label self-test-model-cache \
+  --report "$MODEL_CACHE_REPORT_PATH" \
+  >"$TMP_DIR/model-cache.out" 2>&1
+
+for expected in \
+  "Gate: \`pass\`" \
+  "Sample gate status: \`0\`" \
+  "Instant phrase source shown: 3 (minimum 1)" \
+  "Instant phrase max latency: 0ms (maximum 1ms)" \
+  "Instant phrase match families:" \
+  "model-cache: 3"
+do
+  if ! grep -q "$expected" "$MODEL_CACHE_REPORT_PATH"; then
+    echo "dogfood self-test model-cache report missing: $expected" >&2
     exit 1
   fi
 done

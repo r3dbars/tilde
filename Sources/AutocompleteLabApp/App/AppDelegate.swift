@@ -7187,6 +7187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
+                docLocalContextTexts: orchestration.docLocalContextTexts,
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
