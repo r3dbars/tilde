@@ -8,6 +8,8 @@ dist/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 *.profraw
+__pycache__/
+*.pyc
 
 # Local model/data files stay off git.
 Models/

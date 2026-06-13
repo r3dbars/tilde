@@ -24,6 +24,17 @@ struct MLXModelRuntimeWarmGateTests {
         }
     }
 
+    @Test("Warmup generation defaults on and honors a kill switch")
+    func warmupGenerationDefaultsOn() {
+        #expect(MLXModelRuntime.warmupGenerationEnabled([:]))
+        for value in ["1", "true", "on", "anything"] {
+            #expect(MLXModelRuntime.warmupGenerationEnabled(["AUTOCOMPLETE_LAB_MLX_WARMUP": value]))
+        }
+        for value in ["0", "false", "no", "off", "OFF"] {
+            #expect(!MLXModelRuntime.warmupGenerationEnabled(["AUTOCOMPLETE_LAB_MLX_WARMUP": value]))
+        }
+    }
+
     @Test("Prompt KV cache stays off without environment flag")
     func promptKVCacheStaysOffWithoutEnvironmentFlag() {
         var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: false))
