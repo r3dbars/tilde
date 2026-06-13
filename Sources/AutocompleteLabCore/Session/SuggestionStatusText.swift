@@ -74,8 +74,8 @@ public enum SuggestionStatusText {
             return "doc local"
         case "model-cache", "model-session-cache":
             return "model cache"
-        case "predictive-phrase-fallback":
-            return "legacy instant"
+        case "canned-bridge":
+            return "canned bridge"
         case "app-model-result", "model-candidate-ranker", "model-result":
             return "model"
         default:

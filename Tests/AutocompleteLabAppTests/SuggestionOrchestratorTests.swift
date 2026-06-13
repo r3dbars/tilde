@@ -461,8 +461,9 @@ struct SuggestionOrchestratorTests {
         #expect(disabledSelection.suggestion == nil)
         #expect(disabledSelection.suppressionReason == "disabled")
         #expect(enabledSelection.suggestion?.visibleText == " follow up")
-        #expect(enabledSelection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
-        #expect(enabledSelection.traceMetadata["predictivePhraseMatch"] == "i just wanted to")
+        #expect(enabledSelection.traceMetadata["candidateSelectionSource"] == "canned-bridge")
+        #expect(enabledSelection.traceMetadata["cannedBridgeMatch"] == "i just wanted to")
+        #expect(enabledSelection.traceMetadata["predictivePhraseMatch"] == nil)
     }
 
     @MainActor
@@ -541,7 +542,9 @@ struct SuggestionOrchestratorTests {
 
         #expect(blockedSelection.suppressionReason == "unsupported-profile")
         #expect(proofSelection.suggestion?.visibleText == " clearer")
-        #expect(proofSelection.traceMetadata["predictivePhraseMatch"] == "please make this")
+        #expect(proofSelection.traceMetadata["candidateSelectionSource"] == "canned-bridge")
+        #expect(proofSelection.traceMetadata["cannedBridgeMatch"] == "please make this")
+        #expect(proofSelection.traceMetadata["predictivePhraseMatch"] == nil)
     }
 
     @MainActor
@@ -1115,7 +1118,7 @@ struct SuggestionOrchestratorTests {
         )
         let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
         let request = CompletionRequest(
-            textBeforeCursor: "Autocomplete Lab Obsidian proof Smoke proof feels",
+            textBeforeCursor: "Daily note We should probably",
             appBundleIdentifier: profile.bundleIdentifier,
             fieldKind: classification.kind,
             behaviorProfileID: .docsProse,

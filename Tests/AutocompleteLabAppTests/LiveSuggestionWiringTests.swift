@@ -16,7 +16,7 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "triggerReason: \"fast-word-completion\"")
         try require(appDelegate, contains: "suggestionOrchestrator.fastPhraseSelection(")
         try require(appDelegate, contains: "suggestionOrchestrator.fastPhraseFallbackLearningDecision(")
-        try require(appDelegate, contains: "triggerReason: \"predictive-phrase-fallback\"")
+        try require(appDelegate, contains: "triggerReason: \"canned-bridge\"")
         try require(appDelegate, contains: "try await suggestionOrchestrator.suggestion(")
         try require(appDelegate, contains: "suggestionOrchestrator.shouldPresentStreamingPartial(")
         try require(appDelegate, contains: "suggestionOrchestrator.displayScoreDecision(")

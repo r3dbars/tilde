@@ -2,7 +2,7 @@
 
 Score: 100/100
 
-This deterministic harness uses synthetic, disposable writing situations for TextEdit, Notes, and Obsidian. It asks the product question directly: would this visible suggestion be worth accepting?
+This deterministic harness uses synthetic, disposable writing situations for TextEdit, Notes, and Obsidian. It asks whether short generic continuations would be worth accepting without relying on private dogfood text or product-specific canned phrases.
 
 ## Acceptance Bar
 
@@ -30,30 +30,30 @@ A displayed phrase passes only when it is 3-8 words, matches the expected meanin
 
 | Case | Surface | Actual | Words | Source | Result |
 | --- | --- | --- | ---: | --- | --- |
-| textedit-phrase-01 | TextEdit |  light and clear | 3 | model-candidate-ranker | accept |
-| textedit-phrase-02 | TextEdit |  stays short and specific | 4 | predictive-phrase-fallback | accept |
-| textedit-phrase-03 | TextEdit |  run one small check | 4 | model-candidate-ranker | accept |
-| textedit-phrase-04 | TextEdit |  clear next step | 3 | predictive-phrase-fallback | accept |
-| textedit-phrase-05 | TextEdit |  the key details clearly | 4 | model-candidate-ranker | accept |
-| textedit-phrase-06 | TextEdit |  small focused tasks | 3 | predictive-phrase-fallback | accept |
-| textedit-phrase-07 | TextEdit |  owner and deadline | 3 | model-candidate-ranker | accept |
-| textedit-phrase-08 | TextEdit |  something fast and reliable | 4 | predictive-phrase-fallback | accept |
-| notes-phrase-09 | Notes |  light and clear | 3 | model-candidate-ranker | accept |
-| notes-phrase-10 | Notes |  stays short and specific | 4 | predictive-phrase-fallback | accept |
-| notes-phrase-11 | Notes |  run one small check | 4 | model-candidate-ranker | accept |
-| notes-phrase-12 | Notes |  clear next step | 3 | predictive-phrase-fallback | accept |
-| notes-phrase-13 | Notes |  the key details clearly | 4 | model-candidate-ranker | accept |
-| notes-phrase-14 | Notes |  small focused tasks | 3 | predictive-phrase-fallback | accept |
-| notes-phrase-15 | Notes |  owner and deadline | 3 | model-candidate-ranker | accept |
-| notes-phrase-16 | Notes |  something fast and reliable | 4 | predictive-phrase-fallback | accept |
-| obsidian-phrase-17 | Obsidian |  light and clear | 3 | model-candidate-ranker | accept |
-| obsidian-phrase-18 | Obsidian |  stays short and specific | 4 | predictive-phrase-fallback | accept |
-| obsidian-phrase-19 | Obsidian |  run one small check | 4 | model-candidate-ranker | accept |
-| obsidian-phrase-20 | Obsidian |  clear next step | 3 | predictive-phrase-fallback | accept |
-| obsidian-phrase-21 | Obsidian |  the key details clearly | 4 | model-candidate-ranker | accept |
-| obsidian-phrase-22 | Obsidian |  small focused tasks | 3 | predictive-phrase-fallback | accept |
-| obsidian-phrase-23 | Obsidian |  owner and deadline | 3 | model-candidate-ranker | accept |
-| obsidian-phrase-24 | Obsidian |  something fast and reliable | 4 | predictive-phrase-fallback | accept |
+| textedit-phrase-01 | TextEdit |  take a look | 3 | model-candidate-ranker | accept |
+| textedit-phrase-02 | TextEdit |  keep it simple | 3 | canned-bridge | accept |
+| textedit-phrase-03 | TextEdit |  make this clearer | 3 | model-candidate-ranker | accept |
+| textedit-phrase-04 | TextEdit |  what you think | 3 | canned-bridge | accept |
+| textedit-phrase-05 | TextEdit |  a clearer next step | 4 | model-candidate-ranker | accept |
+| textedit-phrase-06 | TextEdit |  to make this concrete | 4 | canned-bridge | accept |
+| textedit-phrase-07 | TextEdit |  capture the next step | 4 | model-candidate-ranker | accept |
+| textedit-phrase-08 | TextEdit |  to keep this clear | 4 | canned-bridge | accept |
+| notes-phrase-09 | Notes |  take a look | 3 | model-candidate-ranker | accept |
+| notes-phrase-10 | Notes |  keep it simple | 3 | canned-bridge | accept |
+| notes-phrase-11 | Notes |  make this clearer | 3 | model-candidate-ranker | accept |
+| notes-phrase-12 | Notes |  what you think | 3 | canned-bridge | accept |
+| notes-phrase-13 | Notes |  a clearer next step | 4 | model-candidate-ranker | accept |
+| notes-phrase-14 | Notes |  to make this concrete | 4 | canned-bridge | accept |
+| notes-phrase-15 | Notes |  capture the next step | 4 | model-candidate-ranker | accept |
+| notes-phrase-16 | Notes |  to keep this clear | 4 | canned-bridge | accept |
+| obsidian-phrase-17 | Obsidian |  take a look | 3 | model-candidate-ranker | accept |
+| obsidian-phrase-18 | Obsidian |  keep it simple | 3 | canned-bridge | accept |
+| obsidian-phrase-19 | Obsidian |  make this clearer | 3 | model-candidate-ranker | accept |
+| obsidian-phrase-20 | Obsidian |  what you think | 3 | canned-bridge | accept |
+| obsidian-phrase-21 | Obsidian |  a clearer next step | 4 | model-candidate-ranker | accept |
+| obsidian-phrase-22 | Obsidian |  to make this concrete | 4 | canned-bridge | accept |
+| obsidian-phrase-23 | Obsidian |  capture the next step | 4 | model-candidate-ranker | accept |
+| obsidian-phrase-24 | Obsidian |  to keep this clear | 4 | canned-bridge | accept |
 | suppress-01 | TextEdit | silence | 0 | model-candidate-ranker | accept |
 | suppress-02 | TextEdit | silence | 0 | model-candidate-ranker | accept |
 | suppress-03 | Notes | silence | 0 | model-candidate-ranker | accept |
