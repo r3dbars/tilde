@@ -1,0 +1,64 @@
+# Type|Classification|Source|Reason
+# Public AutocompleteLabCore types must be reachable from Sources/AutocompleteLabApp,
+# transitively reachable through a wired core API, or listed here.
+# Classification must be one of: experimental, research, proof-only.
+ManualDisableDefaultOffPolicy|research|Sources/AutocompleteLabCore/Configuration/ManualDisableDefaultOffPolicy.swift|Manual disable default-off behavior is not wired into the live app yet.
+TracePrivacyPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift|Raw trace privacy policy is covered by proof/export tests but app logging uses app-owned trace filtering.
+DocLocalNGramPhrasePredictor|research|Sources/AutocompleteLabCore/Engine/DocLocalNGramPhrasePredictor.swift|Document-local phrase prediction is evaluated in core but not used by the app path.
+LocalCompletionRuntimeConfiguration|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+LocalCompletionRuntimeRunner|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+LocalCompletionRuntimeError|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+ProcessCompletionRuntimeRunner|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+LocalCompletionEngine|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+CompletionEngineSelection|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+UnavailableCompletionEngine|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+CompletionEngineFactory|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
+MockCompletionEngine|proof-only|Sources/AutocompleteLabCore/Engine/MockCompletionEngine.swift|Test and proof helper, not a production app engine.
+AutocompleteExperimentPhase|research|Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|Experiment planning model, not live app behavior.
+AutocompleteWithinUserCrossoverPlan|research|Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|Experiment planning model, not live app behavior.
+AutocompleteExperimentResultLabel|research|Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|Experiment planning model, not live app behavior.
+AutocompleteExperimentGuardrailThresholds|research|Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|Experiment planning model, not live app behavior.
+AutocompleteExperimentGuardrailReport|research|Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|Experiment planning model, not live app behavior.
+AutocompleteExperimentArmOutcome|research|Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|Experiment planning model, not live app behavior.
+AutocompleteExperimentPlanner|research|Sources/AutocompleteLabCore/Experiments/AutocompleteExperimentPlan.swift|Experiment planning model, not live app behavior.
+CompletionPredictionEvalCase|research|Sources/AutocompleteLabCore/Experiments/CompletionPredictionQualityEval.swift|Offline prediction quality eval, not live app behavior.
+CompletionPredictionEvalCaseResult|research|Sources/AutocompleteLabCore/Experiments/CompletionPredictionQualityEval.swift|Offline prediction quality eval, not live app behavior.
+CompletionPredictionEvalSurfaceSummary|research|Sources/AutocompleteLabCore/Experiments/CompletionPredictionQualityEval.swift|Offline prediction quality eval, not live app behavior.
+CompletionPredictionEvalReport|research|Sources/AutocompleteLabCore/Experiments/CompletionPredictionQualityEval.swift|Offline prediction quality eval, not live app behavior.
+CompletionPredictionQualityEvaluator|research|Sources/AutocompleteLabCore/Experiments/CompletionPredictionQualityEval.swift|Offline prediction quality eval, not live app behavior.
+DailyDriverPhraseQualityEvalCase|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
+DailyDriverPhraseQualityEvalCaseResult|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
+DailyDriverPhraseQualitySurfaceSummary|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
+DailyDriverPhraseQualityEvalReport|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
+DailyDriverPhraseQualityEvaluator|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
+OfflineModelTaskKind|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+OfflineModelEvalTask|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+OfflineModelQualityAuditTask|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+OfflineModelOutputScore|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+OfflineModelQualityThresholds|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+OfflineModelQualityThresholdResult|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+OfflineModelQualityEvaluator|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+WordCompletionEvalAction|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
+WordCompletionEvalCase|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
+WordCompletionEvalCaseResult|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
+WordCompletionEvalSurfaceSummary|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
+WordCompletionEvalReport|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
+WordCompletionQualityEvaluator|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
+CaretRectResolver|research|Sources/AutocompleteLabCore/Geometry/CaretRectResolver.swift|Geometry helper kept for research fixtures; live placement uses placement health and frame calculators.
+MockModelRuntime|proof-only|Sources/AutocompleteLabCore/Runtime/MockModelRuntime.swift|Test runtime helper, not production app runtime behavior.
+FocusedTextPollGateDecision|research|Sources/AutocompleteLabCore/Session/FocusedTextPollGatePolicy.swift|Polling gate candidate is tested but not wired into the live polling loop yet.
+FocusedTextPollGatePolicy|research|Sources/AutocompleteLabCore/Session/FocusedTextPollGatePolicy.swift|Polling gate candidate is tested but not wired into the live polling loop yet.
+PlacementUncertaintyDecision|research|Sources/AutocompleteLabCore/Session/PlacementUncertaintySuppressor.swift|Placement uncertainty suppressor is tested but not wired into live display gating yet.
+PlacementUncertaintySuppressor|research|Sources/AutocompleteLabCore/Session/PlacementUncertaintySuppressor.swift|Placement uncertainty suppressor is tested but not wired into live display gating yet.
+SensitiveFieldProofLevel|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
+SensitiveFieldProofFixture|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
+SensitiveFieldProofResult|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
+SensitiveFieldProofHarness|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
+SuggestionFocusChangePolicy|research|Sources/AutocompleteLabCore/Session/SuggestionFocusChangePolicy.swift|Focus-change policy is tested as a candidate but not wired into app orchestration.
+SuggestionPlacementPreflightDecision|research|Sources/AutocompleteLabCore/Session/SuggestionPlacementPreflightPolicy.swift|Placement preflight policy is tested as a candidate but live display uses placement health directly.
+SuggestionPlacementPreflightPolicy|research|Sources/AutocompleteLabCore/Session/SuggestionPlacementPreflightPolicy.swift|Placement preflight policy is tested as a candidate but live display uses placement health directly.
+TraceReplayLatencySlice|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+TraceReplayRequirement|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+AutocompleteTraceReplayProfile|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+AutocompleteTraceReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+AutocompleteTraceReplay|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
