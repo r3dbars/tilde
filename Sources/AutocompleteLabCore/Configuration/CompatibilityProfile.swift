@@ -946,7 +946,7 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         case let .supported(profile):
             return "\(profile.supportLevel.displayName): \(profile.displayName)"
         case .denylisted:
-            return "Unsupported: blocked app"
+            return "Blocked: high-risk app"
         case .unsupported:
             return "Unsupported: not tested yet"
         }
