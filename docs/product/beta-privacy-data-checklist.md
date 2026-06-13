@@ -14,6 +14,7 @@ This is the reviewer map for what the beta can collect or store.
 | Visible suggestion | No, length only | No raw default retention | Raw local debug tracing only | No |
 | Accepted text | No, length/fingerprint only | RAM checks at 2s/10s/30s/1m/5m, then cleared | Raw local debug tracing only | No |
 | Remaining visible suggestion | No, length only | No raw default retention | Raw local debug tracing only | No |
+| Doc-local n-gram corpus | No | RAM only, per focused writing field, cleared on app exit | Built from existing local AX reads | No |
 | Screenshot image | No | No default retention | Screenshot proof only | No |
 | Screenshot path | No | No default retention | Screenshot proof only | No |
 | Personal Capture journal and episodes | No | Until user deletes Personal Capture | Local Personal Capture opt-in only | No |
