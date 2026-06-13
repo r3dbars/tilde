@@ -6,8 +6,10 @@ var tracePath: String?
 var startLine = 0
 var endLine: Int?
 var profile = AutocompleteTraceReplayProfile.full
+var decisionDiffMode = false
+var previewBrain = DisplayScoreSuppressionBrain.fromEnvironment(ProcessInfo.processInfo.environment)
 var iterator = arguments.makeIterator()
-let usage = "Usage: AutocompleteTraceReplay [--start-line N] [--end-line N] [--profile \(AutocompleteTraceReplayProfile.cliValues)] /path/to/traces.jsonl\n"
+let usage = "Usage: AutocompleteTraceReplay [--decision-diff] [--one-brain-preview] [--start-line N] [--end-line N] [--profile \(AutocompleteTraceReplayProfile.cliValues)] /path/to/traces.jsonl\n"
 
 func printUsageAndExit(
     _ message: String? = nil,
@@ -52,6 +54,10 @@ while let argument = iterator.next() {
             printUsageAndExit("Missing value for --profile")
         }
         profile = parseProfile(value)
+    case "--decision-diff":
+        decisionDiffMode = true
+    case "--one-brain-preview":
+        previewBrain = .oneBrainPreview
     case let value where value.hasPrefix("--start-line="):
         startLine = parseLine(String(value.dropFirst("--start-line=".count)), flag: "--start-line")
     case let value where value.hasPrefix("--end-line="):
@@ -97,6 +103,15 @@ for (offset, line) in contents.split(whereSeparator: \.isNewline).enumerated() {
     events.append(event)
 }
 
-let report = AutocompleteTraceReplay().report(for: events, profile: profile)
-print(report.markdown)
-Foundation.exit(report.passesReplayProofGate ? 0 : 1)
+if decisionDiffMode {
+    let report = AutocompleteTraceReplay().decisionDiffReport(
+        for: events,
+        previewBrain: previewBrain
+    )
+    print(report.markdown)
+    Foundation.exit(report.passesDiffProofGate ? 0 : 1)
+} else {
+    let report = AutocompleteTraceReplay().report(for: events, profile: profile)
+    print(report.markdown)
+    Foundation.exit(report.passesReplayProofGate ? 0 : 1)
+}
