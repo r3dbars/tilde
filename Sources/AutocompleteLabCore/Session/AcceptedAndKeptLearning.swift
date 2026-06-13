@@ -3,6 +3,7 @@ import Foundation
 public enum AcceptedAndKeptLearningOutcome: String, Codable, Equatable, Sendable {
     case kept
     case rejected
+    case typeThroughSurvival
 }
 
 public struct AcceptedAndKeptLearningKey: Codable, Equatable, Hashable, Sendable {
@@ -30,9 +31,11 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
     public let effectiveSampleCount: Double
     public let keptCount: Int
     public let rejectedCount: Int
+    public let typeThroughSurvivalCount: Int
     public let priorProbability: Double
     public let userAffinityAdjustment: Double
     public let utilityAdjustment: Double
+    public let typeThroughConfidenceCredit: Double
     public let learningRestraint: Double
     public let decayFactor: Double
 
@@ -43,9 +46,11 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
             "acceptedAndKeptEffectiveSamples": Self.format(effectiveSampleCount),
             "acceptedAndKeptKept": String(keptCount),
             "acceptedAndKeptRejected": String(rejectedCount),
+            "acceptedAndKeptTypeThroughSurvivals": String(typeThroughSurvivalCount),
             "acceptedAndKeptPrior": Self.format(priorProbability),
             "acceptedAndKeptAffinityAdjustment": Self.format(userAffinityAdjustment),
             "acceptedAndKeptUtilityAdjustment": Self.format(utilityAdjustment),
+            "acceptedAndKeptTypeThroughCredit": Self.format(typeThroughConfidenceCredit),
             "acceptedAndKeptLearningRestraint": Self.format(learningRestraint),
             "acceptedAndKeptDecayFactor": Self.format(decayFactor)
         ]
@@ -56,7 +61,9 @@ public struct AcceptedAndKeptLearningSignal: Equatable, Sendable {
             return "Learning: no local accepted-and-kept evidence yet."
         }
 
-        let counts = "\(keptCount) kept, \(rejectedCount) rejected"
+        let counts = typeThroughSurvivalCount == 0
+            ? "\(keptCount) kept, \(rejectedCount) rejected"
+            : "\(keptCount) kept, \(typeThroughSurvivalCount) typed through, \(rejectedCount) rejected"
         if keptCount > rejectedCount {
             return "Learning: this surface is earning trust locally (\(counts))."
         }
@@ -112,6 +119,8 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
             bucket.keptCount += 1
         case .rejected:
             bucket.rejectedCount += 1
+        case .typeThroughSurvival:
+            bucket.typeThroughSurvivalCount += 1
         }
         bucket.lastUpdatedSequence = nextSequence()
         bucket.lastUpdatedAt = now
@@ -129,11 +138,16 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
         let samples = bucket.sampleCount
         let decayFactor = self.decayFactor(for: bucket, now: now)
         let keptWeight = Double(bucket.keptCount) * decayFactor
+        let typeThroughWeight = Double(bucket.typeThroughSurvivalCount) * 0.60 * decayFactor
         let rejectedWeight = Double(bucket.rejectedCount) * decayFactor
-        let effectiveSampleCount = keptWeight + rejectedWeight
-        let probability = (keptWeight + prior * priorWeight)
-            / max(1, keptWeight + rejectedWeight + priorWeight)
+        let effectiveSampleCount = keptWeight + typeThroughWeight + rejectedWeight
+        let probability = (keptWeight + typeThroughWeight + prior * priorWeight)
+            / max(1, keptWeight + typeThroughWeight + rejectedWeight + priorWeight)
         let adjustmentScale = min(1, Double(samples) / 6)
+        let typeThroughConfidenceCredit = Self.bounded(
+            typeThroughWeight / 6 * 0.18,
+            to: 0...0.18
+        )
         let adjustment = Self.bounded(
             (probability - prior) * 0.45 * adjustmentScale,
             to: -0.14...0.18
@@ -155,9 +169,11 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
             effectiveSampleCount: effectiveSampleCount,
             keptCount: bucket.keptCount,
             rejectedCount: bucket.rejectedCount,
+            typeThroughSurvivalCount: bucket.typeThroughSurvivalCount,
             priorProbability: prior,
             userAffinityAdjustment: adjustment,
             utilityAdjustment: utilityAdjustment,
+            typeThroughConfidenceCredit: typeThroughConfidenceCredit,
             learningRestraint: learningRestraint,
             decayFactor: decayFactor
         )
@@ -254,10 +270,26 @@ public struct AcceptedAndKeptLearningStore: Codable, Equatable, Sendable {
 private struct AcceptedAndKeptLearningBucket: Codable, Equatable, Sendable {
     var keptCount: Int = 0
     var rejectedCount: Int = 0
+    var typeThroughSurvivalCount: Int = 0
     var lastUpdatedSequence: UInt64 = 0
     var lastUpdatedAt: Date = Date(timeIntervalSince1970: 0)
 
     var sampleCount: Int {
-        keptCount + rejectedCount
+        keptCount + rejectedCount + typeThroughSurvivalCount
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        keptCount = try container.decodeIfPresent(Int.self, forKey: .keptCount) ?? 0
+        rejectedCount = try container.decodeIfPresent(Int.self, forKey: .rejectedCount) ?? 0
+        typeThroughSurvivalCount = try container.decodeIfPresent(
+            Int.self,
+            forKey: .typeThroughSurvivalCount
+        ) ?? 0
+        lastUpdatedSequence = try container.decodeIfPresent(UInt64.self, forKey: .lastUpdatedSequence) ?? 0
+        lastUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .lastUpdatedAt)
+            ?? Date(timeIntervalSince1970: 0)
     }
 }
