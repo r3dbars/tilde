@@ -144,9 +144,12 @@ def main() -> None:
     reachable = reachable_types(public_types)
     allowlist = load_allowlist()
     missing = sorted(
-        public_type
-        for public_type in public_types
-        if public_type.name not in reachable and public_type.name not in allowlist
+        (
+            public_type
+            for public_type in public_types
+            if public_type.name not in reachable and public_type.name not in allowlist
+        ),
+        key=lambda public_type: (public_type.source, public_type.name),
     )
     if missing:
         print("Public core symbols are neither app-reachable nor allowlisted:", file=sys.stderr)
