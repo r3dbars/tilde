@@ -178,6 +178,7 @@ public enum AutocompleteTracePrivacyFilter {
         "empty-suggestion",
         "engine-error",
         "escape",
+        "escape-cooldown",
         "escape-dismissed",
         "escapeDismissal",
         "exactKept",
