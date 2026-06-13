@@ -276,7 +276,7 @@ final class SuggestionPanelController {
         case .floatingMirror:
             return NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 9)
         case .inlineAdjacent:
-            return NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 2)
+            return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 2)
         case .disabled:
             return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         }

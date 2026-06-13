@@ -2004,24 +2004,63 @@ wait_for_codex_tab_diagnostic_optional() {
   return 1
 }
 
-press_codex_tab_for_smoke() {
+codex_suggestion_hidden_since() {
   local start_line="$1"
 
-  settle_keyboard_event_tap_if_started "$start_line" "Codex Tab acceptance"
+  [[ "$start_line" =~ ^[0-9]+$ ]] || start_line=0
+  log_since_has_fields "$start_line" "suggestion-hidden" "app=com.openai.codex"
+}
+
+try_codex_cgevent_tab_for_smoke() {
+  local start_line="$1"
+  local label="$2"
+  local tap_location="$3"
+  local source_state="${4:-hidSystem}"
+  local probe_start_line
+
+  assert_frontmost_app "Codex" "$label"
+  probe_start_line="$(line_count "$LOG_PATH")"
   press_key_code_cgevent_with_timeout \
     48 \
     "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
-    "Codex CGEvent Tab" \
-    "session" \
-    "warm" || true
+    "$label" \
+    "$tap_location" \
+    "warm" \
+    "$source_state" || true
 
-  if wait_for_codex_tab_diagnostic_optional "$start_line" \
+  if wait_for_codex_tab_diagnostic_optional "$probe_start_line" \
     "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_ATTEMPTS:-5}" \
     "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_DELAY_SECONDS:-0.05}"; then
     return 0
   fi
 
-  echo "Codex CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab." >&2
+  if codex_suggestion_hidden_since "$start_line"; then
+    echo "$label did not produce a Tab diagnostic before the Codex suggestion hid." >&2
+    return 1
+  fi
+
+  return 2
+}
+
+press_codex_tab_for_smoke() {
+  local start_line="$1"
+
+  settle_keyboard_event_tap_if_started "$start_line" "Codex Tab acceptance"
+
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent session Tab" "session"; then
+    return 0
+  fi
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent HID Tab" "hid"; then
+    return 0
+  fi
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent private-source session Tab" "session" "private"; then
+    return 0
+  fi
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent private-source HID Tab" "hid" "private"; then
+    return 0
+  fi
+
+  echo "Codex CGEvent Tab attempts produced no key=tab diagnostic; retrying with System Events Tab." >&2
   assert_frontmost_app "Codex" "Codex proof System Events retry"
   press_key_code 48
 }

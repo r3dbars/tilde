@@ -374,6 +374,25 @@ struct CompletionOutputCleanerTests {
         #expect(cleaner.clean("know you are ready", after: context) == nil)
     }
 
+    @Test("Suppresses model continuations that replay the current sentence")
+    func suppressesModelContinuationsThatReplayTheCurrentSentence() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+        let context = "Intelligence of a person is interesting and something that I base intelligence off"
+
+        #expect(cleaner.clean(
+            "Intelligence of a person is interesting and something that I base intelligence of",
+            after: context
+        ) == nil)
+        #expect(cleaner.clean(
+            "something that I base intelligence of Intelligence",
+            after: context
+        ) == nil)
+        #expect(cleaner.clean(
+            "the way they connect ideas",
+            after: context
+        )?.visibleText == " the way they connect ideas")
+    }
+
     @Test("Allows normal continuations even when earlier context exists")
     func allowsNormalContinuationsWithEarlierContext() {
         let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)

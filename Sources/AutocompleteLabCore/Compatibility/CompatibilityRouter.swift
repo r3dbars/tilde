@@ -58,7 +58,7 @@ public struct CompatibilityRoutingSettings: Equatable, Sendable {
     }
 
     public static let mvp = CompatibilityRoutingSettings(
-        enforceKnownApps: true,
+        enforceKnownApps: false,
         suppressSecureFields: true,
         minimumCharactersBeforeSuggestion: 3,
         suppressEmptyText: true,

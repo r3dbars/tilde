@@ -6,9 +6,10 @@ SteadyType is a small Mac app for quiet writing suggestions near your cursor.
 
 It watches the active text field, shows a short suggestion, and only inserts text when you accept it. The question for this beta is simple: does this make writing feel easier, or does it get in the way?
 
-Current proof truth: the private beta is still blocked until the live proof
-gates are green. The strict manual smoke gate now tracks only the boring
-beta-safe rows, so app support stays narrow and proof-gated.
+Current dogfood stance: suggestions are default-on for normal text fields, with
+hard blocks kept for secure and high-risk system surfaces. If a specific app
+has bad placement or insertion, pause that app, capture a screenshot, and add a
+small compatibility fix.
 
 ## What It Does
 
@@ -19,20 +20,23 @@ beta-safe rows, so app support stays narrow and proof-gated.
 - uses `Shift-Tab` to accept the whole visible suggestion
 - uses `Esc` to dismiss
 - runs local-first by default
-- keeps app support proof-gated instead of pretending it works everywhere
+- tries generic Accessibility support by default, then lets you pause bad apps
 
-## Current Beta Scope
+## Current Dogfood Scope
 
-The first target apps are:
+The first supported targets still have the best proof:
 
 - TextEdit
 - Apple Notes
 - Obsidian
-- Chrome local textarea/contenteditable practice fixtures only
+- Chrome local textarea/contenteditable practice fixtures
+- Codex
+- Claude desktop
+- Claude Code in supported terminal hosts
 
-These are beta targets, not a broad compatibility promise. Prompt and chat apps
-stay heavily guarded. Codex and Claude-style fields are proof-gated because
-accepting text must never submit a prompt by surprise.
+Everything else uses a generic Accessibility path unless it is hard-denied or a
+field is classified as unsafe. Prompt and terminal apps stay one-word and
+fail-closed where possible; screenshots from bad apps become the adapter queue.
 
 ## Privacy
 
