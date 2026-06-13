@@ -208,6 +208,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let presentedCount: Int
     public let acceptedCount: Int
     public let typedThroughCount: Int
+    public let typeThroughSurvivalRate: Double
     public let typedOverCount: Int
     public let ignoredCount: Int
     public let suppressedCount: Int
@@ -306,6 +307,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         presentedCount: Int,
         acceptedCount: Int,
         typedThroughCount: Int,
+        typeThroughSurvivalRate: Double = 0,
         typedOverCount: Int,
         ignoredCount: Int,
         suppressedCount: Int = 0,
@@ -403,6 +405,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.presentedCount = presentedCount
         self.acceptedCount = acceptedCount
         self.typedThroughCount = typedThroughCount
+        self.typeThroughSurvivalRate = typeThroughSurvivalRate
         self.typedOverCount = typedOverCount
         self.ignoredCount = ignoredCount
         self.suppressedCount = suppressedCount
@@ -572,6 +575,9 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
             presentedCount: firstPresentedByID.count,
             acceptedCount: accepted.count,
             typedThroughCount: typedThroughIDs.count,
+            typeThroughSurvivalRate: firstPresentedByID.isEmpty
+                ? 0
+                : Double(typedThroughIDs.count) / Double(firstPresentedByID.count),
             typedOverCount: typedOver.count,
             ignoredCount: hiddenIgnored.count,
             suppressedCount: suppressed.count,

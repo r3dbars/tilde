@@ -138,6 +138,9 @@ struct SuggestionEpisodeTests {
         #expect(record.actions.last?.metadata["typeThroughSurvival"] == "true")
         #expect(scorecard.shown == 1)
         #expect(scorecard.typedPast == 0)
+        #expect(scorecard.typeThroughSurvivals == 1)
+        #expect(scorecard.typeThroughSurvivalRate == 1)
+        #expect(scorecard.markdown.contains("Type-through survival rate: 100% (1/1)"))
     }
 
     @Test("Eval generator uses only accepted and kept local examples")

@@ -548,6 +548,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentSuggestionPresentedAt: Date?
     private var currentSuggestionDisplayScoreFinal: Double?
     private var currentSuggestionInvalidatedByUserKeyDown = false
+    private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
     private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
     private var preservesResidualSuggestionAfterNextWordAccept = false
     private var obsidianPostAcceptanceSuppression: ObsidianPostAcceptanceSuppression?
@@ -6725,6 +6726,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         persistAcceptedAndKeptLearning()
         return signal
+    }
+
+    private func recordTypeThroughConfidenceCreditIfNeeded(
+        _ survival: TypeThroughPrefixSurvival,
+        appBundleIdentifier: String
+    ) -> [String: String] {
+        guard survival.qualifiesForConfidenceCredit,
+              let suggestionID = currentSuggestionID,
+              !typeThroughConfidenceCreditedSuggestionIDs.contains(suggestionID),
+              let requestMode = currentSuggestionRequestMode,
+              let fieldKind = currentSuggestionFieldClassification?.kind,
+              let behaviorProfileID = suggestionOrchestrator.currentRequest?.behaviorProfile.id else {
+            return [:]
+        }
+
+        typeThroughConfidenceCreditedSuggestionIDs.insert(suggestionID)
+        let signal = acceptedAndKeptLearning.record(
+            .typeThroughSurvival,
+            key: AcceptedAndKeptLearningKey(
+                appBundleIdentifier: appBundleIdentifier,
+                fieldKind: fieldKind,
+                requestMode: requestMode,
+                behaviorProfileID: behaviorProfileID
+            )
+        )
+        persistAcceptedAndKeptLearning()
+        var metadata = signal.traceMetadata
+        metadata["typeThroughConfidenceCredited"] = "true"
+        return metadata
     }
 
     private func recordInsertionVerificationFailure(
@@ -17180,6 +17210,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch transition {
         case let .survived(survival):
             let hasRemainingSuggestion = suggestionSession.hasVisibleSuggestion
+            let learningMetadata = recordTypeThroughConfidenceCreditIfNeeded(
+                survival,
+                appBundleIdentifier: profile.bundleIdentifier
+            )
+            let survivalMetadata = survival.traceMetadata
+                .merging(learningMetadata) { current, _ in current }
             lastTextSnapshot = snapshot
             invalidatePendingSuggestionRequest()
             currentSuggestionTextBeforeCursor = context.textBeforeCursor
@@ -17197,14 +17233,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "suggestion-typed-through",
                 context: context,
                 profile: profile,
-                metadata: survival.traceMetadata
+                metadata: survivalMetadata
             )
             recordPersonalCaptureSuggestionEpisodeAction(
                 suggestionID: currentSuggestionID ?? "",
                 appBundleIdentifier: profile.bundleIdentifier,
                 outcome: .shown,
                 reason: "survived_typethrough",
-                metadata: survival.traceMetadata
+                metadata: survivalMetadata
             )
             keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
             if hasRemainingSuggestion {
