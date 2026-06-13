@@ -467,6 +467,61 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast phrase selection wires doc-local corpus before canned bridges")
+    func fastPhraseSelectionUsesDocLocalCorpusBeforeCannedBridges() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = testFieldIdentity(elementIdentifier: 7)
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+
+        _ = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(
+                textBeforeCursor: "The onboarding screen should make permission feel clear before setup",
+                textAfterCursor: ""
+            ),
+            appBundleIdentifier: field.bundleIdentifier,
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
+            maxVisibleWords: 8,
+            requestMode: .phraseContinuation,
+            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
+        ))
+        let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(
+                textBeforeCursor: "The onboarding screen should make",
+                textAfterCursor: ""
+            ),
+            appBundleIdentifier: field.bundleIdentifier,
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
+            maxVisibleWords: 8,
+            requestMode: .phraseContinuation,
+            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
+        ))
+
+        let selection = orchestrator.fastPhraseSelection(
+            for: orchestration.request.textBeforeCursor,
+            docLocalContextTexts: orchestration.docLocalContextTexts,
+            behaviorProfileID: orchestration.request.behaviorProfileID,
+            maxVisibleWords: orchestration.request.maxVisibleWords,
+            allowPredictiveFallback: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " permission feel clear before setup")
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
+        #expect(selection.traceMetadata["docLocalNGramMatch"] == "order-5-local-context")
+        #expect(SuggestionStatusText.shown(
+            mode: orchestration.request.mode,
+            triggerReason: "predictive-phrase-fallback",
+            latencyMilliseconds: 0,
+            metadata: selection.traceMetadata
+        ) == "Shown: phrase doc local 0ms")
+    }
+
+    @MainActor
     @Test("Fast phrase selection can opt into prompt-app proof prediction")
     func fastPhraseSelectionPromptAppProofPrediction() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

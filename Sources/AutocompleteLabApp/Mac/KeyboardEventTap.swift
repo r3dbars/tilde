@@ -29,6 +29,7 @@ final class KeyboardEventTap: @unchecked Sendable {
     private var passthroughObservationSuppressedUntilNanos: UInt64?
     private var pendingReplayedKeyDowns: [KeyboardEventReplay: KeyboardEventReplayState] = [:]
     private var latencyStats = KeyboardEventTapLatencyStats()
+    private var keyDownSuggestionIDs: [AutocompleteKey: String] = [:]
     private let slowEventTapLatencyMicros = 8_000
     private let replayExpirationNanos: UInt64 = 1_000_000_000
     private var passthroughObservationAllowsAutocompleteKey = false
@@ -466,10 +467,12 @@ final class KeyboardEventTap: @unchecked Sendable {
         guard snapshot.hasVisibleSuggestion,
               !snapshot.isInvalidatedByUserTyping else {
             suppressKeyUntilNanos.removeAll(keepingCapacity: true)
+            keyDownSuggestionIDs.removeAll(keepingCapacity: true)
             snapshotLock.unlock()
             return false
         }
 
+        let keyDownSuggestionID = isAutorepeat ? keyDownSuggestionIDs[key] : snapshot.visibleSuggestionID
         if repeatSuppressionPolicy.shouldSuppressAutorepeat(
             key: key,
             isAutorepeat: isAutorepeat,
@@ -488,8 +491,21 @@ final class KeyboardEventTap: @unchecked Sendable {
             supportsFullAcceptance: snapshot.supportsFullAcceptance,
             isInvalidatedByUserTyping: snapshot.isInvalidatedByUserTyping,
             hasPendingAcceptedInsertionUndo: snapshot.hasPendingAcceptedInsertionUndo,
-            acceptAllShortcut: snapshot.acceptAllShortcut
+            acceptAllShortcut: snapshot.acceptAllShortcut,
+            isAutorepeat: isAutorepeat,
+            visibleSuggestionID: snapshot.visibleSuggestionID,
+            keyDownSuggestionID: keyDownSuggestionID
         ))
+
+        if isAutorepeat {
+            if !shouldConsume {
+                keyDownSuggestionIDs[key] = nil
+            }
+        } else if shouldConsume, let visibleSuggestionID = snapshot.visibleSuggestionID {
+            keyDownSuggestionIDs[key] = visibleSuggestionID
+        } else {
+            keyDownSuggestionIDs[key] = nil
+        }
 
         if let deadline = repeatSuppressionPolicy.suppressionDeadline(
             shouldConsume: shouldConsume,
@@ -658,6 +674,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
     var allowsAutocompleteKeyAfterPassthroughObservation: Bool
     var hasPendingAcceptedInsertionUndo: Bool
     var acceptAllShortcut: AcceptAllShortcut
+    var visibleSuggestionID: String?
 
     init(
         hasVisibleSuggestion: Bool = false,
@@ -666,7 +683,8 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         isInvalidatedByUserTyping: Bool = false,
         allowsAutocompleteKeyAfterPassthroughObservation: Bool = false,
         hasPendingAcceptedInsertionUndo: Bool = false,
-        acceptAllShortcut: AcceptAllShortcut = .shiftTab
+        acceptAllShortcut: AcceptAllShortcut = .shiftTab,
+        visibleSuggestionID: String? = nil
     ) {
         self.hasVisibleSuggestion = hasVisibleSuggestion
         self.supportsOneWordAcceptance = supportsOneWordAcceptance
@@ -675,6 +693,7 @@ struct KeyboardEventTapSnapshot: Equatable, Sendable {
         self.allowsAutocompleteKeyAfterPassthroughObservation = allowsAutocompleteKeyAfterPassthroughObservation
         self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
+        self.visibleSuggestionID = visibleSuggestionID
     }
 }
 
