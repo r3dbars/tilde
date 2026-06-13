@@ -282,7 +282,7 @@ public enum AutocompleteTracePrivacyFilter {
         "placement-untrusted-detached-anchor",
         "placement-untrusted-synthetic-caret",
         "precondition-failed",
-        "predictive-phrase-fallback",
+        "canned-bridge",
         "prefix-cooldown",
         "prefix-family-cooldown",
         "profile-diagnostics-only",

@@ -8,7 +8,7 @@ public struct CompletionPredictionEvalCase: Equatable, Sendable {
     public let textBeforeCursor: String
     public let expectedVisibleText: String?
     public let rawCandidateLines: [String]
-    public let usePredictivePhraseFallback: Bool
+    public let useCannedBridge: Bool
 
     public init(
         id: String,
@@ -18,7 +18,7 @@ public struct CompletionPredictionEvalCase: Equatable, Sendable {
         textBeforeCursor: String,
         expectedVisibleText: String?,
         rawCandidateLines: [String],
-        usePredictivePhraseFallback: Bool = false
+        useCannedBridge: Bool = false
     ) {
         self.id = id
         self.surfaceName = surfaceName
@@ -27,7 +27,7 @@ public struct CompletionPredictionEvalCase: Equatable, Sendable {
         self.textBeforeCursor = textBeforeCursor
         self.expectedVisibleText = expectedVisibleText
         self.rawCandidateLines = rawCandidateLines
-        self.usePredictivePhraseFallback = usePredictivePhraseFallback
+        self.useCannedBridge = useCannedBridge
     }
 
     public var expectsSuggestion: Bool {
@@ -309,9 +309,9 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
             return "| \(result.evalCase.id) | \(result.evalCase.surfaceName) | \(expected) | \(actual) | \(result.selectionSource) | \(status) |"
         }
         .joined(separator: "\n")
-        let predictiveResults = results.filter { $0.selectionSource == "predictive-phrase-fallback" }
+        let cannedBridgeResults = results.filter { $0.selectionSource == "canned-bridge" }
         let modelResults = results.filter { $0.selectionSource == "model-candidate-ranker" }
-        let predictiveExact = predictiveResults.filter { $0.evalCase.expectsSuggestion && $0.exactVisibleText }.count
+        let cannedBridgeExact = cannedBridgeResults.filter { $0.evalCase.expectsSuggestion && $0.exactVisibleText }.count
         let modelExact = modelResults.filter { $0.evalCase.expectsSuggestion && $0.exactVisibleText }.count
 
         return """
@@ -320,7 +320,7 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
         Score: \(String(format: "%.1f", score))/100
         Squared score: \(String(format: "%.1f", squaredScore))/10000
 
-        This deterministic harness uses 500 synthetic cases. It checks whether the app's cleaner and ranker pick common next-word and 2-4 word continuations when they are available, while still suppressing prompt-app, search, form, password, code-like negatives, over-eager/chatty output, repetition, wrong-topic continuations, unsafe/sensitive text, and bad user-feel.
+        This deterministic harness uses 500 synthetic cases. It checks whether the app's cleaner and ranker pick common next-word and 2-4 word continuations when they are available, plus a small canned-bridge source for generic transitions only. It still suppresses prompt-app, search, form, password, code-like negatives, over-eager/chatty output, repetition, wrong-topic continuations, unsafe/sensitive text, and bad user-feel.
 
         ## Exactness Summary
 
@@ -338,9 +338,9 @@ public struct CompletionPredictionEvalReport: Equatable, Sendable {
 
         ## Source Mix
 
-        - Predictive phrase fallback exact: \(predictiveExact)/\(predictiveResults.count)
+        - Canned bridge exact: \(cannedBridgeExact)/\(cannedBridgeResults.count)
         - Model candidate ranker exact: \(modelExact)/\(modelResults.filter { $0.evalCase.expectsSuggestion }.count)
-        - Predictor-only positives omit the expected answer from raw model candidates.
+        - Canned-bridge positives omit the expected answer from raw model candidates.
 
         ## First 40 Case Evidence
 
@@ -382,20 +382,20 @@ public enum CompletionPredictionQualityEvaluator {
         cleaner: CompletionOutputCleaner,
         ranker: CompletionCandidateRanker
     ) -> CompletionPredictionEvalCaseResult {
-        if evalCase.usePredictivePhraseFallback {
-            let predictiveSelection = CommonPhraseContinuationPredictor().selection(
+        if evalCase.useCannedBridge {
+            let cannedBridgeSelection = CommonPhraseContinuationPredictor().selection(
                 for: evalCase.textBeforeCursor,
                 behaviorProfileID: evalCase.behaviorProfileID
             )
-            if let suggestion = predictiveSelection.suggestion {
+            if let suggestion = cannedBridgeSelection.suggestion {
                 return CompletionPredictionEvalCaseResult(
                     evalCase: evalCase,
                     visibleText: suggestion.visibleText,
                     candidateCount: 1,
-                    candidateTopScore: predictiveSelection.score,
+                    candidateTopScore: cannedBridgeSelection.score,
                     candidateScoreMargin: nil,
-                    candidateSuppressionReason: predictiveSelection.suppressionReason,
-                    selectionSource: "predictive-phrase-fallback"
+                    candidateSuppressionReason: cannedBridgeSelection.suppressionReason,
+                    selectionSource: "canned-bridge"
                 )
             }
         }
@@ -521,7 +521,7 @@ public enum CompletionPredictionQualityEvaluator {
         tone: String,
         template: PositiveTemplate
     ) -> CompletionPredictionEvalCase {
-        let usePredictivePhraseFallback = index.isMultiple(of: 2)
+        let useCannedBridge = index.isMultiple(of: 2)
         return CompletionPredictionEvalCase(
             id: "prediction-\(String(format: "%03d", index))",
             surfaceName: surface.name,
@@ -529,7 +529,7 @@ public enum CompletionPredictionQualityEvaluator {
             behaviorProfileID: surface.behaviorProfileID,
             textBeforeCursor: "\(tone): \(template.textBeforeCursor)",
             expectedVisibleText: " \(template.expectedVisibleText)",
-            rawCandidateLines: usePredictivePhraseFallback
+            rawCandidateLines: useCannedBridge
                 ? orderedDistractorCandidates(
                     distractors: template.distractors,
                     offset: index
@@ -539,7 +539,7 @@ public enum CompletionPredictionQualityEvaluator {
                     distractors: template.distractors,
                     offset: index
                 ),
-            usePredictivePhraseFallback: usePredictivePhraseFallback
+            useCannedBridge: useCannedBridge
         )
     }
 
@@ -646,16 +646,16 @@ public enum CompletionPredictionQualityEvaluator {
         PositiveTemplate(textBeforeCursor: "This feels genuinely", expectedVisibleText: "useful", distractors: ["kind of", "pretty much"]),
         PositiveTemplate(textBeforeCursor: "I just wanted to", expectedVisibleText: "follow up", distractors: ["get started", "circle around"]),
         PositiveTemplate(textBeforeCursor: "I think we should", expectedVisibleText: "make sure", distractors: ["move quickly", "add more"]),
-        PositiveTemplate(textBeforeCursor: "When this works we can", expectedVisibleText: "keep moving", distractors: ["circle back", "start over"]),
-        PositiveTemplate(textBeforeCursor: "The app should", expectedVisibleText: "stay quiet", distractors: ["feel magical", "do everything"]),
-        PositiveTemplate(textBeforeCursor: "I want this to", expectedVisibleText: "finish the sentence naturally", distractors: ["open the settings", "submit the prompt"]),
-        PositiveTemplate(textBeforeCursor: "The biggest problem is", expectedVisibleText: "suggestions feel too timid", distractors: ["shipping everything now", "opening another app"]),
-        PositiveTemplate(textBeforeCursor: "What kills trust most is", expectedVisibleText: "wrong fields showing up", distractors: ["adding more buttons", "writing a roadmap"]),
-        PositiveTemplate(textBeforeCursor: "The review should focus on", expectedVisibleText: "real user risk", distractors: ["shipping everything", "writing a roadmap"]),
-        PositiveTemplate(textBeforeCursor: "I think what matters is", expectedVisibleText: "that it feels effortless", distractors: ["open a new window", "send the prompt now"]),
-        PositiveTemplate(textBeforeCursor: "What makes this useful is", expectedVisibleText: "getting the words right", distractors: ["adding more buttons", "writing a roadmap"]),
-        PositiveTemplate(textBeforeCursor: "This would be better if it", expectedVisibleText: "predicted the next phrase", distractors: ["opened another app", "answered the prompt"]),
-        PositiveTemplate(textBeforeCursor: "When this feels magical it", expectedVisibleText: "knows the next phrase", distractors: ["adds a pitch deck", "runs the command"])
+        PositiveTemplate(textBeforeCursor: "Sounds good", expectedVisibleText: "to me", distractors: ["for now", "right away"]),
+        PositiveTemplate(textBeforeCursor: "That makes sense", expectedVisibleText: "to me", distractors: ["for later", "right now"]),
+        PositiveTemplate(textBeforeCursor: "I can take", expectedVisibleText: "a look", distractors: ["more time", "the whole thing"]),
+        PositiveTemplate(textBeforeCursor: "Can you please", expectedVisibleText: "take a look", distractors: ["send it now", "open settings"]),
+        PositiveTemplate(textBeforeCursor: "Let me know", expectedVisibleText: "what you think", distractors: ["when possible", "submit the prompt"]),
+        PositiveTemplate(textBeforeCursor: "We should probably", expectedVisibleText: "keep it simple", distractors: ["make it huge", "open another app"]),
+        PositiveTemplate(textBeforeCursor: "It would help to", expectedVisibleText: "make this clearer", distractors: ["add more steps", "run this command"]),
+        PositiveTemplate(textBeforeCursor: "Thanks for", expectedVisibleText: "sending this over", distractors: ["checking later", "click send"]),
+        PositiveTemplate(textBeforeCursor: "What I need is", expectedVisibleText: "a clearer next step", distractors: ["more noise here", "a bigger plan"]),
+        PositiveTemplate(textBeforeCursor: "Next step is", expectedVisibleText: "to make this concrete", distractors: ["press Enter now", "open settings"])
     ]
 
     private static let negativeTemplates = [
