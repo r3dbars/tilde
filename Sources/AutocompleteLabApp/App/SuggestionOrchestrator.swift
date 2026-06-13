@@ -10,9 +10,13 @@ struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
 @MainActor
 final class SuggestionOrchestrator {
     private static let maximumFinalModelDisplayLatencyMilliseconds = 750
+    private static let maximumDocLocalFields = 24
+    private static let maximumDocLocalSnapshotsPerField = 4
+    private static let maximumDocLocalSnapshotCharacters = 12_000
 
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
+    private let docLocalPhrasePredictor: DocLocalNGramPhrasePredictor
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private let completionConfidencePolicy: CompletionConfidencePolicy
@@ -22,10 +26,12 @@ final class SuggestionOrchestrator {
     private var currentRequestStorage: CompletionRequest?
     private var prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
+    private var docLocalCorpusByField: [FocusedFieldIdentity: DocLocalNGramFieldCorpus] = [:]
 
     init(
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
+        docLocalPhrasePredictor: DocLocalNGramPhrasePredictor = DocLocalNGramPhrasePredictor(),
         commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
         completionConfidencePolicy: CompletionConfidencePolicy = CompletionConfidencePolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
@@ -34,6 +40,7 @@ final class SuggestionOrchestrator {
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
+        self.docLocalPhrasePredictor = docLocalPhrasePredictor
         self.commonPhrasePredictor = commonPhrasePredictor
         self.completionConfidencePolicy = completionConfidencePolicy
         self.suggestionPresentationGate = suggestionPresentationGate
@@ -82,6 +89,17 @@ final class SuggestionOrchestrator {
 
     func beginRequest(_ input: SuggestionRequestInput) -> SuggestionOrchestration {
         let suggestionID = UUID().uuidString
+        let behaviorProfileID = behaviorProfileID(
+            appBundleIdentifier: input.appBundleIdentifier,
+            fieldKind: input.fieldClassification.kind,
+            textBeforeCursor: input.context.textBeforeCursor
+        )
+        let docLocalContextTexts = docLocalContextTexts(
+            for: input.fieldIdentity,
+            context: input.context,
+            fieldClassification: input.fieldClassification,
+            behaviorProfileID: behaviorProfileID
+        )
         let fieldIdentityDescription = input.fieldIdentity.traceDescription
         let request = CompletionRequest(
             textBeforeCursor: input.context.textBeforeCursor,
@@ -89,11 +107,7 @@ final class SuggestionOrchestrator {
             appBundleIdentifier: input.appBundleIdentifier,
             fieldIdentityDescription: fieldIdentityDescription,
             fieldKind: input.fieldClassification.kind,
-            behaviorProfileID: behaviorProfileID(
-                appBundleIdentifier: input.appBundleIdentifier,
-                fieldKind: input.fieldClassification.kind,
-                textBeforeCursor: input.context.textBeforeCursor
-            ),
+            behaviorProfileID: behaviorProfileID,
             acceptedTextStyleSketch: input.acceptedTextStyleSketch,
             documentTitleShape: DocumentTitleShape.from(windowTitle: input.context.fingerprint.windowTitle),
             visiblePageContext: input.visiblePageContext,
@@ -104,7 +118,8 @@ final class SuggestionOrchestrator {
         return beginRequest(
             request,
             fieldClassification: input.fieldClassification,
-            suggestionTuning: input.suggestionTuning
+            suggestionTuning: input.suggestionTuning,
+            docLocalContextTexts: docLocalContextTexts
         )
     }
 
@@ -119,7 +134,8 @@ final class SuggestionOrchestrator {
     private func beginRequest(
         _ request: CompletionRequest,
         fieldClassification: AXFieldClassification?,
-        suggestionTuning: SuggestionTuning?
+        suggestionTuning: SuggestionTuning?,
+        docLocalContextTexts: [String] = []
     ) -> SuggestionOrchestration {
         clearStreamingPresentations()
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
@@ -143,8 +159,63 @@ final class SuggestionOrchestrator {
             startedAt: Date(),
             fieldIdentityDescription: request.fieldIdentityDescription ?? "",
             requestMetadata: requestMetadata,
-            runtimeSessionCacheDecision: runtimeSessionCacheDecision
+            runtimeSessionCacheDecision: runtimeSessionCacheDecision,
+            docLocalContextTexts: docLocalContextTexts
         )
+    }
+
+    private func docLocalContextTexts(
+        for fieldIdentity: FocusedFieldIdentity,
+        context: FocusedTextContext,
+        fieldClassification: AXFieldClassification,
+        behaviorProfileID: AutocompleteBehaviorProfileID
+    ) -> [String] {
+        guard !context.isSecure,
+              !fieldClassification.suppressesSuggestionsByDefault,
+              Self.allowsDocLocalCorpus(for: behaviorProfileID) else {
+            docLocalCorpusByField[fieldIdentity] = nil
+            return []
+        }
+
+        let existingTexts = docLocalCorpusByField[fieldIdentity]?.texts ?? []
+        rememberDocLocalContext(
+            context.textBeforeCursor + context.textAfterCursor,
+            for: fieldIdentity
+        )
+        return existingTexts
+    }
+
+    private func rememberDocLocalContext(
+        _ rawText: String,
+        for fieldIdentity: FocusedFieldIdentity
+    ) {
+        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        var corpus = docLocalCorpusByField[fieldIdentity] ?? DocLocalNGramFieldCorpus()
+        corpus.append(
+            rawText,
+            maxSnapshots: Self.maximumDocLocalSnapshotsPerField,
+            maxCharactersPerSnapshot: Self.maximumDocLocalSnapshotCharacters
+        )
+        docLocalCorpusByField[fieldIdentity] = corpus
+
+        if docLocalCorpusByField.count > Self.maximumDocLocalFields,
+           let firstKey = docLocalCorpusByField.keys.first {
+            docLocalCorpusByField[firstKey] = nil
+        }
+    }
+
+    nonisolated private static func allowsDocLocalCorpus(
+        for behaviorProfileID: AutocompleteBehaviorProfileID
+    ) -> Bool {
+        switch behaviorProfileID {
+        case .docsProse, .notes, .bullets:
+            return true
+        case .aiChat, .casualChat, .email, .coding, .forms, .search:
+            return false
+        }
     }
 
     private func behaviorProfileID(
@@ -505,6 +576,7 @@ final class SuggestionOrchestrator {
 
     nonisolated func fastPhraseSelection(
         for textBeforeCursor: String,
+        docLocalContextTexts: [String] = [],
         behaviorProfileID: AutocompleteBehaviorProfileID?,
         maxVisibleWords: Int,
         allowPredictiveFallback: Bool = false,
@@ -517,6 +589,17 @@ final class SuggestionOrchestrator {
                 score: nil,
                 suppressionReason: "disabled"
             )
+        }
+
+        let docLocalSelection = docLocalPhrasePredictor.selection(
+            for: textBeforeCursor,
+            localContextTexts: docLocalContextTexts,
+            behaviorProfileID: behaviorProfileID,
+            maxVisibleWords: maxVisibleWords,
+            allowsPromptAppPrediction: allowPromptAppPrediction
+        )
+        if docLocalSelection.suggestion != nil {
+            return docLocalSelection
         }
 
         return commonPhrasePredictor.selection(
@@ -969,6 +1052,33 @@ struct SuggestionOrchestration: Sendable {
     let fieldIdentityDescription: String
     let requestMetadata: [String: String]
     let runtimeSessionCacheDecision: RuntimeSessionCacheDecision
+    let docLocalContextTexts: [String]
+}
+
+private struct DocLocalNGramFieldCorpus: Sendable {
+    private(set) var texts: [String] = []
+
+    mutating func append(
+        _ rawText: String,
+        maxSnapshots: Int,
+        maxCharactersPerSnapshot: Int
+    ) {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        let bounded = String(trimmed.suffix(max(1, maxCharactersPerSnapshot)))
+        if texts.last == bounded {
+            return
+        }
+
+        texts.append(bounded)
+        let overflow = texts.count - max(1, maxSnapshots)
+        if overflow > 0 {
+            texts.removeFirst(overflow)
+        }
+    }
 }
 
 struct SuggestionDisplayScoreDecision: Sendable {

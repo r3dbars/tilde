@@ -91,6 +91,25 @@ struct HostCompatibilityPolicyTests {
         }
     }
 
+    @Test("Send surfaces are never classified as not prompt")
+    func sendSurfacesAreNeverClassifiedAsNotPrompt() throws {
+        let sendSurfaceBundleIdentifiers = [
+            "com.apple.MobileSMS",
+            "com.tinyspeck.slackmacgap",
+            "ru.keepcoder.Telegram",
+            "com.hnc.Discord",
+            "com.hnc.DiscordPTB",
+            "com.hnc.DiscordCanary"
+        ]
+        let profiles = CompatibilityProfileStore.mvp.profiles
+        let policies = HostCompatibilityPolicyCatalog.mvp.policies
+
+        for bundleIdentifier in sendSurfaceBundleIdentifiers {
+            #expect(try #require(profiles[bundleIdentifier]).promptAppSafetyMode != .notPrompt)
+            #expect(try #require(policies[bundleIdentifier]).safetyMode != .notPrompt)
+        }
+    }
+
     @Test("Normal beta toggles include proven Codex dogfood")
     func normalBetaTogglesIncludeProvenCodexDogfood() throws {
         let catalog = HostCompatibilityPolicyCatalog.mvp

@@ -484,6 +484,7 @@ public struct RedactedAutocompleteTraceEvent: Codable, Equatable, Sendable, Iden
         let normalized = key.lowercased()
 
         return normalized == "role"
+            || normalized == "doclocalngrammatch"
             || normalized.hasSuffix("role")
             || normalized.hasPrefix("has")
             || normalized.hasSuffix("chars")
