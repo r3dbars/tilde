@@ -33,6 +33,13 @@ The redacted trace may store:
 It should be enough to answer "did this help?" without saving what the user
 wrote.
 
+Doc-local phrase prediction keeps a small rolling corpus in memory per focused
+writing field. It is built only from Accessibility text reads the app already
+performed, is not written to traces, logs, exports, or Personal Capture, and is
+cleared when the app exits. Trace rows may store redacted source labels such as
+`doc-local-ngram` and match shape like `order-5-local-context`, but not the
+matched text.
+
 ## Pause An App
 
 To stop suggestions in the current app:
