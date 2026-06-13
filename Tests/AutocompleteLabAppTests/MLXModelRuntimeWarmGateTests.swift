@@ -5,6 +5,78 @@ import Testing
 
 @Suite("MLX runtime warm gate")
 struct MLXModelRuntimeWarmGateTests {
+    @Test("Prompt KV cache stays off without environment flag")
+    func promptKVCacheStaysOffWithoutEnvironmentFlag() {
+        var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: false))
+        let request = promptKVRequest("Can we make this")
+        owner.storePreparedPromptForTesting(
+            request: request,
+            promptTokens: [1, 2, 3],
+            systemPrompt: "system",
+            modelRevision: "model-a",
+            promptStyleIdentifier: "style-a"
+        )
+
+        let lookup = owner.lookup(
+            request: promptKVRequest("Can we make this feel"),
+            promptTokens: [1, 2, 3, 4],
+            systemPrompt: "system",
+            modelRevision: "model-a",
+            promptStyleIdentifier: "style-a"
+        )
+
+        #expect(lookup.decision == .miss(.envFlagOff))
+        #expect(lookup.traceMetadata["mlxPromptKVCacheHit"] == "false")
+    }
+
+    @Test("Prompt KV cache refuses earlier text edits")
+    func promptKVCacheRefusesEarlierTextEdits() {
+        var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: true))
+        owner.storePreparedPromptForTesting(
+            request: promptKVRequest("Can we make this"),
+            promptTokens: [10, 20, 30],
+            systemPrompt: "system",
+            modelRevision: "model-a",
+            promptStyleIdentifier: "style-a"
+        )
+
+        let lookup = owner.lookup(
+            request: promptKVRequest("Can you make this feel"),
+            promptTokens: [10, 90, 30, 40],
+            systemPrompt: "system",
+            modelRevision: "model-a",
+            promptStyleIdentifier: "style-a"
+        )
+
+        #expect(lookup.decision == .miss(.earlierTextEdit))
+        #expect(lookup.reusableCache == nil)
+        #expect(lookup.traceMetadata["mlxPromptKVCachePoisonedAvoided"] == "true")
+    }
+
+    @Test("Prompt KV cache requires exact token prefix")
+    func promptKVCacheRequiresExactTokenPrefix() {
+        var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: true))
+        owner.storePreparedPromptForTesting(
+            request: promptKVRequest("Can we make this"),
+            promptTokens: [10, 20, 30],
+            systemPrompt: "system",
+            modelRevision: "model-a",
+            promptStyleIdentifier: "style-a"
+        )
+
+        let lookup = owner.lookup(
+            request: promptKVRequest("Can we make this feel"),
+            promptTokens: [10, 20, 99, 40],
+            systemPrompt: "system",
+            modelRevision: "model-a",
+            promptStyleIdentifier: "style-a"
+        )
+
+        #expect(lookup.decision == .miss(.tokenPrefixMismatch))
+        #expect(lookup.traceMetadata["mlxPromptKVCacheTokenPrefixMatched"] == "false")
+        #expect(lookup.traceMetadata["mlxPromptKVCachePoisonedAvoided"] == "true")
+    }
+
     @Test("Warm gate resumes every waiter when warm completes")
     func warmGateResumesEveryWaiterWhenWarmCompletes() async throws {
         let gate = MLXRuntimeWarmGate()
@@ -352,4 +424,15 @@ struct MLXModelRuntimeWarmGateTests {
             effectiveMaxVisibleWords: 20
         ) == nil)
     }
+}
+
+private func promptKVRequest(_ text: String) -> CompletionRequest {
+    CompletionRequest(
+        textBeforeCursor: text,
+        appBundleIdentifier: "com.apple.TextEdit",
+        fieldIdentityDescription: "field-1",
+        fieldKind: .multilineCompose,
+        behaviorProfileID: .notes,
+        mode: .phraseContinuation
+    )
 }

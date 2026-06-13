@@ -115,6 +115,45 @@ struct SerialFocusedTextAXReaderTests {
         #expect(options.assumedCanSetSelectedText == true)
     }
 
+    @Test("Electron profiles request AXManualAccessibility wake when no text nodes are exposed")
+    func electronProfilesRequestManualAccessibilityWake() throws {
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "md.obsidian"))
+        let options = FocusedTextReadOptionsPolicy.options(
+            for: runningApplicationInfo(bundleIdentifier: "md.obsidian"),
+            profile: profile
+        )
+
+        #expect(options.manualAccessibilityWakeAppFamily == .electron)
+        #expect(AXManualAccessibilityWakePolicy.decision(
+            appFamily: .electron,
+            focusedReadReturnedContext: false,
+            treeHasTextNodes: false
+        ) == .wakeElectronTree)
+    }
+
+    @Test("AXManualAccessibility wake skips readable trees and non Electron apps")
+    func manualAccessibilityWakeSkipsSafeFallbackCases() throws {
+        #expect(AXManualAccessibilityWakePolicy.decision(
+            appFamily: .electron,
+            focusedReadReturnedContext: true,
+            treeHasTextNodes: false
+        ) == .skip)
+        #expect(AXManualAccessibilityWakePolicy.decision(
+            appFamily: .electron,
+            focusedReadReturnedContext: false,
+            treeHasTextNodes: true
+        ) == .skip)
+        #expect(AXManualAccessibilityWakePolicy.decision(
+            appFamily: .nativeAppKit,
+            focusedReadReturnedContext: false,
+            treeHasTextNodes: false
+        ) == .skip)
+        #expect(FocusedTextReadOptionsPolicy.options(
+            for: runningApplicationInfo(bundleIdentifier: "com.apple.TextEdit"),
+            profile: try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        ).manualAccessibilityWakeAppFamily == nil)
+    }
+
     @Test("Non Codex apps use standard focused text reads")
     func nonCodexAppsUseStandardFocusedTextReads() throws {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))

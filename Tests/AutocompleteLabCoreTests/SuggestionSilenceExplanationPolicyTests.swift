@@ -56,6 +56,12 @@ struct SuggestionSilenceExplanationPolicyTests {
                 "model-result",
                 .displayScore
             ),
+            (
+                "learned-restraint",
+                ["displayScoreSuppressionReason": "learned-restraint"],
+                "model-result",
+                .learnedRestraint
+            ),
             ("repeated-miss", [:], "model-result", .repetition),
             ("typedOver", ["prefixCooldownReason": "typedOver"], "prefix-family-cooldown", .prefixCooldown),
             ("quiet-mode-field", ["quietMode": "field"], "annoyance-quiet-mode", .quietMode),
