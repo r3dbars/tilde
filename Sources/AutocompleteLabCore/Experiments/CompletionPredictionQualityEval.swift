@@ -626,7 +626,7 @@ public enum CompletionPredictionQualityEvaluator {
     private static let positiveSurfaces = [
         EvalSurface(name: "TextEdit", appBundleIdentifier: "com.apple.TextEdit", behaviorProfileID: .docsProse),
         EvalSurface(name: "Notes", appBundleIdentifier: "com.apple.Notes", behaviorProfileID: .notes),
-        EvalSurface(name: "Obsidian", appBundleIdentifier: "md.obsidian", behaviorProfileID: .docsProse),
+        EvalSurface(name: "Obsidian", appBundleIdentifier: "md.obsidian", behaviorProfileID: .notes),
         EvalSurface(name: "Chrome textarea", appBundleIdentifier: "com.google.Chrome", behaviorProfileID: .docsProse),
         EvalSurface(name: "Chrome contenteditable", appBundleIdentifier: "com.google.Chrome", behaviorProfileID: .docsProse)
     ]

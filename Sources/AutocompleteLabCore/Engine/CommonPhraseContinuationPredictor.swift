@@ -116,28 +116,35 @@ public struct CommonPhraseContinuationSelection: Equatable, Sendable {
     public let matchedContextSuffix: String?
     public let score: Double?
     public let suppressionReason: String?
+    public let candidateSelectionSource: String
+    public let matchMetadataKey: String
 
     public init(
         suggestion: CompletionSuggestion?,
         matchedContextSuffix: String?,
         score: Double?,
-        suppressionReason: String?
+        suppressionReason: String?,
+        candidateSelectionSource: String = "predictive-phrase-fallback",
+        matchMetadataKey: String = "predictivePhraseMatch"
     ) {
         self.suggestion = suggestion
         self.matchedContextSuffix = matchedContextSuffix
         self.score = score
         self.suppressionReason = suppressionReason
+        self.candidateSelectionSource = candidateSelectionSource
+        self.matchMetadataKey = matchMetadataKey
     }
 
     public var traceMetadata: [String: String] {
-        [
-            "candidateSelectionSource": "predictive-phrase-fallback",
+        var metadata = [
+            "candidateSelectionSource": candidateSelectionSource,
             "cleanedCandidateCount": suggestion == nil ? "0" : "1",
             "candidateTopScore": score.map { String(format: "%.3f", $0) } ?? "none",
             "candidateScoreMargin": "none",
-            "candidateSuppressionReason": suppressionReason ?? "none",
-            "predictivePhraseMatch": matchedContextSuffix ?? "none"
+            "candidateSuppressionReason": suppressionReason ?? "none"
         ]
+        metadata[matchMetadataKey] = matchedContextSuffix ?? "none"
+        return metadata
     }
 }
 

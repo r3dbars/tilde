@@ -8,6 +8,7 @@ swift test --filter CompletionQualityEvalTests
 swift test --filter OfflineModelQualityEvalTests
 swift test --filter WordCompletionQualityEvalTests
 swift test --filter CompletionPredictionQualityEvalTests
+./script/check_small_model_blind_audit_report.sh
 
 REPORT_PATH="docs/evals/word-completion-quality-2026-05-09.md"
 if [[ ! -f "$REPORT_PATH" ]]; then

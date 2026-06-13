@@ -1109,7 +1109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
-        let suggestionDecisionMenu = NSMenuItem(title: "Why: starting", action: nil, keyEquivalent: "")
+        let suggestionDecisionMenu = NSMenuItem(title: "Why now: starting", action: nil, keyEquivalent: "")
         let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
         let suggestNowItem = NSMenuItem(
             title: "Suggest Now",
@@ -2595,7 +2595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cancelPrefixCooldownRetry()
             break
         case let .coolingDown(cooldown):
-            setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
+            setSuggestionDecision(SuggestionStatusText.notShown(reason: "prefix-family-cooldown"))
             showFieldStatusIndicator(.waiting.withReason("recent miss cooldown"), context: context)
             schedulePrefixCooldownRetry(
                 for: snapshot,
@@ -2635,7 +2635,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
         guard !quietMode.isActive else {
-            setSuggestionDecision("Waiting: \(quietMode.traceReason)")
+            setSuggestionDecision(SuggestionStatusText.notShown(reason: quietMode.traceReason))
             showFieldStatusIndicator(.waiting.withReason("recent rejects"), context: context)
             let metadata = suggestionFieldClassification.traceMetadata
                 .merging(quietMode.metadata) { current, _ in current }
@@ -7289,7 +7289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         ]
                         .merging(learningDecision.metadata) { current, _ in current }
                     )
-                    setSuggestionDecision("\(SuggestionStatusText.notShown(reason: reason)); queued model phrase")
+                    setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
                 } else {
                     presentSuggestion(
                         fastSuggestion,
@@ -7478,7 +7478,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 renderMode: renderMode,
                                 latencyMilliseconds: latencyMilliseconds,
                                 triggerReason: "model-stream",
-                                requestTicket: requestTicket
+                                requestTicket: requestTicket,
+                                candidateSelectionMetadata: self.suggestionOrchestrator
+                                    .streamingPresentationMetadata(suggestionID: suggestionID)
                             )
                         }
                     }
@@ -7986,7 +7988,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 lateSuggestionMetadata["lateSuppressionPreservedAgeMilliseconds"] =
                     currentSuggestionAgeMilliseconds().map(String.init) ?? "unknown"
             }
-            setSuggestionDecision("Blocked: display score \(reason)")
+            setSuggestionDecision(SuggestionStatusText.notShown(reason: reason))
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,

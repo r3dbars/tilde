@@ -41,6 +41,44 @@ struct RawTraceReportExportTests {
         #expect(event.metadata["acceptanceID"] == "accept-one")
     }
 
+    @Test("Suppressed trace events include one silence reason code")
+    func suppressedTraceEventsIncludeOneSilenceReasonCode() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTraceSilenceReasonTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+        }
+
+        let traceURL = temporaryFolder.appendingPathComponent("traces.jsonl")
+        let log = RawAutocompleteTraceLog(
+            logURL: traceURL,
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            environment: [:]
+        )
+
+        log.record(
+            type: .suggestionSuppressed,
+            suggestionID: "slow-one",
+            appBundleIdentifier: "com.apple.TextEdit",
+            requestMode: "phraseContinuation",
+            triggerReason: "model-result",
+            reason: "too-slow-to-display",
+            metadata: [
+                "displayScoreSuppressionReason": "too-slow-to-display"
+            ]
+        )
+
+        let events = try waitForEvents(at: traceURL)
+        let event = try #require(events.first)
+        let reasonCodeKeys = event.metadata.keys.filter {
+            $0 == SuggestionSilenceExplanationPolicy.traceReasonCodeMetadataKey
+        }
+
+        #expect(reasonCodeKeys.count == 1)
+        #expect(event.metadata[SuggestionSilenceExplanationPolicy.traceReasonCodeMetadataKey] == "latency")
+        #expect(event.reason == "too-slow-to-display")
+    }
+
     @Test("Diagnostics export writes redacted HTML and survival reports")
     func diagnosticsExportWritesRedactedReports() throws {
         let temporaryFolder = FileManager.default.temporaryDirectory

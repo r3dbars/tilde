@@ -31,6 +31,11 @@ For target-app coverage work, use the ranked app-surface queue:
 That queue ranks value against proof risk and keeps beta-safe TextEdit, Notes,
 and Obsidian polish ahead of prompt, chat, terminal, and hosted browser claims.
 
+Terminal-host lanes are currently iceboxed. Do not pick Ghostty, Terminal,
+iTerm2, or Claude-Code terminal-host proof as the next score-loop lane unless
+the explicit goal is terminal-host research. Core writing-app quality comes
+first.
+
 Self-test:
 
 ```bash

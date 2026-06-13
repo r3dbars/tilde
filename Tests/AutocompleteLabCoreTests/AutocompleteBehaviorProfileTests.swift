@@ -145,6 +145,9 @@ struct AutocompleteBehaviorProfileTests {
             appBundleIdentifier: "com.apple.Notes"
         )).id == .notes)
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "md.obsidian"
+        )).id == .notes)
+        #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
             appBundleIdentifier: "com.apple.MobileSMS"
         )).id == .casualChat)
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
@@ -156,6 +159,21 @@ struct AutocompleteBehaviorProfileTests {
         #expect(resolver.profile(for: AutocompleteBehaviorProfileInput(
             appBundleIdentifier: "com.apple.dt.Xcode"
         )).id == .coding)
+    }
+
+    @Test("Obsidian uses note-taking behavior instead of generic docs prose")
+    func obsidianUsesNoteTakingBehavior() {
+        let resolver = AutocompleteBehaviorProfileResolver()
+        let profile = resolver.profile(for: AutocompleteBehaviorProfileInput(
+            appBundleIdentifier: "md.obsidian",
+            fieldKind: .multilineCompose,
+            currentLineStructure: CurrentLineStructure.from(textBeforeCursor: "The intro is enough.\n\nNew plan")
+        ))
+
+        #expect(profile.id == .notes)
+        #expect(!profile.suppressionDefaults.suppressesFreshParagraphStart)
+        #expect(profile.suppressionDefaults.suppressesBlankLine)
+        #expect(profile.promptGuidance.joined(separator: " ").contains("Keep notes terse"))
     }
 
     @Test("Trace metadata is short and trace-safe")
