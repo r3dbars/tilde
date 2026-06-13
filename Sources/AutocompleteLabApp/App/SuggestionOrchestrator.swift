@@ -613,7 +613,9 @@ final class SuggestionOrchestrator {
             learningRestraint: acceptedAndKeptSignal.learningRestraint,
             acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
             acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
-            acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment
+            acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment,
+            typeThroughSurvivalCount: acceptedAndKeptSignal.typeThroughSurvivalCount,
+            typeThroughConfidenceCredit: acceptedAndKeptSignal.typeThroughConfidenceCredit
         )
     }
 

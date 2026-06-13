@@ -391,6 +391,8 @@ public struct SuggestionEpisodeScorecard: Equatable, Sendable {
     public let ignored: Int
     public let dismissed: Int
     public let typedPast: Int
+    public let typeThroughSurvivals: Int
+    public let typeThroughSurvivalRate: Double
     public let deletedFast: Int
     public let averageLatencyMilliseconds: Int?
     public let evalCaseCount: Int
@@ -405,6 +407,13 @@ public struct SuggestionEpisodeScorecard: Equatable, Sendable {
         ignored = records.filter { $0.outcome == .ignored }.count
         dismissed = records.filter { $0.outcome == .dismissed }.count
         typedPast = records.filter { $0.outcome == .typedPast }.count
+        typeThroughSurvivals = records.filter { record in
+            record.actions.contains { action in
+                action.reason == "survived_typethrough"
+                    || action.metadata["typeThroughSurvival"] == "true"
+            }
+        }.count
+        typeThroughSurvivalRate = total == 0 ? 0 : Double(typeThroughSurvivals) / Double(total)
         deletedFast = records.filter { $0.outcome == .deletedFast }.count
         evalCaseCount = SuggestionEpisodeEvalGenerator().cases(from: records).count
 
@@ -438,6 +447,7 @@ public struct SuggestionEpisodeScorecard: Equatable, Sendable {
 
     public var markdown: String {
         let latency = averageLatencyMilliseconds.map { "\($0)ms" } ?? "n/a"
+        let typeThroughRate = Self.percent(typeThroughSurvivalRate)
         let rows = modelPromptRows.isEmpty
             ? "- No model/prompt rows yet."
             : modelPromptRows.map { "- \($0)" }.joined(separator: "\n")
@@ -452,6 +462,7 @@ public struct SuggestionEpisodeScorecard: Equatable, Sendable {
         - Ignored: \(ignored)
         - Dismissed: \(dismissed)
         - Typed past: \(typedPast)
+        - Type-through survival rate: \(typeThroughRate) (\(typeThroughSurvivals)/\(total))
         - Deleted fast: \(deletedFast)
         - Eval cases: \(evalCaseCount)
         - Average latency: \(latency)
@@ -461,5 +472,9 @@ public struct SuggestionEpisodeScorecard: Equatable, Sendable {
         \(rows)
 
         """
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
     }
 }

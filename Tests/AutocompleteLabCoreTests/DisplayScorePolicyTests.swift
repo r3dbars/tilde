@@ -96,6 +96,62 @@ struct DisplayScorePolicyTests {
         #expect(unstableDecision.metadata["displayScoreInstability"] == "0.90")
     }
 
+    @Test("type-through credit can carry a survivor over the display threshold")
+    func typeThroughCreditCanCarrySurvivorOverDisplayThreshold() {
+        let policy = DisplayScorePolicy()
+        let baseScore = DisplayScore(
+            utility: 0.55,
+            styleFit: 0.30,
+            contextFit: 0.25,
+            userAffinity: 0.10,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05
+        )
+        let creditedScore = DisplayScore(
+            utility: 0.55,
+            styleFit: 0.30,
+            contextFit: 0.25,
+            userAffinity: 0.10,
+            risk: 0.05,
+            repetition: 0.05,
+            instability: 0.05,
+            typeThroughSurvivalCount: 3,
+            typeThroughConfidenceCredit: 0.12
+        )
+
+        let baseDecision = policy.decision(for: baseScore, mode: .phraseContinuation)
+        let creditedDecision = policy.decision(for: creditedScore, mode: .phraseContinuation)
+
+        #expect(!baseDecision.shouldDisplay)
+        #expect(baseDecision.metadata["displayScoreSuppressionReason"] == "below-threshold")
+        #expect(creditedDecision.shouldDisplay)
+        #expect(creditedDecision.metadata["displayScoreTypeThroughSurvivals"] == "3")
+        #expect(creditedDecision.metadata["displayScoreTypeThroughCredit"] == "0.12")
+    }
+
+    @Test("type-through credit does not bypass safety vetoes")
+    func typeThroughCreditDoesNotBypassSafetyVetoes() {
+        let policy = DisplayScorePolicy()
+        let decision = policy.decision(
+            for: DisplayScore(
+                utility: 1.00,
+                styleFit: 1.00,
+                contextFit: 1.00,
+                userAffinity: 1.00,
+                risk: 0.90,
+                repetition: 0.00,
+                instability: 0.00,
+                typeThroughSurvivalCount: 10,
+                typeThroughConfidenceCredit: 0.30
+            ),
+            mode: .phraseContinuation
+        )
+
+        #expect(!decision.shouldDisplay)
+        #expect(decision.metadata["displayScoreSuppressionReason"] == "high-risk")
+    }
+
     @Test("word phrase and sentence modes use different thresholds")
     func wordPhraseAndSentenceModesUseDifferentThresholds() {
         let policy = DisplayScorePolicy()
