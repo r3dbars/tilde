@@ -171,27 +171,6 @@ private struct ObsidianPostAcceptanceSuppression {
     }
 }
 
-struct SuggestionDebounceSchedule: Equatable, Sendable {
-    let policyDelayMilliseconds: Int
-    let scheduledDelayMilliseconds: Int
-
-    init(policyDelayMilliseconds: Int, renderMode: SuggestionRenderMode) {
-        let policyDelayMilliseconds = max(0, policyDelayMilliseconds)
-        self.policyDelayMilliseconds = policyDelayMilliseconds
-        self.scheduledDelayMilliseconds = renderMode == .inlineAdjacent
-            ? policyDelayMilliseconds
-            : max(policyDelayMilliseconds, 60)
-    }
-
-    var traceMetadata: [String: String] {
-        [
-            "delayMilliseconds": String(policyDelayMilliseconds),
-            "policyDelayMilliseconds": String(policyDelayMilliseconds),
-            "scheduledDelayMilliseconds": String(scheduledDelayMilliseconds)
-        ]
-    }
-}
-
 private final class ProcessResourceDiagnosticsSampler {
     private var previousCPUSeconds: Double?
     private var previousWallTime: Date?
@@ -314,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
+    private let suggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy()
     private let suggestionAggressivenessPolicy = SuggestionAggressivenessPolicy()
     private let visiblePageContextProvider = VisiblePageContextProvider()
     private let fieldClassifier = AXFieldClassifier()
@@ -358,6 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wordCompletionRanker: wordCompletionRanker,
         prefixFamilyCooldownPolicy: makePrefixFamilyCooldownPolicy()
     )
+    private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()
     private let suggestionTypingProgressPolicy = SuggestionTypingProgressPolicy()
     private var displayScorePolicy: DisplayScorePolicy {
         suggestionTuning.displayScorePolicy
@@ -2609,45 +2590,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = recordPrefixFamilyCooldown(.deletion, input: prefixCooldownInput)
         }
 
-        if allowsMaxAggressiveTuningBypass(for: profile) {
+        switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
+        case .allowed:
             cancelPrefixCooldownRetry()
-        } else {
-            switch suggestionOrchestrator.prefixCooldownDecision(for: prefixCooldownInput) {
-            case .allowed:
-                cancelPrefixCooldownRetry()
-                break
-            case let .coolingDown(cooldown):
-                setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
-                showFieldStatusIndicator(.waiting.withReason("recent miss cooldown"), context: context)
-                schedulePrefixCooldownRetry(
-                    for: snapshot,
-                    cooldown: cooldown
-                )
-                let metadata = suggestionFieldClassification.traceMetadata
-                    .merging(cooldown.metadata) { current, _ in current }
-                    .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
-                RawAutocompleteTraceLog.shared.record(
-                    type: .suggestionSuppressed,
-                    suggestionID: UUID().uuidString,
-                    appBundleIdentifier: profile.bundleIdentifier,
-                    fieldIdentity: fieldIdentity.traceDescription,
-                    requestMode: requestMode.rawValue,
-                    triggerReason: "prefix-family-cooldown",
-                    textBeforeCursor: context.textBeforeCursor,
-                    textAfterCursor: context.textAfterCursor,
-                    reason: cooldown.reason.rawValue,
-                    metadata: metadata
-                )
-                recordBlockedSuggestionEvent(
-                    "suggestion-blocked",
-                    context: context,
-                    profile: profile,
-                    fieldIdentity: fieldIdentity,
-                    metadata: metadata
-                )
-                hideSuggestion()
-                return
-            }
+            break
+        case let .coolingDown(cooldown):
+            setSuggestionDecision("Waiting: prefix \(cooldown.reason.rawValue)")
+            showFieldStatusIndicator(.waiting.withReason("recent miss cooldown"), context: context)
+            schedulePrefixCooldownRetry(
+                for: snapshot,
+                cooldown: cooldown
+            )
+            let metadata = suggestionFieldClassification.traceMetadata
+                .merging(cooldown.metadata) { current, _ in current }
+                .merging(["reason": "prefix-family-cooldown"]) { current, _ in current }
+            RawAutocompleteTraceLog.shared.record(
+                type: .suggestionSuppressed,
+                suggestionID: UUID().uuidString,
+                appBundleIdentifier: profile.bundleIdentifier,
+                fieldIdentity: fieldIdentity.traceDescription,
+                requestMode: requestMode.rawValue,
+                triggerReason: "prefix-family-cooldown",
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                reason: cooldown.reason.rawValue,
+                metadata: metadata
+            )
+            recordBlockedSuggestionEvent(
+                "suggestion-blocked",
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                metadata: metadata
+            )
+            hideSuggestion()
+            return
         }
 
         let annoyanceContext = annoyanceContext(
@@ -2657,8 +2634,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldKind: suggestionFieldClassification.kind
         )
         let quietMode = await annoyanceSuppressor.quietMode(for: annoyanceContext)
-        guard !quietMode.isActive
-                || allowsMaxAggressiveTuningBypass(for: profile) else {
+        guard !quietMode.isActive else {
             setSuggestionDecision("Waiting: \(quietMode.traceReason)")
             showFieldStatusIndicator(.waiting.withReason("recent rejects"), context: context)
             let metadata = suggestionFieldClassification.traceMetadata
@@ -6924,8 +6900,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suggestionOrchestrator.startStreamingPresentation(suggestionID: suggestionID)
         let requestTicket = orchestration.ticket
         let requestStartedAt = orchestration.startedAt
-        let debounceSchedule = SuggestionDebounceSchedule(
+        let requestSchedule = suggestionRequestSchedulingPolicy.schedule(
             policyDelayMilliseconds: delayMilliseconds,
+            timingLane: timingLane,
+            requestMode: request.mode,
             renderMode: renderMode
         )
         let typingBurstMetadata: [String: String] = typingBurstDecision == .idle
@@ -6945,7 +6923,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "renderMode": renderMode.rawValue
             ]
             .merging(typingBurstMetadata) { current, _ in current }
-            .merging(debounceSchedule.traceMetadata) { current, _ in current }
+            .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
 
@@ -7444,12 +7422,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
             .merging(typingBurstMetadata) { current, _ in current }
             .merging(fastPhraseFallbackMetadata) { current, _ in current }
-            .merging(debounceSchedule.traceMetadata) { current, _ in current }
+            .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
         debounceTaskSuggestionID = suggestionID
-        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, debounceSchedule] in
-            try? await Task.sleep(for: .milliseconds(debounceSchedule.scheduledDelayMilliseconds))
+        debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
+            try? await Task.sleep(for: .milliseconds(requestSchedule.scheduledDelayMilliseconds))
             guard !Task.isCancelled else {
                 await MainActor.run {
                     self.clearCompletedSuggestionTask(suggestionID: suggestionID)
@@ -7513,6 +7491,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         currentFieldIdentity: self.currentFieldIdentity
                     ) else {
+                        return
+                    }
+
+                    if self.suggestionRequestSchedulingPolicy.shouldSuppressResult(
+                        latencyMilliseconds: latencyMilliseconds,
+                        schedule: requestSchedule
+                    ) {
+                        let shouldKeepStreamedSuggestion = self.suggestionOrchestrator.shouldKeepVisibleStreamingSuggestionAfterEmptyFinal(
+                            suggestionID: suggestionID,
+                            currentSuggestionID: self.currentSuggestionID,
+                            ticket: requestTicket,
+                            fieldIdentity: fieldIdentity,
+                            currentFieldIdentity: self.currentFieldIdentity,
+                            hasVisibleSuggestion: self.suggestionSession.hasVisibleSuggestion
+                        )
+                        let metadata = requestMetadata
+                            .merging(requestSchedule.traceMetadata) { current, _ in current }
+                            .merging([
+                                "resultLatencyBudgetExceeded": "true",
+                                "keptVisibleStreamingSuggestion": String(shouldKeepStreamedSuggestion)
+                            ]) { current, _ in current }
+                        RawAutocompleteTraceLog.shared.record(
+                            type: .suggestionSuppressed,
+                            suggestionID: suggestionID,
+                            appBundleIdentifier: appBundleIdentifier,
+                            fieldIdentity: fieldIdentityDescription,
+                            requestMode: request.mode.rawValue,
+                            triggerReason: "model-result",
+                            textBeforeCursor: request.textBeforeCursor,
+                            textAfterCursor: request.textAfterCursor,
+                            cleanedVisibleText: suggestion?.visibleText ?? "",
+                            displayedText: suggestion?.visibleText ?? "",
+                            latencyMilliseconds: latencyMilliseconds,
+                            reason: "latency-budget-exceeded",
+                            metadata: metadata
+                        )
+                        self.recordSuggestionEvent(
+                            "suggestion-blocked",
+                            context: context,
+                            profile: profile,
+                            metadata: [
+                                "reason": "latency-budget-exceeded"
+                            ].merging(metadata) { current, _ in current }
+                        )
+                        if shouldKeepStreamedSuggestion {
+                            self.setSuggestionDecision("Shown: kept streamed suggestion")
+                            self.repositionVisibleSuggestion(context: context, profile: profile)
+                            return
+                        }
+
+                        self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "latency-budget-exceeded"))
+                        self.hideSuggestion(reason: "latency-budget-exceeded")
                         return
                     }
 
@@ -7897,14 +7927,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fieldClassification: displayFieldClassification,
             profile: profile
         )
-        let bypassesRepeatedMiss = allowsMaxAggressiveTuningBypass(for: profile)
-        let isRepeatedMiss = bypassesRepeatedMiss
-            ? false
-            : suggestionRepetitionSuppressor.shouldSuppress(
-                suggestion.visibleText,
-                mode: request.mode,
-                scope: request.appBundleIdentifier ?? profile.bundleIdentifier
-            )
+        let isRepeatedMiss = suggestionRepetitionSuppressor.shouldSuppress(
+            suggestion.visibleText,
+            mode: request.mode,
+            scope: request.appBundleIdentifier ?? profile.bundleIdentifier
+        )
         let orchestratedDisplayDecision = suggestionOrchestrator.displayScoreDecision(
             suggestion: suggestion,
             request: request,
@@ -17071,7 +17098,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         var metadata = [
-            "typedSuffix": typedSuffix
+            "typedSuffixChars": String(typedSuffix.count)
         ]
         metadata.merge(recordPrefixFamilyCooldown(
             .typedOver,
@@ -17132,21 +17159,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let progress = suggestionTypingProgressPolicy.progress(
-            originalTextBeforeCursor: originalTextBeforeCursor,
-            displayedText: displayedText,
-            newTextBeforeCursor: context.textBeforeCursor
+        let baselineSnapshot = currentSuggestionAcceptanceSnapshot?.focusedTextSnapshot
+            ?? FocusedTextSnapshot(
+                fieldIdentity: fieldIdentity,
+                textBeforeCursor: originalTextBeforeCursor,
+                textAfterCursor: context.textAfterCursor
+            )
+        let transition = typeThroughPrefixStateMachine.apply(
+            to: &suggestionSession,
+            input: TypeThroughPrefixInput(
+                baselineSnapshot: baselineSnapshot,
+                currentSnapshot: snapshot
+            )
         )
 
-        if case let .typedThroughVisiblePrefix(typedSuffix) = progress {
-            guard suggestionSession.commitTypedVisiblePrefix(typedSuffix) else {
-                return false
-            }
-
+        switch transition {
+        case let .survived(survival):
             let hasRemainingSuggestion = suggestionSession.hasVisibleSuggestion
             lastTextSnapshot = snapshot
             invalidatePendingSuggestionRequest()
             currentSuggestionTextBeforeCursor = context.textBeforeCursor
+            currentSuggestionDisplayedText = suggestionSession.visibleSuggestion?.visibleText
             if let currentSuggestionAcceptanceSnapshot {
                 self.currentSuggestionAcceptanceSnapshot = currentSuggestionAcceptanceSnapshot.advancingTextRevision(
                     textBeforeCursor: context.textBeforeCursor,
@@ -17160,11 +17193,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "suggestion-typed-through",
                 context: context,
                 profile: profile,
-                metadata: [
-                    "reason": "visible-prefix-advanced",
-                    "typedSuffixChars": String(typedSuffix.count),
-                    "remainingVisibleChars": String(suggestionSession.visibleSuggestion?.visibleText.count ?? 0)
-                ]
+                metadata: survival.traceMetadata
+            )
+            recordPersonalCaptureSuggestionEpisodeAction(
+                suggestionID: currentSuggestionID ?? "",
+                appBundleIdentifier: profile.bundleIdentifier,
+                outcome: .shown,
+                reason: "survived_typethrough",
+                metadata: survival.traceMetadata
             )
             keyboardEventTap?.suppressPassthroughObservation(for: 0.35)
             if hasRemainingSuggestion {
@@ -17174,7 +17210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             lastRequestedTextBeforeCursor = nil
             return false
-        } else if case .typedOver = progress {
+        case .invalidated(.mismatch):
             if shouldPreserveVisibleSuggestionWhileTyping(displayedText: displayedText) {
                 lastRequestedTextBeforeCursor = nil
                 setSuggestionDecision("Shown: refreshing while typing")
@@ -17197,6 +17233,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 scope: currentSuggestionAppBundleIdentifier ?? currentProfile?.bundleIdentifier ?? ""
             )
             hideSuggestion(reason: "typed-over")
+        case let .invalidated(reason):
+            hideSuggestion(
+                reason: "type-through-\(reason.rawValue)",
+                metadata: transition.traceMetadata
+            )
+        case let .suppressed(reason):
+            hideSuggestion(
+                reason: "type-through-\(reason.rawValue)",
+                metadata: transition.traceMetadata
+            )
+        case .unchanged:
+            return false
         }
 
         return false
@@ -18502,22 +18550,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func allowsSentenceBoundaryContinuation(for profile: CompatibilityProfile) -> Bool {
         !profile.promptAppSafetyMode.isPromptSurface
-            || allowsMaxAggressiveTuningBypass(for: profile)
     }
 
     private func usesDailyDriverLineStartPhraseContinuation(for profile: CompatibilityProfile) -> Bool {
-        guard !profile.promptAppSafetyMode.isPromptSurface
-                || allowsMaxAggressiveTuningBypass(for: profile) else {
+        guard !profile.promptAppSafetyMode.isPromptSurface else {
             return false
         }
 
-        return allowsMaxAggressiveTuningBypass(for: profile)
-            || (profile.bundleIdentifier == "md.obsidian" && suggestionTuning.aggressivenessLevel >= 4)
-    }
-
-    private func allowsMaxAggressiveTuningBypass(for profile: CompatibilityProfile) -> Bool {
-        suggestionTuning.aggressivenessLevel >= SuggestionTuning.maximumAggressivenessLevel
-            && profile.allowsMaxAggressiveTuningBypass
+        return profile.bundleIdentifier == "md.obsidian" && suggestionTuning.aggressivenessLevel >= 4
     }
 
     private func minimumPhraseContinuationWords(for profile: CompatibilityProfile) -> Int {
@@ -18643,21 +18683,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setSuggestionAggressivenessLevel(_ level: Int) {
-        if level == SuggestionTuning.maximumAggressivenessLevel {
-            setSuggestionTuning(
-                updatedSuggestionTuning(
-                    aggressivenessLevel: level,
-                    wordStartCharacters: SuggestionTuning.minimumWordStartCharacters,
-                    phraseStartWords: SuggestionTuning.minimumPhraseStartWords,
-                    responseSpeedLevel: SuggestionTuning.maximumResponseSpeedLevel,
-                    confidenceLevel: SuggestionTuning.maximumConfidenceLevel,
-                    learningRestraintLevel: SuggestionTuning.minimumLearningRestraintLevel
-                ),
-                reason: "aggressiveness-changed"
-            )
-            return
-        }
-
         setSuggestionTuning(
             updatedSuggestionTuning(aggressivenessLevel: level),
             reason: "aggressiveness-changed"
@@ -19584,31 +19609,25 @@ private extension AppDelegate {
             var selection = DisabledAppSelection(
                 persistedBundleIdentifiers: persisted
             )
+            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
+            disabledBundleIdentifiers = selection.bundleIdentifiers
             appEnablementSetupCompleted = setupKeyExists
                 ? defaults.bool(forKey: Self.appEnablementSetupCompletedDefaultsKey)
                 : true
-            if !setupKeyExists {
-                selection.clear()
-            }
-            if !appEnablementSetupCompleted {
-                selection.clear()
-                appEnablementSetupCompleted = true
-            }
-            selection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
-            disabledBundleIdentifiers = selection.bundleIdentifiers
             defaults.set(appEnablementSetupCompleted, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-            persistDisabledApps()
             return
         }
 
         var defaultOffSelection = DisabledAppSelection(
             defaultOffProfileStore: profileStore
         )
+        disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
+        appEnablementSetupCompleted = false
+        defaults.set(false, forKey: Self.appEnablementSetupCompletedDefaultsKey)
+        persistDisabledApps()
+
         defaultOffSelection.temporarilyEnable(bundleIdentifiers: temporarilyEnabledBundleIDs)
         disabledBundleIdentifiers = defaultOffSelection.bundleIdentifiers
-        appEnablementSetupCompleted = true
-        defaults.set(true, forKey: Self.appEnablementSetupCompletedDefaultsKey)
-        persistDisabledApps()
     }
 
     func loadProofModeOverrides() {
