@@ -63,7 +63,7 @@ public struct CompletionModelPolicy: Equatable, Sendable {
     }
 
     public static let mvp = CompletionModelPolicy(
-        model: .qwen35FourB,
+        model: .gemma4E4BItOptiQ,
         runtimeOwnership: .appOwnedEmbedded,
         minimumMemoryGB: 16,
         maxGeneratedTokens: 20,
