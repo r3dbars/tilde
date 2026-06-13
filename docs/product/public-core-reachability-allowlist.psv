@@ -30,6 +30,22 @@ DailyDriverPhraseQualityEvalCaseResult|research|Sources/AutocompleteLabCore/Expe
 DailyDriverPhraseQualitySurfaceSummary|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
 DailyDriverPhraseQualityEvalReport|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
 DailyDriverPhraseQualityEvaluator|research|Sources/AutocompleteLabCore/Experiments/DailyDriverPhraseQualityEval.swift|Offline phrase quality eval, not live app behavior.
+EvalV2BlindCorpusCaseKind|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+EvalV2ExpectedAction|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+EvalV2PublicDomainSource|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+EvalV2BlindCorpusCase|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+EvalV2BlindPrompt|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+EvalV2BlindAnswerKeyRow|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+EvalV2BlindCorpusPlan|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+EvalV2BlindCorpus|experimental|Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift|Wave 4 blind eval corpus scaffold, not live app behavior.
+HumanJudgedSuggestionWinner|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
+HumanJudgedSuggestionCandidate|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
+HumanJudgedSuggestionPairSeed|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
+HumanJudgedSuggestionRoundItem|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
+HumanJudgedSuggestionRoundKeyRow|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
+HumanJudgedSuggestionJudgmentRow|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
+HumanJudgedSuggestionRound|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
+HumanJudgedSuggestionRoundError|experimental|Sources/AutocompleteLabCore/Experiments/HumanJudgedSuggestionRound.swift|Wave 4 human-judged round scaffold, not live app behavior.
 OfflineModelTaskKind|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
 OfflineModelEvalTask|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
 OfflineModelQualityAuditTask|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
