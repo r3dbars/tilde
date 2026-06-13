@@ -226,6 +226,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             throw CancellationError()
         }
 
+        await warmupCompletionGraph(container: loadedContainer)
+        try Task.checkCancellation()
+
         stateQueue.sync {
             container = loadedContainer
             storedState = .ready(candidate: .mlx)
@@ -238,6 +241,57 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
             ]
         )
+    }
+
+    /// Runs a tiny throwaway generation right after the model loads so the
+    /// MLX/Metal compute graph is compiled during background warm instead of on
+    /// the user's first real keystroke. This is best-effort: any failure is
+    /// recorded and ignored so it can never block readiness. Set
+    /// `AUTOCOMPLETE_LAB_MLX_WARMUP` to an off value to skip it.
+    private func warmupCompletionGraph(container: ModelContainer) async {
+        guard Self.warmupGenerationEnabled() else {
+            return
+        }
+
+        let startedAt = Date()
+        do {
+            let session = ChatSession(
+                container,
+                instructions: "",
+                generateParameters: GenerateParameters(maxTokens: 1, temperature: 0),
+                additionalContext: ["enable_thinking": false]
+            )
+            for try await _ in session.streamResponse(to: "Warm up.") {
+                break
+            }
+            DiagnosticsLog.shared.record(
+                "mlx-model-warmup-succeeded",
+                metadata: [
+                    "warmupMilliseconds": String(Self.milliseconds(from: startedAt, to: Date())),
+                    "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
+                ]
+            )
+        } catch is CancellationError {
+            DiagnosticsLog.shared.record("mlx-model-warmup-cancelled", metadata: [:])
+        } catch {
+            DiagnosticsLog.shared.record(
+                "mlx-model-warmup-skipped",
+                metadata: ["reason": error.localizedDescription]
+            )
+        }
+    }
+
+    static func warmupGenerationEnabled(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        guard let value = environment["AUTOCOMPLETE_LAB_MLX_WARMUP"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        else {
+            return true
+        }
+
+        return !["0", "false", "no", "off"].contains(value)
     }
 
     private func verifyModelAssetIntegrity(

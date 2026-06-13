@@ -124,6 +124,18 @@ system prompt (mode, behavior profile, visible-page guidance) cause a clean miss
 and a full re-prefill, so trimming and stabilizing the system prompt remains a
 follow-up latency lever to validate with the latency proof.
 
+## Warmup Generation After Load
+
+Loading the model only allocates weights; the MLX/Metal compute graph is not
+compiled until the first generation runs. Without a warmup that first
+compilation lands on the user's first real keystroke, making the very first
+suggestion the slowest one. The runtime now runs a tiny throwaway generation at
+the end of background warm (`warmupCompletionGraph`), so the graph is compiled
+before the runtime reports ready. It is best-effort and never blocks readiness.
+Set `AUTOCOMPLETE_LAB_MLX_WARMUP` to an off value (`0`, `false`, `no`, `off`) to
+skip it. Warmup timing is recorded as `mlx-model-warmup-succeeded` in
+diagnostics.
+
 ## Measuring Models Without a Cold Load Per Row
 
 The quality/latency audit harness used to spawn a fresh `mlx_lm.generate`
