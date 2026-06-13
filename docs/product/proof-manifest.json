@@ -20,7 +20,7 @@
         "versionSource": "/System/Applications/TextEdit.app",
         "safetyMode": "notPrompt",
         "runtimeState": "userToggleAllowed",
-        "proofState": "complete",
+        "proofState": "partial",
         "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
@@ -82,7 +82,7 @@
             "reference": "Obsidian/obsidian-long-note"
           }
         ],
-        "notes": "Real CodeMirror proof is current across default, non-default theme, pane, and long-note lanes; broader vault variance still keeps support yellow."
+        "notes": "Real CodeMirror proof requires a stock no-flags default launch plus non-default theme, pane, and long-note lanes; broader vault variance still keeps support yellow."
       },
       {
         "bundle": "com.apple.mail",
@@ -736,19 +736,27 @@
     },
     {
       "surface": "Obsidian",
-      "status": "complete",
-      "manualSmoke": {
-        "app": "Obsidian",
-        "bundle": "md.obsidian",
-        "proof": "default",
-        "minVerifiedAccepts": 2,
-        "requiresVisualStrictComplete": true
-      },
+      "status": "partial",
       "screenshots": [
         "docs/product/visual-placement-screenshots/obsidian.png"
       ],
-      "gaps": [],
+      "gaps": [
+        "Stock no-flags default Obsidian smoke proof is required before claiming stock Obsidian support."
+      ],
       "requirements": [
+        {
+          "id": "obsidian-stock-default",
+          "status": "pending",
+          "summary": "Bounded default proof must use stock Obsidian launch with no --force-renderer-accessibility flag.",
+          "manualSmoke": {
+            "app": "Obsidian",
+            "bundle": "md.obsidian",
+            "proof": "obsidian-stock",
+            "minVerifiedAccepts": 2,
+            "requiresVisualStrictComplete": true
+          },
+          "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate"
+        },
         {
           "id": "obsidian-theme-variants",
           "status": "complete",
@@ -1043,7 +1051,7 @@
       "surface": "Obsidian",
       "status": "partial",
       "owner": "electron editor adapter lane",
-      "safetyNote": "Defined Obsidian proof rows are current across default, theme, pane, and long-note lanes; broader vault variance and hidden-caret edge cases keep support yellow."
+      "safetyNote": "Theme, pane, and long-note proof exists, but stock no-flags default proof is now tracked separately before claiming stock Obsidian support."
     },
     {
       "bundle": "com.apple.mail",
