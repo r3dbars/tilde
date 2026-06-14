@@ -749,4 +749,5 @@ public struct AutocompleteTraceReplay: Sendable {
             return suppression.reason.rawValue
         }
     }
+
 }
