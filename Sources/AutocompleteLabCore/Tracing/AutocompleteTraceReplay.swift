@@ -621,19 +621,11 @@ public struct AutocompleteTraceReplay: Sendable {
     }
 
     private func intMetadata(_ event: AutocompleteTraceEvent, key: String) -> Int? {
-        guard let value = event.metadata[key] else {
-            return nil
-        }
-
-        return Int(value)
+        event.intMetadata(key)
     }
 
     private func doubleMetadata(_ event: AutocompleteTraceEvent, key: String) -> Double? {
-        guard let value = event.metadata[key] else {
-            return nil
-        }
-
-        return Double(value)
+        event.doubleMetadata(key)
     }
 
     private func displayDecisionDiff(
