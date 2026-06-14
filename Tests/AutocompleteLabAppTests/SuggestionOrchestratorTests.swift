@@ -522,6 +522,60 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast phrase selection picks doc-local n-gram over canned bridge when both match")
+    func fastPhraseSelectionPrefersDocLocalNGramOverCannedBridgeWhenBothMatch() {
+        // "we should probably" is a known canned-bridge context suffix (→ "keep it simple").
+        // Priming doc-local with a different continuation for the same prefix verifies that
+        // the n-gram source wins and the canned bridge is never reached.
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = testFieldIdentity(elementIdentifier: 7)
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+
+        // Prime doc-local corpus with a sentence that starts with "we should probably".
+        _ = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(
+                textBeforeCursor: "we should probably validate this path early and often",
+                textAfterCursor: ""
+            ),
+            appBundleIdentifier: field.bundleIdentifier,
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
+            maxVisibleWords: 8,
+            requestMode: .phraseContinuation,
+            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
+        ))
+        let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(
+                textBeforeCursor: "we should probably",
+                textAfterCursor: ""
+            ),
+            appBundleIdentifier: field.bundleIdentifier,
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
+            maxVisibleWords: 8,
+            requestMode: .phraseContinuation,
+            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
+        ))
+
+        let selection = orchestrator.fastPhraseSelection(
+            for: orchestration.request.textBeforeCursor,
+            docLocalContextTexts: orchestration.docLocalContextTexts,
+            behaviorProfileID: orchestration.request.behaviorProfileID,
+            maxVisibleWords: orchestration.request.maxVisibleWords,
+            allowPredictiveFallback: true
+        )
+
+        // The doc-local n-gram continuation wins over the canned " keep it simple".
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
+        #expect(selection.traceMetadata["candidateSelectionSource"] != "canned-bridge")
+        #expect(selection.suggestion?.visibleText.hasPrefix(" validate") == true)
+    }
+
+    @MainActor
     @Test("Fast phrase selection can opt into prompt-app proof prediction")
     func fastPhraseSelectionPromptAppProofPrediction() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
