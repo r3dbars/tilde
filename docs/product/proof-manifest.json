@@ -208,7 +208,7 @@
         "hostVersion": "2.1.128",
         "hostBuild": "2.1.128",
         "versionSource": "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app",
-        "safetyMode": "disabled",
+        "safetyMode": "wordOnly",
         "runtimeState": "proofModeOnly",
         "proofState": "partial",
         "killSwitch": "proofModeRequired",
@@ -222,7 +222,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated, proof-mode-only, one-word only, and iceboxed from beta readiness. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
+        "notes": "Word-only proof-mode lane: terminal-host proof is marker-gated, one-word only, and iceboxed from beta readiness. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -350,6 +350,27 @@
         "killSwitch": "hardDisabled",
         "proofArtifacts": [],
         "notes": "Monaco editor and AI composer stay blocked until app-specific proof exists."
+      },
+      {
+        "bundle": "*",
+        "displayName": "Generic App",
+        "versionState": "pending",
+        "versionReason": "The generic fallback covers every app without a custom profile, so no single host version applies.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [
+          {
+            "kind": "self-test",
+            "reference": "script/check_generic_app_safety_proof_self_test.sh"
+          },
+          {
+            "kind": "unit-test",
+            "reference": "Tests/AutocompleteLabCoreTests/GenericAppSafetyProofHarnessTests.swift"
+          }
+        ],
+        "notes": "Default-on generic Accessibility fallback for apps without a custom profile. Wrong-field and sensitive surfaces are proven silent across arbitrary apps by GenericAppSafetyProofHarness and script/check_generic_app_safety_proof.sh; per-app pause disables a bad target. Real-app current-head trace proof is still pending."
       }
     ]
   },
@@ -1023,6 +1044,32 @@
           "smokeCommand": "AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh notes-checklist-undo --manual-gate"
         }
       ]
+    },
+    {
+      "surface": "Generic app fallback safety",
+      "status": "partial",
+      "gaps": [
+        "Real-app current-head redacted trace across a battery of arbitrary unknown apps is still pending; deterministic core and script proof pass today.",
+        "No screenshot-backed visual placement proof yet for unknown apps presenting in safe compose fields."
+      ],
+      "requirements": [
+        {
+          "id": "generic-fallback-core-suppression",
+          "status": "complete",
+          "summary": "GenericAppSafetyProofHarness proves the default-on generic fallback routes secure, password, payment, search, URL, login, form, command-prompt, and unknown-role fields to suppression in both the CompatibilityRouter and the live CompatibilityProfileStore stack, while still presenting in positively classified compose fields."
+        },
+        {
+          "id": "generic-fallback-trace-gate",
+          "status": "complete",
+          "summary": "script/check_generic_app_safety_proof.sh and its self-test gate zero wrong-field presentations, required sensitive-field suppression, generic-fallback resolution, and raw-text redaction on a redacted trace."
+        },
+        {
+          "id": "generic-fallback-real-app-trace",
+          "status": "pending",
+          "summary": "Record a current-head redacted real-app trace across several arbitrary unknown apps showing zero wrong-field insertions and sensitive-field suppression under the default-on fallback.",
+          "smokeCommand": "AUTOCOMPLETE_LAB_GENERIC_APP_TRACE_PATH=<trace> script/check_generic_app_safety_proof.sh <trace>"
+        }
+      ]
     }
   ],
   "profileCoverage": [
@@ -1092,11 +1139,11 @@
     {
       "bundle": "com.anthropic.claude-code",
       "displayName": "Claude Code",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Claude Code",
       "status": "blocked",
       "owner": "terminal-host adapter lane",
-      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code proof is virtual, proof-mode-only, host-labeled, and iceboxed from beta readiness, while normal terminal hosts remain denylisted."
+      "safetyNote": "Terminal-hosted Claude Code proof is word-only, proof-mode-only, host-labeled, and iceboxed from beta readiness; normal terminal hosts stay off until a custom adapter proves one-word no-submit acceptance."
     },
     {
       "bundle": "com.anthropic.claudefordesktop",
@@ -1214,6 +1261,15 @@
       "status": "blocked",
       "owner": "chat no-submit proof lane",
       "safetyNote": "Discord Canary message composers stay diagnostics-only until a disposable server/channel proves placement, one-word accept, and no submit."
+    },
+    {
+      "bundle": "*",
+      "displayName": "Generic App",
+      "supportLevel": "yellow",
+      "surface": "Generic app fallback safety",
+      "status": "partial",
+      "owner": "core proof lane",
+      "safetyNote": "Default-on generic Accessibility fallback for apps without a custom profile. Wrong-field and sensitive surfaces (secure, password, payment, search, URL, login, form, command-prompt, and unclassifiable fields) are proven silent across arbitrary apps by GenericAppSafetyProofHarness and script/check_generic_app_safety_proof.sh, while positively classified compose fields still present; per-app pause disables a bad target. Real-app current-head trace proof is still pending."
     }
   ]
 }

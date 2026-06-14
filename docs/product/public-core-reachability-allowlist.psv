@@ -69,6 +69,11 @@ SensitiveFieldProofLevel|proof-only|Sources/AutocompleteLabCore/Session/Sensitiv
 SensitiveFieldProofFixture|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
 SensitiveFieldProofResult|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
 SensitiveFieldProofHarness|proof-only|Sources/AutocompleteLabCore/Session/SensitiveFieldProofHarness.swift|Sensitive-field harness is proof-only coverage support.
+GenericAppSafetyExpectation|proof-only|Sources/AutocompleteLabCore/Compatibility/GenericAppSafetyProofHarness.swift|Generic-app fallback safety harness is proof-only coverage support.
+GenericAppSafetyFieldCategory|proof-only|Sources/AutocompleteLabCore/Compatibility/GenericAppSafetyProofHarness.swift|Generic-app fallback safety harness is proof-only coverage support.
+GenericAppSafetyFixture|proof-only|Sources/AutocompleteLabCore/Compatibility/GenericAppSafetyProofHarness.swift|Generic-app fallback safety harness is proof-only coverage support.
+GenericAppSafetyResult|proof-only|Sources/AutocompleteLabCore/Compatibility/GenericAppSafetyProofHarness.swift|Generic-app fallback safety harness is proof-only coverage support.
+GenericAppSafetyProofHarness|proof-only|Sources/AutocompleteLabCore/Compatibility/GenericAppSafetyProofHarness.swift|Generic-app fallback safety harness is proof-only coverage support.
 SuggestionFocusChangePolicy|research|Sources/AutocompleteLabCore/Session/SuggestionFocusChangePolicy.swift|Focus-change policy is tested as a candidate but not wired into app orchestration.
 SuggestionPlacementPreflightDecision|research|Sources/AutocompleteLabCore/Session/SuggestionPlacementPreflightPolicy.swift|Placement preflight policy is tested as a candidate but live display uses placement health directly.
 SuggestionPlacementPreflightPolicy|research|Sources/AutocompleteLabCore/Session/SuggestionPlacementPreflightPolicy.swift|Placement preflight policy is tested as a candidate but live display uses placement health directly.
