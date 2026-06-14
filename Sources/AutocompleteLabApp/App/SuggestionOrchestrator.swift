@@ -10,6 +10,14 @@ struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
 @MainActor
 final class SuggestionOrchestrator {
     private static let maximumFinalModelDisplayLatencyMilliseconds = 750
+    /// Tighter ceiling applied when a model result would be the *first* thing the user sees
+    /// (no instant local phrase or streamed partial already on screen). A model result that
+    /// lands later than this would paint as a stale, late ghost-text flash after the caret has
+    /// moved on, so we suppress it and let the slot stay empty rather than show it cold.
+    /// Tied to `SuggestionRequestSchedulingPolicy.instantWordResultBudgetMilliseconds` (450ms):
+    /// the model still shows when it is genuinely fast, only the slow cold paints are dropped.
+    /// Model results that *refine* an already-visible suggestion keep the looser budget above.
+    private static let maximumFirstVisibleModelDisplayLatencyMilliseconds = 450
     private static let maximumDocLocalFields = 24
     private static let maximumDocLocalSnapshotsPerField = 4
     private static let maximumDocLocalSnapshotCharacters = 12_000
@@ -207,13 +215,18 @@ final class SuggestionOrchestrator {
         }
     }
 
-    nonisolated private static func allowsDocLocalCorpus(
+    nonisolated static func allowsDocLocalCorpus(
         for behaviorProfileID: AutocompleteBehaviorProfileID
     ) -> Bool {
         switch behaviorProfileID {
-        case .docsProse, .notes, .bullets:
+        // aiChat is included so the prompt-app prediction path actually has a corpus to read.
+        // `DocLocalNGramPhrasePredictor.allowsPrediction` is willing to predict for aiChat (gated
+        // behind `allowsPromptAppPrediction`), but the corpus was never remembered here — so that
+        // path could never fire. Remembering the corpus does not surface any new suggestion unless
+        // prompt-app prediction is active; it only stops the two gates from silently disagreeing.
+        case .docsProse, .notes, .bullets, .aiChat:
             return true
-        case .aiChat, .casualChat, .email, .coding, .forms, .search:
+        case .casualChat, .email, .coding, .forms, .search:
             return false
         }
     }
@@ -715,6 +728,8 @@ final class SuggestionOrchestrator {
         isRepeatedMiss: Bool,
         displayScorePolicy: DisplayScorePolicy,
         suggestionTuning: SuggestionTuning? = nil,
+        modelIsFirstVisibleSuggestion: Bool = false,
+        scheduledDelayMilliseconds: Int = 0,
         now: Date = Date()
     ) -> SuggestionDisplayScoreDecision {
         _ = suggestionTuning
@@ -772,12 +787,24 @@ final class SuggestionOrchestrator {
         if claudeCodeTerminalHostProofLatencyBypass {
             confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
         }
+        let modelDisplayLatencyBudgetMilliseconds = Self.maximumFinalModelDisplayLatencyMilliseconds(
+            for: request,
+            suggestion: suggestion,
+            firstVisible: modelIsFirstVisibleSuggestion
+        )
+        // The first-visible ceiling bounds the MODEL's contribution to first paint, so it is
+        // compared against latency with the deliberate pre-model scheduling pause removed
+        // (`latencyMilliseconds` is measured from before that pause). The refinement budget keeps
+        // its original delay-inclusive basis so existing behavior is unchanged.
+        let modelLatencyForBudget = modelIsFirstVisibleSuggestion
+            ? max(0, latencyMilliseconds - max(0, scheduledDelayMilliseconds))
+            : latencyMilliseconds
+        confidenceMetadata["modelDisplayLatencyBudgetMilliseconds"] = String(modelDisplayLatencyBudgetMilliseconds)
+        confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
+        confidenceMetadata["modelLatencyForBudgetMilliseconds"] = String(modelLatencyForBudget)
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
             && !proofLatencyBypass
-            && latencyMilliseconds > Self.maximumFinalModelDisplayLatencyMilliseconds(
-                for: request,
-                suggestion: suggestion
-            )
+            && modelLatencyForBudget > modelDisplayLatencyBudgetMilliseconds
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
             && !proofLatencyBypass
             && confidenceDecision.reasons.contains("too-slow-to-display")
@@ -995,8 +1022,16 @@ final class SuggestionOrchestrator {
 
     private static func maximumFinalModelDisplayLatencyMilliseconds(
         for request: CompletionRequest,
-        suggestion: CompletionSuggestion
+        suggestion: CompletionSuggestion,
+        firstVisible: Bool
     ) -> Int {
+        // When the model result would be the first thing shown, cap hard regardless of length:
+        // a late cold paint is worse than no paint, and the instant local lane (or nothing)
+        // should own the first-visible slot.
+        if firstVisible {
+            return maximumFirstVisibleModelDisplayLatencyMilliseconds
+        }
+
         guard request.mode == .phraseContinuation,
               suggestion.maxVisibleWords >= 8,
               suggestion.visibleWordCount >= CompletionModelPolicy.preferredMinimumVisibleWords(

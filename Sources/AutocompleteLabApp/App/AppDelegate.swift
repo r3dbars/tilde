@@ -7727,7 +7727,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         latencyMilliseconds: latencyMilliseconds,
                         triggerReason: "model-result",
                         requestTicket: requestTicket,
-                        candidateSelectionMetadata: appModelResultMetadata
+                        candidateSelectionMetadata: appModelResultMetadata,
+                        scheduledDelayMilliseconds: requestSchedule.scheduledDelayMilliseconds
                     )
                 }
                 await MainActor.run {
@@ -7776,7 +7777,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         triggerReason: String,
         requestTicket: SuggestionRequestTicket? = nil,
         candidateSelectionMetadata: [String: String] = [:],
-        refreshBeforePresenting: Bool = true
+        refreshBeforePresenting: Bool = true,
+        scheduledDelayMilliseconds: Int = 0
     ) {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionInvalidatedByUserKeyDown
@@ -7971,6 +7973,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mode: request.mode,
             scope: request.appBundleIdentifier ?? profile.bundleIdentifier
         )
+        // A final model result is "first visible" when nothing is already on screen for the user
+        // to read — no instant local phrase and no streamed partial. In that case a slow result
+        // would paint cold and late, so displayScoreDecision applies a tighter latency ceiling.
+        // When a suggestion is already visible, the model result is a refinement and keeps the
+        // looser budget so good late refinements can still replace the instant phrase in place.
+        let modelIsFirstVisibleSuggestion = triggerReason == "model-result"
+            && !suggestionSession.hasVisibleSuggestion
         let orchestratedDisplayDecision = suggestionOrchestrator.displayScoreDecision(
             suggestion: suggestion,
             request: request,
@@ -7983,7 +7992,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss,
             displayScorePolicy: displayScorePolicy,
-            suggestionTuning: suggestionTuning
+            suggestionTuning: suggestionTuning,
+            modelIsFirstVisibleSuggestion: modelIsFirstVisibleSuggestion,
+            scheduledDelayMilliseconds: scheduledDelayMilliseconds
         )
         let displayScoreDecision = orchestratedDisplayDecision.decision
         let displayScoreMetadata = orchestratedDisplayDecision.metadata
