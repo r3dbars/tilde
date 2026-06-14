@@ -5,6 +5,36 @@ import Testing
 
 @Suite("MLX runtime warm gate")
 struct MLXModelRuntimeWarmGateTests {
+    @Test("Prompt KV cache configuration defaults on and honors a kill switch")
+    func promptKVCacheConfigurationDefaultsOn() {
+        #expect(MLXPromptKVCacheConfiguration.fromEnvironment([:]).isEnabled)
+        for value in ["1", "true", "yes", "on", "TRUE", " On "] {
+            #expect(
+                MLXPromptKVCacheConfiguration
+                    .fromEnvironment([MLXPromptKVCacheConfiguration.environmentKey: value])
+                    .isEnabled
+            )
+        }
+        for value in ["0", "false", "no", "off", "OFF", " false "] {
+            #expect(
+                !MLXPromptKVCacheConfiguration
+                    .fromEnvironment([MLXPromptKVCacheConfiguration.environmentKey: value])
+                    .isEnabled
+            )
+        }
+    }
+
+    @Test("Warmup generation defaults on and honors a kill switch")
+    func warmupGenerationDefaultsOn() {
+        #expect(MLXModelRuntime.warmupGenerationEnabled([:]))
+        for value in ["1", "true", "on", "anything"] {
+            #expect(MLXModelRuntime.warmupGenerationEnabled(["AUTOCOMPLETE_LAB_MLX_WARMUP": value]))
+        }
+        for value in ["0", "false", "no", "off", "OFF"] {
+            #expect(!MLXModelRuntime.warmupGenerationEnabled(["AUTOCOMPLETE_LAB_MLX_WARMUP": value]))
+        }
+    }
+
     @Test("Prompt KV cache stays off without environment flag")
     func promptKVCacheStaysOffWithoutEnvironmentFlag() {
         var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: false))

@@ -105,6 +105,59 @@ Compare the small lane against the 4B default from redacted diagnostics:
 ./script/compare_local_models.py --small-draft-lane
 ```
 
+## Prompt KV Cache (First-Token Latency)
+
+The app-owned MLX runtime has two generation paths. The slow path rebuilds a
+`ChatSession` per request and re-prefills the entire system prompt every time.
+The fast path (`generateRawCompletionWithPromptKVCache`) keeps the prefilled
+system-prompt + prior-context KV across keystrokes in the same field, so only
+the newly typed tokens are prefilled. Because the autocomplete system prompt is
+large and the generation budget is tiny (about 14 phrase tokens), prefill
+dominates first-token latency, and the fast path is the single biggest win.
+
+The prompt KV cache is now **on by default**. Set
+`AUTOCOMPLETE_LAB_MLX_KV_CACHE` to an explicit off value (`0`, `false`, `no`,
+`off`) to fall back to the slower full-re-prefill path. Any other value (or no
+value) keeps it on. Cache reuse still requires a byte-stable system prompt and a
+strict token-prefix extension within the same field; mid-typing changes to the
+system prompt (mode, behavior profile, visible-page guidance) cause a clean miss
+and a full re-prefill, so trimming and stabilizing the system prompt remains a
+follow-up latency lever to validate with the latency proof.
+
+## Warmup Generation After Load
+
+Loading the model only allocates weights; the MLX/Metal compute graph is not
+compiled until the first generation runs. Without a warmup that first
+compilation lands on the user's first real keystroke, making the very first
+suggestion the slowest one. The runtime now runs a tiny throwaway generation at
+the end of background warm (`warmupCompletionGraph`), so the graph is compiled
+before the runtime reports ready. It is best-effort and never blocks readiness.
+Set `AUTOCOMPLETE_LAB_MLX_WARMUP` to an off value (`0`, `false`, `no`, `off`) to
+skip it. Warmup timing is recorded as `mlx-model-warmup-succeeded` in
+diagnostics.
+
+## Measuring Models Without a Cold Load Per Row
+
+The quality/latency audit harness used to spawn a fresh `mlx_lm.generate`
+subprocess for every prompt row, cold-loading the whole model 36+ times in a
+single run. That is why a blind audit could not finish even the first model in
+two minutes. `script/local_completion_batch.py` loads the model once and streams
+every row through it, and it prefers the installed local asset directory under
+`~/Library/Application Support/SteadyType/Models/...` over a Hugging Face repo
+id so it never silently re-downloads weights.
+
+The audit scripts use this batch path:
+
+```bash
+AUTOCOMPLETE_LAB_LOCAL_QUALITY_AUDIT=1 \
+AUTOCOMPLETE_LAB_RUNTIME_BACKEND=mlx \
+  ./script/small_model_blind_audit_report.py --run
+```
+
+`script/local_quality_audit.py --generate --batch` is the single-model entry
+point. The blind-audit report now also enforces an overall wall-clock budget per
+model, so a wedged run fails fast with a timeout note instead of hanging.
+
 ## Model Asset Format
 
 Use the MLX/Hugging Face directory format under:
