@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -80,6 +80,160 @@ done
 
 configure_readiness_scratch_path || exit 1
 
+READINESS_FAILED_LANES=()
+READINESS_NEXT_ACTIONS=()
+READINESS_SUMMARY_PRINTED=0
+ACTIVE_READINESS_LANE=""
+
+append_next_action() {
+  local action="$1"
+  local existing
+  local action_count
+
+  [[ -z "$action" ]] && return
+  action_count=${#READINESS_NEXT_ACTIONS[@]}
+  if ((action_count > 0)); then
+    for existing in "${READINESS_NEXT_ACTIONS[@]}"; do
+      [[ "$existing" == "$action" ]] && return
+    done
+  fi
+
+  READINESS_NEXT_ACTIONS+=("$action")
+}
+
+readiness_next_action() {
+  local lane="$1"
+
+  case "$lane" in
+    "Model asset")
+      echo "Repair or install the local model in Settings, then rerun ./script/check_model_asset.py."
+      ;;
+    "Smoke")
+      echo "Fix the first smoke failure, then rerun ./script/smoke_test.sh."
+      ;;
+    "Runtime production gate")
+      echo "Launch SteadyType with Qwen3.5-4B-4bit ready, then rerun ./script/check_diagnostics_log.sh."
+      ;;
+    "Runtime no-egress proof")
+      echo "Refresh the runtime no-egress proof, then rerun ./script/check_runtime_network_egress.py through beta readiness."
+      ;;
+    "Controls and diagnostics readiness")
+      echo "Fix the named controls/diagnostics subcheck, then rerun ./script/check_controls_diagnostics_readiness.sh."
+      ;;
+    "Redacted report export")
+      echo "Fix redacted export proof, then rerun ./script/check_redacted_report_export.sh."
+      ;;
+    "Issue template validation")
+      echo "Fix the beta issue template, then rerun ./script/validate_beta_issue_template.sh."
+      ;;
+    "Onboarding walkthrough proof")
+      echo "Record the clean TextEdit walkthrough row, then rerun ./script/check_onboarding_walkthrough_proof.py."
+      ;;
+    "Onboarding permission QA")
+      echo "Complete the clean-user permission checklist, then rerun ./script/check_onboarding_permission_qa.sh --check."
+      ;;
+    "Clipboard fallback disabled")
+      echo "Remove beta-unsafe clipboard fallback surfaces, then rerun ./script/beta_readiness.sh --check-only."
+      ;;
+    "Production mock fallback disabled")
+      echo "Remove production mock fallback surfaces, then rerun ./script/beta_readiness.sh --check-only."
+      ;;
+    "Prompt app manifest proof gate")
+      echo "Refresh bounded prompt-app manifest proof, then rerun ./script/check_prompt_app_manifest_proof.sh."
+      ;;
+    "Manual app proof")
+      echo "Refresh beta-safe manual rows with ./script/manual_proof_refresh.sh, then rerun ./script/manual_smoke_status.sh --require-all."
+      ;;
+    "Visual placement proof")
+      echo "Refresh missing screenshot-backed placement rows, then rerun ./script/check_visual_placement_evidence.sh --require-all."
+      ;;
+    "Latency beta gate")
+      echo "Run current TextEdit model-latency proof, then rerun the latency beta gate."
+      ;;
+    "Release package prerequisites"|"Release package"|"Developer ID DMG signature"|"Developer ID archive signature"|"Notarized install proof"|"Private beta artifact"|"Apple notarization")
+      echo "Rebuild, Developer ID sign, notarize, staple, and verify dist/SteadyType.dmg before rerunning beta readiness."
+      ;;
+    "Private beta packet")
+      echo "Regenerate the private beta packet from the current DMG, then rerun ./script/private_beta_packet.sh --check."
+      ;;
+    *)
+      echo "Fix the $lane lane, then rerun ./script/beta_readiness.sh --check-only."
+      ;;
+  esac
+}
+
+remember_readiness_failure() {
+  local lane="$1"
+  local existing
+  local failed_count
+
+  [[ -z "$lane" ]] && return
+  failed_count=${#READINESS_FAILED_LANES[@]}
+  if ((failed_count > 0)); then
+    for existing in "${READINESS_FAILED_LANES[@]}"; do
+      [[ "$existing" == "$lane" ]] && return
+    done
+  fi
+
+  READINESS_FAILED_LANES+=("$lane")
+  append_next_action "$(readiness_next_action "$lane")"
+}
+
+print_readiness_answer() {
+  local answer="$1"
+  local mode="$2"
+  local index=1
+  local lane
+  local action
+  local failed_count
+  local action_count
+
+  READINESS_SUMMARY_PRINTED=1
+  echo
+  echo "== Beta readiness answer =="
+  if [[ "$answer" == "GO" ]]; then
+    echo "GO: beta readiness passed in $mode mode."
+    return
+  fi
+
+  failed_count=${#READINESS_FAILED_LANES[@]}
+  echo "HOLD: $failed_count blocker(s) in $mode mode."
+  echo "Failing lanes:"
+  if ((failed_count > 0)); then
+    for lane in "${READINESS_FAILED_LANES[@]}"; do
+      echo "- $lane"
+    done
+  fi
+
+  echo "Next 3 actions:"
+  action_count=${#READINESS_NEXT_ACTIONS[@]}
+  if ((action_count == 0)); then
+    echo "1. Rerun ./script/beta_readiness.sh --check-only and fix the first blocked lane."
+    return
+  fi
+
+  if ((action_count > 0)); then
+    for action in "${READINESS_NEXT_ACTIONS[@]}"; do
+      echo "$index. $action"
+      index=$((index + 1))
+      ((index > 3)) && break
+    done
+  fi
+}
+
+readiness_err_trap() {
+  local status=$?
+
+  if ((status != 0)) && [[ -n "$ACTIVE_READINESS_LANE" ]] && [[ "$READINESS_SUMMARY_PRINTED" == "0" ]]; then
+    remember_readiness_failure "$ACTIVE_READINESS_LANE"
+    print_readiness_answer "HOLD" "$MODE"
+  fi
+
+  exit "$status"
+}
+
+trap readiness_err_trap ERR
+
 run_check() {
   local label="$1"
   shift
@@ -92,6 +246,7 @@ run_check() {
   fi
 
   echo "$label: blocked"
+  remember_readiness_failure "$label"
   return 1
 }
 
@@ -546,6 +701,7 @@ if [[ "$MODE" == "check-only" ]]; then
   else
     echo "Private beta artifact: blocked"
     echo "missing primary beta artifact: $PRIMARY_ARTIFACT"
+    remember_readiness_failure "Private beta artifact"
     failures=$((failures + 1))
   fi
 
@@ -558,79 +714,95 @@ if [[ "$MODE" == "check-only" ]]; then
   fi
 
   if ((failures > 0)); then
-    echo
+    print_readiness_answer "HOLD" "$MODE"
     echo "Beta readiness check-only found $failures blocker(s)."
     print_next_beta_readiness_lanes "$onboarding_failed"
     exit 1
   fi
 
-  echo
+  print_readiness_answer "GO" "$MODE"
   echo "Beta readiness check-only passed."
   exit 0
 fi
 
+ACTIVE_READINESS_LANE="Model asset"
 echo "== Model asset =="
 ./script/check_model_asset.py
 
 echo
+ACTIVE_READINESS_LANE="Smoke"
 echo "== Smoke =="
 ./script/smoke_test.sh
 
 echo
+ACTIVE_READINESS_LANE="Runtime production gate"
 echo "== Runtime production gate =="
 AUTOCOMPLETE_LAB_REQUIRE_READY=1 \
   AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
   ./script/check_diagnostics_log.sh
 
 echo
+ACTIVE_READINESS_LANE="Runtime no-egress proof"
 echo "== Runtime no-egress proof =="
 check_runtime_no_egress_proof
 
 echo
+ACTIVE_READINESS_LANE="Controls and diagnostics readiness"
 echo "== Controls and diagnostics readiness =="
 ./script/check_controls_diagnostics_readiness.sh
 
 echo
+ACTIVE_READINESS_LANE="Redacted report export"
 echo "== Redacted report export =="
 ./script/check_redacted_report_export.sh
 
 echo
+ACTIVE_READINESS_LANE="Issue template validation"
 echo "== Issue template validation =="
 ./script/validate_beta_issue_template.sh
 
 echo
+ACTIVE_READINESS_LANE="Onboarding walkthrough proof"
 echo "== Onboarding walkthrough proof =="
 ./script/check_onboarding_walkthrough_proof.py
 
 echo
+ACTIVE_READINESS_LANE="Clipboard fallback disabled"
 echo "== Clipboard fallback disabled =="
 check_clipboard_fallback_disabled
 
 echo
+ACTIVE_READINESS_LANE="Production mock fallback disabled"
 echo "== Production mock fallback disabled =="
 check_production_mock_fallback_disabled
 
 echo
+ACTIVE_READINESS_LANE="Prompt app manifest proof gate"
 echo "== Prompt app manifest proof gate =="
 ./script/check_prompt_app_manifest_proof.sh
 
 echo
+ACTIVE_READINESS_LANE="Onboarding permission QA"
 echo "== Onboarding permission QA =="
 ./script/check_onboarding_permission_qa.sh --check
 
 echo
+ACTIVE_READINESS_LANE="Manual app proof"
 echo "== Manual app proof =="
 ./script/manual_smoke_status.sh --require-all
 
 echo
+ACTIVE_READINESS_LANE="Visual placement proof"
 echo "== Visual placement proof =="
 ./script/check_visual_placement_evidence.sh --require-all
 
 echo
+ACTIVE_READINESS_LANE="Latency beta gate"
 echo "== Latency beta gate =="
 latency_beta_gate
 
 echo
+ACTIVE_READINESS_LANE="Release package"
 echo "== Release package =="
 ./script/package_release.sh --check --require-developer-id --require-notary-profile
 ./script/package_release.sh archive
@@ -641,19 +813,25 @@ if [[ "${AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE:-0}" =~ ^(1|true|yes|on)$ ]]; 
 else
   echo "Apple notarization not run by default."
   echo "Set AUTOCOMPLETE_LAB_BETA_READINESS_NOTARIZE=1 to let this full gate submit the current DMG to Apple, then rerun."
+  remember_readiness_failure "Apple notarization"
+  print_readiness_answer "HOLD" "$MODE"
   exit 1
 fi
 check_notarized_install_proof
 
 echo
+ACTIVE_READINESS_LANE="Notarized install proof"
 echo "== Notarized install proof =="
 check_notarized_install_proof
 
 echo
+ACTIVE_READINESS_LANE="Private beta packet"
 echo "== Private beta packet =="
 ./script/private_beta_packet.sh create
 with_privacy_export_proof_tree ./script/private_beta_packet.sh --check
 
+ACTIVE_READINESS_LANE=""
+print_readiness_answer "GO" "$MODE"
 echo
 echo "Beta readiness passed."
 echo "Primary artifact: $PRIMARY_ARTIFACT"

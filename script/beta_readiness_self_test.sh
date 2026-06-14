@@ -50,11 +50,28 @@ require_order() {
   fi
 }
 
+require_contains 'set -Eeuo pipefail'
 require_contains './script/package_release.sh --check --require-developer-id --require-notary-profile'
 require_contains 'PRIMARY_ARTIFACT="$ROOT_DIR/dist/SteadyType.dmg"'
 require_contains 'READINESS_SCRATCH_PATH_CREATED=""'
 require_contains 'cleanup_readiness_scratch_path'
 require_contains 'configure_readiness_scratch_path || exit 1'
+require_contains 'READINESS_FAILED_LANES=()'
+require_contains 'ACTIVE_READINESS_LANE=""'
+require_contains 'readiness_next_action()'
+require_contains 'remember_readiness_failure()'
+require_contains 'print_readiness_answer()'
+require_contains '== Beta readiness answer =='
+require_contains 'failed_count=${#READINESS_FAILED_LANES[@]}'
+require_contains 'HOLD: $failed_count blocker(s) in $mode mode.'
+require_contains 'Failing lanes:'
+require_contains 'Next 3 actions:'
+require_contains 'trap readiness_err_trap ERR'
+require_contains 'remember_readiness_failure "$label"'
+require_contains 'ACTIVE_READINESS_LANE="Smoke"'
+require_contains 'remember_readiness_failure "Private beta artifact"'
+require_contains 'remember_readiness_failure "Apple notarization"'
+require_contains 'print_readiness_answer "GO" "$MODE"'
 require_contains 'AUTOCOMPLETE_LAB_READINESS_ISOLATED_SCRATCH'
 require_contains 'SwiftPM readiness scratch: default SwiftPM build cache'
 require_contains 'mktemp -d "${parent%/}/autocomplete-lab-beta-readiness.XXXXXX"'
@@ -120,6 +137,8 @@ require_order 'run_check "Latency beta gate" latency_beta_gate' \
   'run_check "Release package prerequisites" ./script/package_release.sh --check --require-developer-id --require-notary-profile'
 require_order 'echo "Beta readiness check-only found $failures blocker(s)."' \
   'print_next_beta_readiness_lanes "$onboarding_failed"'
+require_order 'print_readiness_answer "HOLD" "$MODE"' \
+  'echo "Beta readiness check-only found $failures blocker(s)."'
 require_order 'configure_readiness_scratch_path || exit 1' \
   'run_check "Controls and diagnostics readiness" with_privacy_export_proof_tree ./script/check_controls_diagnostics_readiness.sh'
 require_order 'run_check "Runtime production gate" env' \
