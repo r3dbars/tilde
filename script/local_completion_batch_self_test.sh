@@ -4,6 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Make model resolution hermetic: point the model root at an empty directory so
+# the "no installed asset" paths resolve to the HF repo id regardless of any
+# model actually installed on this machine. Without this the bare resolve calls
+# below pick up a developer's real ~/Library model and flip kind to
+# "local-asset", so the test passed only on a clean CI checkout.
+ISOLATED_MODEL_ROOT="$(mktemp -d)"
+export AUTOCOMPLETE_LAB_MODEL_ROOT="$ISOLATED_MODEL_ROOT"
+trap 'rm -rf "$ISOLATED_MODEL_ROOT"' EXIT
+
 python3 - <<'PY'
 import importlib.util
 import json
@@ -30,6 +39,7 @@ with tempfile.TemporaryDirectory() as tmp:
     asset.mkdir(parents=True)
     (asset / "config.json").write_text("{}", encoding="utf-8")
     (asset / "model.safetensors").write_text("weights", encoding="utf-8")
+    _prev_model_root = os.environ.get("AUTOCOMPLETE_LAB_MODEL_ROOT")
     os.environ["AUTOCOMPLETE_LAB_MODEL_ROOT"] = str(root / "Models")
     try:
         assert module.installed_asset_path("qwen35-4b") == asset
@@ -42,7 +52,10 @@ with tempfile.TemporaryDirectory() as tmp:
         (empty / "config.json").write_text("{}", encoding="utf-8")
         assert module.installed_asset_path("qwen3-0.6b") is None
     finally:
-        del os.environ["AUTOCOMPLETE_LAB_MODEL_ROOT"]
+        if _prev_model_root is None:
+            os.environ.pop("AUTOCOMPLETE_LAB_MODEL_ROOT", None)
+        else:
+            os.environ["AUTOCOMPLETE_LAB_MODEL_ROOT"] = _prev_model_root
 
 # An explicit MLX model override wins and is classified by whether it is a dir.
 os.environ["AUTOCOMPLETE_LAB_MLX_MODEL"] = "some/repo-id"

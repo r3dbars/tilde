@@ -1,0 +1,45 @@
+name: Fast proof gate
+
+# Single fast pre-merge tier: script/proof.sh fast. These are the cheap proof
+# checks that must stay green on main (the kind of red that has been landing
+# unguarded: a stale coverage manifest, broken scripts, whitespace). The Swift +
+# MLX suite needs macOS + Apple Silicon, so proof.sh auto-skips it here; the
+# Linux-friendly checks (coverage manifest, byte-compile, harness self-tests,
+# whitespace, and the report-only proof manifest) run on every PR to main.
+#
+# This replaces the old "Script self-tests" workflow: its byte-compile and
+# self-test steps now live inside proof.sh, so the gate has a single source of
+# truth that developers run locally too (script/proof.sh fast, pre-push hook).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so a PR can diff against its base for git diff --check.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fast proof tier (script/proof.sh fast)
+        run: bash script/proof.sh fast
+        env:
+          # On a PR, also flag whitespace / conflict markers the PR introduces.
+          # Empty on push events -> proof.sh checks the working tree instead.
+          PROOF_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
