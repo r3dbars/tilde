@@ -36,6 +36,74 @@ struct SuggestionPanelVisualStyleTests {
         #expect(style.textColor(for: .disabled) == .secondaryLabelColor)
     }
 
+    // MARK: - SuggestionPanelAppearancePolicy
+
+    @Test("No accessibility restrictions: fade-in 0.12s, translucent popover")
+    func noRestrictionsGivesFadeAndPopover() {
+        let policy = SuggestionPanelAppearancePolicy.resolve(
+            reduceMotion: false,
+            reduceTransparency: false
+        )
+
+        #expect(policy.fadeInDuration == 0.12)
+        #expect(policy.backdropStyle == .translucent(material: .popover))
+    }
+
+    @Test("Reduce motion: fade-in is zero, backdrop is still translucent")
+    func reduceMotionSkipsFadeKeepsTranslucency() {
+        let policy = SuggestionPanelAppearancePolicy.resolve(
+            reduceMotion: true,
+            reduceTransparency: false
+        )
+
+        #expect(policy.fadeInDuration == 0)
+        #expect(policy.backdropStyle == .translucent(material: .popover))
+    }
+
+    @Test("Reduce transparency: fade-in is present, backdrop is solid")
+    func reduceTransparencyKeepsFadeGivesSolid() {
+        let policy = SuggestionPanelAppearancePolicy.resolve(
+            reduceMotion: false,
+            reduceTransparency: true
+        )
+
+        #expect(policy.fadeInDuration == 0.12)
+        #expect(policy.backdropStyle == .solid)
+    }
+
+    @Test("Both restrictions: fade-in zero and solid backdrop")
+    func bothRestrictionsGiveInstantAndSolid() {
+        let policy = SuggestionPanelAppearancePolicy.resolve(
+            reduceMotion: true,
+            reduceTransparency: true
+        )
+
+        #expect(policy.fadeInDuration == 0)
+        #expect(policy.backdropStyle == .solid)
+    }
+
+    @Test("Custom default material is passed through when transparency is allowed")
+    func customDefaultMaterialPassedThrough() {
+        let policy = SuggestionPanelAppearancePolicy.resolve(
+            reduceMotion: false,
+            reduceTransparency: false,
+            defaultMaterial: .sidebar
+        )
+
+        #expect(policy.backdropStyle == .translucent(material: .sidebar))
+    }
+
+    @Test("Custom default material is ignored when reduce transparency is on")
+    func customDefaultMaterialIgnoredWhenReduceTransparency() {
+        let policy = SuggestionPanelAppearancePolicy.resolve(
+            reduceMotion: false,
+            reduceTransparency: true,
+            defaultMaterial: .sidebar
+        )
+
+        #expect(policy.backdropStyle == .solid)
+    }
+
     private func resolvedComponents(
         of color: NSColor,
         in appearance: NSAppearance
