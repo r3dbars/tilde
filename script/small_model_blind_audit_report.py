@@ -93,28 +93,43 @@ def parse_metric(output: str, label: str) -> str:
     return match.group(1) if match else "unknown"
 
 
-def run_quality(candidate: Candidate, prompts_path: Path, timeout: float) -> tuple[str, str, str]:
+def run_quality(
+    candidate: Candidate,
+    prompts_path: Path,
+    timeout: float,
+    model_root: Path,
+) -> tuple[str, str, str]:
     env = os.environ.copy()
     env.setdefault(OPT_IN_ENV, "1")
     env.setdefault("AUTOCOMPLETE_LAB_RUNTIME_BACKEND", "mlx")
-    completed = subprocess.run(
-        [
-            str(ROOT_DIR / "script" / "local_quality_audit.py"),
-            "--input",
-            str(prompts_path),
-            "--generate",
-            "--model",
-            candidate.model,
-            "--timeout",
-            str(timeout),
-        ],
-        cwd=ROOT_DIR,
-        env=env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+    # Point the persistent batch runtime at the installed assets so it loads the
+    # local model directory instead of re-downloading by Hugging Face repo id.
+    env.setdefault("AUTOCOMPLETE_LAB_MODEL_ROOT", str(model_root))
+    # One model load (batch) plus per-row work, with headroom; never hang forever.
+    overall_timeout = 900.0 + timeout * 64
+    try:
+        completed = subprocess.run(
+            [
+                str(ROOT_DIR / "script" / "local_quality_audit.py"),
+                "--input",
+                str(prompts_path),
+                "--generate",
+                "--batch",
+                "--model",
+                candidate.model,
+                "--timeout",
+                str(timeout),
+            ],
+            cwd=ROOT_DIR,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=overall_timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return "unknown", "unknown", f"timed out after {int(overall_timeout)}s"
     if completed.returncode != 0:
         reason = (completed.stderr or completed.stdout).strip().splitlines()[-1:]
         return "unknown", "unknown", reason[0] if reason else f"exit {completed.returncode}"
@@ -164,7 +179,9 @@ def main() -> int:
         relevance = "unknown"
         note = "installed" if installed else "model asset missing"
         if args.run and can_run and installed:
-            quality, relevance, note = run_quality(candidate, args.prompts, args.timeout)
+            quality, relevance, note = run_quality(
+                candidate, args.prompts, args.timeout, args.model_root
+            )
         elif args.run and not can_run:
             note = "`mlx_lm` unavailable"
         decision = decision_for(candidate.alias, quality, "unknown")
