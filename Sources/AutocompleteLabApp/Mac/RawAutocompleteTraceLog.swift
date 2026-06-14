@@ -252,6 +252,9 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 atomically: true,
                 encoding: .utf8
             )
+            // Atomic write replaces the file with a fresh inode at the process umask, so
+            // re-tighten to owner-only after rewriting.
+            SecureLocalStorage.restrictFile(at: logURL)
         }
     }
 
@@ -440,11 +443,10 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
         queue.async { [logURL, encoder] in
             do {
-                let fileManager = FileManager.default
-                try fileManager.createDirectory(
-                    at: logURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
+                // Owner-only (0700 dir / 0600 file): traces can hold raw text when raw-content
+                // dogfood tracing is opted in, so the file must not rely on the parent
+                // directory's mode to stay private. See docs/security/threat-model.md (F2).
+                SecureLocalStorage.createDirectory(at: logURL.deletingLastPathComponent())
 
                 let data = try encoder.encode(event)
                 guard var line = String(data: data, encoding: .utf8) else {
@@ -453,9 +455,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
 
                 line.append("\n")
 
-                if !fileManager.fileExists(atPath: logURL.path) {
-                    fileManager.createFile(atPath: logURL.path, contents: nil)
-                }
+                SecureLocalStorage.ensureFile(at: logURL)
 
                 let handle = try FileHandle(forWritingTo: logURL)
                 try handle.seekToEnd()
