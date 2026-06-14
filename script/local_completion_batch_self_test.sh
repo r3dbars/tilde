@@ -17,11 +17,18 @@ module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
 
-# Unknown alias has no local target and falls back to the HF repo id.
-assert module.installed_asset_path("does-not-exist") is None
-source, kind = module.resolve_model_source("qwen35-4b")
-assert kind == "hf-repo", kind
-assert source == "mlx-community/Qwen3.5-4B-MLX-4bit", source
+# Unknown alias has no local target and falls back to the HF repo id. Point the
+# model root at an empty dir so the result does not depend on which assets happen
+# to be installed on this machine.
+with tempfile.TemporaryDirectory() as empty:
+    os.environ["AUTOCOMPLETE_LAB_MODEL_ROOT"] = str(Path(empty) / "Models")
+    try:
+        assert module.installed_asset_path("does-not-exist") is None
+        source, kind = module.resolve_model_source("qwen35-4b")
+        assert kind == "hf-repo", kind
+        assert source == "mlx-community/Qwen3.5-4B-MLX-4bit", source
+    finally:
+        del os.environ["AUTOCOMPLETE_LAB_MODEL_ROOT"]
 
 # A populated local asset dir is preferred over the repo id.
 with tempfile.TemporaryDirectory() as tmp:
@@ -87,8 +94,11 @@ rows = module.read_rows(io.StringIO('{"id": "a"}\n\n{"id": "b"}\n'))
 assert [row["id"] for row in rows] == ["a", "b"], rows
 PY
 
-# The --print-source path resolves a model without importing mlx_lm.
-SOURCE_OUTPUT="$(script/local_completion_batch.py --model qwen35-4b --print-source)"
+# The --print-source path resolves a model without importing mlx_lm. Use an empty
+# model root so the result does not depend on locally-installed assets.
+EMPTY_ROOT="$(mktemp -d)"
+SOURCE_OUTPUT="$(AUTOCOMPLETE_LAB_MODEL_ROOT="$EMPTY_ROOT/Models" script/local_completion_batch.py --model qwen35-4b --print-source)"
+rm -rf "$EMPTY_ROOT"
 grep -q "alias=qwen35-4b" <<<"$SOURCE_OUTPUT"
 grep -q "kind=hf-repo" <<<"$SOURCE_OUTPUT"
 

@@ -18,6 +18,10 @@ MLX_MODEL_BY_NAME = {
     "gemma-4-e2b": "mlx-community/gemma-4-E2B-it-4bit",
     "gemma 4 e4b": "mlx-community/gemma-4-e4b-4bit",
     "gemma-4-e4b": "mlx-community/gemma-4-e4b-4bit",
+    "gemma-3-1b-it": "mlx-community/gemma-3-1b-it-4bit",
+    "gemma-3-1b": "mlx-community/gemma-3-1b-it-4bit",
+    "gemma-3n-e4b-it": "mlx-community/gemma-3n-E4B-it-lm-4bit",
+    "gemma-3n-e4b": "mlx-community/gemma-3n-E4B-it-lm-4bit",
     "qwen3 0.6b": "mlx-community/Qwen3-0.6B-4bit",
     "qwen3-0.6b": "mlx-community/Qwen3-0.6B-4bit",
     "qwen3 1.7b": "mlx-community/Qwen3-1.7B-4bit",
@@ -102,11 +106,26 @@ def mlx_model_name(requested_model: str) -> str:
     return MLX_MODEL_BY_NAME.get(key, DEFAULT_MLX_MODEL)
 
 
+# Mirror the Swift product template (CompletionPromptBuilder.swift `rawCompletion`).
+# Keep in sync with local_quality_audit.RAW_COMPLETION_INSTRUCTION.
+RAW_COMPLETION_INSTRUCTION = (
+    "Complete only the text requested below. Return no label and no copied context."
+)
+
+
+def build_raw_completion_prompt(system: str, user: str) -> str:
+    parts = (system, RAW_COMPLETION_INSTRUCTION, user)
+    return "\n\n".join(part.strip() for part in parts if part and part.strip())
+
+
 def prompt_text(payload: dict[str, str]) -> str:
     if prompt_template(payload) == "raw_completion":
         raw_prompt = payload.get("rawPrompt") or payload.get("raw_prompt")
         if raw_prompt:
             return raw_prompt.strip()
+        return build_raw_completion_prompt(
+            payload.get("system", ""), payload.get("user", "")
+        )
 
     user = payload.get("user", "").strip()
     if bool(payload.get("promptIsBuilt") or payload.get("prompt_is_built")):
