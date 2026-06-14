@@ -3,7 +3,7 @@ name: Fast proof gate
 # Single fast pre-merge tier: script/proof.sh fast. These are the cheap proof
 # checks that must stay green on main (the kind of red that has been landing
 # unguarded: a stale coverage manifest, broken scripts, whitespace). The Swift +
-# MLX suite needs macOS + Apple Silicon, so proof.sh auto-skips it here; the
+# MLX suite needs macOS + Apple Silicon, so this job sets PROOF_SKIP_SWIFT=1; the
 # Linux-friendly checks (coverage manifest, byte-compile, harness self-tests,
 # whitespace, and the report-only proof manifest) run on every PR to main.
 #
@@ -40,6 +40,11 @@ jobs:
       - name: Fast proof tier (script/proof.sh fast)
         run: bash script/proof.sh fast
         env:
+          # The Swift suite needs macOS + Apple Silicon + the MLX runtime, and
+          # even the core filter has to resolve the MLX-laden package graph, so
+          # skip it on the Linux runner (it has a swift toolchain, but can't run
+          # this package). Swift still runs locally and in the pre-push hook.
+          PROOF_SKIP_SWIFT: "1"
           # On a PR, also flag whitespace / conflict markers the PR introduces.
           # Empty on push events -> proof.sh checks the working tree instead.
           PROOF_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
