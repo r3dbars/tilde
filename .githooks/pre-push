@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Pre-push hook: run the fast proof tier before pushing, so a red main is hard to
+# create from a developer machine too (the GitHub gate is the backstop).
+#
+# Enable once:   git config core.hookspath .githooks
+# Bypass once:   git push --no-verify        (or: PROOF_SKIP_PREPUSH=1 git push)
+# Skip Swift:    PROOF_SKIP_SWIFT=1 git push (e.g. on a cold build)
+set -uo pipefail
+
+if [ "${PROOF_SKIP_PREPUSH:-}" = "1" ]; then
+  echo "pre-push: PROOF_SKIP_PREPUSH=1 set — skipping fast proof gate." >&2
+  exit 0
+fi
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+echo "pre-push: running script/proof.sh fast (bypass with 'git push --no-verify')…" >&2
+exec "$ROOT_DIR/script/proof.sh" fast
