@@ -18,6 +18,7 @@ This is a macOS-only SwiftPM package (`swift-tools 6.2`, targets macOS 26, Apple
 - Package shape after docs/target changes: `swift package describe`
 - MLX patch (run after `swift package resolve`, before building the app): `./script/patch_mlx_swift_lm.sh` — applies `patches/mlx-swift-lm/gemma4-optiq-scaled-linear.patch` to the resolved checkout. It is idempotent and no-ops if already applied.
 - Broad pre-beta gate: `./script/beta_readiness.sh`, plus the specific `script/check_*.sh` for the proof surface you changed.
+- Pre-merge gate (mirrors CI): `./script/proof.sh fast` — runs `swift test`, `check_test_coverage_manifest`, `check_proof_manifest`, and a whitespace check. Exits non-zero if any check fails.
 
 Most scripts have a paired `*_self_test.sh` that validates the script itself.
 
