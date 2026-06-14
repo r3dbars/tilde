@@ -14,10 +14,13 @@ struct LocalCompletionEngineTests {
         )
 
         let configuration = await runner.lastConfiguration
-        #expect(configuration?.model == .qwen35FourB)
+        #expect(configuration?.model == .gemma4E4BItOptiQ)
         #expect(configuration?.maxGeneratedTokens == 20)
         #expect(configuration?.maxVisibleWords == 8)
         #expect(configuration?.reasoningEnabled == false)
+        #expect(configuration?.promptTemplate == .chatInstruct)
+        #expect(await runner.lastPrompt?.template == .chatInstruct)
+        #expect(await runner.lastPrompt?.system.contains("Inline autocomplete") == true)
     }
 
     @Test("Runtime config allows the extended word slider")
@@ -36,6 +39,40 @@ struct LocalCompletionEngineTests {
 
         #expect(configuration.maxVisibleWords == 20)
         #expect(configuration.maxGeneratedTokens == 48)
+    }
+
+    @Test("Runtime config uses raw completion template for base small model")
+    func runtimeConfigUsesRawTemplateForBaseSmallModel() async throws {
+        let policy = CompletionModelPolicy(
+            model: .qwen3Medium,
+            runtimeOwnership: .appOwnedEmbedded,
+            minimumMemoryGB: 8,
+            maxGeneratedTokens: 16,
+            maxVisibleWords: 5,
+            debounceMilliseconds: 10,
+            targetLatencyMilliseconds: 35,
+            reasoningEnabled: false
+        )
+        let configuration = LocalCompletionRuntimeConfiguration(policy: policy)
+        let runner = FakeLocalRunner(result: .success("simple and local"))
+        let engine = LocalCompletionEngine(
+            runner: runner,
+            configuration: configuration
+        )
+
+        _ = try await engine.suggestion(
+            for: CompletionRequest(textBeforeCursor: "The small model should stay", maxVisibleWords: 5)
+        )
+
+        let prompt = try #require(await runner.lastPrompt)
+        #expect(await runner.lastConfiguration?.promptTemplate == .rawCompletion)
+        #expect(prompt.template == .rawCompletion)
+        #expect(prompt.system == "")
+        #expect(prompt.rawPrompt == prompt.user)
+        #expect(prompt.user.contains("Inline autocomplete"))
+        #expect(prompt.user.contains("Before cursor:\nThe small model should stay"))
+        #expect(!prompt.user.contains("System:"))
+        #expect(!prompt.user.contains("Assistant:"))
     }
 
     @Test("Passes request mode to runtime runner")
@@ -159,7 +196,7 @@ struct LocalCompletionEngineTests {
 
 private actor FakeLocalRunner: LocalCompletionRuntimeRunner {
     private let result: Result<String, any Error>
-    private(set) var lastPrompt: CompletionPrompt?
+    private(set) var lastPrompt: FormattedCompletionPrompt?
     private(set) var lastMode: CompletionRequestMode?
     private(set) var lastConfiguration: LocalCompletionRuntimeConfiguration?
 
@@ -168,7 +205,7 @@ private actor FakeLocalRunner: LocalCompletionRuntimeRunner {
     }
 
     func complete(
-        prompt: CompletionPrompt,
+        prompt: FormattedCompletionPrompt,
         mode: CompletionRequestMode,
         configuration: LocalCompletionRuntimeConfiguration
     ) async throws -> String {

@@ -2026,7 +2026,8 @@ if ! grep -F 'system attribute "AUTOCOMPLETE_LAB_NOTES_RAW_TEXT"' script/real_ap
 fi
 
 script/real_app_smoke.sh obsidian --dry-run >"$TMP_DIR/obsidian.txt"
-if ! grep -F "manual-gated disposable Obsidian default-note smoke" "$TMP_DIR/obsidian.txt" >/dev/null; then
+if ! grep -F "guarded Obsidian stock default-note smoke" "$TMP_DIR/obsidian.txt" >/dev/null ||
+   ! grep -F "validates logs and traces as obsidian-stock proof" "$TMP_DIR/obsidian.txt" >/dev/null; then
   echo "real app smoke self-test did not print the Obsidian manual gate" >&2
   exit 1
 fi
@@ -2187,9 +2188,11 @@ if not custom_open < custom_activate < custom_return < vault_open < vault_activa
     )
 PY
 
-if ! grep -F "ensure_obsidian_smoke_renderer_accessibility_launch()" script/real_app_smoke.sh >/dev/null ||
+if ! grep -F "ensure_obsidian_smoke_launch()" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Refusing Obsidian stock proof while Obsidian is already running with --force-renderer-accessibility." script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'manual_proof_label="obsidian-stock"' script/real_app_smoke.sh >/dev/null ||
    ! grep -F -- "--force-renderer-accessibility" script/real_app_smoke.sh >/dev/null; then
-  echo "real app smoke self-test expected Obsidian proof launch to force Electron renderer accessibility when starting a fresh app" >&2
+  echo "real app smoke self-test expected stock Obsidian proof to stay separate from forced renderer proof" >&2
   exit 1
 fi
 
@@ -2460,19 +2463,26 @@ if ! grep -F "codex-proof-insert-verification-fast-path" Sources/AutocompleteLab
   exit 1
 fi
 if ! awk '/run_codex\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_codex_tab_for_smoke "\$start_line"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh ||
-   ! awk '/press_codex_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent_with_timeout/ && /\\$/ { found_call = 1 } in_smoke && /"session"/ { found_session = 1 } in_smoke && /"warm"/ { found_warm = 1 } END { exit (found_call && found_session && found_warm) ? 0 : 1 }' script/real_app_smoke.sh; then
+   ! awk '/try_codex_cgevent_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code_cgevent_with_timeout/ && /\\$/ { found_call = 1 } in_smoke && /"\$tap_location"/ { found_tap = 1 } in_smoke && /"warm"/ { found_warm = 1 } END { exit (found_call && found_tap && found_warm) ? 0 : 1 }' script/real_app_smoke.sh ||
+   ! awk '/press_codex_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /"Codex CGEvent session Tab" "session"/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Codex proof to press Tab through the guarded session CGEvent helper" >&2
   exit 1
 fi
 if ! grep -F "wait_for_codex_tab_diagnostic_optional" script/real_app_smoke.sh >/dev/null ||
    ! grep -F "AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_ATTEMPTS" script/real_app_smoke.sh >/dev/null ||
-   ! awk '/press_codex_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /wait_for_codex_tab_diagnostic_optional/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
+   ! awk '/try_codex_cgevent_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /wait_for_codex_tab_diagnostic_optional/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
   echo "real app smoke self-test expected Codex proof to use a short hot-path CGEvent diagnostic wait before fallback" >&2
   exit 1
 fi
-if ! grep -F "Codex CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab." script/real_app_smoke.sh >/dev/null ||
+if ! grep -F 'try_codex_cgevent_tab_for_smoke()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F 'codex_suggestion_hidden_since()' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"Codex CGEvent session Tab" "session"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"Codex CGEvent HID Tab" "hid"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"Codex CGEvent private-source session Tab" "session" "private"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F '"Codex CGEvent private-source HID Tab" "hid" "private"' script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "Codex CGEvent Tab attempts produced no key=tab diagnostic; retrying with System Events Tab." script/real_app_smoke.sh >/dev/null ||
    ! awk '/press_codex_tab_for_smoke\(\)/ { in_smoke = 1 } /^}/ && in_smoke { in_smoke = 0 } in_smoke && /press_key_code 48/ { found = 1 } END { exit found ? 0 : 1 }' script/real_app_smoke.sh; then
-  echo "real app smoke self-test expected Codex proof to retry with guarded System Events Tab only after missing key diagnostics" >&2
+  echo "real app smoke self-test expected Codex proof to exhaust guarded CGEvent Tab routes before System Events fallback" >&2
   exit 1
 fi
 if ! grep -F 'ensure_cgevent_keypress_helper()' script/real_app_smoke.sh >/dev/null ||

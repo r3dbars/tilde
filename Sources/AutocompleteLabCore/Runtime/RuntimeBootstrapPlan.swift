@@ -194,7 +194,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         requiredFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json"]
     )
 
-    public static let preferredMLX = qwen35FourBMLX
+    public static let preferredMLX = gemma4E4BItOptiQMLX
 
     public static let selectableMLXManifests: [String: LocalModelAssetManifest] = [
         "gemma-4-e2b": .gemma4E2BMLX,
@@ -207,6 +207,7 @@ public struct LocalModelAssetManifest: Equatable, Sendable {
         "gemma-4-26b": .gemma4A4BMLX,
         "qwen3-0.6b": .qwen3SmallMLX,
         "qwen3-1.7b": .qwen3MediumMLX,
+        "qwen3-1.7b-base": .qwen3MediumMLX,
         "small-draft-1b": .qwen3MediumMLX,
         "qwen35-4b": .qwen35FourBMLX,
         "qwen3.5-4b": .qwen35FourBMLX,

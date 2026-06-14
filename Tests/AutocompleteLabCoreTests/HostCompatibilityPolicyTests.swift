@@ -35,8 +35,6 @@ struct HostCompatibilityPolicyTests {
         let catalog = HostCompatibilityPolicyCatalog.mvp
 
         for bundleIdentifier in [
-            "com.anthropic.claude-code",
-            "com.anthropic.claudefordesktop",
             "com.openai.atlas"
         ] {
             let policy = try #require(catalog.policy(for: bundleIdentifier))
@@ -85,21 +83,42 @@ struct HostCompatibilityPolicyTests {
             } else {
                 #expect(!profile.supportsFullAcceptance)
                 #expect(profile.requiresNoSubmitAcceptanceProof)
-                #expect(policy.killSwitch == .proofModeRequired)
+                #expect([.proofModeRequired, .perHostDisable].contains(policy.killSwitch))
             }
             #expect(!policy.proofArtifacts.isEmpty)
         }
     }
 
-    @Test("Normal beta toggles include proven Codex dogfood")
-    func normalBetaTogglesIncludeProvenCodexDogfood() throws {
+    @Test("Send surfaces are never classified as not prompt")
+    func sendSurfacesAreNeverClassifiedAsNotPrompt() throws {
+        let sendSurfaceBundleIdentifiers = [
+            "com.apple.MobileSMS",
+            "com.tinyspeck.slackmacgap",
+            "ru.keepcoder.Telegram",
+            "com.hnc.Discord",
+            "com.hnc.DiscordPTB",
+            "com.hnc.DiscordCanary"
+        ]
+        let profiles = CompatibilityProfileStore.mvp.profiles
+        let policies = HostCompatibilityPolicyCatalog.mvp.policies
+
+        for bundleIdentifier in sendSurfaceBundleIdentifiers {
+            #expect(try #require(profiles[bundleIdentifier]).promptAppSafetyMode != .notPrompt)
+            #expect(try #require(policies[bundleIdentifier]).safetyMode != .notPrompt)
+        }
+    }
+
+    @Test("Normal beta toggles include default-on dogfood apps")
+    func normalBetaTogglesIncludeDefaultOnDogfoodApps() throws {
         let catalog = HostCompatibilityPolicyCatalog.mvp
         let betaSafeBundles = Set([
             "com.apple.TextEdit",
             "com.apple.Notes",
             "md.obsidian",
             "com.google.Chrome",
-            "com.openai.codex"
+            "com.openai.codex",
+            "com.anthropic.claude-code",
+            "com.anthropic.claudefordesktop"
         ])
 
         let userToggleBundles = Set(catalog.policies.values
@@ -110,8 +129,8 @@ struct HostCompatibilityPolicyTests {
         #expect(try #require(catalog.policy(for: "com.apple.MobileSMS")).runtimeState == .proofModeOnly)
         #expect(try #require(catalog.policy(for: "com.apple.MobileSMS")).killSwitch == .proofModeRequired)
         #expect(try #require(catalog.policy(for: "com.openai.codex")).runtimeState == .userToggleAllowed)
-        #expect(try #require(catalog.policy(for: "com.anthropic.claudefordesktop")).runtimeState == .proofModeOnly)
-        #expect(try #require(catalog.policy(for: "com.anthropic.claude-code")).runtimeState == .proofModeOnly)
+        #expect(try #require(catalog.policy(for: "com.anthropic.claudefordesktop")).runtimeState == .userToggleAllowed)
+        #expect(try #require(catalog.policy(for: "com.anthropic.claude-code")).runtimeState == .userToggleAllowed)
     }
 
     @Test("Runtime state keeps disabled and proof-only hosts closed by default")

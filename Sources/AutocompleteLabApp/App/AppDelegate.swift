@@ -476,6 +476,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         setSuggestionLearningRestraintLevel: { [weak self] level in
             self?.setSuggestionLearningRestraintLevel(level)
+        },
+        resetSuggestionTuning: { [weak self] in
+            self?.resetSuggestionTuning()
         }
     )
 
@@ -1109,46 +1112,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureStatusButton(item.button, configuration: .autocompleteLab)
 
         let menu = NSMenu()
-        let statusMenu = NSMenuItem(title: "Status: starting", action: nil, keyEquivalent: "")
-        let suggestionDecisionMenu = NSMenuItem(title: "Why now: starting", action: nil, keyEquivalent: "")
-        let runtimeMenu = NSMenuItem(title: "Model: starting", action: nil, keyEquivalent: "")
+
+        // A single, calm status line. The full decision + model detail lives in its tooltip.
+        let statusMenu = NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: "")
+        menu.addItem(statusMenu)
+        menu.addItem(NSMenuItem.separator())
+
         let suggestNowItem = NSMenuItem(
-            title: "Suggest Now",
+            title: "Ask for a Suggestion",
             action: #selector(suggestNowFromMenu),
             keyEquivalent: "`"
         )
         suggestNowItem.keyEquivalentModifierMask = [.control]
         suggestNowItem.toolTip = "\(SuggestionSummonHotKeyDescriptor.controlBacktick.displayName) asks for one suggestion without changing Tab."
+        menu.addItem(suggestNowItem)
+
+        // Pause options live in one submenu so the top level stays uncluttered.
+        let pauseParentItem = NSMenuItem(title: "Pause Suggestions", action: nil, keyEquivalent: "")
+        let pauseMenu = NSMenu()
         let pauseItem = NSMenuItem(title: pauseSuggestionsTitle, action: #selector(togglePauseSuggestions), keyEquivalent: "p")
-        let pause15Item = NSMenuItem(title: "Pause for 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: "")
-        let pause1HourItem = NSMenuItem(title: "Pause for 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: "")
-        let pauseUntilTomorrowItem = NSMenuItem(
-            title: "Pause Until Tomorrow",
-            action: #selector(pauseSuggestionsUntilTomorrowFromControl),
-            keyEquivalent: ""
-        )
+        pauseMenu.addItem(pauseItem)
+        pauseMenu.addItem(NSMenuItem.separator())
+        pauseMenu.addItem(NSMenuItem(title: "For 15 Minutes", action: #selector(pauseSuggestionsFor15Minutes), keyEquivalent: ""))
+        pauseMenu.addItem(NSMenuItem(title: "For 1 Hour", action: #selector(pauseSuggestionsFor1Hour), keyEquivalent: ""))
+        pauseMenu.addItem(NSMenuItem(title: "Until Tomorrow", action: #selector(pauseSuggestionsUntilTomorrowFromControl), keyEquivalent: ""))
+        menu.setSubmenu(pauseMenu, for: pauseParentItem)
+        menu.addItem(pauseParentItem)
+
+        let toggleItem = NSMenuItem(title: "Pause Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
+        menu.addItem(toggleItem)
         let silenceFieldItem = NSMenuItem(
             title: "Silence This Field",
             action: #selector(silenceCurrentField),
             keyEquivalent: "s"
         )
-        let toggleItem = NSMenuItem(title: "Pause Current App", action: #selector(toggleCurrentApp), keyEquivalent: "t")
-        let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
-        let debugMenu = NSMenu()
-
-        menu.addItem(NSMenuItem(title: "SteadyType", action: nil, keyEquivalent: ""))
-        menu.addItem(statusMenu)
-        menu.addItem(suggestionDecisionMenu)
-        menu.addItem(runtimeMenu)
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(suggestNowItem)
-        menu.addItem(pauseItem)
-        menu.addItem(pause15Item)
-        menu.addItem(pause1HourItem)
-        menu.addItem(pauseUntilTomorrowItem)
         menu.addItem(silenceFieldItem)
-        menu.addItem(toggleItem)
-        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ","))
         let feedbackItem = NSMenuItem(
             title: BetaFeedbackLink.menuTitle,
             action: #selector(openFeedbackForm),
@@ -1156,28 +1157,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         feedbackItem.toolTip = BetaFeedbackLink.privacyNote
         menu.addItem(feedbackItem)
+
+        // Developer tools stay hidden unless explicitly enabled, so everyday users never see them.
+        if developerMenuEnabled {
+            let debugMenuItem = NSMenuItem(title: "Developer", action: nil, keyEquivalent: "")
+            let debugMenu = NSMenu()
+            debugMenu.addItem(NSMenuItem(title: "Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
+            debugMenu.addItem(NSMenuItem(title: "Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
+            debugMenu.addItem(NSMenuItem(title: "Writing Journal Folder", action: #selector(revealPersonalCaptureFolder), keyEquivalent: ""))
+            debugMenu.addItem(NSMenuItem.separator())
+            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
+            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
+            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
+            debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
+            debugMenu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
+            menu.setSubmenu(debugMenu, for: debugMenuItem)
+            menu.addItem(debugMenuItem)
+        }
+
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Request Accessibility", action: #selector(requestAccessibilityPermission), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
-        debugMenu.addItem(NSMenuItem(title: "Diagnostics", action: #selector(showDiagnostics), keyEquivalent: "d"))
-        debugMenu.addItem(NSMenuItem(title: "Model Folder", action: #selector(revealModelFolder), keyEquivalent: "m"))
-        debugMenu.addItem(NSMenuItem(title: "Personal Capture Folder", action: #selector(revealPersonalCaptureFolder), keyEquivalent: ""))
-        debugMenu.addItem(NSMenuItem.separator())
-        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Up", action: #selector(nudgeCurrentAppSuggestionUp), keyEquivalent: ""))
-        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Down", action: #selector(nudgeCurrentAppSuggestionDown), keyEquivalent: ""))
-        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Left", action: #selector(nudgeCurrentAppSuggestionLeft), keyEquivalent: ""))
-        debugMenu.addItem(NSMenuItem(title: "Nudge Suggestion Right", action: #selector(nudgeCurrentAppSuggestionRight), keyEquivalent: ""))
-        debugMenu.addItem(NSMenuItem(title: "Reset Current App Learning", action: #selector(resetCurrentAppLearning), keyEquivalent: ""))
-        menu.setSubmenu(debugMenu, for: debugMenuItem)
-        menu.addItem(debugMenuItem)
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit SteadyType", action: #selector(quit), keyEquivalent: "q"))
 
         item.menu = menu
         statusItem = item
         statusMenuItem = statusMenu
-        suggestionDecisionMenuItem = suggestionDecisionMenu
-        runtimeMenuItem = runtimeMenu
+        suggestionDecisionMenuItem = nil
+        runtimeMenuItem = nil
         pauseSuggestionsMenuItem = pauseItem
         silenceFieldMenuItem = silenceFieldItem
         toggleAppMenuItem = toggleItem
@@ -1579,6 +1584,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseControlState.toggleTitle
     }
 
+    /// Developer tooling (Diagnostics, nudges, journal folder) is hidden from the menu by
+    /// default. Enable with `defaults write <bundle id> settings.showDeveloperMenu -bool true`.
+    private var developerMenuEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "settings.showDeveloperMenu")
+    }
+
     private var pauseStatusTitle: String {
         pauseControlState.menuPausedTitle
     }
@@ -1726,9 +1737,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if isClaudeCodeTerminalHostProof(profile: profile, hostBundleIdentifier: app.bundleIdentifier) {
-            return activeAppProofBundleIdentifiers.contains(
-                ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-            )
+            return !disabledBundleIdentifiers.contains(app.bundleIdentifier)
         }
 
         return ProofModeAppEnablementPolicy(
@@ -1741,10 +1750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func claudeCodeTerminalHostProofProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
-        guard ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(app.bundleIdentifier),
-              activeAppProofBundleIdentifiers.contains(
-                  ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-              ) else {
+        guard ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(app.bundleIdentifier) else {
             return nil
         }
 
@@ -2833,9 +2839,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let proofModeEnabled = activeAppProofBundleIdentifiers.contains(
             ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
         )
-        let shouldReadTerminalScreenText = proofModeEnabled
-            && (app.bundleIdentifier == "com.mitchellh.ghostty"
-                || !ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText))
+        let shouldReadTerminalScreenText = app.bundleIdentifier == "com.mitchellh.ghostty"
+            || !ClaudeCodeTerminalHostProofPolicy.containsProofMarker(searchableInputText)
         let terminalScreenText = shouldReadTerminalScreenText
             ? (accessibilityClient.focusedWindowText(for: app) ?? "")
             : ""
@@ -4142,7 +4147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isInvalidatedByUserTyping: currentSuggestionInvalidatedByUserKeyDown,
             allowsAutocompleteKeyAfterPassthroughObservation: isClaudeCodeTerminalHostProofSuggestion,
             hasPendingAcceptedInsertionUndo: acceptedInsertionUndoIsActive(),
-            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut
+            acceptAllShortcut: keyboardShortcutConfiguration.acceptAllShortcut,
+            visibleSuggestionID: currentSuggestionID
         )
     }
 
@@ -7217,6 +7223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
+                docLocalContextTexts: orchestration.docLocalContextTexts,
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
@@ -7236,7 +7243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         appBundleIdentifier: appBundleIdentifier,
                         fieldIdentity: fieldIdentityDescription,
                         requestMode: request.mode.rawValue,
-                        triggerReason: "predictive-phrase-fallback",
+                        triggerReason: "canned-bridge",
                         textBeforeCursor: request.textBeforeCursor,
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: fastSuggestion.visibleText,
@@ -7255,7 +7262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: profile,
                         metadata: [
                             "reason": "repeated-miss",
-                            "triggerReason": "predictive-phrase-fallback"
+                            "triggerReason": "canned-bridge"
                         ]
                     )
                     recordAnnoyanceSignal(
@@ -7298,7 +7305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         appBundleIdentifier: appBundleIdentifier,
                         fieldIdentity: fieldIdentityDescription,
                         requestMode: request.mode.rawValue,
-                        triggerReason: "predictive-phrase-fallback",
+                        triggerReason: "canned-bridge",
                         textBeforeCursor: request.textBeforeCursor,
                         textAfterCursor: request.textAfterCursor,
                         latencyMilliseconds: 0,
@@ -7315,7 +7322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: profile,
                         metadata: [
                             "reason": reason,
-                            "triggerReason": "predictive-phrase-fallback"
+                            "triggerReason": "canned-bridge"
                         ]
                         .merging(learningDecision.metadata) { current, _ in current }
                     )
@@ -7330,7 +7337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         renderMode: renderMode,
                         latencyMilliseconds: 0,
-                        triggerReason: "predictive-phrase-fallback",
+                        triggerReason: "canned-bridge",
                         requestTicket: requestTicket,
                         candidateSelectionMetadata: fastPresentationMetadata,
                         refreshBeforePresenting: false
@@ -7720,7 +7727,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         latencyMilliseconds: latencyMilliseconds,
                         triggerReason: "model-result",
                         requestTicket: requestTicket,
-                        candidateSelectionMetadata: appModelResultMetadata
+                        candidateSelectionMetadata: appModelResultMetadata,
+                        scheduledDelayMilliseconds: requestSchedule.scheduledDelayMilliseconds
                     )
                 }
                 await MainActor.run {
@@ -7769,7 +7777,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         triggerReason: String,
         requestTicket: SuggestionRequestTicket? = nil,
         candidateSelectionMetadata: [String: String] = [:],
-        refreshBeforePresenting: Bool = true
+        refreshBeforePresenting: Bool = true,
+        scheduledDelayMilliseconds: Int = 0
     ) {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionInvalidatedByUserKeyDown
@@ -7964,6 +7973,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mode: request.mode,
             scope: request.appBundleIdentifier ?? profile.bundleIdentifier
         )
+        // A final model result is "first visible" when nothing is already on screen for the user
+        // to read — no instant local phrase and no streamed partial. In that case a slow result
+        // would paint cold and late, so displayScoreDecision applies a tighter latency ceiling.
+        // When a suggestion is already visible, the model result is a refinement and keeps the
+        // looser budget so good late refinements can still replace the instant phrase in place.
+        let modelIsFirstVisibleSuggestion = triggerReason == "model-result"
+            && !suggestionSession.hasVisibleSuggestion
         let orchestratedDisplayDecision = suggestionOrchestrator.displayScoreDecision(
             suggestion: suggestion,
             request: request,
@@ -7976,7 +7992,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss,
             displayScorePolicy: displayScorePolicy,
-            suggestionTuning: suggestionTuning
+            suggestionTuning: suggestionTuning,
+            modelIsFirstVisibleSuggestion: modelIsFirstVisibleSuggestion,
+            scheduledDelayMilliseconds: scheduledDelayMilliseconds
         )
         let displayScoreDecision = orchestratedDisplayDecision.decision
         let displayScoreMetadata = orchestratedDisplayDecision.metadata
@@ -17531,30 +17549,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard supportStatus.canToggleSuggestions else {
-            switch supportStatus.supportLevel {
-            case .diagnosticsOnly:
-                return "Diagnostics only in \(app.localizedName)"
-            case .unsupported:
-                return "Unsupported in \(app.localizedName)"
-            case .green, .yellow:
-                return "Off in \(app.localizedName)"
-            }
+            return "Not active in \(app.localizedName)"
         }
 
         guard appEnabled else {
-            return "Blocked in \(app.localizedName)"
+            return "Paused in \(app.localizedName)"
         }
 
         switch SuggestionDecisionPresentation(lastSuggestionDecision).statusKind {
         case .shown:
-            return "Showing in \(app.localizedName)"
+            return "Suggesting in \(app.localizedName)"
         case .thinking:
             return "Thinking in \(app.localizedName)"
-        case .waiting:
-            return "Waiting in \(app.localizedName)"
-        case .quiet:
-            return "Quiet in \(app.localizedName)"
-        case .ready:
+        case .waiting, .quiet, .ready:
             return "Ready in \(app.localizedName)"
         }
     }
@@ -18767,6 +18774,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updatedSuggestionTuning(learningRestraintLevel: level),
             reason: "learning-restraint-changed"
         )
+    }
+
+    private func resetSuggestionTuning() {
+        setSuggestionTuning(SuggestionTuning(), reason: "reset-tuning")
     }
 
     private func updatedSuggestionTuning(

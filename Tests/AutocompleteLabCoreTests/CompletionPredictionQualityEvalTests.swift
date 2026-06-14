@@ -18,10 +18,10 @@ struct CompletionPredictionQualityEvalTests {
         #expect(total.exactNextWordCount == 400)
         #expect(total.exactPrefix2Trials == 300)
         #expect(total.exactPrefix2Count == 300)
-        #expect(total.exactPrefix3Trials == 200)
-        #expect(total.exactPrefix3Count == 200)
-        #expect(total.exactPrefix4Trials == 175)
-        #expect(total.exactPrefix4Count == 175)
+        #expect(total.exactPrefix3Trials == 175)
+        #expect(total.exactPrefix3Count == 175)
+        #expect(total.exactPrefix4Trials == 50)
+        #expect(total.exactPrefix4Count == 50)
         #expect(total.usefulSuffixTrials == 400)
         #expect(total.usefulSuffixCount == 400)
         #expect(total.noSuggestionCorrectCount == 100)
@@ -33,9 +33,9 @@ struct CompletionPredictionQualityEvalTests {
         #expect(total.userFeelPassCount == 500)
         #expect(report.score == 100)
         #expect(report.squaredScore == 10_000)
-        #expect(report.results.filter { $0.selectionSource == "predictive-phrase-fallback" }.count == 200)
+        #expect(report.results.filter { $0.selectionSource == "canned-bridge" }.count == 200)
         #expect(report.results.filter { $0.selectionSource == "model-candidate-ranker" && $0.evalCase.expectsSuggestion }.count == 200)
-        #expect(report.results.filter { $0.evalCase.usePredictivePhraseFallback }.allSatisfy { result in
+        #expect(report.results.filter { $0.evalCase.useCannedBridge }.allSatisfy { result in
             !result.evalCase.rawCandidateLines.contains(result.evalCase.expectedVisibleText?.trimmingCharacters(in: .whitespaces) ?? "")
         })
     }
@@ -85,8 +85,8 @@ struct CompletionPredictionQualityEvalTests {
         #expect(markdown.contains("| Code field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |"))
         #expect(markdown.contains("| Code field negative | n/a | 100% | 100% | 100% | 100% | 100% |"))
         #expect(markdown.contains("Source Mix"))
-        #expect(markdown.contains("Predictive phrase fallback exact: 200/200"))
-        #expect(markdown.contains("Predictor-only positives omit the expected answer"))
+        #expect(markdown.contains("Canned bridge exact: 200/200"))
+        #expect(markdown.contains("Canned-bridge positives omit the expected answer"))
         #expect(markdown.contains("not a claim that the live model is 100/100"))
     }
 
@@ -104,7 +104,7 @@ struct CompletionPredictionQualityEvalTests {
             "| Total | 100% | 100% | 100% | 100% | 100% | 100% |",
             "| Code field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |",
             "| Code field negative | n/a | 100% | 100% | 100% | 100% | 100% |",
-            "Predictor-only positives omit the expected answer",
+            "Canned-bridge positives omit the expected answer",
             "not a claim that the live model is 100/100"
         ] {
             #expect(generatedMarkdown.contains(required))
@@ -129,7 +129,7 @@ struct CompletionPredictionQualityEvalTests {
         #expect(total.acceptWorthyCount == 30)
         #expect(report.score == 100)
         #expect(Set(report.surfaceSummaries.map(\.surfaceName)) == ["TextEdit", "Notes", "Obsidian"])
-        #expect(report.results.contains { $0.selectionSource == "predictive-phrase-fallback" })
+        #expect(report.results.contains { $0.selectionSource == "canned-bridge" })
         #expect(report.results.contains { $0.selectionSource == "model-candidate-ranker" })
     }
 
@@ -150,7 +150,7 @@ struct CompletionPredictionQualityEvalTests {
             "3-8 word phrase rate: 100%",
             "Suffix-noise failures: 0",
             "| Total | 24/24 | 100% | 100% | 0 | 6/6 | 100% |",
-            "would this visible suggestion be worth accepting",
+            "short generic continuations would be worth accepting",
             "not private dogfood"
         ] {
             #expect(markdown.contains(required))

@@ -145,13 +145,13 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             hostVersion: .exact(shortVersion: "1.12.4", build: "0.14.8", source: "/Applications/Obsidian.app"),
             safetyMode: .notPrompt,
             runtimeState: .userToggleAllowed,
-            proofState: .complete,
+            proofState: .partial,
             killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/obsidian.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "Obsidian/obsidian-long-note")
             ],
-            notes: "Real CodeMirror default, theme, pane, and long-note proof is recorded; broader vault variance keeps support yellow."
+            notes: "Theme, pane, and long-note proof is recorded; stock no-flags default proof is tracked separately before claiming stock Obsidian support."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.mail",
@@ -239,28 +239,28 @@ public struct HostCompatibilityPolicyCatalog: Equatable, Sendable {
             bundleIdentifier: "com.anthropic.claude-code",
             displayName: "Claude Code",
             hostVersion: .exact(shortVersion: "2.1.128", build: "2.1.128", source: "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app"),
-            safetyMode: .disabled,
-            runtimeState: .proofModeOnly,
+            safetyMode: .wordOnly,
+            runtimeState: .userToggleAllowed,
             proofState: .partial,
-            killSwitch: .proofModeRequired,
+            killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/claude-code-terminal.png"),
                 HostProofArtifact(kind: "manual-smoke", reference: "Claude Code/default")
             ],
-            notes: "Direct bundle is disabled; terminal-host proof is marker-gated and one-word only."
+            notes: "Default-on dogfood lane; terminal-host support is Claude-detected and one-word only."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
             hostVersion: .exact(shortVersion: "1.6608.0", build: "1.6608.0", source: "/Applications/Claude.app"),
             safetyMode: .wordOnly,
-            runtimeState: .proofModeOnly,
+            runtimeState: .userToggleAllowed,
             proofState: .partial,
-            killSwitch: .proofModeRequired,
+            killSwitch: .perHostDisable,
             proofArtifacts: [
                 HostProofArtifact(kind: "screenshot", reference: "docs/product/visual-placement-screenshots/claude-desktop.png")
             ],
-            notes: "Proof-only prompt support has one no-submit layout. Normal beta use, full accept, and layout variants remain blocked until current exact proof exists."
+            notes: "Default-on dogfood lane with one-word no-submit behavior; layout variants will be fixed from screenshots."
         ),
         HostCompatibilityPolicy(
             bundleIdentifier: "com.apple.Safari",

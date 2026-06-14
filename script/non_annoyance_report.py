@@ -227,7 +227,7 @@ def is_immediate_resurfacing_suppression(event):
     metadata = event.get("metadata") or {}
     cooldown_reason = metadata.get("prefixCooldownReason") or event.get("reason", "")
     return (
-        cooldown_reason in {"typedOver", "escapeDismissal", "acceptedThenDeleted"}
+        cooldown_reason in {"typedOver", "escape-cooldown", "escapeDismissal", "acceptedThenDeleted"}
         or event.get("triggerReason") == "annoyance-signal"
     )
 

@@ -166,16 +166,33 @@ final class FieldStatusIndicatorController {
         lastState = state
         lastFrame = frame
         if wasVisible {
+            panel.alphaValue = 1
             panel.displayIfNeeded()
         } else {
+            panel.alphaValue = 0
             panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.14
+                panel.animator().alphaValue = 1
+            }
         }
     }
 
     func hide() {
         lastState = nil
         lastFrame = nil
-        panel.orderOut(nil)
+        guard panel.isVisible else {
+            panel.orderOut(nil)
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.12
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak panel] in
+            panel?.orderOut(nil)
+            panel?.alphaValue = 1
+        })
     }
 
     private func screen(containing accessibilityRect: CGRect, screenHeight: CGFloat) -> NSScreen? {

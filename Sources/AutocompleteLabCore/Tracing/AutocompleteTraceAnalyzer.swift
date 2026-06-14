@@ -890,19 +890,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func doubleMetadata(_ event: AutocompleteTraceEvent, key: String) -> Double? {
-        guard let value = event.metadata[key] else {
-            return nil
-        }
-
-        return Double(value)
+        event.doubleMetadata(key)
     }
 
     private func intMetadata(_ event: AutocompleteTraceEvent, key: String) -> Int? {
-        guard let value = event.metadata[key] else {
-            return nil
-        }
-
-        return Int(value)
+        event.intMetadata(key)
     }
 
     private func modelTotalGenerationLatency(_ event: AutocompleteTraceEvent) -> Int? {
@@ -923,7 +915,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let cleanedVisibleText = event.cleanedVisibleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let rawOutput = event.rawOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedVisibleText.isEmpty || !rawOutput.isEmpty else {
-            return false
+            return true
         }
 
         return cleanedVisibleText.isEmpty
@@ -2074,8 +2066,11 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         events.filter(\.isAcceptedThenDeletedWithinTwoSecondsSignal).count
     }
 
+    // ISO8601DateFormatter.date(from:) is thread-safe; shared to avoid per-call allocation.
+    nonisolated(unsafe) private static let iso8601Formatter = ISO8601DateFormatter()
+
     private func iso8601Date(from value: String) -> Date? {
-        ISO8601DateFormatter().date(from: value)
+        Self.iso8601Formatter.date(from: value)
     }
 
     private func isTooShortWordCompletion(_ text: String) -> Bool {
@@ -2223,9 +2218,8 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
     }
 
     private func millisecondsBetween(_ start: String, _ end: String) -> Int? {
-        let formatter = ISO8601DateFormatter()
-        guard let startDate = formatter.date(from: start),
-              let endDate = formatter.date(from: end) else {
+        guard let startDate = iso8601Date(from: start),
+              let endDate = iso8601Date(from: end) else {
             return nil
         }
 

@@ -163,7 +163,7 @@ struct PersonalCaptureEpisodeStoreTests {
                 model: SuggestionEpisodeModelContext(
                     modelName: CompletionModelPolicy.mvp.model.rawValue,
                     runtime: "mlx",
-                    asset: "Qwen3.5-4B-4bit",
+                    asset: "gemma-4-e4b-it-OptiQ-4bit",
                     promptVersion: CompletionPromptBuilder.promptStyleIdentifier,
                     experimentArm: AutocompleteExperimentArm.length3Word.rawValue,
                     triggerReason: "model-result",

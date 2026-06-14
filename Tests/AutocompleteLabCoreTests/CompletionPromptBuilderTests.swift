@@ -3,6 +3,49 @@ import Testing
 
 @Suite("Completion prompt builder")
 struct CompletionPromptBuilderTests {
+    @Test("Template selector keeps base completion models raw")
+    func templateSelectorKeepsBaseCompletionModelsRaw() {
+        #expect(CompletionPromptTemplate.template(for: .qwen3Small) == .rawCompletion)
+        #expect(CompletionPromptTemplate.template(for: .qwen3Medium) == .rawCompletion)
+        #expect(CompletionPromptTemplate.template(for: .qwen35FourB) == .chatInstruct)
+        #expect(CompletionPromptTemplate.template(for: .gemma4E4BItOptiQ) == .chatInstruct)
+    }
+
+    @Test("Raw completion template has no chat wrapper")
+    func rawCompletionTemplateHasNoChatWrapper() {
+        let prompt = CompletionPrompt(
+            system: "Inline autocomplete.\nReturn only the suffix.",
+            user: "Before cursor:\nThe draft should stay\n\nNext words:"
+        )
+        let formatted = prompt.formatted(using: .rawCompletion)
+
+        #expect(formatted.template == .rawCompletion)
+        #expect(formatted.system == "")
+        #expect(formatted.user == formatted.rawPrompt)
+        #expect(formatted.user.contains("Inline autocomplete."))
+        #expect(formatted.user.contains("Complete only the text requested below"))
+        #expect(formatted.user.contains("Return no label and no copied context"))
+        #expect(formatted.user.contains("Before cursor:\nThe draft should stay"))
+        #expect(!formatted.user.contains("System:"))
+        #expect(!formatted.user.contains("User:"))
+        #expect(!formatted.user.contains("Assistant:"))
+        #expect(!formatted.user.contains("[INST]"))
+    }
+
+    @Test("Chat instruct template preserves system and user channels")
+    func chatInstructTemplatePreservesSystemAndUserChannels() {
+        let prompt = CompletionPrompt(
+            system: "Inline autocomplete.",
+            user: "Before cursor:\nThe draft should stay\n\nNext words:"
+        )
+        let formatted = prompt.formatted(using: .chatInstruct)
+
+        #expect(formatted.template == .chatInstruct)
+        #expect(formatted.system == "Inline autocomplete.")
+        #expect(formatted.user.hasSuffix("Next words:"))
+        #expect(formatted.rawPrompt == nil)
+    }
+
     @Test("Prompt asks for a bounded continuation only")
     func promptAsksForBoundedContinuationOnly() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
@@ -37,6 +80,9 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("common phrase"))
         #expect(prompt.system.contains("Do not answer, explain"))
         #expect(prompt.system.contains("repeat the Before cursor text"))
+        #expect(prompt.system.contains("Do not copy any 4-word span from the current sentence"))
+        #expect(prompt.system.contains("mostly replay words already visible"))
+        #expect(prompt.system.contains("fresh, useful next words"))
         #expect(prompt.system.contains("Do not brainstorm, rewrite"))
         #expect(prompt.system.contains("reason"))
         #expect(prompt.user.contains("Before cursor:\nI think we should"))

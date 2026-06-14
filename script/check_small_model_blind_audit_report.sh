@@ -84,24 +84,38 @@ fi
 for required in \
   "Small Model Blind Quality Audit - 2026-06-12" \
   "1B-class lane: \`small-draft-1b\` / \`qwen3-1.7b\`" \
+  "Base completion lane: \`qwen3-1.7b-base\` / \`raw_completion\`" \
   "Default model remains: \`qwen35-4b\`" \
-  "Rows scored: $ROW_COUNT" \
+  "Prompt rows: $ROW_COUNT" \
   "Display rows: $DISPLAY_COUNT" \
   "Expected suppression rows: $SUPPRESSION_COUNT" \
   "Source mix: synthetic-public" \
   "No private text: yes" \
   "Default switch: no" \
-  "Blindness check: no current complaint-language fixtures"; do
+  "Blindness check: no current complaint-language fixtures" \
+  "Promotion gate: default only if blind-audit overall >= (4B score - 5) and first-token p50 <= 50% of 4B." \
+  "Draft/speculative gate: if quality misses but latency wins big, keep it out of default and test only as draft/speculative." \
+  "| Model | Template | Quality | Latency | Memory | Decision |"; do
   if ! grep -F "$required" "$REPORT_PATH" >/dev/null; then
     echo "small-model blind audit report missing required proof: $required" >&2
     exit 1
   fi
 done
 
-if ! grep -E "Result status: (measured-failed-quality-bar|measured-passed-quality-bar|runnable-not-measured)" "$REPORT_PATH" >/dev/null; then
+if ! grep -E "Result status: (measured-failed-quality-bar|measured-passed-quality-bar|runnable-not-measured|scaffolded-unavailable)" "$REPORT_PATH" >/dev/null; then
   echo "small-model blind audit report must declare a measured or runnable result status" >&2
   exit 1
 fi
+
+for required_row in \
+  "| \`qwen3-1.7b-base\` | \`raw_completion\` |" \
+  "| \`qwen3-0.6b\` | \`raw_completion\` |" \
+  "| \`qwen35-4b\` | \`chat_instruct\` |"; do
+  if ! grep -F "$required_row" "$REPORT_PATH" >/dev/null; then
+    echo "small-model blind audit report missing decision row: $required_row" >&2
+    exit 1
+  fi
+done
 
 if (( SOURCE_KIND_COUNT < 1 )); then
   echo "small-model blind prompt set missing source_kind metadata" >&2

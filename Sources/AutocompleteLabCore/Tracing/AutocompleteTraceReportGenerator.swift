@@ -381,23 +381,17 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
     }
 
     private func sortedCountList(_ buckets: [String: Int]) -> String {
-        guard !buckets.isEmpty else {
-            return "<li>none yet</li>"
-        }
-
-        return buckets
-            .sorted { lhs, rhs in
-                if lhs.value == rhs.value {
-                    return lhs.key < rhs.key
-                }
-
-                return lhs.value > rhs.value
-            }
-            .map { "<li><code>\(escape($0.key))</code>: \($0.value)</li>" }
-            .joined(separator: "\n")
+        sortedBucketList(buckets) { "\($0)" }
     }
 
     private func sortedRateList(_ buckets: [String: Double]) -> String {
+        sortedBucketList(buckets) { percent($0) }
+    }
+
+    private func sortedBucketList<Value: Comparable>(
+        _ buckets: [String: Value],
+        format: (Value) -> String
+    ) -> String {
         guard !buckets.isEmpty else {
             return "<li>none yet</li>"
         }
@@ -410,7 +404,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
 
                 return lhs.value > rhs.value
             }
-            .map { "<li><code>\(escape($0.key))</code>: \(percent($0.value))</li>" }
+            .map { "<li><code>\(escape($0.key))</code>: \(format($0.value))</li>" }
             .joined(separator: "\n")
     }
 

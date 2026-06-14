@@ -82,12 +82,7 @@ public struct CompletionConfidencePolicy: Equatable, Sendable {
                 reasons.append("too-short-daily-driver-phrase")
             }
 
-            if suggestion.maxVisibleWords >= 12 {
-                if wordCount > suggestion.maxVisibleWords {
-                    score -= 45
-                    reasons.append("too-many-visible-words")
-                }
-            } else if suggestion.maxVisibleWords >= 8 {
+            if suggestion.maxVisibleWords >= 8 {
                 if wordCount > suggestion.maxVisibleWords {
                     score -= 45
                     reasons.append("too-many-visible-words")

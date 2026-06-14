@@ -2,7 +2,7 @@ import Foundation
 
 public enum PrefixFamilyCooldownReason: String, Codable, Equatable, Sendable {
     case typedOver
-    case escapeDismissal
+    case escapeDismissal = "escape-cooldown"
     case deletion
     case acceptedThenDeleted
 }

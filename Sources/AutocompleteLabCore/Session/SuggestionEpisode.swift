@@ -68,7 +68,7 @@ public struct SuggestionEpisodeSurvivalCheckpoint: Codable, Equatable, Sendable 
     public var countsAsDeletedFast: Bool {
         survivalClass == AcceptanceSurvivalClass.rejectedAfterAccept.rawValue
             && (checkpoint == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue
-                || checkpoint == "10s")
+                || checkpoint == AcceptanceSurvivalCheckpoint.tenSeconds.rawValue)
     }
 }
 
@@ -230,13 +230,13 @@ public struct SuggestionEpisodeRecord: Codable, Equatable, Sendable, Identifiabl
         if outcome == .deletedFast || survivalCheckpoints.contains(where: \.countsAsDeletedFast) {
             return 0
         }
-        if survivalCheckpoints.contains(where: { $0.countsAsKept && $0.checkpoint == "5m" }) {
+        if survivalCheckpoints.contains(where: { $0.countsAsKept && $0.checkpoint == AcceptanceSurvivalCheckpoint.fiveMinutes.rawValue }) {
             return 5
         }
-        if survivalCheckpoints.contains(where: { $0.countsAsKept && $0.checkpoint == "1m" }) {
+        if survivalCheckpoints.contains(where: { $0.countsAsKept && $0.checkpoint == AcceptanceSurvivalCheckpoint.oneMinute.rawValue }) {
             return 4
         }
-        if survivalCheckpoints.contains(where: { $0.countsAsKept && $0.checkpoint == "30s" }) {
+        if survivalCheckpoints.contains(where: { $0.countsAsKept && $0.checkpoint == AcceptanceSurvivalCheckpoint.thirtySeconds.rawValue }) {
             return 3
         }
         if survivalCheckpoints.contains(where: \.countsAsScoreableKept) || (
