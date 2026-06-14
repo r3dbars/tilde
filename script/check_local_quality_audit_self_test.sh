@@ -20,7 +20,11 @@ assert module.prompt_template_for_model("qwen3-1.7b-base") == "raw_completion"
 assert module.prompt_template_for_model("small-draft-1b") == "raw_completion"
 assert module.prompt_template_for_model("qwen3-0.6b") == "raw_completion"
 assert module.prompt_template_for_model("qwen35-4b") == "chat_instruct"
-assert module.raw_completion_prompt("system", "user") == "system\n\nuser"
+# raw_completion mirrors the Swift product template: system + instruction + user.
+assert module.RAW_COMPLETION_INSTRUCTION in module.raw_completion_prompt("system", "user")
+assert module.raw_completion_prompt("system", "user") == (
+    "system\n\n" + module.RAW_COMPLETION_INSTRUCTION + "\n\nuser"
+)
 PY
 
 grep -q "Local quality audit: PASS" <<<"$OUTPUT"

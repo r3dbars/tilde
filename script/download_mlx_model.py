@@ -89,6 +89,33 @@ MODELS = {
         "revision": "695690b33533b1f8b0395c1d6b4f00dc411353ef",
         "target": "Models/Gemma4A4B/MLX/gemma-4-26b-a4b-it-4bit",
     },
+    # Small cross-family lane for the small-model blind audit (docs/evals).
+    # gemma3_text (Gemma3ForCausalLM) loads in mlx_lm; gemma4 does not.
+    "gemma-3-1b-it": {
+        "repo_id": "mlx-community/gemma-3-1b-it-4bit",
+        "revision": "2d44e83dc9e80843d22fb941d3d699a0b1351aa6",
+        "target": "Models/Gemma31B/MLX/gemma-3-1b-it-4bit",
+    },
+    "gemma-3-1b": {
+        "canonical": "gemma-3-1b-it",
+        "repo_id": "mlx-community/gemma-3-1b-it-4bit",
+        "revision": "2d44e83dc9e80843d22fb941d3d699a0b1351aa6",
+        "target": "Models/Gemma31B/MLX/gemma-3-1b-it-4bit",
+    },
+    # Nearest loadable Gemma sibling to the gemma4 default, used as a
+    # Gemma-family baseline cross-check. The "-lm-" extraction is the
+    # language-model-only build, which loads text-only under mlx_lm.
+    "gemma-3n-e4b-it": {
+        "repo_id": "mlx-community/gemma-3n-E4B-it-lm-4bit",
+        "revision": "00b5ecdc79ba872a9b4cd32f4327e263bab5936c",
+        "target": "Models/Gemma3nE4B/MLX/gemma-3n-E4B-it-lm-4bit",
+    },
+    "gemma-3n-e4b": {
+        "canonical": "gemma-3n-e4b-it",
+        "repo_id": "mlx-community/gemma-3n-E4B-it-lm-4bit",
+        "revision": "00b5ecdc79ba872a9b4cd32f4327e263bab5936c",
+        "target": "Models/Gemma3nE4B/MLX/gemma-3n-E4B-it-lm-4bit",
+    },
 }
 
 ALLOW_PATTERNS = [

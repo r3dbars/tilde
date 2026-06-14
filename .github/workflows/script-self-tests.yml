@@ -28,6 +28,9 @@ jobs:
       - name: Local completion batch self-test
         run: bash script/local_completion_batch_self_test.sh
 
+      - name: First-token latency self-test
+        run: bash script/first_token_latency_self_test.sh
+
       - name: Local quality audit self-test
         run: bash script/check_local_quality_audit_self_test.sh
 
