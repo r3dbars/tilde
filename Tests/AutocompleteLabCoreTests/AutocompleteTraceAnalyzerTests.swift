@@ -913,6 +913,23 @@ struct AutocompleteTraceAnalyzerTests {
         #expect(summary.modelTotalGenerationLatencyBuckets["501-1000ms"] == 1)
     }
 
+    @Test("counts a model result with no cleaned text and no raw output as empty")
+    func countsFullyEmptyModelResultWithoutMetadata() {
+        let events = [
+            event(
+                .modelResult,
+                suggestionID: "blank",
+                rawOutput: "",
+                cleanedVisibleText: ""
+            )
+        ]
+
+        let summary = AutocompleteTraceAnalyzer().summary(for: events)
+
+        #expect(summary.emptyModelResultCount == 1)
+        #expect(summary.emptyModelResultRate == 1.0)
+    }
+
     @Test("summarizes sensitive suppression categories and leaks")
     func summarizesSensitiveSuppressionCategoriesAndLeaks() {
         let events = [

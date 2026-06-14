@@ -915,7 +915,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
         let cleanedVisibleText = event.cleanedVisibleText.trimmingCharacters(in: .whitespacesAndNewlines)
         let rawOutput = event.rawOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedVisibleText.isEmpty || !rawOutput.isEmpty else {
-            return false
+            return true
         }
 
         return cleanedVisibleText.isEmpty

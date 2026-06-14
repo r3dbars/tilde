@@ -91,12 +91,6 @@ public struct CompletionSuggestion: Equatable, Sendable {
             return accepted
         }
 
-        let boundary = text.index(text.startIndex, offsetBy: accepted.count)
-        if boundary < text.endIndex,
-           text[boundary].isWhitespace {
-            return accepted + " "
-        }
-
         return accepted + " "
     }
 
@@ -114,13 +108,8 @@ public struct CompletionSuggestion: Equatable, Sendable {
             return capped
         }
 
-        let leadingWhitespace = capped.prefix { $0.isWhitespace }
         let wordBoundaryCapped = String(capped[..<lastWhitespaceIndex])
         if wordBoundaryCapped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return String(capped.prefix(characterLimit))
-        }
-
-        if wordBoundaryCapped == String(leadingWhitespace) {
             return capped
         }
 
