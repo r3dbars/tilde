@@ -11,6 +11,7 @@ language:
   supported writing apps.
 - Suggestions do not enter the document until accepted.
 - `Tab` accepts one word.
+- `Shift-Tab` accepts the whole visible suggestion.
 - `Esc` dismisses the suggestion without changing text.
 - `Pause Suggestions` stops suggestions everywhere.
 - `Pause Current App` stops suggestions only in the frontmost app.
@@ -36,7 +37,7 @@ language:
 
 - [ ] Confirm Settings shows `Practice`.
 - [ ] Confirm Practice shows Accessibility status, local model readiness, and TextEdit enablement.
-- [ ] Confirm Practice names the proof points before leaving: Accessibility, local model, TextEdit, `Tab`, `Esc`, Pause, and Delete Local Logs.
+- [ ] Confirm Practice names the proof points before leaving: Accessibility, local model, TextEdit, `Tab`, `Shift-Tab`, `Esc`, Pause, and Delete Local Logs.
 - [ ] Click `Start TextEdit Practice`.
 - [ ] Confirm the app opens a disposable local TextEdit practice file.
 - [ ] Confirm the practice file repeats the safe first-run map in plain language.
@@ -44,12 +45,13 @@ language:
 - [ ] Type disposable text in TextEdit.
 - [ ] Confirm a suggestion appears near the cursor.
 - [ ] Press `Tab` and confirm only the next word inserts.
+- [ ] Press `Shift-Tab` and confirm the whole visible suggestion inserts.
 - [ ] Type again, wait for another suggestion, press `Esc`, and confirm the suggestion dismisses without changing text.
 - [ ] Click `Pause Suggestions` from Practice and confirm suggestions stop.
 - [ ] Click `Delete Local Logs` from Practice and confirm local trace JSONL and screenshot files are gone.
 - [ ] Record the walkthrough in the `Guided TextEdit Walkthrough Proof` table below.
 - [ ] Keep evidence to command output, line ranges, counters, and hashes. Do not paste raw typed text.
-- [ ] Use `./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready` before deletion and `./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready` after deletion to gather redacted line ranges. The before-delete helper must show model ready, TextEdit enabled, suggestions unpaused at practice start, and Tab/Esc/Pause evidence after the latest TextEdit practice-start line.
+- [ ] Use `./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready` before deletion and `./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready` after deletion to gather redacted line ranges. The before-delete helper must show model ready, TextEdit enabled, suggestions unpaused at practice start, and Tab/Shift-Tab/Esc/Pause evidence after the latest TextEdit practice-start line.
 - [ ] Run `./script/check_onboarding_walkthrough_proof.py`.
 
 ## First Success
@@ -59,6 +61,7 @@ language:
 - [ ] Type disposable text in TextEdit.
 - [ ] Confirm a suggestion appears near the cursor.
 - [ ] Press `Tab` and confirm only the next word inserts.
+- [ ] Press `Shift-Tab` and confirm the whole visible suggestion inserts.
 - [ ] Press `Esc` and confirm the suggestion dismisses without changing text.
 
 ## Permission Recovery
@@ -100,13 +103,13 @@ Current known gaps:
 
 ## Guided TextEdit Walkthrough Proof
 
-The row must prove one complete clean-user path: app-owned explanation, user-triggered Accessibility grant, app-owned local runtime readiness, disposable TextEdit practice, one-word `Tab`, `Esc`, Pause, and trace deletion. It must not rely on Ollama, llama.cpp, Python, a separate server, or mock fallback.
+The row must prove one complete clean-user path: app-owned explanation, user-triggered Accessibility grant, app-owned local runtime readiness, disposable TextEdit practice, one-word `Tab`, whole-suggestion `Shift-Tab`, `Esc`, Pause, and trace deletion. It must not rely on Ollama, llama.cpp, Python, a separate server, or mock fallback.
 
 Use [onboarding-walkthrough-proof.md](onboarding-walkthrough-proof.md) before editing this table. `./script/check_onboarding_walkthrough_proof.py --print-template` prints the exact row shape with the current commit proof, build verification command, evidence helper commands, and diagnostics/trace paths. The placeholder row below is not evidence; the gate should stay red until a real clean-user run adds a `pass` row with diagnostics or trace line references.
 
-| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |
+| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Shift-Tab | Esc | Pause | Delete traces | Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |
 
 ## Proof Log
 

@@ -250,11 +250,13 @@ struct SettingsWindowControllerStateTests {
         #expect(state.statusText == "New here? Start in TextEdit")
         #expect(state.detailText.contains("next to your cursor"))
         #expect(state.detailText.contains("Tab to accept one word"))
+        #expect(state.detailText.contains("Shift-Tab for the whole visible suggestion"))
         #expect(state.detailText.contains("Esc to dismiss"))
         #expect(state.detailText.contains("Pause Suggestions stops them everywhere"))
         #expect(state.detailText.contains("Pause in Current App stops only that app"))
         #expect(state.quickStartText.contains("60-second path"))
         #expect(state.quickStartText.contains("Start TextEdit Practice"))
+        #expect(state.quickStartText.contains("Shift-Tab once"))
         #expect(state.quickStartText.contains("Delete Local Logs"))
         #expect(state.appsText.contains("stays on this Mac"))
         #expect(state.appsText.contains("Start with TextEdit"))
@@ -385,7 +387,7 @@ struct SettingsWindowControllerStateTests {
             )
         )
 
-        #expect(ready.text == "Ready: use Practice to open TextEdit, try Tab for one word, press Esc to dismiss, then pause or delete local logs.")
+        #expect(ready.text == "Ready: use Practice to open TextEdit, try Tab for one word, Shift-Tab for the whole visible suggestion, press Esc to dismiss, then pause or delete local logs.")
         #expect(!ready.text.localizedCaseInsensitiveContains("Notes"))
     }
 
@@ -470,6 +472,7 @@ struct SettingsWindowControllerStateTests {
         #expect(ready.detailText.localizedCaseInsensitiveContains("near the cursor"))
         #expect(ready.detailText.localizedCaseInsensitiveContains("No Screen Recording needed"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Tab once"))
+        #expect(ready.stepsText.localizedCaseInsensitiveContains("Shift-Tab once"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("Esc"))
         #expect(ready.stepsText.localizedCaseInsensitiveContains("delete local logs"))
     }
@@ -730,7 +733,7 @@ struct SettingsWindowControllerStateTests {
 
         let shown = SettingsSuggestionDecisionState("Shown: private phrase should not be repeated")
         #expect(shown.statusText == "Right now: showing a suggestion")
-        #expect(shown.detailText == "A suggestion is next to your cursor. Tab accepts one word; Esc dismisses.")
+        #expect(shown.detailText == "A suggestion is next to your cursor. Tab accepts one word; Shift-Tab accepts the whole visible suggestion; Esc dismisses.")
 
         let ready = SettingsSuggestionDecisionState("")
         #expect(ready.statusText == "Right now: ready")

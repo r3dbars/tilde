@@ -245,6 +245,7 @@ struct RuntimePolicyTests {
         #expect(failed.isActionEnabled)
         #expect(ready.actionTitle == "Ready")
         #expect(!ready.isActionEnabled)
+        #expect(ready.message.contains("Shift-Tab for the whole visible suggestion"))
     }
 
     @Test("Runtime readiness report marks native runtime ready")

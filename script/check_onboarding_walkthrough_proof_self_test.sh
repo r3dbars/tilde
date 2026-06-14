@@ -14,13 +14,14 @@ write_proof() {
   local runtime="${2:-ready; app-owned MLX; no external server}"
   local delete_traces="${3:-Delete traces removed local trace/log files}"
   local build_proof="${4:-commit:$CURRENT_COMMIT}"
+  local shift_tab="${5:-Shift-Tab accepted whole visible suggestion verified inserted text}"
 
   cat >"$path" <<MARKDOWN
 # Onboarding Walkthrough Proof
 
-| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-05-13T12:00:00Z | \`$build_proof\` | steadytype-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | $runtime | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Esc dismissed with no text change | Pause stopped suggestions | $delete_traces | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
+| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Shift-Tab | Esc | Pause | Delete traces | Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-13T12:00:00Z | \`$build_proof\` | steadytype-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | $runtime | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | $shift_tab | Esc dismissed with no text change | Pause stopped suggestions | $delete_traces | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
 MARKDOWN
 }
 
@@ -55,6 +56,12 @@ fi
 
 if ! grep -F "./script/onboarding_walkthrough_evidence_helper.py --print-commands" "$TMP_DIR/template.txt" >/dev/null; then
   echo "onboarding proof self-test missing evidence helper command in template output" >&2
+  cat "$TMP_DIR/template.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "Shift-Tab whole visible suggestion accept verified" "$TMP_DIR/template.txt" >/dev/null; then
+  echo "onboarding proof self-test missing Shift-Tab proof requirement in template output" >&2
   cat "$TMP_DIR/template.txt" >&2
   exit 1
 fi
@@ -97,6 +104,11 @@ if ! grep -F "./script/onboarding_walkthrough_evidence_helper.py --mode before-d
   exit 1
 fi
 
+if ! grep -F "Tab/Shift-Tab/Esc/Pause evidence" docs/product/onboarding-walkthrough-proof.md >/dev/null; then
+  echo "onboarding proof self-test missing Shift-Tab runbook requirement" >&2
+  exit 1
+fi
+
 if ! grep -F "./script/check_onboarding_walkthrough_proof.py --print-template" docs/product/onboarding-permission-qa-checklist.md >/dev/null; then
   echo "onboarding proof self-test missing template command in checklist" >&2
   exit 1
@@ -106,9 +118,9 @@ PENDING_PROOF="$TMP_DIR/pending.md"
 cat >"$PENDING_PROOF" <<'MARKDOWN'
 # Onboarding Walkthrough Proof
 
-| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh run. |
+| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Shift-Tab | Esc | Pause | Delete traces | Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh run. |
 MARKDOWN
 
 if script/check_onboarding_walkthrough_proof.py --proof "$PENDING_PROOF" >"$TMP_DIR/pending.txt" 2>&1; then
@@ -132,10 +144,10 @@ PENDING_THEN_PASS="$TMP_DIR/pending-then-pass.md"
 cat >"$PENDING_THEN_PASS" <<MARKDOWN
 # Onboarding Walkthrough Proof
 
-| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |
-| 2026-05-13T12:00:00Z | \`commit:$CURRENT_COMMIT\` | steadytype-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | ready; app-owned MLX; no external server | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Esc dismissed with no text change | Pause stopped suggestions | Delete traces removed local trace/log files | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
+| Time UTC | Build proof | macOS user | Accessibility | Runtime | TextEdit practice | Tab | Shift-Tab | Esc | Pause | Delete traces | Result | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Pending | Pending | Clean tester account | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Needs fresh guided TextEdit walkthrough proof. |
+| 2026-05-13T12:00:00Z | \`commit:$CURRENT_COMMIT\` | steadytype-clean | Accessibility granted after app-owned Settings user-triggered Allow Accessibility | ready; app-owned MLX; no external server | TextEdit opened disposable local practice file | one-word Tab inserted verified next word | Shift-Tab accepted whole visible suggestion verified inserted text | Esc dismissed with no text change | Pause stopped suggestions | Delete traces removed local trace/log files | pass | manual gate; diagnostics lines 10-80; trace lines 40-55 |
 MARKDOWN
 
 script/check_onboarding_walkthrough_proof.py --proof "$PENDING_THEN_PASS" >"$TMP_DIR/pending-then-pass.txt"
@@ -157,6 +169,20 @@ fi
 if ! grep -F "runtime proof must not rely on Ollama" "$TMP_DIR/external-runtime.txt" >/dev/null; then
   echo "onboarding proof self-test missing external runtime failure" >&2
   cat "$TMP_DIR/external-runtime.txt" >&2
+  exit 1
+fi
+
+MISSING_SHIFT_TAB="$TMP_DIR/missing-shift-tab.md"
+write_proof "$MISSING_SHIFT_TAB" "ready; app-owned MLX; no external server" "Delete traces removed local trace/log files" "commit:$CURRENT_COMMIT" "Whole suggestion tried"
+
+if script/check_onboarding_walkthrough_proof.py --proof "$MISSING_SHIFT_TAB" >"$TMP_DIR/missing-shift-tab.txt" 2>&1; then
+  echo "onboarding proof self-test expected weak Shift-Tab proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "Shift-Tab proof must show whole visible suggestion acceptance" "$TMP_DIR/missing-shift-tab.txt" >/dev/null; then
+  echo "onboarding proof self-test missing Shift-Tab failure" >&2
+  cat "$TMP_DIR/missing-shift-tab.txt" >&2
   exit 1
 fi
 
