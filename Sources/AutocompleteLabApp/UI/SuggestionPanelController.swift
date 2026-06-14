@@ -179,7 +179,27 @@ final class SuggestionPanelController {
         }
 
         let wasVisible = panel.isVisible
-        backdropView.isHidden = renderMode != .floatingMirror
+        let workspace = NSWorkspace.shared
+        let appearancePolicy = SuggestionPanelAppearancePolicy.resolve(
+            reduceMotion: workspace.accessibilityDisplayShouldReduceMotion,
+            reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency,
+            defaultMaterial: visualStyle.mirrorMaterial
+        )
+        let showBackdrop = renderMode == .floatingMirror
+        if showBackdrop {
+            switch appearancePolicy.backdropStyle {
+            case .translucent(let material):
+                backdropView.material = material
+                backdropView.blendingMode = .behindWindow
+                backdropView.state = .active
+                backdropView.layer?.backgroundColor = NSColor.clear.cgColor
+            case .solid:
+                backdropView.blendingMode = .withinWindow
+                backdropView.state = .inactive
+                backdropView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            }
+        }
+        backdropView.isHidden = !showBackdrop
         ghostTextView.update(
             text: text,
             font: font,
@@ -205,14 +225,19 @@ final class SuggestionPanelController {
             // Mid-stream updates snap so the ghost text never lags the cursor.
             panel.alphaValue = 1
             panel.displayIfNeeded()
-        } else {
+        } else if appearancePolicy.fadeInDuration > 0 {
             // First appearance fades in gently, the way native transient overlays do.
+            // Skipped when the user has enabled Reduce Motion.
             panel.alphaValue = 0
             panel.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
+                context.duration = appearancePolicy.fadeInDuration
                 panel.animator().alphaValue = 1
             }
+        } else {
+            // Reduce Motion is on — snap the panel in instantly.
+            panel.alphaValue = 1
+            panel.orderFrontRegardless()
         }
         return accessibilityFrame
     }
