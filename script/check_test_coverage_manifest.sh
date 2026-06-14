@@ -118,7 +118,7 @@ require_pattern "Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift" "Runti
 require_pattern "Tests/AutocompleteLabCoreTests/RuntimePolicyTests.swift" "Runtime readiness blocks suggestions" "runtime suppression coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/ModelPolicyTests.swift"
-require_pattern "Tests/AutocompleteLabCoreTests/ModelPolicyTests.swift" "app-owned Qwen MLX model" "app-owned MLX policy coverage"
+require_pattern "Tests/AutocompleteLabCoreTests/ModelPolicyTests.swift" "app-owned Gemma MLX model" "app-owned MLX policy coverage"
 
 require_file "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift"
 require_pattern "Tests/AutocompleteLabCoreTests/CompatibilityProfileTests.swift" "MVP target apps are explicitly profiled" "target app profile coverage"

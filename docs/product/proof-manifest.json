@@ -12,6 +12,18 @@
     "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
     "entries": [
       {
+        "bundle": "*",
+        "displayName": "Generic App",
+        "versionState": "pending",
+        "versionReason": "Fallback policy applies to unprofiled apps and has no exact host version.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "pending",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [],
+        "notes": "Default-on generic Accessibility path for unprofiled apps. Treat this as pending proof for each concrete host, and use per-host disable when a target behaves badly."
+      },
+      {
         "bundle": "com.apple.TextEdit",
         "displayName": "TextEdit",
         "versionState": "exact",
@@ -208,7 +220,7 @@
         "hostVersion": "2.1.128",
         "hostBuild": "2.1.128",
         "versionSource": "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app",
-        "safetyMode": "disabled",
+        "safetyMode": "wordOnly",
         "runtimeState": "proofModeOnly",
         "proofState": "partial",
         "killSwitch": "proofModeRequired",
@@ -222,7 +234,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated, proof-mode-only, one-word only, and iceboxed from beta readiness. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
+        "notes": "Direct bundle and terminal-host adapter stay one-word only behind proof-mode safety. Normal terminal hosts remain blocked unless exact host proof exists."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -1027,6 +1039,15 @@
   ],
   "profileCoverage": [
     {
+      "bundle": "*",
+      "displayName": "Generic App",
+      "supportLevel": "yellow",
+      "surface": "Generic Accessibility fallback",
+      "status": "pending",
+      "owner": "fallback compatibility lane",
+      "safetyNote": "Unprofiled apps use the generic Accessibility path only as pending proof for each concrete host; secure, prompt, sendable, browser-hosted, terminal, and private fields still require exact proof or suppression."
+    },
+    {
       "bundle": "com.apple.TextEdit",
       "displayName": "TextEdit",
       "supportLevel": "green",
@@ -1092,11 +1113,11 @@
     {
       "bundle": "com.anthropic.claude-code",
       "displayName": "Claude Code",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Claude Code",
-      "status": "blocked",
+      "status": "partial",
       "owner": "terminal-host adapter lane",
-      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code proof is virtual, proof-mode-only, host-labeled, and iceboxed from beta readiness, while normal terminal hosts remain denylisted."
+      "safetyNote": "Claude Code is a guarded dogfood target with one-word acceptance only. Terminal-host support remains host-labeled and proof-gated; normal terminal use and full accept stay blocked without exact no-submit proof."
     },
     {
       "bundle": "com.anthropic.claudefordesktop",

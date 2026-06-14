@@ -11,11 +11,11 @@ OUTPUT="$TMP_DIR/output.txt"
 script/target_app_coverage_queue.py --limit 5 >"$OUTPUT"
 
 for expected in \
-  "1. Obsidian broader vault layouts | value=High | risk=Low-Medium" \
-  "2. TextEdit and Notes polish variants | value=Medium-High | risk=Low" \
-  "3. Chrome production text fields | value=High | risk=Medium" \
-  "4. Real Monaco and CodeMirror editors | value=High | risk=Medium-High" \
-  "5. Codex layouts | value=High | risk=High"; do
+  "1. Apple Pages documents | value=High | risk=Low-Medium" \
+  "2. LibreOffice Writer documents | value=High | risk=Medium" \
+  "3. Safari local textarea/contenteditable fixtures | value=Medium-High | risk=Low-Medium" \
+  "4. Focused local writing apps | value=Medium-High | risk=Medium" \
+  "5. Google Docs in Chrome | value=High | risk=High"; do
   if ! grep -F "$expected" "$OUTPUT" >/dev/null; then
     echo "target app coverage queue missed: $expected" >&2
     cat "$OUTPUT" >&2
@@ -23,8 +23,14 @@ for expected in \
   fi
 done
 
-if ! grep -F "local textarea/contenteditable fixtures do not count" "$OUTPUT" >/dev/null; then
-  echo "Chrome production lane must not broaden local fixture proof" >&2
+if ! grep -F "Local fixtures only; no public pages or hosted browser apps." "$OUTPUT" >/dev/null; then
+  echo "Safari lane must stay limited to local fixtures" >&2
+  cat "$OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "Exact disposable real-service proof only; local fixtures do not count." "$OUTPUT" >/dev/null; then
+  echo "Google Docs lane must not broaden local fixture proof" >&2
   cat "$OUTPUT" >&2
   exit 1
 fi
@@ -32,6 +38,11 @@ fi
 if ! grep -F "manifest: decision=blocked, proofState=blocked" "$OUTPUT" >/dev/null; then
   echo "queue should include live manifest blocked state for blocked rows" >&2
   cat "$OUTPUT" >&2
+  exit 1
+fi
+
+if ! script/target_app_coverage_queue.py --limit 10 | grep -F "Keep off by default until no-submit/no-send proof exists" >/dev/null; then
+  echo "risky send/prompt surfaces must stay guarded in the long queue" >&2
   exit 1
 fi
 
