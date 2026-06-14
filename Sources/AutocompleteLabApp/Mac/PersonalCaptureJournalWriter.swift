@@ -164,13 +164,12 @@ final class PersonalCaptureJournalWriter: @unchecked Sendable {
     private func append(_ markdown: String, at date: Date) {
         queue.async { [folderURL, calendar] in
             do {
-                let fileManager = FileManager.default
-                try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+                // The Personal Capture journal is verbatim typed text — keep it owner-only
+                // (0700 dir / 0600 file). See docs/security/threat-model.md (F2).
+                SecureLocalStorage.createDirectory(at: folderURL)
                 let fileURL = Self.fileURL(folderURL: folderURL, date: date, calendar: calendar)
-                if !fileManager.fileExists(atPath: fileURL.path) {
-                    let header = Self.header(for: date, calendar: calendar)
-                    fileManager.createFile(atPath: fileURL.path, contents: Data(header.utf8))
-                }
+                let header = Self.header(for: date, calendar: calendar)
+                SecureLocalStorage.ensureFile(at: fileURL, seededWith: Data(header.utf8))
 
                 let handle = try FileHandle(forWritingTo: fileURL)
                 try handle.seekToEnd()

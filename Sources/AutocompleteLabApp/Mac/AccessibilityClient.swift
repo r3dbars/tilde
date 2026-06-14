@@ -544,7 +544,11 @@ final class AccessibilityClient: @unchecked Sendable {
         )
     }
 
-    func insertText(_ text: String, allowDescendantTextFallback: Bool = false) -> Bool {
+    func insertText(
+        _ text: String,
+        expectedFieldIdentity: FocusedFieldIdentity? = nil,
+        allowDescendantTextFallback: Bool = false
+    ) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
               let bundleIdentifier = app.bundleIdentifier,
               let focusedElement = focusedElement(
@@ -555,6 +559,16 @@ final class AccessibilityClient: @unchecked Sendable {
                   ),
                   allowWindowDescendantFallback: allowDescendantTextFallback
               ) else {
+            return false
+        }
+
+        guard insertionTargetIsBound(
+            expectedFieldIdentity: expectedFieldIdentity,
+            bundleIdentifier: bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            focusedElement: focusedElement,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        ) else {
             return false
         }
 
@@ -577,7 +591,11 @@ final class AccessibilityClient: @unchecked Sendable {
         return textAfterInsert != textBeforeInsert
     }
 
-    func replaceSelectedTextBySettingValue(_ text: String, allowDescendantTextFallback: Bool = false) -> Bool {
+    func replaceSelectedTextBySettingValue(
+        _ text: String,
+        expectedFieldIdentity: FocusedFieldIdentity? = nil,
+        allowDescendantTextFallback: Bool = false
+    ) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
               let bundleIdentifier = app.bundleIdentifier,
               let focusedElement = focusedElement(
@@ -596,6 +614,16 @@ final class AccessibilityClient: @unchecked Sendable {
                   utf16Length: selectedRange.length,
                   with: text
               ) else {
+            return false
+        }
+
+        guard insertionTargetIsBound(
+            expectedFieldIdentity: expectedFieldIdentity,
+            bundleIdentifier: bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            focusedElement: focusedElement,
+            allowDescendantTextFallback: allowDescendantTextFallback
+        ) else {
             return false
         }
 
@@ -655,6 +683,51 @@ final class AccessibilityClient: @unchecked Sendable {
 
         let restoredText = copyAttribute(focusedElement, attribute: kAXValueAttribute) as? String
         return restoredText == text
+    }
+
+    /// Bind an Accessibility write to the field identity the acceptance pipeline validated.
+    ///
+    /// `insertText` / `replaceSelectedTextBySettingValue` re-resolve the frontmost app and the
+    /// focused element fresh at write time, so focus stolen since acceptance was validated would
+    /// otherwise let the user's accepted text land in a different app/field (a TOCTOU race —
+    /// docs/security/threat-model.md F1). When an `expectedFieldIdentity` is supplied we refuse
+    /// the write on drift. Element identity is the same `CFHash`-based value the focused-text
+    /// reader records, so it matches what the acceptance guard compared. With descendant-text
+    /// fallback the written element legitimately differs from the read element, so only the
+    /// application identity (bundle id + pid) is enforced there; cross-app drift is always refused.
+    private func insertionTargetIsBound(
+        expectedFieldIdentity: FocusedFieldIdentity?,
+        bundleIdentifier: String,
+        processIdentifier: pid_t,
+        focusedElement: AXUIElement,
+        allowDescendantTextFallback: Bool
+    ) -> Bool {
+        guard let expectedFieldIdentity else {
+            return true
+        }
+
+        let current = FocusedFieldIdentity(
+            bundleIdentifier: bundleIdentifier,
+            processIdentifier: processIdentifier,
+            elementIdentifier: Int(CFHash(focusedElement))
+        )
+        let decision = InsertionTargetIdentityGuard().decision(
+            expected: expectedFieldIdentity,
+            current: current,
+            requireElementMatch: !allowDescendantTextFallback
+        )
+        guard let reason = decision.blockReason else {
+            return true
+        }
+
+        DiagnosticsLog.shared.record(
+            "insert-target-identity-mismatch",
+            metadata: [
+                "reason": reason.rawValue,
+                "allowDescendantTextFallback": String(allowDescendantTextFallback)
+            ]
+        )
+        return false
     }
 
     private func cursorMatches(_ expectedRange: CFRange, in element: AXUIElement) -> Bool {

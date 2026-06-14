@@ -9312,9 +9312,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
 
+        // Bind the Accessibility write to the field the suggestion was shown for, so focus
+        // stolen between the acceptance guard and the write cannot redirect the user's accepted
+        // text into another app/field. See docs/security/threat-model.md (F1).
         let result = insertionEngine.insert(
             acceptedText,
             profile: profile,
+            expectedFieldIdentity: currentSuggestionFieldIdentity,
             skipping: skippedModes
         )
         DiagnosticsLog.shared.record(
@@ -10452,7 +10456,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originalProofInputText = lastTextSnapshot.textBeforeCursor
             + lastTextSnapshot.textAfterCursor
 
-        if accessibilityClient.insertText(acceptedText, allowDescendantTextFallback: false) {
+        if accessibilityClient.insertText(
+            acceptedText,
+            expectedFieldIdentity: currentSuggestionFieldIdentity,
+            allowDescendantTextFallback: false
+        ) {
             let verified = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: expectedProofInputText,
                 frontmostApp: frontmostApp,
