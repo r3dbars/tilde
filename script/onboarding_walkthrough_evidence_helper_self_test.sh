@@ -18,13 +18,15 @@ cat >"$DIAGNOSTICS" <<'LOG'
 2026-05-25T12:00:00Z launch executableSHA256=abc
 2026-05-25T12:01:00Z textedit-practice-started app=com.apple.TextEdit model=ready globalPaused=false textEditEnabled=true
 2026-05-25T12:02:00Z keyboard-action action=acceptNextWord app=com.apple.TextEdit handled=true insertsSuggestionText=String(4 chars) key=tab reason=accepted
-2026-05-25T12:03:00Z keyboard-action action=dismiss app=com.apple.TextEdit handled=true insertsSuggestionText=String(5 chars) key=escape reason=dismissed
-2026-05-25T12:04:00Z suggestions-control paused=true
+2026-05-25T12:03:00Z keyboard-action action=acceptAllVisible app=com.apple.TextEdit handled=true insertsSuggestionText=String(14 chars) key=shiftTab reason=accepted
+2026-05-25T12:04:00Z keyboard-action action=dismiss app=com.apple.TextEdit handled=true insertsSuggestionText=String(5 chars) key=escape reason=dismissed
+2026-05-25T12:05:00Z suggestions-control paused=true
 LOG
 
 cat >"$TRACE" <<'JSONL'
 {"type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","displayedText":"String(8 chars)"}
 {"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","requestMode":"wordCompletion","outcome":"acceptNextWord","acceptedText":"String(4 chars)"}
+{"type":"suggestionAccepted","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","outcome":"acceptAllVisible","acceptedText":"String(14 chars)"}
 JSONL
 
 touch "$RAW_TRACE"
@@ -45,8 +47,10 @@ for expected in \
   "Suggestions unpaused at practice start" \
   "Latest TextEdit practice start line: 2" \
   "TextEdit Tab accepted one word" \
+  "TextEdit Shift-Tab accepted whole suggestion" \
   "TextEdit acceptNextWord events: 1" \
-  "trace lines 1-2" \
+  "TextEdit acceptAllVisible events: 1" \
+  "trace lines 1-3" \
   "Suggested Evidence cell before delete:"; do
   if ! grep -F "$expected" "$TMP_DIR/before.txt" >/dev/null; then
     echo "onboarding evidence helper self-test missing before-delete output: $expected" >&2
@@ -54,6 +58,24 @@ for expected in \
     exit 1
   fi
 done
+
+MISSING_SHIFT_TAB="$TMP_DIR/missing-shift-tab.log"
+grep -v "action=acceptAllVisible" "$DIAGNOSTICS" >"$MISSING_SHIFT_TAB"
+if script/onboarding_walkthrough_evidence_helper.py \
+  --mode before-delete \
+  --require-ready \
+  --diagnostics-log "$MISSING_SHIFT_TAB" \
+  --trace-log "$TRACE" \
+  >"$TMP_DIR/missing-shift-tab.txt" 2>&1; then
+  echo "onboarding evidence helper self-test expected missing Shift-Tab proof to fail" >&2
+  exit 1
+fi
+
+if ! grep -F "TextEdit Shift-Tab accepted whole suggestion" "$TMP_DIR/missing-shift-tab.txt" >/dev/null; then
+  echo "onboarding evidence helper self-test missing Shift-Tab failure detail" >&2
+  cat "$TMP_DIR/missing-shift-tab.txt" >&2
+  exit 1
+fi
 
 MISSING_ESC="$TMP_DIR/missing-esc.log"
 grep -v "action=dismiss" "$DIAGNOSTICS" >"$MISSING_ESC"
@@ -78,9 +100,10 @@ cat >"$STALE_AFTER_START" <<'LOG'
 2026-05-25T12:00:00Z launch executableSHA256=abc
 2026-05-25T12:01:00Z textedit-practice-started app=com.apple.TextEdit model=ready globalPaused=false textEditEnabled=true
 2026-05-25T12:02:00Z keyboard-action action=acceptNextWord app=com.apple.TextEdit handled=true insertsSuggestionText=String(4 chars) key=tab reason=accepted
-2026-05-25T12:03:00Z keyboard-action action=dismiss app=com.apple.TextEdit handled=true insertsSuggestionText=String(5 chars) key=escape reason=dismissed
-2026-05-25T12:04:00Z suggestions-control paused=true
-2026-05-25T12:05:00Z textedit-practice-started app=com.apple.TextEdit model=ready globalPaused=false textEditEnabled=true
+2026-05-25T12:03:00Z keyboard-action action=acceptAllVisible app=com.apple.TextEdit handled=true insertsSuggestionText=String(14 chars) key=shiftTab reason=accepted
+2026-05-25T12:04:00Z keyboard-action action=dismiss app=com.apple.TextEdit handled=true insertsSuggestionText=String(5 chars) key=escape reason=dismissed
+2026-05-25T12:05:00Z suggestions-control paused=true
+2026-05-25T12:06:00Z textedit-practice-started app=com.apple.TextEdit model=ready globalPaused=false textEditEnabled=true
 LOG
 
 if script/onboarding_walkthrough_evidence_helper.py \
@@ -94,8 +117,9 @@ if script/onboarding_walkthrough_evidence_helper.py \
 fi
 
 for expected in \
-  "Latest TextEdit practice start line: 6" \
+  "Latest TextEdit practice start line: 7" \
   "TextEdit Tab accepted one word after TextEdit practice started" \
+  "TextEdit Shift-Tab accepted whole suggestion after TextEdit practice started" \
   "TextEdit Esc dismissed suggestion after TextEdit practice started" \
   "Pause Suggestions turned on after TextEdit practice started"; do
   if ! grep -F "$expected" "$TMP_DIR/stale-after-start.txt" >/dev/null; then
@@ -212,6 +236,12 @@ script/onboarding_walkthrough_evidence_helper.py --print-commands >"$TMP_DIR/com
 
 if ! grep -F "./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready" "$TMP_DIR/commands.txt" >/dev/null; then
   echo "onboarding evidence helper self-test missing before-delete command" >&2
+  cat "$TMP_DIR/commands.txt" >&2
+  exit 1
+fi
+
+if ! grep -F "through Tab, Shift-Tab, Esc, and Pause Suggestions" "$TMP_DIR/commands.txt" >/dev/null; then
+  echo "onboarding evidence helper self-test missing Shift-Tab command guidance" >&2
   cat "$TMP_DIR/commands.txt" >&2
   exit 1
 fi

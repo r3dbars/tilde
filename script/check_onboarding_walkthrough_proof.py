@@ -23,6 +23,7 @@ REQUIRED_COLUMNS = [
     "runtime",
     "textedit practice",
     "tab",
+    "shift-tab",
     "esc",
     "pause",
     "delete traces",
@@ -257,6 +258,12 @@ def validate_row(row: dict[str, str], tokens: set[str]) -> list[str]:
     ):
         failures.append("Tab proof must show a verified one-word or next-word insert")
 
+    shift_tab = normalize(row["shift-tab"])
+    if "shift-tab" not in shift_tab or not any(term in shift_tab for term in ("whole", "visible")):
+        failures.append("Shift-Tab proof must show whole visible suggestion acceptance")
+    if not any(term in shift_tab for term in ("verified", "inserted", "accepted")):
+        failures.append("Shift-Tab proof must show accepted or verified inserted text")
+
     esc = normalize(row["esc"])
     if "dismiss" not in esc or not any(term in esc for term in ("no text change", "unchanged")):
         failures.append("Esc proof must show dismiss with no text change")
@@ -307,6 +314,7 @@ def proof_row_template() -> str:
         "Runtime ready; app-owned MLX; no external server | "
         "TextEdit opened disposable local practice file | "
         "one-word Tab inserted verified next word | "
+        "Shift-Tab accepted whole visible suggestion verified inserted text | "
         "Esc dismissed with no text change | "
         "Pause stopped suggestions | "
         "Delete traces removed local trace/log files | "
@@ -318,10 +326,10 @@ def proof_row_template() -> str:
 def recording_template() -> str:
     header = (
         "| Time UTC | Build proof | macOS user | Accessibility | Runtime | "
-        "TextEdit practice | Tab | Esc | Pause | Delete traces | Result | Evidence |"
+        "TextEdit practice | Tab | Shift-Tab | Esc | Pause | Delete traces | Result | Evidence |"
     )
     separator = (
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
     )
     return "\n".join(
         [
@@ -355,6 +363,7 @@ def recording_template() -> str:
             "- app-owned local MLX runtime ready with no external server",
             "- disposable TextEdit practice opened",
             "- one-word or next-word Tab insert verified",
+            "- Shift-Tab whole visible suggestion accept verified",
             "- Esc dismiss with no text change",
             "- pause stops suggestions",
             "- local trace/log deletion removed files",

@@ -29,6 +29,7 @@ class TraceSummary:
     proof_lines: list[int]
     presented: int
     accepted_next_word: int
+    accepted_all_visible: int
     accepted_total: int
 
 
@@ -98,6 +99,7 @@ def diagnostics_matches(path: Path) -> list[MatchedLine]:
         "TextEdit enabled at practice start",
         "Suggestions unpaused at practice start",
         "TextEdit Tab accepted one word",
+        "TextEdit Shift-Tab accepted whole suggestion",
         "TextEdit Esc dismissed suggestion",
         "Pause Suggestions turned on",
         "Delete Local Logs recorded",
@@ -131,6 +133,17 @@ def diagnostics_matches(path: Path) -> list[MatchedLine]:
             latest["TextEdit Tab accepted one word"] = MatchedLine(number, "TextEdit Tab accepted one word")
         if (
             "keyboard-action" in line
+            and "action=acceptAllVisible" in line
+            and "app=com.apple.TextEdit" in line
+            and "handled=true" in line
+            and "key=shiftTab" in line
+        ):
+            latest["TextEdit Shift-Tab accepted whole suggestion"] = MatchedLine(
+                number,
+                "TextEdit Shift-Tab accepted whole suggestion",
+            )
+        if (
+            "keyboard-action" in line
             and "action=dismiss" in line
             and "app=com.apple.TextEdit" in line
             and "handled=true" in line
@@ -149,12 +162,14 @@ def summarize_trace(path: Path) -> TraceSummary:
     textedit_lines: list[int] = []
     last_presented_line: int | None = None
     last_accepted_next_word_line: int | None = None
+    last_accepted_all_visible_line: int | None = None
     presented = 0
     accepted_next_word = 0
+    accepted_all_visible = 0
     accepted_total = 0
 
     if not path.is_file():
-        return TraceSummary(textedit_lines, [], presented, accepted_next_word, accepted_total)
+        return TraceSummary(textedit_lines, [], presented, accepted_next_word, accepted_all_visible, accepted_total)
 
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for number, raw_line in enumerate(handle, start=1):
@@ -173,16 +188,22 @@ def summarize_trace(path: Path) -> TraceSummary:
                 last_presented_line = number
             if event_type == "suggestionAccepted":
                 accepted_total += 1
+                metadata = event.get("metadata")
+                if not isinstance(metadata, dict):
+                    metadata = {}
                 if event.get("outcome") == "acceptNextWord":
                     accepted_next_word += 1
                     last_accepted_next_word_line = number
+                if event.get("outcome") == "acceptAllVisible" or metadata.get("acceptMode") == "acceptAllVisible":
+                    accepted_all_visible += 1
+                    last_accepted_all_visible_line = number
 
     proof_lines = [
         line
-        for line in (last_presented_line, last_accepted_next_word_line)
+        for line in (last_presented_line, last_accepted_next_word_line, last_accepted_all_visible_line)
         if line is not None
     ]
-    return TraceSummary(textedit_lines, proof_lines, presented, accepted_next_word, accepted_total)
+    return TraceSummary(textedit_lines, proof_lines, presented, accepted_next_word, accepted_all_visible, accepted_total)
 
 
 def file_missing_or_empty(path: Path) -> bool:
@@ -200,7 +221,7 @@ def print_commands() -> None:
     print()
     print("```bash")
     print("./script/build_and_run.sh --verify")
-    print("# Complete Settings Practice in TextEdit through Tab, Esc, and Pause Suggestions.")
+    print("# Complete Settings Practice in TextEdit through Tab, Shift-Tab, Esc, and Pause Suggestions.")
     print("./script/onboarding_walkthrough_evidence_helper.py --mode before-delete --require-ready > /tmp/steadytype-onboarding-before-delete.txt")
     print("# Click Delete Local Logs in SteadyType Settings Practice.")
     print("./script/onboarding_walkthrough_evidence_helper.py --mode after-delete --require-ready > /tmp/steadytype-onboarding-after-delete.txt")
@@ -229,6 +250,7 @@ def before_delete_report(diagnostics_log: Path, trace_log: Path, require_ready: 
             missing.append(label)
     for label in (
         "TextEdit Tab accepted one word",
+        "TextEdit Shift-Tab accepted whole suggestion",
         "TextEdit Esc dismissed suggestion",
         "Pause Suggestions turned on",
     ):
@@ -241,6 +263,8 @@ def before_delete_report(diagnostics_log: Path, trace_log: Path, require_ready: 
         missing.append("TextEdit suggestionPresented trace event")
     if trace.accepted_next_word == 0:
         missing.append("TextEdit acceptNextWord suggestionAccepted trace event")
+    if trace.accepted_all_visible == 0:
+        missing.append("TextEdit acceptAllVisible suggestionAccepted trace event")
 
     diagnostics_lines = [match.number for match in matches if match.label != "Delete Local Logs recorded"]
 
@@ -257,6 +281,7 @@ def before_delete_report(diagnostics_log: Path, trace_log: Path, require_ready: 
     print(f"- TextEdit suggestionPresented events: {trace.presented}")
     print(f"- TextEdit suggestionAccepted events: {trace.accepted_total}")
     print(f"- TextEdit acceptNextWord events: {trace.accepted_next_word}")
+    print(f"- TextEdit acceptAllVisible events: {trace.accepted_all_visible}")
 
     if missing:
         print("Missing evidence:")
