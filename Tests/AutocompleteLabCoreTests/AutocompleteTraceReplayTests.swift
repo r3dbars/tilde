@@ -553,6 +553,94 @@ struct AutocompleteTraceReplayTests {
         })
     }
 
+    @Test("Decision diff replays current and one brain preview from redacted score metadata")
+    func decisionDiffReplaysCurrentAndOneBrainPreviewFromRedactedScoreMetadata() {
+        let events = [
+            event(
+                .suggestionSuppressed,
+                suggestionID: "repeat",
+                reason: "high-repetition",
+                metadata: displayScoreMetadata(
+                    decision: "suppress",
+                    suppressionReason: "high-repetition",
+                    utility: "1.00",
+                    styleFit: "1.00",
+                    contextFit: "1.00",
+                    userAffinity: "1.00",
+                    risk: "0.00",
+                    repetition: "0.90",
+                    instability: "0.00",
+                    finalScore: "3.10"
+                )
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "risk",
+                reason: "high-risk",
+                metadata: displayScoreMetadata(
+                    decision: "suppress",
+                    suppressionReason: "high-risk",
+                    utility: "1.00",
+                    styleFit: "1.00",
+                    contextFit: "1.00",
+                    userAffinity: "1.00",
+                    risk: "0.90",
+                    repetition: "0.90",
+                    instability: "0.00",
+                    finalScore: "2.20"
+                )
+            ),
+            event(
+                .suggestionSuppressed,
+                suggestionID: "learned",
+                reason: "below-threshold",
+                metadata: displayScoreMetadata(
+                    decision: "suppress",
+                    suppressionReason: "below-threshold",
+                    utility: "0.70",
+                    styleFit: "0.40",
+                    contextFit: "0.35",
+                    userAffinity: "0.25",
+                    risk: "0.10",
+                    repetition: "0.05",
+                    instability: "0.05",
+                    learningRestraint: "0.75",
+                    finalScore: "0.75",
+                    acceptedAndKeptProbability: "0.17",
+                    acceptedAndKeptSamples: "4"
+                )
+            )
+        ]
+
+        let currentOnly = AutocompleteTraceReplay().decisionDiffReport(
+            for: events,
+            previewBrain: .current
+        )
+        let preview = AutocompleteTraceReplay().decisionDiffReport(for: events)
+
+        #expect(currentOnly.passesDiffProofGate)
+        #expect(currentOnly.differences.isEmpty)
+        #expect(preview.samples.count == 3)
+        #expect(preview.differences.count == 2)
+        #expect(preview.differences.contains {
+            $0.suggestionID == "repeat"
+                && $0.currentDecision == "suppress"
+                && $0.currentReason == "high-repetition"
+                && $0.previewDecision == "display"
+                && $0.previewBindingReason == "none"
+        })
+        #expect(preview.differences.contains {
+            $0.suggestionID == "learned"
+                && $0.currentDecision == "suppress"
+                && $0.currentReason == "below-threshold"
+                && $0.previewDecision == "suppress"
+                && $0.previewBindingReason == "learned-restraint"
+        })
+        #expect(!preview.differences.contains { $0.suggestionID == "risk" })
+        #expect(preview.markdown.contains("metadata-only replay"))
+        #expect(!preview.markdown.contains("textBeforeCursor"))
+    }
+
     private func event(
         _ type: AutocompleteTraceEventType,
         suggestionID: String,
@@ -602,6 +690,38 @@ struct AutocompleteTraceReplayTests {
             "displayScoreFinal": "1.65",
             "displayScoreAcceptedAndKeptProbability": "0.340",
             "displayScoreAcceptedAndKeptSamples": "0"
+        ]
+    }
+
+    private func displayScoreMetadata(
+        decision: String,
+        suppressionReason: String,
+        utility: String,
+        styleFit: String,
+        contextFit: String,
+        userAffinity: String,
+        risk: String,
+        repetition: String,
+        instability: String,
+        learningRestraint: String = "0.00",
+        finalScore: String,
+        acceptedAndKeptProbability: String = "0.50",
+        acceptedAndKeptSamples: String = "8"
+    ) -> [String: String] {
+        [
+            "displayScoreDecision": decision,
+            "displayScoreSuppressionReason": suppressionReason,
+            "displayScoreUtility": utility,
+            "displayScoreStyleFit": styleFit,
+            "displayScoreContextFit": contextFit,
+            "displayScoreUserAffinity": userAffinity,
+            "displayScoreRisk": risk,
+            "displayScoreRepetition": repetition,
+            "displayScoreInstability": instability,
+            "displayScoreLearningRestraint": learningRestraint,
+            "displayScoreFinal": finalScore,
+            "displayScoreAcceptedAndKeptProbability": acceptedAndKeptProbability,
+            "displayScoreAcceptedAndKeptSamples": acceptedAndKeptSamples
         ]
     }
 

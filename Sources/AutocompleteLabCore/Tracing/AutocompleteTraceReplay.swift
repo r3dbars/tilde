@@ -154,6 +154,76 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
     }
 }
 
+public struct TraceReplayDisplayDecisionDiff: Equatable, Sendable {
+    public let eventID: String
+    public let suggestionID: String
+    public let appBundleIdentifier: String
+    public let requestMode: String
+    public let recordedDecision: String
+    public let recordedReason: String
+    public let currentDecision: String
+    public let currentReason: String
+    public let previewDecision: String
+    public let previewBindingReason: String
+
+    public var differsFromPreview: Bool {
+        currentDecision != previewDecision || currentReason != previewBindingReason
+    }
+
+    public var recordedDiffersFromCurrent: Bool {
+        recordedDecision != currentDecision || recordedReason != currentReason
+    }
+}
+
+public struct AutocompleteTraceDecisionReplayReport: Equatable, Sendable {
+    public let previewBrain: DisplayScoreSuppressionBrain
+    public let samples: [TraceReplayDisplayDecisionDiff]
+
+    public var differences: [TraceReplayDisplayDecisionDiff] {
+        samples.filter(\.differsFromPreview)
+    }
+
+    public var recordedDrifts: [TraceReplayDisplayDecisionDiff] {
+        samples.filter(\.recordedDiffersFromCurrent)
+    }
+
+    public var passesDiffProofGate: Bool {
+        !samples.isEmpty
+    }
+
+    public var markdown: String {
+        var lines = [
+            "# Autocomplete Trace Replay Decision Diff",
+            "",
+            "- preview brain: \(previewBrain.rawValue)",
+            "- display score samples: \(samples.count)",
+            "- current-vs-preview diffs: \(differences.count)",
+            "- recorded-vs-current drifts: \(recordedDrifts.count)",
+            "- privacy: metadata-only replay; raw text, prompts, model output, and screenshots are not required",
+            "",
+            "## Current Vs Preview Diffs"
+        ]
+
+        if differences.isEmpty {
+            lines.append("- none")
+        } else {
+            lines += differences.map(Self.diffLine)
+        }
+
+        if !recordedDrifts.isEmpty {
+            lines.append("")
+            lines.append("## Recorded Vs Current Drifts")
+            lines += recordedDrifts.map(Self.diffLine)
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func diffLine(_ diff: TraceReplayDisplayDecisionDiff) -> String {
+        "- suggestion=\(diff.suggestionID) app=\(diff.appBundleIdentifier) mode=\(diff.requestMode) recorded=\(diff.recordedDecision)/\(diff.recordedReason) current=\(diff.currentDecision)/\(diff.currentReason) preview=\(diff.previewDecision)/\(diff.previewBindingReason)"
+    }
+}
+
 public struct AutocompleteTraceReplay: Sendable {
     public init() {}
 
@@ -275,6 +345,25 @@ public struct AutocompleteTraceReplay: Sendable {
             latencyByMode: latencyByMode,
             annoyanceSignalCounts: summary.annoyanceSignalCounts,
             requirements: requirements
+        )
+    }
+
+    public func decisionDiffReport(
+        for events: [AutocompleteTraceEvent],
+        policy: DisplayScorePolicy = DisplayScorePolicy(),
+        previewBrain: DisplayScoreSuppressionBrain = .oneBrainPreview
+    ) -> AutocompleteTraceDecisionReplayReport {
+        let samples = events.compactMap { event in
+            displayDecisionDiff(
+                for: event,
+                policy: policy,
+                previewBrain: previewBrain
+            )
+        }
+
+        return AutocompleteTraceDecisionReplayReport(
+            previewBrain: previewBrain,
+            samples: samples
         )
     }
 
@@ -537,5 +626,135 @@ public struct AutocompleteTraceReplay: Sendable {
         }
 
         return Int(value)
+    }
+
+    private func doubleMetadata(_ event: AutocompleteTraceEvent, key: String) -> Double? {
+        guard let value = event.metadata[key] else {
+            return nil
+        }
+
+        return Double(value)
+    }
+
+    private func displayDecisionDiff(
+        for event: AutocompleteTraceEvent,
+        policy: DisplayScorePolicy,
+        previewBrain: DisplayScoreSuppressionBrain
+    ) -> TraceReplayDisplayDecisionDiff? {
+        guard let score = displayScore(from: event),
+              let mode = CompletionRequestMode(rawValue: event.requestMode) else {
+            return nil
+        }
+
+        let behaviorProfileID = behaviorProfileID(from: event)
+        let current = policy.decision(
+            for: score,
+            mode: mode,
+            behaviorProfileID: behaviorProfileID,
+            suppressionBrain: .current
+        )
+        let preview = policy.decision(
+            for: score,
+            mode: mode,
+            behaviorProfileID: behaviorProfileID,
+            suppressionBrain: previewBrain
+        )
+
+        return TraceReplayDisplayDecisionDiff(
+            eventID: event.id,
+            suggestionID: event.suggestionID.isEmpty ? event.id : event.suggestionID,
+            appBundleIdentifier: event.appBundleIdentifier.isEmpty ? "unknown" : event.appBundleIdentifier,
+            requestMode: event.requestMode.isEmpty ? "unknown" : event.requestMode,
+            recordedDecision: recordedDecision(for: event),
+            recordedReason: recordedReason(for: event),
+            currentDecision: decisionLabel(current),
+            currentReason: decisionReason(current),
+            previewDecision: decisionLabel(preview),
+            previewBindingReason: decisionReason(preview)
+        )
+    }
+
+    private func displayScore(from event: AutocompleteTraceEvent) -> DisplayScore? {
+        guard let utility = doubleMetadata(event, key: "displayScoreUtility"),
+              let styleFit = doubleMetadata(event, key: "displayScoreStyleFit"),
+              let contextFit = doubleMetadata(event, key: "displayScoreContextFit"),
+              let userAffinity = doubleMetadata(event, key: "displayScoreUserAffinity"),
+              let risk = doubleMetadata(event, key: "displayScoreRisk"),
+              let repetition = doubleMetadata(event, key: "displayScoreRepetition"),
+              let instability = doubleMetadata(event, key: "displayScoreInstability") else {
+            return nil
+        }
+
+        return DisplayScore(
+            utility: utility,
+            styleFit: styleFit,
+            contextFit: contextFit,
+            userAffinity: userAffinity,
+            risk: risk,
+            repetition: repetition,
+            instability: instability,
+            learningRestraint: doubleMetadata(event, key: "displayScoreLearningRestraint") ?? 0,
+            acceptedAndKeptProbability: doubleMetadata(
+                event,
+                key: "displayScoreAcceptedAndKeptProbability"
+            ),
+            acceptedAndKeptSampleCount: intMetadata(
+                event,
+                key: "displayScoreAcceptedAndKeptSamples"
+            ) ?? 0,
+            acceptedAndKeptUtilityAdjustment: doubleMetadata(
+                event,
+                key: "displayScoreAcceptedAndKeptUtilityAdjustment"
+            ) ?? 0
+        )
+    }
+
+    private func behaviorProfileID(from event: AutocompleteTraceEvent) -> AutocompleteBehaviorProfileID? {
+        let rawValue = event.metadata["displayScoreBehaviorProfile"] ?? event.metadata["behaviorProfile"]
+        guard let rawValue else {
+            return nil
+        }
+
+        return AutocompleteBehaviorProfileID(rawValue: rawValue)
+    }
+
+    private func recordedDecision(for event: AutocompleteTraceEvent) -> String {
+        if let decision = event.metadata["displayScoreDecision"], !decision.isEmpty {
+            return decision
+        }
+
+        switch event.type {
+        case .suggestionPresented:
+            return "display"
+        case .suggestionSuppressed:
+            return "suppress"
+        default:
+            return "unknown"
+        }
+    }
+
+    private func recordedReason(for event: AutocompleteTraceEvent) -> String {
+        if let reason = event.metadata["displayScoreSuppressionReason"], !reason.isEmpty {
+            return reason
+        }
+
+        if recordedDecision(for: event) == "display" {
+            return "none"
+        }
+
+        return event.reason.isEmpty ? "unknown" : event.reason
+    }
+
+    private func decisionLabel(_ decision: DisplayScoreDecision) -> String {
+        decision.shouldDisplay ? "display" : "suppress"
+    }
+
+    private func decisionReason(_ decision: DisplayScoreDecision) -> String {
+        switch decision {
+        case .display:
+            return "none"
+        case let .suppress(suppression):
+            return suppression.reason.rawValue
+        }
     }
 }
