@@ -59,6 +59,47 @@ struct InsertionEngineTests {
         #expect(InsertionEngine.prefersHardwareKeyEvents(for: chrome))
         #expect(!InsertionEngine.prefersHardwareKeyEvents(for: textEdit))
     }
+
+    @Test("Accepted-text insertion forwards the validated field identity to the AX write (F1)")
+    func insertForwardsExpectedFieldIdentityToClient() throws {
+        let client = TextInsertionClientSpy(insertResults: [true])
+        let engine = InsertionEngine(accessibilityClient: client)
+        let textEdit = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let identity = FocusedFieldIdentity(
+            bundleIdentifier: "com.apple.TextEdit",
+            processIdentifier: 4321,
+            elementIdentifier: 99
+        )
+
+        let result = engine.insert("ant", profile: textEdit, expectedFieldIdentity: identity)
+
+        #expect(result.succeeded)
+        // The identity-bound write must receive the same identity the acceptance pipeline
+        // validated; otherwise AccessibilityClient cannot refuse a drifted target.
+        #expect(client.recordedExpectedIdentities == [identity])
+    }
+
+    @Test("Value-replacement insertion forwards the validated field identity (F1)")
+    func valueReplacementForwardsExpectedFieldIdentityToClient() throws {
+        let client = TextInsertionClientSpy(replaceResults: [true])
+        let engine = InsertionEngine(accessibilityClient: client)
+        let chrome = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
+        let identity = FocusedFieldIdentity(
+            bundleIdentifier: "com.google.Chrome",
+            processIdentifier: 777,
+            elementIdentifier: 12
+        )
+
+        let result = engine.insert(
+            "ant",
+            profile: chrome,
+            expectedFieldIdentity: identity,
+            skipping: [.axThenKeyEvents]
+        )
+
+        #expect(result.succeeded)
+        #expect(client.recordedExpectedIdentities == [identity])
+    }
 }
 
 private final class TextInsertionClientSpy: TextInsertionClient {
@@ -70,19 +111,30 @@ private final class TextInsertionClientSpy: TextInsertionClient {
     private var insertResults: [Bool]
     private var replaceResults: [Bool]
     private(set) var calls: [Call] = []
+    private(set) var recordedExpectedIdentities: [FocusedFieldIdentity?] = []
 
     init(insertResults: [Bool] = [], replaceResults: [Bool] = []) {
         self.insertResults = insertResults
         self.replaceResults = replaceResults
     }
 
-    func insertText(_ text: String, allowDescendantTextFallback: Bool) -> Bool {
+    func insertText(
+        _ text: String,
+        expectedFieldIdentity: FocusedFieldIdentity?,
+        allowDescendantTextFallback: Bool
+    ) -> Bool {
         calls.append(.insertText(text: text, allowDescendantTextFallback: allowDescendantTextFallback))
+        recordedExpectedIdentities.append(expectedFieldIdentity)
         return insertResults.isEmpty ? false : insertResults.removeFirst()
     }
 
-    func replaceSelectedTextBySettingValue(_ text: String, allowDescendantTextFallback: Bool) -> Bool {
+    func replaceSelectedTextBySettingValue(
+        _ text: String,
+        expectedFieldIdentity: FocusedFieldIdentity?,
+        allowDescendantTextFallback: Bool
+    ) -> Bool {
         calls.append(.replaceSelectedTextBySettingValue(text: text, allowDescendantTextFallback: allowDescendantTextFallback))
+        recordedExpectedIdentities.append(expectedFieldIdentity)
         return replaceResults.isEmpty ? false : replaceResults.removeFirst()
     }
 }

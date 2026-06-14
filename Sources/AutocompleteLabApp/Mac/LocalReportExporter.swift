@@ -7,6 +7,18 @@ struct LocalReportExporter {
     private let encoder = JSONEncoder()
     private let generator = AutocompleteTraceReportGenerator()
 
+    // Export artifacts can include lightly-redacted survival data (and, for the debug inspector,
+    // raw-trace-derived content), so write them owner-only. See docs/security/threat-model.md (F2).
+    private func writeSecure(_ data: Data, to url: URL) throws {
+        try data.write(to: url, options: .atomic)
+        SecureLocalStorage.restrictFile(at: url)
+    }
+
+    private func writeSecure(_ text: String, to url: URL) throws {
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        SecureLocalStorage.restrictFile(at: url)
+    }
+
     func exportPrivacyBundle(limit: Int = 2_000) -> URL? {
         let events = storedEvents(limit: limit)
         guard !events.isEmpty else {
@@ -18,28 +30,24 @@ struct LocalReportExporter {
 
         do {
             try? FileManager.default.removeItem(at: bundleURL)
-            try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
-            try redactedJSONL(for: redactedEvents).write(
-                to: bundleURL.appendingPathComponent("redacted-traces.jsonl"),
-                atomically: true,
-                encoding: .utf8
+            SecureLocalStorage.createDirectory(at: bundleURL)
+            try writeSecure(
+                redactedJSONL(for: redactedEvents),
+                to: bundleURL.appendingPathComponent("redacted-traces.jsonl")
             )
-            try generator.htmlReport(for: redactedEvents).write(
-                to: bundleURL.appendingPathComponent("trace-report.html"),
-                atomically: true,
-                encoding: .utf8
+            try writeSecure(
+                generator.htmlReport(for: redactedEvents),
+                to: bundleURL.appendingPathComponent("trace-report.html")
             )
-            try generator.visualCalibrationReport(for: redactedEvents).write(
-                to: bundleURL.appendingPathComponent("visual-calibration-report.txt"),
-                atomically: true,
-                encoding: .utf8
+            try writeSecure(
+                generator.visualCalibrationReport(for: redactedEvents),
+                to: bundleURL.appendingPathComponent("visual-calibration-report.txt")
             )
             let survivalData = try generator.redactedSurvivalJSONData(for: redactedEvents, encoder: encoder)
-            try survivalData.write(to: bundleURL.appendingPathComponent("survival-report.json"), options: .atomic)
-            try privacyChecklist(eventCount: redactedEvents.count).write(
-                to: bundleURL.appendingPathComponent("PRIVACY-CHECKLIST.md"),
-                atomically: true,
-                encoding: .utf8
+            try writeSecure(survivalData, to: bundleURL.appendingPathComponent("survival-report.json"))
+            try writeSecure(
+                privacyChecklist(eventCount: redactedEvents.count),
+                to: bundleURL.appendingPathComponent("PRIVACY-CHECKLIST.md")
             )
             let manifest = LocalPrivacyExportManifest(
                 generatedAt: ISO8601DateFormatter().string(from: Date()),
@@ -56,7 +64,7 @@ struct LocalReportExporter {
                 ]
             )
             let manifestData = try encoder.encode(manifest)
-            try manifestData.write(to: bundleURL.appendingPathComponent("manifest.json"), options: .atomic)
+            try writeSecure(manifestData, to: bundleURL.appendingPathComponent("manifest.json"))
             return bundleURL
         } catch {
             return nil
@@ -68,9 +76,9 @@ struct LocalReportExporter {
         let reportURL = folderURL.appendingPathComponent("survival-report.json")
 
         do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            SecureLocalStorage.createDirectory(at: folderURL)
             let data = try generator.redactedSurvivalJSONData(for: events, encoder: encoder)
-            try data.write(to: reportURL, options: .atomic)
+            try writeSecure(data, to: reportURL)
             return reportURL
         } catch {
             return nil
@@ -89,9 +97,9 @@ struct LocalReportExporter {
         let reportURL = folderURL.appendingPathComponent("survival-inspector-debug.json")
 
         do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            SecureLocalStorage.createDirectory(at: folderURL)
             let data = try generator.debugSurvivalInspectorJSONData(for: events, encoder: encoder)
-            try data.write(to: reportURL, options: .atomic)
+            try writeSecure(data, to: reportURL)
             return reportURL
         } catch {
             return nil
@@ -109,11 +117,11 @@ struct LocalReportExporter {
         let reportURL = folderURL.appendingPathComponent("trace-report.html")
 
         do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            try generator.htmlReport(
-                summary: summary,
-                events: events
-            ).write(to: reportURL, atomically: true, encoding: .utf8)
+            SecureLocalStorage.createDirectory(at: folderURL)
+            try writeSecure(
+                generator.htmlReport(summary: summary, events: events),
+                to: reportURL
+            )
             return reportURL
         } catch {
             return nil
