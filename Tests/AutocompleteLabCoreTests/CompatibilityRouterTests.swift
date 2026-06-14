@@ -3,6 +3,11 @@ import Testing
 
 @Suite("Compatibility router")
 struct CompatibilityRouterTests {
+    @Test("MVP routing is default-on for unknown apps")
+    func mvpRoutingIsDefaultOnForUnknownApps() {
+        #expect(!CompatibilityRoutingSettings.mvp.enforceKnownApps)
+    }
+
     @Test("TextEdit can request and accept suggestions")
     func textEditCanRequestAndAccept() {
         let decision = CompatibilityRouter().decision(
@@ -24,8 +29,8 @@ struct CompatibilityRouterTests {
         #expect(!decision.allowsClipboardFallback)
     }
 
-    @Test("Unsupported apps are blocked instead of treated as default editors")
-    func unsupportedAppsAreBlocked() {
+    @Test("Unknown apps use generic Accessibility routing")
+    func unknownAppsUseGenericAccessibilityRouting() {
         let decision = CompatibilityRouter().decision(
             for: CompatibilityEvaluationContext(
                 bundleIdentifier: "com.example.UnknownWriter",
@@ -37,9 +42,10 @@ struct CompatibilityRouterTests {
             )
         )
 
-        #expect(!decision.shouldRequestSuggestion)
-        #expect(decision.rung == .blocked)
-        #expect(decision.suppressionReason == .unsupportedApp("com.example.UnknownWriter"))
+        #expect(decision.shouldRequestSuggestion)
+        #expect(decision.rung == .accept)
+        #expect(decision.acceptMode == .directAccessibility)
+        #expect(decision.suppressionReason == nil)
     }
 
     @Test("Browser and editor adapters start detect-only until real integrations exist")

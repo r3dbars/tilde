@@ -234,12 +234,6 @@ public struct CompatibilityLearningProfile: Codable, Equatable, Sendable {
         String(format: "%.2f", value)
     }
 
-    private func matchesVisualTrustContext(
-        _ context: CompatibilityLearningVisualTrustContext
-    ) -> Bool {
-        visualOffsetTrustDecision(in: context).isApplied
-    }
-
     private var hasContextScopedVisualTrust: Bool {
         [visualAppVersion, visualScreenFingerprint, visualFieldShapeFingerprint]
             .contains { ($0?.isEmpty == false) }

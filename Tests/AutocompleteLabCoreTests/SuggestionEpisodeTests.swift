@@ -111,7 +111,7 @@ struct SuggestionEpisodeTests {
         #expect(scorecard.deletedFast == 1)
         #expect(scorecard.averageLatencyMilliseconds == 200)
         #expect(scorecard.modelPromptRows.contains(
-            "Qwen3.5 4B / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
+            "Gemma 4 E4B IT OptiQ / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
         ))
         #expect(scorecard.markdown.contains("Score:"))
     }
@@ -262,7 +262,7 @@ struct SuggestionEpisodeTests {
             model: SuggestionEpisodeModelContext(
                 modelName: CompletionModelPolicy.mvp.model.rawValue,
                 runtime: "mlx",
-                asset: "Qwen3.5-4B-4bit",
+                asset: "gemma-4-e4b-it-OptiQ-4bit",
                 promptVersion: CompletionPromptBuilder.promptStyleIdentifier,
                 experimentArm: AutocompleteExperimentArm.length3Word.rawValue,
                 triggerReason: "model-result",

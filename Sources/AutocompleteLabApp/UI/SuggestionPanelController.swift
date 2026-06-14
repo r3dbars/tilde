@@ -202,17 +202,28 @@ final class SuggestionPanelController {
         lastFrame = frame
         lastRenderMode = renderMode
         if wasVisible {
+            // Mid-stream updates snap so the ghost text never lags the cursor.
+            panel.alphaValue = 1
             panel.displayIfNeeded()
         } else {
+            // First appearance fades in gently, the way native transient overlays do.
+            panel.alphaValue = 0
             panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                panel.animator().alphaValue = 1
+            }
         }
         return accessibilityFrame
     }
 
     func hide() {
+        // Hiding stays instant: on acceptance the ghost text must vanish before the
+        // accepted word lands, so a fade-out here could read as duplicated text.
         lastText = nil
         lastFrame = nil
         lastRenderMode = nil
+        panel.alphaValue = 1
         panel.orderOut(nil)
     }
 
@@ -265,7 +276,7 @@ final class SuggestionPanelController {
         case .floatingMirror:
             return NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 9)
         case .inlineAdjacent:
-            return NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 2)
+            return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 2)
         case .disabled:
             return NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         }

@@ -6,6 +6,9 @@ public struct KeyboardEventTapConsumptionInput: Equatable, Sendable {
     public let isInvalidatedByUserTyping: Bool
     public let hasPendingAcceptedInsertionUndo: Bool
     public let acceptAllShortcut: AcceptAllShortcut
+    public let isAutorepeat: Bool
+    public let visibleSuggestionID: String?
+    public let keyDownSuggestionID: String?
 
     public init(
         key: AutocompleteKey,
@@ -14,7 +17,10 @@ public struct KeyboardEventTapConsumptionInput: Equatable, Sendable {
         supportsFullAcceptance: Bool,
         isInvalidatedByUserTyping: Bool,
         hasPendingAcceptedInsertionUndo: Bool = false,
-        acceptAllShortcut: AcceptAllShortcut
+        acceptAllShortcut: AcceptAllShortcut,
+        isAutorepeat: Bool = false,
+        visibleSuggestionID: String? = nil,
+        keyDownSuggestionID: String? = nil
     ) {
         self.key = key
         self.hasVisibleSuggestion = hasVisibleSuggestion
@@ -23,6 +29,9 @@ public struct KeyboardEventTapConsumptionInput: Equatable, Sendable {
         self.isInvalidatedByUserTyping = isInvalidatedByUserTyping
         self.hasPendingAcceptedInsertionUndo = hasPendingAcceptedInsertionUndo
         self.acceptAllShortcut = acceptAllShortcut
+        self.isAutorepeat = isAutorepeat
+        self.visibleSuggestionID = visibleSuggestionID
+        self.keyDownSuggestionID = keyDownSuggestionID
     }
 }
 
@@ -44,6 +53,12 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
             return false
         }
 
+        if input.isAutorepeat,
+           shouldProtectAcceptanceIdentity(for: input.key),
+           input.visibleSuggestionID != input.keyDownSuggestionID {
+            return false
+        }
+
         switch input.key {
         case .tab:
             return input.supportsOneWordAcceptance
@@ -61,6 +76,15 @@ public struct KeyboardEventTapConsumptionPolicy: Equatable, Sendable {
             return false
         case .other:
             return false
+        }
+    }
+
+    private func shouldProtectAcceptanceIdentity(for key: AutocompleteKey) -> Bool {
+        switch key {
+        case .tab, .shiftTab, .optionTab:
+            true
+        case .backtick, .controlBacktick, .commandZ, .escape, .other:
+            false
         }
     }
 

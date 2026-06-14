@@ -341,6 +341,22 @@ extension AutocompleteTraceEvent {
             || metadata["checkpoint"] == AcceptanceSurvivalCheckpoint.twoSeconds.rawValue
     }
 
+    func intMetadata(_ key: String) -> Int? {
+        guard let value = metadata[key] else {
+            return nil
+        }
+
+        return Int(value)
+    }
+
+    func doubleMetadata(_ key: String) -> Double? {
+        guard let value = metadata[key] else {
+            return nil
+        }
+
+        return Double(value)
+    }
+
     private func traceTextSignalContains(_ token: String) -> Bool {
         reason.localizedCaseInsensitiveContains(token)
             || outcome.localizedCaseInsensitiveContains(token)
@@ -484,6 +500,7 @@ public struct RedactedAutocompleteTraceEvent: Codable, Equatable, Sendable, Iden
         let normalized = key.lowercased()
 
         return normalized == "role"
+            || normalized == "doclocalngrammatch"
             || normalized.hasSuffix("role")
             || normalized.hasPrefix("has")
             || normalized.hasSuffix("chars")

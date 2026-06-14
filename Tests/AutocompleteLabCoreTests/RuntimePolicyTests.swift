@@ -169,9 +169,9 @@ struct RuntimePolicyTests {
         let missingReport = missingPlan.readinessReport(for: .ready(candidate: .mock))
 
         #expect(missingReport.stage == .downloadNeeded)
-        #expect(missingReport.summary == "download needed (Qwen3.5 4B)")
+        #expect(missingReport.summary == "download needed (Gemma 4 E4B IT OptiQ)")
         #expect(missingReport.detail == "The local model is not installed yet. Expected folder: /tmp/gemma")
-        #expect(missingReport.action == .installModel)
+        #expect(missingReport.action == .revealModelFolder)
 
         let invalidPlan = RuntimeBootstrapPlan(
             assetState: .invalid(path: "/tmp/gemma", reason: "missing config.json"),
@@ -314,24 +314,18 @@ struct RuntimePolicyTests {
         #expect(!report.allowsSuggestions)
     }
 
-    @Test("Qwen3.5 4B asset manifest is MLX first")
-    func qwen35FourBAssetManifestIsMLXFirst() {
+    @Test("Gemma 4 E4B IT OptiQ asset manifest is the preferred MLX trial")
+    func gemma4E4BItOptiQAssetManifestIsPreferredMLXTrial() {
         let manifest = LocalModelAssetManifest.preferredMLX
 
-        #expect(manifest.model == .qwen35FourB)
+        #expect(manifest.model == .gemma4E4BItOptiQ)
         #expect(manifest.runtimeCandidate == .mlx)
-        #expect(manifest.cacheDirectoryName.contains("Qwen35FourB"))
-        #expect(manifest.source?.repoID == "mlx-community/Qwen3.5-4B-MLX-4bit")
-        #expect(manifest.source?.revision == "32f3e8ecf65426fc3306969496342d504bfa13f3")
-        #expect(manifest.source?.allowPatterns.contains("*.safetensors") == true)
-        #expect(manifest.source?.estimatedBytes == 3_030_000_000)
-        #expect(manifest.source?.expectedFiles.count == 10)
-        #expect(manifest.source?.expectedFiles.contains {
-            $0.path == "model.safetensors"
-                && $0.byteCount == 3_034_300_695
-                && $0.sha256 == "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db"
-        } == true)
+        #expect(manifest.cacheDirectoryName.contains("Gemma4E4BItOptiQ"))
+        #expect(manifest.fileName == "gemma-4-e4b-it-OptiQ-4bit")
+        #expect(manifest.source == nil)
         #expect(manifest.requiredFileNames.contains("config.json"))
+        #expect(manifest.requiredFileNames.contains("tokenizer.json"))
+        #expect(manifest.requiredFileNames.contains("tokenizer_config.json"))
         #expect(manifest.requiredModelFileExtension == "safetensors")
         #expect(!manifest.requiresVisionLanguageFactory)
     }
@@ -372,8 +366,8 @@ struct RuntimePolicyTests {
 
     @Test("Named MLX manifests support local model trials")
     func namedMLXManifestsSupportLocalModelTrials() {
-        #expect(LocalModelAssetManifest.mlxManifest(named: nil) == .qwen35FourBMLX)
-        #expect(LocalModelAssetManifest.mlxManifest(named: "") == .qwen35FourBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: nil) == .gemma4E4BItOptiQMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "") == .gemma4E4BItOptiQMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "qwen35-4b") == .qwen35FourBMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: " Qwen3.5-9B ") == .qwen35NineBMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-e4b") == .gemma4E4BMLX)
@@ -382,8 +376,9 @@ struct RuntimePolicyTests {
         #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-e4b-it-optiq-4bit") == .gemma4E4BItOptiQMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "gemma-4-26b") == .gemma4A4BMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "qwen3-1.7b") == .qwen3MediumMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "qwen3-1.7b-base") == .qwen3MediumMLX)
         #expect(LocalModelAssetManifest.mlxManifest(named: "small-draft-1b") == .qwen3MediumMLX)
-        #expect(LocalModelAssetManifest.mlxManifest(named: "unknown") == .qwen35FourBMLX)
+        #expect(LocalModelAssetManifest.mlxManifest(named: "unknown") == .gemma4E4BItOptiQMLX)
     }
 
     @Test("MLX model asset validation expects a Hugging Face directory")
@@ -422,7 +417,7 @@ struct RuntimePolicyTests {
             path: "/tmp/gemma",
             isDirectory: true,
             childFileNames: ["config.json", "tokenizer.json", "tokenizer_config.json", "model.safetensors"],
-            modelBytes: 3 * 1024 * 1024 * 1024
+            modelBytes: 6 * 1024 * 1024 * 1024
         ) == .available(path: "/tmp/gemma"))
     }
 

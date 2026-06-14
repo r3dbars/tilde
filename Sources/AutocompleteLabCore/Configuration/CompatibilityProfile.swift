@@ -261,6 +261,40 @@ public struct CompatibilityProfile: Equatable, Sendable {
         )
     }
 
+    public func replacingBundleIdentifier(_ bundleIdentifier: String) -> CompatibilityProfile {
+        CompatibilityProfile(
+            bundleIdentifier: bundleIdentifier,
+            displayName: displayName,
+            appFamily: appFamily,
+            supportLevel: supportLevel,
+            graduationDecision: graduationDecision,
+            supportReason: supportReason,
+            renderMode: renderMode,
+            insertionMode: insertionMode,
+            fallbackRenderMode: fallbackRenderMode,
+            fallbackInsertionMode: fallbackInsertionMode,
+            fieldIdentityMode: fieldIdentityMode,
+            anchorLadder: anchorLadder,
+            knownFailureModes: knownFailureModes,
+            allowsFieldAnchor: allowsFieldAnchor,
+            allowsWindowAnchor: allowsWindowAnchor,
+            requiresValidatedCaret: requiresValidatedCaret,
+            supportsObserverUpdates: supportsObserverUpdates,
+            supportsOneWordAcceptance: supportsOneWordAcceptance,
+            supportsFullAcceptance: supportsFullAcceptance,
+            allowsUnknownFieldKind: allowsUnknownFieldKind,
+            requiresNoSubmitAcceptanceProof: requiresNoSubmitAcceptanceProof,
+            suppressesUntilBlurAfterEscape: suppressesUntilBlurAfterEscape,
+            suppressesAfterInsertionFailure: suppressesAfterInsertionFailure,
+            allowsDescendantTextFallback: allowsDescendantTextFallback,
+            allowsDetachedSuggestions: allowsDetachedSuggestions,
+            allowsSyntheticCaretPlacement: allowsSyntheticCaretPlacement,
+            isSensitive: isSensitive,
+            promptAppSafetyMode: promptAppSafetyMode,
+            notes: notes
+        )
+    }
+
     public var userFacingSafetySummary: String {
         guard canPresentSuggestions, !isSensitive else {
             return "Suggestions stay off here."
@@ -362,13 +396,16 @@ public struct CompatibilityPlacementTrustInput: Equatable, Sendable {
 public struct CompatibilityProfileStore: Equatable, Sendable {
     public let profiles: [String: CompatibilityProfile]
     public let denylistedBundleIdentifiers: Set<String>
+    public let fallbackProfile: CompatibilityProfile
 
     public init(
         profiles: [CompatibilityProfile],
-        denylistedBundleIdentifiers: Set<String> = Self.defaultDenylist
+        denylistedBundleIdentifiers: Set<String> = Self.defaultDenylist,
+        fallbackProfile: CompatibilityProfile = Self.defaultOnFallbackProfile
     ) {
         self.profiles = Dictionary(uniqueKeysWithValues: profiles.map { ($0.bundleIdentifier, $0) })
         self.denylistedBundleIdentifiers = denylistedBundleIdentifiers
+        self.fallbackProfile = fallbackProfile
     }
 
     public func profile(for bundleIdentifier: String) -> CompatibilityProfile? {
@@ -396,8 +433,23 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             return .supported(profile)
         }
 
-        return .unsupported
+        return .supported(fallbackProfile.replacingBundleIdentifier(bundleIdentifier))
     }
+
+    public static let defaultOnFallbackProfile = CompatibilityProfile(
+        bundleIdentifier: "*",
+        displayName: "Generic App",
+        appFamily: .unknown,
+        supportLevel: .yellow,
+        supportReason: "Default-on generic Accessibility path for apps without a custom profile.",
+        renderMode: .inlineAdjacent,
+        insertionMode: .axThenKeyEvents,
+        fallbackRenderMode: .floatingMirror,
+        fallbackInsertionMode: .axValueReplacement,
+        knownFailureModes: ["generic AX support may have bad caret placement or insertion in untested apps"],
+        allowsDescendantTextFallback: true,
+        notes: "Default-on fallback. Use native Accessibility first, fall back to mirror placement and AX value replacement, and let per-app pause disable bad targets until a custom adapter is added."
+    )
 
     public static let mvp = CompatibilityProfileStore(profiles: [
         CompatibilityProfile(
@@ -434,10 +486,10 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             displayName: "Obsidian",
             appFamily: .electron,
             supportLevel: .yellow,
-            supportReason: "Electron editors can hide caret bounds, so this uses floating or synthetic placement.",
-            renderMode: .floatingMirror,
+            supportReason: "Electron editors can hide caret bounds, so this uses caret-locked inline placement or stays hidden.",
+            renderMode: .inlineAdjacent,
             insertionMode: .keyEvents,
-            fallbackRenderMode: .floatingMirror,
+            fallbackRenderMode: nil,
             fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
             anchorLadder: [.caret],
@@ -449,7 +501,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             allowsDescendantTextFallback: true,
             allowsDetachedSuggestions: false,
             allowsSyntheticCaretPlacement: true,
-            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and key-event insertion because CodeMirror AX values can represent only the visible viewport in long virtualized notes. Do not show detached suggestions when CodeMirror hides usable caret bounds."
+            notes: "Yellow Electron target. Prefer capability probing, descendant text fallback for empty CodeMirror web areas, synthetic text-area caret placement, and key-event insertion because CodeMirror AX values can represent only the visible viewport in long virtualized notes. Obsidian is inline-or-hidden: do not fall back to a mirror or detached whole-editor suggestion when CodeMirror hides usable caret bounds."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.mail",
@@ -607,32 +659,34 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             bundleIdentifier: "com.anthropic.claude-code",
             displayName: "Claude Code",
             appFamily: .customCanvas,
-            supportLevel: .diagnosticsOnly,
-            graduationDecision: .diagnosticsOnly,
-            supportReason: "The installed Claude Code bundle is a background-only CLI helper; interactive Claude Code typing usually happens inside a terminal host, which is blocked until a separate safe adapter exists.",
-            renderMode: .disabled,
-            insertionMode: .disabled,
-            fallbackRenderMode: .disabled,
-            fallbackInsertionMode: .disabled,
+            supportLevel: .yellow,
+            graduationDecision: .wordOnly,
+            supportReason: "Claude Code is enabled for dogfood through the direct app profile and terminal-host adapter.",
+            renderMode: .floatingMirror,
+            insertionMode: .clipboardFallbackOptIn,
+            fallbackRenderMode: .floatingMirror,
+            fallbackInsertionMode: .keyEvents,
             fieldIdentityMode: .stableBounds,
-            anchorLadder: [.none],
-            knownFailureModes: ["foreground prompt surface is not the Claude Code bundle", "terminal-hosted CLI input can submit shell commands"],
-            allowsFieldAnchor: false,
+            anchorLadder: [.caret],
+            knownFailureModes: ["foreground prompt surface is often a terminal host", "terminal-hosted CLI input can submit shell commands"],
+            allowsFieldAnchor: true,
             allowsWindowAnchor: false,
-            supportsOneWordAcceptance: false,
+            requiresValidatedCaret: false,
+            supportsOneWordAcceptance: true,
             supportsFullAcceptance: false,
+            requiresNoSubmitAcceptanceProof: true,
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
-            isSensitive: true,
-            promptAppSafetyMode: .disabled,
-            notes: "Diagnostics-only Claude Code CLI target. Do not present suggestions for the background-only bundle or terminal-hosted Claude Code sessions until a terminal-host adapter proves one-word Tab accept without submitting shell input or agent prompts."
+            allowsSyntheticCaretPlacement: true,
+            promptAppSafetyMode: .wordOnly,
+            notes: "Default-on Claude Code dogfood target. Direct app profile uses floating placement and one-word acceptance only. Terminal-hosted sessions use the Claude Code terminal adapter without requiring proof mode, and should be fixed app-by-app when screenshots show bad placement or insertion."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.anthropic.claudefordesktop",
             displayName: "Claude",
             appFamily: .electron,
             supportLevel: .yellow,
-            supportReason: "Claude desktop is proof-only; composer placement still needs more layout proof before any normal beta use.",
+            supportReason: "Claude desktop is enabled for dogfood; composer placement will be fixed from app screenshots.",
             renderMode: .inlineAdjacent,
             insertionMode: .axValueReplacement,
             fallbackRenderMode: .floatingMirror,
@@ -647,7 +701,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             suppressesAfterInsertionFailure: true,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
-            notes: "Proof-only target for Claude desktop. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Same-slice one-word no-submit proof exists; normal beta use and full accept stay disabled until separate current proof exists."
+            notes: "Default-on Claude desktop target. Prefer prompt-bound inline suggestions when the composer exposes bounds; otherwise use mirror placement without showing detached whole-window suggestions. Same-slice one-word no-submit proof exists; broaden layout fixes from dogfood screenshots."
         ),
         CompatibilityProfile(
             bundleIdentifier: "com.apple.Safari",
@@ -829,13 +883,9 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
     ])
 
     public static let defaultDenylist: Set<String> = [
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
         "com.apple.dt.Xcode",
-        "com.microsoft.VSCode",
         "com.microsoft.VSCodeInsiders",
         "com.visualstudio.code.oss",
-        "com.todesktop.230313mzl4w4u92",
         "com.exafunction.windsurf",
         "com.jetbrains.intellij",
         "com.jetbrains.AppCode",
@@ -850,11 +900,6 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
         "com.jetbrains.DataSpell",
         "com.jetbrains.aqua",
         "com.jetbrains.gateway",
-        "dev.warp.Warp",
-        "com.mitchellh.ghostty",
-        "net.kovidgoyal.kitty",
-        "org.alacritty",
-        "com.github.wez.wezterm",
         "com.apple.keychainaccess",
         "com.apple.Passwords",
         "com.1password.1password",
@@ -901,7 +946,7 @@ public enum CompatibilitySupportStatus: Equatable, Sendable {
         case let .supported(profile):
             return "\(profile.supportLevel.displayName): \(profile.displayName)"
         case .denylisted:
-            return "Unsupported: blocked app"
+            return "Blocked: high-risk app"
         case .unsupported:
             return "Unsupported: not tested yet"
         }

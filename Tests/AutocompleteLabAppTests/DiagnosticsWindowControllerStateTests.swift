@@ -347,7 +347,7 @@ struct DiagnosticsWindowControllerStateTests {
                     "repetitionMissLifetimeMs": "840"
                 ]),
                 event(metadata: [
-                    "prefixCooldownReason": "escapeDismissal",
+                    "prefixCooldownReason": "escape-cooldown",
                     "prefixCooldownDurationMilliseconds": "60000",
                     "prefixFamilyTokenCount": "3",
                     "prefixCooldownEscalated": "true",

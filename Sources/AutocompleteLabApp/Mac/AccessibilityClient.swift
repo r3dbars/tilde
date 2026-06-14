@@ -70,6 +70,47 @@ struct FocusedTextContext: Equatable, Sendable {
     }
 }
 
+private extension AXError {
+    var diagnosticName: String {
+        switch self {
+        case .success:
+            return "success"
+        case .failure:
+            return "failure"
+        case .illegalArgument:
+            return "illegal-argument"
+        case .invalidUIElement:
+            return "invalid-ui-element"
+        case .invalidUIElementObserver:
+            return "invalid-ui-element-observer"
+        case .cannotComplete:
+            return "cannot-complete"
+        case .attributeUnsupported:
+            return "attribute-unsupported"
+        case .actionUnsupported:
+            return "action-unsupported"
+        case .notificationUnsupported:
+            return "notification-unsupported"
+        case .notImplemented:
+            return "not-implemented"
+        case .notificationAlreadyRegistered:
+            return "notification-already-registered"
+        case .notificationNotRegistered:
+            return "notification-not-registered"
+        case .apiDisabled:
+            return "api-disabled"
+        case .noValue:
+            return "no-value"
+        case .parameterizedAttributeUnsupported:
+            return "parameterized-attribute-unsupported"
+        case .notEnoughPrecision:
+            return "not-enough-precision"
+        @unknown default:
+            return "unknown-\(rawValue)"
+        }
+    }
+}
+
 struct FocusedTextCapabilities: Equatable, Sendable {
     let canReadValue: Bool
     let canReadSelectedTextRange: Bool
@@ -94,7 +135,8 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         skipAttributedText: true,
         useMinimalFingerprint: true,
         skipWindowLookup: true,
-        assumedCanSetSelectedText: true
+        assumedCanSetSelectedText: true,
+        manualAccessibilityWakeAppFamily: nil
     )
 
     let preferDirectTextSnapshot: Bool
@@ -103,6 +145,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
     let useMinimalFingerprint: Bool
     let skipWindowLookup: Bool
     let assumedCanSetSelectedText: Bool?
+    let manualAccessibilityWakeAppFamily: CompatibilityAppFamily?
 
     init(
         preferDirectTextSnapshot: Bool = false,
@@ -110,7 +153,8 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         skipAttributedText: Bool = false,
         useMinimalFingerprint: Bool = false,
         skipWindowLookup: Bool = false,
-        assumedCanSetSelectedText: Bool? = nil
+        assumedCanSetSelectedText: Bool? = nil,
+        manualAccessibilityWakeAppFamily: CompatibilityAppFamily? = nil
     ) {
         self.preferDirectTextSnapshot = preferDirectTextSnapshot
         self.skipParameterizedTextGeometry = skipParameterizedTextGeometry
@@ -118,6 +162,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         self.useMinimalFingerprint = useMinimalFingerprint
         self.skipWindowLookup = skipWindowLookup
         self.assumedCanSetSelectedText = assumedCanSetSelectedText
+        self.manualAccessibilityWakeAppFamily = manualAccessibilityWakeAppFamily
     }
 }
 
@@ -218,6 +263,13 @@ private struct EditableTextSnapshot {
 }
 
 final class AccessibilityClient: @unchecked Sendable {
+    private static let accessibilityTextNodeRoles: Set<String> = [
+        "AXStaticText",
+        "AXText",
+        "AXTextArea",
+        "AXTextField"
+    ]
+
     private let sensitiveTextFieldPolicy = SensitiveTextFieldPolicy()
     private let descendantTextFallbackPolicy = DescendantTextFallbackPolicy()
     private let focusedContextBeforeUTF16Limit = 2_000
@@ -268,6 +320,61 @@ final class AccessibilityClient: @unchecked Sendable {
         for app: RunningApplicationInfo,
         allowDescendantTextFallback: Bool = false,
         options: FocusedTextReadOptions = .standard
+    ) -> FocusedTextContext? {
+        if let context = focusedTextContextWithoutManualAccessibilityWake(
+            for: app,
+            allowDescendantTextFallback: allowDescendantTextFallback,
+            options: options
+        ) {
+            return context
+        }
+
+        guard let appFamily = options.manualAccessibilityWakeAppFamily else {
+            return nil
+        }
+
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        configureMessagingTimeout(for: appElement)
+        let treeHasTextNodes = accessibilityTreeHasTextNodes(in: appElement)
+        let decision = AXManualAccessibilityWakePolicy.decision(
+            appFamily: appFamily,
+            focusedReadReturnedContext: false,
+            treeHasTextNodes: treeHasTextNodes
+        )
+
+        guard decision.shouldWake else {
+            return nil
+        }
+
+        let result = AXUIElementSetAttributeValue(
+            appElement,
+            AXManualAccessibilityWakePolicy.attributeName as CFString,
+            kCFBooleanTrue
+        )
+        DiagnosticsLog.shared.record(
+            "ax-manual-accessibility-wake",
+            metadata: [
+                "app": app.bundleIdentifier,
+                "result": result.diagnosticName,
+                "reason": decision.reason?.rawValue ?? "none"
+            ]
+        )
+
+        guard result == .success else {
+            return nil
+        }
+
+        return focusedTextContextWithoutManualAccessibilityWake(
+            for: app,
+            allowDescendantTextFallback: allowDescendantTextFallback,
+            options: options
+        )
+    }
+
+    private func focusedTextContextWithoutManualAccessibilityWake(
+        for app: RunningApplicationInfo,
+        allowDescendantTextFallback: Bool,
+        options: FocusedTextReadOptions
     ) -> FocusedTextContext? {
         guard let focusedElement = focusedElement(
             for: app,
@@ -380,6 +487,28 @@ final class AccessibilityClient: @unchecked Sendable {
             caretIsSynthetic: false,
             capabilities: capabilities
         )
+    }
+
+    private func accessibilityTreeHasTextNodes(
+        in element: AXUIElement,
+        depth: Int = 0
+    ) -> Bool {
+        guard depth <= 12 else {
+            return false
+        }
+
+        configureMessagingTimeout(for: element)
+        let role = copyAttribute(element, attribute: kAXRoleAttribute) as? String
+        if Self.accessibilityTextNodeRoles.contains(role ?? "") {
+            return true
+        }
+
+        let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] ?? []
+        for child in children where accessibilityTreeHasTextNodes(in: child, depth: depth + 1) {
+            return true
+        }
+
+        return false
     }
 
     private func secureTextContext(
@@ -989,7 +1118,7 @@ final class AccessibilityClient: @unchecked Sendable {
         options: FocusedTextReadOptions = .standard
     ) -> EditableTextSnapshot? {
         if options.preferDirectTextSnapshot,
-           let directSnapshot = directEditableTextSnapshot(
+           let directSnapshot = valueEditableTextSnapshot(
                in: element,
                role: role,
                bundleIdentifier: bundleIdentifier,
@@ -1009,28 +1138,18 @@ final class AccessibilityClient: @unchecked Sendable {
             return boundedSnapshot
         }
 
-        guard let text = editableText(
+        return valueEditableTextSnapshot(
             in: element,
             role: role,
             bundleIdentifier: bundleIdentifier,
             processIdentifier: processIdentifier,
             windowTitle: windowTitle,
-            allowDescendantTextFallback: allowDescendantTextFallback
-        ) else {
-            return nil
-        }
-
-        return EditableTextSnapshot(
-            slice: CursorTextSplitter.split(
-                text,
-                utf16Offset: selectedRange?.location ?? text.utf16.count
-            ),
-            utf16Length: text.utf16.count,
-            canReadValue: true
+            allowDescendantTextFallback: allowDescendantTextFallback,
+            selectedRange: selectedRange
         )
     }
 
-    private func directEditableTextSnapshot(
+    private func valueEditableTextSnapshot(
         in element: AXUIElement,
         role: String?,
         bundleIdentifier: String?,

@@ -2004,24 +2004,63 @@ wait_for_codex_tab_diagnostic_optional() {
   return 1
 }
 
-press_codex_tab_for_smoke() {
+codex_suggestion_hidden_since() {
   local start_line="$1"
 
-  settle_keyboard_event_tap_if_started "$start_line" "Codex Tab acceptance"
+  [[ "$start_line" =~ ^[0-9]+$ ]] || start_line=0
+  log_since_has_fields "$start_line" "suggestion-hidden" "app=com.openai.codex"
+}
+
+try_codex_cgevent_tab_for_smoke() {
+  local start_line="$1"
+  local label="$2"
+  local tap_location="$3"
+  local source_state="${4:-hidSystem}"
+  local probe_start_line
+
+  assert_frontmost_app "Codex" "$label"
+  probe_start_line="$(line_count "$LOG_PATH")"
   press_key_code_cgevent_with_timeout \
     48 \
     "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_TIMEOUT_SECONDS:-2}" \
-    "Codex CGEvent Tab" \
-    "session" \
-    "warm" || true
+    "$label" \
+    "$tap_location" \
+    "warm" \
+    "$source_state" || true
 
-  if wait_for_codex_tab_diagnostic_optional "$start_line" \
+  if wait_for_codex_tab_diagnostic_optional "$probe_start_line" \
     "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_ATTEMPTS:-5}" \
     "${AUTOCOMPLETE_LAB_CODEX_CGEVENT_TAB_DIAGNOSTIC_DELAY_SECONDS:-0.05}"; then
     return 0
   fi
 
-  echo "Codex CGEvent Tab produced no key=tab diagnostic; retrying with System Events Tab." >&2
+  if codex_suggestion_hidden_since "$start_line"; then
+    echo "$label did not produce a Tab diagnostic before the Codex suggestion hid." >&2
+    return 1
+  fi
+
+  return 2
+}
+
+press_codex_tab_for_smoke() {
+  local start_line="$1"
+
+  settle_keyboard_event_tap_if_started "$start_line" "Codex Tab acceptance"
+
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent session Tab" "session"; then
+    return 0
+  fi
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent HID Tab" "hid"; then
+    return 0
+  fi
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent private-source session Tab" "session" "private"; then
+    return 0
+  fi
+  if try_codex_cgevent_tab_for_smoke "$start_line" "Codex CGEvent private-source HID Tab" "hid" "private"; then
+    return 0
+  fi
+
+  echo "Codex CGEvent Tab attempts produced no key=tab diagnostic; retrying with System Events Tab." >&2
   assert_frontmost_app "Codex" "Codex proof System Events retry"
   press_key_code 48
 }
@@ -3915,6 +3954,10 @@ obsidian_session_app() {
   fi
 
   case "${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}" in
+    obsidian-stock)
+      printf 'obsidian\n'
+      return 0
+      ;;
     obsidian-theme|obsidian-pane|obsidian-long-note|obsidian-font-zoom|obsidian-markdown-bold|obsidian-markdown-list|obsidian-multiline|obsidian-run-on)
       printf '%s\n' "$AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL"
       return 0
@@ -3936,6 +3979,9 @@ Required Obsidian proof lanes:
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-markdown-list --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-multiline --manual-gate
   AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian-run-on --manual-gate
+
+The default Obsidian lane records `obsidian-stock` proof and launches without
+--force-renderer-accessibility. Forced renderer proof rows do not satisfy it.
 EOF
 }
 
@@ -13905,7 +13951,7 @@ describe_plan() {
           echo "Plan: guarded Obsidian run-on/wrapped sentence proof. The script types after a long wrapping sentence and validates visual placement plus insertion."
           ;;
         *)
-          echo "Plan: manual-gated disposable Obsidian default-note smoke. The script prints the checklist and validates after you run it."
+          echo "Plan: guarded Obsidian stock default-note smoke. The script launches Obsidian without --force-renderer-accessibility, opens the disposable proof-vault note, types smoke fragments, then validates logs and traces as obsidian-stock proof."
           ;;
       esac
       echo "Safety: pass --manual-gate to continue. Use only a disposable vault note."
@@ -16029,23 +16075,57 @@ seed_obsidian_proof_vault_note() {
   printf '%s\n' "$reset_text" >"$proof_note"
 }
 
-ensure_obsidian_smoke_renderer_accessibility_launch() {
+obsidian_running_with_forced_renderer_accessibility() {
+  local pid command
+  while IFS= read -r pid; do
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" == *"--force-renderer-accessibility"* ]]; then
+      return 0
+    fi
+  done < <(pgrep -x Obsidian 2>/dev/null || true)
+
+  return 1
+}
+
+ensure_obsidian_smoke_launch() {
+  local manual_app="$1"
+  local forced_renderer_accessibility=0
+  if [[ "$manual_app" != "obsidian" ]]; then
+    forced_renderer_accessibility=1
+  fi
+
   if pgrep -x Obsidian >/dev/null 2>&1; then
+    if (( forced_renderer_accessibility == 0 )) && obsidian_running_with_forced_renderer_accessibility; then
+      echo "Refusing Obsidian stock proof while Obsidian is already running with --force-renderer-accessibility." >&2
+      echo "Quit that Obsidian process, then rerun the stock lane." >&2
+      exit 3
+    fi
     return 0
   fi
 
   local app_path="${AUTOCOMPLETE_LAB_OBSIDIAN_APP_PATH:-/Applications/Obsidian.app}"
-  if [[ -d "$app_path" ]]; then
-    open -na "$app_path" --args --force-renderer-accessibility
+
+  if (( forced_renderer_accessibility == 1 )); then
+    if [[ -d "$app_path" ]]; then
+      open -na "$app_path" --args --force-renderer-accessibility
+    else
+      open -na Obsidian --args --force-renderer-accessibility
+    fi
   else
-    open -na Obsidian --args --force-renderer-accessibility
+    if [[ -d "$app_path" ]]; then
+      open -na "$app_path"
+    else
+      open -na Obsidian
+    fi
   fi
   sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_INITIAL_LAUNCH_WAIT_SECONDS:-2}"
 }
 
 open_obsidian_smoke_note_if_configured() {
+  local manual_app
+  manual_app="$(obsidian_session_app)"
   local smoke_uri="${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI:-}"
-  ensure_obsidian_smoke_renderer_accessibility_launch
+  ensure_obsidian_smoke_launch "$manual_app"
   if [[ -n "$smoke_uri" ]]; then
     open "$smoke_uri"
     sleep "${AUTOCOMPLETE_LAB_OBSIDIAN_SMOKE_URI_WAIT_SECONDS:-2}"
@@ -16305,11 +16385,16 @@ run_obsidian() {
 
   sleep 1
   local manual_check_args=("$manual_app" --check)
+  local manual_proof_label="${AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL:-}"
+  if [[ "$manual_app" == "obsidian" ]]; then
+    manual_proof_label="obsidian-stock"
+  fi
   if screenshot_trace_requested; then
     manual_check_args+=(--visual)
   fi
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
     AUTOCOMPLETE_LAB_SMOKE_ACCEPT_ALL_SHORTCUT="$full_accept_key" \
+    AUTOCOMPLETE_LAB_SMOKE_PROOF_LABEL="$manual_proof_label" \
     AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh "${manual_check_args[@]}"
 }

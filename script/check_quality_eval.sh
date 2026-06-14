@@ -50,8 +50,8 @@ for required in \
   "User-feel ok" \
   "| Code field negative | 0/20 | n/a | n/a | n/a | n/a | 100% | 0 |" \
   "Unsafe displays" \
-  "Predictive phrase fallback exact: 200/200" \
-  "Predictor-only positives omit the expected answer" \
+  "Canned bridge exact: 200/200" \
+  "Canned-bridge positives omit the expected answer" \
   "not a claim that the live model is 100/100"; do
   if ! grep -F "$required" "$PREDICTION_REPORT_PATH" >/dev/null; then
     echo "completion prediction quality report missing required section: $required" >&2
@@ -75,7 +75,7 @@ for required in \
   "3-8 word phrase rate: 100%" \
   "Suffix-noise failures: 0" \
   "| Total | 24/24 | 100% | 100% | 0 | 6/6 | 100% |" \
-  "would this visible suggestion be worth accepting" \
+  "short generic continuations would be worth accepting" \
   "not private dogfood"; do
   if ! grep -F "$required" "$PHRASE_REPORT_PATH" >/dev/null; then
     echo "daily-driver phrase quality report missing required section: $required" >&2

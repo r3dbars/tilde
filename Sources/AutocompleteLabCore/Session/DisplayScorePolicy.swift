@@ -455,10 +455,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
         _ lhs: (reason: DisplayScoreSuppressionReason, penalty: Double, priority: Int),
         _ rhs: (reason: DisplayScoreSuppressionReason, penalty: Double, priority: Int)
     ) -> Bool {
-        let leftOvershoot = lhs.penalty
-        let rightOvershoot = rhs.penalty
-        if abs(leftOvershoot - rightOvershoot) > 0.0001 {
-            return leftOvershoot < rightOvershoot
+        if abs(lhs.penalty - rhs.penalty) > 0.0001 {
+            return lhs.penalty < rhs.penalty
         }
 
         return lhs.priority < rhs.priority

@@ -461,8 +461,64 @@ struct SuggestionOrchestratorTests {
         #expect(disabledSelection.suggestion == nil)
         #expect(disabledSelection.suppressionReason == "disabled")
         #expect(enabledSelection.suggestion?.visibleText == " follow up")
-        #expect(enabledSelection.traceMetadata["candidateSelectionSource"] == "predictive-phrase-fallback")
-        #expect(enabledSelection.traceMetadata["predictivePhraseMatch"] == "i just wanted to")
+        #expect(enabledSelection.traceMetadata["candidateSelectionSource"] == "canned-bridge")
+        #expect(enabledSelection.traceMetadata["cannedBridgeMatch"] == "i just wanted to")
+        #expect(enabledSelection.traceMetadata["predictivePhraseMatch"] == nil)
+    }
+
+    @MainActor
+    @Test("Fast phrase selection wires doc-local corpus before canned bridges")
+    func fastPhraseSelectionUsesDocLocalCorpusBeforeCannedBridges() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = testFieldIdentity(elementIdentifier: 7)
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+
+        _ = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(
+                textBeforeCursor: "The onboarding screen should make permission feel clear before setup",
+                textAfterCursor: ""
+            ),
+            appBundleIdentifier: field.bundleIdentifier,
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
+            maxVisibleWords: 8,
+            requestMode: .phraseContinuation,
+            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
+        ))
+        let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(
+                textBeforeCursor: "The onboarding screen should make",
+                textAfterCursor: ""
+            ),
+            appBundleIdentifier: field.bundleIdentifier,
+            fieldIdentity: field,
+            fieldClassification: classification,
+            acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
+            maxVisibleWords: 8,
+            requestMode: .phraseContinuation,
+            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
+        ))
+
+        let selection = orchestrator.fastPhraseSelection(
+            for: orchestration.request.textBeforeCursor,
+            docLocalContextTexts: orchestration.docLocalContextTexts,
+            behaviorProfileID: orchestration.request.behaviorProfileID,
+            maxVisibleWords: orchestration.request.maxVisibleWords,
+            allowPredictiveFallback: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " permission feel clear before setup")
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
+        #expect(selection.traceMetadata["docLocalNGramMatch"] == "order-5-local-context")
+        #expect(SuggestionStatusText.shown(
+            mode: orchestration.request.mode,
+            triggerReason: "predictive-phrase-fallback",
+            latencyMilliseconds: 0,
+            metadata: selection.traceMetadata
+        ) == "Shown: phrase doc local 0ms")
     }
 
     @MainActor
@@ -486,7 +542,9 @@ struct SuggestionOrchestratorTests {
 
         #expect(blockedSelection.suppressionReason == "unsupported-profile")
         #expect(proofSelection.suggestion?.visibleText == " clearer")
-        #expect(proofSelection.traceMetadata["predictivePhraseMatch"] == "please make this")
+        #expect(proofSelection.traceMetadata["candidateSelectionSource"] == "canned-bridge")
+        #expect(proofSelection.traceMetadata["cannedBridgeMatch"] == "please make this")
+        #expect(proofSelection.traceMetadata["predictivePhraseMatch"] == nil)
     }
 
     @MainActor
@@ -722,6 +780,94 @@ struct SuggestionOrchestratorTests {
 
         #expect(!display.decision.shouldDisplay)
         #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+    }
+
+    @MainActor
+    @Test("First-visible model results use a tighter latency budget than refinements")
+    func firstVisibleModelResultsUseTighterLatencyBudget() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
+        let request = CompletionRequest(
+            textBeforeCursor: "Can you send the notes",
+            appBundleIdentifier: profile.bundleIdentifier,
+            fieldKind: classification.kind,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            mode: .phraseContinuation,
+            suggestionID: "first-visible-budget"
+        )
+        let signal = AcceptedAndKeptLearningStore().signal(
+            for: acceptedAndKeptKey(
+                request: request,
+                fieldKind: classification.kind,
+                profile: profile
+            )
+        )
+
+        func decide(latency: Int, firstVisible: Bool, scheduledDelay: Int = 0) -> SuggestionDisplayScoreDecision {
+            orchestrator.displayScoreDecision(
+                suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
+                request: request,
+                context: makeContext(textBeforeCursor: "Can you send the notes", textAfterCursor: ""),
+                fieldClassification: classification,
+                profile: profile,
+                fieldIdentity: field,
+                triggerReason: "model-result",
+                latencyMilliseconds: latency,
+                acceptedAndKeptSignal: signal,
+                isRepeatedMiss: false,
+                displayScorePolicy: DisplayScorePolicy(),
+                modelIsFirstVisibleSuggestion: firstVisible,
+                scheduledDelayMilliseconds: scheduledDelay
+            )
+        }
+
+        // First-visible with no scheduling pause: 600ms of model compute exceeds the tight 450ms
+        // ceiling, so the result is suppressed before it can paint cold and late.
+        let firstVisible = decide(latency: 600, firstVisible: true)
+        #expect(firstVisible.metadata["modelDisplayLatencyBudgetMilliseconds"] == "450")
+        #expect(firstVisible.metadata["modelIsFirstVisibleSuggestion"] == "true")
+        #expect(firstVisible.metadata["modelLatencyForBudgetMilliseconds"] == "600")
+        #expect(!firstVisible.decision.shouldDisplay)
+        #expect(firstVisible.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+
+        // First-visible but the latency is high ONLY because of the deliberate pre-model
+        // scheduling pause: model compute (600 - 240 = 360ms) is under the 450ms ceiling, so the
+        // healthy result must NOT be suppressed. (Regression guard: the ceiling bounds model
+        // compute, not the intentional pause baked into `latencyMilliseconds`.)
+        let firstVisibleAfterPause = decide(latency: 600, firstVisible: true, scheduledDelay: 240)
+        #expect(firstVisibleAfterPause.metadata["modelLatencyForBudgetMilliseconds"] == "360")
+        #expect(firstVisibleAfterPause.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+
+        // Refinement (a suggestion is already visible): the same 600ms stays within the looser
+        // 750ms budget on its original delay-inclusive basis, so the too-slow gate does not fire
+        // and the model can replace in place.
+        let refinement = decide(latency: 600, firstVisible: false)
+        #expect(refinement.metadata["modelDisplayLatencyBudgetMilliseconds"] == "750")
+        #expect(refinement.metadata["modelIsFirstVisibleSuggestion"] == "false")
+        #expect(refinement.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+    }
+
+    @MainActor
+    @Test("Doc-local corpus gate matches the predictor's aiChat willingness")
+    func docLocalCorpusGateMatchesPredictorWillingness() {
+        // aiChat must be remembered so the prompt-app prediction path has a corpus to read;
+        // otherwise DocLocalNGramPhrasePredictor.allowsPrediction is willing but starved.
+        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .aiChat))
+        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .docsProse))
+        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .notes))
+        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .bullets))
+        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .email))
+        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .casualChat))
+        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .coding))
+        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .forms))
+        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .search))
     }
 
     @MainActor
@@ -1060,7 +1206,7 @@ struct SuggestionOrchestratorTests {
         )
         let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
         let request = CompletionRequest(
-            textBeforeCursor: "Autocomplete Lab Obsidian proof Smoke proof feels",
+            textBeforeCursor: "Daily note We should probably",
             appBundleIdentifier: profile.bundleIdentifier,
             fieldKind: classification.kind,
             behaviorProfileID: .docsProse,

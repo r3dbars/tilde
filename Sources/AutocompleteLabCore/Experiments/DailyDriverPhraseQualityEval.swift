@@ -7,7 +7,7 @@ public struct DailyDriverPhraseQualityEvalCase: Equatable, Sendable {
     public let textBeforeCursor: String
     public let expectedMeaningTerms: [String]
     public let rawCandidateLines: [String]
-    public let usePredictivePhraseFallback: Bool
+    public let useCannedBridge: Bool
     public let expectedNoSuggestion: Bool
 
     public init(
@@ -17,7 +17,7 @@ public struct DailyDriverPhraseQualityEvalCase: Equatable, Sendable {
         textBeforeCursor: String,
         expectedMeaningTerms: [String],
         rawCandidateLines: [String],
-        usePredictivePhraseFallback: Bool = false,
+        useCannedBridge: Bool = false,
         expectedNoSuggestion: Bool = false
     ) {
         self.id = id
@@ -26,7 +26,7 @@ public struct DailyDriverPhraseQualityEvalCase: Equatable, Sendable {
         self.textBeforeCursor = textBeforeCursor
         self.expectedMeaningTerms = expectedMeaningTerms
         self.rawCandidateLines = rawCandidateLines
-        self.usePredictivePhraseFallback = usePredictivePhraseFallback
+        self.useCannedBridge = useCannedBridge
         self.expectedNoSuggestion = expectedNoSuggestion
     }
 
@@ -194,7 +194,7 @@ public struct DailyDriverPhraseQualityEvalReport: Equatable, Sendable {
 
         Score: \(String(format: "%.0f", score))/100
 
-        This deterministic harness uses synthetic, disposable writing situations for TextEdit, Notes, and Obsidian. It asks the product question directly: would this visible suggestion be worth accepting?
+        This deterministic harness uses synthetic, disposable writing situations for TextEdit, Notes, and Obsidian. It asks whether short generic continuations would be worth accepting without relying on private dogfood text or product-specific canned phrases.
 
         ## Acceptance Bar
 
@@ -257,7 +257,7 @@ public enum DailyDriverPhraseQualityEvaluator {
         ranker: CompletionCandidateRanker,
         predictor: CommonPhraseContinuationPredictor
     ) -> DailyDriverPhraseQualityEvalCaseResult {
-        if evalCase.usePredictivePhraseFallback {
+        if evalCase.useCannedBridge {
             let selection = predictor.selection(
                 for: evalCase.textBeforeCursor,
                 behaviorProfileID: evalCase.behaviorProfileID,
@@ -266,7 +266,7 @@ public enum DailyDriverPhraseQualityEvaluator {
             return DailyDriverPhraseQualityEvalCaseResult(
                 evalCase: evalCase,
                 visibleText: selection.suggestion?.visibleText,
-                selectionSource: "predictive-phrase-fallback",
+                selectionSource: "canned-bridge",
                 suppressionReason: selection.suppressionReason
             )
         }
@@ -330,17 +330,17 @@ public enum DailyDriverPhraseQualityEvaluator {
         for surface in surfaces {
             for template in positiveTemplates {
                 index += 1
-                let usePredictiveFallback = index.isMultiple(of: 2)
+                let useCannedBridge = index.isMultiple(of: 2)
                 cases.append(DailyDriverPhraseQualityEvalCase(
                     id: "\(surface.id)-phrase-\(String(format: "%02d", index))",
                     surfaceName: surface.name,
                     behaviorProfileID: surface.behaviorProfileID,
                     textBeforeCursor: "\(surface.contextPrefix): \(template.textBeforeCursor)",
                     expectedMeaningTerms: template.expectedMeaningTerms,
-                    rawCandidateLines: usePredictiveFallback
+                    rawCandidateLines: useCannedBridge
                         ? template.distractors
                         : [template.expectedVisibleText] + template.distractors,
-                    usePredictivePhraseFallback: usePredictiveFallback
+                    useCannedBridge: useCannedBridge
                 ))
             }
         }
@@ -388,51 +388,51 @@ public enum DailyDriverPhraseQualityEvaluator {
 
     private static let positiveTemplates = [
         PositiveTemplate(
-            textBeforeCursor: "I want this note to feel",
-            expectedVisibleText: "light and clear",
-            expectedMeaningTerms: ["light", "clear"],
-            distractors: ["ready", "fine", "press Enter to send"]
+            textBeforeCursor: "Can you please",
+            expectedVisibleText: "take a look",
+            expectedMeaningTerms: ["take", "look"],
+            distractors: ["send it now", "open settings", "press Enter to send"]
         ),
         PositiveTemplate(
-            textBeforeCursor: "The draft feels calmer when it",
-            expectedVisibleText: "stays short and specific",
-            expectedMeaningTerms: ["stays", "short", "specific"],
+            textBeforeCursor: "We should probably",
+            expectedVisibleText: "keep it simple",
+            expectedMeaningTerms: ["keep", "simple"],
             distractors: ["works", "submit the prompt", "kind of"]
         ),
         PositiveTemplate(
-            textBeforeCursor: "Before we ship we should",
-            expectedVisibleText: "run one small check",
-            expectedMeaningTerms: ["run", "small", "check"],
+            textBeforeCursor: "It would help to",
+            expectedVisibleText: "make this clearer",
+            expectedMeaningTerms: ["make", "clearer"],
             distractors: ["ship", "open settings", "do more"]
         ),
         PositiveTemplate(
-            textBeforeCursor: "The meeting notes need a",
-            expectedVisibleText: "clear next step",
-            expectedMeaningTerms: ["clear", "next", "step"],
+            textBeforeCursor: "Let me know",
+            expectedVisibleText: "what you think",
+            expectedMeaningTerms: ["what", "think"],
             distractors: ["summary", "calendar invite", "whole plan"]
         ),
         PositiveTemplate(
-            textBeforeCursor: "In Obsidian this note should capture",
-            expectedVisibleText: "the key details clearly",
-            expectedMeaningTerms: ["key", "details", "clearly"],
+            textBeforeCursor: "What I need is",
+            expectedVisibleText: "a clearer next step",
+            expectedMeaningTerms: ["clearer", "next", "step"],
             distractors: ["everything", "the note", "send it"]
         ),
         PositiveTemplate(
-            textBeforeCursor: "Today I want to focus on",
-            expectedVisibleText: "small focused tasks",
-            expectedMeaningTerms: ["small", "focused", "tasks"],
+            textBeforeCursor: "Next step is",
+            expectedVisibleText: "to make this concrete",
+            expectedMeaningTerms: ["make", "concrete"],
             distractors: ["work", "big plans", "more"]
         ),
         PositiveTemplate(
-            textBeforeCursor: "The action item needs an",
-            expectedVisibleText: "owner and deadline",
-            expectedMeaningTerms: ["owner", "deadline"],
+            textBeforeCursor: "Before we move on",
+            expectedVisibleText: "capture the next step",
+            expectedMeaningTerms: ["capture", "next", "step"],
             distractors: ["owner", "meeting tomorrow", "attachment"]
         ),
         PositiveTemplate(
-            textBeforeCursor: "What I want is",
-            expectedVisibleText: "something fast and reliable",
-            expectedMeaningTerms: ["fast", "reliable"],
+            textBeforeCursor: "The main thing is",
+            expectedVisibleText: "to keep this clear",
+            expectedMeaningTerms: ["keep", "clear"],
             distractors: ["more", "something", "you should"]
         )
     ]
