@@ -65,19 +65,25 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 
 ## Required Next Proof
 
-1. Expand Claude desktop same-baseline proof across prompt layouts:
-   `claude-empty`, `claude-long`, `claude-wrapped`, `claude-narrow`,
-   `claude-context`, `claude-light`, and `claude-dark`.
-2. Keep Chrome production and editor lanes out of beta-safe scope:
-   `codemirror-official` after Accessibility is enabled,
-   `monaco-real --chrome-accessibility default`, and `monaco-official`.
-   These rows can collect proof, but they do not count as beta-safe support.
-   The smoke harness still fails honestly when a verified editor cannot be
-   reached.
-3. Add real production proof paths for Google Docs, Notion, browser webmail,
-   browser ChatGPT, browser Slack, and browser Discord before removing their
-   `unsupported-browser-surface` block. Local fixtures, local harnesses, and
-   public non-auth editor fixtures do not count for these real-service rows.
+1. Add native/local document proof before more prompt or send surfaces:
+   Pages document body first, then LibreOffice Writer document body. Use
+   disposable files only, require screenshot-backed placement, verified
+   insertion, one-word Tab, full accept where safe, native undo/recovery, and
+   no suggestions in title/sidebar/comment/share/dialog fields.
+2. Add WebKit fixture proof without broadening browser claims:
+   Safari local textarea and contenteditable fixtures should mirror the Chrome
+   local fixture proof. Public pages, hosted apps, search/address/payment
+   fields, and production browser apps still do not count.
+3. Add one focused local writing app when installed:
+   Bear, Drafts, iA Writer, Ulysses, Typora, or CotEditor are preferred because
+   they are writing-first and non-send surfaces. Capture bundle/version first
+   and use a disposable local document.
+4. After those safe lanes, add exact disposable real-service proof for Google
+   Docs and Notion before removing their hosted-surface blocks. Local fixtures,
+   local harnesses, and public non-auth editor fixtures do not count.
+5. Keep browser webmail, browser ChatGPT, Slack, Discord, Mail compose,
+   terminal-hosted Claude Code, and prompt-app layout expansion guarded until
+   exact no-send/no-submit proof exists for the app, field, and layout.
 
 ## Proof Rules
 
