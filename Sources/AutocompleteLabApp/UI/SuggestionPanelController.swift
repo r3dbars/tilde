@@ -5,6 +5,7 @@ import AutocompleteLabCore
 final class SuggestionPanelController {
     private let panel: NSPanel
     private let backdropView: NSVisualEffectView
+    private let solidBackdropView: SolidBackdropView
     private let ghostTextView: GhostTextView
     private let visualStyle = SuggestionPanelVisualStyle.native
     private var lastText: String?
@@ -17,6 +18,7 @@ final class SuggestionPanelController {
 
     init() {
         backdropView = NSVisualEffectView(frame: .zero)
+        solidBackdropView = SolidBackdropView(frame: .zero)
         ghostTextView = GhostTextView(frame: .zero)
 
         panel = NSPanel(
@@ -47,11 +49,23 @@ final class SuggestionPanelController {
         backdropView.wantsLayer = true
         backdropView.layer?.cornerRadius = visualStyle.mirrorCornerRadius
         backdropView.layer?.masksToBounds = true
+        solidBackdropView.translatesAutoresizingMaskIntoConstraints = false
+        solidBackdropView.configure(
+            fillColor: visualStyle.mirrorSolidBackgroundColor,
+            borderColor: visualStyle.mirrorSolidBorderColor,
+            cornerRadius: visualStyle.mirrorCornerRadius
+        )
+        solidBackdropView.isHidden = true
         ghostTextView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(solidBackdropView)
         container.addSubview(backdropView)
         container.addSubview(ghostTextView)
 
         NSLayoutConstraint.activate([
+            solidBackdropView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            solidBackdropView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            solidBackdropView.topAnchor.constraint(equalTo: container.topAnchor),
+            solidBackdropView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             backdropView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             backdropView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             backdropView.topAnchor.constraint(equalTo: container.topAnchor),
@@ -179,7 +193,8 @@ final class SuggestionPanelController {
         }
 
         let wasVisible = panel.isVisible
-        backdropView.isHidden = renderMode != .floatingMirror
+        let presentation = Self.accessibilityPresentation()
+        applyBackdrop(presentation.background, visibleFor: renderMode)
         ghostTextView.update(
             text: text,
             font: font,
@@ -205,14 +220,18 @@ final class SuggestionPanelController {
             // Mid-stream updates snap so the ghost text never lags the cursor.
             panel.alphaValue = 1
             panel.displayIfNeeded()
-        } else {
+        } else if presentation.animatesFirstAppearance {
             // First appearance fades in gently, the way native transient overlays do.
             panel.alphaValue = 0
             panel.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
+                context.duration = presentation.firstAppearanceFadeDuration
                 panel.animator().alphaValue = 1
             }
+        } else {
+            // Reduce Motion: snap in with no fade.
+            panel.alphaValue = 1
+            panel.orderFrontRegardless()
         }
         return accessibilityFrame
     }
@@ -238,6 +257,34 @@ final class SuggestionPanelController {
             visualStyle: visualStyle
         )
         return view.pngData()
+    }
+
+    /// Resolve how the panel should present itself from the live macOS
+    /// accessibility display preferences. The decision itself is pure and lives
+    /// in `AutocompleteLabCore`; this only reads the system prefs.
+    private static func accessibilityPresentation() -> SuggestionPanelAccessibilityPresentation {
+        let workspace = NSWorkspace.shared
+        return SuggestionPanelAccessibilityPresentationPolicy.resolve(
+            reduceMotion: workspace.accessibilityDisplayShouldReduceMotion,
+            reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency
+        )
+    }
+
+    /// Show the backdrop that matches the resolved transparency preference, but
+    /// only for the floating mirror (inline ghost text never has a backdrop).
+    private func applyBackdrop(
+        _ background: SuggestionPanelAccessibilityPresentation.Background,
+        visibleFor renderMode: SuggestionRenderMode
+    ) {
+        let showsBackdrop = renderMode == .floatingMirror
+        switch background {
+        case .translucentMaterial:
+            backdropView.isHidden = !showsBackdrop
+            solidBackdropView.isHidden = true
+        case .solid:
+            backdropView.isHidden = true
+            solidBackdropView.isHidden = !showsBackdrop
+        }
     }
 
     private func screen(containing accessibilityRect: CGRect, screenHeight: CGFloat) -> NSScreen? {
@@ -434,6 +481,44 @@ private final class SuggestionOverlayAppearancePreviewView: NSView {
                 .foregroundColor: visualStyle.textColor(for: .floatingMirror)
             ]
         )
+    }
+}
+
+/// A layer-backed opaque pill shown instead of the translucent vibrancy
+/// backdrop when the user enables Reduce Transparency. Resolving the colors in
+/// `updateLayer()` keeps the fill correct across light, dark, and high-contrast
+/// appearances, and re-resolves automatically when the appearance changes.
+private final class SolidBackdropView: NSView {
+    private var fillColor: NSColor = .controlBackgroundColor
+    private var borderColor: NSColor = .separatorColor
+    private var cornerRadius: CGFloat = 7
+
+    func configure(fillColor: NSColor, borderColor: NSColor, cornerRadius: CGFloat) {
+        self.fillColor = fillColor
+        self.borderColor = borderColor
+        self.cornerRadius = cornerRadius
+        wantsLayer = true
+        needsDisplay = true
+    }
+
+    override var wantsUpdateLayer: Bool {
+        true
+    }
+
+    override func updateLayer() {
+        guard let layer else {
+            return
+        }
+        layer.backgroundColor = fillColor.cgColor
+        layer.borderColor = borderColor.cgColor
+        layer.borderWidth = 1
+        layer.cornerRadius = cornerRadius
+        layer.masksToBounds = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }
 
