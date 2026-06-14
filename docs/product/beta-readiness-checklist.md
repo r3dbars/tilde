@@ -93,25 +93,32 @@ Use this before inviting private beta testers.
 
 Invite testers only when every applicable box is checked.
 
-## Current Blockers - 2026-05-20
+## Current Gate - 2026-06-14
 
-- `./script/beta_readiness.sh --check-only` currently blocks on fresh latency
-  proof, current manual app proof refresh, release package proof, and
-  notarized install proof.
-- `./script/manual_smoke_status.sh --strict` still requires current-head proof
-  refresh for the 10 beta-safe target rows. Do not treat stale
-  screenshot-backed rows as beta-current.
-- `./script/check_onboarding_walkthrough_proof.py` is expected to block until
-  the guided TextEdit walkthrough table has a current clean-user pass row.
-- `./script/private_beta_packet.sh --check` must be rerun after any app-code or
-  artifact change and now validates the current DMG with stapler and spctl.
-- Current local SteadyType artifacts are not beta-current until a Developer ID
-  signed DMG, Apple notarization, stapling, and fresh-install Gatekeeper proof
-  are all regenerated. A stored notarytool profile may exist under a legacy
-  shared alias, but older legacy ZIP notarization does not count for the
-  current SteadyType DMG.
-- Recreate `dist/SteadyType.dmg`, the secondary `dist/SteadyType.zip`, and
-  `dist/private-beta/checksums.txt` if app code changes after the remaining
-  proof blockers close.
-- All-history trace eval is diagnostic only; beta proof must use fresh marked
-  slices from disposable text.
+HOLD. `./script/beta_readiness.sh --check-only` still blocks. Green lanes in the
+latest run: model asset, runtime production gate, controls/diagnostics readiness,
+redacted report export, issue template validation, clipboard fallback disabled,
+production mock fallback disabled, prompt app manifest proof, visual placement
+proof, and release package prerequisites.
+
+Current blockers:
+
+- Runtime no-egress proof is stale, older than the latest runtime launch, and
+  its executable SHA-256 does not match the current `dist/SteadyType.app`.
+- Onboarding walkthrough proof has no completed clean-user pass row.
+- Onboarding permission QA still has 48 unchecked checklist items and 3 pending
+  proof rows.
+- Manual app proof requires current app/source refresh for the 10 beta-safe rows:
+  TextEdit, Notes title/body/checklist, Obsidian stock/theme/panes/long note,
+  Chrome textarea, and Chrome contenteditable. Obsidian stock is still pending.
+- Latency beta gate has no eligible default runtime launch for the current app.
+- Private beta artifact is missing: `dist/SteadyType.dmg`.
+
+Next 3 actions:
+
+1. Refresh the runtime no-egress proof against the current app binary.
+2. Record the clean-user TextEdit onboarding walkthrough row.
+3. Complete the clean-user permission QA checklist rows.
+
+All-history trace eval is diagnostic only; beta proof must use fresh marked
+slices from disposable text.
