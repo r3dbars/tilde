@@ -31,6 +31,21 @@ struct LiveSuggestionWiringTests {
 
         try require(coverageCheck, contains: "./script/check_public_core_wiring.py")
     }
+
+    @Test("App delegate advances the visible suggestion through the type-through state machine")
+    func appDelegateAdvancesVisibleSuggestionThroughTypeThroughStateMachine() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(appDelegate, contains: "private let typeThroughPrefixStateMachine = TypeThroughPrefixStateMachine()")
+        try require(appDelegate, contains: "private func advanceVisibleSuggestionForTypingProgressIfNeeded(")
+        try require(appDelegate, contains: "typeThroughPrefixStateMachine.apply(")
+        try require(appDelegate, contains: "to: &suggestionSession,")
+        try require(appDelegate, contains: "case let .survived(survival):")
+        try require(appDelegate, contains: "currentSuggestionDisplayedText = suggestionSession.visibleSuggestion?.visibleText")
+        try require(appDelegate, contains: "\"Shown: typing through suggestion\"")
+        try require(appDelegate, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
+        try require(appDelegate, contains: "reason: \"survived_typethrough\"")
+    }
 }
 
 private func source(_ relativePath: String) throws -> String {

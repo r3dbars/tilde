@@ -12,6 +12,18 @@
     "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
     "entries": [
       {
+        "bundle": "*",
+        "displayName": "Generic App",
+        "versionState": "pending",
+        "versionReason": "Default-on fallback profile; exact version proof is captured only when a custom app row graduates.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [],
+        "notes": "Generic Accessibility fallback is default-on but uncustomized. Per-app pause remains the escape hatch, and custom app rows need exact proof before stronger support claims."
+      },
+      {
         "bundle": "com.apple.TextEdit",
         "displayName": "TextEdit",
         "versionState": "exact",
@@ -208,7 +220,7 @@
         "hostVersion": "2.1.128",
         "hostBuild": "2.1.128",
         "versionSource": "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app",
-        "safetyMode": "disabled",
+        "safetyMode": "wordOnly",
         "runtimeState": "proofModeOnly",
         "proofState": "partial",
         "killSwitch": "proofModeRequired",
@@ -222,7 +234,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle is disabled; terminal-host proof is marker-gated, proof-mode-only, one-word only, and iceboxed from beta readiness. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
+        "notes": "Claude Code remains one-word and proof-gated in the proof manifest. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -1027,6 +1039,15 @@
   ],
   "profileCoverage": [
     {
+      "bundle": "*",
+      "displayName": "Generic App",
+      "supportLevel": "yellow",
+      "surface": "Generic Accessibility fallback",
+      "status": "partial",
+      "owner": "compatibility fallback lane",
+      "safetyNote": "Default-on fallback can try ordinary writing fields, but untested apps stay yellow and must be paused or given a custom profile when placement or insertion is wrong."
+    },
+    {
       "bundle": "com.apple.TextEdit",
       "displayName": "TextEdit",
       "supportLevel": "green",
@@ -1092,11 +1113,11 @@
     {
       "bundle": "com.anthropic.claude-code",
       "displayName": "Claude Code",
-      "supportLevel": "diagnosticsOnly",
+      "supportLevel": "yellow",
       "surface": "Claude Code",
-      "status": "blocked",
+      "status": "partial",
       "owner": "terminal-host adapter lane",
-      "safetyNote": "The direct bundle is a background-only helper; terminal-hosted Claude Code proof is virtual, proof-mode-only, host-labeled, and iceboxed from beta readiness, while normal terminal hosts remain denylisted."
+      "safetyNote": "Claude Code is enabled only as a dogfood prompt target with one-word acceptance and no-submit safety gates; broader terminal-host behavior remains guarded."
     },
     {
       "bundle": "com.anthropic.claudefordesktop",

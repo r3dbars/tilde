@@ -351,13 +351,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private let annoyanceSuppressor = AnnoyanceSuppressorActor()
     private let traceScreenshotCaptureCoordinator = TraceScreenshotCaptureCoordinator()
-    private let focusedTextPollingBackoffPolicy = FocusedTextPollingBackoffPolicy.typingBackoff
     private let focusedTextAXHealthPolicy = FocusedTextAXHealthPolicy.typingResponsiveness
-    private let focusedTextPollDiagnosticsPolicy = FocusedTextPollDiagnosticsPolicy.typingDiagnostics
     private let focusedTextAXHealthSuggestionVisibilityPolicy = FocusedTextAXHealthSuggestionVisibilityPolicy()
     private let focusedTextPollingThrottleSuggestionVisibilityPolicy =
         FocusedTextPollingThrottleSuggestionVisibilityPolicy()
-    private let focusPollingCadencePolicy = FocusPollingCadencePolicy()
     private let recentWordExtractor = RecentWordExtractor()
     private let compatibilityLearningStore = CompatibilityLearningStore.shared
     private let suggestionPanel = SuggestionPanelController()
@@ -378,6 +375,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private lazy var focusedTextReader = SerialFocusedTextAXReader(accessibilityClient: accessibilityClient)
+    /// First extracted slice of the suggestion pipeline: owns the focused-text polling driver
+    /// (timer, cadence, in-flight guard, throttle/pause, latency/skip stats). AppDelegate holds
+    /// it and delegates timing concerns to it via `SuggestionPipelineHost` (see extension below).
+    private lazy var suggestionPipeline = SuggestionPipelineController(host: self)
     private let diagnosticsWindow = DiagnosticsWindowController()
     private let appProofCommandCoordinator = AppProofCommandCoordinator()
     private lazy var settingsWindow = SettingsWindowController(
@@ -492,7 +493,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workspaceFocusObservers: [NSObjectProtocol] = []
     private var screenGeometryObserver: NSObjectProtocol?
     private var proofOnlyAcceptCommandObserver: NSObjectProtocol?
-    private var pollTimer: Timer?
     private var resourceDiagnosticsTimer: Timer?
     private let resourceDiagnosticsSampler = ProcessResourceDiagnosticsSampler()
     private lazy var suggestionSummonHotKey = SuggestionSummonHotKey { [weak self] in
@@ -531,11 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusedFieldIdentityPolicy = FocusedFieldIdentityPolicy()
     private let insertionVerificationPreflightPolicy = InsertionVerificationPreflightPolicy()
     private let insertionFailureSuppressionPolicy = InsertionFailureSuppressionPolicy()
-    private var isFocusedTextPollInFlight = false
-    private var latestFocusedTextReadRequestID: UInt64?
     private var focusedTextAXHealthState = FocusedTextAXHealthState()
-    private var focusedTextPollLatencyStats = FocusedTextPollLatencyStats()
-    private var focusedTextPollSkipStats = FocusedTextPollSkipStats()
     private var suggestionBlockLogGate = SuggestionBlockLogGate()
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private let typingBurstPolicy = TypingBurstPolicy()
@@ -575,15 +571,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var modelInstallTask: Task<Void, Never>?
     private var modelInstallStatusText: String?
     private var isModelInstallCancelRequested = false
-    private let focusedTextPollInterval: TimeInterval = 0.08
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
     private let maximumPreservedSuggestionGeometryAgeDuringAXPauseMilliseconds = 750
     private let maximumPreservedSuggestionDisplaySuppressionAgeMilliseconds = 5_000
-    private var focusedTextPollingPause = FocusedTextPollingPause()
-    private var lastFocusedTextPollAttemptAt: Date?
     private var suggestionsPaused = false
     private var suggestionsPausedUntil: Date?
     private var appEnablementSetupCompleted = true
@@ -618,7 +611,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         startWorkspaceFocusObservers()
         startScreenGeometryObserver()
-        startPolling()
+        suggestionPipeline.startPolling()
         startResourceDiagnostics()
         DispatchQueue.main.async { [weak self] in
             self?.keepProcessResident()
@@ -640,7 +633,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtimeWarmTask?.cancel()
         invalidatePendingSuggestionRequest()
         modelRuntime.cancel()
-        pollTimer?.invalidate()
+        suggestionPipeline.stopPolling()
         resourceDiagnosticsTimer?.invalidate()
         suggestionSummonHotKey.stop()
         manualSuggestionRetryTask?.cancel()
@@ -1210,16 +1203,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.toolTip = configuration.accessibilityLabel
     }
 
-    private func startPolling() {
-        let timer = Timer.scheduledTimer(withTimeInterval: focusedTextPollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.pollFocusedTextIfIdle()
-            }
-        }
-        timer.tolerance = focusedTextPollInterval / 2
-        pollTimer = timer
-    }
-
     private func startResourceDiagnostics() {
         recordResourceDiagnostics(reason: "launch")
 
@@ -1607,76 +1590,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return suggestionControlPolicy.state(isPaused: suggestionsPaused)
     }
 
-    private func pollFocusedTextIfIdle() {
-        let now = Date()
-        guard shouldRunFocusedTextPoll(now: now) else {
-            return
-        }
-
-        guard !isFocusedTextPollInFlight else {
-            guard focusedTextPollingBackoffPolicy.shouldRecordInFlightSkip(
-                lastPollAttemptAt: lastFocusedTextPollAttemptAt,
-                now: now
-            ) else {
-                return
-            }
-
-            lastFocusedTextPollAttemptAt = now
-            if let notice = focusedTextPollSkipStats.recordSkippedInFlight(now: now) {
-                DiagnosticsLog.shared.record(
-                    "focused-text-poll-skipped",
-                    metadata: [
-                        "reason": "in-flight",
-                        "count": String(notice.count)
-                    ]
-                )
-            }
-            return
-        }
-
-        lastFocusedTextPollAttemptAt = now
-        isFocusedTextPollInFlight = true
-        let startedAt = DispatchTime.now().uptimeNanoseconds
-        var completesAsync = false
-        pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
-        if !completesAsync {
-            finishFocusedTextPoll(startedAt: startedAt)
-        }
-    }
-
-    private func shouldRunFocusedTextPoll(now: Date) -> Bool {
-        let activeApp = accessibilityClient.frontmostApplication()
-        let hasSupportedProfile = activeApp.flatMap { app -> Bool? in
-            guard let profile = effectiveProfile(for: app) else {
-                return false
-            }
-
-            return profile.canPresentSuggestions
-                && !profile.isSensitive
-                && isSuggestionEnabled(for: app, profile: profile)
-        } ?? false
-        let isTrustedForAccessibility = accessibilityClient.isTrusted
-        let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
-        let hasPersonalCapture = appSettings.personalCaptureEnabled
-        let hasRecentTextChange = focusPollingCadencePolicy.hasRecentTextChange(
-            lastTextChangeAt: lastFocusedTextChangeAt,
-            now: now
-        )
-
-        guard focusPollingCadencePolicy.shouldPoll(
-            now: now,
-            lastPollAt: lastFocusedTextPollAttemptAt,
-            isTrustedForAccessibility: isTrustedForAccessibility,
-            hasSupportedProfile: hasSupportedProfile || hasPersonalCapture,
-            hasVisibleSuggestion: hasVisibleSuggestion,
-            hasRecentTextChange: hasRecentTextChange
-        ) else {
-            return false
-        }
-
-        return true
-    }
-
     private func effectiveProfile(for app: RunningApplicationInfo) -> CompatibilityProfile? {
         if let terminalProofProfile = claudeCodeTerminalHostProofProfile(for: app) {
             return terminalProofProfile
@@ -1765,21 +1678,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && ClaudeCodeTerminalHostProofPolicy.supportedTerminalHosts.contains(hostBundleIdentifier)
     }
 
-    private func finishFocusedTextPoll(
-        startedAt: UInt64,
-        latencySummarySuppressionReason: String? = nil
-    ) {
-        let endedAt = DispatchTime.now().uptimeNanoseconds
-        let durationMilliseconds = Int((endedAt - startedAt) / 1_000_000)
-        isFocusedTextPollInFlight = false
-        latestFocusedTextReadRequestID = nil
-        recordFocusedTextPollLatency(
-            durationMilliseconds,
-            summarySuppressionReason: latencySummarySuppressionReason
-        )
-        recordFocusedTextPollSkipSummaryIfNeeded()
-    }
-
     private func pollFocusedText(startedAt: UInt64, completesAsync: inout Bool) {
         if case let .blocked(reason) = suggestionControlPolicy.suggestionAvailability(for: suggestionControlState) {
             if appSettings.personalCaptureEnabled,
@@ -1807,7 +1705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if focusedTextPollingPause.isPaused(now: Date()) {
+        if suggestionPipeline.isPollingPaused(now: Date()) {
             setSuggestionDecision("Waiting: typing")
             return
         }
@@ -1892,7 +1790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         }
-        latestFocusedTextReadRequestID = requestID
+        suggestionPipeline.noteReadStarted(requestID: requestID)
         completesAsync = true
     }
 
@@ -1907,13 +1805,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if pollStartedWithManualSuggestionRequest && manualSuggestionRequestPending {
                 manualSuggestionRequestPending = false
             }
-            finishFocusedTextPoll(
+            suggestionPipeline.finishPoll(
                 startedAt: startedAt,
                 latencySummarySuppressionReason: latencySummarySuppressionReason
             )
         }
 
-        guard latestFocusedTextReadRequestID == result.requestID else {
+        guard suggestionPipeline.isCurrentRead(result.requestID) else {
             latencySummarySuppressionReason = "stale-request"
             DiagnosticsLog.shared.record(
                 "focused-text-ax-read-dropped",
@@ -1925,7 +1823,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if focusedTextPollDiagnosticsPolicy.shouldRecordSlowAXReadMarker(
+        if suggestionPipeline.shouldRecordSlowAXReadMarker(
             queueDelayMilliseconds: result.queueDelayMilliseconds,
             readDurationMilliseconds: result.readDurationMilliseconds
         ) {
@@ -1945,11 +1843,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let axThrottleRecommendation = focusedTextPollingBackoffPolicy.throttleRecommendation(
+        let axThrottleRecommendation = suggestionPipeline.throttleRecommendation(
             queueDelayMilliseconds: result.queueDelayMilliseconds,
             readDurationMilliseconds: result.readDurationMilliseconds
         )
-        let shouldProcessCurrentAXRead = focusedTextPollingBackoffPolicy.shouldProcessCurrentAXReadBeforeThrottle(
+        let shouldProcessCurrentAXRead = suggestionPipeline.shouldProcessCurrentAXReadBeforeThrottle(
             hasContext: result.context != nil
         )
 
@@ -1992,7 +1890,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        pauseFocusedTextPollingAfterProcessingCurrentAXRead(axThrottleRecommendation)
+        suggestionPipeline.pauseAfterProcessingCurrentAXRead(axThrottleRecommendation)
         await processFocusedTextContext(
             rawContext,
             frontmostApp: result.app,
@@ -2046,7 +1944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         }
-        latestFocusedTextReadRequestID = requestID
+        suggestionPipeline.noteReadStarted(requestID: requestID)
         completesAsync = true
         return true
     }
@@ -2058,13 +1956,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) async {
         var latencySummarySuppressionReason: String?
         defer {
-            finishFocusedTextPoll(
+            suggestionPipeline.finishPoll(
                 startedAt: startedAt,
                 latencySummarySuppressionReason: latencySummarySuppressionReason
             )
         }
 
-        guard latestFocusedTextReadRequestID == result.requestID else {
+        guard suggestionPipeline.isCurrentRead(result.requestID) else {
             latencySummarySuppressionReason = "stale-request"
             return
         }
@@ -3116,74 +3014,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func recordFocusedTextPollLatency(
-        _ durationMilliseconds: Int,
-        summarySuppressionReason: String? = nil
-    ) {
-        if focusedTextPollDiagnosticsPolicy.shouldRecordSlowPollMarker(
-            durationMilliseconds: durationMilliseconds
-        ) {
-            DiagnosticsLog.shared.record(
-                "focused-text-poll-latency-slow",
-                metadata: [
-                    "durationMilliseconds": String(durationMilliseconds)
-                ]
-            )
-        }
-
-        if let summarySuppressionReason {
-            DiagnosticsLog.shared.record(
-                "focused-text-poll-latency-summary-suppressed",
-                metadata: [
-                    "durationMilliseconds": String(durationMilliseconds),
-                    "reason": summarySuppressionReason
-                ]
-            )
-            return
-        }
-
-        if let summary = focusedTextPollLatencyStats.record(durationMilliseconds) {
-            DiagnosticsLog.shared.record(
-                "focused-text-poll-latency-summary",
-                metadata: [
-                    "count": String(summary.count),
-                    "p50Milliseconds": String(summary.p50Milliseconds),
-                    "p90Milliseconds": String(summary.p90Milliseconds),
-                    "p95Milliseconds": String(summary.p95Milliseconds),
-                    "p99Milliseconds": String(summary.p99Milliseconds),
-                    "maxMilliseconds": String(summary.maxMilliseconds)
-                ]
-            )
-            applyFocusedTextPollingThrottleIfNeeded(
-                focusedTextPollingBackoffPolicy.throttleRecommendation(
-                    latencySummary: summary,
-                    skipSummary: nil
-                )
-            )
-        }
-    }
-
-    private func recordFocusedTextPollSkipSummaryIfNeeded() {
-        guard let summary = focusedTextPollSkipStats.drain(now: Date()) else {
-            return
-        }
-
-        DiagnosticsLog.shared.record(
-            "focused-text-poll-skip-summary",
-            metadata: [
-                "reason": "in-flight",
-                "count": String(summary.count),
-                "durationMilliseconds": String(summary.durationMilliseconds)
-            ]
-        )
-        applyFocusedTextPollingThrottleIfNeeded(
-            focusedTextPollingBackoffPolicy.throttleRecommendation(
-                latencySummary: nil,
-                skipSummary: summary
-            )
-        )
-    }
-
     @discardableResult
     private func applyFocusedTextPollingThrottleIfNeeded(
         _ recommendation: FocusedTextPollingThrottleRecommendation
@@ -3194,10 +3024,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        focusedTextPollingPause.pause(
+        suggestionPipeline.pausePollingWithBackoff(
             now: Date(),
-            durationMilliseconds: recommendation.pauseMilliseconds,
-            policy: focusedTextPollingBackoffPolicy
+            durationMilliseconds: recommendation.pauseMilliseconds
         )
         let preservesPendingRequest = shouldPreserveClaudeCodeTerminalHostProofPendingRequestDuringFocusedTextPollingThrottle(
             reason: reason,
@@ -3275,30 +3104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         )
         return true
-    }
-
-    private func pauseFocusedTextPollingAfterProcessingCurrentAXRead(
-        _ recommendation: FocusedTextPollingThrottleRecommendation
-    ) {
-        guard recommendation.shouldThrottle,
-              let reason = recommendation.reason,
-              recommendation.pauseMilliseconds > 0 else {
-            return
-        }
-
-        focusedTextPollingPause.pause(
-            now: Date(),
-            durationMilliseconds: recommendation.pauseMilliseconds,
-            policy: focusedTextPollingBackoffPolicy
-        )
-        DiagnosticsLog.shared.record(
-            "focused-text-poll-throttled",
-            metadata: [
-                "reason": reason.rawValue,
-                "pauseMilliseconds": String(recommendation.pauseMilliseconds),
-                "currentRead": "processed"
-            ]
-        )
     }
 
     private func currentSuggestionAgeMilliseconds(now: Date = Date()) -> Int? {
@@ -4218,7 +4023,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observePassthroughTypingKeyDown() {
-        focusedTextPollingPause.pause(
+        suggestionPipeline.pausePolling(
             now: Date(),
             durationMilliseconds: suggestionSession.hasVisibleSuggestion
                 ? visibleSuggestionTypingPollPauseMilliseconds
@@ -5330,7 +5135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scheduledRequestMode = currentSuggestionRequestMode
         let delayMilliseconds = deferredGhosttyInsertionProbeDelayMilliseconds()
         deferredTerminalHostAcceptanceTask?.cancel()
-        focusedTextPollingPause.pause(
+        suggestionPipeline.pausePolling(
             now: Date(),
             durationMilliseconds: delayMilliseconds + postInsertionPollPauseMilliseconds
         )
@@ -5550,7 +5355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: undo.textBeforeCursor,
             textAfterCursor: undo.textAfterCursor
         )
-        focusedTextPollingPause.pause(
+        suggestionPipeline.pausePolling(
             now: Date(),
             durationMilliseconds: postInsertionPollPauseMilliseconds
         )
@@ -9206,7 +9011,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             if succeeded {
-                focusedTextPollingPause.pause(
+                suggestionPipeline.pausePolling(
                     now: Date(),
                     durationMilliseconds: postInsertionPollPauseMilliseconds
                 )
@@ -9230,7 +9035,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             if succeeded {
-                focusedTextPollingPause.pause(
+                suggestionPipeline.pausePolling(
                     now: Date(),
                     durationMilliseconds: postInsertionPollPauseMilliseconds
                 )
@@ -9254,7 +9059,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             if succeeded {
-                focusedTextPollingPause.pause(
+                suggestionPipeline.pausePolling(
                     now: Date(),
                     durationMilliseconds: postInsertionPollPauseMilliseconds
                 )
@@ -9278,7 +9083,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             if succeeded {
-                focusedTextPollingPause.pause(
+                suggestionPipeline.pausePolling(
                     now: Date(),
                     durationMilliseconds: postInsertionPollPauseMilliseconds
                 )
@@ -9302,7 +9107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ]
             )
             if succeeded {
-                focusedTextPollingPause.pause(
+                suggestionPipeline.pausePolling(
                     now: Date(),
                     durationMilliseconds: postInsertionPollPauseMilliseconds
                 )
@@ -9312,9 +9117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         repairObsidianFullAcceptCaretIfNeeded(profile: profile, action: action)
 
+        // Bind the Accessibility write to the field the suggestion was shown for, so focus
+        // stolen between the acceptance guard and the write cannot redirect the user's accepted
+        // text into another app/field. See docs/security/threat-model.md (F1).
         let result = insertionEngine.insert(
             acceptedText,
             profile: profile,
+            expectedFieldIdentity: currentSuggestionFieldIdentity,
             skipping: skippedModes
         )
         DiagnosticsLog.shared.record(
@@ -9332,7 +9141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         if result.succeeded {
-            focusedTextPollingPause.pause(
+            suggestionPipeline.pausePolling(
                 now: Date(),
                 durationMilliseconds: postInsertionPollPauseMilliseconds
             )
@@ -10452,7 +10261,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originalProofInputText = lastTextSnapshot.textBeforeCursor
             + lastTextSnapshot.textAfterCursor
 
-        if accessibilityClient.insertText(acceptedText, allowDescendantTextFallback: false) {
+        if accessibilityClient.insertText(
+            acceptedText,
+            expectedFieldIdentity: currentSuggestionFieldIdentity,
+            allowDescendantTextFallback: false
+        ) {
             let verified = verifyClaudeCodeTerminalHostProofInsertion(
                 expectedProofInputText: expectedProofInputText,
                 frontmostApp: frontmostApp,
@@ -18038,7 +17851,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         manualSuggestionRequestPending = true
         lastRequestedTextBeforeCursor = nil
-        focusedTextPollingPause = FocusedTextPollingPause()
+        suggestionPipeline.resetPollingPause()
         setSuggestionDecision("Queued: asked once")
         DiagnosticsLog.shared.record(
             "suggestion-summon-requested",
@@ -18052,21 +17865,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pollFocusedTextForManualSuggestion() {
         let now = Date()
-        guard !isFocusedTextPollInFlight else {
-            lastFocusedTextPollAttemptAt = now
+        guard !suggestionPipeline.isPollInFlight else {
+            suggestionPipeline.notePollAttempt(at: now)
             setSuggestionDecision("Waiting: checking field")
             scheduleManualSuggestionRetry()
             return
         }
 
-        lastFocusedTextPollAttemptAt = now
-        isFocusedTextPollInFlight = true
+        suggestionPipeline.notePollAttempt(at: now)
+        suggestionPipeline.beginInFlightPoll()
         let startedAt = DispatchTime.now().uptimeNanoseconds
         var completesAsync = false
         pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
         if !completesAsync {
             manualSuggestionRequestPending = false
-            finishFocusedTextPoll(startedAt: startedAt)
+            suggestionPipeline.finishPoll(startedAt: startedAt)
         }
     }
 
@@ -20022,5 +19835,44 @@ private extension CompletionActivationDecision {
         case let .block(reason):
             return reason.rawValue
         }
+    }
+}
+
+// MARK: - SuggestionPipelineHost
+
+extension AppDelegate: SuggestionPipelineHost {
+    /// App-computed cadence inputs for the polling driver (relocated from the former
+    /// `shouldRunFocusedTextPoll`); the pure cadence policy lives in `SuggestionPipelineController`.
+    func focusedTextPollCadenceSignals() -> FocusPollingCadenceSignals {
+        let activeApp = accessibilityClient.frontmostApplication()
+        let hasSupportedProfile = activeApp.flatMap { app -> Bool? in
+            guard let profile = effectiveProfile(for: app) else {
+                return false
+            }
+
+            return profile.canPresentSuggestions
+                && !profile.isSensitive
+                && isSuggestionEnabled(for: app, profile: profile)
+        } ?? false
+        return FocusPollingCadenceSignals(
+            isTrustedForAccessibility: accessibilityClient.isTrusted,
+            hasSupportedProfile: hasSupportedProfile,
+            hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion,
+            hasPersonalCapture: appSettings.personalCaptureEnabled,
+            lastFocusedTextChangeAt: lastFocusedTextChangeAt
+        )
+    }
+
+    /// Run one focused-text poll (Accessibility read + dispatch). Returns whether the read
+    /// completes asynchronously, in which case the controller defers `finishPoll` to the
+    /// async completion handler (`completeFocusedTextPoll`).
+    func executeFocusedTextPoll(startedAt: UInt64) -> Bool {
+        var completesAsync = false
+        pollFocusedText(startedAt: startedAt, completesAsync: &completesAsync)
+        return completesAsync
+    }
+
+    func applyFocusedTextPollingThrottle(_ recommendation: FocusedTextPollingThrottleRecommendation) {
+        applyFocusedTextPollingThrottleIfNeeded(recommendation)
     }
 }
