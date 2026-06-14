@@ -45,3 +45,7 @@ Avoid early:
 - Keep the model runtime app-owned. Do not require users to start Ollama, llama.cpp, or any other separate server.
 - Mock engines are fine for development and tests, but production UX should feel like one Mac app.
 - Add tests with each meaningful behavior change.
+
+## Pre-merge gate
+
+Run `./script/proof.sh fast` before pushing. It runs `swift test --jobs 1`, `check_test_coverage_manifest`, `check_proof_manifest`, and a whitespace check, and exits non-zero if any check fails. GitHub Actions runs this same gate on every pull request targeting main.
