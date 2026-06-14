@@ -17,11 +17,18 @@ module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
 
-# Unknown alias has no local target and falls back to the HF repo id.
-assert module.installed_asset_path("does-not-exist") is None
-source, kind = module.resolve_model_source("qwen35-4b")
-assert kind == "hf-repo", kind
-assert source == "mlx-community/Qwen3.5-4B-MLX-4bit", source
+# Unknown alias has no local target and falls back to the HF repo id. Pin an
+# empty model root so this stays deterministic on dev machines that already have
+# the real asset installed under the default Application Support location.
+with tempfile.TemporaryDirectory() as empty_root:
+    os.environ["AUTOCOMPLETE_LAB_MODEL_ROOT"] = str(Path(empty_root) / "Models")
+    try:
+        assert module.installed_asset_path("does-not-exist") is None
+        source, kind = module.resolve_model_source("qwen35-4b")
+        assert kind == "hf-repo", kind
+        assert source == "mlx-community/Qwen3.5-4B-MLX-4bit", source
+    finally:
+        del os.environ["AUTOCOMPLETE_LAB_MODEL_ROOT"]
 
 # A populated local asset dir is preferred over the repo id.
 with tempfile.TemporaryDirectory() as tmp:
@@ -87,8 +94,12 @@ rows = module.read_rows(io.StringIO('{"id": "a"}\n\n{"id": "b"}\n'))
 assert [row["id"] for row in rows] == ["a", "b"], rows
 PY
 
-# The --print-source path resolves a model without importing mlx_lm.
-SOURCE_OUTPUT="$(script/local_completion_batch.py --model qwen35-4b --print-source)"
+# The --print-source path resolves a model without importing mlx_lm. Pin an
+# empty model root so the fallback classification is deterministic even on a dev
+# machine that has the real asset installed at the default location.
+EMPTY_MODEL_ROOT="$(mktemp -d)"
+trap 'rm -rf "$EMPTY_MODEL_ROOT"' EXIT
+SOURCE_OUTPUT="$(AUTOCOMPLETE_LAB_MODEL_ROOT="$EMPTY_MODEL_ROOT/Models" script/local_completion_batch.py --model qwen35-4b --print-source)"
 grep -q "alias=qwen35-4b" <<<"$SOURCE_OUTPUT"
 grep -q "kind=hf-repo" <<<"$SOURCE_OUTPUT"
 
