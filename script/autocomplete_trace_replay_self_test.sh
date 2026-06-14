@@ -7,10 +7,11 @@ SLICE_OUTPUT="$(mktemp)"
 SMOKE_OUTPUT="$(mktemp)"
 FROZEN_OUTPUT="$(mktemp)"
 HELP_OUTPUT="$(mktemp)"
+DIFF_OUTPUT="$(mktemp)"
 MARK_FILE="$(mktemp)"
 TRACE_MARK_OUTPUT="$(mktemp)"
 TRACE_MARK_SMOKE_OUTPUT="$(mktemp)"
-trap 'rm -f "$TRACE_FILE" "$WHOLE_OUTPUT" "$SLICE_OUTPUT" "$SMOKE_OUTPUT" "$FROZEN_OUTPUT" "$HELP_OUTPUT" "$MARK_FILE" "$TRACE_MARK_OUTPUT" "$TRACE_MARK_SMOKE_OUTPUT"' EXIT
+trap 'rm -f "$TRACE_FILE" "$WHOLE_OUTPUT" "$SLICE_OUTPUT" "$SMOKE_OUTPUT" "$FROZEN_OUTPUT" "$HELP_OUTPUT" "$DIFF_OUTPUT" "$MARK_FILE" "$TRACE_MARK_OUTPUT" "$TRACE_MARK_SMOKE_OUTPUT"' EXIT
 
 cat >"$TRACE_FILE" <<'JSONL'
 {"timestamp":"2026-05-07T12:00:00Z","type":"suggestionRequested","suggestionID":"stale","requestMode":"phraseContinuation"}
@@ -68,9 +69,37 @@ fi
 
 swift run AutocompleteTraceReplay --help >"$HELP_OUTPUT"
 
-if ! grep -F "Usage: AutocompleteTraceReplay [--start-line N] [--end-line N]" "$HELP_OUTPUT" >/dev/null; then
+if ! grep -F "Usage: AutocompleteTraceReplay [--decision-diff] [--one-brain-preview]" "$HELP_OUTPUT" >/dev/null; then
   echo "replay self-test did not print help" >&2
   cat "$HELP_OUTPUT" >&2
+  exit 1
+fi
+
+CORPUS_FILE="docs/evals/trace-replay-one-brain-suppression-corpus-2026-06-13.jsonl"
+if grep -E '"(textBeforeCursor|textAfterCursor|systemPrompt|userPrompt|rawOutput|cleanedVisibleText|displayedText|acceptedText|remainingVisibleText|screenshotPath)"[[:space:]]*:[[:space:]]*"[^"]+"' "$CORPUS_FILE" >/dev/null; then
+  echo "replay diff corpus contains raw text, prompt, output, accepted text, or screenshot fields" >&2
+  exit 1
+fi
+
+script/autocomplete_trace_replay_diff.sh "$CORPUS_FILE" >"$DIFF_OUTPUT"
+
+if ! grep -F -- "- preview brain: one-brain-preview" "$DIFF_OUTPUT" >/dev/null; then
+  echo "replay diff self-test did not select one-brain preview" >&2
+  cat "$DIFF_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F -- "- current-vs-preview diffs: 3" "$DIFF_OUTPUT" >/dev/null; then
+  echo "replay diff self-test did not report the expected reviewed diff count" >&2
+  cat "$DIFF_OUTPUT" >&2
+  exit 1
+fi
+
+if ! grep -F "suggestion=repetition-hard-veto" "$DIFF_OUTPUT" >/dev/null ||
+   ! grep -F "suggestion=learned-restraint-binding" "$DIFF_OUTPUT" >/dev/null ||
+   ! grep -F "suggestion=low-kept-hard-gate" "$DIFF_OUTPUT" >/dev/null; then
+  echo "replay diff self-test did not include the expected binding-reason rows" >&2
+  cat "$DIFF_OUTPUT" >&2
   exit 1
 fi
 

@@ -112,8 +112,29 @@ public enum DisplayScoreSuppressionReason: String, Equatable, Sendable {
     case highInstability = "high-instability"
     case tooSlowToDisplay = "too-slow-to-display"
     case lowConfidence = "low-confidence"
+    case learnedRestraint = "learned-restraint"
     case lowAcceptedAndKeptProbability = "low-accepted-and-kept-probability"
     case belowThreshold = "below-threshold"
+}
+
+public enum DisplayScoreSuppressionBrain: String, Equatable, Sendable {
+    case current
+    case oneBrainPreview = "one-brain-preview"
+
+    public static let environmentFlag = "STEADYTYPE_ONE_BRAIN_SUPPRESSION"
+
+    public static func fromEnvironment(_ environment: [String: String]) -> DisplayScoreSuppressionBrain {
+        guard let value = environment[environmentFlag] else {
+            return .current
+        }
+
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "on", oneBrainPreview.rawValue:
+            return .oneBrainPreview
+        default:
+            return .current
+        }
+    }
 }
 
 public struct DisplayScoreTrace: Equatable, Sendable {
@@ -309,7 +330,8 @@ public struct DisplayScorePolicy: Equatable, Sendable {
     public func decision(
         for score: DisplayScore,
         mode: CompletionRequestMode,
-        behaviorProfileID: AutocompleteBehaviorProfileID? = nil
+        behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
+        suppressionBrain: DisplayScoreSuppressionBrain = .current
     ) -> DisplayScoreDecision {
         let effectiveFinalScore = effectiveFinalScore(for: score)
         let trace = DisplayScoreTrace(
@@ -325,6 +347,18 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             )
         )
 
+        switch suppressionBrain {
+        case .current:
+            return currentDecision(for: score, trace: trace)
+        case .oneBrainPreview:
+            return oneBrainPreviewDecision(for: score, trace: trace)
+        }
+    }
+
+    private func currentDecision(
+        for score: DisplayScore,
+        trace: DisplayScoreTrace
+    ) -> DisplayScoreDecision {
         if score.risk >= highRiskThreshold {
             return .suppress(DisplayScoreSuppression(reason: .highRisk, trace: trace))
         }
@@ -343,11 +377,91 @@ public struct DisplayScorePolicy: Equatable, Sendable {
             return .suppress(DisplayScoreSuppression(reason: .lowAcceptedAndKeptProbability, trace: trace))
         }
 
-        guard effectiveFinalScore >= trace.threshold else {
+        guard trace.effectiveFinalScore >= trace.threshold else {
             return .suppress(DisplayScoreSuppression(reason: .belowThreshold, trace: trace))
         }
 
         return .display(trace)
+    }
+
+    private func oneBrainPreviewDecision(
+        for score: DisplayScore,
+        trace: DisplayScoreTrace
+    ) -> DisplayScoreDecision {
+        if score.risk >= highRiskThreshold {
+            return .suppress(DisplayScoreSuppression(reason: .highRisk, trace: trace))
+        }
+
+        guard trace.effectiveFinalScore >= trace.threshold else {
+            return .suppress(DisplayScoreSuppression(
+                reason: bindingReason(for: score, trace: trace),
+                trace: trace
+            ))
+        }
+
+        return .display(trace)
+    }
+
+    private func bindingReason(
+        for score: DisplayScore,
+        trace: DisplayScoreTrace
+    ) -> DisplayScoreSuppressionReason {
+        let gap = trace.threshold - trace.effectiveFinalScore
+        guard gap > 0 else {
+            return .belowThreshold
+        }
+
+        let candidates = bindingPenaltyCandidates(for: score, trace: trace)
+        if let flippingCandidate = candidates
+            .filter({ trace.effectiveFinalScore + $0.penalty >= trace.threshold })
+            .sorted(by: bindingCandidateSort)
+            .first {
+            return flippingCandidate.reason
+        }
+
+        return .belowThreshold
+    }
+
+    private func bindingPenaltyCandidates(
+        for score: DisplayScore,
+        trace: DisplayScoreTrace
+    ) -> [(reason: DisplayScoreSuppressionReason, penalty: Double, priority: Int)] {
+        var candidates: [(reason: DisplayScoreSuppressionReason, penalty: Double, priority: Int)] = []
+
+        if score.repetition > 0 {
+            candidates.append((.highRepetition, score.repetition, 0))
+        }
+
+        if score.instability > 0 {
+            candidates.append((.highInstability, score.instability, 1))
+        }
+
+        let effectiveLearningPenalty = score.learningRestraint * learningRestraintScoreScale
+        if effectiveLearningPenalty > 0 {
+            candidates.append((.learnedRestraint, effectiveLearningPenalty, 2))
+        }
+
+        if let acceptedAndKeptProbability = score.acceptedAndKeptProbability,
+           score.acceptedAndKeptSampleCount >= minimumAcceptedAndKeptSamples,
+           acceptedAndKeptProbability < trace.acceptedAndKeptProbabilityThreshold,
+           effectiveLearningPenalty <= 0 {
+            candidates.append((.lowAcceptedAndKeptProbability, trace.threshold - trace.effectiveFinalScore, 3))
+        }
+
+        return candidates
+    }
+
+    private func bindingCandidateSort(
+        _ lhs: (reason: DisplayScoreSuppressionReason, penalty: Double, priority: Int),
+        _ rhs: (reason: DisplayScoreSuppressionReason, penalty: Double, priority: Int)
+    ) -> Bool {
+        let leftOvershoot = lhs.penalty
+        let rightOvershoot = rhs.penalty
+        if abs(leftOvershoot - rightOvershoot) > 0.0001 {
+            return leftOvershoot < rightOvershoot
+        }
+
+        return lhs.priority < rhs.priority
     }
 
     public func acceptedAndKeptProbabilityThreshold(

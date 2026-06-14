@@ -49,7 +49,7 @@ struct SuggestionReplacementVisibilityPolicy: Equatable {
         switch reason {
         case .tooSlowToDisplay, .lowConfidence, .belowThreshold:
             return true
-        case .highRisk, .highRepetition, .highInstability, .lowAcceptedAndKeptProbability, nil:
+        case .highRisk, .highRepetition, .highInstability, .learnedRestraint, .lowAcceptedAndKeptProbability, nil:
             return false
         }
     }
