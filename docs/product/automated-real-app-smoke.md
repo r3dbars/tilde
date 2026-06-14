@@ -140,6 +140,16 @@ full-accept or field-send finalization signals, and still depends on the human
 visual check that the prompt stayed unsent. Claude Code uses that same bar
 through its explicit terminal-host proof lane.
 
+Codex one-word proof now leaves a redacted proof bundle for both blocked and
+successful runs. By default it writes under `dist/smoke-proof/`; set
+`AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROOF_EXPORT_DIR` to choose an exact output
+folder. The bundle contains only counts, line ranges, safe event metadata, and
+the next step. It does not copy prompt text, accepted text, screenshots, raw
+diagnostics, raw traces, document names, URLs, or clipboard data. If macOS TCC,
+focus, screenshot capture, key capture, insertion, or verification blocks full
+automation, the Codex lane fails closed and points at that bundle instead of
+asking the operator to infer the blocker from raw logs.
+
 Run the long typing endurance command when working the "typing must feel
 untouched" score:
 

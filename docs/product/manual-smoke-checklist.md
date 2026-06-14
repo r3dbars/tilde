@@ -200,6 +200,10 @@ AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh codex --manual-gate
   no assistant response started.
 - The recorder will not accept a Codex proof unless the disposable proof marker
   is explicitly confirmed.
+- The recorder exports a redacted proof bundle under `dist/smoke-proof/` unless
+  `AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROOF_EXPORT_DIR` points somewhere else.
+  Use it to see what Codex-controlled automation proved before any TCC, focus,
+  screenshot, key-capture, insertion, or verification block.
 - Full visible accept is disabled for this profile until separate full-accept no-submit proof exists.
 - Do not press Enter as part of the smoke pass.
 - When the recorder asks, type `NO-SUBMIT` only after confirming the prompt was not sent.
