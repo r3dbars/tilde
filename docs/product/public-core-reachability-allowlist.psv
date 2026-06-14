@@ -86,10 +86,3 @@ AutocompleteTraceReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/Aut
 TraceReplayDisplayDecisionDiff|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceDecisionReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceReplay|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
-HostCompatibilityPolicy|research|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host compatibility policy is covered by HostCompatibilityPolicyTests but not wired into the live app yet; runtime compatibility uses CompatibilityProfile/CompatibilityRouter.
-HostCompatibilityPolicyCatalog|research|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog is tested but not wired into the live app yet; runtime compatibility uses CompatibilityProfile/CompatibilityRouter.
-HostPolicyRuntimeState|research|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host compatibility policy value type is tested but not wired into the live app yet.
-HostPolicyProofState|research|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host compatibility policy value type is tested but not wired into the live app yet.
-HostPolicyKillSwitch|research|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host compatibility policy value type is tested but not wired into the live app yet.
-HostAppVersionProof|research|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host compatibility policy value type is tested but not wired into the live app yet.
-HostProofArtifact|research|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host compatibility policy value type is tested but not wired into the live app yet.
