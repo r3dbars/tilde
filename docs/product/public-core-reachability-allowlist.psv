@@ -86,6 +86,7 @@ AutocompleteTraceReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/Aut
 TraceReplayDisplayDecisionDiff|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceDecisionReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceReplay|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+BetaAcceptanceScorecard|proof-only|Sources/AutocompleteLabCore/Tracing/BetaAcceptanceScorecard.swift|Beta acceptance scoring is proof/reporting output for trace replay, not live app runtime behavior.
 RecentSpokenTranscriptProviding|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike (docs/product/spikes/voice-text-loop.md) Transcripted seam; not wired into the live app yet.
 InMemorySpokenTranscriptProvider|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike stub transcript provider; not wired into the live app yet.
 SpokenTranscriptFixture|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike fixture parser; not wired into the live app yet.
