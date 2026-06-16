@@ -2,8 +2,23 @@ import AppKit
 import AutocompleteLabCore
 
 protocol TextInsertionClient: AnyObject {
-    func insertText(_ text: String, allowDescendantTextFallback: Bool) -> Bool
-    func replaceSelectedTextBySettingValue(_ text: String, allowDescendantTextFallback: Bool) -> Bool
+    /// Write `text` into the focused element via the Accessibility selected-text API.
+    ///
+    /// `expectedFieldIdentity` binds the write to the field the acceptance pipeline validated:
+    /// the client must re-resolve the live focused target immediately before writing and refuse
+    /// (return `false`) if it drifted (different app/pid, or — outside descendant fallback — a
+    /// different element). Pass `nil` only for paths that do not originate from suggestion
+    /// acceptance. See `InsertionTargetIdentityGuard` and docs/security/threat-model.md (F1).
+    func insertText(
+        _ text: String,
+        expectedFieldIdentity: FocusedFieldIdentity?,
+        allowDescendantTextFallback: Bool
+    ) -> Bool
+    func replaceSelectedTextBySettingValue(
+        _ text: String,
+        expectedFieldIdentity: FocusedFieldIdentity?,
+        allowDescendantTextFallback: Bool
+    ) -> Bool
 }
 
 extension AccessibilityClient: TextInsertionClient {}
@@ -25,6 +40,7 @@ final class InsertionEngine {
     func insert(
         _ text: String,
         profile: CompatibilityProfile,
+        expectedFieldIdentity: FocusedFieldIdentity? = nil,
         skipping skippedModes: Set<InsertionMode> = []
     ) -> InsertionResult {
         guard !text.isEmpty else {
@@ -32,7 +48,12 @@ final class InsertionEngine {
         }
 
         for mode in InsertionModePlan.modes(for: profile, skipping: skippedModes) {
-            if let result = attempt(text, mode: mode, profile: profile) {
+            if let result = attempt(
+                text,
+                mode: mode,
+                profile: profile,
+                expectedFieldIdentity: expectedFieldIdentity
+            ) {
                 return result
             }
         }
@@ -40,11 +61,17 @@ final class InsertionEngine {
         return clipboardFallbackUnavailable()
     }
 
-    private func attempt(_ text: String, mode: InsertionMode, profile: CompatibilityProfile) -> InsertionResult? {
+    private func attempt(
+        _ text: String,
+        mode: InsertionMode,
+        profile: CompatibilityProfile,
+        expectedFieldIdentity: FocusedFieldIdentity?
+    ) -> InsertionResult? {
         switch mode {
         case .axSelectedText:
             if accessibilityClient.insertText(
                 text,
+                expectedFieldIdentity: expectedFieldIdentity,
                 allowDescendantTextFallback: profile.allowsDescendantTextFallback
             ) {
                 return InsertionResult(succeeded: true, mode: .axSelectedText, message: "Inserted via AX selected text.")
@@ -55,6 +82,7 @@ final class InsertionEngine {
         case .axValueReplacement:
             if accessibilityClient.replaceSelectedTextBySettingValue(
                 text,
+                expectedFieldIdentity: expectedFieldIdentity,
                 allowDescendantTextFallback: profile.allowsDescendantTextFallback
             ) {
                 return InsertionResult(succeeded: true, mode: .axValueReplacement, message: "Inserted via AX value replacement.")
@@ -65,6 +93,7 @@ final class InsertionEngine {
         case .axThenKeyEvents:
             if accessibilityClient.insertText(
                 text,
+                expectedFieldIdentity: expectedFieldIdentity,
                 allowDescendantTextFallback: profile.allowsDescendantTextFallback
             ) {
                 return InsertionResult(succeeded: true, mode: .axSelectedText, message: "Inserted via verified AX selected text.")

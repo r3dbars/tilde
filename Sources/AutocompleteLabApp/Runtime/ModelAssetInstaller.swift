@@ -84,7 +84,11 @@ struct ModelAssetInstaller {
             .deletingLastPathComponent()
             .appendingPathComponent(".\(manifest.fileName).download-\(UUID().uuidString)", isDirectory: true)
 
-        try fileManager.createDirectory(at: scratchURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(
+            at: scratchURL,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: SecureLocalStorage.directoryPermissions]
+        )
         defer {
             try? fileManager.removeItem(at: scratchURL)
         }
@@ -179,7 +183,17 @@ struct ModelAssetInstaller {
         }
 
         let parentURL = targetURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
+        // Owner-only model directory limits local tampering with downloaded weights between
+        // integrity check and load. See docs/security/threat-model.md (F5).
+        try fileManager.createDirectory(
+            at: parentURL,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: SecureLocalStorage.directoryPermissions]
+        )
+        try? fileManager.setAttributes(
+            [.posixPermissions: SecureLocalStorage.directoryPermissions],
+            ofItemAtPath: parentURL.path
+        )
 
         let backupURL = parentURL.appendingPathComponent(
             ".\(targetURL.lastPathComponent).backup-\(UUID().uuidString)",
