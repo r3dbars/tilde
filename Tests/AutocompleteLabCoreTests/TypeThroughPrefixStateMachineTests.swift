@@ -345,6 +345,36 @@ struct TypeThroughPrefixStateMachineTests {
         #expect(transition.traceMetadata["typeThroughConfidenceCredit"] == "true")
     }
 
+    @Test("Survived type-through advances the visible suggestion and emits the survived signal")
+    func survivedTypeThroughAdvancesVisibleSuggestionAndEmitsSignal() {
+        // Mirrors the live typing-progress path (advanceVisibleSuggestionForTypingProgressIfNeeded):
+        // a typed prefix that matches the visible head trims the suggestion forward and keeps the
+        // remainder visible — it does not cancel — while emitting the survived-typethrough signal.
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: " make this feel instant", maxVisibleWords: 8)
+        )
+
+        let transition = machine.apply(
+            to: &session,
+            input: input(
+                baselineBefore: "Can we",
+                currentBefore: "Can we make "
+            )
+        )
+
+        #expect(transition == .survived(TypeThroughPrefixSurvival(
+            typedCharacterCount: 6,
+            remainingVisibleCharacterCount: 17,
+            consumedFullSuggestion: false
+        )))
+        #expect(session.hasVisibleSuggestion)
+        #expect(session.visibleSuggestion?.visibleText == "this feel instant")
+        #expect(transition.traceMetadata["reason"] == "survived_typethrough")
+        #expect(transition.traceMetadata["typeThroughSurvival"] == "true")
+        #expect(transition.traceMetadata["typeThroughDecision"] == "survived")
+        #expect(transition.traceMetadata["typedThroughChars"] == "6")
+    }
+
     private func input(
         baselineField: FocusedFieldIdentity? = nil,
         currentField: FocusedFieldIdentity? = nil,
