@@ -197,6 +197,10 @@ run_blocking "first-token latency self-test" bash script/first_token_latency_sel
 run_blocking "local quality audit self-test" bash script/check_local_quality_audit_self_test.sh
 run_blocking "small model blind audit report" bash script/check_small_model_blind_audit_report.sh
 run_blocking "test coverage manifest" ./script/check_test_coverage_manifest.sh
+run_blocking "public-core allowlist canonical" python3 script/normalize_public_core_allowlist.py --check
+run_blocking "public-core allowlist normalizer self-test" bash script/normalize_public_core_allowlist_self_test.sh
+run_blocking "proof-manifest canonical" python3 script/normalize_proof_manifest.py --check
+run_blocking "proof-manifest normalizer self-test" bash script/normalize_proof_manifest_self_test.sh
 run_swift
 
 # --- REPORT lane (advisory; pending manual proof stays pending) -------------
