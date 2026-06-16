@@ -1,0 +1,14 @@
+# voice-text-loop spike — sample recent spoken transcript (synthetic, local only)
+#
+# One utterance per line. Blank lines and lines beginning with '#' are ignored
+# (see SpokenTranscriptFixture in
+# Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift).
+#
+# This is hand-written FIXTURE data for the prediction PoC. It is not captured
+# audio, it is not a real user's speech, and nothing here leaves this Mac.
+# Ordering is oldest-first; the freshest utterance is last.
+
+The onboarding flow should feel calm and quiet, not chatty
+Remind me to keep the suggestion panel out of the way while typing
+I want predictions to sound like me, using what I just said out loud
+Let's circle back on the latency budget before the beta cutoff
