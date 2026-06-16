@@ -222,36 +222,55 @@ def main() -> int:
 
     rows = read_rows(sys.stdin)
 
-    # Run each row on a worker thread so a single wedged generation cannot hang
-    # the whole batch. The model itself is loaded once and shared across rows.
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+    # MLX (0.31.x, the installed Metal build) binds the GPU stream to the thread
+    # that first touches the device while loading, and raises "There is no
+    # Stream(gpu, 0) in current thread." for generation on any other thread.
+    # A worker-thread executor therefore cannot run a single generation, which
+    # is why an earlier batch attempt could not finish even one row. Run each row
+    # on the main thread and bound it with a SIGALRM wall-clock timer so a wedged
+    # generation still fails its own row (exit 75) instead of hanging the batch.
+    import signal
+    import threading
 
-    executor = ThreadPoolExecutor(max_workers=1)
+    class _RowTimeout(Exception):
+        pass
+
+    def _on_row_timeout(signum, frame):  # noqa: ANN001 - POSIX signal handler signature
+        raise _RowTimeout()
+
+    use_alarm = hasattr(signal, "SIGALRM") and threading.current_thread() is threading.main_thread()
+    if use_alarm:
+        signal.signal(signal.SIGALRM, _on_row_timeout)
+
     exit_code = 0
     for row in rows:
         row_id = str(row.get("id") or "row")
         max_tokens = int(row.get("max_tokens") or 16)
         prompt = build_prompt(row, tokenizer)
         started = time.monotonic()
-        future = executor.submit(
-            generate_once, mlx_generate, model, tokenizer, prompt, max_tokens, sampler
-        )
+        if use_alarm:
+            signal.setitimer(signal.ITIMER_REAL, max(0.0, float(args.row_timeout)))
         try:
-            output = future.result(timeout=args.row_timeout)
-            latency_ms = round((time.monotonic() - started) * 1000)
-            print(json.dumps({"id": row_id, "output": output.strip(), "ok": True, "latency_ms": latency_ms}))
-        except FutureTimeout:
+            output = generate_once(mlx_generate, model, tokenizer, prompt, max_tokens, sampler)
+        except _RowTimeout:
+            # The one-shot itimer has already fired; nothing left to disarm.
             exit_code = 75
             print(json.dumps({"id": row_id, "ok": False, "error": f"timed out after {args.row_timeout}s"}))
-            # A timed-out generation may still be running on the single worker;
-            # stop accepting new work and bail rather than block indefinitely.
-            executor.shutdown(wait=False, cancel_futures=True)
             break
         except Exception as error:  # noqa: BLE001
+            if use_alarm:
+                signal.setitimer(signal.ITIMER_REAL, 0)
             print(json.dumps({"id": row_id, "ok": False, "error": str(error)}))
+            sys.stdout.flush()
+            continue
+        if use_alarm:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+        latency_ms = round((time.monotonic() - started) * 1000)
+        print(json.dumps({"id": row_id, "output": output.strip(), "ok": True, "latency_ms": latency_ms}))
         sys.stdout.flush()
 
-    executor.shutdown(wait=False, cancel_futures=True)
+    if use_alarm:
+        signal.setitimer(signal.ITIMER_REAL, 0)
     return exit_code
 
 

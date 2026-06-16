@@ -291,6 +291,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
     public let suppressedByReason: [String: Int]
     public let sensitiveSuppressedByCategory: [String: Int]
     public let sensitivePresentedByCategory: [String: Int]
+    public let presentedByApp: [String: Int]
     public let suppressedByApp: [String: Int]
     public let suppressedByMode: [String: Int]
     public let actionableSuppressedByApp: [String: Int]
@@ -390,6 +391,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         suppressedByReason: [String: Int] = [:],
         sensitiveSuppressedByCategory: [String: Int] = [:],
         sensitivePresentedByCategory: [String: Int] = [:],
+        presentedByApp: [String: Int] = [:],
         suppressedByApp: [String: Int] = [:],
         suppressedByMode: [String: Int] = [:],
         actionableSuppressedByApp: [String: Int] = [:],
@@ -488,6 +490,7 @@ public struct AutocompleteTraceSummary: Equatable, Sendable {
         self.suppressedByReason = suppressedByReason
         self.sensitiveSuppressedByCategory = sensitiveSuppressedByCategory
         self.sensitivePresentedByCategory = sensitivePresentedByCategory
+        self.presentedByApp = presentedByApp
         self.suppressedByApp = suppressedByApp
         self.suppressedByMode = suppressedByMode
         self.actionableSuppressedByApp = actionableSuppressedByApp
@@ -770,6 +773,7 @@ public struct AutocompleteTraceAnalyzer: Equatable, Sendable {
                 Array(firstPresentedByID.values).filter(isSensitivePresentation),
                 key: sensitivePresentationCategory
             ),
+            presentedByApp: counts(Array(firstPresentedByID.values), key: \.appBundleIdentifier),
             suppressedByApp: counts(suppressed, key: \.appBundleIdentifier),
             suppressedByMode: counts(suppressed, key: \.requestMode),
             actionableSuppressedByApp: counts(actionableSuppressed, key: \.appBundleIdentifier),
