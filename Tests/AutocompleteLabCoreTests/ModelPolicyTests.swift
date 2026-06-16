@@ -16,7 +16,7 @@ struct ModelPolicyTests {
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
 
-    @Test("Small draft experiment uses Qwen3 1.7B without changing the MVP default")
+    @Test("Small draft experiment uses an app-owned Qwen MLX model without changing the MVP default")
     func smallDraftExperimentUsesQwen3Medium() {
         let policy = CompletionModelPolicy.smallDraftExperiment
 
