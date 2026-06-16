@@ -142,11 +142,9 @@ final class CompatibilityLearningStore: @unchecked Sendable {
             profiles.removeValue(forKey: bundleIdentifier)
 
             do {
-                try FileManager.default.createDirectory(
-                    at: fileURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
+                SecureLocalStorage.createDirectory(at: fileURL.deletingLastPathComponent())
                 try encoder.encode(profiles).write(to: fileURL, options: .atomic)
+                SecureLocalStorage.restrictFile(at: fileURL)
             } catch {
                 DiagnosticsLog.shared.record(
                     "compatibility-learning-reset-failed",
@@ -190,11 +188,9 @@ final class CompatibilityLearningStore: @unchecked Sendable {
             }
 
             do {
-                try FileManager.default.createDirectory(
-                    at: fileURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
+                SecureLocalStorage.createDirectory(at: fileURL.deletingLastPathComponent())
                 try encoder.encode(profiles).write(to: fileURL, options: .atomic)
+                SecureLocalStorage.restrictFile(at: fileURL)
             } catch {
                 DiagnosticsLog.shared.record(
                     "compatibility-learning-disable-screenshot-tracing-failed",
@@ -215,6 +211,7 @@ final class CompatibilityLearningStore: @unchecked Sendable {
             if sanitized != profiles {
                 do {
                     try encoder.encode(sanitized).write(to: fileURL, options: .atomic)
+                    SecureLocalStorage.restrictFile(at: fileURL)
                 } catch {
                     DiagnosticsLog.shared.record(
                         "compatibility-learning-expiry-write-failed",
@@ -251,11 +248,9 @@ final class CompatibilityLearningStore: @unchecked Sendable {
             profiles[bundleIdentifier] = profile
 
             do {
-                try FileManager.default.createDirectory(
-                    at: fileURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
+                SecureLocalStorage.createDirectory(at: fileURL.deletingLastPathComponent())
                 try encoder.encode(profiles).write(to: fileURL, options: .atomic)
+                SecureLocalStorage.restrictFile(at: fileURL)
             } catch {
                 DiagnosticsLog.shared.record(
                     "compatibility-learning-write-failed",

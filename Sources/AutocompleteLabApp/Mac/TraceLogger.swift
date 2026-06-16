@@ -69,11 +69,9 @@ actor TraceLogger {
         _ event: AutocompleteTraceEvent,
         to logURL: URL
     ) throws {
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(
-            at: logURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        // raw-traces.jsonl carries raw dogfood content when enabled — keep owner-only
+        // (0700 dir / 0600 file). See docs/security/threat-model.md (F2).
+        SecureLocalStorage.createDirectory(at: logURL.deletingLastPathComponent())
 
         let data = try encoder.encode(event)
         guard var line = String(data: data, encoding: .utf8) else {
@@ -82,9 +80,7 @@ actor TraceLogger {
 
         line.append("\n")
 
-        if !fileManager.fileExists(atPath: logURL.path) {
-            fileManager.createFile(atPath: logURL.path, contents: nil)
-        }
+        SecureLocalStorage.ensureFile(at: logURL)
 
         let handle = try FileHandle(forWritingTo: logURL)
         try handle.seekToEnd()
@@ -128,6 +124,8 @@ actor TraceLogger {
         }
 
         try? data.write(to: url, options: .atomic)
+        // Atomic rewrite creates a fresh inode at umask; re-tighten to owner-only.
+        SecureLocalStorage.restrictFile(at: url)
     }
 
     private func pruneScreenshots(at url: URL, maxAgeDays: Int) {
