@@ -42,7 +42,7 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 | Browser webmail | blocked | Email composers can send messages and expose private recipients/subjects; no disposable real-service proof exists. |
 | Browser ChatGPT | blocked | Real ChatGPT prompt surfaces need one-word no-submit proof; the local browser-chat harness does not count. |
 | Prompt-app full accept | proof-only | Codex default composer has exact separate no-submit screenshot and insertion proof; other prompt/chat full-accept claims remain blocked. |
-| Terminal-host Claude Code | proof-only/iceboxed | Terminal and iTerm2 have bounded proof-mode rows, Ghostty insertion remains unproven, and no terminal host counts as beta-safe normal writing support. |
+| Terminal-host Claude Code | proof-only (dogfood) | Default-on word-only dogfood lane: marker-gated, shell-command guarded, verified one-word no-submit accepts on Terminal and iTerm2. Ghostty insertion remains unproven, full accept stays blocked, and no terminal host counts as beta-safe normal writing support. |
 | Chrome production text fields | blocked | Public proof pages and production browser apps do not count as beta-safe local fixture proof. |
 | Claude desktop layouts | proof-only | Default one-word no-submit proof exists, but normal beta use, layout variants, and full accept remain blocked. |
 | Codex layouts | proof-only | Default one-word and full-accept no-submit proof is recorded for the Codex composer; normal beta use and broader layouts remain gated. |
@@ -91,10 +91,10 @@ A- rows as `partial`, even when they have a passing live smoke slice.
   `docs/product/visual-placement-screenshots/`.
 - Accept proof must show verified insertion, not just a visible suggestion.
 - Prompt apps must prove one-word accept without submit before they can run in proof mode; they do not graduate into beta-safe normal use from that alone.
-- Terminal-hosted Claude Code must first prove the terminal adapter cannot submit shell input, and host-labeled proof must not stand in for untested terminal hosts.
-- Terminal-hosted Claude Code is iceboxed from beta readiness; Terminal/iTerm2
-  proof rows and Ghostty placement evidence do not count as normal writing-app
-  support.
+- Terminal-hosted Claude Code stays shell-command guarded so the terminal adapter cannot submit shell input, and host-labeled proof must not stand in for untested terminal hosts.
+- Terminal-hosted Claude Code is a word-only dogfood lane, not a beta-safe
+  writing surface; Terminal/iTerm2 proof rows and Ghostty placement evidence do
+  not count as normal writing-app support, and full accept stays blocked.
 - Prompt-app full accept needs its own separate full-accept no-submit proof.
 - Real ChatGPT, Slack, Discord, browser webmail, Google Docs, and Notion require
   exact disposable real-service proof with screenshot-backed placement and verified insertion.

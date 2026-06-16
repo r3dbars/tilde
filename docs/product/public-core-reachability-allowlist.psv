@@ -11,6 +11,13 @@ HostPolicyRuntimeState|proof-only|Sources/AutocompleteLabCore/Configuration/Host
 HostProofArtifact|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Versioned host policy metadata is used by proof manifest checks and tests, not live app runtime wiring.
 ManualDisableDefaultOffPolicy|research|Sources/AutocompleteLabCore/Configuration/ManualDisableDefaultOffPolicy.swift|Manual disable default-off behavior is not wired into the live app yet.
 TracePrivacyPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift|Raw trace privacy policy is covered by proof/export tests but app logging uses app-owned trace filtering.
+HostPolicyRuntimeState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
+HostPolicyProofState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
+HostPolicyKillSwitch|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
+HostAppVersionProof|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
+HostProofArtifact|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
+HostCompatibilityPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
+HostCompatibilityPolicyCatalog|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
 LocalCompletionRuntimeConfiguration|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
 LocalCompletionRuntimeRunner|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
 LocalCompletionRuntimeError|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
@@ -86,3 +93,8 @@ AutocompleteTraceReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/Aut
 TraceReplayDisplayDecisionDiff|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceDecisionReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceReplay|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+RecentSpokenTranscriptProviding|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike (docs/product/spikes/voice-text-loop.md) Transcripted seam; not wired into the live app yet.
+InMemorySpokenTranscriptProvider|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike stub transcript provider; not wired into the live app yet.
+SpokenTranscriptFixture|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike fixture parser; not wired into the live app yet.
+RecentSpokenContextPolicy|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike opt-in policy; default off and not wired into the live app yet.
+VoiceContextPhrasePredictor|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike fusion predictor; not wired into the live app yet.
