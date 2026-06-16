@@ -4,13 +4,18 @@
 # Classification must be one of: experimental, research, proof-only.
 ManualDisableDefaultOffPolicy|research|Sources/AutocompleteLabCore/Configuration/ManualDisableDefaultOffPolicy.swift|Manual disable default-off behavior is not wired into the live app yet.
 TracePrivacyPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift|Raw trace privacy policy is covered by proof/export tests but app logging uses app-owned trace filtering.
-HostPolicyRuntimeState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
-HostPolicyProofState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
-HostPolicyKillSwitch|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
-HostAppVersionProof|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
-HostProofArtifact|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
-HostCompatibilityPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
-HostCompatibilityPolicyCatalog|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
+# HostCompatibilityPolicy* is the per-host safety/proof MIRROR. Live suggest/insert gating reads
+# CompatibilityProfile (promptAppSafetyMode, canPresentSuggestions, isSensitive) + the denylist, not this
+# catalog. It backs docs/product/proof-manifest.json (verify_host_policy in check_proof_manifest.py) and is
+# cross-checked against CompatibilityProfileStore by HostCompatibilityPolicyTests, so the wiring script
+# cannot trace it through Swift. See the header of HostCompatibilityPolicy.swift.
+HostCompatibilityPolicyCatalog|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Per-host safety/proof catalog that backs docs/product/proof-manifest.json (verify_host_policy in check_proof_manifest.py) and is cross-checked against the live CompatibilityProfileStore by HostCompatibilityPolicyTests; runtime gating reads CompatibilityProfile, not this catalog.
+HostCompatibilityPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Per-host policy entry mirrored into proof-manifest.json hostPolicy.entries; HostCompatibilityPolicyTests asserts its safetyMode equals CompatibilityProfile.promptAppSafetyMode. The live app reads the profile, not this type.
+HostAppVersionProof|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host version-proof field (exact/pending) recorded in proof-manifest.json versionState/hostVersion and exercised by HostCompatibilityPolicyTests; proof metadata, not a runtime input.
+HostPolicyRuntimeState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Per-host runtime-state proof field mirrored into proof-manifest.json and cross-checked against CompatibilityProfile.canPresentSuggestions by HostCompatibilityPolicyTests; the live app derives runtime state from the profile.
+HostPolicyProofState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Per-host proof-state field recorded in proof-manifest.json and exercised by HostCompatibilityPolicyTests; tracks proof progress, not a runtime gate.
+HostPolicyKillSwitch|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Per-host kill-switch proof field recorded in proof-manifest.json and exercised by HostCompatibilityPolicyTests; describes proof and kill posture, not consulted by the live suggest/insert path.
+HostProofArtifact|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Proof-artifact references (screenshots, manual smokes) carried by HostCompatibilityPolicy and mirrored into proof-manifest.json proofArtifacts; proof evidence only.
 LocalCompletionRuntimeConfiguration|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
 LocalCompletionRuntimeRunner|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
 LocalCompletionRuntimeError|research|Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift|Legacy process runtime scaffold; production runtime wiring is app-owned MLX.
@@ -86,3 +91,9 @@ AutocompleteTraceReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/Aut
 TraceReplayDisplayDecisionDiff|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceDecisionReplayReport|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay decision diff is proof tooling for reviewed suppression previews, not app runtime behavior.
 AutocompleteTraceReplay|proof-only|Sources/AutocompleteLabCore/Tracing/AutocompleteTraceReplay.swift|Trace replay is a proof/check executable path, not app runtime behavior.
+BetaAcceptanceScorecard|proof-only|Sources/AutocompleteLabCore/Tracing/BetaAcceptanceScorecard.swift|Beta acceptance scoring is proof/reporting output for trace replay, not live app runtime behavior.
+RecentSpokenTranscriptProviding|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike (docs/product/spikes/voice-text-loop.md) Transcripted seam; not wired into the live app yet.
+InMemorySpokenTranscriptProvider|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike stub transcript provider; not wired into the live app yet.
+SpokenTranscriptFixture|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike fixture parser; not wired into the live app yet.
+RecentSpokenContextPolicy|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike opt-in policy; default off and not wired into the live app yet.
+VoiceContextPhrasePredictor|research|Sources/AutocompleteLabCore/Engine/VoiceContextPhrasePredictor.swift|Voice-text loop spike fusion predictor; not wired into the live app yet.

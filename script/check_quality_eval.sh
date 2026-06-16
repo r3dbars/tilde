@@ -8,6 +8,7 @@ swift test --filter CompletionQualityEvalTests
 swift test --filter OfflineModelQualityEvalTests
 swift test --filter WordCompletionQualityEvalTests
 swift test --filter CompletionPredictionQualityEvalTests
+swift test --filter SuggestionUsefulnessScorecardEvalTests
 ./script/check_small_model_blind_audit_report.sh
 
 REPORT_PATH="docs/evals/word-completion-quality-2026-05-09.md"
@@ -55,6 +56,31 @@ for required in \
   "not a claim that the live model is 100/100"; do
   if ! grep -F "$required" "$PREDICTION_REPORT_PATH" >/dev/null; then
     echo "completion prediction quality report missing required section: $required" >&2
+    exit 1
+  fi
+done
+
+USEFULNESS_REPORT_PATH="docs/evals/suggestion-usefulness-scorecard-2026-06-14.md"
+if [[ ! -f "$USEFULNESS_REPORT_PATH" ]]; then
+  echo "suggestion usefulness scorecard report missing: $USEFULNESS_REPORT_PATH" >&2
+  exit 1
+fi
+
+for required in \
+  "Suggestion Usefulness Scorecard - 20 Synthetic Cases" \
+  "Score: 100/100" \
+  "Candidate rows scored: 20" \
+  "Display-eligible rows: 18" \
+  "Useful suggestions: 20/20" \
+  "Short suggestions: 20/20" \
+  "Non-repetitive suggestions: 20/20" \
+  "Safe or suppressed rows: 20/20" \
+  "Non-annoyance gates: 6/6" \
+  "| Total | 20/20 | 18/18 | 20/20 | 20/20 | 20/20 | 20/20 |" \
+  "one-brain preview keeps high risk as a hard veto" \
+  "not private dogfood or live model telemetry"; do
+  if ! grep -F "$required" "$USEFULNESS_REPORT_PATH" >/dev/null; then
+    echo "suggestion usefulness scorecard report missing required section: $required" >&2
     exit 1
   fi
 done
