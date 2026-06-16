@@ -92,6 +92,12 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
         requirements.allSatisfy(\.passed)
     }
 
+    /// Decision-oriented per-app health rollup derived from the same summary. Surfaced in the
+    /// report so a beta reviewer sees "is it good, and where is it not" alongside coverage.
+    public var betaAcceptanceScorecard: BetaAcceptanceScorecard {
+        BetaAcceptanceScorecard(summary: summary)
+    }
+
     public var markdown: String {
         var lines: [String] = [
             "# Autocomplete Trace Replay",
@@ -133,6 +139,9 @@ public struct AutocompleteTraceReplayReport: Equatable, Sendable {
                 .sorted { lhs, rhs in lhs.key < rhs.key }
                 .map { "- \($0.key): \($0.value)" }
         }
+
+        lines.append("")
+        lines.append(betaAcceptanceScorecard.markdown)
 
         return lines.joined(separator: "\n")
     }
@@ -749,4 +758,5 @@ public struct AutocompleteTraceReplay: Sendable {
             return suppression.reason.rawValue
         }
     }
+
 }
