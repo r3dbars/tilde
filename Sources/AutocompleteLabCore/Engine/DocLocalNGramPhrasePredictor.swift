@@ -29,6 +29,7 @@ public struct DocLocalNGramPhrasePredictor: Equatable, Sendable {
     public func selection(
         for textBeforeCursor: String,
         localContextTexts: [String] = [],
+        spokenContextTexts: [String] = [],
         behaviorProfileID: AutocompleteBehaviorProfileID?,
         maxVisibleWords: Int = 4,
         allowsPromptAppPrediction: Bool = false
@@ -53,7 +54,8 @@ public struct DocLocalNGramPhrasePredictor: Equatable, Sendable {
 
         let corpora = sourceCorpora(
             textBeforeCursor: textBeforeCursor,
-            localContextTexts: localContextTexts
+            localContextTexts: localContextTexts,
+            spokenContextTexts: spokenContextTexts
         )
         guard !corpora.isEmpty else {
             return noSuggestion("empty-corpus")
@@ -103,7 +105,8 @@ public struct DocLocalNGramPhrasePredictor: Equatable, Sendable {
 
     private func sourceCorpora(
         textBeforeCursor: String,
-        localContextTexts: [String]
+        localContextTexts: [String],
+        spokenContextTexts: [String] = []
     ) -> [DocLocalNGramCorpus] {
         var corpora: [DocLocalNGramCorpus] = []
         let beforeCursorTokens = Self.tokens(in: textBeforeCursor, source: .beforeCursor)
@@ -115,6 +118,20 @@ public struct DocLocalNGramPhrasePredictor: Equatable, Sendable {
             .flatMap { Self.tokens(in: $0, source: .localContext) }
         if localContextTokens.count >= minimumMatchWords + 1 {
             corpora.append(DocLocalNGramCorpus(source: .localContext, tokens: localContextTokens))
+        }
+
+        // Spike: opt-in recent *spoken* transcript corpus (see
+        // docs/product/spikes/voice-text-loop.md). Entries arrive already bounded
+        // and are joined as separate lines so a continuation never bleeds across
+        // two snapshots, and so a more recent entry earns a higher recency score.
+        // This stays empty unless a caller opts in to recent spoken context, so
+        // typed-only behavior is unchanged.
+        let spokenContextTokens = Self.tokens(
+            in: spokenContextTexts.joined(separator: "\n"),
+            source: .spokenTranscript
+        )
+        if spokenContextTokens.count >= minimumMatchWords + 1 {
+            corpora.append(DocLocalNGramCorpus(source: .spokenTranscript, tokens: spokenContextTokens))
         }
 
         return corpora
@@ -203,7 +220,7 @@ public struct DocLocalNGramPhrasePredictor: Equatable, Sendable {
             return lhs.order > rhs.order
         }
         if lhs.source != rhs.source {
-            return lhs.source == .beforeCursor
+            return lhs.source.rank < rhs.source.rank
         }
         if abs(lhs.score - rhs.score) > 0.0001 {
             return lhs.score > rhs.score
@@ -294,6 +311,18 @@ public struct DocLocalNGramPhrasePredictor: Equatable, Sendable {
 private enum DocLocalNGramSource: String, Equatable, Sendable {
     case beforeCursor = "before-cursor"
     case localContext = "local-context"
+    case spokenTranscript = "spoken-transcript"
+
+    /// Precedence when two candidates tie on match length. Typed text the user
+    /// can already see ranks above remembered local context, which ranks above
+    /// the opt-in recent spoken corpus.
+    var rank: Int {
+        switch self {
+        case .beforeCursor: return 0
+        case .localContext: return 1
+        case .spokenTranscript: return 2
+        }
+    }
 }
 
 private struct DocLocalNGramToken: Equatable, Sendable {
@@ -322,7 +351,12 @@ private struct DocLocalNGramCandidate: Equatable, Sendable {
         let recencyScore = corpusTokenCount > 0
             ? min(0.08, Double(startIndex) / Double(corpusTokenCount) * 0.08)
             : 0
-        let sourceScore = source == .beforeCursor ? 0.05 : 0.02
+        let sourceScore: Double
+        switch source {
+        case .beforeCursor: sourceScore = 0.05
+        case .spokenTranscript: sourceScore = 0.03
+        case .localContext: sourceScore = 0.02
+        }
         return 0.45 + orderScore + lengthScore + recencyScore + sourceScore
     }
 }
