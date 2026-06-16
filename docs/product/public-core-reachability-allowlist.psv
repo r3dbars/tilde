@@ -3,13 +3,6 @@
 # transitively reachable through a wired core API, or listed here.
 # Classification must be one of: experimental, research, proof-only.
 ManualDisableDefaultOffPolicy|research|Sources/AutocompleteLabCore/Configuration/ManualDisableDefaultOffPolicy.swift|Manual disable default-off behavior is not wired into the live app yet.
-HostPolicyRuntimeState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host proof catalog records support claims; live routing still uses app compatibility profiles.
-HostPolicyProofState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host proof catalog records support claims; live routing still uses app compatibility profiles.
-HostPolicyKillSwitch|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host proof catalog records support claims; live routing still uses app compatibility profiles.
-HostAppVersionProof|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host proof catalog records support claims; live routing still uses app compatibility profiles.
-HostProofArtifact|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host proof catalog records support claims; live routing still uses app compatibility profiles.
-HostCompatibilityPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host proof catalog records support claims; live routing still uses app compatibility profiles.
-HostCompatibilityPolicyCatalog|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host proof catalog records support claims; live routing still uses app compatibility profiles.
 TracePrivacyPolicy|proof-only|Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift|Raw trace privacy policy is covered by proof/export tests but app logging uses app-owned trace filtering.
 HostPolicyRuntimeState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
 HostPolicyProofState|proof-only|Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift|Host policy catalog backs proof manifest checks and is not wired into live app routing yet.
