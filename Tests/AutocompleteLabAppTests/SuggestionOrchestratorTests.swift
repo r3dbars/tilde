@@ -522,6 +522,41 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Fast phrase selection prefers the doc-local n-gram over a competing canned bridge")
+    func fastPhraseSelectionPrefersDocLocalNGramOverCompetingCannedBridge() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        // The phrase the canned bridge knows ("please make this" -> " clearer"): with no doc-local
+        // corpus the instant path falls through to the canned predictor.
+        let cannedOnly = orchestrator.fastPhraseSelection(
+            for: "Please make this",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 8,
+            allowPredictiveFallback: true
+        )
+
+        #expect(cannedOnly.suggestion?.visibleText == " clearer")
+        #expect(cannedOnly.traceMetadata["candidateSelectionSource"] == "canned-bridge")
+        #expect(cannedOnly.traceMetadata["cannedBridgeMatch"] == "please make this")
+
+        // Same head, but now repeated in the doc-local corpus: the n-gram predictor is consulted
+        // first and wins, so the returned candidate is the corpus continuation, not the canned one.
+        let docLocal = orchestrator.fastPhraseSelection(
+            for: "Please make this",
+            docLocalContextTexts: ["Please make this guide land cleanly"],
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 8,
+            allowPredictiveFallback: true
+        )
+
+        #expect(docLocal.suggestion?.visibleText == " guide land cleanly")
+        #expect(docLocal.suggestion?.visibleText != " clearer")
+        #expect(docLocal.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
+        #expect(docLocal.traceMetadata["docLocalNGramMatch"] == "order-3-local-context")
+        #expect(docLocal.traceMetadata["cannedBridgeMatch"] == nil)
+    }
+
+    @MainActor
     @Test("Fast phrase selection can opt into prompt-app proof prediction")
     func fastPhraseSelectionPromptAppProofPrediction() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
