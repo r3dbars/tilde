@@ -12,6 +12,18 @@
     "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
     "entries": [
       {
+        "bundle": "*",
+        "displayName": "Generic App",
+        "versionState": "pending",
+        "versionReason": "Default-on fallback profile; exact version proof is captured only when a custom app row graduates.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [],
+        "notes": "Generic Accessibility fallback is default-on but uncustomized. Per-app pause remains the escape hatch, and custom app rows need exact proof before stronger support claims."
+      },
+      {
         "bundle": "com.apple.TextEdit",
         "displayName": "TextEdit",
         "versionState": "exact",
@@ -225,7 +237,7 @@
         "hostBuild": "2.1.128",
         "versionSource": "/Users/redbars/Library/Application Support/Claude/claude-code/2.1.128/claude.app",
         "safetyMode": "wordOnly",
-        "runtimeState": "userToggleAllowed",
+        "runtimeState": "proofModeOnly",
         "proofState": "partial",
         "killSwitch": "perHostDisable",
         "proofArtifacts": [
@@ -238,7 +250,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Default-on dogfood lane; terminal-host support is Claude-detected and one-word only. Full accept stays off."
+        "notes": "Claude Code remains one-word and proof-gated in the proof manifest. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -1043,6 +1055,15 @@
   ],
   "profileCoverage": [
     {
+      "bundle": "*",
+      "displayName": "Generic App",
+      "supportLevel": "yellow",
+      "surface": "Generic Accessibility fallback",
+      "status": "partial",
+      "owner": "compatibility fallback lane",
+      "safetyNote": "Default-on fallback can try ordinary writing fields, but untested apps stay yellow and must be paused or given a custom profile when placement or insertion is wrong."
+    },
+    {
       "bundle": "com.apple.TextEdit",
       "displayName": "TextEdit",
       "supportLevel": "green",
@@ -1121,7 +1142,7 @@
       "surface": "Claude Code",
       "status": "partial",
       "owner": "terminal-host adapter lane",
-      "safetyNote": "Default-on dogfood is one-word only with prompt safety gates. Full accept stays off, and bad placement or insertion must be fixed from screenshots before broader claims."
+      "safetyNote": "Claude Code is enabled only as a dogfood prompt target with one-word acceptance and no-submit safety gates; broader terminal-host behavior remains guarded."
     },
     {
       "bundle": "com.anthropic.claudefordesktop",
