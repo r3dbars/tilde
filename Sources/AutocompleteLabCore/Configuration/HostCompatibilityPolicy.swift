@@ -1,5 +1,25 @@
 import Foundation
 
+// Per-host safety/proof MIRROR — not the live runtime authority.
+//
+// Runtime "where to suggest / where to insert / what acceptance mode" decisions are made by
+// `CompatibilityProfile` / `CompatibilityProfileStore` (promptAppSafetyMode, canPresentSuggestions,
+// isSensitive) plus the denylist and `SensitiveTextFieldPolicy`. This catalog restates the same per-host
+// posture in proof terms and adds proof-tracking metadata (exact/pending host version, proofState,
+// killSwitch, proofArtifacts).
+//
+// Its consumers are the proof system, not the app loop:
+//   - `docs/product/proof-manifest.json` mirrors it (validated by `verify_host_policy` in
+//     `script/check_proof_manifest.py`; the policy version constant below is also read by
+//     `script/check_proof_manifest_self_test.sh`, so keep proof tokens out of this header comment).
+//   - `HostCompatibilityPolicyTests` cross-checks it against `CompatibilityProfileStore.mvp` so the two can
+//     never drift (e.g. `safetyMode == promptAppSafetyMode`, send surfaces are never `.notPrompt`).
+//
+// Because nothing in `AutocompleteLabApp` references it, it is classified `proof-only` in
+// `docs/product/public-core-reachability-allowlist.psv`. Keep it in sync with the live profile store rather
+// than wiring a second runtime source of truth; if you intend to delete it, retire the proof-manifest
+// hostPolicy section and the cross-check test in the same change.
+
 public enum HostPolicyRuntimeState: String, Equatable, Sendable {
     case userToggleAllowed
     case proofModeOnly
