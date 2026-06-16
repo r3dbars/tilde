@@ -41,7 +41,7 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "typeThroughPrefixStateMachine.apply(")
         try require(appDelegate, contains: "to: &suggestionSession,")
         try require(appDelegate, contains: "case let .survived(survival):")
-        try require(appDelegate, contains: "currentSuggestionDisplayedText = suggestionSession.visibleSuggestion?.visibleText")
+        try require(appDelegate, contains: "currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText")
         try require(appDelegate, contains: "\"Shown: typing through suggestion\"")
         try require(appDelegate, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
         try require(appDelegate, contains: "reason: \"survived_typethrough\"")
