@@ -47,10 +47,9 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
             }
 
             do {
-                try FileManager.default.createDirectory(
-                    at: screenshotURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
+                // Owner-only (0700) screenshot directory; the PNG itself is tightened after
+                // screencapture writes it. See docs/security/threat-model.md (F2).
+                SecureLocalStorage.createDirectory(at: screenshotURL.deletingLastPathComponent())
 
                 Thread.sleep(forTimeInterval: 0.05)
 
@@ -92,6 +91,10 @@ final class ScreenshotTraceCapture: @unchecked Sendable {
                     )
                     return
                 }
+
+                // screencapture writes the PNG at the process umask (world-readable); tighten
+                // to owner-only. Screenshots can contain whatever is on screen near the caret.
+                SecureLocalStorage.restrictFile(at: screenshotURL)
 
                 CompatibilityLearningStore.shared.recordObservation(
                     for: bundleIdentifier,

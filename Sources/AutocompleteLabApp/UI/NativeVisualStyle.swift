@@ -26,6 +26,12 @@ struct NativeAppearanceCoverage: Equatable {
 struct SuggestionPanelVisualStyle {
     let appearanceCoverage: NativeAppearanceCoverage
     let mirrorMaterial: NSVisualEffectView.Material
+    /// Opaque fill used in place of `mirrorMaterial` when the user enables
+    /// Reduce Transparency. Dynamic so it tracks light/dark/high-contrast.
+    let mirrorSolidBackgroundColor: NSColor
+    /// Hairline border drawn around the solid fill so the pill keeps a defined
+    /// edge once the translucent vibrancy is gone.
+    let mirrorSolidBorderColor: NSColor
     let mirrorCornerRadius: CGFloat
     let usesDynamicSystemInlineTextColor: Bool
     let usesFocusedFieldFontWhenAvailable: Bool
@@ -34,6 +40,8 @@ struct SuggestionPanelVisualStyle {
     static let native = SuggestionPanelVisualStyle(
         appearanceCoverage: .lightDarkAndHighContrast,
         mirrorMaterial: .popover,
+        mirrorSolidBackgroundColor: .controlBackgroundColor,
+        mirrorSolidBorderColor: .separatorColor,
         mirrorCornerRadius: 7,
         usesDynamicSystemInlineTextColor: true,
         usesFocusedFieldFontWhenAvailable: true,
