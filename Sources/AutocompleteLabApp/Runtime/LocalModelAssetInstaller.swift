@@ -167,7 +167,8 @@ struct LocalModelAssetInstaller: Sendable {
             .appendingPathComponent(".\(manifest.fileName).download-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
             at: scratchURL,
-            withIntermediateDirectories: true
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: SecureLocalStorage.directoryPermissions]
         )
         defer {
             try? FileManager.default.removeItem(at: scratchURL)

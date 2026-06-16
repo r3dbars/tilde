@@ -123,8 +123,9 @@ final class PersonalCaptureEpisodeStore: @unchecked Sendable {
 
     private func persist(_ record: SuggestionEpisodeRecord) {
         do {
-            let fileManager = FileManager.default
-            try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            // Episode records and dashboards embed verbatim typed/suggested text — keep
+            // owner-only (0700 dir / 0600 file). See docs/security/threat-model.md (F2).
+            SecureLocalStorage.createDirectory(at: folderURL)
 
             let data = try encoder.encode(record)
             guard var line = String(data: data, encoding: .utf8) else {
@@ -134,21 +135,22 @@ final class PersonalCaptureEpisodeStore: @unchecked Sendable {
 
             let writeDate = now()
             let fileURL = episodeFileURL(for: writeDate)
-            if !fileManager.fileExists(atPath: fileURL.path) {
-                fileManager.createFile(atPath: fileURL.path, contents: nil)
-            }
+            SecureLocalStorage.ensureFile(at: fileURL)
 
             let handle = try FileHandle(forWritingTo: fileURL)
             try handle.seekToEnd()
             try handle.write(contentsOf: Data(line.utf8))
             try handle.close()
 
+            let dashboardURL = dashboardFileURL(for: writeDate)
             let dashboard = scorecard(for: writeDate).markdown
             try dashboard.write(
-                to: dashboardFileURL(for: writeDate),
+                to: dashboardURL,
                 atomically: true,
                 encoding: .utf8
             )
+            // Atomic write creates a fresh inode at the process umask; re-tighten.
+            SecureLocalStorage.restrictFile(at: dashboardURL)
         } catch {
             DiagnosticsLog.shared.record(
                 "personal-capture-episode-write-failed",

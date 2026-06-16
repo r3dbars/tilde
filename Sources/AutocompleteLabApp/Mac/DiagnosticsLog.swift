@@ -22,15 +22,9 @@ final class DiagnosticsLog: @unchecked Sendable {
         queue.async { [self, logURL] in
             do {
                 let line = format(event: event, metadata: metadata)
-                let fileManager = FileManager.default
-                try fileManager.createDirectory(
-                    at: logURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-
-                if !fileManager.fileExists(atPath: logURL.path) {
-                    fileManager.createFile(atPath: logURL.path, contents: nil)
-                }
+                // Owner-only (0700 dir / 0600 file). See docs/security/threat-model.md (F2).
+                SecureLocalStorage.createDirectory(at: logURL.deletingLastPathComponent())
+                SecureLocalStorage.ensureFile(at: logURL)
 
                 let handle = try FileHandle(forWritingTo: logURL)
                 try handle.seekToEnd()
