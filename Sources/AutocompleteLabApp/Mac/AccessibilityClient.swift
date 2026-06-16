@@ -853,11 +853,7 @@ final class AccessibilityClient: @unchecked Sendable {
     private func focusedElement(for processIdentifier: pid_t) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(processIdentifier)
         configureMessagingTimeout(for: appElement)
-        guard let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute) else {
-            return nil
-        }
-
-        return (focusedElementValue as! AXUIElement)
+        return copyElementAttribute(appElement, attribute: kAXFocusedUIElementAttribute)
     }
 
     private func focusedElement(
@@ -886,11 +882,7 @@ final class AccessibilityClient: @unchecked Sendable {
     private func focusedWindow(for processIdentifier: pid_t) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(processIdentifier)
         configureMessagingTimeout(for: appElement)
-        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
-            return nil
-        }
-
-        return (windowValue as! AXUIElement)
+        return copyElementAttribute(appElement, attribute: kAXFocusedWindowAttribute)
     }
 
     func focusedWindowText(
@@ -900,10 +892,9 @@ final class AccessibilityClient: @unchecked Sendable {
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
         configureMessagingTimeout(for: appElement)
         var values: [String] = []
-        if let focusedElementValue = copyAttribute(appElement, attribute: kAXFocusedUIElementAttribute),
-           CFGetTypeID(focusedElementValue) == AXUIElementGetTypeID() {
+        if let focusedElement = copyElementAttribute(appElement, attribute: kAXFocusedUIElementAttribute) {
             collectAccessibleText(
-                from: (focusedElementValue as! AXUIElement),
+                from: focusedElement,
                 depth: 0,
                 maximumCharacters: maximumCharacters,
                 into: &values
@@ -1061,6 +1052,45 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         return value
+    }
+
+    /// Reads an attribute expected to be an `AXUIElement`, returning nil when the target app
+    /// hands back a different CF type. The call sites historically force-cast the raw
+    /// `CFTypeRef`, which crashes the whole menu-bar process if an app violates the AX
+    /// contract; degrading to nil instead just means "no suggestion" for that read.
+    private func copyElementAttribute(_ element: AXUIElement, attribute: String) -> AXUIElement? {
+        guard let value = copyAttribute(element, attribute: attribute) else {
+            return nil
+        }
+
+        return Self.axUIElement(from: value)
+    }
+
+    /// Bridges a raw attribute value to `AXValue` only when it really is one. Same crash-safety
+    /// rationale as `copyElementAttribute`.
+    private func axValue(_ value: CFTypeRef) -> AXValue? {
+        Self.axValue(from: value)
+    }
+
+    /// Pure crash-safety guard: returns the value typed as `AXUIElement` only when its CF type
+    /// id matches, otherwise nil. Exposed (internal) so the degradation contract is unit
+    /// testable without a live accessibility tree. `AXUIElement` is a CoreFoundation type, so
+    /// the checked force-cast is the canonical bridge — `as?` does not runtime-check CF types.
+    static func axUIElement(from value: CFTypeRef) -> AXUIElement? {
+        guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
+            return nil
+        }
+
+        return (value as! AXUIElement)
+    }
+
+    /// Pure crash-safety guard for `AXValue`; see `axUIElement(from:)`.
+    static func axValue(from value: CFTypeRef) -> AXValue? {
+        guard CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        return (value as! AXValue)
     }
 
     private func focusedElementAttributeDump(for element: AXUIElement) -> FocusedElementAttributeDump {
@@ -1362,19 +1392,19 @@ final class AccessibilityClient: @unchecked Sendable {
     }
 
     private func containingWindowTitle(for element: AXUIElement, processIdentifier: pid_t) -> String? {
-        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute),
-           let title = copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String {
+        if let windowValue = copyElementAttribute(element, attribute: kAXWindowAttribute),
+           let title = copyAttribute(windowValue, attribute: kAXTitleAttribute) as? String {
             return title
         }
 
         let appElement = AXUIElementCreateApplication(processIdentifier)
         configureMessagingTimeout(for: appElement)
 
-        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
+        guard let windowValue = copyElementAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
             return nil
         }
 
-        return copyAttribute((windowValue as! AXUIElement), attribute: kAXTitleAttribute) as? String
+        return copyAttribute(windowValue, attribute: kAXTitleAttribute) as? String
     }
 
     private func focusedElementFingerprint(
@@ -1438,12 +1468,13 @@ final class AccessibilityClient: @unchecked Sendable {
     }
 
     private func selectedTextRange(in element: AXUIElement) -> CFRange? {
-        guard let rangeValue = copyAttribute(element, attribute: kAXSelectedTextRangeAttribute) else {
+        guard let rangeValue = copyAttribute(element, attribute: kAXSelectedTextRangeAttribute),
+              let axRange = axValue(rangeValue) else {
             return nil
         }
 
         var range = CFRange()
-        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+        guard AXValueGetValue(axRange, .cfRange, &range) else {
             return nil
         }
 
@@ -1502,12 +1533,12 @@ final class AccessibilityClient: @unchecked Sendable {
             &boundsValue
         )
 
-        guard result == .success, let boundsValue else {
+        guard result == .success, let boundsValue, let axBounds = axValue(boundsValue) else {
             return nil
         }
 
         var rect = CGRect.zero
-        guard AXValueGetValue(boundsValue as! AXValue, .cgRect, &rect) else {
+        guard AXValueGetValue(axBounds, .cgRect, &rect) else {
             return nil
         }
 
@@ -1516,15 +1547,17 @@ final class AccessibilityClient: @unchecked Sendable {
 
     private func elementBounds(for element: AXUIElement) -> CGRect? {
         guard let positionValue = copyAttribute(element, attribute: kAXPositionAttribute),
-              let sizeValue = copyAttribute(element, attribute: kAXSizeAttribute) else {
+              let sizeValue = copyAttribute(element, attribute: kAXSizeAttribute),
+              let axPosition = axValue(positionValue),
+              let axSize = axValue(sizeValue) else {
             return nil
         }
 
         var position = CGPoint.zero
         var size = CGSize.zero
 
-        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
-              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else {
+        guard AXValueGetValue(axPosition, .cgPoint, &position),
+              AXValueGetValue(axSize, .cgSize, &size) else {
             return nil
         }
 
@@ -1545,18 +1578,14 @@ final class AccessibilityClient: @unchecked Sendable {
     }
 
     private func containingWindowElement(for element: AXUIElement, processIdentifier: pid_t) -> AXUIElement? {
-        if let windowValue = copyAttribute(element, attribute: kAXWindowAttribute) {
-            return (windowValue as! AXUIElement)
+        if let windowValue = copyElementAttribute(element, attribute: kAXWindowAttribute) {
+            return windowValue
         }
 
         let appElement = AXUIElementCreateApplication(processIdentifier)
         configureMessagingTimeout(for: appElement)
 
-        guard let windowValue = copyAttribute(appElement, attribute: kAXFocusedWindowAttribute) else {
-            return nil
-        }
-
-        return (windowValue as! AXUIElement)
+        return copyElementAttribute(appElement, attribute: kAXFocusedWindowAttribute)
     }
 
     private func focusedTextStyle(in element: AXUIElement, textLength: Int, range: CFRange) -> FocusedTextStyle? {
