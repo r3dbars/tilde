@@ -15,13 +15,13 @@
         "bundle": "*",
         "displayName": "Generic App",
         "versionState": "pending",
-        "versionReason": "Fallback policy applies to unprofiled apps and has no exact host version.",
+        "versionReason": "Default-on fallback profile; exact version proof is captured only when a custom app row graduates.",
         "safetyMode": "notPrompt",
         "runtimeState": "userToggleAllowed",
-        "proofState": "pending",
+        "proofState": "partial",
         "killSwitch": "perHostDisable",
         "proofArtifacts": [],
-        "notes": "Default-on generic Accessibility path for unprofiled apps. Treat this as pending proof for each concrete host, and use per-host disable when a target behaves badly."
+        "notes": "Generic Accessibility fallback is default-on but uncustomized. Per-app pause remains the escape hatch, and custom app rows need exact proof before stronger support claims."
       },
       {
         "bundle": "com.apple.TextEdit",
@@ -234,7 +234,7 @@
             "reference": "Claude Code/default"
           }
         ],
-        "notes": "Direct bundle and terminal-host adapter stay one-word only behind proof-mode safety. Normal terminal hosts remain blocked unless exact host proof exists."
+        "notes": "Claude Code remains one-word and proof-gated in the proof manifest. Normal terminal hosts remain blocked unless a future terminal-host research task explicitly reopens them."
       },
       {
         "bundle": "com.anthropic.claudefordesktop",
@@ -1043,9 +1043,9 @@
       "displayName": "Generic App",
       "supportLevel": "yellow",
       "surface": "Generic Accessibility fallback",
-      "status": "pending",
-      "owner": "fallback compatibility lane",
-      "safetyNote": "Unprofiled apps use the generic Accessibility path only as pending proof for each concrete host; secure, prompt, sendable, browser-hosted, terminal, and private fields still require exact proof or suppression."
+      "status": "partial",
+      "owner": "compatibility fallback lane",
+      "safetyNote": "Default-on fallback can try ordinary writing fields, but untested apps stay yellow and must be paused or given a custom profile when placement or insertion is wrong."
     },
     {
       "bundle": "com.apple.TextEdit",
@@ -1117,7 +1117,7 @@
       "surface": "Claude Code",
       "status": "partial",
       "owner": "terminal-host adapter lane",
-      "safetyNote": "Claude Code is a guarded dogfood target with one-word acceptance only. Terminal-host support remains host-labeled and proof-gated; normal terminal use and full accept stay blocked without exact no-submit proof."
+      "safetyNote": "Claude Code is enabled only as a dogfood prompt target with one-word acceptance and no-submit safety gates; broader terminal-host behavior remains guarded."
     },
     {
       "bundle": "com.anthropic.claudefordesktop",
