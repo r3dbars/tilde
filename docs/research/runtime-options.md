@@ -8,29 +8,33 @@ model server.
 The product should own the model runtime. The user launches one Mac app and
 autocomplete works.
 
-## Current Preferred Path: MLX + Qwen3.5 4B
+## Current Preferred Path: MLX + Gemma 4 E4B IT OptiQ
 
 MLX is the current runtime path because it is Apple Silicon native and already
-lives behind the app-owned `ModelRuntime` boundary. Qwen3.5 4B is the documented
-default because it is the current low-latency quality target for short
-autocomplete completions. LiteRT-LM stays tracked as a future candidate for
-future app-owned packaging research, but it is not a runtime fallback in the app
-or beta UX.
+lives behind the app-owned `ModelRuntime` boundary. Gemma 4 E4B IT OptiQ is the
+current default (`RuntimeBootstrapPlan.preferredMLX` /
+`CompletionModelPolicy.mvp.model`) because it is the present low-latency quality
+target for short autocomplete completions. Qwen3.5 4B remains a selectable
+alternative asset, not the default. LiteRT-LM stays tracked as a future candidate
+for app-owned packaging research, but it is not a runtime fallback in the app or
+beta UX.
 
-The preferred beta model asset is Qwen3.5 4B 4-bit:
+The default beta model asset is Gemma 4 E4B IT OptiQ (4-bit):
 
 ```text
-~/Library/Application Support/SteadyType/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit
+~/Library/Application Support/SteadyType/Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit
 ```
 
 The matching development download alias is:
 
 ```bash
-script/download_mlx_model.py --model qwen35-4b
+script/download_mlx_model.py --model gemma-4-e4b-it-optiq
 ```
 
-That helper is for local development and packaging prep. It should not be part
-of tester onboarding.
+Qwen3.5 4B stays available as a selectable alternative
+(`--model qwen35-4b`, asset `Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit`). These
+helpers are for local development and packaging prep. They should not be part of
+tester onboarding.
 
 In the app, Settings now owns the install path. When the model folder is
 missing, use `Install Local Model`. When the folder is incomplete, use `Repair
@@ -179,7 +183,8 @@ The directory should contain at least:
 - one or more `.safetensors` weight files
 - `.steadytype-model-integrity.json`
 
-The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`.
+The default model repo is `mlx-community/gemma-4-e4b-it-OptiQ-4bit`. The
+selectable Qwen alternative is `mlx-community/Qwen3.5-4B-MLX-4bit`.
 
 ## Future Candidate: LiteRT-LM
 
@@ -195,7 +200,7 @@ Sources:
 
 - app-owned runtime
 - no user-managed server
-- Qwen3.5 4B 4-bit preferred beta asset
+- Gemma 4 E4B IT OptiQ (4-bit) default beta asset; Qwen3.5 4B 4-bit selectable
 - macOS 14 or newer on Apple Silicon for the private beta
 - Apple Silicon with 16 GB RAM first target
 - reasoning off
