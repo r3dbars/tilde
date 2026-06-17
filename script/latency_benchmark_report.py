@@ -4,7 +4,7 @@ import json
 import os
 import re
 import statistics
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -101,6 +101,16 @@ def metric_line(label, samples, unit):
     )
 
 
+def value_metric(values, unit):
+    summary = metrics(values)
+    if summary is None:
+        return "no samples"
+    return (
+        f"n={summary['n']} avg={summary['avg']}{unit} "
+        f"p95={summary['p95']}{unit} max={summary['max']}{unit}"
+    )
+
+
 def summary_window_line(label, windows, unit):
     if not windows:
         return f"{label}: no summary windows"
@@ -154,6 +164,17 @@ def int_value(value):
         return None
 
 
+def bool_value(value):
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
 def metadata_value(event, key, fallback="unknown"):
     metadata = event.get("metadata") or {}
     value = metadata.get(key)
@@ -200,6 +221,7 @@ def line_slice(path, start_line, line_limit, end_line=None):
 
 def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_ms):
     first_visible = []
+    streaming_first_partial = []
     first_token = []
     total_generation = []
     stale_late_suppressed = []
@@ -234,6 +256,13 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
             sample = Sample(latency, app, profile, mode, "trace", line_number, suggestion_id)
             first_visible.append(sample)
             presented_samples.append(sample)
+            streaming_latency = int_value(metadata.get("streamingFirstPartialLatencyMilliseconds"))
+            if streaming_latency is None and event.get("triggerReason") == "model-stream":
+                streaming_latency = latency
+            if streaming_latency is not None:
+                streaming_first_partial.append(
+                    Sample(streaming_latency, app, profile, mode, "trace", line_number, suggestion_id)
+                )
             if latency > late_visible_budget_ms:
                 late_visible.append(sample)
             continue
@@ -277,6 +306,7 @@ def parse_trace_log(path, start_line, end_line, line_limit, late_visible_budget_
 
     return {
         "first_visible": first_visible,
+        "streaming_first_partial": streaming_first_partial,
         "model_backed_first_visible": model_backed_first_visible,
         "first_token": first_token,
         "total_generation": total_generation,
@@ -307,6 +337,18 @@ def parse_diagnostics_log(path, start_line, end_line, line_limit):
     ax_slow_markers = []
     ax_skips = []
     runtime_launches = []
+    cache_stats = {
+        "static_hits": 0,
+        "static_misses": 0,
+        "kv_hits": 0,
+        "kv_misses": 0,
+        "kv_miss_reasons": Counter(),
+        "warm_append_first_token": [],
+        "prepare_prompt": [],
+        "cache_setup": [],
+        "prompt_tokens": [],
+        "append_tokens": [],
+    }
     malformed = []
     seen_presented = set()
 
@@ -363,6 +405,7 @@ def parse_diagnostics_log(path, start_line, end_line, line_limit):
                 total_generation.append(
                     Sample(total, app, "unknown", mode, "diagnostics", line_number)
                 )
+            record_cache_stats(cache_stats, fields)
             continue
 
         if event == "keyboard-event-tap-latency":
@@ -422,8 +465,38 @@ def parse_diagnostics_log(path, start_line, end_line, line_limit):
         "ax_slow_markers": ax_slow_markers,
         "ax_skips": ax_skips,
         "runtime_launches": runtime_launches,
+        "cache_stats": cache_stats,
         "malformed": malformed,
     }
+
+
+def record_cache_stats(cache_stats, fields):
+    static_hit = bool_value(fields.get("runtimeStaticPromptCacheHit"))
+    if static_hit is True:
+        cache_stats["static_hits"] += 1
+    elif static_hit is False:
+        cache_stats["static_misses"] += 1
+
+    kv_hit = bool_value(fields.get("mlxPromptKVCacheHit"))
+    kv_decision = fields.get("mlxPromptKVCacheDecision")
+    if kv_hit is True or kv_decision == "hit":
+        cache_stats["kv_hits"] += 1
+    elif kv_hit is False or kv_decision == "miss":
+        cache_stats["kv_misses"] += 1
+        reason = fields.get("mlxPromptKVCacheMissReason")
+        if reason:
+            cache_stats["kv_miss_reasons"][reason] += 1
+
+    for key, bucket in [
+        ("mlxPromptKVCacheWarmAppendFirstTokenMilliseconds", "warm_append_first_token"),
+        ("preparePromptMilliseconds", "prepare_prompt"),
+        ("cacheSetupMilliseconds", "cache_setup"),
+        ("promptTokenCount", "prompt_tokens"),
+        ("appendTokenCount", "append_tokens"),
+    ]:
+        value = int_value(fields.get(key))
+        if value is not None:
+            cache_stats[bucket].append(value)
 
 
 def summary_window(fields, suffix, source, line_number):
@@ -455,6 +528,80 @@ def print_grouped(title, samples, unit):
         print(f"  {app} / {profile}: {metric_line('', group, unit).lstrip(': ')}")
 
 
+def speed_budget_line(args, first_visible, first_token, total_generation, diagnostics_data, trace_data):
+    first_visible_budget = args.max_first_visible_p95_ms or BETA_MAX_FIRST_VISIBLE_P95_MS
+    first_token_budget = args.max_first_token_p95_ms or BETA_MAX_FIRST_TOKEN_P95_MS
+    total_generation_budget = args.max_total_generation_p95_ms or BETA_MAX_TOTAL_GENERATION_P95_MS
+    event_tap_budget = args.max_event_tap_p95_us or BETA_MAX_EVENT_TAP_P95_US
+    ax_budget = args.max_ax_p95_ms or BETA_MAX_AX_P95_MS
+
+    event_tap_p95 = percentile([sample.value for sample in diagnostics_data["event_tap"]], 0.95)
+    if event_tap_p95 is None:
+        event_tap_p95 = compact_optional_metric(
+            [window.p95 for window in diagnostics_data["event_tap_windows"]]
+        )
+    ax_p95_window = percentile(
+        [window.p95 for window in diagnostics_data["ax_windows"] if window.p95 is not None],
+        0.95,
+    )
+
+    late_visible_count = len(trace_data["late_visible"])
+    return (
+        "Speed budget: "
+        f"{budget_fragment('firstVisibleP95', percentile([sample.value for sample in first_visible], 0.95), first_visible_budget, 'ms')}; "
+        f"{budget_fragment('firstTokenP95', percentile([sample.value for sample in first_token], 0.95), first_token_budget, 'ms')}; "
+        f"{budget_fragment('totalGenerationP95', percentile([sample.value for sample in total_generation], 0.95), total_generation_budget, 'ms')}; "
+        f"{budget_fragment('eventTapP95', event_tap_p95, event_tap_budget, 'us')}; "
+        f"{budget_fragment('axP95Window', ax_p95_window, ax_budget, 'ms')}; "
+        f"lateVisible={late_visible_count} {'ok' if late_visible_count == 0 else 'over'}"
+    )
+
+
+def budget_fragment(label, value, budget, unit):
+    if value is None:
+        return f"{label}=missing/{budget}{unit} missing"
+    status = "ok" if value <= budget else "over"
+    return f"{label}={value}/{budget}{unit} {status}"
+
+
+def compact_optional_metric(values):
+    clean = [value for value in values if value is not None]
+    if not clean:
+        return None
+    return max(clean)
+
+
+def cache_path_line(cache_stats):
+    static_total = cache_stats["static_hits"] + cache_stats["static_misses"]
+    kv_total = cache_stats["kv_hits"] + cache_stats["kv_misses"]
+    if static_total == 0 and kv_total == 0:
+        return "Runtime cache path: no mlx cache metadata"
+
+    top_miss = "none"
+    if cache_stats["kv_miss_reasons"]:
+        reason, count = cache_stats["kv_miss_reasons"].most_common(1)[0]
+        top_miss = f"{reason}:{count}"
+
+    return (
+        "Runtime cache path: "
+        f"staticPrompt hits={cache_stats['static_hits']} misses={cache_stats['static_misses']} "
+        f"hitRate={hit_rate(cache_stats['static_hits'], static_total)}; "
+        f"promptKV hits={cache_stats['kv_hits']} misses={cache_stats['kv_misses']} "
+        f"hitRate={hit_rate(cache_stats['kv_hits'], kv_total)} topMiss={top_miss}; "
+        f"warmAppendFirstToken {value_metric(cache_stats['warm_append_first_token'], 'ms')}; "
+        f"preparePrompt {value_metric(cache_stats['prepare_prompt'], 'ms')}; "
+        f"cacheSetup {value_metric(cache_stats['cache_setup'], 'ms')}; "
+        f"promptTokens {value_metric(cache_stats['prompt_tokens'], '')}; "
+        f"appendTokens {value_metric(cache_stats['append_tokens'], '')}"
+    )
+
+
+def hit_rate(hits, total):
+    if total <= 0:
+        return "n/a"
+    return f"{round((hits / total) * 100)}%"
+
+
 def print_report(args, trace_data, diagnostics_data):
     first_visible = trace_data["first_visible"] or diagnostics_data["presented"]
     first_token = trace_data["first_token"] or diagnostics_data["first_token"]
@@ -470,10 +617,13 @@ def print_report(args, trace_data, diagnostics_data):
     print(f"Line limit: {args.line_limit if args.line_limit > 0 else 'all'}")
     print()
     print(metric_line("First visible / keystroke-to-visible", first_visible, "ms"))
+    print(metric_line("Streaming first partial", trace_data["streaming_first_partial"], "ms"))
     print(metric_line("First token", first_token, "ms"))
     print(metric_line("Total generation", total_generation, "ms"))
+    print(speed_budget_line(args, first_visible, first_token, total_generation, diagnostics_data, trace_data))
     print(trace_evidence_line(trace_data["model_backed_first_visible"]))
     print(runtime_proof_line(diagnostics_data["runtime_launches"]))
+    print(cache_path_line(diagnostics_data["cache_stats"]))
     print(metric_line("Event-tap overhead raw", diagnostics_data["event_tap"], "us"))
     print(summary_window_line("Event-tap overhead summaries", diagnostics_data["event_tap_windows"], "us"))
     print(summary_window_line("AX read latency summaries", diagnostics_data["ax_windows"], "ms"))
