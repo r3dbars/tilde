@@ -472,8 +472,13 @@ def read_rows(path: Path) -> list[AuditRow]:
     return rows
 
 
-def generated_output(row: AuditRow, timeout: float, model: Optional[str]) -> str:
-    template = prompt_template_for_model(model)
+def generated_output(
+    row: AuditRow,
+    timeout: float,
+    model: Optional[str],
+    template_override: Optional[str] = None,
+) -> str:
+    template = template_override or prompt_template_for_model(model)
     payload = {
         "system": row.system,
         "user": row.user,
@@ -507,8 +512,12 @@ def generated_output(row: AuditRow, timeout: float, model: Optional[str]) -> str
     return completed.stdout.strip()
 
 
-def row_payload(row: AuditRow, model: Optional[str]) -> dict:
-    template = prompt_template_for_model(model)
+def row_payload(
+    row: AuditRow,
+    model: Optional[str],
+    template_override: Optional[str] = None,
+) -> dict:
+    template = template_override or prompt_template_for_model(model)
     payload = {
         "id": row.row_id,
         "system": row.system,
@@ -527,6 +536,7 @@ def generated_outputs_batch(
     rows: list[AuditRow],
     timeout: float,
     model: Optional[str],
+    template: Optional[str] = None,
 ) -> dict[str, str]:
     """Generate all rows through one persistent model load.
 
@@ -534,11 +544,16 @@ def generated_outputs_batch(
     omitted so the caller scores them as empty (no suggestion), exactly as a
     failed single-row generation would.
     """
-    command = [str(ROOT_DIR / "script" / "local_completion_batch.py")]
+    # Launch the batch runtime with the SAME interpreter running this audit so an
+    # mlx-capable python propagates down the chain (the script shebang would pick
+    # a system python that may lack mlx_lm).
+    command = [sys.executable, str(ROOT_DIR / "script" / "local_completion_batch.py")]
     if model:
         command.extend(["--model", model])
+    if template:
+        command.extend(["--template", template])
     command.extend(["--row-timeout", str(timeout)])
-    payloads = "\n".join(json.dumps(row_payload(row, model)) for row in rows)
+    payloads = "\n".join(json.dumps(row_payload(row, model, template)) for row in rows)
     # Overall budget: one model load plus per-row work, with generous headroom
     # so a healthy run never trips it but a wedged run still fails fast.
     overall_timeout = float(os.environ.get("AUTOCOMPLETE_LAB_BATCH_LOAD_TIMEOUT", "900"))
@@ -575,10 +590,18 @@ def prompt_template_for_model(model: Optional[str]) -> str:
     return "chat_instruct"
 
 
+# Mirror the Swift product template (CompletionPromptBuilder.swift `rawCompletion`)
+# and local_completion_runtime.RAW_COMPLETION_INSTRUCTION so the eval predicts
+# production output rather than a bare system+user join.
+RAW_COMPLETION_INSTRUCTION = (
+    "Complete only the text requested below. Return no label and no copied context."
+)
+
+
 def raw_completion_prompt(system: str, user: str) -> str:
     return "\n\n".join(
         part.strip()
-        for part in (system, user)
+        for part in (system, RAW_COMPLETION_INSTRUCTION, user)
         if part.strip()
     )
 
@@ -589,10 +612,11 @@ def outputs_for_rows(
     timeout: float,
     model: Optional[str] = None,
     batch: bool = False,
+    template: Optional[str] = None,
 ) -> list[tuple[AuditRow, str]]:
     rows = list(rows)
     if generate and batch:
-        raw_by_id = generated_outputs_batch(rows, timeout, model)
+        raw_by_id = generated_outputs_batch(rows, timeout, model, template)
         return [
             (row, display_output(row, raw_by_id.get(row.row_id, "")))
             for row in rows
@@ -601,7 +625,7 @@ def outputs_for_rows(
     pairs = []
     for row in rows:
         if generate:
-            output = display_output(row, generated_output(row, timeout, model))
+            output = display_output(row, generated_output(row, timeout, model, template))
         else:
             output = display_output(row, row.output or "")
         pairs.append((row, output))
@@ -737,6 +761,12 @@ def main() -> int:
     parser.add_argument("--generate", action="store_true", help="Generate current local model output")
     parser.add_argument("--model", help="Model alias for generated runs, for example small-draft-1b")
     parser.add_argument(
+        "--template",
+        choices=["chat_instruct", "raw_completion"],
+        default=None,
+        help="Force a prompt template, overriding the per-model default (for chat-vs-raw A/B).",
+    )
+    parser.add_argument(
         "--batch",
         action="store_true",
         help="Generate all rows through one persistent model load (much faster).",
@@ -766,7 +796,8 @@ def main() -> int:
             return 64
         rows = read_rows(args.input)
         if args.generate and args.model:
-            source = f"current local model ({args.model})"
+            template_note = f", {args.template}" if args.template else ""
+            source = f"current local model ({args.model}{template_note})"
         else:
             source = "current local model" if args.generate else "labeled local outputs"
         generate = args.generate
@@ -777,6 +808,7 @@ def main() -> int:
         timeout=args.timeout,
         model=args.model,
         batch=args.batch,
+        template=args.template,
     )
     scores = [score_row(row, output) for row, output in pairs]
     summary, overall, relevance = summarize(scores, source=source, include_raw=include_raw)

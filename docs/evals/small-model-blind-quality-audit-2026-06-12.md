@@ -1,5 +1,12 @@
 # Small Model Blind Quality Audit - 2026-06-12
 
+> **Superseded by [small-model-blind-quality-audit-2026-06-14.md](small-model-blind-quality-audit-2026-06-14.md).**
+> This was the runnable-but-unmeasured scaffold (the generated run could not
+> finish before the `--batch` runtime landed). The 2026-06-14 rerun has the
+> measured numbers and the decision. Note: the "default" referenced below is
+> `qwen35-4b`, which is wrong — the production default is `gemma4E4BItOptiQ`;
+> `qwen3.5-4b` is only the in-harness reference.
+
 This is the Wave 1 rerun lane for the small-model bet. The old 1.7B result is
 not enough to promote anything because it may have used an instruct/chat prompt
 shape for a completion-shaped task.

@@ -193,6 +193,7 @@ run_blocking "git diff --check (whitespace / conflict markers)" check_diff
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
 run_blocking "local completion runtime self-test" bash script/local_completion_runtime_self_test.sh
 run_blocking "local completion batch self-test" bash script/local_completion_batch_self_test.sh
+run_blocking "first-token latency self-test" bash script/first_token_latency_self_test.sh
 run_blocking "local quality audit self-test" bash script/check_local_quality_audit_self_test.sh
 run_blocking "small model blind audit report" bash script/check_small_model_blind_audit_report.sh
 run_blocking "test coverage manifest" ./script/check_test_coverage_manifest.sh

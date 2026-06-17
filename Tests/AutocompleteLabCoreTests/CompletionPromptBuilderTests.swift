@@ -32,6 +32,24 @@ struct CompletionPromptBuilderTests {
         #expect(!formatted.user.contains("[INST]"))
     }
 
+    @Test("Raw completion template matches the eval harness contract exactly")
+    func rawCompletionTemplateMatchesEvalContract() {
+        // The blind-audit harness (script/local_quality_audit.raw_completion_prompt
+        // and local_completion_runtime.RAW_COMPLETION_INSTRUCTION) mirrors this exact
+        // shape so the eval predicts production. Pin system + instruction + user
+        // joined by blank lines, in that order.
+        let prompt = CompletionPrompt(system: "Inline autocomplete.", user: "The draft should stay")
+        let formatted = prompt.formatted(using: .rawCompletion)
+
+        #expect(formatted.user == """
+        Inline autocomplete.
+
+        Complete only the text requested below. Return no label and no copied context.
+
+        The draft should stay
+        """)
+    }
+
     @Test("Chat instruct template preserves system and user channels")
     func chatInstructTemplatePreservesSystemAndUserChannels() {
         let prompt = CompletionPrompt(
