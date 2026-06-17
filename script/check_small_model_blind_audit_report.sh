@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 PROMPTS_PATH="docs/evals/small-model-blind-prompts-2026-06-12.jsonl"
-REPORT_PATH="docs/evals/small-model-blind-quality-audit-2026-06-12.md"
+REPORT_PATH="docs/evals/small-model-blind-quality-audit-2026-06-14.md"
 
 if [[ ! -f "$PROMPTS_PATH" ]]; then
   echo "small-model blind prompt set missing: $PROMPTS_PATH" >&2
@@ -82,33 +82,31 @@ if (( SUPPRESSION_COUNT < 6 )); then
 fi
 
 for required in \
-  "Small Model Blind Quality Audit - 2026-06-12" \
-  "1B-class lane: \`small-draft-1b\` / \`qwen3-1.7b\`" \
-  "Base completion lane: \`qwen3-1.7b-base\` / \`raw_completion\`" \
-  "Default model remains: \`qwen35-4b\`" \
+  "Small Model Blind Quality Audit" \
   "Prompt rows: $ROW_COUNT" \
   "Display rows: $DISPLAY_COUNT" \
   "Expected suppression rows: $SUPPRESSION_COUNT" \
   "Source mix: synthetic-public" \
   "No private text: yes" \
+  "Default model: gemma4E4BItOptiQ (unchanged)" \
+  "In-harness reference: qwen35-4b" \
   "Default switch: no" \
-  "Blindness check: no current complaint-language fixtures" \
-  "Promotion gate: default only if blind-audit overall >= (4B score - 5) and first-token p50 <= 50% of 4B." \
+  "Promotion gate: default only if blind-audit overall >= (Gemma 4 E4B - 5) and first-token p50 <= 50% of Gemma's." \
   "Draft/speculative gate: if quality misses but latency wins big, keep it out of default and test only as draft/speculative." \
-  "| Model | Template | Quality | Latency | Memory | Decision |"; do
+  "| Model | Template | Quality (overall / relevance) | First-token p50 | p95 | Disk | Peak RAM | Mechanical decision |"; do
   if ! grep -F "$required" "$REPORT_PATH" >/dev/null; then
     echo "small-model blind audit report missing required proof: $required" >&2
     exit 1
   fi
 done
 
-if ! grep -E "Result status: (measured-failed-quality-bar|measured-passed-quality-bar|runnable-not-measured|scaffolded-unavailable)" "$REPORT_PATH" >/dev/null; then
+if ! grep -E "Result status: (measured-no-default-change|measured-failed-quality-bar|measured-passed-quality-bar|runnable-not-measured|scaffolded-unavailable)" "$REPORT_PATH" >/dev/null; then
   echo "small-model blind audit report must declare a measured or runnable result status" >&2
   exit 1
 fi
 
 for required_row in \
-  "| \`qwen3-1.7b-base\` | \`raw_completion\` |" \
+  "| \`qwen3-1.7b\` | \`raw_completion\` |" \
   "| \`qwen3-0.6b\` | \`raw_completion\` |" \
   "| \`qwen35-4b\` | \`chat_instruct\` |"; do
   if ! grep -F "$required_row" "$REPORT_PATH" >/dev/null; then

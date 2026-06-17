@@ -59,6 +59,10 @@ LOCAL_TARGET_BY_ALIAS = {
     "gemma-4-e4b": "Models/Gemma4E4B/MLX/gemma-4-e4b-4bit",
     "gemma-4-e4b-it-optiq": "Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit",
     "gemma-4-26b": "Models/Gemma4A4B/MLX/gemma-4-26b-a4b-it-4bit",
+    "gemma-3-1b-it": "Models/Gemma31B/MLX/gemma-3-1b-it-4bit",
+    "gemma-3-1b": "Models/Gemma31B/MLX/gemma-3-1b-it-4bit",
+    "gemma-3n-e4b-it": "Models/Gemma3nE4B/MLX/gemma-3n-E4B-it-lm-4bit",
+    "gemma-3n-e4b": "Models/Gemma3nE4B/MLX/gemma-3n-E4B-it-lm-4bit",
 }
 
 DEFAULT_SUPPORT_ROOT = Path.home() / "Library/Application Support/SteadyType"
@@ -153,6 +157,29 @@ def make_greedy_sampler():
         return None
 
 
+# Chat models occasionally emit their turn/eos markers as literal text when the
+# tokenizer's stop ids are not wired into generate(). Truncate at the first such
+# marker so a model is scored on its continuation, not on leaked control tokens.
+_TERMINATORS = (
+    "<end_of_turn>",
+    "<start_of_turn>",
+    "<eos>",
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|eot_id|>",
+    "</s>",
+)
+
+
+def truncate_at_terminator(text: str) -> str:
+    cut = len(text)
+    for marker in _TERMINATORS:
+        index = text.find(marker)
+        if index != -1:
+            cut = min(cut, index)
+    return text[:cut]
+
+
 def generate_once(mlx_generate, model, tokenizer, prompt: str, max_tokens: int, sampler) -> str:
     kwargs = {"max_tokens": max_tokens, "verbose": False}
     if sampler is not None:
@@ -182,6 +209,12 @@ def main() -> int:
         type=float,
         default=float(os.environ.get("AUTOCOMPLETE_LAB_RUNTIME_TIMEOUT", "45")),
         help="Per-row wall-clock budget in seconds.",
+    )
+    parser.add_argument(
+        "--template",
+        choices=["chat_instruct", "raw_completion"],
+        default=None,
+        help="Override every row's prompt template (chat_instruct|raw_completion).",
     )
     parser.add_argument(
         "--print-source",
@@ -244,6 +277,8 @@ def main() -> int:
 
     exit_code = 0
     for row in rows:
+        if args.template:
+            row["template"] = args.template
         row_id = str(row.get("id") or "row")
         max_tokens = int(row.get("max_tokens") or 16)
         prompt = build_prompt(row, tokenizer)
@@ -266,7 +301,7 @@ def main() -> int:
         if use_alarm:
             signal.setitimer(signal.ITIMER_REAL, 0)
         latency_ms = round((time.monotonic() - started) * 1000)
-        print(json.dumps({"id": row_id, "output": output.strip(), "ok": True, "latency_ms": latency_ms}))
+        print(json.dumps({"id": row_id, "output": truncate_at_terminator(output).strip(), "ok": True, "latency_ms": latency_ms}))
         sys.stdout.flush()
 
     if use_alarm:
