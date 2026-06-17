@@ -312,6 +312,7 @@ Wrong-field safety proof should stay in the default smoke path too:
 ./script/check_prompt_app_proof_self_test.sh
 ./script/check_prompt_app_manifest_proof_self_test.sh
 ./script/check_sensitive_field_proof_self_test.sh
+./script/check_generic_app_safety_proof_self_test.sh
 ```
 
 For a clean app-specific slice:
