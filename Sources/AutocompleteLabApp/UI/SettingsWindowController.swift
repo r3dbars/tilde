@@ -199,11 +199,11 @@ struct SettingsFirstRunTrustState: Equatable {
     }
 
     var detailText: String {
-        "Suggestions appear in light gray next to your cursor. Press Tab to accept one word, Tab again for the next word, and Esc to dismiss. Pause Suggestions stops them everywhere; Pause in Current App stops only that app."
+        "Suggestions appear in light gray next to your cursor. Press Tab to accept one word, Shift-Tab for the whole visible suggestion, and Esc to dismiss. Pause Suggestions stops them everywhere; Pause in Current App stops only that app."
     }
 
     var quickStartText: String {
-        "60-second path: Allow Accessibility, wait for the on-device model, Start TextEdit Practice, press Tab once, press Esc once, then Delete Local Logs."
+        "60-second path: Allow Accessibility, wait for the on-device model, Start TextEdit Practice, press Tab once, Shift-Tab once, Esc once, then Delete Local Logs."
     }
 
     var appsText: String {
@@ -507,7 +507,7 @@ struct SettingsPracticeState: Equatable {
     }
 
     var stepsText: String {
-        "Try it: press Tab once for one word, type more and press Esc to dismiss, then pause suggestions or delete local logs before you leave."
+        "Try it: press Tab once for one word, Shift-Tab once for the whole visible suggestion, type more and press Esc to dismiss, then pause suggestions or delete local logs before you leave."
     }
 
     var primaryAction: SettingsPracticePrimaryAction {
@@ -750,7 +750,7 @@ struct SettingsSuggestionDecisionState: Equatable {
         case "queued", "running":
             return "Thinking on your Mac. Your text never leaves it."
         case "shown", "kept current suggestion":
-            return "A suggestion is next to your cursor. Tab accepts one word; Esc dismisses."
+            return "A suggestion is next to your cursor. Tab accepts one word; Shift-Tab accepts the whole visible suggestion; Esc dismisses."
         case "accepted":
             return "Accepted. SteadyType will look for the next suggestion once the field settles."
         case "hidden":

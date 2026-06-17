@@ -26,7 +26,7 @@ public struct RuntimeReadinessGuidance: Equatable, Sendable {
             actionTitle = "Retry Model"
             isActionEnabled = true
         case .ready:
-            message = "Ready: use Practice to open TextEdit, try Tab for one word, press Esc to dismiss, then pause or delete traces."
+            message = "Ready: use Practice to open TextEdit, try Tab for one word, Shift-Tab for the whole visible suggestion, press Esc to dismiss, then pause or delete traces."
             actionTitle = "Ready"
             isActionEnabled = false
         }
