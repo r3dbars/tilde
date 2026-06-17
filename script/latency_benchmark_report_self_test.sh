@@ -12,17 +12,18 @@ TRACE_LOG="$TMP_DIR/traces.jsonl"
 
 cat >"$DIAGNOSTICS_LOG" <<'LOG'
 2026-05-09T10:00:00Z runtime-bootstrap activeCandidate=mlx asset=Qwen3.5-4B-4bit
-2026-05-09T10:00:01Z mlx-completion-timing app=com.apple.TextEdit cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=100 generationMilliseconds=180 maxTokens=9 mode=phraseContinuation promptMilliseconds=0 rawChars=12 sessionMilliseconds=0 totalMilliseconds=190
+2026-05-09T10:00:01Z mlx-completion-timing app=com.apple.TextEdit appendTokenCount=0 cacheSetupMilliseconds=1 cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=100 generationMilliseconds=180 maxTokens=9 mlxPromptKVCacheDecision=miss mlxPromptKVCacheHit=false mlxPromptKVCacheMissReason=no-prior-prompt mode=phraseContinuation preparePromptMilliseconds=2 promptMilliseconds=0 promptTokenCount=120 rawChars=12 runtimeStaticPromptCacheHit=false sessionMilliseconds=0 totalMilliseconds=190
 2026-05-09T10:00:02Z suggestion-presented app=com.apple.TextEdit behaviorProfile=notes latencyMilliseconds=210 requestMode=phraseContinuation traceID=one
 2026-05-09T10:00:03Z keyboard-event-tap-latency decision=consume durationMicros=300 key=tab
 2026-05-09T10:00:04Z keyboard-event-tap-latency decision=passthrough durationMicros=500 key=escape
 2026-05-09T10:00:05Z keyboard-event-tap-latency-summary count=3 maxMicros=700 p50Micros=400 p90Micros=500 p95Micros=600 p99Micros=700 reason=stop
 2026-05-09T10:00:06Z focused-text-poll-latency-summary count=4 maxMilliseconds=9 p50Milliseconds=4 p90Milliseconds=6 p95Milliseconds=8 p99Milliseconds=9
+2026-05-09T10:00:07Z mlx-completion-timing app=com.apple.TextEdit appendTokenCount=5 cacheSetupMilliseconds=1 cleanedChars=12 cleanupMilliseconds=0 firstChunkMilliseconds=80 generationMilliseconds=140 maxTokens=9 mlxPromptKVCacheDecision=hit mlxPromptKVCacheHit=true mlxPromptKVCacheWarmAppendFirstTokenMilliseconds=80 mode=phraseContinuation preparePromptMilliseconds=2 promptMilliseconds=0 promptTokenCount=125 rawChars=12 runtimeStaticPromptCacheHit=true sessionMilliseconds=0 totalMilliseconds=145
 LOG
 
 cat >"$TRACE_LOG" <<'LOG'
 {"timestamp":"2026-05-09T10:00:01Z","sessionID":"session","suggestionID":"one","type":"modelResult","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":190,"metadata":{"behaviorProfile":"notes","firstTokenLatencyMilliseconds":"100","totalGenerationLatencyMilliseconds":"190"}}
-{"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","latencyMilliseconds":210,"metadata":{"behaviorProfile":"notes"}}
+{"timestamp":"2026-05-09T10:00:02Z","sessionID":"session","suggestionID":"one","type":"suggestionPresented","appBundleIdentifier":"com.apple.TextEdit","requestMode":"phraseContinuation","triggerReason":"model-stream","latencyMilliseconds":210,"metadata":{"behaviorProfile":"notes","streamingFirstPartialLatencyMilliseconds":"205","streamingPartialIndex":"1"}}
 {"timestamp":"2026-05-09T10:00:03Z","sessionID":"session","suggestionID":"two","type":"modelResult","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":820,"metadata":{"behaviorProfile":"ai_chat","firstTokenLatencyMilliseconds":"610","totalGenerationLatencyMilliseconds":"820"}}
 {"timestamp":"2026-05-09T10:00:04Z","sessionID":"session","suggestionID":"two","type":"suggestionSuppressed","appBundleIdentifier":"com.openai.codex","requestMode":"phraseContinuation","latencyMilliseconds":820,"reason":"too-slow-to-display","metadata":{"behaviorProfile":"ai_chat"}}
 {"timestamp":"2026-05-09T10:00:05Z","sessionID":"session","suggestionID":"three","type":"suggestionSuppressed","appBundleIdentifier":"com.openai.codex","requestMode":"wordCompletion","latencyMilliseconds":120,"reason":"stale-text","metadata":{"behaviorProfile":"ai_chat"}}
@@ -51,6 +52,24 @@ fi
 
 if ! grep -F "First visible / keystroke-to-visible: n=1 min=210ms avg=210ms p50=210ms p90=210ms p95=210ms p99=210ms max=210ms" <<<"$REPORT" >/dev/null; then
   echo "latency benchmark self-test did not print first-visible percentiles" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "Streaming first partial: n=1 min=205ms avg=205ms p50=205ms p90=205ms p95=205ms p99=205ms max=205ms" <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not print streaming first-partial latency" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "Speed budget: firstVisibleP95=210/250ms ok; firstTokenP95=610/650ms ok; totalGenerationP95=820/850ms ok; eventTapP95=500/8000us ok; axP95Window=8/90ms ok; lateVisible=0 ok" <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not print deterministic speed budget status" >&2
+  echo "$REPORT" >&2
+  exit 1
+fi
+
+if ! grep -F "Runtime cache path: staticPrompt hits=1 misses=1 hitRate=50%; promptKV hits=1 misses=1 hitRate=50% topMiss=no-prior-prompt:1; warmAppendFirstToken n=1 avg=80ms p95=80ms max=80ms; preparePrompt n=2 avg=2ms p95=2ms max=2ms; cacheSetup n=2 avg=1ms p95=1ms max=1ms; promptTokens n=2 avg=122 p95=125 max=125; appendTokens n=2 avg=2 p95=5 max=5" <<<"$REPORT" >/dev/null; then
+  echo "latency benchmark self-test did not print runtime cache path summary" >&2
   echo "$REPORT" >&2
   exit 1
 fi
