@@ -30,25 +30,30 @@ For screenshot-backed app-by-app grades and gaps, use
 
 ## Focused Graduation Queue
 
-These are the next high-value writing surfaces. The decision is intentionally
+These are the next compatibility lanes after the current
+TextEdit/Notes/Obsidian/Chrome fixture proof. The decision is intentionally
 conservative: no surface moves up without current-head screenshot evidence,
-safe Tab behavior, no submit/send, sensitive-field suppression, verified
-insertion, and undo/recovery proof.
+safe Tab behavior, sensitive-field suppression, verified insertion, and
+undo/recovery proof. Hosted, sendable, prompt, terminal, and private fields stay
+guarded until their exact proof exists.
 
 | Surface | Decision | Current proof state | Required next proof |
 | --- | --- | --- | --- |
-| Google Docs in Chrome | blocked | Browser policy suppresses `docs.google.com` as `unsupported-browser-surface`. | Disposable document proof for placement, one-word Tab, insertion verification, undo/recovery, and no sensitive-field leak. |
-| Notion browser or desktop | blocked | Browser Notion and `notion.id` stay disabled. | Disposable page proof for ProseMirror placement, insertion verification, undo/recovery, and no submit/navigation side effect. |
-| Slack browser or desktop | blocked | Browser Slack and `com.tinyspeck.slackmacgap` stay disabled. | Disposable channel proof for one-word Tab, no send, insertion verification, undo/recovery, and sensitive-field suppression. |
-| Discord browser or desktop | blocked | Browser Discord and Discord app variants stay disabled. | Disposable server/channel proof for one-word Tab, no send, insertion verification, undo/recovery, and sensitive-field suppression. |
-| Mail compose | diagnostics-only | `com.apple.mail` has a diagnostics-only profile and disabled insertion. | Compose-body-only adapter proof that avoids recipients/search/account fields, verifies insertion, and proves undo/recovery. |
-| Browser webmail | blocked | Gmail, Outlook, Fastmail, iCloud, Yahoo, and other browser webmail stay blocked by hosted-surface policy. | Disposable test account proof for compose body only, no recipient/subject/search/account-field suggestion, one-word Tab no-send, verified insertion, undo/recovery, latency, and screenshot-backed current-head evidence. |
-| Browser ChatGPT | blocked | Browser ChatGPT is blocked by hosted-surface policy; ChatGPT app/Atlas profiles are disabled. | Disposable prompt proof for one-word Tab, no submit/tool/context side effect, insertion verification, undo/recovery, and screenshot-backed placement. |
-| Chrome production text fields | blocked | Public proof pages and production browser apps no longer count as beta-safe. | Disposable production-page proof before any public or production page is treated as safe. |
-| Claude desktop layouts | proof-only | Default Claude desktop proof exists; layout variants are pending. | Empty, long, wrapped, narrow, context, light, and dark prompt layout rows with one-word no-submit proof. |
-| Codex layouts | proof-only | Default Codex proof exists with one-word and full-accept no-submit behavior. | More prompt layouts before raising beyond proof-only/default-composer support. |
-| Obsidian long notes | supported | Current-head long-note proof has strict screenshot evidence, verified Tab insertion, and accepted-and-kept behavior in the disposable proof vault. | Broader vault layouts, hidden-caret variants, and stronger native undo proof. |
-| Real Monaco and CodeMirror editors | blocked | ProseMirror proof is stronger; official/default Monaco and current CodeMirror are not complete. | Official CodeMirror and Monaco/default-AX lanes with verified insertion, undo/recovery, and current screenshots. |
+| Apple Pages documents | candidate | No exact Pages proof yet; current runtime would use the generic Accessibility path. Pages is installed locally as `com.apple.iWork.Pages`. | Disposable Pages document body proof for same-line placement, one-word Tab, full accept, verified insertion, native undo, and no suggestions in title/sidebar/comment/share fields. |
+| LibreOffice Writer documents | candidate | No exact Writer proof yet; current runtime would use the generic Accessibility path. LibreOffice is installed locally as `org.libreoffice.script`. | Disposable Writer document body proof for caret placement, one-word Tab, verified insertion, undo/recovery, and no suggestions in menus, dialogs, find, save, or export fields. |
+| Safari local textarea/contenteditable fixtures | blocked | Safari stays disabled until WebKit local fixture proof exists. | Mirror the Chrome local textarea/contenteditable proof in Safari with strict screenshots, safe Tab, verified insertion, undo/recovery, and sensitive-field suppression. No public pages or hosted apps. |
+| Focused local writing apps | candidate | No exact app proof yet; good next candidates are Bear, Drafts, iA Writer, Ulysses, Typora, or CotEditor when installed. | Pick one installed local writing app, capture bundle/version, and prove disposable-document placement, one-word Tab, verified insertion, undo/recovery, and no suggestions in library/search/title fields. |
+| Google Docs in Chrome | blocked | Browser policy suppresses `docs.google.com` as `unsupported-browser-surface`. | Disposable real-service document proof for placement, one-word Tab, insertion verification, undo/recovery, and no sensitive-field leak. Local fixtures do not count. |
+
+Guarded later lanes:
+
+| Surface | Decision | Why it stays later |
+| --- | --- | --- |
+| Notion browser or desktop | blocked | Useful, but workspace text is private and local ProseMirror-like fixtures do not count. Needs disposable-page proof. |
+| Chrome production text fields | blocked | Public pages and production browser apps no longer count as beta-safe. Needs disposable production-page proof and must avoid search, address, payment, and send fields. |
+| Real Monaco and CodeMirror editors | blocked | Forced/local editor fixtures do not graduate production editors. Command palettes, terminals, and AI composers stay blocked. |
+| Codex and Claude desktop layouts | guarded dogfood/proof lanes | Prompt apps need exact one-word no-submit proof for each layout; do not treat dogfood proof as broad writing support. |
+| Mail, browser webmail, Messages, Slack, Discord, terminals | blocked, diagnostics-only, or proof-only | Sendable/private/terminal surfaces stay off unless exact no-send/no-submit proof exists for the app, field, and layout. |
 
 Run:
 
