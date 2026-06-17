@@ -1415,8 +1415,10 @@ def verify_host_policy(
             failures.append(f"hostPolicy {bundle}: diagnostics-only profiles cannot be user-toggle enabled")
         if safety_mode == "disabled" and runtime_state not in {"disabled", "diagnosticsOnly", "proofModeOnly"}:
             failures.append(f"hostPolicy {bundle}: disabled safety mode cannot allow normal suggestions")
-        if safety_mode == "wordOnly" and kill_switch != "proofModeRequired":
-            failures.append(f"hostPolicy {bundle}: word-only prompt hosts must have proofModeRequired kill switch")
+        if safety_mode == "wordOnly" and kill_switch not in {"proofModeRequired", "perHostDisable"}:
+            failures.append(
+                f"hostPolicy {bundle}: word-only prompt hosts must have proofModeRequired or perHostDisable kill switch"
+            )
 
         artifacts = entry.get("proofArtifacts", [])
         if artifacts is None:

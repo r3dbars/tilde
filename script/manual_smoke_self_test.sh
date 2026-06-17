@@ -323,7 +323,7 @@ run_passing_case notes Notes com.apple.Notes 'inlineAdjacent|floatingMirror' flo
 run_notes_undo_case notes-title-undo notes-title-undo
 run_notes_undo_case notes-body-undo notes-body-undo
 run_notes_undo_case notes-checklist-undo notes-checklist-undo
-run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror
+run_passing_case obsidian Obsidian md.obsidian floatingMirror floatingMirror obsidian-stock
 run_passing_case obsidian-theme Obsidian md.obsidian floatingMirror floatingMirror obsidian-theme
 run_passing_case obsidian-pane Obsidian md.obsidian floatingMirror floatingMirror obsidian-pane
 run_passing_case obsidian-long-note Obsidian md.obsidian floatingMirror floatingMirror obsidian-long-note
@@ -621,7 +621,7 @@ if ! grep -F "Insertion proof status: $REPORT_PATH" "$STATUS_OUTPUT" >/dev/null;
   exit 1
 fi
 
-for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" Obsidian "Obsidian theme" "Obsidian panes" "Obsidian long note" "Chrome textarea" "Chrome contenteditable"; do
+for app_name in TextEdit "Notes title" "Notes body" "Notes checklist" "Obsidian stock" "Obsidian theme" "Obsidian panes" "Obsidian long note" "Chrome textarea" "Chrome contenteditable"; do
   if ! grep -F -- "- $app_name: passed" "$STATUS_OUTPUT" >/dev/null; then
     echo "manual smoke self-test did not report $app_name as passed" >&2
     exit 1
@@ -635,8 +635,8 @@ for app_name in "Chrome production textarea" "Chrome chat-like no-submit" Codex 
   fi
 done
 
-if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not report full Obsidian proof as passed" >&2
+if ! grep -F -- "- Obsidian stock: passed" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not report full Obsidian stock proof as passed" >&2
   exit 1
 fi
 
@@ -777,16 +777,16 @@ cat >"$DEFAULT_OBSIDIAN_REPORT" <<EOF
 
 | Time UTC | App | Bundle | Proof | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
-| 2026-04-26T08:00:00Z | Obsidian | \`md.obsidian\` | \`default\` | 2 | \`floatingMirror\` | lines 1+ in \`/tmp/diagnostics.log\` | lines 1+ in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$CURRENT_COMMIT_PROOF\` |
+| 2026-04-26T08:00:00Z | Obsidian | \`md.obsidian\` | \`obsidian-stock\` | 2 | \`floatingMirror\` | lines 1+ in \`/tmp/diagnostics.log\` | lines 1+ in \`/tmp/traces.jsonl\`; visual \`strict-complete\`; build \`commit:$CURRENT_COMMIT_PROOF\` |
 EOF
 
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$DEFAULT_OBSIDIAN_REPORT" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-if ! grep -F -- "- Obsidian: passed" "$STATUS_OUTPUT" >/dev/null &&
-  ! grep -F -- "- Obsidian: stale pass" "$STATUS_OUTPUT" >/dev/null; then
-  echo "manual smoke self-test did not recognize the default Obsidian proof row" >&2
+if ! grep -F -- "- Obsidian stock: passed" "$STATUS_OUTPUT" >/dev/null &&
+  ! grep -F -- "- Obsidian stock: stale pass" "$STATUS_OUTPUT" >/dev/null; then
+  echo "manual smoke self-test did not recognize the stock Obsidian proof row" >&2
   exit 1
 fi
 
@@ -808,14 +808,14 @@ cat >"$LIMITED_REPORT" <<'EOF'
 
 | Time UTC | App | Bundle | Proof label | Verified accepts | Render expectation | Diagnostics slice | Trace slice |
 | --- | --- | --- | --- | ---: | --- | --- | --- |
-| 2026-04-26T08:00:00Z | Obsidian | `md.obsidian` | `default` | 0 | `detached-suppressed` | lines 1+ in `/tmp/diagnostics.log` | lines 1+ in `/tmp/traces.jsonl` |
+| 2026-04-26T08:00:00Z | Obsidian | `md.obsidian` | `obsidian-stock` | 0 | `detached-suppressed` | lines 1+ in `/tmp/diagnostics.log` | lines 1+ in `/tmp/traces.jsonl` |
 EOF
 
 AUTOCOMPLETE_LAB_MANUAL_SMOKE_REPORT="$LIMITED_REPORT" \
   AUTOCOMPLETE_LAB_SCORECARD="$SCORECARD_PATH" \
   script/manual_smoke_status.sh >"$STATUS_OUTPUT"
 
-if ! grep -F -- "- Obsidian: limited pass (needs full accept proof; run" "$STATUS_OUTPUT" >/dev/null; then
+if ! grep -F -- "- Obsidian stock: limited pass (needs full accept proof; run" "$STATUS_OUTPUT" >/dev/null; then
   echo "manual smoke self-test did not report limited Obsidian proof as incomplete" >&2
   exit 1
 fi
