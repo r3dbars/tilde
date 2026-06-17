@@ -191,16 +191,28 @@
         "notes": "Only local textarea and local contenteditable fixtures are beta-safe. Public pages, production browser apps, browser ChatGPT, Slack, Discord, Google Docs, Notion, official CodeMirror, and default Monaco remain blocked until exact proof exists."
       },
       {
+        "bundle": "*",
+        "displayName": "Generic App",
+        "versionState": "pending",
+        "versionReason": "Generic fallback has no exact host version.",
+        "safetyMode": "notPrompt",
+        "runtimeState": "userToggleAllowed",
+        "proofState": "partial",
+        "killSwitch": "perHostDisable",
+        "proofArtifacts": [],
+        "notes": "Default-on generic Accessibility path for normal text fields. Sensitive, secure, search, prompt, and denylisted surfaces remain blocked by separate policies until app-specific proof exists."
+      },
+      {
         "bundle": "com.openai.codex",
         "displayName": "Codex",
         "versionState": "exact",
-        "hostVersion": "26.506.21252",
-        "hostBuild": "2575",
+        "hostVersion": "26.519.22136",
+        "hostBuild": "3003",
         "versionSource": "/Applications/Codex.app",
         "safetyMode": "wordOnly",
-        "runtimeState": "proofModeOnly",
+        "runtimeState": "userToggleAllowed",
         "proofState": "partial",
-        "killSwitch": "proofModeRequired",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
             "kind": "screenshot",
@@ -209,9 +221,13 @@
           {
             "kind": "manual-smoke",
             "reference": "Codex/default"
+          },
+          {
+            "kind": "manual-smoke",
+            "reference": "Codex/full-accept"
           }
         ],
-        "notes": "Proof-only prompt support has same-slice screenshot, one-word accept, and no-submit proof plus a separate default-composer full-accept no-submit proof. It is not beta-safe normal writing support, and broader layouts remain gated."
+        "notes": "Enabled for this local Codex build with one-word and full-accept no-submit proof. Detached suggestions and generic key-event insertion stay off."
       },
       {
         "bundle": "com.anthropic.claude-code",
@@ -223,7 +239,7 @@
         "safetyMode": "wordOnly",
         "runtimeState": "proofModeOnly",
         "proofState": "partial",
-        "killSwitch": "proofModeRequired",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
             "kind": "screenshot",
@@ -244,16 +260,16 @@
         "hostBuild": "1.6608.0",
         "versionSource": "/Applications/Claude.app",
         "safetyMode": "wordOnly",
-        "runtimeState": "proofModeOnly",
+        "runtimeState": "userToggleAllowed",
         "proofState": "partial",
-        "killSwitch": "proofModeRequired",
+        "killSwitch": "perHostDisable",
         "proofArtifacts": [
           {
             "kind": "screenshot",
             "reference": "docs/product/visual-placement-screenshots/claude-desktop.png"
           }
         ],
-        "notes": "Proof-only prompt support has one no-submit layout. Normal beta use, full accept, and layout variants remain blocked until current exact proof exists."
+        "notes": "Default-on dogfood lane with one-word no-submit behavior. Layout variants need more proof and full accept stays off."
       },
       {
         "bundle": "com.apple.Safari",
@@ -1102,6 +1118,15 @@
       "safetyNote": "Only local textarea and contenteditable fixtures count as beta-safe. Public pages, production browser apps, chat, hosted docs, Monaco, CodeMirror, and ProseMirror remain blocked until exact proof exists."
     },
     {
+      "bundle": "*",
+      "displayName": "Generic App",
+      "supportLevel": "yellow",
+      "surface": "Generic Accessibility fallback",
+      "status": "partial",
+      "owner": "generic fallback lane",
+      "safetyNote": "Default-on fallback is only for normal text fields. Sensitive, secure, search, prompt, and denylisted surfaces stay blocked until app-specific proof exists."
+    },
+    {
       "bundle": "com.openai.codex",
       "displayName": "Codex",
       "supportLevel": "yellow",
@@ -1126,7 +1151,7 @@
       "surface": "Claude desktop",
       "status": "partial",
       "owner": "prompt-app proof lane",
-      "safetyNote": "Claude desktop is proof-mode-only for one composer layout; normal beta use, layout variants, and full accept remain blocked."
+      "safetyNote": "Claude desktop is a one-word dogfood lane. Layout variants and full accept remain blocked until current exact proof exists."
     },
     {
       "bundle": "com.apple.Safari",

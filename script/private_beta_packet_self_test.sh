@@ -92,8 +92,8 @@ require_contains "$FIRST_RUN_DOC" "Pause Current App stops suggestions only in t
 require_contains "$FIRST_RUN_DOC" '`Install Local Model` or `Repair Local Model`'
 require_contains "$FIRST_RUN_DOC" "do not run Ollama, Python, shell scripts, or a separate model"
 require_contains "$FIRST_RUN_DOC" "Typed text, prompts, model output, accepted text, screenshots"
-require_contains "$FIRST_RUN_DOC" "Write-test only in the currently enabled proof lanes"
-require_contains "$FIRST_RUN_DOC" "Do not write-test these as normal beta apps."
+require_contains "$FIRST_RUN_DOC" "The app is now default-on for normal text fields through a generic Accessibility"
+require_contains "$FIRST_RUN_DOC" "Treat these as guarded one-word dogfood targets:"
 require_contains "$FIRST_RUN_DOC" "Mail"
 require_contains "$FIRST_RUN_DOC" "search, login, payment, address, URL, secure, and private fields"
 require_contains "$FIRST_RUN_DOC" "Chrome local textarea/contenteditable practice fixtures"

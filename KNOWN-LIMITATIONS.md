@@ -12,12 +12,15 @@ Stale screenshots and old insertion rows do not make a beta lane current.
 - Obsidian when current proof is green
 - Chrome local textarea/contenteditable fixtures
 
-## Diagnostics Or Proof-Only
+## Dogfood Or Proof-Limited
 
-- Codex, Claude Code, and Claude desktop are proof-only prompt/terminal targets,
-  not beta-safe normal writing apps.
+- Codex, Claude Code, and Claude desktop are guarded dogfood prompt/terminal
+  targets, not beta-safe normal writing apps.
+- One-word accept is the only normal dogfood path for Claude Code and Claude
+  desktop. Codex has a separate current full-accept no-submit proof for its
+  default composer only.
 - Full accept stays off in prompt apps until a separate no-submit full-accept
-  proof exists.
+  proof exists for that exact app and layout.
 - Mail is diagnostics-only until compose insertion is proven safe.
 - Browser webmail, including Gmail and Outlook in a browser, is blocked until
   disposable compose-body proof exists.

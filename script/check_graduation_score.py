@@ -422,7 +422,7 @@ def profile_checks() -> list[Check]:
                     "graduationDecision == .wordOnly",
                     "graduationDecision == .diagnosticsOnly",
                     "graduationDecision == .blocked",
-                    "supportStatus(for: \"com.microsoft.VSCode\") == .denylisted",
+                    "supportStatus(for: \"com.microsoft.VSCode\").supportLevel == .diagnosticsOnly",
                 ),
             ),
         ),
