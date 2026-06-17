@@ -294,6 +294,41 @@ struct TypeThroughPrefixStateMachineTests {
         #expect(session.visibleSuggestion?.visibleText == "finish here")
     }
 
+    @Test("Advance emits survived-typethrough signal and trims the visible suggestion")
+    func advanceEmitsSurvivedTypethroughSignalAndTrimsVisibleSuggestion() {
+        // The state machine should ADVANCE/trim the visible suggestion when the user types a
+        // matching prefix, emitting the survived-typethrough signal.  This test verifies the
+        // signal is present on the read-only `transition()` path AND that the mutating `apply()`
+        // path trims the session accordingly — confirming the machine advances rather than
+        // cancels when the typed characters match.
+        var session = SuggestionSession(
+            visibleSuggestion: CompletionSuggestion(text: " validate this path early", maxVisibleWords: 8)
+        )
+        let inp = input(
+            baselineBefore: "we should probably",
+            currentBefore: "we should probably validate"
+        )
+
+        // Read-only path: the transition is .survived with the correct signal.
+        let readOnlyTransition = machine.transition(session: session, input: inp)
+        guard case let .survived(survival) = readOnlyTransition else {
+            Issue.record("Expected .survived but got \(readOnlyTransition)")
+            return
+        }
+        #expect(survival.traceMetadata["reason"] == "survived_typethrough")
+        #expect(survival.traceMetadata["typeThroughSurvival"] == "true")
+        #expect(survival.typedCharacterCount == 9)   // " validate" is 9 chars
+        #expect(!survival.consumedFullSuggestion)
+        // Session must be unchanged after the read-only call.
+        #expect(session.visibleSuggestion?.visibleText == " validate this path early")
+
+        // Mutating path: apply() trims the session to the remaining suffix.
+        let applyTransition = machine.apply(to: &session, input: inp)
+        #expect(applyTransition == readOnlyTransition)
+        // The leading space before "this" is part of the remaining text after the typed prefix.
+        #expect(session.visibleSuggestion?.visibleText == " this path early")
+    }
+
     @Test("Survival metadata is trace safe")
     func survivalMetadataIsTraceSafe() throws {
         let transition = TypeThroughPrefixTransition.survived(TypeThroughPrefixSurvival(
