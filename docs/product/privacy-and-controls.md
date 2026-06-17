@@ -96,6 +96,20 @@ The local proof gate is:
 ./script/check_sensitive_field_proof.sh <redacted-trace.jsonl>
 ```
 
+## Generic App Fallback
+
+Apps without a custom compatibility profile fall back to the default-on "Generic
+App" profile, so the same wrong-field promise must hold for arbitrary, untested
+apps. `GenericAppSafetyProofHarness` proves that across a battery of unknown apps
+the fallback keeps secure, password, payment, search, URL, login, form,
+command-prompt, and unclassifiable fields silent in both the `CompatibilityRouter`
+and the live `CompatibilityProfileStore` stack, while still presenting in
+positively classified compose fields. The matching local proof gate is:
+
+```bash
+./script/check_generic_app_safety_proof.sh <redacted-trace.jsonl>
+```
+
 ## Beta Rule
 
 Private beta reports should use only the redacted export. Do not ask testers for
