@@ -58,3 +58,7 @@ Avoid early:
   run report-only. Keep proof gates honest: pending proof stays pending — do not
   flip a report lane to blocking until its manual proof actually lands.
 - The broad pre-beta gate stays `./script/beta_readiness.sh`.
+
+## Default orchestration: ultracode + workflows
+
+For substantive work — research, audits, multi-file or cross-cutting changes, design, and reviews — default to authoring and running a **Workflow** that fans out parallel agents and adversarially verifies findings, rather than working solo. Reserve solo execution for trivial mechanical edits and conversational replies. Spawned worker threads inherit this default: a thread doing real work should itself orchestrate with a workflow wherever breadth or independent verification helps. Token cost is not the constraint here — correctness and coverage are. This is "ultracode" as the standing default for this repo.
