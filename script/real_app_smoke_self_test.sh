@@ -2541,9 +2541,10 @@ source = Path("script/real_app_smoke.sh").read_text()
 start = source.index("run_codex()")
 end = source.index("\nrun_codex_full_accept()", start)
 block = source[start:end]
-if block.index("focus_codex_proof_prompt") > block.index('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"'):
+suggestion_wait = 'wait_for_log_pattern_optional "$start_line" "suggestion-presented .*app=com.openai.codex"'
+if block.index("focus_codex_proof_prompt") > block.index(suggestion_wait):
     raise SystemExit("Codex proof must focus the marker composer before waiting for the visible suggestion")
-after_visible = block.split('wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex"', 1)[1]
+after_visible = block.split(suggestion_wait, 1)[1]
 before_tab = after_visible.split('press_codex_tab_for_smoke "$start_line"', 1)[0]
 if "focus_codex_proof_prompt" in before_tab or "assert_codex_proof_prompt_ready" in before_tab:
     raise SystemExit("Codex proof must not refocus the composer after the suggestion is visible")
@@ -4307,6 +4308,22 @@ if ! grep -F "full accept waits for separate full-accept no-submit proof" "$TMP_
   echo "real app smoke self-test did not explain the Claude full-accept gate" >&2
   exit 1
 fi
+
+script/real_app_smoke.sh codex --dry-run >"$TMP_DIR/codex.txt"
+if ! grep -F "redacted counts-only bundle" "$TMP_DIR/codex.txt" >/dev/null ||
+   ! grep -F "AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROOF_EXPORT_DIR" "$TMP_DIR/codex.txt" >/dev/null; then
+  echo "real app smoke self-test did not explain the Codex redacted proof export" >&2
+  exit 1
+fi
+if ! grep -F "wait_for_accessibility_ready_optional" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "fail_codex_smoke_with_export" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "blocked-tab-capture" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "blocked-screenshot" script/real_app_smoke.sh >/dev/null ||
+   ! grep -F "script/real_app_smoke_proof_export.sh" script/real_app_smoke.sh >/dev/null; then
+  echo "real app smoke self-test expected Codex blocked proof paths to write a redacted export" >&2
+  exit 1
+fi
+./script/real_app_smoke_proof_export_self_test.sh >/dev/null
 
 for claude_variant in claude-empty claude-long claude-wrapped claude-narrow claude-context claude-light claude-dark; do
   script/real_app_smoke.sh "$claude_variant" --dry-run >"$TMP_DIR/$claude_variant.txt"
