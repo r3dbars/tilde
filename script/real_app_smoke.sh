@@ -62,6 +62,7 @@ TEXTEDIT_APPEARANCE_WAS_SET=0
 TEXTEDIT_PREVIOUS_DARK_MODE=""
 CODEX_DRAFT_BACKUP_PATH=""
 CODEX_DRAFT_BACKUP_ACTIVE=0
+CODEX_PROOF_EXPORT_WRITTEN=0
 CLAUDE_CODE_TERMINAL_PROOF_TITLE=""
 CLAUDE_CODE_TERMINAL_WAS_RUNNING=0
 CLAUDE_DRAFT_BACKUP_PATH=""
@@ -2839,6 +2840,41 @@ latest_accessibility_is_ready() {
   [[ -n "$latest_accessibility_line" ]]
 }
 
+ACCESSIBILITY_READY_BLOCKER=""
+
+wait_for_accessibility_ready_optional() {
+  local start_line="$1"
+  local timeout_seconds="${2:-20}"
+  local allow_existing_ready="${3:-0}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local saw_missing=0
+  ACCESSIBILITY_READY_BLOCKER="timeout"
+
+  while ((SECONDS <= deadline)); do
+    if log_since_matches "$start_line" "launch accessibility=(true|trusted)|status .*accessibility=AX ok"; then
+      ACCESSIBILITY_READY_BLOCKER=""
+      return 0
+    fi
+
+    if [[ "$allow_existing_ready" == "1" ]] && latest_accessibility_is_ready; then
+      ACCESSIBILITY_READY_BLOCKER=""
+      return 0
+    fi
+
+    if log_since_matches "$start_line" "launch accessibility=false|status .*accessibility=AX missing"; then
+      saw_missing=1
+      ACCESSIBILITY_READY_BLOCKER="missing"
+    fi
+
+    sleep 0.2
+  done
+
+  if [[ "$saw_missing" == "1" ]]; then
+    ACCESSIBILITY_READY_BLOCKER="missing"
+  fi
+  return 1
+}
+
 wait_for_accessibility_ready() {
   local start_line="$1"
   local label="${2:-Accessibility readiness}"
@@ -3306,6 +3342,80 @@ manual_gate_reason() {
       echo "it focuses user content"
       ;;
   esac
+}
+
+proof_export_safe_slug() {
+  printf '%s\n' "$1" |
+    tr '[:upper:]' '[:lower:]' |
+    sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//'
+}
+
+codex_smoke_proof_export_command() {
+  local requested="${REQUESTED_APP:-$APP}"
+  local command_text="script/real_app_smoke.sh $requested"
+  if [[ "$MANUAL_GATE" == "1" ]]; then
+    command_text+=" --manual-gate"
+  fi
+  if [[ "$SKIP_BUILD" == "1" ]]; then
+    command_text+=" --skip-build"
+  fi
+  printf '%s\n' "$command_text"
+}
+
+write_codex_smoke_proof_export() {
+  local log_start_line="$1"
+  local trace_start_line="$2"
+  local outcome="$3"
+  local reason="$4"
+  local next_step="$5"
+  local proof_label="${6:-default}"
+
+  if [[ "$CODEX_PROOF_EXPORT_WRITTEN" == "1" ]]; then
+    return 0
+  fi
+
+  local output_dir label_slug outcome_slug timestamp
+  label_slug="$(proof_export_safe_slug "$proof_label")"
+  outcome_slug="$(proof_export_safe_slug "$outcome")"
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  output_dir="${AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROOF_EXPORT_DIR:-${AUTOCOMPLETE_LAB_REAL_APP_PROOF_EXPORT_DIR:-dist/smoke-proof/codex-${label_slug:-default}-${outcome_slug:-proof}-$timestamp}}"
+
+  ./script/real_app_smoke_proof_export.sh \
+    --app com.openai.codex \
+    --label "$proof_label" \
+    --out "$output_dir" \
+    --log "$LOG_PATH" \
+    --trace "$TRACE_PATH" \
+    --log-start "$log_start_line" \
+    --trace-start "$trace_start_line" \
+    --outcome "$outcome" \
+    --reason "$reason" \
+    --next-step "$next_step" \
+    --command "$(codex_smoke_proof_export_command)" >&2
+
+  CODEX_PROOF_EXPORT_WRITTEN=1
+  echo "Codex redacted proof export: $output_dir" >&2
+}
+
+fail_codex_smoke_with_export() {
+  local log_start_line="$1"
+  local trace_start_line="$2"
+  local outcome="$3"
+  local reason="$4"
+  local next_step="$5"
+  local proof_label="${6:-default}"
+
+  write_codex_smoke_proof_export \
+    "$log_start_line" \
+    "$trace_start_line" \
+    "$outcome" \
+    "$reason" \
+    "$next_step" \
+    "$proof_label" || true
+
+  echo "Codex smoke stopped: $reason" >&2
+  echo "Next step: $next_step" >&2
+  exit 1
 }
 
 claude_code_host_display_name() {
@@ -13964,15 +14074,18 @@ describe_plan() {
         echo "Safety: Codex model latency proof tags the runtime launch with scenario codex-model-latency so generic prompt samples cannot satisfy the strict selector."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter or full accept; it runs the prompt no-submit gate on the same trace slice."
         echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
+        echo "Proof export: blocked and successful Codex runs write a redacted counts-only bundle under dist/smoke-proof unless AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROOF_EXPORT_DIR is set."
       elif [[ "$CODEX_FULL_ACCEPT_PROOF" == "1" ]]; then
         echo "Plan: manual-gated Codex prompt full-accept no-submit proof. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text, waits for a visible short phrase, presses the configured full-accept shortcut once, and validates that the phrase stayed in the composer."
         echo "Safety: Codex full accept is enabled only for the proof-mode Codex bundle and runtime scenario codex-full-accept-no-submit."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter; it runs the prompt full-accept no-submit gate on the same trace slice."
         echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
+        echo "Proof export: blocked and successful Codex runs write a redacted counts-only bundle under dist/smoke-proof unless AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROOF_EXPORT_DIR is set."
       else
         echo "Plan: manual-gated Codex prompt smoke. The script seeds disposable AUTOCOMPLETE_LAB_CODEX_PROOF text and validates one-word Tab accept without submit."
         echo "Safety: pass --manual-gate to continue. The helper never presses Enter; full accept waits for separate full-accept no-submit proof."
         echo "Safety: if the focused Codex prompt already has a draft, the helper backs it up privately and restores it after the no-submit proof; empty proof composers are cleared."
+        echo "Proof export: blocked and successful Codex runs write a redacted counts-only bundle under dist/smoke-proof unless AUTOCOMPLETE_LAB_REAL_APP_SMOKE_PROOF_EXPORT_DIR is set."
       fi
       ;;
     claude-code)
@@ -14369,6 +14482,7 @@ run_codex() {
 
   local runtime_start_line start_line trace_start_line proof_text backup_dir
   runtime_start_line="$(line_count "$LOG_PATH")"
+  trace_start_line="$(line_count "$TRACE_PATH")"
   proof_text="$(codex_proof_text)"
   backup_dir="$(make_tmp_dir)"
   CODEX_DRAFT_BACKUP_PATH="$backup_dir/codex-draft-backup.txt"
@@ -14377,7 +14491,22 @@ run_codex() {
 
   prepare_temporary_app_enablement
   build_if_needed
-  wait_for_accessibility_ready "$runtime_start_line" "Codex Accessibility readiness" 20 "$SKIP_BUILD"
+  if ! wait_for_accessibility_ready_optional "$runtime_start_line" 20 "$SKIP_BUILD"; then
+    if [[ "$ACCESSIBILITY_READY_BLOCKER" == "missing" ]]; then
+      fail_codex_smoke_with_export \
+        "$runtime_start_line" \
+        "$trace_start_line" \
+        "blocked-accessibility" \
+        "SteadyType is not trusted for macOS Accessibility, so Codex automation stopped before typing." \
+        "Enable SteadyType in System Settings > Privacy & Security > Accessibility, then rerun script/real_app_smoke.sh codex --manual-gate."
+    fi
+    fail_codex_smoke_with_export \
+      "$runtime_start_line" \
+      "$trace_start_line" \
+      "blocked-accessibility-timeout" \
+      "SteadyType Accessibility readiness was not proven before the Codex smoke timeout." \
+      "Confirm the current dist/SteadyType.app is running and trusted in Accessibility, then rerun script/real_app_smoke.sh codex --manual-gate."
+  fi
   wait_for_runtime_ready "$runtime_start_line" "Codex runtime readiness" 60 "$SKIP_BUILD"
   ensure_cgevent_keypress_helper
 
@@ -14389,19 +14518,55 @@ run_codex() {
     CODEX_DRAFT_BACKUP_ACTIVE=1
   fi
   focus_codex_proof_prompt
-  wait_for_log_pattern "$start_line" "suggestion-presented .*app=com.openai.codex" "Codex proof suggestion" 20
-  wait_for_screenshot_capture_if_enabled "$start_line" "com.openai.codex" "Codex proof"
+  if ! wait_for_log_pattern_optional "$start_line" "suggestion-presented .*app=com.openai.codex" 20; then
+    fail_codex_smoke_with_export \
+      "$start_line" \
+      "$trace_start_line" \
+      "blocked-no-suggestion" \
+      "Codex prompt was seeded with disposable proof text, but SteadyType did not present a Codex suggestion." \
+      "Check that the Codex composer is focused, the disposable marker is still present, and no prompt-app suppression reason appears in diagnostics."
+  fi
+  if screenshot_trace_requested &&
+     ! wait_for_log_pattern_optional "$start_line" "screenshot-captured .*app=com.openai.codex" 8; then
+    fail_codex_smoke_with_export \
+      "$start_line" \
+      "$trace_start_line" \
+      "blocked-screenshot" \
+      "Codex showed a suggestion, but strict screenshot evidence was not captured for the slice." \
+      "Keep the run YELLOW, confirm screenshot tracing permissions/output, then rerun with AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1."
+  fi
   assert_frontmost_app "Codex" "Codex proof"
   sleep 0.05
   press_codex_tab_for_smoke "$start_line"
-  wait_for_log_fields "$start_line" "Codex Tab acceptance" 12 \
+  if ! wait_for_log_fields_optional "$start_line" 12 \
     "keyboard-action" \
     "app=com.openai.codex" \
     "key=tab" \
     "action=acceptNextWord" \
-    "handled=true"
-  wait_for_log_pattern "$start_line" "insert .*app=com.openai.codex .*success=true" "Codex successful insertion" 12
-  wait_for_log_pattern "$start_line" "insert-verification .*app=com.openai.codex .*result=verified" "Codex verified insertion" 12
+    "handled=true"; then
+    fail_codex_smoke_with_export \
+      "$start_line" \
+      "$trace_start_line" \
+      "blocked-tab-capture" \
+      "Codex showed a suggestion, but the automated Tab did not reach SteadyType as a handled acceptNextWord action." \
+      "Use the redacted diagnostics counts to distinguish key-capture/TCC focus loss from app logic; if needed, rerun and press a real hardware Tab once while the disposable proof text is focused."
+  fi
+  if ! wait_for_log_pattern_optional "$start_line" "insert .*app=com.openai.codex .*success=true" 12; then
+    fail_codex_smoke_with_export \
+      "$start_line" \
+      "$trace_start_line" \
+      "blocked-insert" \
+      "Codex handled Tab, but SteadyType did not record a successful Codex insertion." \
+      "Inspect insertion diagnostics for the redacted failure class, then rerun the Codex lane after focus or insertion-mode fixes."
+  fi
+  if ! wait_for_log_pattern_optional "$start_line" "insert-verification .*app=com.openai.codex .*result=verified" 12; then
+    fail_codex_smoke_with_export \
+      "$start_line" \
+      "$trace_start_line" \
+      "blocked-verification" \
+      "Codex insertion ran, but same-slice verification did not prove the accepted word landed in the composer." \
+      "Treat the run as not-green; inspect redacted verification diagnostics before claiming Codex proof."
+  fi
   assert_codex_prompt_retains_marker
 
   sleep 1
@@ -14409,6 +14574,13 @@ run_codex() {
   AUTOCOMPLETE_LAB_LOG_START_LINE="$start_line" \
   AUTOCOMPLETE_LAB_TRACE_START_LINE="$trace_start_line" \
     ./script/manual_smoke_session.sh codex --check --visual
+  write_codex_smoke_proof_export \
+    "$start_line" \
+    "$trace_start_line" \
+    "passed" \
+    "Codex one-word no-submit smoke verified suggestion, Tab accept, insertion, and insertion verification." \
+    "No manual follow-up needed for this exact disposable Codex slice." \
+    "default"
 }
 
 run_codex_full_accept() {

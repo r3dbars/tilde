@@ -19,6 +19,7 @@ swift test
 ./script/check_model_asset_self_test.sh
 ./script/manual_smoke_self_test.sh
 ./script/real_app_smoke_self_test.sh
+./script/real_app_smoke_proof_export_self_test.sh
 ./script/manual_proof_queue_self_test.sh
 ./script/manual_proof_refresh_self_test.sh
 ./script/check_onboarding_walkthrough_proof_self_test.sh
