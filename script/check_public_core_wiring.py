@@ -125,9 +125,16 @@ def load_allowlist() -> dict[str, AllowlistEntry]:
                 f"unknown classification '{classification}' for {name}; "
                 f"use one of {', '.join(sorted(ALLOWED_CLASSIFICATIONS))}"
             )
-        if name in entries:
-            fail(f"duplicate allowlist entry for {name}")
-        entries[name] = AllowlistEntry(classification, source, reason)
+        entry = AllowlistEntry(classification, source, reason)
+        existing = entries.get(name)
+        if existing is not None and existing != entry:
+            # Two rows for the same type that disagree are a real ambiguity a
+            # human must resolve.
+            fail(f"conflicting allowlist entries for {name}")
+        # An exact-duplicate row is the harmless artifact of a `merge=union`
+        # auto-merge (see .gitattributes); collapse it instead of failing.
+        # script/normalize_public_core_allowlist.py removes it on write.
+        entries[name] = entry
     return entries
 
 

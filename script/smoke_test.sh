@@ -32,6 +32,8 @@ swift test
 ./script/check_generic_app_safety_proof_self_test.sh
 ./script/check_diagnostics_log_self_test.sh
 ./script/check_proof_manifest_self_test.sh
+./script/normalize_public_core_allowlist_self_test.sh
+./script/normalize_proof_manifest_self_test.sh
 ./script/check_visual_placement_evidence_self_test.sh
 ./script/check_visual_placement_evidence.sh
 ./script/visual_calibration_report_self_test.sh
