@@ -36,7 +36,7 @@ struct SuggestionRequestSchedulingPolicyTests {
 
         #expect(schedule.policyDelayMilliseconds == 20)
         #expect(schedule.scheduledDelayMilliseconds == 60)
-        #expect(schedule.resultLatencyBudgetMilliseconds == 750)
+        #expect(schedule.resultLatencyBudgetMilliseconds == 150)
         #expect(schedule.reason == "floating-overlay-floor")
     }
 

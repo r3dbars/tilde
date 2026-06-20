@@ -134,6 +134,33 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Latency-capped phrase requests expose the effective word limit")
+    func latencyCappedPhraseRequestsExposeEffectiveWordLimit() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.apple.TextEdit",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
+            context: makeContext(textBeforeCursor: "The onboarding screen should make", textAfterCursor: ""),
+            appBundleIdentifier: "com.apple.TextEdit",
+            fieldIdentity: field,
+            fieldClassification: AXFieldClassification(kind: .multilineCompose, reason: "test-compose"),
+            acceptedTextStyleSketch: nil,
+            visiblePageContext: nil,
+            maxVisibleWords: 3,
+            requestMode: .phraseContinuation,
+            suggestionTuning: SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 20)
+        ))
+
+        #expect(orchestration.request.maxVisibleWords == 3)
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "20")
+        #expect(orchestration.requestMetadata["suggestionEffectiveMaxVisibleWords"] == "3")
+        #expect(orchestration.requestMetadata["suggestionMaxVisibleWordsCappedForLatency"] == "true")
+    }
+
+    @MainActor
     @Test("A newer request blocks an older request ticket")
     func newerRequestBlocksOlderTicket() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -464,6 +491,36 @@ struct SuggestionOrchestratorTests {
         #expect(enabledSelection.traceMetadata["candidateSelectionSource"] == "canned-bridge")
         #expect(enabledSelection.traceMetadata["cannedBridgeMatch"] == "i just wanted to")
         #expect(enabledSelection.traceMetadata["predictivePhraseMatch"] == nil)
+    }
+
+    @MainActor
+    @Test("Fast phrase selection covers common tiny writing edits")
+    func fastPhraseSelectionCoversCommonTinyWritingEdits() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let onboarding = orchestrator.fastPhraseSelection(
+            for: "The onboarding screen should make",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 3,
+            allowPredictiveFallback: true
+        )
+        let appFeel = orchestrator.fastPhraseSelection(
+            for: "I want this app to feel",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 3,
+            allowPredictiveFallback: true
+        )
+        let seeIf = orchestrator.fastPhraseSelection(
+            for: "I would like to see if",
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 3,
+            allowPredictiveFallback: true
+        )
+
+        #expect(onboarding.suggestion?.visibleText == " setup feel clear")
+        #expect(onboarding.traceMetadata["candidateSelectionSource"] == "canned-bridge")
+        #expect(appFeel.suggestion?.visibleText == " fast and useful")
+        #expect(seeIf.suggestion?.visibleText == " this works")
     }
 
     @MainActor
