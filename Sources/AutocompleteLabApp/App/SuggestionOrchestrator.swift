@@ -158,6 +158,12 @@ final class SuggestionOrchestrator {
         if let suggestionTuning {
             requestMetadata.merge(suggestionTuning.traceMetadata) { current, _ in current }
         }
+        if request.mode == .phraseContinuation,
+           let configuredMaxVisibleWords = suggestionTuning?.maxVisibleWords,
+           request.maxVisibleWords < configuredMaxVisibleWords {
+            requestMetadata["suggestionEffectiveMaxVisibleWords"] = String(request.maxVisibleWords)
+            requestMetadata["suggestionMaxVisibleWordsCappedForLatency"] = "true"
+        }
 
         currentRequestStorage = request
         return SuggestionOrchestration(

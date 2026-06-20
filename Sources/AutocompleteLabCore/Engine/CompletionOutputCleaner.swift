@@ -670,6 +670,28 @@ public struct CompletionOutputCleaner: Equatable, Sendable {
             }
         }
 
+        let earlyReplayWindow = min(5, suggestionWords.count)
+        guard earlyReplayWindow >= 3 else {
+            return false
+        }
+
+        let earlySuggestionWords = Array(suggestionWords.prefix(earlyReplayWindow))
+        for replayCount in stride(from: min(3, earlySuggestionWords.count), through: 2, by: -1) {
+            let replaySpans = currentSentenceWords.windows(ofCount: replayCount)
+            let lastStartIndex = earlySuggestionWords.count - replayCount
+            guard lastStartIndex >= 1 else {
+                continue
+            }
+
+            for startIndex in 1...lastStartIndex {
+                let endIndex = startIndex + replayCount
+                let candidateSpan = Array(earlySuggestionWords[startIndex..<endIndex])
+                if replaySpans.contains(candidateSpan) {
+                    return true
+                }
+            }
+        }
+
         return false
     }
 

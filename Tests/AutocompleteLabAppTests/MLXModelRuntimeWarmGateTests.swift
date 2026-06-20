@@ -417,6 +417,82 @@ struct MLXModelRuntimeWarmGateTests {
         ) == nil)
     }
 
+    @Test("Max phrase continuation does not collapse into tiny word suffix after real context")
+    func maxPhraseContinuationDoesNotCollapseIntoTinyWordSuffixAfterRealContext() {
+        let request = CompletionRequest(
+            textBeforeCursor: "Hey how is it going today? I would like to be intellig",
+            maxVisibleWords: 20,
+            mode: .phraseContinuation
+        )
+
+        #expect(MLXModelRuntime.localWordCompletionFallbackSelection(for: request) == nil)
+    }
+
+    @Test("Max phrase continuation retries accepted tiny suffixes")
+    func maxPhraseContinuationRetriesAcceptedTinySuffixes() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "Hey how is it going I would like to see if I am smart and intellig",
+            maxVisibleWords: 20,
+            mode: .phraseContinuation
+        )
+        let tinyCandidate = CompletionSuggestion(text: "gent", maxVisibleWords: 20)
+        let selection = CompletionCandidateSelection(
+            rankedCandidates: [RankedCompletionCandidate(suggestion: tinyCandidate, score: 1.0)],
+            selectedCandidate: RankedCompletionCandidate(suggestion: tinyCandidate, score: 1.0),
+            scoreMargin: nil,
+            suppressionReason: nil
+        )
+
+        let prompt = try #require(MLXModelRuntime.retryPromptForShortHighWordCandidate(
+            request: request,
+            cleanedCandidates: [tinyCandidate],
+            candidateSelection: selection,
+            effectiveMaxVisibleWords: 20
+        ))
+
+        #expect(prompt.system.contains("previous answer was too short"))
+        #expect(prompt.system.contains("gent"))
+        #expect(prompt.user.hasSuffix("Next 12-20 words, or <NO_SUGGESTION>:"))
+    }
+
+    @Test("Max phrase continuation rejects tiny suffixes after retry")
+    func maxPhraseContinuationRejectsTinySuffixesAfterRetry() {
+        let request = CompletionRequest(
+            textBeforeCursor: "Hey how is it going I would like to see if I am smart and intellig",
+            maxVisibleWords: 20,
+            mode: .phraseContinuation
+        )
+        let tinyCandidate = CompletionSuggestion(text: "gent", maxVisibleWords: 20)
+        let phraseCandidate = CompletionSuggestion(
+            text: "ent enough to keep learning from the details without slowing the whole thought down",
+            maxVisibleWords: 20
+        )
+
+        #expect(MLXModelRuntime.shouldRejectTinyMaxContinuation(
+            tinyCandidate,
+            request: request,
+            effectiveMaxVisibleWords: 20
+        ))
+        #expect(!MLXModelRuntime.shouldRejectTinyMaxContinuation(
+            phraseCandidate,
+            request: request,
+            effectiveMaxVisibleWords: 20
+        ))
+    }
+
+    @Test("Max phrase continuation can still finish a word before enough context")
+    func maxPhraseContinuationCanStillFinishAWordBeforeEnoughContext() throws {
+        let request = CompletionRequest(
+            textBeforeCursor: "Looks inst",
+            maxVisibleWords: 20,
+            mode: .phraseContinuation
+        )
+
+        let selection = try #require(MLXModelRuntime.localWordCompletionFallbackSelection(for: request))
+
+        #expect(selection.suggestion?.visibleText == "ant")
+    }
+
     @Test("Local word completion fallback stays off in the middle of words")
     func localWordCompletionFallbackStaysOffInTheMiddleOfWords() {
         let request = CompletionRequest(

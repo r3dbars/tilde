@@ -3,24 +3,25 @@ import Testing
 
 @Suite("Model policy")
 struct ModelPolicyTests {
-    @Test("MVP uses an app-owned Gemma MLX model with short suggestions and reasoning off")
+    @Test("MVP uses an app-owned loadable chat-tuned MLX model with short suggestions and reasoning off")
     func mvpPolicy() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .gemma4E4BItOptiQ)
+        #expect(policy.model == .qwen35FourB)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)
+        #expect(policy.minimumMemoryGB == 16)
         #expect(policy.maxGeneratedTokens == 20)
         #expect(policy.maxVisibleWords == 8)
         #expect(policy.maxVisibleWords >= CompletionModelPolicy.minimumVisibleWords)
         #expect(policy.maxVisibleWords <= CompletionModelPolicy.maximumVisibleWords)
     }
 
-    @Test("Small draft experiment uses an app-owned Qwen MLX model without changing the MVP default")
+    @Test("Small draft experiment keeps Qwen3 1.7B available as a lower-memory trial")
     func smallDraftExperimentUsesQwen3Medium() {
         let policy = CompletionModelPolicy.smallDraftExperiment
 
-        #expect(CompletionModelPolicy.mvp.model == .gemma4E4BItOptiQ)
+        #expect(CompletionModelPolicy.mvp.model == .qwen35FourB)
         #expect(policy.model == .qwen3Medium)
         #expect(policy.runtimeOwnership == .appOwnedEmbedded)
         #expect(policy.reasoningEnabled == false)

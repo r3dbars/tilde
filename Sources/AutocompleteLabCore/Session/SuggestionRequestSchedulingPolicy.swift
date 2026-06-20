@@ -37,7 +37,7 @@ public struct SuggestionRequestSchedulingPolicy: Equatable, Sendable {
     public init(
         floatingOverlayMinimumDelayMilliseconds: Int = 60,
         instantWordResultBudgetMilliseconds: Int = 450,
-        continuationResultBudgetMilliseconds: Int = 750
+        continuationResultBudgetMilliseconds: Int = 150
     ) {
         self.floatingOverlayMinimumDelayMilliseconds = max(0, floatingOverlayMinimumDelayMilliseconds)
         self.instantWordResultBudgetMilliseconds = max(1, instantWordResultBudgetMilliseconds)

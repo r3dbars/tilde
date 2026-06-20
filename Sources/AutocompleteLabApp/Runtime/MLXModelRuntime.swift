@@ -468,6 +468,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         var wordCompletionFallbackUsed = false
         var wordCompletionFallbackSource: String?
 
+        let effectiveMaxVisibleWords = effectiveMaxVisibleWords(for: request)
         let retryPrompt = Self.retryPromptForEmptyWordCompletionCandidate(
             request: request,
             cleanedCandidates: cleanedCandidates,
@@ -476,7 +477,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             request: request,
             cleanedCandidates: cleanedCandidates,
             candidateSelection: candidateSelection,
-            effectiveMaxVisibleWords: effectiveMaxVisibleWords(for: request)
+            effectiveMaxVisibleWords: effectiveMaxVisibleWords
         )
         if let retryPrompt {
             retryAttempted = true
@@ -485,7 +486,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 metadata: [
                     "app": request.appBundleIdentifier ?? "unknown",
                     "mode": request.mode.rawValue,
-                    "maxVisibleWords": String(effectiveMaxVisibleWords(for: request)),
+                    "maxVisibleWords": String(effectiveMaxVisibleWords),
                     "candidateTopScore": Self.formattedCandidateScore(candidateSelection.rankedCandidates.first?.score),
                     "candidateWords": String(candidateSelection.rankedCandidates.first?.suggestion.visibleWordCount ?? 0)
                 ]
@@ -527,6 +528,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             }
         }
 
+        let shouldRejectTinyContinuation = Self.shouldRejectTinyMaxContinuation(
+            candidateSelection.suggestion,
+            request: request,
+            effectiveMaxVisibleWords: effectiveMaxVisibleWords
+        )
+
         if candidateSelection.suggestion == nil,
            let fallbackSelection = Self.localWordCompletionFallbackSelection(for: request),
            let fallbackSuggestion = fallbackSelection.suggestion {
@@ -550,7 +557,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             )
         }
 
-        let cleanedSuggestion = candidateSelection.suggestion
+        let cleanedSuggestion = shouldRejectTinyContinuation ? nil : candidateSelection.suggestion
         let candidateTopScore = candidateSelection.rankedCandidates.first?.score
         let cleanedAt = Date()
         let totalMilliseconds = Self.milliseconds(from: startedAt, to: cleanedAt)
@@ -566,7 +573,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["cleanupMilliseconds"] = String(Self.milliseconds(from: generation.generatedAt, to: cleanedAt))
         timingMetadata["totalMilliseconds"] = String(totalMilliseconds)
         timingMetadata["maxTokens"] = String(requestMaxGeneratedTokens)
-        timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords(for: request))
+        timingMetadata["maxVisibleWords"] = String(effectiveMaxVisibleWords)
         timingMetadata["promptTemplate"] = formattedPrompt.templateIdentifier
         // Prompt-size proxies for prefill cost. On the default ChatSession path, prefill +
         // first-token decode are fused inside `firstChunkMilliseconds` (streamResponse is
@@ -578,6 +585,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         timingMetadata["candidateTopScore"] = Self.formattedCandidateScore(candidateTopScore)
         timingMetadata["candidateScoreMargin"] = Self.formattedCandidateScore(candidateSelection.scoreMargin)
         timingMetadata["candidateSuppressionReason"] = candidateSelection.suppressionReason?.rawValue ?? "none"
+        timingMetadata["tinyMaxContinuationRejected"] = shouldRejectTinyContinuation ? "true" : "false"
         timingMetadata["cleanedChars"] = String(cleanedSuggestion?.visibleText.count ?? 0)
         timingMetadata["retryAttempted"] = String(retryAttempted)
         timingMetadata["retryUsed"] = String(retryUsed)
@@ -984,6 +992,11 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
             return false
         }
 
+        if request.maxVisibleWords >= 12,
+           completedWordsBeforeTrailingFragment(in: request.textBeforeCursor) >= 4 {
+            return false
+        }
+
         return true
     }
 
@@ -994,11 +1007,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         effectiveMaxVisibleWords: Int
     ) -> CompletionPrompt? {
         guard request.mode.isContinuation,
-              effectiveMaxVisibleWords >= 6,
-              candidateSelection.suggestion == nil,
-              candidateSelection.suppressionReason == .lowTopScore
-                || candidateSelection.suppressionReason == .noCandidates
-        else {
+              effectiveMaxVisibleWords >= 6 else {
             return nil
         }
 
@@ -1007,6 +1016,16 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         )
         let shortCandidate = candidateSelection.rankedCandidates.first?.suggestion
             ?? cleanedCandidates.first
+        let selectedCandidateIsTooShort = candidateSelection.suggestion.map {
+            $0.visibleWordCount < preferredMinimum
+        } ?? false
+        let shouldRepairMissingOrWeakCandidate = candidateSelection.suggestion == nil
+            && (candidateSelection.suppressionReason == .lowTopScore
+                || candidateSelection.suppressionReason == .noCandidates)
+        guard selectedCandidateIsTooShort || shouldRepairMissingOrWeakCandidate else {
+            return nil
+        }
+
         let shortPrefix = shortCandidate?.visibleText
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if candidateSelection.suppressionReason == .lowTopScore,
@@ -1046,6 +1065,25 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         return CompletionPrompt(system: system, user: user)
     }
 
+    static func shouldRejectTinyMaxContinuation(
+        _ suggestion: CompletionSuggestion?,
+        request: CompletionRequest,
+        effectiveMaxVisibleWords: Int
+    ) -> Bool {
+        guard request.mode == .phraseContinuation,
+              effectiveMaxVisibleWords >= 12,
+              let suggestion,
+              completedWordsBeforeTrailingFragment(in: request.textBeforeCursor) >= 4
+        else {
+            return false
+        }
+
+        let preferredMinimum = CompletionModelPolicy.preferredMinimumVisibleWords(
+            forVisibleWords: effectiveMaxVisibleWords
+        )
+        return suggestion.visibleWordCount < preferredMinimum
+    }
+
     static func shouldStopEarly(
         _ suggestion: CompletionSuggestion?,
         rawOutput: String,
@@ -1077,6 +1115,23 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         return text.split(whereSeparator: { !$0.isLetter }).last.map(String.init)
+    }
+
+    private static func completedWordsBeforeTrailingFragment(in text: String) -> Int {
+        guard trailingWordFragment(in: text) != nil else {
+            return text.split(whereSeparator: { !$0.isLetter }).count
+        }
+
+        var prefixEnd = text.endIndex
+        while prefixEnd > text.startIndex {
+            let previousIndex = text.index(before: prefixEnd)
+            guard text[previousIndex].isLetter else {
+                break
+            }
+            prefixEnd = previousIndex
+        }
+        let prefix = text[..<prefixEnd]
+        return prefix.split(whereSeparator: { !$0.isLetter }).count
     }
 
     private static let wordCompletionFallbackWords = WordCompletionCandidateRanker.defaultWords + [

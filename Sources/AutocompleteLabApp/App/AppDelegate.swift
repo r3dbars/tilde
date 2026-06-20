@@ -18480,10 +18480,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for requestMode: CompletionRequestMode,
         profile: CompatibilityProfile
     ) -> Int {
-        effectiveSuggestionPace(for: profile).maxVisibleWords(
+        let pacedWords = effectiveSuggestionPace(for: profile).maxVisibleWords(
             defaultMaxVisibleWords: suggestionTuning.maxVisibleWords,
             requestMode: requestMode
         )
+        guard requestMode == .phraseContinuation else {
+            return pacedWords
+        }
+
+        return min(pacedWords, 3)
     }
 
     private func shouldAskModelForWordCompletionFallback(

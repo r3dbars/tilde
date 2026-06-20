@@ -304,6 +304,10 @@ struct CompletionOutputCleanerTests {
             after: "I want this to feel"
         ) == nil)
         #expect(cleaner.clean(
+            "can I see if I can get a quick confirmation",
+            after: "I would like to see if "
+        ) == nil)
+        #expect(cleaner.clean(
             "I want this to feel smoother",
             after: "I want this"
         )?.visibleText == " to feel smoother")

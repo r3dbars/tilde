@@ -290,8 +290,24 @@ private final class FieldStatusBadgeView: NSView {
         layer?.shadowOpacity = 1
         layer?.shadowRadius = 4
         layer?.shadowOffset = CGSize(width: 0, height: -1)
+        glyphLabel.stringValue = glyph(for: state.kind)
         glyphLabel.textColor = tint
         statusDot.layer?.backgroundColor = tint.cgColor
+    }
+
+    private func glyph(for kind: FieldStatusIndicatorState.Kind) -> String {
+        switch kind {
+        case .ready:
+            return "A"
+        case .thinking:
+            return "..."
+        case .shown:
+            return "A+"
+        case .waiting:
+            return "?"
+        case .blocked:
+            return "!"
+        }
     }
 
     private func tintColor(for kind: FieldStatusIndicatorState.Kind) -> NSColor {
