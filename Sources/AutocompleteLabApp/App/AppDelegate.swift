@@ -576,7 +576,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var modelInstallStatusText: String?
     private var isModelInstallCancelRequested = false
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
-    private let eagerTypingPollDelayMilliseconds = 16
+    // Fast enough to keep ghost text aligned while typing, but slow enough to coalesce
+    // AX reads instead of making the suggestion system compete with real keystrokes.
+    private let eagerTypingPollDelayMilliseconds = 40
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
@@ -4232,7 +4234,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func shouldRequestEagerTypingPoll() -> Bool {
         guard suggestionTuning.aggressivenessLevel >= 5,
-              !suggestionSession.hasVisibleSuggestion,
               let frontmostApp = accessibilityClient.frontmostApplication(),
               let profile = effectiveProfile(for: frontmostApp),
               profile.canPresentSuggestions,

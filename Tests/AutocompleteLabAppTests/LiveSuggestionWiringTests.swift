@@ -50,6 +50,19 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "reason: \"survived_typethrough\"")
     }
 
+    @Test("Max mode reconciles visible suggestions while the user keeps typing")
+    func maxModeReconcilesVisibleSuggestionsDuringTyping() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+        let eagerPollPolicy = try functionBody(
+            named: "private func shouldRequestEagerTypingPoll() -> Bool",
+            in: appDelegate
+        )
+
+        try require(appDelegate, contains: "private let eagerTypingPollDelayMilliseconds = 40")
+        try require(appDelegate, contains: "suggestionPipeline.requestPollSoon(afterMilliseconds: eagerTypingPollDelayMilliseconds)")
+        #expect(!eagerPollPolicy.contains("!suggestionSession.hasVisibleSuggestion"))
+    }
+
     @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")
     func appDelegateForwardsScreenshotPathAuthorization() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
@@ -106,4 +119,14 @@ private func require(_ text: String, contains needle: String) throws {
     if !text.contains(needle) {
         Issue.record("Expected source to contain \(needle)")
     }
+}
+
+private func functionBody(named signature: String, in source: String) throws -> Substring {
+    guard let start = source.range(of: signature)?.lowerBound,
+          let nextFunction = source[source.index(after: start)...].range(of: "\n    private func ")?.lowerBound else {
+        Issue.record("Expected to find function body for \(signature)")
+        return source[...]
+    }
+
+    return source[start..<nextFunction]
 }
