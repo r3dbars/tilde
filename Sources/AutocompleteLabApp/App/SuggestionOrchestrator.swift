@@ -524,6 +524,32 @@ final class SuggestionOrchestrator {
         screenshotTracingEnabled: Bool,
         shouldCaptureScreenshot: Bool
     ) -> Bool {
+        if profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier {
+            guard context.role == "AXTextArea",
+                  context.caretIsSynthetic,
+                  context.capabilities.canReadValue,
+                  context.capabilities.canReadSelectedTextRange,
+                  context.selectedTextLength == 0,
+                  context.textAfterCursor.isEmpty,
+                  context.windowIdentifier != nil,
+                  let elementRect = context.elementRect,
+                  elementRect.width > 0,
+                  elementRect.height > 0 else {
+                return false
+            }
+
+            return PromptEditorFingerprintPolicy().decision(
+                bundleIdentifier: profile.bundleIdentifier,
+                role: context.role,
+                fingerprintText: context.fingerprint.searchableText,
+                elementRect: context.elementRect,
+                windowRect: context.windowRect,
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor,
+                selectedTextLength: context.selectedTextLength
+            ).canSuggest
+        }
+
         guard profile.bundleIdentifier == "com.google.Chrome",
               context.role == "AXTextArea",
               context.caretIsSynthetic,
