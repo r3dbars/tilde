@@ -257,11 +257,11 @@ private func runReplay(options: Options) async throws {
         }
     }
     let markdown = "# SteadyType Replay Eval\n\n" + markdownSections.joined(separator: "\n\n") + "\n"
-    try emitMarkdown(markdown, to: options.outputMarkdownURL, ownerOnly: corpusKind == "personal")
     if options.trendRequested {
         let destination = options.trendURL ?? defaultTrendURL(corpusKind: corpusKind)
         try appendTrendRows(trendRows, to: destination, ownerOnly: corpusKind == "personal")
     }
+    try emitMarkdown(markdown, to: options.outputMarkdownURL, ownerOnly: corpusKind == "personal")
 }
 
 private func percentile95(_ values: [Int]) -> Double? {
@@ -296,9 +296,9 @@ private func runLiveScorecard(options: Options) throws {
         corpusKind: "personal",
         scorecard: scorecard
     )
-    try emitMarkdown(scorecard.markdown + "\n", to: options.outputMarkdownURL, ownerOnly: true)
     let destination = options.trendURL ?? defaultTrendURL(corpusKind: "personal")
     try appendTrendRows([row], to: destination, ownerOnly: true)
+    try emitMarkdown(scorecard.markdown + "\n", to: options.outputMarkdownURL, ownerOnly: true)
 }
 
 private func loadJournalEntries(from corpusURL: URL) throws -> [PersonalCaptureJournalEntry] {
@@ -376,18 +376,24 @@ private func defaultTrendURL(corpusKind: String) -> URL {
 private func emitMarkdown(_ markdown: String, to url: URL?, ownerOnly: Bool) throws {
     guard let url else { print(markdown, terminator: ""); return }
     let directory = url.deletingLastPathComponent()
-    try FileManager.default.createDirectory(
-        at: directory,
-        withIntermediateDirectories: true,
-        attributes: ownerOnly ? [.posixPermissions: 0o700] : nil
-    )
+    if !FileManager.default.fileExists(atPath: directory.path) {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: ownerOnly ? [.posixPermissions: 0o700] : nil
+        )
+    }
     if ownerOnly {
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     }
-    try markdown.write(to: url, atomically: true, encoding: .utf8)
-    if ownerOnly {
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-    }
+    let mode: mode_t = ownerOnly ? 0o600 : 0o644
+    let descriptor = open(url.path, O_WRONLY | O_CREAT | O_TRUNC, mode)
+    guard descriptor >= 0 else { throw CLIError.input("Could not write report file: \(url.path)") }
+    defer { close(descriptor) }
+    if ownerOnly { _ = fchmod(descriptor, 0o600) }
+    let data = Data(markdown.utf8)
+    let written = data.withUnsafeBytes { bytes in write(descriptor, bytes.baseAddress, bytes.count) }
+    guard written == data.count else { throw CLIError.input("Incomplete report write: \(url.path)") }
 }
 
 private func date(fromDayString value: String) -> Date? {
