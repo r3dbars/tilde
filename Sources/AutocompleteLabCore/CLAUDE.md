@@ -6,14 +6,14 @@ Start map:
 
 - `Session/`: live suggestion lifecycle, keyboard decisions, cooldowns, suppression, and acceptance checks.
 - `Engine/`: prompt building, completion engines, output cleanup, ranking, and word memory.
-- `Geometry/`: caret, bounds, placement, screenshots, and coordinate conversion policies.
+- `Geometry/`: live caret, bounds, placement, screenshots, and coordinate conversion policies.
 - `Configuration/`: defaults, privacy, compatibility, browser host, and insertion-mode policies.
-- `Tracing/`: privacy filters, trace events, analyzers, reports, and proof metadata.
+- `Tracing/`: privacy filters, trace events, analyzers, and privacy reports.
 - `Compatibility/`: app profiles and support routing.
 - `Text/`: cursor splitting, replacement, and diagnostic redaction.
-- `Runtime/`: runtime value types, readiness guidance, caches, and benchmark shapes.
+- `Runtime/`: shipping runtime value types, readiness guidance, and caches.
 - `Suggestions/`: suggestion and acceptance value types.
-- `Experiments/`: deterministic eval and experiment helpers.
+- Research-only evals, mocks, proof harnesses, and replay logic belong in `AutocompleteLabResearch`.
 
 Rules:
 

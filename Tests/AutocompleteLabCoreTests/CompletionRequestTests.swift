@@ -70,19 +70,14 @@ struct CompletionRequestTests {
         #expect(!metadata.values.joined(separator: " ").contains("Follow"))
     }
 
-    @Test("Trace metadata includes document title shape only")
-    func traceMetadataIncludesDocumentTitleShapeOnly() {
-        let request = CompletionRequest(
-            textBeforeCursor: "Can we keep",
-            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *")
-        )
+    @Test("Trace metadata stays limited to focused-field request shape")
+    func traceMetadataStaysLimitedToFocusedFieldRequestShape() {
+        let request = CompletionRequest(textBeforeCursor: "Can we keep")
         let metadata = request.behaviorProfileTraceMetadata
 
-        #expect(metadata["documentTitleWordCount"] == "3")
-        #expect(metadata["documentTitleLengthBucket"] == "short")
-        #expect(metadata["documentTitleExtension"] == "md")
-        #expect(metadata["documentTitleHasUnsavedMarker"] == "true")
-        #expect(!metadata.values.joined(separator: " ").contains("Launch"))
-        #expect(!metadata.values.joined(separator: " ").contains("Plan"))
+        #expect(metadata["documentTitleWordCount"] == nil)
+        #expect(metadata["acceptedTextStyleSamples"] == nil)
+        #expect(metadata["visiblePageContextSource"] == nil)
+        #expect(!metadata.values.joined(separator: " ").contains("Can we keep"))
     }
 }

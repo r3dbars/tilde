@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Proof mode scope policy")
 struct ProofModeScopePolicyTests {

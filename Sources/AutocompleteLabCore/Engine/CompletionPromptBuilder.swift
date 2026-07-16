@@ -110,26 +110,19 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         )
         let userPrompt = userPrompt(
             context: context,
-            visiblePageContext: request.visiblePageContext,
             suffix: suffixLabel(for: request.mode, visibleWords: effectiveMaxVisibleWords)
         )
 
         if request.mode == .wordCompletion {
-            let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
             let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
             let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
-            let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
             return CompletionPrompt(
                 system: """
                 Inline word completion.
                 Return only the missing suffix for the current word.
                 Tab inserts only this visible suffix; full accept is separate and must never be implied.
-                \(titleShapeGuidance)
                 \(partialWordGuidance)
                 \(lineStructureGuidance)
-                \(visiblePageGuidance)
-                If visible page context includes a matching local word, name, or term, prefer that word's missing suffix.
-                For partial product names, app names, permissions, people, project terms, and repeated OCR words, complete the visible local word before guessing a generic dictionary word.
                 Critical suffix example: "The privacy note should stay redac" -> ted. Do not return tion for redac in a privacy-note context.
                 Suffix examples: transi -> tion; configu -> rable; visi -> ble; qui -> etly; redac -> ted. For "The setting should be configu", return rable, not ration. For "privacy note should stay redac", return ted, not tion. Never return tion unless it completes the visible word.
                 Only exception: return exactly \(Self.noSuggestionToken) when unsafe or the suffix would complete the wrong word.
@@ -156,12 +149,8 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         let candidateCountGuidance = candidateCountGuidance(forVisibleWords: effectiveMaxVisibleWords)
         let sentenceGuidance = sentenceGuidance(for: request)
         let lengthGuidance = lengthGuidance(forVisibleWords: effectiveMaxVisibleWords)
-        let styleLengthGuidance = styleLengthGuidance(forVisibleWords: effectiveMaxVisibleWords)
-        let styleGuidance = request.acceptedTextStyleSketch?.promptGuidance ?? ""
-        let titleShapeGuidance = request.documentTitleShape?.promptGuidance ?? ""
         let partialWordGuidance = request.partialWordShape?.promptGuidance ?? ""
         let lineStructureGuidance = request.currentLineStructure?.promptGuidance ?? ""
-        let visiblePageGuidance = request.visiblePageContext?.promptGuidance ?? ""
         let exampleGuidance = exampleGuidance(forVisibleWords: effectiveMaxVisibleWords)
         let modeGuidance = request.mode == .sentenceContinuation
             ? "Sentence mode: continue naturally up to the visible word limit. If the limit is high and the next sentence is obvious, a longer sentence chunk is allowed."
@@ -176,12 +165,8 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Only exception: return exactly \(Self.noSuggestionToken) when unsafe, chatty, or likely to answer the prompt instead of continuing it.
         Never suggest pressing Tab, Shift-Tab, Option-Tab, Backtick, or accepting all visible text.
         Behavior profile: \(behaviorProfile.id.rawValue), max \(behaviorProfile.maxVisibleWords) visible words / \(behaviorProfile.maxGeneratedTokens) generated tokens.
-        \(styleGuidance)
-        \(styleLengthGuidance)
-        \(titleShapeGuidance)
         \(partialWordGuidance)
         \(lineStructureGuidance)
-        \(visiblePageGuidance)
         \(behaviorProfile.promptGuidance.joined(separator: "\n"))
         \(modeGuidance)
         Prefer the next word or short phrase at low settings; at high settings, prefer the next words the user was already likely to type, especially names, repeated local terms, reply language, list items, and boring connective tissue.
@@ -193,7 +178,6 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Ordinary drafting with should or need is allowed when it is not telling the app to act; continue it with concrete next words.
         Avoid generic filler like "comes to life", "key features and benefits", "comprehensive plan", or "acknowledge the user's point".
         \(exampleGuidance)
-        When the visible page context is useful, act like a local writing companion that can see the screen but still only types the user's next words.
         Do not repeat the Before cursor text.
         Do not copy any 4-word span from the current sentence.
         If the next text would mostly replay words already visible in the current sentence, return \(Self.noSuggestionToken).
@@ -255,22 +239,9 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
 
     private func userPrompt(
         context: String,
-        visiblePageContext: VisiblePageContext?,
         suffix: String
     ) -> String {
-        guard let visiblePageContext else {
-            return "Before cursor:\n\(context)\n\n\(suffix)"
-        }
-
-        return """
-        Visible page context:
-        \(visiblePageContext.promptText)
-
-        Before cursor:
-        \(context)
-
-        \(suffix)
-        """
+        "Before cursor:\n\(context)\n\n\(suffix)"
     }
 
     private func sentenceGuidance(for request: CompletionRequest) -> String {
@@ -336,14 +307,6 @@ public struct CompletionPromptBuilder: Equatable, Sendable {
         Correction exception: "Correct this spelling: recieve ->" -> "receive"; "adress ->" -> "address"; "seperate ->" -> "separate"; "calender ->" -> "calendar"; "occured ->" -> "occurred". Return one corrected word only for explicit spelling correction prompts.
         Do not copy the example topics. For ordinary drafting at this high setting, do not return a 1-4 word answer.
         """
-    }
-
-    private func styleLengthGuidance(forVisibleWords visibleWords: Int) -> String {
-        guard visibleWords >= 12 else {
-            return ""
-        }
-
-        return "Length setting overrides recent short-kept history. Use the style sketch for tone and casing, not to shrink the suggestion below the high word-count target."
     }
 
     private func promptContext(from textBeforeCursor: String, mode: CompletionRequestMode) -> String {

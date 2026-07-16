@@ -52,19 +52,16 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
 
     public func suggestion(
         for textBeforeCursor: String,
-        recentWords: [String] = [],
         allowPredictiveFallback: Bool = false
     ) -> CompletionSuggestion? {
         selection(
             for: textBeforeCursor,
-            recentWords: recentWords,
             allowPredictiveFallback: allowPredictiveFallback
         ).suggestion
     }
 
     public func selection(
         for textBeforeCursor: String,
-        recentWords: [String] = [],
         allowPredictiveFallback: Bool = false
     ) -> WordCompletionCandidateSelection {
         guard let fragment = trailingFragment(in: textBeforeCursor),
@@ -80,10 +77,7 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         }
 
         let normalizedFragment = fragment.lowercased()
-        let candidates = rankedCandidates(
-            fragment: normalizedFragment,
-            recentWords: recentWords
-        )
+        let candidates = rankedCandidates(fragment: normalizedFragment)
 
         guard let candidate = candidates.first,
               candidate.normalizedWord.count > normalizedFragment.count else {
@@ -109,11 +103,10 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         }
 
         let suffix = String(candidate.normalizedWord.dropFirst(normalizedFragment.count))
-        let competingCandidateCount = candidates.filter { $0.source == candidate.source }.count
+        let competingCandidateCount = candidates.count
         guard isUsefulSuffix(
             suffix,
             fragment: normalizedFragment,
-            source: candidate.source,
             competingCandidateCount: competingCandidateCount
         ) else {
             return WordCompletionCandidateSelection(
@@ -137,23 +130,16 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
         )
     }
 
-    private func rankedCandidates(fragment: String, recentWords: [String]) -> [Candidate] {
-        let recent = recentWords
-            .reversed()
-            .compactMap(candidateWord)
-            .filter { $0.normalized.hasPrefix(fragment) && $0.normalized.count > fragment.count }
-
+    private func rankedCandidates(fragment: String) -> [Candidate] {
         let staticMatches = staticWords
             .compactMap(candidateWord)
             .filter { $0.normalized.hasPrefix(fragment) && $0.normalized.count > fragment.count }
 
         var seen: Set<String> = []
-        return (recent.enumerated().map { (index, word) in
-            Candidate(normalizedWord: word.normalized, displayWord: word.display, source: .recent, priority: 0, index: index)
-        }
-            + staticMatches.enumerated().map { (index, word) in
-                Candidate(normalizedWord: word.normalized, displayWord: word.display, source: .staticDictionary, priority: 1, index: index)
-            })
+        return staticMatches.enumerated()
+            .map { index, word in
+                Candidate(normalizedWord: word.normalized, displayWord: word.display, index: index)
+            }
             .filter { candidate in
                 guard !seen.contains(candidate.normalizedWord) else {
                     return false
@@ -162,10 +148,6 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
                 return true
             }
             .sorted { lhs, rhs in
-                if lhs.priority != rhs.priority {
-                    return lhs.priority < rhs.priority
-                }
-
                 return lhs.index < rhs.index
             }
     }
@@ -187,27 +169,17 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
     private func isUsefulSuffix(
         _ suffix: String,
         fragment: String,
-        source: CandidateSource,
         competingCandidateCount: Int
     ) -> Bool {
         guard !suffix.isEmpty else {
             return false
         }
 
-        if source == .recent {
-            if suffix.count <= 2 {
-                return fragment.count >= 6
-            }
-
-            return true
-        }
-
         if suffix == "ng" {
             return fragment.count >= 6
         }
 
-        if source == .staticDictionary,
-           Self.ambiguousTwoLetterStaticFragments.contains(fragment),
+        if Self.ambiguousTwoLetterStaticFragments.contains(fragment),
            competingCandidateCount > 1 {
             return false
         }
@@ -338,23 +310,11 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
     private struct Candidate: Equatable {
         let normalizedWord: String
         let displayWord: String
-        let source: CandidateSource
-        let priority: Int
         let index: Int
 
         var score: Double {
-            switch source {
-            case .recent:
-                return max(0.800, 1.000 - (Double(index) * 0.020))
-            case .staticDictionary:
-                return max(0.500, 0.850 - (Double(index) * 0.010))
-            }
+            max(0.500, 0.850 - (Double(index) * 0.010))
         }
-    }
-
-    private enum CandidateSource: Equatable {
-        case recent
-        case staticDictionary
     }
 }
 

@@ -377,17 +377,14 @@ public struct SuggestionTuning: Equatable, Sendable {
         }
     }
 
-    public func allowsModelWordCompletionFallback(
-        visiblePageContextAvailable: Bool
-    ) -> Bool {
-        aggressivenessLevel >= 4 || visiblePageContextAvailable
+    public func allowsModelWordCompletionFallback() -> Bool {
+        aggressivenessLevel >= 4
     }
 
     public func allowsPredictiveWordFallback(
-        appBundleIdentifier: String,
-        visiblePageContextAvailable: Bool
+        appBundleIdentifier: String
     ) -> Bool {
-        if allowsModelWordCompletionFallback(visiblePageContextAvailable: visiblePageContextAvailable) {
+        if allowsModelWordCompletionFallback() {
             return true
         }
 
@@ -396,8 +393,7 @@ public struct SuggestionTuning: Equatable, Sendable {
 
     public func allowsPredictivePhraseFallback(
         appBundleIdentifier: String,
-        behaviorProfileID: AutocompleteBehaviorProfileID?,
-        visiblePageContextAvailable: Bool
+        behaviorProfileID: AutocompleteBehaviorProfileID?
     ) -> Bool {
         switch behaviorProfileID {
         case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
@@ -406,7 +402,7 @@ public struct SuggestionTuning: Equatable, Sendable {
             break
         }
 
-        if visiblePageContextAvailable || aggressivenessLevel >= 3 {
+        if aggressivenessLevel >= 3 {
             return true
         }
 

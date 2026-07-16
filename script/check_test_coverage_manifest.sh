@@ -31,6 +31,9 @@ coverage_test_path_for_source() {
     Sources/AutocompleteLabCore/*)
       printf 'Tests/AutocompleteLabCoreTests/%sTests.swift\n' "$base"
       ;;
+    Sources/AutocompleteLabResearch/*)
+      printf 'Tests/AutocompleteLabCoreTests/%sTests.swift\n' "$base"
+      ;;
     Sources/AutocompleteLabApp/*)
       printf 'Tests/AutocompleteLabAppTests/%sTests.swift\n' "$base"
       ;;

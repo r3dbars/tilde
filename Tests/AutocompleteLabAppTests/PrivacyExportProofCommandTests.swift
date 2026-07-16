@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Privacy export proof command")
 struct PrivacyExportProofCommandTests {

@@ -22,7 +22,6 @@ final class AppSettings {
         static let suppressAfterNewline = "settings.suppressAfterNewline"
         static let runtimeMode = "settings.runtimeMode"
         static let minimumCharacters = "settings.minimumCharacters"
-        static let personalCaptureEnabled = "settings.personalCaptureEnabled"
     }
 
     private let defaults: UserDefaults
@@ -70,11 +69,6 @@ final class AppSettings {
         set { defaults.set(max(1, newValue), forKey: Key.minimumCharacters) }
     }
 
-    var personalCaptureEnabled: Bool {
-        get { defaults.bool(forKey: Key.personalCaptureEnabled) }
-        set { defaults.set(newValue, forKey: Key.personalCaptureEnabled) }
-    }
-
     func toggleSuggestionsEnabled() {
         suggestionsEnabled.toggle()
     }
@@ -93,10 +87,6 @@ final class AppSettings {
 
     func toggleAfterNewlineSuppression() {
         suppressAfterNewline.toggle()
-    }
-
-    func togglePersonalCapture() {
-        personalCaptureEnabled.toggle()
     }
 
     func privacySettings(allowedBundleIdentifiers: Set<String>) -> SuggestionPrivacySettings {
@@ -130,8 +120,7 @@ final class AppSettings {
             Key.suppressShortText: true,
             Key.suppressAfterNewline: true,
             Key.runtimeMode: RuntimeMode.appOwnedLocalModel.rawValue,
-            Key.minimumCharacters: 3,
-            Key.personalCaptureEnabled: false
+            Key.minimumCharacters: 3
         ])
     }
 }

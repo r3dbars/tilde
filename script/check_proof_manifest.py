@@ -15,8 +15,8 @@ DEFAULT_MANUAL_SMOKE = ROOT_DIR / "docs/product/manual-smoke-runs.md"
 DEFAULT_SCORECARD = ROOT_DIR / "docs/product/deep-dive-scorecard-2026-05-06.md"
 DEFAULT_APP_PROOF_MATRIX = ROOT_DIR / "docs/product/app-proof-matrix.md"
 DEFAULT_COMPATIBILITY_PROFILES = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/CompatibilityProfile.swift"
-PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift"
-HOST_POLICY_SOURCE = ROOT_DIR / "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift"
+PROOF_METADATA_SOURCE = ROOT_DIR / "Sources/AutocompleteLabResearch/AutocompleteTraceProofMetadata.swift"
+HOST_POLICY_SOURCE = ROOT_DIR / "Sources/AutocompleteLabResearch/HostCompatibilityPolicy.swift"
 CURRENT_PROOF_SOURCE_PATHS = (
     "Package.swift",
     "Package.resolved",
@@ -345,7 +345,7 @@ def proof_sensitive_worktree_changes() -> list[str]:
         path = line[3:].strip() if len(line) > 3 else line.strip()
         if path:
             changes.append(path)
-    return changes
+    return sorted(changes, key=lambda path: (path.startswith("Sources/"), path))
 
 
 def compatibility_profiles(path: Path) -> dict[str, dict[str, str]]:
@@ -1330,7 +1330,7 @@ def verify_host_policy(
         )
 
     source = str(host_policy.get("source", "")).strip()
-    if source != "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift":
+    if source != "Sources/AutocompleteLabResearch/HostCompatibilityPolicy.swift":
         failures.append("hostPolicy.source must point at HostCompatibilityPolicy.swift")
     elif not repo_path(source).exists():
         failures.append(f"hostPolicy.source is missing: {source}")

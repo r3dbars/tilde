@@ -59,6 +59,14 @@ let package = Package(
                 "Tracing/CLAUDE.md"
             ]
         ),
+        .target(
+            name: "AutocompleteLabResearch",
+            dependencies: ["AutocompleteLabCore"],
+            exclude: [
+                "AGENTS.md",
+                "CLAUDE.md"
+            ]
+        ),
         .executableTarget(
             name: "AutocompleteLabApp",
             dependencies: [
@@ -86,7 +94,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "AutocompleteTraceReplay",
-            dependencies: ["AutocompleteLabCore"],
+            dependencies: [
+                "AutocompleteLabCore",
+                "AutocompleteLabResearch"
+            ],
             exclude: [
                 "AGENTS.md",
                 "CLAUDE.md"
@@ -101,7 +112,10 @@ let package = Package(
         ),
         .testTarget(
             name: "AutocompleteLabCoreTests",
-            dependencies: ["AutocompleteLabCore"],
+            dependencies: [
+                "AutocompleteLabCore",
+                "AutocompleteLabResearch"
+            ],
             exclude: [
                 "AGENTS.md",
                 "CLAUDE.md"
@@ -109,7 +123,10 @@ let package = Package(
         ),
         .testTarget(
             name: "AutocompleteLabAppTests",
-            dependencies: ["AutocompleteLabApp"],
+            dependencies: [
+                "AutocompleteLabApp",
+                "AutocompleteLabResearch"
+            ],
             exclude: [
                 "AGENTS.md",
                 "CLAUDE.md"

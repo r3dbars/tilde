@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("App proof command runner")
 struct AppProofCommandRunnerTests {

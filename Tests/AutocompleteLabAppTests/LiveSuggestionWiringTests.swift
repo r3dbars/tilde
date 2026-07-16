@@ -15,7 +15,7 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "suggestionOrchestrator.fastWordSelection(")
         try require(appDelegate, contains: "triggerReason: \"fast-word-completion\"")
         try require(appDelegate, contains: "suggestionOrchestrator.fastPhraseSelection(")
-        try require(appDelegate, contains: "suggestionOrchestrator.fastPhraseFallbackLearningDecision(")
+        try requireNot(appDelegate, contains: "suggestionOrchestrator.fastPhraseFallbackLearningDecision(")
         try require(appDelegate, contains: "triggerReason: \"canned-bridge\"")
         try require(appDelegate, contains: "try await suggestionOrchestrator.suggestion(")
         try require(appDelegate, contains: "suggestionOrchestrator.shouldPresentStreamingPartial(")
@@ -44,7 +44,8 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "currentSuggestionState.displayedText = suggestionSession.visibleSuggestion?.visibleText")
         try require(appDelegate, contains: "\"Shown: typing through suggestion\"")
         try require(appDelegate, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
-        try require(appDelegate, contains: "reason: \"survived_typethrough\"")
+        try require(appDelegate, contains: "recordSuggestionEvent(\n                \"suggestion-typed-through\"")
+        try require(appDelegate, contains: "metadata: survivalMetadata")
     }
 }
 
@@ -57,5 +58,11 @@ private func source(_ relativePath: String) throws -> String {
 private func require(_ text: String, contains needle: String) throws {
     if !text.contains(needle) {
         Issue.record("Expected source to contain \(needle)")
+    }
+}
+
+private func requireNot(_ text: String, contains needle: String) throws {
+    if text.contains(needle) {
+        Issue.record("Expected source not to contain \(needle)")
     }
 }

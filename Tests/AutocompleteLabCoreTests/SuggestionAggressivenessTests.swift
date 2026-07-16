@@ -316,60 +316,42 @@ struct SuggestionAggressivenessTests {
         ) == .allow(.phraseContinuation))
     }
 
-    @Test("predictive fallback stays on for writing surfaces before OCR arrives")
+    @Test("predictive fallback stays on for focused writing surfaces")
     func predictiveFallbackStaysOnForWritingSurfaces() {
         let normal = SuggestionTuning(aggressivenessLevel: 2)
 
         #expect(normal.allowsPredictiveWordFallback(
-            appBundleIdentifier: "com.apple.Notes",
-            visiblePageContextAvailable: false
+            appBundleIdentifier: "com.apple.Notes"
         ))
         #expect(normal.allowsPredictiveWordFallback(
-            appBundleIdentifier: "com.apple.TextEdit",
-            visiblePageContextAvailable: false
+            appBundleIdentifier: "com.apple.TextEdit"
         ))
         #expect(normal.allowsPredictiveWordFallback(
-            appBundleIdentifier: "md.obsidian",
-            visiblePageContextAvailable: false
+            appBundleIdentifier: "md.obsidian"
         ))
-        #expect(!normal.allowsModelWordCompletionFallback(visiblePageContextAvailable: false))
+        #expect(!normal.allowsModelWordCompletionFallback())
         #expect(!normal.allowsPredictiveWordFallback(
-            appBundleIdentifier: "com.apple.mail",
-            visiblePageContextAvailable: false
-        ))
-        #expect(normal.allowsPredictiveWordFallback(
-            appBundleIdentifier: "com.apple.mail",
-            visiblePageContextAvailable: true
+            appBundleIdentifier: "com.apple.mail"
         ))
         #expect(normal.allowsPredictivePhraseFallback(
             appBundleIdentifier: "com.apple.Notes",
-            behaviorProfileID: .notes,
-            visiblePageContextAvailable: false
+            behaviorProfileID: .notes
         ))
         #expect(!normal.allowsPredictivePhraseFallback(
             appBundleIdentifier: "com.apple.mail",
-            behaviorProfileID: .email,
-            visiblePageContextAvailable: false
-        ))
-        #expect(normal.allowsPredictivePhraseFallback(
-            appBundleIdentifier: "com.apple.mail",
-            behaviorProfileID: .email,
-            visiblePageContextAvailable: true
+            behaviorProfileID: .email
         ))
         #expect(normal.allowsPredictivePhraseFallback(
             appBundleIdentifier: "com.google.Chrome",
-            behaviorProfileID: .docsProse,
-            visiblePageContextAvailable: false
+            behaviorProfileID: .docsProse
         ))
         #expect(!normal.allowsPredictivePhraseFallback(
             appBundleIdentifier: "com.google.Chrome",
-            behaviorProfileID: .forms,
-            visiblePageContextAvailable: false
+            behaviorProfileID: .forms
         ))
         #expect(SuggestionTuning(aggressivenessLevel: 3).allowsPredictivePhraseFallback(
             appBundleIdentifier: "com.apple.mail",
-            behaviorProfileID: .email,
-            visiblePageContextAvailable: false
+            behaviorProfileID: .email
         ))
     }
 

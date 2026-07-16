@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Eval v2 blind corpus")
 struct EvalV2BlindCorpusTests {

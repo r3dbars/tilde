@@ -113,7 +113,7 @@ CURRENT_HEAD="$(git rev-parse --verify HEAD)"
 while IFS= read -r candidate; do
   [[ "$candidate" != "$CURRENT_HEAD" ]] || continue
   changed_paths="$(git diff --name-only "$candidate".."$CURRENT_HEAD" -- Package.swift Package.resolved Sources | tr '\n' ' ')"
-  if [[ "$changed_paths" == "Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift " ]]; then
+  if [[ "$changed_paths" == "Sources/AutocompleteLabResearch/ClaudeCodeTerminalHostProofPolicy.swift " ]]; then
     CLAUDE_POLICY_ONLY_COMMIT="$(git rev-parse --short=12 "$candidate")"
     break
   fi

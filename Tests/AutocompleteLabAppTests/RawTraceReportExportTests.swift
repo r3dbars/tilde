@@ -5,8 +5,8 @@ import AutocompleteLabCore
 
 @Suite("Raw trace report export")
 struct RawTraceReportExportTests {
-    @Test("Raw trace events include current proof metadata")
-    func rawTraceEventsIncludeCurrentProofMetadata() throws {
+    @Test("Raw trace events do not inject proof metadata")
+    func rawTraceEventsDoNotInjectProofMetadata() throws {
         let temporaryFolder = FileManager.default.temporaryDirectory
             .appendingPathComponent("RawTraceProofMetadataTests-\(UUID().uuidString)")
         defer {
@@ -26,18 +26,17 @@ struct RawTraceReportExportTests {
             appBundleIdentifier: "com.apple.TextEdit",
             requestMode: "wordCompletion",
             metadata: [
-                "acceptanceID": "accept-one",
-                "traceProofVersion": "stale"
+                "acceptanceID": "accept-one"
             ]
         )
 
         let events = try waitForEvents(at: traceURL)
         let event = try #require(events.first)
 
-        #expect(event.metadata["traceProofVersion"] == AutocompleteTraceProofMetadata.traceProofVersion)
-        #expect(event.metadata["placementProofVersion"] == AutocompleteTraceProofMetadata.placementProofVersion)
-        #expect(event.metadata["keyCaptureProofVersion"] == AutocompleteTraceProofMetadata.keyCaptureProofVersion)
-        #expect(event.metadata["runtimeProofVersion"] == AutocompleteTraceProofMetadata.runtimeProofVersion)
+        #expect(event.metadata["traceProofVersion"] == nil)
+        #expect(event.metadata["placementProofVersion"] == nil)
+        #expect(event.metadata["keyCaptureProofVersion"] == nil)
+        #expect(event.metadata["runtimeProofVersion"] == nil)
         #expect(event.metadata["acceptanceID"] == "accept-one")
     }
 

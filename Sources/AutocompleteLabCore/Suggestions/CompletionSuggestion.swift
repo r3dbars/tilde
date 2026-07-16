@@ -46,7 +46,7 @@ public struct CompletionSuggestion: Equatable, Sendable {
         return characterCappedText(wordCappedText, characterLimit: characterLimit)
     }
 
-    static func acceptedPrefix(in text: String, wordLimit: Int) -> String {
+    public static func acceptedPrefix(in text: String, wordLimit: Int) -> String {
         guard wordLimit > 0 else {
             return ""
         }

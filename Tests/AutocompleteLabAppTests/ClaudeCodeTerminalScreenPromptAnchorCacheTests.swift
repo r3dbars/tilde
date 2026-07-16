@@ -2,6 +2,7 @@ import AutocompleteLabCore
 import Foundation
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Claude Code terminal screen prompt anchor cache")
 struct ClaudeCodeTerminalScreenPromptAnchorCacheTests {

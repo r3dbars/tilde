@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Visible page context refresh policy")
 struct VisiblePageContextRefreshPolicyTests {

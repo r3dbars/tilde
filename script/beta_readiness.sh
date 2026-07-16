@@ -308,7 +308,7 @@ from pathlib import Path
 import re
 import sys
 
-engine = Path("Sources/AutocompleteLabCore/Engine/LocalCompletionEngine.swift").read_text()
+engine = Path("Sources/AutocompleteLabResearch/LocalCompletionEngine.swift").read_text()
 runtime = Path("Sources/AutocompleteLabCore/Runtime/CompletionRuntimeBenchmark.swift").read_text()
 
 blocked = []

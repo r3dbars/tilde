@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 struct ObsidianProofDocumentInsertionPlannerTests {
     @Test("Proof document planner appends accepted text after visible scrolled tail")

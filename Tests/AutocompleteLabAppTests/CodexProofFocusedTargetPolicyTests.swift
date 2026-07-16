@@ -2,6 +2,7 @@ import AppKit
 import AutocompleteLabCore
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Codex proof focused target policy")
 struct CodexProofFocusedTargetPolicyTests {
@@ -227,8 +228,8 @@ struct CodexProofFocusedTargetPolicyTests {
         try #require(CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier))
     }
 
-    private func codexApp() -> RunningApplicationInfo {
-        RunningApplicationInfo(
+    private func codexApp() -> ProofRunningApplicationInfo {
+        ProofRunningApplicationInfo(
             bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
             localizedName: "Codex",
             processIdentifier: 42
@@ -254,9 +255,8 @@ struct CodexProofFocusedTargetPolicyTests {
     private func focusedContext(
         textBeforeCursor: String,
         elementRect: CGRect? = CGRect(x: 10, y: 10, width: 700, height: 80)
-    ) -> FocusedTextContext {
-        FocusedTextContext(
-            elementIdentifier: 7,
+    ) -> ProofFocusedTextContext {
+        ProofFocusedTextContext(
             role: "AXTextArea",
             subrole: nil,
             fingerprint: FocusedElementFingerprint(
@@ -272,21 +272,11 @@ struct CodexProofFocusedTargetPolicyTests {
             elementRect: elementRect,
             windowRect: CGRect(x: 0, y: 0, width: 900, height: 700),
             windowIdentifier: 1,
-            textLineRect: nil,
-            textStyle: nil,
-            isSecure: false,
-            caretIsSynthetic: false,
-            capabilities: FocusedTextCapabilities(
-                canReadValue: true,
-                canReadSelectedTextRange: true,
-                canReadBoundsForRange: true,
-                canReadAttributedText: false,
-                canSetSelectedText: true
-            )
+            isSecure: false
         )
     }
 
-    private func targetFingerprint(for context: FocusedTextContext) -> FocusedTargetFingerprint {
+    private func targetFingerprint(for context: ProofFocusedTextContext) -> FocusedTargetFingerprint {
         FocusedTargetFingerprint(
             role: context.role,
             subrole: context.subrole,

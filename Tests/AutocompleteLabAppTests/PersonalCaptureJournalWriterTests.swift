@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import AutocompleteLabCore
-@testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Personal capture journal writer")
 struct PersonalCaptureJournalWriterTests {

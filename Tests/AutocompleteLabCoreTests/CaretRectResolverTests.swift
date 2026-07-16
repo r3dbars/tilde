@@ -1,6 +1,7 @@
 import CoreGraphics
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Caret rect resolver")
 struct CaretRectResolverTests {

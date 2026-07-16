@@ -966,8 +966,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         }
 
         let selection = WordCompletionCandidateRanker(staticWords: wordCompletionFallbackWords).selection(
-            for: request.textBeforeCursor,
-            recentWords: request.visiblePageContext?.completionCandidateWords ?? []
+            for: request.textBeforeCursor
         )
         guard selection.suggestion != nil else {
             return nil

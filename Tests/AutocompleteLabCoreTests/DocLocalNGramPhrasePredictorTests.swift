@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Doc-local n-gram phrase predictor")
 struct DocLocalNGramPhrasePredictorTests {

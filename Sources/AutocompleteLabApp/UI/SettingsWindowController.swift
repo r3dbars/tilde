@@ -217,12 +217,9 @@ struct SettingsPrivacyState: Equatable {
     let rawContentTracingExpiresAt: Date?
     let screenshotTracingEnabled: Bool
     let screenshotTracingExpiresAt: Date?
-    let visiblePageContextEnabled: Bool
-    let personalCaptureEnabled: Bool
     let screenCaptureAccessGranted: Bool
     let diagnosticsPath: String
     let tracePath: String
-    let personalCapturePath: String
 
     init(
         tracingPaused: Bool,
@@ -230,24 +227,18 @@ struct SettingsPrivacyState: Equatable {
         rawContentTracingExpiresAt: Date?,
         screenshotTracingEnabled: Bool,
         screenshotTracingExpiresAt: Date?,
-        visiblePageContextEnabled: Bool,
-        personalCaptureEnabled: Bool = false,
         screenCaptureAccessGranted: Bool,
         diagnosticsPath: String,
-        tracePath: String,
-        personalCapturePath: String = ""
+        tracePath: String
     ) {
         self.tracingPaused = tracingPaused
         self.rawContentTracingEnabled = rawContentTracingEnabled
         self.rawContentTracingExpiresAt = rawContentTracingExpiresAt
         self.screenshotTracingEnabled = screenshotTracingEnabled
         self.screenshotTracingExpiresAt = screenshotTracingExpiresAt
-        self.visiblePageContextEnabled = visiblePageContextEnabled
-        self.personalCaptureEnabled = personalCaptureEnabled
         self.screenCaptureAccessGranted = screenCaptureAccessGranted
         self.diagnosticsPath = diagnosticsPath
         self.tracePath = tracePath
-        self.personalCapturePath = personalCapturePath
     }
 
     var statusText: String {
@@ -265,22 +256,6 @@ struct SettingsPrivacyState: Equatable {
         return "Exact text in logs: \(state)"
     }
 
-    var visiblePageContextStatusText: String {
-        if visiblePageContextEnabled && !screenCaptureAccessGranted {
-            return "Reads nearby on-screen text: on — waiting for Screen Recording permission."
-        }
-
-        return "Reads nearby on-screen text: \(visiblePageContextEnabled ? "on" : "off"). This happens on your Mac and only improves suggestions."
-    }
-
-    var personalCaptureStatusText: String {
-        "Writing journal: \(personalCaptureEnabled ? "on" : "off")"
-    }
-
-    var personalCaptureDetailText: String {
-        "Optional. Saves a daily Markdown file on this Mac so SteadyType can learn from your real writing. It stays out of any diagnostic report."
-    }
-
     var sharingStatusText: String {
         "Nothing is ever sent automatically. A diagnostic report you choose to export never includes your text or screenshots."
     }
@@ -294,27 +269,15 @@ struct SettingsPrivacyState: Equatable {
     }
 
     var screenRecordingPermissionText: String? {
-        guard screenshotTracingEnabled || visiblePageContextEnabled else {
+        guard screenshotTracingEnabled else {
             return nil
-        }
-
-        if visiblePageContextEnabled && !screenCaptureAccessGranted {
-            return "Screen Recording: needed to read nearby on-screen text."
-        }
-
-        if visiblePageContextEnabled {
-            return "Screen Recording: used on your Mac to read nearby on-screen text."
         }
 
         return "Screen Recording: used on your Mac to check where suggestions appear."
     }
 
     var pathText: String {
-        guard !personalCapturePath.isEmpty else {
-            return "Activity log: \(diagnosticsPath) | Event log: \(tracePath)"
-        }
-
-        return "Activity log: \(diagnosticsPath) | Event log: \(tracePath) | Writing journal: \(personalCapturePath)"
+        "Activity log: \(diagnosticsPath) | Event log: \(tracePath)"
     }
 }
 
@@ -419,8 +382,8 @@ struct SettingsTrustState: Equatable {
     }
 
     var typedTextText: String {
-        if privacy.rawContentTracingEnabled || privacy.personalCaptureEnabled {
-            return "Your text: a local journal or detailed log is on."
+        if privacy.rawContentTracingEnabled {
+            return "Your text: detailed local logging is on."
         }
 
         return "Your text: never stored unless you turn it on."
@@ -933,12 +896,6 @@ final class SettingsWindowController: NSObject {
     // Privacy
     private let privacyLabel = NSTextField(labelWithString: "")
     private let localOnlyProofLabel = NSTextField(labelWithString: "")
-    private let visiblePageContextStatusLabel = NSTextField(labelWithString: "")
-    private let toggleVisiblePageContextButton = NSButton(
-        checkboxWithTitle: "Use nearby on-screen text to improve suggestions",
-        target: nil,
-        action: nil
-    )
     private let screenRecordingPermissionLabel = NSTextField(labelWithString: "")
     private let learningStatusLabel = NSTextField(labelWithString: "")
     private let clearLearningDataButton = NSButton(title: "Forget What I’ve Taught It", target: nil, action: nil)
@@ -1010,16 +967,11 @@ final class SettingsWindowController: NSObject {
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
     private let toggleCurrentAppMirrorMode: () -> Void
-    private let startCurrentAppProof: () -> Void
     private let startTextEditPractice: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
     private let toggleRawContentTracing: () -> Void
     private let toggleScreenshotTracing: () -> Void
-    private let toggleVisiblePageContext: () -> Void
-    private let togglePersonalCapture: () -> Void
-    private let revealPersonalCaptureFolder: () -> Void
-    private let deletePersonalCapture: () -> Void
     private let deleteLocalLogs: () -> Void
     private let clearLearningData: () -> Void
     private let exportPrivacyBundle: () -> Void
@@ -1048,16 +1000,11 @@ final class SettingsWindowController: NSObject {
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
         toggleCurrentAppMirrorMode: @escaping () -> Void,
-        startCurrentAppProof: @escaping () -> Void,
         startTextEditPractice: @escaping () -> Void = {},
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
         toggleRawContentTracing: @escaping () -> Void,
         toggleScreenshotTracing: @escaping () -> Void,
-        toggleVisiblePageContext: @escaping () -> Void,
-        togglePersonalCapture: @escaping () -> Void = {},
-        revealPersonalCaptureFolder: @escaping () -> Void = {},
-        deletePersonalCapture: @escaping () -> Void = {},
         deleteLocalLogs: @escaping () -> Void,
         clearLearningData: @escaping () -> Void,
         exportPrivacyBundle: @escaping () -> Void = {},
@@ -1082,16 +1029,11 @@ final class SettingsWindowController: NSObject {
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
         self.toggleCurrentAppMirrorMode = toggleCurrentAppMirrorMode
-        self.startCurrentAppProof = startCurrentAppProof
         self.startTextEditPractice = startTextEditPractice
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
         self.toggleRawContentTracing = toggleRawContentTracing
         self.toggleScreenshotTracing = toggleScreenshotTracing
-        self.toggleVisiblePageContext = toggleVisiblePageContext
-        self.togglePersonalCapture = togglePersonalCapture
-        self.revealPersonalCaptureFolder = revealPersonalCaptureFolder
-        self.deletePersonalCapture = deletePersonalCapture
         self.deleteLocalLogs = deleteLocalLogs
         self.clearLearningData = clearLearningData
         self.exportPrivacyBundle = exportPrivacyBundle
@@ -1301,8 +1243,6 @@ final class SettingsWindowController: NSObject {
         // Privacy.
         privacyLabel.stringValue = privacy.statusText
         localOnlyProofLabel.stringValue = privacy.localOnlyProofText
-        visiblePageContextStatusLabel.stringValue = privacy.visiblePageContextStatusText
-        toggleVisiblePageContextButton.state = privacy.visiblePageContextEnabled ? .on : .off
         let screenRecordingText = privacy.screenRecordingPermissionText
         screenRecordingPermissionLabel.stringValue = screenRecordingText ?? ""
         screenRecordingPermissionLabel.isHidden = screenRecordingText == nil
@@ -1547,14 +1487,6 @@ final class SettingsWindowController: NSObject {
                 ]
             ),
             makeSection(
-                title: "On-Screen Context",
-                views: [
-                    toggleVisiblePageContextButton,
-                    visiblePageContextStatusLabel,
-                    screenRecordingPermissionLabel
-                ]
-            ),
-            makeSection(
                 title: "Learning",
                 views: [
                     learningStatusLabel,
@@ -1676,7 +1608,6 @@ final class SettingsWindowController: NSObject {
 
         privacyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         configureSecondaryLabel(localOnlyProofLabel)
-        configureSecondaryLabel(visiblePageContextStatusLabel)
         configureSecondaryLabel(screenRecordingPermissionLabel)
         configureSecondaryLabel(learningStatusLabel)
         configureSecondaryLabel(privacySharingStatusLabel)
@@ -1744,9 +1675,6 @@ final class SettingsWindowController: NSObject {
         acceptAllShortcutPopup.target = self
         acceptAllShortcutPopup.action = #selector(selectAcceptAllShortcutControl)
 
-        toggleVisiblePageContextButton.target = self
-        toggleVisiblePageContextButton.action = #selector(toggleVisiblePageContextControl)
-        toggleVisiblePageContextButton.toolTip = "Reads nearby on-screen text on your Mac to make suggestions fit better."
         configureButton(clearLearningDataButton, #selector(clearLearningDataControl))
         toggleTracingButton.target = self
         toggleTracingButton.action = #selector(toggleTracingControl)
@@ -2081,11 +2009,6 @@ final class SettingsWindowController: NSObject {
     @objc
     private func toggleScreenshotTraceControl() {
         toggleScreenshotTracing()
-    }
-
-    @objc
-    private func toggleVisiblePageContextControl() {
-        toggleVisiblePageContext()
     }
 
     @objc

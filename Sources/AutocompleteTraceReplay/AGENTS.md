@@ -2,7 +2,7 @@
 
 This target is a small executable for replaying redacted traces through core logic.
 
-- Depend only on `AutocompleteLabCore`.
+- Depend on `AutocompleteLabCore` for shipping value types and `AutocompleteLabResearch` for replay/report behavior.
 - Keep it CLI-only.
 - Do not read raw private text, screenshots, browser history, or clipboard contents.
 - Keep output suitable for local proof reports.

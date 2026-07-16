@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 import AutocompleteLabCore
 
 @Suite("App proof mode coordinator")

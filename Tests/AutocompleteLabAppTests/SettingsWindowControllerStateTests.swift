@@ -272,7 +272,6 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: nil,
             screenshotTracingEnabled: true,
             screenshotTracingExpiresAt: nil,
-            visiblePageContextEnabled: false,
             screenCaptureAccessGranted: true,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
@@ -281,10 +280,6 @@ struct SettingsWindowControllerStateTests {
         #expect(screenshotsOn.statusText == "Everything stays on your Mac")
         #expect(screenshotsOn.diagnosticsStatusText == "Activity log: on")
         #expect(screenshotsOn.contentStatusText == "Exact text in logs: off")
-        #expect(
-            screenshotsOn.visiblePageContextStatusText
-                == "Reads nearby on-screen text: off. This happens on your Mac and only improves suggestions."
-        )
         #expect(
             screenshotsOn.sharingStatusText
                 == "Nothing is ever sent automatically. A diagnostic report you choose to export never includes your text or screenshots."
@@ -309,7 +304,6 @@ struct SettingsWindowControllerStateTests {
             screenshotsOn.statusText,
             screenshotsOn.diagnosticsStatusText,
             screenshotsOn.contentStatusText,
-            screenshotsOn.visiblePageContextStatusText,
             screenshotsOn.sharingStatusText,
             screenshotsOn.learningStatusText,
             screenshotsOn.localOnlyProofText
@@ -325,7 +319,6 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: Date(timeIntervalSince1970: 1_000),
             screenshotTracingEnabled: false,
             screenshotTracingExpiresAt: nil,
-            visiblePageContextEnabled: true,
             screenCaptureAccessGranted: false,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
@@ -333,11 +326,7 @@ struct SettingsWindowControllerStateTests {
 
         #expect(pausedRaw.diagnosticsStatusText == "Activity log: paused")
         #expect(pausedRaw.contentStatusText == "Exact text in logs: on for a short time")
-        #expect(
-            pausedRaw.visiblePageContextStatusText
-                == "Reads nearby on-screen text: on — waiting for Screen Recording permission."
-        )
-        #expect(pausedRaw.screenRecordingPermissionText == "Screen Recording: needed to read nearby on-screen text.")
+        #expect(pausedRaw.screenRecordingPermissionText == nil)
 
         let allOff = SettingsPrivacyState(
             tracingPaused: false,
@@ -345,7 +334,6 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: nil,
             screenshotTracingEnabled: false,
             screenshotTracingExpiresAt: nil,
-            visiblePageContextEnabled: false,
             screenCaptureAccessGranted: false,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"
@@ -621,8 +609,6 @@ struct SettingsWindowControllerStateTests {
                 rawContentTracingExpiresAt: nil,
                 screenshotTracingEnabled: false,
                 screenshotTracingExpiresAt: nil,
-                visiblePageContextEnabled: false,
-                personalCaptureEnabled: true,
                 screenCaptureAccessGranted: false,
                 diagnosticsPath: "/tmp/diagnostics.log",
                 tracePath: "/tmp/traces.jsonl"
@@ -631,7 +617,7 @@ struct SettingsWindowControllerStateTests {
         )
 
         #expect(rawCapture.statusText == "Suggestions are paused")
-        #expect(rawCapture.typedTextText == "Your text: a local journal or detailed log is on.")
+        #expect(rawCapture.typedTextText == "Your text: detailed local logging is on.")
     }
 
     @Test("Pause state copy stays shared across surfaces")
@@ -764,13 +750,11 @@ struct SettingsWindowControllerStateTests {
             performRuntimeAction: { runtimeActions.append($0) },
             toggleCurrentApp: {},
             toggleCurrentAppMirrorMode: {},
-            startCurrentAppProof: {},
             startTextEditPractice: { practiceStartCount += 1 },
             enableAllApps: {},
             toggleTracingPaused: {},
             toggleRawContentTracing: {},
             toggleScreenshotTracing: {},
-            toggleVisiblePageContext: {},
             deleteLocalLogs: { deleteCount += 1 },
             clearLearningData: {},
             cycleAcceptAllShortcut: {},
@@ -841,12 +825,10 @@ struct SettingsWindowControllerStateTests {
             performRuntimeAction: { _ in },
             toggleCurrentApp: {},
             toggleCurrentAppMirrorMode: {},
-            startCurrentAppProof: {},
             enableAllApps: {},
             toggleTracingPaused: {},
             toggleRawContentTracing: {},
             toggleScreenshotTracing: {},
-            toggleVisiblePageContext: {},
             deleteLocalLogs: {},
             clearLearningData: {},
             cycleAcceptAllShortcut: {},
@@ -882,7 +864,6 @@ struct SettingsWindowControllerStateTests {
             rawContentTracingExpiresAt: nil,
             screenshotTracingEnabled: false,
             screenshotTracingExpiresAt: nil,
-            visiblePageContextEnabled: false,
             screenCaptureAccessGranted: false,
             diagnosticsPath: "/tmp/diagnostics.log",
             tracePath: "/tmp/traces.jsonl"

@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Word completion candidate ranker")
 struct WordCompletionCandidateRankerTests {
@@ -204,5 +205,15 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "I use dictation") == nil)
         #expect(ranker.suggestion(for: "I use d") == nil)
         #expect(ranker.suggestion(for: "I use dic ") == nil)
+    }
+}
+
+private extension WordCompletionCandidateRanker {
+    func suggestion(
+        for textBeforeCursor: String,
+        recentWords: [String]
+    ) -> CompletionSuggestion? {
+        WordCompletionCandidateRanker(staticWords: recentWords.reversed() + staticWords)
+            .suggestion(for: textBeforeCursor)
     }
 }

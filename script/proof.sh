@@ -191,6 +191,8 @@ echo "Repo: ${ROOT_DIR}"
 # --- BLOCKING lane (cheap first, Swift last) --------------------------------
 run_blocking "git diff --check (whitespace / conflict markers)" check_diff
 run_blocking "byte-compile script/*.py" python3 -m py_compile script/*.py
+run_blocking "shipping boundary checker self-test" python3 script/check_shipping_boundary_self_test.py
+run_blocking "shipping product boundary" python3 script/check_shipping_boundary.py
 run_blocking "local completion runtime self-test" bash script/local_completion_runtime_self_test.sh
 run_blocking "local completion batch self-test" bash script/local_completion_batch_self_test.sh
 run_blocking "first-token latency self-test" bash script/first_token_latency_self_test.sh

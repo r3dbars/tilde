@@ -215,7 +215,6 @@ final class DiagnosticsWindowController {
         modelDirectoryPath: String,
         recentEvents: [String],
         traceSummary: AutocompleteTraceSummary,
-        personalCaptureScorecard: SuggestionEpisodeScorecard?,
         recentTraceEvents: [AutocompleteTraceEvent],
         tracePath: String,
         tracingPaused: Bool,
@@ -276,9 +275,6 @@ final class DiagnosticsWindowController {
         sections.append(SuggestionLearningDiagnostics(
             summary: traceSummary,
             recentEvents: recentTraceEvents
-        ).text)
-        sections.append(PersonalCaptureLoopDiagnostics(
-            scorecard: personalCaptureScorecard
         ).text)
         sections.append(PromptContextDiagnostics(
             recentEvents: recentTraceEvents
@@ -595,37 +591,6 @@ struct DiagnosticsOverviewState: Equatable {
     }
 }
 
-struct PersonalCaptureLoopDiagnostics: Equatable {
-    let scorecard: SuggestionEpisodeScorecard?
-
-    var text: String {
-        guard let scorecard else {
-            return "Personal Capture loop: off"
-        }
-
-        let latency = scorecard.averageLatencyMilliseconds.map { "\($0)ms" } ?? "n/a"
-        let rows = scorecard.modelPromptRows.isEmpty
-            ? "  none yet"
-            : scorecard.modelPromptRows.prefix(5).map { "  \($0)" }.joined(separator: "\n")
-
-        return """
-        Personal Capture loop:
-          score: \(scorecard.score)/100
-          episodes: \(scorecard.total)
-          accepted: \(scorecard.accepted)
-          kept: \(scorecard.kept)
-          ignored: \(scorecard.ignored)
-          dismissed: \(scorecard.dismissed)
-          typed past: \(scorecard.typedPast)
-          deleted fast: \(scorecard.deletedFast)
-          eval cases: \(scorecard.evalCaseCount)
-          average latency: \(latency)
-        Model / prompt:
-        \(rows)
-        """
-    }
-}
-
 struct DiagnosticsPlacementEvidence {
     let rows: [Row]
 
@@ -771,31 +736,13 @@ struct PromptContextDiagnostics: Equatable {
     var text: String {
         [
             headlineText,
-            latestDocumentTitleShapeText,
             latestPartialWordShapeText,
-            latestCurrentLineShapeText,
-            latestVisiblePageContextFilterText
+            latestCurrentLineShapeText
         ].joined(separator: "\n")
     }
 
     private var headlineText: String {
         "Prompt context diagnostics: recent shape events \(shapeEvents.count)"
-    }
-
-    private var latestDocumentTitleShapeText: String {
-        guard let event = recentEvents.latestEvent(containingAny: [
-            "documentTitleWordCount",
-            "documentTitleLengthBucket"
-        ]) else {
-            return "Document title shape: no recent title-shape metadata"
-        }
-
-        let words = event.metadata["documentTitleWordCount"] ?? "unknown"
-        let length = event.metadata["documentTitleLengthBucket"] ?? "unknown"
-        let fileExtension = event.metadata["documentTitleExtension"] ?? "none"
-        let untitled = event.metadata["documentTitleIsUntitled"] ?? "unknown"
-        let unsaved = event.metadata["documentTitleHasUnsavedMarker"] ?? "unknown"
-        return "Document title shape: length=\(length), words=\(words), extension=\(fileExtension), untitled=\(untitled), unsaved=\(unsaved)"
     }
 
     private var latestPartialWordShapeText: String {
@@ -830,28 +777,10 @@ struct PromptContextDiagnostics: Equatable {
         return "Current line shape: kind=\(kind), marker=\(marker), indent=\(indentation), contentWords=\(contentWords)"
     }
 
-    private var latestVisiblePageContextFilterText: String {
-        guard let event = recentEvents.latestEvent(containingAny: [
-            "visiblePageContextActiveLineFiltered"
-        ]) else {
-            return "Screen context active-line filter: no recent OCR context metadata"
-        }
-
-        switch event.metadata["visiblePageContextActiveLineFiltered"]?.lowercased() {
-        case "true", "1", "yes":
-            return "Screen context active-line filter: removed active typed line"
-        case "false", "0", "no":
-            return "Screen context active-line filter: no active line removed"
-        default:
-            return "Screen context active-line filter: unknown"
-        }
-    }
-
     private var shapeEvents: [AutocompleteTraceEvent] {
         recentEvents.filter { event in
             event.metadata.keys.contains { key in
-                key.hasPrefix("documentTitle")
-                    || key.hasPrefix("partialWord")
+                key.hasPrefix("partialWord")
                     || key.hasPrefix("currentLine")
             }
         }

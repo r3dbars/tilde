@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Sensitive text field policy")
 struct SensitiveTextFieldPolicyTests {

@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Suggestion focus change policy")
 struct SuggestionFocusChangePolicyTests {
