@@ -1,4 +1,5 @@
 import Foundation
+import MLXLMCommon
 import Testing
 @testable import AutocompleteLabCore
 @testable import AutocompleteLabApp
@@ -138,6 +139,72 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(firstPrompt.system == nextPrompt.system)
         #expect(lookup.decision == .hit)
         #expect(lookup.appendTokens == [40])
+    }
+
+    @Test("Hybrid prompt caches can be copied and reused without trim support")
+    func hybridPromptCacheReuseDoesNotRequireTrimming() {
+        let firstRequest = promptKVRequest("Can we make this")
+        let nextRequest = promptKVRequest("Can we make this feel")
+        var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: true))
+        let metadata = owner.storePreparedPromptCache(
+            [MambaCache(), KVCacheSimple()],
+            key: MLXPromptKVCacheOwner.key(
+                modelRevision: "hybrid-model",
+                promptStyleIdentifier: "style-a",
+                systemPrompt: "system",
+                promptTokens: [10, 20, 30]
+            ),
+            request: firstRequest,
+            promptTokens: [10, 20, 30]
+        )
+
+        let lookup = owner.lookup(
+            request: nextRequest,
+            promptTokens: [10, 20, 30, 40],
+            systemPrompt: "system",
+            modelRevision: "hybrid-model",
+            promptStyleIdentifier: "style-a"
+        )
+
+        #expect(metadata["mlxPromptKVCacheStored"] == "true")
+        #expect(lookup.decision == .hit)
+        #expect(lookup.appendTokens == [40])
+        #expect(lookup.reusableCache?.count == 2)
+    }
+
+    @Test("Prompt cache finds the exact common chat-template prefix")
+    func promptCacheFindsCommonPrefix() {
+        #expect(MLXPromptKVCacheOwner.commonPrefixTokenCount([10, 20, 30, 99], [10, 20, 30, 40, 50]) == 3)
+        #expect(MLXPromptKVCacheOwner.commonPrefixTokenCount([10], [20]) == 0)
+        #expect(MLXPromptKVCacheOwner.commonPrefixTokenCount([10, 20], [10, 20, 30]) == 2)
+    }
+
+    @Test("Hybrid prompt cache fails closed when a prior suffix must be trimmed")
+    func hybridPromptCacheDoesNotReuseDivergentSuffix() {
+        let firstRequest = promptKVRequest("Can we make this")
+        var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: true))
+        _ = owner.storePreparedPromptCache(
+            [MambaCache()],
+            key: MLXPromptKVCacheOwner.key(
+                modelRevision: "hybrid-model",
+                promptStyleIdentifier: "style-a",
+                systemPrompt: "system",
+                promptTokens: [10, 20, 30]
+            ),
+            request: firstRequest,
+            promptTokens: [10, 20, 30]
+        )
+
+        let lookup = owner.lookup(
+            request: promptKVRequest("Can we make this feel"),
+            promptTokens: [10, 20, 40],
+            systemPrompt: "system",
+            modelRevision: "hybrid-model",
+            promptStyleIdentifier: "style-a"
+        )
+
+        #expect(lookup.decision == .miss(.untrimmablePromptCache))
+        #expect(lookup.reusableCache == nil)
     }
 
     @Test("Warm gate resumes every waiter when warm completes")
