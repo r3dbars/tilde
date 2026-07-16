@@ -67,6 +67,10 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "suggestionIdleRetryState.consumeRetryIfReady(")
         try require(appDelegate, contains: "suggestionIdleRetryState.noteTextChange(")
         try require(appDelegate, contains: "suggestionIdleRetryState.noteTypingBurstSuppression(")
+        try require(appDelegate, contains: "suggestionIdleRetryState.noteModelMiss(")
+        try require(appDelegate, contains: "guard triggerReason != \"idle-retry\"")
+        try require(appDelegate, contains: "? \"instant-word-model-fallback\"")
+        try require(appDelegate, contains: "setSuggestionDecision(\"Queued: model word completion\")")
         try require(appDelegate, contains: "else if idleRetryReason != nil {")
         try require(appDelegate, contains: "? \"idle-retry\"")
     }

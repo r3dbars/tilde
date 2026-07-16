@@ -933,7 +933,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
               cleanedCandidates.isEmpty,
               candidateSelection.suppressionReason == .noCandidates,
               let fragment = trailingWordFragment(in: request.textBeforeCursor),
-              fragment.count >= 3,
+              fragment.count >= 2,
               fragment.allSatisfy(\.isLetter)
         else {
             return nil
@@ -1001,7 +1001,7 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         effectiveMaxVisibleWords: Int
     ) -> CompletionPrompt? {
         guard request.mode.isContinuation,
-              effectiveMaxVisibleWords >= 6,
+              effectiveMaxVisibleWords >= 3,
               candidateSelection.suggestion == nil,
               candidateSelection.suppressionReason == .lowTopScore
                 || candidateSelection.suppressionReason == .noCandidates

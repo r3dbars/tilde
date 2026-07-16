@@ -93,6 +93,33 @@ struct SuggestionIdleRetryStateTests {
         ) == nil)
     }
 
+    @Test("A model miss retries once after the text settles")
+    func modelMissRetriesAfterPause() {
+        var state = SuggestionIdleRetryState(settleDelayMilliseconds: 120)
+        let snapshot = snapshot("Please finish this")
+
+        state.noteModelMiss(
+            snapshot: snapshot,
+            nowMilliseconds: 1_000
+        )
+
+        #expect(state.consumeRetryIfReady(
+            snapshot: snapshot,
+            nowMilliseconds: 1_119,
+            hasVisibleSuggestion: false
+        ) == nil)
+        #expect(state.consumeRetryIfReady(
+            snapshot: snapshot,
+            nowMilliseconds: 1_120,
+            hasVisibleSuggestion: false
+        ) == .modelMiss)
+        #expect(state.consumeRetryIfReady(
+            snapshot: snapshot,
+            nowMilliseconds: 2_000,
+            hasVisibleSuggestion: false
+        ) == nil)
+    }
+
     @Test("New snapshot or visible suggestion cancels a stale idle retry")
     func staleRetryIsCancelled() {
         var changedState = SuggestionIdleRetryState(settleDelayMilliseconds: 100)

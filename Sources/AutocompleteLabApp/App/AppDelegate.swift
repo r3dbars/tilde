@@ -7083,7 +7083,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             if timingLane == .instantWord {
-                let reason = "instant-word-no-local-candidate"
+                let shouldAskModel = shouldAskModelForWordCompletionFallback(
+                    visiblePageContext: visiblePageContext
+                )
+                let reason = shouldAskModel
+                    ? "instant-word-model-fallback"
+                    : "instant-word-no-local-candidate"
                 RawAutocompleteTraceLog.shared.record(
                     type: .suggestionSuppressed,
                     suggestionID: suggestionID,
@@ -7101,43 +7106,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .merging(fastSelectionMetadata) { current, _ in current }
                     .merging(requestMetadata) { current, _ in current }
                 )
-                if suggestionSession.hasVisibleSuggestion {
+                if shouldAskModel {
+                    setSuggestionDecision("Queued: model word completion")
+                } else if suggestionSession.hasVisibleSuggestion {
                     setSuggestionDecision("Shown: no instant word replacement")
                     repositionVisibleSuggestion(context: context, profile: profile)
                     return
+                } else {
+                    setSuggestionDecision("Waiting: no instant word match")
+                    hideSuggestion()
+                    return
                 }
-
-                setSuggestionDecision("Waiting: no instant word match")
-                hideSuggestion()
-                return
             }
 
-            RawAutocompleteTraceLog.shared.record(
-                type: .suggestionSuppressed,
-                suggestionID: suggestionID,
-                appBundleIdentifier: appBundleIdentifier,
-                fieldIdentity: fieldIdentityDescription,
-                requestMode: request.mode.rawValue,
-                triggerReason: "fast-word-completion",
-                textBeforeCursor: request.textBeforeCursor,
-                textAfterCursor: request.textAfterCursor,
-                reason: "no-fast-word-candidate",
-                metadata: [
-                    "renderMode": renderMode.rawValue
-                ]
-                .merging(fastSelectionMetadata) { current, _ in current }
-                .merging(requestMetadata) { current, _ in current }
-            )
-            if shouldAskModelForWordCompletionFallback(visiblePageContext: visiblePageContext) {
-                setSuggestionDecision("Queued: model word completion")
-            } else if suggestionSession.hasVisibleSuggestion {
-                setSuggestionDecision("Shown: no fast word replacement")
-                repositionVisibleSuggestion(context: context, profile: profile)
-                return
-            } else {
-                setSuggestionDecision(SuggestionStatusText.notShown(reason: "no-fast-word-candidate"))
-                hideSuggestion()
-                return
+            if timingLane != .instantWord {
+                RawAutocompleteTraceLog.shared.record(
+                    type: .suggestionSuppressed,
+                    suggestionID: suggestionID,
+                    appBundleIdentifier: appBundleIdentifier,
+                    fieldIdentity: fieldIdentityDescription,
+                    requestMode: request.mode.rawValue,
+                    triggerReason: "fast-word-completion",
+                    textBeforeCursor: request.textBeforeCursor,
+                    textAfterCursor: request.textAfterCursor,
+                    reason: "no-fast-word-candidate",
+                    metadata: [
+                        "renderMode": renderMode.rawValue
+                    ]
+                    .merging(fastSelectionMetadata) { current, _ in current }
+                    .merging(requestMetadata) { current, _ in current }
+                )
+                if shouldAskModelForWordCompletionFallback(visiblePageContext: visiblePageContext) {
+                    setSuggestionDecision("Queued: model word completion")
+                } else if suggestionSession.hasVisibleSuggestion {
+                    setSuggestionDecision("Shown: no fast word replacement")
+                    repositionVisibleSuggestion(context: context, profile: profile)
+                    return
+                } else {
+                    setSuggestionDecision(SuggestionStatusText.notShown(reason: "no-fast-word-candidate"))
+                    hideSuggestion()
+                    return
+                }
             }
         } else if requestMode == .wordCompletion,
                   disablesFastWordCompletionForProof {
@@ -7193,11 +7202,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var didPresentFastPhraseFallback = false
         if requestMode == .phraseContinuation,
            !disablesFastPhraseFallbackForProof {
-            let allowsClaudeCodeProofPromptPrediction =
+            let allowsPromptAppPrediction =
                 appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
                 && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
+                || suggestionTuning.allowsPromptAppPrediction(
+                    behaviorProfileID: request.behaviorProfileID
+                )
             let allowsPredictivePhraseFallback =
-                allowsClaudeCodeProofPromptPrediction
+                allowsPromptAppPrediction
                 || shouldUsePredictivePhraseFallback(
                     profile: profile,
                     behaviorProfileID: request.behaviorProfileID,
@@ -7210,7 +7222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
-                allowPromptAppPrediction: allowsClaudeCodeProofPromptPrediction
+                allowPromptAppPrediction: allowsPromptAppPrediction
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }
@@ -7574,6 +7586,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             return
                         }
 
+                        self.armModelMissIdleRetry(
+                            context: context,
+                            fieldIdentity: fieldIdentity,
+                            profile: profile,
+                            triggerReason: triggerReason
+                        )
                         self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "latency-budget-exceeded"))
                         self.hideSuggestion(reason: "latency-budget-exceeded")
                         return
@@ -7623,6 +7641,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             return
                         }
 
+                        self.armModelMissIdleRetry(
+                            context: context,
+                            fieldIdentity: fieldIdentity,
+                            profile: profile,
+                            triggerReason: triggerReason
+                        )
                         self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "empty-suggestion"))
                         self.hideSuggestion()
                         return
@@ -7752,11 +7776,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ) else {
                         return
                     }
+                    self.armModelMissIdleRetry(
+                        context: context,
+                        fieldIdentity: fieldIdentity,
+                        profile: profile,
+                        triggerReason: triggerReason
+                    )
                     self.setSuggestionDecision(SuggestionStatusText.notShown(reason: "engine-error"))
                     self.hideSuggestion(reason: "engine-error")
                 }
             }
         }
+    }
+
+    private func armModelMissIdleRetry(
+        context: FocusedTextContext,
+        fieldIdentity: FocusedFieldIdentity,
+        profile: CompatibilityProfile,
+        triggerReason: String
+    ) {
+        guard triggerReason != "idle-retry" else {
+            return
+        }
+
+        suggestionIdleRetryState.noteModelMiss(
+            snapshot: FocusedTextSnapshot(
+                fieldIdentity: fieldIdentity,
+                textBeforeCursor: context.textBeforeCursor,
+                textAfterCursor: context.textAfterCursor
+            ),
+            nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+            settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+        )
     }
 
     private func presentSuggestion(
