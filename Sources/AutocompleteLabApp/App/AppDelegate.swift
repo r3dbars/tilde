@@ -3124,11 +3124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preservePendingRequest: Bool = false
     ) {
         fieldStatusIndicator.hide()
-        let hasVerifiedCodexPresentationRetry = codexPromptPresentationRetryTask != nil
-            && currentFieldIdentity == lastTrustedCodexPromptTargetContinuityAnchor?.fieldIdentity
-            && lastTextSnapshot?.fieldIdentity
-                == lastTrustedCodexPromptTargetContinuityAnchor?.fieldIdentity
-        if !preservePendingRequest && !hasVerifiedCodexPresentationRetry {
+        if !preservePendingRequest {
             invalidatePendingSuggestionRequest()
         }
         guard suggestionSession.hasVisibleSuggestion else {
