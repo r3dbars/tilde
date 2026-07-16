@@ -3,6 +3,7 @@ import AutocompleteLabCore
 
 @MainActor
 final class SuggestionPanelController {
+    var prefersImmediateFirstAppearance = false
     private let panel: NSPanel
     private let backdropView: NSVisualEffectView
     private let solidBackdropView: SolidBackdropView
@@ -193,7 +194,9 @@ final class SuggestionPanelController {
         }
 
         let wasVisible = panel.isVisible
-        let presentation = Self.accessibilityPresentation()
+        let presentation = Self.accessibilityPresentation(
+            prefersImmediateAppearance: prefersImmediateFirstAppearance
+        )
         applyBackdrop(presentation.background, visibleFor: renderMode)
         ghostTextView.update(
             text: text,
@@ -262,11 +265,14 @@ final class SuggestionPanelController {
     /// Resolve how the panel should present itself from the live macOS
     /// accessibility display preferences. The decision itself is pure and lives
     /// in `AutocompleteLabCore`; this only reads the system prefs.
-    private static func accessibilityPresentation() -> SuggestionPanelAccessibilityPresentation {
+    private static func accessibilityPresentation(
+        prefersImmediateAppearance: Bool
+    ) -> SuggestionPanelAccessibilityPresentation {
         let workspace = NSWorkspace.shared
         return SuggestionPanelAccessibilityPresentationPolicy.resolve(
             reduceMotion: workspace.accessibilityDisplayShouldReduceMotion,
-            reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency
+            reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency,
+            prefersImmediateAppearance: prefersImmediateAppearance
         )
     }
 
