@@ -107,6 +107,39 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(lookup.traceMetadata["mlxPromptKVCachePoisonedAvoided"] == "true")
     }
 
+    @Test("Stable personal context preserves warm prompt KV reuse")
+    func stablePersonalContextPreservesPromptKVReuse() {
+        let personalContext = PersonalContext(
+            snippets: ["Keep launch notes direct and bounded."],
+            profileGuidance: "Prefer short direct sentences."
+        )
+        let firstRequest = promptKVRequest("Can we make this", personalContext: personalContext)
+        let nextRequest = promptKVRequest("Can we make this feel", personalContext: personalContext)
+        let builder = CompletionPromptBuilder()
+        let firstPrompt = builder.prompt(for: firstRequest)
+        let nextPrompt = builder.prompt(for: nextRequest)
+        var owner = MLXPromptKVCacheOwner(configuration: .init(isEnabled: true))
+        owner.storePreparedPromptForTesting(
+            request: firstRequest,
+            promptTokens: [10, 20, 30],
+            systemPrompt: firstPrompt.system,
+            modelRevision: "model-a",
+            promptStyleIdentifier: CompletionPromptBuilder.promptStyleIdentifier
+        )
+
+        let lookup = owner.lookup(
+            request: nextRequest,
+            promptTokens: [10, 20, 30, 40],
+            systemPrompt: nextPrompt.system,
+            modelRevision: "model-a",
+            promptStyleIdentifier: CompletionPromptBuilder.promptStyleIdentifier
+        )
+
+        #expect(firstPrompt.system == nextPrompt.system)
+        #expect(lookup.decision == .hit)
+        #expect(lookup.appendTokens == [40])
+    }
+
     @Test("Warm gate resumes every waiter when warm completes")
     func warmGateResumesEveryWaiterWhenWarmCompletes() async throws {
         let gate = MLXRuntimeWarmGate()
@@ -456,13 +489,14 @@ struct MLXModelRuntimeWarmGateTests {
     }
 }
 
-private func promptKVRequest(_ text: String) -> CompletionRequest {
+private func promptKVRequest(_ text: String, personalContext: PersonalContext? = nil) -> CompletionRequest {
     CompletionRequest(
         textBeforeCursor: text,
         appBundleIdentifier: "com.apple.TextEdit",
         fieldIdentityDescription: "field-1",
         fieldKind: .multilineCompose,
         behaviorProfileID: .notes,
+        personalContext: personalContext,
         mode: .phraseContinuation
     )
 }
