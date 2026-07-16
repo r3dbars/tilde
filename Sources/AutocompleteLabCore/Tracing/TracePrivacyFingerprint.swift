@@ -5,6 +5,11 @@ public enum TracePrivacyFingerprint {
     public static let version = "hmac-sha256-v1"
     public static let prefixFamilyVersion = "prefix-family-hmac-sha256-v1"
 
+    public static func fingerprint(for text: String, secret: Data) -> String? {
+        guard !text.isEmpty, !secret.isEmpty else { return nil }
+        return hmacHex(text, secret: secret)
+    }
+
     public static func metadata(for text: String, secret: Data) -> [String: String] {
         let tokens = AcceptanceSurvivalClassifier.looseTokens(in: text)
         guard !tokens.isEmpty, !secret.isEmpty else {
