@@ -206,7 +206,7 @@ public struct SuggestionTuning: Equatable, Sendable {
         case 4:
             "Fast and willing to guess."
         default:
-            "Most active when suggestions are resumed and this app is enabled."
+            "Fastest. Shows frequent guesses after very short pauses."
         }
     }
 
@@ -289,7 +289,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 maximumWordCompletionCharacters: 18,
                 allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
                 allowsUnfinishedWordPhraseContinuation: true,
-                prefersPhraseContinuationForWordFragments: true
+                prefersPhraseContinuationForWordFragments: false
             )
         }
 
@@ -400,7 +400,9 @@ public struct SuggestionTuning: Equatable, Sendable {
         visiblePageContextAvailable: Bool
     ) -> Bool {
         switch behaviorProfileID {
-        case .some(.aiChat), .some(.coding), .some(.forms), .some(.search):
+        case .some(.aiChat):
+            return allowsPromptAppPrediction(behaviorProfileID: behaviorProfileID)
+        case .some(.coding), .some(.forms), .some(.search):
             return false
         case .some, .none:
             break
@@ -412,6 +414,12 @@ public struct SuggestionTuning: Equatable, Sendable {
 
         return Self.predictiveFallbackWritingApps.contains(appBundleIdentifier)
             || appBundleIdentifier == "com.google.Chrome"
+    }
+
+    public func allowsPromptAppPrediction(
+        behaviorProfileID: AutocompleteBehaviorProfileID?
+    ) -> Bool {
+        aggressivenessLevel >= 5 && behaviorProfileID == .aiChat
     }
 
     public var traceMetadata: [String: String] {

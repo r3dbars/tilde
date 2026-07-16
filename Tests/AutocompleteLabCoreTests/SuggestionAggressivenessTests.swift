@@ -314,6 +314,14 @@ struct SuggestionAggressivenessTests {
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
         ) == .allow(.phraseContinuation))
+
+        #expect(oneWordPhraseActivation.decision(
+            textBeforeCursor: "Please fin",
+            textAfterCursor: "",
+            isSecure: false,
+            isFieldSuppressed: false,
+            fieldKind: .multilineCompose
+        ) == .allow(.wordCompletion))
     }
 
     @Test("predictive fallback stays on for writing surfaces before OCR arrives")
@@ -371,6 +379,22 @@ struct SuggestionAggressivenessTests {
             behaviorProfileID: .email,
             visiblePageContextAvailable: false
         ))
+        #expect(!normal.allowsPromptAppPrediction(behaviorProfileID: .aiChat))
+        #expect(!normal.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.openai.codex",
+            behaviorProfileID: .aiChat,
+            visiblePageContextAvailable: true
+        ))
+
+        let max = SuggestionTuning(aggressivenessLevel: 5)
+        #expect(max.allowsPromptAppPrediction(behaviorProfileID: .aiChat))
+        #expect(max.allowsPredictivePhraseFallback(
+            appBundleIdentifier: "com.openai.codex",
+            behaviorProfileID: .aiChat,
+            visiblePageContextAvailable: false
+        ))
+        #expect(!max.allowsPromptAppPrediction(behaviorProfileID: .coding))
+
     }
 
     @Test("parsing and cycling are stable")

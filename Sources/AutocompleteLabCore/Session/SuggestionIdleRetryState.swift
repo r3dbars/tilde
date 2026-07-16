@@ -1,6 +1,7 @@
 public enum SuggestionIdleRetryReason: String, Equatable, Sendable {
     case requestCancelled = "request-cancelled"
     case typingBurstSuppressed = "typing-burst-suppressed"
+    case modelMiss = "model-miss"
 }
 
 public struct SuggestionIdleRetryState: Equatable, Sendable {
@@ -54,6 +55,19 @@ public struct SuggestionIdleRetryState: Equatable, Sendable {
         arm(
             snapshot: snapshot,
             reason: .typingBurstSuppressed,
+            nowMilliseconds: nowMilliseconds,
+            settleDelayMilliseconds: settleDelayMilliseconds
+        )
+    }
+
+    public mutating func noteModelMiss(
+        snapshot: FocusedTextSnapshot,
+        nowMilliseconds: Int,
+        settleDelayMilliseconds: Int? = nil
+    ) {
+        arm(
+            snapshot: snapshot,
+            reason: .modelMiss,
             nowMilliseconds: nowMilliseconds,
             settleDelayMilliseconds: settleDelayMilliseconds
         )

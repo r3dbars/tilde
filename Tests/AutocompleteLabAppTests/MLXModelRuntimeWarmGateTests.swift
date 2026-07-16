@@ -418,6 +418,21 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(prompt.system.contains("Choose a fresh continuation"))
         #expect(prompt.system.contains("3-8 words"))
         #expect(prompt.user.contains("Smoke proof feels"))
+
+        #expect(MLXModelRuntime.retryPromptForShortHighWordCandidate(
+            request: CompletionRequest(
+                textBeforeCursor: "Please make the next step ",
+                maxVisibleWords: 5,
+                mode: .phraseContinuation
+            ),
+            cleanedCandidates: [],
+            candidateSelection: CompletionCandidateRanker().selection(
+                [],
+                mode: .phraseContinuation,
+                textBeforeCursor: "Please make the next step "
+            ),
+            effectiveMaxVisibleWords: 5
+        ) != nil)
     }
 
     @Test("Word completion retry prompt repairs empty model candidates")
@@ -446,6 +461,21 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(prompt.system.contains("Example suffix: ted"))
         #expect(prompt.user.contains("The privacy note should stay redac"))
         #expect(prompt.user.hasSuffix("Suffix only, letters only, or <NO_SUGGESTION>:"))
+
+        let twoLetterRequest = CompletionRequest(
+            textBeforeCursor: "Please make this cl",
+            mode: .wordCompletion
+        )
+        let twoLetterSelection = CompletionCandidateRanker().selection(
+            [],
+            mode: .wordCompletion,
+            textBeforeCursor: twoLetterRequest.textBeforeCursor
+        )
+        #expect(MLXModelRuntime.retryPromptForEmptyWordCompletionCandidate(
+            request: twoLetterRequest,
+            cleanedCandidates: [],
+            candidateSelection: twoLetterSelection
+        ) != nil)
     }
 
     @Test("Word completion retry prompt stays off for usable model candidates")
@@ -515,6 +545,7 @@ struct MLXModelRuntimeWarmGateTests {
                 mode: .phraseContinuation
             )
         ) == nil)
+
     }
 
     @Test("Local word completion fallback stays off in the middle of words")
