@@ -1,6 +1,6 @@
 # Compatibility Matrix
 
-Current compatibility stance for the lab build.
+Current compatibility stance for the SteadyType private-beta build.
 
 After changing placement or key handling, treat recorded proof as stale until
 the manual smoke status is refreshed from the current build.

@@ -2,10 +2,7 @@
 
 Diagnostic workflow docs live here.
 
-Start with:
-
-- `target-app-ux-workflow.md`
-- `runs/`
+Generated local diagnostic bundles belong in `runs/`.
 
 Rules:
 

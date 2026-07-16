@@ -1,11 +1,11 @@
 # Runtime Network Egress Proof
 
 Use this to prove the local-only typing path does not talk to the network while
-Autocomplete Lab is running.
+SteadyType is running.
 
 ## Autocomplete-Time Check
 
-Run this while Autocomplete Lab is open and a disposable local typing session is
+Run this while SteadyType is open and a disposable local typing session is
 active:
 
 ```bash

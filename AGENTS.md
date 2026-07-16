@@ -1,11 +1,12 @@
-# Autocomplete Lab Agent Guide
+# SteadyType Agent Guide
 
-This repo is separate from Transcripted on purpose.
+SteadyType is a standalone macOS writing assistant.
 
 ## Product stance
 
-- Treat this as an experiment first, not a committed Transcripted feature.
-- Keep the app tiny until real people prove it is useful.
+- Keep the product centered on one quiet writing loop: suggest, accept, or dismiss.
+- Keep the app and its documentation small until real use proves more is needed.
+- Do not grow research, scorecard, or integration sprawl around the core assistant.
 - The test is simple: does inline help make writing feel easier, or does it get annoying?
 - Privacy is a product requirement. Do not store or send typed text unless the user explicitly turns that on.
 
@@ -20,7 +21,7 @@ Start with:
 - Tab accepts the next word
 - Esc dismisses
 - local-first inference
-- app allowlist while testing
+- proof-backed app profiles plus a conservative generic Accessibility path
 
 Avoid early:
 
@@ -28,7 +29,7 @@ Avoid early:
 - broad telemetry
 - cloud-only inference
 - browser-specific heroics
-- Transcripted integration
+- cross-product integrations
 - true inline ghost text until the floating overlay proves useful
 
 ## Technical bias

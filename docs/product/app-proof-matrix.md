@@ -2,7 +2,8 @@
 
 Screenshot-backed proof for the current cross-app typing loop.
 
-This is not a support promise. It is the honest proof state for the lab build:
+This is not a support promise. It is the honest proof state for the SteadyType
+private-beta build:
 what has a screenshot, what has insertion proof, and what still needs a real
 manual pass.
 

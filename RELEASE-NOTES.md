@@ -2,6 +2,9 @@
 
 Use this template for each private beta artifact.
 
+This file is not evidence that a release was built, notarized, published, or
+installed. Fill it from the exact artifact and its release proof.
+
 ## Build
 
 - Version:

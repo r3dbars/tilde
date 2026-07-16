@@ -1,9 +1,8 @@
 # Small Model Blind Quality Audit — 2026-06-14
 
-Wave-2 rerun of the small-model bet, now **measured**. This supersedes the
-runnable-but-unmeasured [2026-06-12 skeleton](small-model-blind-quality-audit-2026-06-12.md):
-the old run was blocked by a cold-load bug (36 model reloads per audit), since
-fixed by the persistent `--batch` runtime.
+Wave-2 rerun of the small-model bet, now **measured**. This supersedes an
+unmeasured 2026-06-12 scaffold that was blocked by a cold-load bug (36 model
+reloads per audit), since fixed by the persistent `--batch` runtime.
 
 **Result.** Switching base/small models from a chat wrapper to `raw_completion`
 raises overall blind-quality by **+7 to +16 points** on every model tested — the
