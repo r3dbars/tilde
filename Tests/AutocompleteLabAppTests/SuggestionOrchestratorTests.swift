@@ -1732,6 +1732,71 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Validated Codex composer trusts its synthetic caret without screenshot proof")
+    func validatedCodexComposerTrustsSyntheticCaretWithoutScreenshotProof() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(
+            for: CodexProofFocusedTargetPolicy.bundleIdentifier
+        ))
+        let context = makeContext(
+            textBeforeCursor: "Help me finish this thought",
+            textAfterCursor: "",
+            windowTitle: "Codex",
+            caretIsSynthetic: true
+        )
+
+        let plan = orchestrator.placementHealthPlan(
+            context: context,
+            profile: codex,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: nil,
+                effectiveRenderMode: .inlineAdjacent
+            ),
+            screenshotTracingEnabled: false
+        )
+
+        guard case let .present(presentation) = plan else {
+            Issue.record("Expected validated Codex synthetic caret to present inline")
+            return
+        }
+        #expect(presentation.renderMode == .inlineAdjacent)
+        #expect(presentation.anchorSource == .syntheticCaret)
+        #expect(presentation.reason == .healthy)
+    }
+
+    @MainActor
+    @Test("Codex synthetic caret fails closed without stable window identity")
+    func codexSyntheticCaretFailsClosedWithoutStableWindowIdentity() throws {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let codex = try #require(CompatibilityProfileStore.mvp.profile(
+            for: CodexProofFocusedTargetPolicy.bundleIdentifier
+        ))
+        let context = makeContext(
+            textBeforeCursor: "Help me finish this thought",
+            textAfterCursor: "",
+            windowTitle: "Codex",
+            caretIsSynthetic: true,
+            windowIdentifier: nil
+        )
+
+        let plan = orchestrator.placementHealthPlan(
+            context: context,
+            profile: codex,
+            learningAdjustment: CompatibilityLearningAdjustment(
+                profile: nil,
+                effectiveRenderMode: .inlineAdjacent
+            ),
+            screenshotTracingEnabled: false
+        )
+
+        guard case let .suppress(suppression) = plan else {
+            Issue.record("Expected unverified Codex synthetic caret to stay suppressed")
+            return
+        }
+        #expect(suppression.reason == .untrustedSyntheticCaret)
+    }
+
+    @MainActor
     @Test("Placement suppression exposes command fallback metadata")
     func placementSuppressionExposesCommandFallbackMetadata() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -1867,7 +1932,8 @@ private func makeContext(
     textBeforeCursor: String,
     textAfterCursor: String,
     windowTitle: String? = nil,
-    caretIsSynthetic: Bool = false
+    caretIsSynthetic: Bool = false,
+    windowIdentifier: Int? = 42
 ) -> FocusedTextContext {
     FocusedTextContext(
         elementIdentifier: 7,
@@ -1880,7 +1946,7 @@ private func makeContext(
         caretRect: CGRect(x: 10, y: 10, width: 1, height: 18),
         elementRect: CGRect(x: 0, y: 0, width: 400, height: 200),
         windowRect: CGRect(x: 0, y: 0, width: 500, height: 300),
-        windowIdentifier: 42,
+        windowIdentifier: windowIdentifier,
         textLineRect: CGRect(x: 10, y: 10, width: 120, height: 18),
         textStyle: nil,
         isSecure: false,
