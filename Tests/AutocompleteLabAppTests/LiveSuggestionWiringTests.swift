@@ -68,10 +68,19 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "codexPromptPresentationRetryTask?.cancel()")
         try require(appDelegate, contains: "canPreserveDuringAXCooldown(")
         try require(appDelegate, contains: "preservePendingRequest: shouldPreservePendingRequest")
-        try require(appDelegate, contains: "codexPromptAXCooldownRetryDelayMilliseconds(")
-        try require(appDelegate, contains: "codex-prompt-target-refresh-retry-deferred-for-ax-cooldown")
+        try require(appDelegate, contains: "codexPromptAXCooldownPresentationDelayMilliseconds(")
+        try require(appDelegate, contains: "scheduleCodexPromptPresentationAfterAXCooldown(")
+        try require(appDelegate, contains: "codex-prompt-presentation-deferred-for-ax-cooldown")
         try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
         try require(appDelegate, contains: "fieldStatusIndicator.hide()")
+
+        let cooldownGate = try #require(appDelegate.range(
+            of: "let axCooldownDelayMilliseconds = refreshBeforePresenting"
+        ))
+        let presentationRefresh = try #require(appDelegate.range(
+            of: "let refreshedContext = refreshBeforePresenting"
+        ))
+        #expect(cooldownGate.lowerBound < presentationRefresh.lowerBound)
     }
 }
 
