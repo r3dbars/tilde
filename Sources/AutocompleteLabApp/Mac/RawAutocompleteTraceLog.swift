@@ -434,7 +434,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             latencyMilliseconds: latencyMilliseconds,
             outcome: outcome,
             reason: reason,
-            screenshotPath: screenshotPath,
+            screenshotPath: screenshotTracingEnabled ? screenshotPath : "",
             metadata: AutocompleteTracePrivacyFilter.metadata(
                 proofMetadata,
                 rawContentEnabled: rawContentEnabled
