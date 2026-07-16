@@ -118,6 +118,8 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
     private func performWarm() async throws {
         let startedAt = Date()
         let modelLoadDirectoryURL = Self.modelLoadDirectoryURL(for: modelDirectoryURL)
+        // Keep integrity receipts and diagnostics anchored to the configured install path.
+        // Only the upstream MLX enumerator needs the compatibility symlink resolved.
         var integrityValidationCache = stateQueue.sync {
             self.integrityValidationCache
         }

@@ -17,7 +17,10 @@ enum ModelWarmProofCommand {
             environment: environment,
             defaults: defaults
         )
+        return await run(bundle: bundle)
+    }
 
+    static func run(bundle: AppModelRuntimeBundle) async -> Int32 {
         guard bundle.bootstrapPlan.canWarmPreferredRuntime else {
             fputs("Model warm proof failed: runtime is unavailable\n", stderr)
             return 1
