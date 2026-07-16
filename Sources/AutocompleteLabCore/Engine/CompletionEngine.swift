@@ -34,6 +34,7 @@ public struct CompletionRequest: Equatable, Sendable {
     public let fieldKind: AXFieldKind
     public let behaviorProfileID: AutocompleteBehaviorProfileID?
     public let acceptedTextStyleSketch: AcceptedTextStyleSketch?
+    public let personalContext: PersonalContext?
     public let documentTitleShape: DocumentTitleShape?
     public let visiblePageContext: VisiblePageContext?
     public let maxVisibleWords: Int
@@ -48,6 +49,7 @@ public struct CompletionRequest: Equatable, Sendable {
         fieldKind: AXFieldKind = .unknown,
         behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
         acceptedTextStyleSketch: AcceptedTextStyleSketch? = nil,
+        personalContext: PersonalContext? = nil,
         documentTitleShape: DocumentTitleShape? = nil,
         visiblePageContext: VisiblePageContext? = nil,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
@@ -61,6 +63,7 @@ public struct CompletionRequest: Equatable, Sendable {
         self.fieldKind = fieldKind
         self.behaviorProfileID = behaviorProfileID
         self.acceptedTextStyleSketch = acceptedTextStyleSketch
+        self.personalContext = mode.isContinuation ? personalContext : nil
         self.documentTitleShape = documentTitleShape
         self.visiblePageContext = visiblePageContext
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
@@ -82,6 +85,9 @@ public struct CompletionRequest: Equatable, Sendable {
         metadata["requestFieldKind"] = fieldKind.rawValue
         if let acceptedTextStyleSketch {
             metadata.merge(acceptedTextStyleSketch.traceMetadata) { current, _ in current }
+        }
+        if let personalContext {
+            metadata.merge(personalContext.traceMetadata) { current, _ in current }
         }
         if let documentTitleShape {
             metadata.merge(documentTitleShape.traceMetadata) { current, _ in current }

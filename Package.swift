@@ -21,6 +21,10 @@ let package = Package(
             targets: ["AutocompleteTraceReplay"]
         ),
         .executable(
+            name: "SteadyTypeReplayEval",
+            targets: ["SteadyTypeReplayEval"]
+        ),
+        .executable(
             name: "SteadyTypeTextEventHelper",
             targets: ["SteadyTypeTextEventHelper"]
         )
@@ -47,6 +51,8 @@ let package = Package(
                 "Experiments/CLAUDE.md",
                 "Geometry/AGENTS.md",
                 "Geometry/CLAUDE.md",
+                "Personalization/AGENTS.md",
+                "Personalization/CLAUDE.md",
                 "Runtime/AGENTS.md",
                 "Runtime/CLAUDE.md",
                 "Session/AGENTS.md",
@@ -86,6 +92,14 @@ let package = Package(
         ),
         .executableTarget(
             name: "AutocompleteTraceReplay",
+            dependencies: ["AutocompleteLabCore"],
+            exclude: [
+                "AGENTS.md",
+                "CLAUDE.md"
+            ]
+        ),
+        .executableTarget(
+            name: "SteadyTypeReplayEval",
             dependencies: ["AutocompleteLabCore"],
             exclude: [
                 "AGENTS.md",

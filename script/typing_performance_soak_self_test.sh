@@ -337,4 +337,21 @@ if ! script/typing_performance_soak.sh --self-test-runtime-ready "$runtime_fresh
   exit 1
 fi
 
+runtime_failed_log="$TMP_DIR/runtime-failed-diagnostics.log"
+cat >"$runtime_failed_log" <<'EOF'
+2026-05-12T00:00:00Z runtime completionLength=5 words / 11 tokens readinessAction=none readinessStage=ready state=ready (MLX)
+2026-05-12T00:00:01Z runtime-bootstrap activeCandidate=mlx
+2026-05-12T00:00:03Z runtime completionLength=5 words / 11 tokens readinessAction=retry readinessStage=failed state=MLX failed
+EOF
+
+if ! script/typing_performance_soak.sh --self-test-runtime-terminal "$runtime_failed_log" 1; then
+  echo "typing soak self-test expected a fresh terminal runtime state to be detected" >&2
+  exit 1
+fi
+
+if script/typing_performance_soak.sh --self-test-runtime-terminal "$runtime_failed_log" 3; then
+  echo "typing soak self-test expected an old terminal runtime state to be ignored" >&2
+  exit 1
+fi
+
 echo "Typing performance soak self-test passed."

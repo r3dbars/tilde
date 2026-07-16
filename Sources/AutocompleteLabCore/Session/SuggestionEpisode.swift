@@ -155,6 +155,31 @@ public struct SuggestionEpisodeReplyContext: Codable, Equatable, Sendable {
     }
 }
 
+public struct SuggestionEpisodeReplayContext: Codable, Equatable, Sendable {
+    public let source: String
+    public let captureScope: String
+    public let characterCount: Int
+    public let fingerprintVersion: String
+    public let fingerprint: String
+    public let text: String?
+
+    public init(
+        visiblePageContext: VisiblePageContext,
+        fingerprintSecret: Data,
+        includeText: Bool
+    ) {
+        source = visiblePageContext.source.rawValue
+        captureScope = visiblePageContext.captureScope.rawValue
+        characterCount = visiblePageContext.text.count
+        fingerprintVersion = TracePrivacyFingerprint.version
+        fingerprint = TracePrivacyFingerprint.fingerprint(
+            for: visiblePageContext.text,
+            secret: fingerprintSecret
+        ) ?? ""
+        text = includeText ? visiblePageContext.text : nil
+    }
+}
+
 public struct SuggestionEpisodeRecord: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let createdAt: String
@@ -168,6 +193,7 @@ public struct SuggestionEpisodeRecord: Codable, Equatable, Sendable, Identifiabl
     public var userTypedContext: String
     public var textAfterCursor: String
     public var replyContext: SuggestionEpisodeReplyContext?
+    public var replayContext: SuggestionEpisodeReplayContext?
     public var suggestedText: String
     public var acceptedText: String
     public var model: SuggestionEpisodeModelContext
@@ -191,6 +217,7 @@ public struct SuggestionEpisodeRecord: Codable, Equatable, Sendable, Identifiabl
         userTypedContext: String,
         textAfterCursor: String = "",
         replyContext: SuggestionEpisodeReplyContext? = nil,
+        replayContext: SuggestionEpisodeReplayContext? = nil,
         suggestedText: String,
         acceptedText: String = "",
         model: SuggestionEpisodeModelContext,
@@ -213,6 +240,7 @@ public struct SuggestionEpisodeRecord: Codable, Equatable, Sendable, Identifiabl
         self.userTypedContext = userTypedContext
         self.textAfterCursor = textAfterCursor
         self.replyContext = replyContext
+        self.replayContext = replayContext
         self.suggestedText = suggestedText
         self.acceptedText = acceptedText
         self.model = model
@@ -267,6 +295,7 @@ public struct SuggestionEpisodeRecord: Codable, Equatable, Sendable, Identifiabl
         userTypedContext = newer.userTypedContext
         textAfterCursor = newer.textAfterCursor
         replyContext = newer.replyContext
+        replayContext = newer.replayContext
         suggestedText = newer.suggestedText
         model = newer.model
         placement = newer.placement
