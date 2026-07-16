@@ -88,10 +88,6 @@ public struct RuntimeSessionCachePolicy: Equatable, Sendable {
         previous: CompletionRequest?,
         current: CompletionRequest
     ) -> RuntimeSessionCacheDecision {
-        guard current.mode.isContinuation else {
-            return .reset(.wordCompletion)
-        }
-
         guard let previous else {
             return .reset(.noPriorRequest)
         }
