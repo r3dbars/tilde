@@ -515,6 +515,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
     private var lastTrustedCodexPromptTargetContinuityAnchor: CodexPromptTargetContinuityAnchor?
+    private var codexPromptAXCooldownPreservation: CodexPromptAXCooldownPreservation?
     private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot?
     private var personalCaptureLastSnapshot: FocusedTextSnapshot?
     private var lastFocusedTextChangeAt: Date?
@@ -1369,6 +1370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cancelPrefixCooldownRetry()
         lastTextSnapshot = nil
         lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
@@ -1769,7 +1771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard allowFocusedTextAXRead(for: frontmostApp.bundleIdentifier) else {
+        guard allowFocusedTextAXRead(for: frontmostApp) else {
             return
         }
 
@@ -1923,7 +1925,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         guard appSettings.personalCaptureEnabled,
               accessibilityClient.isTrusted,
-              allowFocusedTextAXRead(for: app.bundleIdentifier) else {
+              allowFocusedTextAXRead(for: app) else {
             return false
         }
 
@@ -2999,13 +3001,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return app.bundleIdentifier
     }
 
-    private func allowFocusedTextAXRead(for bundleIdentifier: String) -> Bool {
+    private func allowFocusedTextAXRead(for app: RunningApplicationInfo) -> Bool {
         switch focusedTextAXHealthPolicy.pollDecision(
-            for: bundleIdentifier,
+            for: app.bundleIdentifier,
             now: Date(),
             state: &focusedTextAXHealthState
         ) {
         case let .allowed(recovery?):
+            codexPromptAXCooldownPreservation = nil
             DiagnosticsLog.shared.record(
                 "focused-text-ax-health-recovered",
                 metadata: [
@@ -3016,8 +3019,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return true
         case .allowed(nil):
+            codexPromptAXCooldownPreservation = nil
             return true
         case let .coolingDown(cooldown):
+            let hasActiveSuggestionWork = debounceTask != nil
+                || codexPromptPresentationRetryTask != nil
+                || suggestionSession.hasVisibleSuggestion
+                || suggestionIdleRetryState.hasPendingRetry
+                || manualSuggestionRequestPending
+            let shouldPreservePendingRequest = codexPromptTargetContinuityPolicy
+                .canPreserveDuringAXCooldown(
+                    appBundleIdentifier: app.bundleIdentifier,
+                    processIdentifier: app.processIdentifier,
+                    currentFieldIdentity: currentFieldIdentity,
+                    currentSnapshot: lastTextSnapshot,
+                    trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+                    preservation: codexPromptAXCooldownPreservation,
+                    hasActiveSuggestionWork: hasActiveSuggestionWork
+                )
+            if !shouldPreservePendingRequest {
+                codexPromptAXCooldownPreservation = nil
+            }
             DiagnosticsLog.shared.record(
                 "focused-text-ax-health-cooldown",
                 metadata: [
@@ -3027,7 +3049,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "remainingMilliseconds": String(cooldown.remainingMilliseconds)
                 ]
             )
-            handleFocusedTextAXHealthCooldown(cooldown, source: "poll")
+            handleFocusedTextAXHealthCooldown(
+                cooldown,
+                source: "poll",
+                preservePendingRequest: shouldPreservePendingRequest
+            )
             setSuggestionDecision("Waiting: AX cooldown")
             return false
         }
@@ -3048,21 +3074,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
-        let shouldPreservePendingRequest: Bool
-        if let context = result.context {
-            let promptMatch = promptTextAreaMatch(
-                for: result.app.bundleIdentifier,
-                context: context
+        let hasActiveSuggestionWork = debounceTask != nil
+            || codexPromptPresentationRetryTask != nil
+            || suggestionSession.hasVisibleSuggestion
+            || suggestionIdleRetryState.hasPendingRetry
+            || manualSuggestionRequestPending
+        let shouldPreservePendingRequest = result.context.map {
+            codexPromptTargetContinuityPolicy.canBeginAXCooldownPreservation(
+                appBundleIdentifier: result.app.bundleIdentifier,
+                processIdentifier: result.app.processIdentifier,
+                currentFieldIdentity: currentFieldIdentity,
+                currentSnapshot: lastTextSnapshot,
+                trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+                observedContext: $0,
+                hasActiveSuggestionWork: hasActiveSuggestionWork
             )
-            shouldPreservePendingRequest = !promptMatch.canSuggest
-                && shouldDeferCodexPromptTargetInvalidation(
-                    app: result.app,
-                    context: context,
-                    promptBlockReason: promptMatch.reason
-                )
-        } else {
-            shouldPreservePendingRequest = false
-        }
+        } ?? false
+        codexPromptAXCooldownPreservation = shouldPreservePendingRequest
+            ? codexPromptTargetContinuityPolicy.axCooldownPreservation(
+                trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+                cooldownMilliseconds: cooldown.cooldownMilliseconds
+            )
+            : nil
 
         DiagnosticsLog.shared.record(
             "focused-text-ax-health-cooldown-started",
@@ -8362,6 +8395,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
+            let axCooldownDelayMilliseconds = self.codexPromptAXCooldownRetryDelayMilliseconds(
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            )
+            if axCooldownDelayMilliseconds > 0 {
+                DiagnosticsLog.shared.record(
+                    "codex-prompt-target-refresh-retry-deferred-for-ax-cooldown",
+                    metadata: [
+                        "app": profile.bundleIdentifier,
+                        "attempt": String(retry.attempt),
+                        "delayMilliseconds": String(axCooldownDelayMilliseconds)
+                    ]
+                )
+                try? await Task.sleep(for: .milliseconds(axCooldownDelayMilliseconds))
+                guard !Task.isCancelled else {
+                    return
+                }
+            }
+
             self.codexPromptPresentationRetryTask = nil
             self.presentSuggestion(
                 suggestion,
@@ -8371,7 +8423,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds + retry.delayMilliseconds,
+                latencyMilliseconds: latencyMilliseconds
+                    + retry.delayMilliseconds
+                    + axCooldownDelayMilliseconds,
                 triggerReason: triggerReason,
                 requestTicket: requestTicket,
                 candidateSelectionMetadata: candidateSelectionMetadata,
@@ -8380,6 +8434,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 presentationRefreshAttempt: retry.attempt
             )
         }
+    }
+
+    private func codexPromptAXCooldownRetryDelayMilliseconds(
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Int {
+        let canPreserve = codexPromptTargetContinuityPolicy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: fieldIdentity.processIdentifier,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: lastTextSnapshot,
+            trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+            preservation: codexPromptAXCooldownPreservation,
+            hasActiveSuggestionWork: codexPromptPresentationRetryTask != nil
+        )
+        guard canPreserve else {
+            return 0
+        }
+
+        return codexPromptTargetContinuityPolicy.remainingAXCooldownMilliseconds(
+            preservation: codexPromptAXCooldownPreservation
+        )
     }
 
     private func refreshedPresentationContext(
@@ -8423,8 +8499,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let requestMatchesCurrentSnapshot = lastTextSnapshot?.fieldIdentity == fieldIdentity
                 && lastTextSnapshot?.textBeforeCursor == request.textBeforeCursor
                 && lastTextSnapshot?.textAfterCursor == request.textAfterCursor
-            let canDeferInvalidation = requestMatchesCurrentSnapshot
-                && codexPromptTargetContinuityPolicy.canDeferInvalidation(
+            let resolution = requestMatchesCurrentSnapshot
+                ? codexPromptTargetContinuityPolicy.presentationRefreshResolution(
                     appBundleIdentifier: frontmostApp.bundleIdentifier,
                     processIdentifier: frontmostApp.processIdentifier,
                     promptBlockReason: promptMatch.reason,
@@ -8434,15 +8510,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     observedContext: rawContext,
                     trustedContext: requestContext
                 )
-            guard canDeferInvalidation else {
+                : .reject
+            guard resolution != .reject else {
                 return (nil, "stale-prompt-target")
             }
 
-            let canReuseTrustedTextAreaContext = rawContext.role == "AXTextArea"
-                && rawContext.elementIdentifier
-                    == lastTrustedCodexPromptTargetContinuityAnchor?.elementIdentifier
             DiagnosticsLog.shared.record(
-                canReuseTrustedTextAreaContext
+                resolution == .reuseTrustedTextAreaContext
                     ? "codex-prompt-target-bounds-reused"
                     : "codex-prompt-target-refresh-retry-needed",
                 metadata: [
@@ -8453,7 +8527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "afterChars": String(rawContext.textAfterCursor.count)
                 ]
             )
-            return canReuseTrustedTextAreaContext
+            return resolution == .reuseTrustedTextAreaContext
                 ? (requestContext, nil)
                 : (nil, "transient-codex-prompt-target")
         }
@@ -17837,6 +17911,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                 self.lastTextSnapshot = nil
                 self.lastTrustedCodexPromptTargetContinuityAnchor = nil
+                self.codexPromptAXCooldownPreservation = nil
                 self.lastRequestedTextBeforeCursor = nil
                 self.suggestionBlockLogGate.reset()
                 self.setSuggestionDecision("Ready: prefix \(reason) expired")
@@ -18001,6 +18076,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity = fieldIdentity
         lastTextSnapshot = nil
         lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         typingBurstState.reset()
@@ -18029,6 +18105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentFieldIdentity = nil
         lastTextSnapshot = nil
         lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         typingBurstState.reset()
@@ -18049,6 +18126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func cancelPendingSuggestionTask(reason: String) -> Bool {
+        codexPromptAXCooldownPreservation = nil
         let cancelledPresentationRefreshRetry = codexPromptPresentationRetryTask != nil
         codexPromptPresentationRetryTask?.cancel()
         codexPromptPresentationRetryTask = nil
@@ -19153,6 +19231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setSuggestionDecision("Ready: app mode \(overrideText)")
         lastTextSnapshot = nil
         lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()

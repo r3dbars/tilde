@@ -248,6 +248,213 @@ struct CodexPromptTargetContinuityPolicyTests {
         #expect(retryPolicy.next(after: -1) == nil)
     }
 
+    @Test("Presentation never reuses an unresolved web-area wrapper")
+    func presentationNeverReusesUnresolvedWebAreaWrapper() throws {
+        let fieldIdentity = identity()
+        let trustedContext = context()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: trustedContext
+        ))
+        let currentSnapshot = snapshot(fieldIdentity: fieldIdentity)
+        let wrapper = context(
+            role: "AXWebArea",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Codex"),
+            caretRect: nil,
+            elementRect: nil
+        )
+        let missingBoundsTextArea = context(caretRect: nil, elementRect: nil)
+
+        #expect(policy.presentationRefreshResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: wrapper,
+            trustedContext: trustedContext
+        ) == .retry)
+        #expect(policy.presentationRefreshResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: missingBoundsTextArea,
+            trustedContext: trustedContext
+        ) == .reuseTrustedTextAreaContext)
+        #expect(policy.presentationRefreshResolution(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: context(
+                role: "AXWebArea",
+                fingerprint: FocusedElementFingerprint(windowTitle: "Codex"),
+                textBeforeCursor: "synthetic prompt changed",
+                caretRect: nil,
+                elementRect: nil
+            ),
+            trustedContext: trustedContext
+        ) == .reject)
+    }
+
+    @Test("Verified transient target preserves work through the full AX cooldown")
+    func verifiedTransientTargetPreservesWorkThroughFullAXCooldown() throws {
+        let fieldIdentity = identity()
+        let trustedContext = context()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: trustedContext,
+            nowMilliseconds: 100
+        ))
+        let currentSnapshot = snapshot(fieldIdentity: fieldIdentity)
+        let transientWrapper = context(
+            role: "AXWebArea",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Codex"),
+            caretRect: nil,
+            elementRect: nil
+        )
+        #expect(policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: transientWrapper,
+            nowMilliseconds: 200
+        ))
+        #expect(policy.canBeginAXCooldownPreservation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: transientWrapper,
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 200
+        ))
+        #expect(policy.canBeginAXCooldownPreservation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            observedContext: trustedContext,
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 200
+        ))
+
+        let preservation = try #require(policy.axCooldownPreservation(
+            trustedAnchor: anchor,
+            cooldownMilliseconds: 750,
+            nowMilliseconds: 200
+        ))
+        #expect(policy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            preservation: preservation,
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 360
+        ))
+        #expect(policy.remainingAXCooldownMilliseconds(
+            preservation: preservation,
+            nowMilliseconds: 360
+        ) == 590)
+        #expect(policy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            preservation: preservation,
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 950
+        ))
+        #expect(!policy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: anchor,
+            preservation: preservation,
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 951
+        ))
+    }
+
+    @Test("Cooldown preservation fails closed for changed or inactive requests")
+    func cooldownPreservationFailsClosedForChangedOrInactiveRequests() throws {
+        let fieldIdentity = identity()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: context(),
+            nowMilliseconds: 100
+        ))
+        let preservation = try #require(policy.axCooldownPreservation(
+            trustedAnchor: anchor,
+            cooldownMilliseconds: 750,
+            nowMilliseconds: 200
+        ))
+        let changedSnapshot = FocusedTextSnapshot(
+            fieldIdentity: fieldIdentity,
+            textBeforeCursor: "synthetic prompt changed",
+            textAfterCursor: ""
+        )
+
+        #expect(!policy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: changedSnapshot,
+            trustedAnchor: anchor,
+            preservation: preservation,
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 300
+        ))
+        #expect(!policy.canBeginAXCooldownPreservation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: changedSnapshot,
+            trustedAnchor: anchor,
+            observedContext: context(),
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 300
+        ))
+        #expect(!policy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            preservation: preservation,
+            hasActiveSuggestionWork: false,
+            nowMilliseconds: 300
+        ))
+        #expect(!policy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 43,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            preservation: preservation,
+            hasActiveSuggestionWork: true,
+            nowMilliseconds: 300
+        ))
+    }
+
     private func identity() -> FocusedFieldIdentity {
         FocusedFieldIdentity(
             bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
