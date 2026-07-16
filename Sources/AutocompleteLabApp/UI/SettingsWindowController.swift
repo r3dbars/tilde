@@ -1010,7 +1010,6 @@ final class SettingsWindowController: NSObject {
     private let performRuntimeAction: (RuntimeReadinessAction) -> Void
     private let toggleCurrentApp: () -> Void
     private let toggleCurrentAppMirrorMode: () -> Void
-    private let startCurrentAppProof: () -> Void
     private let startTextEditPractice: () -> Void
     private let enableAllApps: () -> Void
     private let toggleTracingPaused: () -> Void
@@ -1048,7 +1047,6 @@ final class SettingsWindowController: NSObject {
         performRuntimeAction: @escaping (RuntimeReadinessAction) -> Void,
         toggleCurrentApp: @escaping () -> Void,
         toggleCurrentAppMirrorMode: @escaping () -> Void,
-        startCurrentAppProof: @escaping () -> Void,
         startTextEditPractice: @escaping () -> Void = {},
         enableAllApps: @escaping () -> Void,
         toggleTracingPaused: @escaping () -> Void,
@@ -1082,7 +1080,6 @@ final class SettingsWindowController: NSObject {
         self.performRuntimeAction = performRuntimeAction
         self.toggleCurrentApp = toggleCurrentApp
         self.toggleCurrentAppMirrorMode = toggleCurrentAppMirrorMode
-        self.startCurrentAppProof = startCurrentAppProof
         self.startTextEditPractice = startTextEditPractice
         self.enableAllApps = enableAllApps
         self.toggleTracingPaused = toggleTracingPaused
