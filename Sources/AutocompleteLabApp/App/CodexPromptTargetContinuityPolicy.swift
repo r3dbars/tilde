@@ -83,7 +83,9 @@ struct CodexPromptTargetContinuityPolicy {
               fieldIdentity.bundleIdentifier == appBundleIdentifier,
               context.role == "AXTextArea",
               context.selectedTextLength == 0,
-              context.elementRect != nil,
+              let elementRect = context.elementRect,
+              elementRect.width > 0,
+              elementRect.height > 0,
               !context.isSecure else {
             return nil
         }
