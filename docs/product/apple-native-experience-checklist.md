@@ -319,18 +319,7 @@ Native target: nothing looks like a web widget floating on top of macOS.
 
 ### Appearance QA Evidence
 
-- [Settings light](native-visual-qa/settings-light.png)
-- [Settings dark](native-visual-qa/settings-dark.png)
-- [Settings high-contrast light](native-visual-qa/settings-high-contrast-light.png)
-- [Settings high-contrast dark](native-visual-qa/settings-high-contrast-dark.png)
-- [Diagnostics light](native-visual-qa/diagnostics-light.png)
-- [Diagnostics dark](native-visual-qa/diagnostics-dark.png)
-- [Diagnostics high-contrast light](native-visual-qa/diagnostics-high-contrast-light.png)
-- [Diagnostics high-contrast dark](native-visual-qa/diagnostics-high-contrast-dark.png)
-- [Suggestion overlay light](native-visual-qa/suggestion-overlay-light.png)
-- [Suggestion overlay dark](native-visual-qa/suggestion-overlay-dark.png)
-- [Suggestion overlay high-contrast light](native-visual-qa/suggestion-overlay-high-contrast-light.png)
-- [Suggestion overlay high-contrast dark](native-visual-qa/suggestion-overlay-high-contrast-dark.png)
+Regenerate and review native appearance screenshots locally with the commands in the [native visual QA guide](native-visual-qa/AGENTS.md). Generated PNGs are not tracked.
 
 ## Category 6: Privacy And Permissions Trust
 
