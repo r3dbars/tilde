@@ -73,14 +73,9 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "codex-prompt-presentation-deferred-for-ax-cooldown")
         try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
         try require(appDelegate, contains: "fieldStatusIndicator.hide()")
-
-        let cooldownGate = try #require(appDelegate.range(
-            of: "let axCooldownDelayMilliseconds = refreshBeforePresenting"
-        ))
-        let presentationRefresh = try #require(appDelegate.range(
-            of: "let refreshedContext = refreshBeforePresenting"
-        ))
-        #expect(cooldownGate.lowerBound < presentationRefresh.lowerBound)
+        try require(appDelegate, contains: "switch codexPromptPresentationPreparationPolicy.preparation(")
+        try require(appDelegate, contains: "case let .deferForAXCooldown(delayMilliseconds):")
+        try require(appDelegate, contains: "case .refreshFocusedContext:")
     }
 }
 
