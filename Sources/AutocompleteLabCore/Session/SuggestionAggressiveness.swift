@@ -206,7 +206,7 @@ public struct SuggestionTuning: Equatable, Sendable {
         case 4:
             "Fast and willing to guess."
         default:
-            "Fastest. Shows frequent guesses after very short pauses."
+            "Fastest. Shows frequent guesses while you type."
         }
     }
 
@@ -358,13 +358,13 @@ public struct SuggestionTuning: Equatable, Sendable {
             return SuggestionTriggerPolicy(
                 charactersBeforePauseRequest: 1,
                 wordCompletionDelayMilliseconds: responseSpeedDelays.wordCompletion,
-                wordBoundaryDelayMilliseconds: min(responseSpeedDelays.wordBoundary, 80),
-                softPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 120),
-                structuralPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 120),
-                closingPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 120),
-                sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 200),
-                pauseDelayMilliseconds: min(responseSpeedDelays.pause, 80),
-                minimumPhrasePauseDelayMilliseconds: min(responseSpeedDelays.pause, 220),
+                wordBoundaryDelayMilliseconds: min(responseSpeedDelays.wordBoundary, 20),
+                softPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 40),
+                structuralPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 40),
+                closingPunctuationDelayMilliseconds: min(responseSpeedDelays.punctuation, 40),
+                sentenceBoundaryDelayMilliseconds: min(responseSpeedDelays.sentenceBoundary, 60),
+                pauseDelayMilliseconds: min(responseSpeedDelays.pause, 20),
+                minimumPhrasePauseDelayMilliseconds: min(responseSpeedDelays.pause, 20),
                 minimumWordCompletionCharacters: wordStartCharacters,
                 minimumPhraseContinuationWords: phraseContinuationWords,
                 allowsPlainLineStartWordCompletion: true,
@@ -420,6 +420,10 @@ public struct SuggestionTuning: Equatable, Sendable {
         behaviorProfileID: AutocompleteBehaviorProfileID?
     ) -> Bool {
         aggressivenessLevel >= 5 && behaviorProfileID == .aiChat
+    }
+
+    public var allowsContinuationDuringTypingBurst: Bool {
+        aggressivenessLevel >= 5
     }
 
     public var traceMetadata: [String: String] {
