@@ -51,10 +51,10 @@ allow_reference() {
 	      return
       ;;
 	    Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift)
-	      [[ "$line" == *"url: \"https://www.gutenberg.org/ebooks/"* \
-	        || "$line" == *"url: \"https://www.archives.gov/founding-docs/constitution-transcript\""* \
-	        || "$line" == *"url: \"https://www.archives.gov/milestone-documents/gettysburg-address\""* \
-	        || "$line" == *"source.url.hasPrefix(\"https://\")"* ]]
+	      [[ "$line" =~ ^[[:space:]]*url:[[:space:]]\"https://www\.gutenberg\.org/ebooks/[0-9]+\",?[[:space:]]*$ \
+	        || "$line" =~ ^[[:space:]]*url:[[:space:]]\"https://www\.archives\.gov/founding-docs/constitution-transcript\",?[[:space:]]*$ \
+	        || "$line" =~ ^[[:space:]]*url:[[:space:]]\"https://www\.archives\.gov/milestone-documents/gettysburg-address\",?[[:space:]]*$ \
+	        || "$line" =~ ^[[:space:]]*if[[:space:]]+!source\.url\.hasPrefix\(\"https://\"\)[[:space:]]*\{[[:space:]]*$ ]]
 	      return
       ;;
   esac
