@@ -249,6 +249,44 @@ struct CodexPromptTargetContinuityPolicy {
         return true
     }
 
+    func canAcceptStablePrompt(
+        appBundleIdentifier: String,
+        processIdentifier: Int32,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        shownSnapshot: SuggestionAcceptanceSnapshot,
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        observedContext: FocusedTextContext,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
+        maximumAnchorAgeMilliseconds: Int = 1_000
+    ) -> Bool {
+        guard observedContext.role == "AXTextArea",
+              shownSnapshot.selectedTextLength == 0,
+              let currentFieldIdentity,
+              let currentSnapshot,
+              shownSnapshot.fieldIdentity == currentFieldIdentity,
+              shownSnapshot.fieldIdentity == currentSnapshot.fieldIdentity,
+              shownSnapshot.textBeforeCursor == currentSnapshot.textBeforeCursor,
+              shownSnapshot.textAfterCursor == currentSnapshot.textAfterCursor,
+              shownSnapshot.targetFingerprint.surroundingTextRevision == FocusedTextRevision(
+                  textBeforeCursor: currentSnapshot.textBeforeCursor,
+                  textAfterCursor: currentSnapshot.textAfterCursor
+              ) else {
+            return false
+        }
+
+        return verifiedTransientObservation(
+            appBundleIdentifier: appBundleIdentifier,
+            processIdentifier: processIdentifier,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext,
+            nowMilliseconds: nowMilliseconds,
+            maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
+        ) != nil
+    }
+
     func remainingAXCooldownMilliseconds(
         preservation: CodexPromptAXCooldownPreservation?,
         nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
