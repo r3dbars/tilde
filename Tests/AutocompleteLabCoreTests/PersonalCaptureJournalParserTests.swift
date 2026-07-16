@@ -111,4 +111,30 @@ struct PersonalCaptureJournalParserTests {
         #expect(entries.count == 1)
         #expect(entries.first?.text == "valid writing remains here")
     }
+
+    @Test("Unknown field kinds fail closed without losing valid neighbors")
+    func unknownFieldKindsFailClosed() {
+        let markdown = """
+        ## 12:00:00 - Unknown
+        typed:
+        ```text
+        private text from an unclassified field
+        ```
+        - App: `com.example.future`
+        - Kind: `futureUnknownKind`
+
+        ## 12:01:00 - Notes
+        typed:
+        ```text
+        safe classified writing remains available
+        ```
+        - App: `com.apple.Notes`
+        - Kind: `multilineCompose`
+        """
+
+        let entries = parser.entries(inDailyMarkdown: markdown, dayString: "2026-07-15")
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.text == "safe classified writing remains available")
+    }
 }
