@@ -383,9 +383,6 @@ private func emitMarkdown(_ markdown: String, to url: URL?, ownerOnly: Bool) thr
             attributes: ownerOnly ? [.posixPermissions: 0o700] : nil
         )
     }
-    if ownerOnly {
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-    }
     let mode: mode_t = ownerOnly ? 0o600 : 0o644
     let descriptor = open(url.path, O_WRONLY | O_CREAT | O_TRUNC, mode)
     guard descriptor >= 0 else { throw CLIError.input("Could not write report file: \(url.path)") }
