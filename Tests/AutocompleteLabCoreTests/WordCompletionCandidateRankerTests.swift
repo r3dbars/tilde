@@ -60,6 +60,19 @@ struct WordCompletionCandidateRankerTests {
         #expect(ranker.suggestion(for: "I saw the", recentWords: ["therefore"])?.visibleText == "refore")
     }
 
+    @Test("Explicit eager threshold can complete an unambiguous two-letter fragment")
+    func eagerThresholdCompletesTwoLetterFragment() {
+        let ranker = WordCompletionCandidateRanker(staticWords: ["autocomplete"])
+
+        #expect(ranker.suggestion(for: "Try au") == nil)
+        #expect(
+            ranker.suggestion(
+                for: "Try au",
+                minimumFragmentCharacters: 2
+            )?.visibleText == "tocomplete"
+        )
+    }
+
     @Test("common fragments complete without waiting for the model")
     func commonFragmentsComplete() {
         let ranker = WordCompletionCandidateRanker()
