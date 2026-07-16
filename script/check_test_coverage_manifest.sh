@@ -180,9 +180,10 @@ require_file "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swi
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift" "Blocks thin-context phrase continuations" "low-confidence weak-context coverage"
 require_pattern "Tests/AutocompleteLabCoreTests/CompletionConfidencePolicyTests.swift" "Yellow short phrase mode makes long phrase suggestions low confidence" "profile confidence penalty coverage"
 
-require_file "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift"
-require_pattern "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift" "Secure field traces keep only shape data by default" "secure-field trace privacy coverage"
-require_pattern "Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift" "Unsupported app traces redact typed content by default" "unsupported-app trace privacy coverage"
+require_file "Tests/AutocompleteLabCoreTests/AutocompleteTracePrivacyFilterTests.swift"
+require_pattern "Tests/AutocompleteLabCoreTests/AutocompleteTracePrivacyFilterTests.swift" "Redacts trace text unless raw content is enabled" "core trace privacy coverage"
+require_file "Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift"
+require_pattern "Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift" "Default raw trace record redacts private content and screenshot path" "on-disk runtime trace privacy coverage"
 
 require_file "script/check_local_only_network_surface.sh"
 require_file "script/check_local_only_network_surface_self_test.sh"

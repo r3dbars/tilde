@@ -47,6 +47,16 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "reason: \"survived_typethrough\"")
     }
 
+    @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")
+    func appDelegateForwardsScreenshotPathAuthorization() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(
+            appDelegate,
+            contains: "screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized"
+        )
+    }
+
     @Test("App delegate rearms cancelled suggestions after typing settles")
     func appDelegateRearmsCancelledSuggestionsAfterTypingSettles() throws {
         let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
