@@ -7770,6 +7770,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionState.invalidatedByUserKeyDown
             && currentSuggestionState.id == suggestionID
+        let axCooldownDelayMilliseconds = refreshBeforePresenting
+            ? codexPromptAXCooldownPresentationDelayMilliseconds(
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            )
+            : 0
+        if axCooldownDelayMilliseconds > 0 {
+            scheduleCodexPromptPresentationAfterAXCooldown(
+                suggestion,
+                suggestionID: suggestionID,
+                request: request,
+                context: originalContext,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: latencyMilliseconds,
+                triggerReason: triggerReason,
+                requestTicket: requestTicket,
+                candidateSelectionMetadata: candidateSelectionMetadata,
+                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+                presentationRefreshAttempt: presentationRefreshAttempt,
+                delayMilliseconds: axCooldownDelayMilliseconds
+            )
+            return
+        }
         let refreshedContext = refreshBeforePresenting
             ? refreshedPresentationContext(
                 for: request,
@@ -8391,23 +8416,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            let axCooldownDelayMilliseconds = self.codexPromptAXCooldownRetryDelayMilliseconds(
+            self.codexPromptPresentationRetryTask = nil
+            self.presentSuggestion(
+                suggestion,
+                suggestionID: suggestionID,
+                request: request,
+                context: context,
                 profile: profile,
-                fieldIdentity: fieldIdentity
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: latencyMilliseconds + retry.delayMilliseconds,
+                triggerReason: triggerReason,
+                requestTicket: requestTicket,
+                candidateSelectionMetadata: candidateSelectionMetadata,
+                refreshBeforePresenting: true,
+                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+                presentationRefreshAttempt: retry.attempt
             )
-            if axCooldownDelayMilliseconds > 0 {
-                DiagnosticsLog.shared.record(
-                    "codex-prompt-target-refresh-retry-deferred-for-ax-cooldown",
-                    metadata: [
-                        "app": profile.bundleIdentifier,
-                        "attempt": String(retry.attempt),
-                        "delayMilliseconds": String(axCooldownDelayMilliseconds)
-                    ]
-                )
-                try? await Task.sleep(for: .milliseconds(axCooldownDelayMilliseconds))
-                guard !Task.isCancelled else {
-                    return
-                }
+        }
+    }
+
+    private func scheduleCodexPromptPresentationAfterAXCooldown(
+        _ suggestion: CompletionSuggestion,
+        suggestionID: String,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        renderMode: SuggestionRenderMode,
+        latencyMilliseconds: Int,
+        triggerReason: String,
+        requestTicket: SuggestionRequestTicket?,
+        candidateSelectionMetadata: [String: String],
+        scheduledDelayMilliseconds: Int,
+        presentationRefreshAttempt: Int,
+        delayMilliseconds: Int
+    ) {
+        codexPromptPresentationRetryTask?.cancel()
+        setSuggestionDecision("Waiting: Codex AX cooldown")
+        fieldStatusIndicator.hide()
+        DiagnosticsLog.shared.record(
+            "codex-prompt-presentation-deferred-for-ax-cooldown",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "delayMilliseconds": String(delayMilliseconds),
+                "beforeChars": String(request.textBeforeCursor.count),
+                "afterChars": String(request.textAfterCursor.count)
+            ]
+        )
+        codexPromptPresentationRetryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            guard !Task.isCancelled, let self else {
+                return
             }
 
             self.codexPromptPresentationRetryTask = nil
@@ -8419,20 +8479,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 profile: profile,
                 fieldIdentity: fieldIdentity,
                 renderMode: renderMode,
-                latencyMilliseconds: latencyMilliseconds
-                    + retry.delayMilliseconds
-                    + axCooldownDelayMilliseconds,
+                latencyMilliseconds: latencyMilliseconds + delayMilliseconds,
                 triggerReason: triggerReason,
                 requestTicket: requestTicket,
                 candidateSelectionMetadata: candidateSelectionMetadata,
                 refreshBeforePresenting: true,
                 scheduledDelayMilliseconds: scheduledDelayMilliseconds,
-                presentationRefreshAttempt: retry.attempt
+                presentationRefreshAttempt: presentationRefreshAttempt
             )
         }
     }
 
-    private func codexPromptAXCooldownRetryDelayMilliseconds(
+    private func codexPromptAXCooldownPresentationDelayMilliseconds(
         profile: CompatibilityProfile,
         fieldIdentity: FocusedFieldIdentity
     ) -> Int {
@@ -8443,7 +8501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentSnapshot: lastTextSnapshot,
             trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
             preservation: codexPromptAXCooldownPreservation,
-            hasActiveSuggestionWork: codexPromptPresentationRetryTask != nil
+            hasActiveSuggestionWork: true
         )
         guard canPreserve else {
             return 0
