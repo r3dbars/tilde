@@ -13,6 +13,17 @@ struct CodexPromptPresentationRefreshRetry: Equatable {
     let delayMilliseconds: Int
 }
 
+struct CodexPromptAXCooldownPreservation: Equatable {
+    let fieldIdentity: FocusedFieldIdentity
+    let expiresAtMilliseconds: Int
+}
+
+enum CodexPromptPresentationRefreshResolution: Equatable {
+    case reject
+    case reuseTrustedTextAreaContext
+    case retry
+}
+
 struct CodexPromptPresentationRefreshRetryPolicy {
     let maximumAttempts: Int
     let delayMilliseconds: Int
@@ -113,6 +124,139 @@ struct CodexPromptTargetContinuityPolicy {
             && trustedContext.textBeforeCursor == currentSnapshot.textBeforeCursor
             && trustedContext.textAfterCursor == currentSnapshot.textAfterCursor
             && trustedAnchor.targetFingerprint.matches(targetFingerprint(for: trustedContext))
+    }
+
+    func presentationRefreshResolution(
+        appBundleIdentifier: String,
+        processIdentifier: Int32,
+        promptBlockReason: String,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        observedContext: FocusedTextContext,
+        trustedContext: FocusedTextContext,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
+    ) -> CodexPromptPresentationRefreshResolution {
+        guard canDeferInvalidation(
+            appBundleIdentifier: appBundleIdentifier,
+            processIdentifier: processIdentifier,
+            promptBlockReason: promptBlockReason,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext,
+            trustedContext: trustedContext,
+            nowMilliseconds: nowMilliseconds
+        ) else {
+            return .reject
+        }
+
+        guard observedContext.role == "AXTextArea",
+              observedContext.elementIdentifier == trustedAnchor?.elementIdentifier else {
+            return .retry
+        }
+
+        return .reuseTrustedTextAreaContext
+    }
+
+    func axCooldownPreservation(
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        cooldownMilliseconds: Int,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
+    ) -> CodexPromptAXCooldownPreservation? {
+        guard let trustedAnchor,
+              cooldownMilliseconds > 0 else {
+            return nil
+        }
+
+        return CodexPromptAXCooldownPreservation(
+            fieldIdentity: trustedAnchor.fieldIdentity,
+            expiresAtMilliseconds: nowMilliseconds + cooldownMilliseconds
+        )
+    }
+
+    func canBeginAXCooldownPreservation(
+        appBundleIdentifier: String,
+        processIdentifier: Int32,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        observedContext: FocusedTextContext,
+        hasActiveSuggestionWork: Bool,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
+        maximumAnchorAgeMilliseconds: Int = 1_000
+    ) -> Bool {
+        guard appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier,
+              hasActiveSuggestionWork,
+              let currentFieldIdentity,
+              let currentSnapshot,
+              let trustedAnchor,
+              currentFieldIdentity == trustedAnchor.fieldIdentity,
+              currentSnapshot.fieldIdentity == trustedAnchor.fieldIdentity,
+              trustedAnchor.fieldIdentity.bundleIdentifier == appBundleIdentifier,
+              trustedAnchor.fieldIdentity.processIdentifier == processIdentifier,
+              nowMilliseconds >= trustedAnchor.createdAtMilliseconds,
+              nowMilliseconds - trustedAnchor.createdAtMilliseconds <= maximumAnchorAgeMilliseconds,
+              Self.transientObservedRoles.contains(observedContext.role ?? ""),
+              observedContext.selectedTextLength == 0,
+              !observedContext.isSecure,
+              observedContext.textBeforeCursor == currentSnapshot.textBeforeCursor,
+              observedContext.textAfterCursor == currentSnapshot.textAfterCursor,
+              trustedAnchor.targetFingerprint.surroundingTextRevision == FocusedTextRevision(
+                textBeforeCursor: currentSnapshot.textBeforeCursor,
+                textAfterCursor: currentSnapshot.textAfterCursor
+              ),
+              observationDoesNotConflict(
+                trustedAnchor,
+                observedContext: observedContext
+              ) else {
+            return false
+        }
+
+        return true
+    }
+
+    func canPreserveDuringAXCooldown(
+        appBundleIdentifier: String,
+        processIdentifier: Int32,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        preservation: CodexPromptAXCooldownPreservation?,
+        hasActiveSuggestionWork: Bool,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
+    ) -> Bool {
+        guard appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier,
+              hasActiveSuggestionWork,
+              let currentFieldIdentity,
+              let currentSnapshot,
+              let trustedAnchor,
+              let preservation,
+              currentFieldIdentity == preservation.fieldIdentity,
+              currentSnapshot.fieldIdentity == preservation.fieldIdentity,
+              trustedAnchor.fieldIdentity == preservation.fieldIdentity,
+              preservation.fieldIdentity.bundleIdentifier == appBundleIdentifier,
+              preservation.fieldIdentity.processIdentifier == processIdentifier,
+              nowMilliseconds <= preservation.expiresAtMilliseconds,
+              trustedAnchor.targetFingerprint.surroundingTextRevision == FocusedTextRevision(
+                textBeforeCursor: currentSnapshot.textBeforeCursor,
+                textAfterCursor: currentSnapshot.textAfterCursor
+              ) else {
+            return false
+        }
+
+        return true
+    }
+
+    func remainingAXCooldownMilliseconds(
+        preservation: CodexPromptAXCooldownPreservation?,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
+    ) -> Int {
+        guard let preservation else {
+            return 0
+        }
+
+        return max(0, preservation.expiresAtMilliseconds - nowMilliseconds)
     }
 
     private func observationDoesNotConflict(

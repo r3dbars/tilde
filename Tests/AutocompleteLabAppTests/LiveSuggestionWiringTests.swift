@@ -66,6 +66,10 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "\"codex-prompt-target-refresh-deferred\"")
         try require(appDelegate, contains: "scheduleCodexPromptPresentationRefreshRetry(")
         try require(appDelegate, contains: "codexPromptPresentationRetryTask?.cancel()")
+        try require(appDelegate, contains: "canPreserveDuringAXCooldown(")
+        try require(appDelegate, contains: "preservePendingRequest: shouldPreservePendingRequest")
+        try require(appDelegate, contains: "codexPromptAXCooldownRetryDelayMilliseconds(")
+        try require(appDelegate, contains: "codex-prompt-target-refresh-retry-deferred-for-ax-cooldown")
         try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
         try require(appDelegate, contains: "fieldStatusIndicator.hide()")
     }
