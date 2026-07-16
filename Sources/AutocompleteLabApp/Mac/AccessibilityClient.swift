@@ -127,6 +127,41 @@ struct FocusedTextCapabilities: Equatable, Sendable {
     }
 }
 
+struct FocusedTextWindowReadPlan: Equatable, Sendable {
+    let readsIdentifier: Bool
+    let allowsFocusedWindowFallback: Bool
+    let readsBounds: Bool
+}
+
+enum FocusedTextWindowReadMode: Equatable, Sendable {
+    case none
+    case identifierOnly
+    case full
+
+    var plan: FocusedTextWindowReadPlan {
+        switch self {
+        case .none:
+            FocusedTextWindowReadPlan(
+                readsIdentifier: false,
+                allowsFocusedWindowFallback: false,
+                readsBounds: false
+            )
+        case .identifierOnly:
+            FocusedTextWindowReadPlan(
+                readsIdentifier: true,
+                allowsFocusedWindowFallback: false,
+                readsBounds: false
+            )
+        case .full:
+            FocusedTextWindowReadPlan(
+                readsIdentifier: true,
+                allowsFocusedWindowFallback: true,
+                readsBounds: true
+            )
+        }
+    }
+}
+
 struct FocusedTextReadOptions: Equatable, Sendable {
     static let standard = FocusedTextReadOptions()
     static let syntheticTextAreaFastPath = FocusedTextReadOptions(
@@ -134,9 +169,9 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         skipParameterizedTextGeometry: true,
         skipAttributedText: true,
         useMinimalFingerprint: true,
-        // Prompt continuity must retain affirmative same-window identity when
-        // Codex transiently reports AXWebArea instead of the composer.
-        skipWindowLookup: false,
+        // One direct AXWindow token keeps prompt identity without restoring the
+        // expensive window-title/bounds path on every Codex poll.
+        windowReadMode: .identifierOnly,
         assumedCanSetSelectedText: true,
         manualAccessibilityWakeAppFamily: nil
     )
@@ -145,7 +180,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
     let skipParameterizedTextGeometry: Bool
     let skipAttributedText: Bool
     let useMinimalFingerprint: Bool
-    let skipWindowLookup: Bool
+    let windowReadMode: FocusedTextWindowReadMode
     let assumedCanSetSelectedText: Bool?
     let manualAccessibilityWakeAppFamily: CompatibilityAppFamily?
 
@@ -154,7 +189,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         skipParameterizedTextGeometry: Bool = false,
         skipAttributedText: Bool = false,
         useMinimalFingerprint: Bool = false,
-        skipWindowLookup: Bool = false,
+        windowReadMode: FocusedTextWindowReadMode = .full,
         assumedCanSetSelectedText: Bool? = nil,
         manualAccessibilityWakeAppFamily: CompatibilityAppFamily? = nil
     ) {
@@ -162,7 +197,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         self.skipParameterizedTextGeometry = skipParameterizedTextGeometry
         self.skipAttributedText = skipAttributedText
         self.useMinimalFingerprint = useMinimalFingerprint
-        self.skipWindowLookup = skipWindowLookup
+        self.windowReadMode = windowReadMode
         self.assumedCanSetSelectedText = assumedCanSetSelectedText
         self.manualAccessibilityWakeAppFamily = manualAccessibilityWakeAppFamily
     }
@@ -427,12 +462,19 @@ final class AccessibilityClient: @unchecked Sendable {
         }
 
         let elementRect = elementBounds(for: focusedElement)
-        let windowIdentifier = options.skipWindowLookup
-            ? nil
-            : containingWindowIdentifier(for: focusedElement, processIdentifier: app.processIdentifier)
-        let windowRect = options.skipWindowLookup
-            ? nil
-            : containingWindowBounds(for: focusedElement, processIdentifier: app.processIdentifier)
+        let windowReadPlan = options.windowReadMode.plan
+        let windowElement: AXUIElement?
+        if windowReadPlan.readsIdentifier {
+            windowElement = windowReadPlan.allowsFocusedWindowFallback
+                ? containingWindowElement(for: focusedElement, processIdentifier: app.processIdentifier)
+                : copyElementAttribute(focusedElement, attribute: kAXWindowAttribute)
+        } else {
+            windowElement = nil
+        }
+        let windowIdentifier = windowElement.map { Int(CFHash($0)) }
+        let windowRect = windowReadPlan.readsBounds
+            ? windowElement.flatMap { elementBounds(for: $0) }
+            : nil
         let selectedTextLength = max(0, selectedRange?.length ?? 0)
         let selectedTextValue = selectedRange.flatMap {
             selectedText(in: focusedElement, selectedRange: $0)
