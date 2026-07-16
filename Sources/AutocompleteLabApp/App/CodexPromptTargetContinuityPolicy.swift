@@ -24,6 +24,12 @@ enum CodexPromptPresentationRefreshResolution: Equatable {
     case retry
 }
 
+enum CodexPromptTargetInvalidationResolution: Equatable {
+    case reject
+    case preserveWork
+    case cancelAndRetry
+}
+
 enum CodexPromptPresentationPreparation: Equatable {
     case deferForAXCooldown(delayMilliseconds: Int)
     case refreshFocusedContext
@@ -110,6 +116,32 @@ struct CodexPromptTargetContinuityPolicy {
         nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
         maximumAnchorAgeMilliseconds: Int = 1_000
     ) -> Bool {
+        invalidationResolution(
+            appBundleIdentifier: appBundleIdentifier,
+            processIdentifier: processIdentifier,
+            promptBlockReason: promptBlockReason,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext,
+            trustedContext: trustedContext,
+            nowMilliseconds: nowMilliseconds,
+            maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
+        ) == .preserveWork
+    }
+
+    func invalidationResolution(
+        appBundleIdentifier: String,
+        processIdentifier: Int32,
+        promptBlockReason: String,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        observedContext: FocusedTextContext,
+        trustedContext: FocusedTextContext? = nil,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
+        maximumAnchorAgeMilliseconds: Int = 1_000
+    ) -> CodexPromptTargetInvalidationResolution {
         guard Self.transientPromptBlockReasons.contains(promptBlockReason),
               let verifiedObservation = verifiedTransientObservation(
                   appBundleIdentifier: appBundleIdentifier,
@@ -121,23 +153,25 @@ struct CodexPromptTargetContinuityPolicy {
                   nowMilliseconds: nowMilliseconds,
                   maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
               ) else {
-            return false
+            return .reject
         }
 
         let currentSnapshot = verifiedObservation.currentSnapshot
         let trustedAnchor = verifiedObservation.trustedAnchor
 
-        guard let trustedContext else {
-            return true
+        if let trustedContext {
+            guard trustedContext.role == "AXTextArea",
+                  trustedContext.selectedTextLength == 0,
+                  trustedContext.elementRect != nil,
+                  !trustedContext.isSecure,
+                  trustedContext.textBeforeCursor == currentSnapshot.textBeforeCursor,
+                  trustedContext.textAfterCursor == currentSnapshot.textAfterCursor,
+                  trustedAnchor.targetFingerprint.matches(targetFingerprint(for: trustedContext)) else {
+                return .reject
+            }
         }
 
-        return trustedContext.role == "AXTextArea"
-            && trustedContext.selectedTextLength == 0
-            && trustedContext.elementRect != nil
-            && !trustedContext.isSecure
-            && trustedContext.textBeforeCursor == currentSnapshot.textBeforeCursor
-            && trustedContext.textAfterCursor == currentSnapshot.textAfterCursor
-            && trustedAnchor.targetFingerprint.matches(targetFingerprint(for: trustedContext))
+        return verifiedObservation.resolution
     }
 
     func presentationRefreshResolution(
@@ -151,7 +185,7 @@ struct CodexPromptTargetContinuityPolicy {
         trustedContext: FocusedTextContext,
         nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
     ) -> CodexPromptPresentationRefreshResolution {
-        guard canDeferInvalidation(
+        guard invalidationResolution(
             appBundleIdentifier: appBundleIdentifier,
             processIdentifier: processIdentifier,
             promptBlockReason: promptBlockReason,
@@ -161,12 +195,14 @@ struct CodexPromptTargetContinuityPolicy {
             observedContext: observedContext,
             trustedContext: trustedContext,
             nowMilliseconds: nowMilliseconds
-        ) else {
+        ) == .preserveWork else {
             return .reject
         }
 
         guard observedContext.role == "AXTextArea",
-              observedContext.elementIdentifier == trustedAnchor?.elementIdentifier else {
+              observedContext.elementIdentifier == trustedAnchor?.elementIdentifier,
+              observedContext.textBeforeCursor == currentSnapshot?.textBeforeCursor,
+              observedContext.textAfterCursor == currentSnapshot?.textAfterCursor else {
             return .retry
         }
 
@@ -200,21 +236,39 @@ struct CodexPromptTargetContinuityPolicy {
         nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
         maximumAnchorAgeMilliseconds: Int = 1_000
     ) -> Bool {
-        guard hasActiveSuggestionWork,
-              verifiedTransientObservation(
-                  appBundleIdentifier: appBundleIdentifier,
-                  processIdentifier: processIdentifier,
-                  currentFieldIdentity: currentFieldIdentity,
-                  currentSnapshot: currentSnapshot,
-                  trustedAnchor: trustedAnchor,
-                  observedContext: observedContext,
-                  nowMilliseconds: nowMilliseconds,
-                  maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
-              ) != nil else {
-            return false
-        }
+        hasActiveSuggestionWork
+            && axHealthInvalidationResolution(
+                appBundleIdentifier: appBundleIdentifier,
+                processIdentifier: processIdentifier,
+                currentFieldIdentity: currentFieldIdentity,
+                currentSnapshot: currentSnapshot,
+                trustedAnchor: trustedAnchor,
+                observedContext: observedContext,
+                nowMilliseconds: nowMilliseconds,
+                maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
+            ) == .preserveWork
+    }
 
-        return true
+    func axHealthInvalidationResolution(
+        appBundleIdentifier: String,
+        processIdentifier: Int32,
+        currentFieldIdentity: FocusedFieldIdentity?,
+        currentSnapshot: FocusedTextSnapshot?,
+        trustedAnchor: CodexPromptTargetContinuityAnchor?,
+        observedContext: FocusedTextContext,
+        nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000),
+        maximumAnchorAgeMilliseconds: Int = 1_000
+    ) -> CodexPromptTargetInvalidationResolution {
+        verifiedTransientObservation(
+            appBundleIdentifier: appBundleIdentifier,
+            processIdentifier: processIdentifier,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            observedContext: observedContext,
+            nowMilliseconds: nowMilliseconds,
+            maximumAnchorAgeMilliseconds: maximumAnchorAgeMilliseconds
+        )?.resolution ?? .reject
     }
 
     func canPreserveDuringAXCooldown(
@@ -271,7 +325,8 @@ struct CodexPromptTargetContinuityPolicy {
         maximumAnchorAgeMilliseconds: Int
     ) -> (
         currentSnapshot: FocusedTextSnapshot,
-        trustedAnchor: CodexPromptTargetContinuityAnchor
+        trustedAnchor: CodexPromptTargetContinuityAnchor,
+        resolution: CodexPromptTargetInvalidationResolution
     )? {
         guard appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier,
               let currentFieldIdentity,
@@ -286,8 +341,13 @@ struct CodexPromptTargetContinuityPolicy {
               Self.transientObservedRoles.contains(observedContext.role ?? ""),
               observedContext.selectedTextLength == 0,
               !observedContext.isSecure,
-              observedContext.textBeforeCursor == currentSnapshot.textBeforeCursor,
-              observedContext.textAfterCursor == currentSnapshot.textAfterCursor,
+              let resolution = observationTextResolution(
+                  currentSnapshot,
+                  observedContext: observedContext
+              ),
+              resolution != .cancelAndRetry
+                || observedContext.role != "AXTextArea"
+                || observedContext.elementIdentifier == trustedAnchor.elementIdentifier,
               trustedAnchor.targetFingerprint.surroundingTextRevision == FocusedTextRevision(
                   textBeforeCursor: currentSnapshot.textBeforeCursor,
                   textAfterCursor: currentSnapshot.textAfterCursor
@@ -299,7 +359,40 @@ struct CodexPromptTargetContinuityPolicy {
             return nil
         }
 
-        return (currentSnapshot: currentSnapshot, trustedAnchor: trustedAnchor)
+        return (
+            currentSnapshot: currentSnapshot,
+            trustedAnchor: trustedAnchor,
+            resolution: resolution
+        )
+    }
+
+    private func observationTextResolution(
+        _ currentSnapshot: FocusedTextSnapshot,
+        observedContext: FocusedTextContext
+    ) -> CodexPromptTargetInvalidationResolution? {
+        if observedContext.textBeforeCursor == currentSnapshot.textBeforeCursor,
+           observedContext.textAfterCursor == currentSnapshot.textAfterCursor {
+            return .preserveWork
+        }
+
+        switch observedContext.role {
+        case "AXWebArea":
+            guard observedContext.textBeforeCursor.isEmpty,
+                  observedContext.textAfterCursor.isEmpty else {
+                return nil
+            }
+            return .cancelAndRetry
+        case "AXTextArea":
+            guard currentSnapshot.textAfterCursor.isEmpty,
+                  !currentSnapshot.textBeforeCursor.isEmpty,
+                  observedContext.textBeforeCursor.isEmpty,
+                  observedContext.textAfterCursor.hasPrefix(currentSnapshot.textBeforeCursor) else {
+                return nil
+            }
+            return .cancelAndRetry
+        default:
+            return nil
+        }
     }
 
     private func observationDoesNotConflict(
