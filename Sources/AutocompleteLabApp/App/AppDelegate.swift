@@ -7587,7 +7587,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 suggestionID: suggestionID,
                                 mode: request.mode,
                                 nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1000),
-                                latencyMilliseconds: latencyMilliseconds
+                                latencyMilliseconds: latencyMilliseconds,
+                                minimumVisibleWordsOverride: self.suggestionTuning.aggressivenessLevel >= 5
+                                    ? 1
+                                    : nil
                             ) else {
                                 return
                             }
