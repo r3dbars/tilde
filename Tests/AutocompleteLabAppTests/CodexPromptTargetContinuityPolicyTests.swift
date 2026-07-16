@@ -274,7 +274,9 @@ struct CodexPromptTargetContinuityPolicyTests {
             for: CodexProofFocusedTargetPolicy.bundleIdentifier
         ))
         let options = FocusedTextReadOptionsPolicy.options(for: app, profile: profile)
-        #expect(!options.skipWindowLookup)
+        #expect(options.windowReadMode == .identifierOnly)
+        #expect(!options.windowReadMode.plan.readsBounds)
+        #expect(!options.windowReadMode.plan.allowsFocusedWindowFallback)
 
         let fieldIdentity = identity()
         let anchor = try #require(policy.anchor(
