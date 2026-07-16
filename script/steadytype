@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$ROOT_DIR/script"
+
+usage() {
+  cat <<'EOF'
+Usage: ./script/steadytype <operation> [release arguments]
+
+Operations:
+  build    Build the app bundle without launching it.
+  test     Run the fast pre-merge test gate.
+  smoke    Run the existing local smoke suite.
+  eval     Run the existing quality evaluation suite.
+  release  Build or check release artifacts.
+EOF
+}
+
+run_target() {
+  exec "$@"
+}
+
+require_no_arguments() {
+  local operation="$1"
+  shift
+  if (($# > 0)); then
+    echo "steadytype: $operation does not accept arguments" >&2
+    return 2
+  fi
+}
+
+dispatch() {
+  local operation="${1:-}"
+  if [[ -n "$operation" ]]; then
+    shift
+  fi
+
+  cd "$ROOT_DIR"
+
+  case "$operation" in
+    build)
+      require_no_arguments "$operation" "$@" || return
+      run_target "$SCRIPT_DIR/build_and_run.sh" --bundle-only
+      ;;
+    test)
+      require_no_arguments "$operation" "$@" || return
+      run_target "$SCRIPT_DIR/proof.sh" fast
+      ;;
+    smoke)
+      require_no_arguments "$operation" "$@" || return
+      run_target "$SCRIPT_DIR/smoke_test.sh"
+      ;;
+    eval)
+      require_no_arguments "$operation" "$@" || return
+      run_target "$SCRIPT_DIR/check_quality_eval.sh"
+      ;;
+    release)
+      run_target "$SCRIPT_DIR/package_release.sh" "$@"
+      ;;
+    -h|--help)
+      usage
+      ;;
+    "")
+      usage >&2
+      return 2
+      ;;
+    *)
+      echo "steadytype: unknown operation '$operation'" >&2
+      usage >&2
+      return 2
+      ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  dispatch "$@"
+fi
