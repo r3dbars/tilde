@@ -1536,8 +1536,7 @@ if ! grep -F 'current_steadytype_app_bundle_pids' script/real_app_smoke.sh >/dev
    ! grep -F 'AUTOCOMPLETE_LAB_EXCLUSIVE_PROOF_RUN' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/beta_readiness.sh' script/real_app_smoke.sh >/dev/null ||
    ! grep -F 'script/check_score_targets.sh' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null ||
-   ! grep -F 'script/check_current_build_privacy_export.sh' script/real_app_smoke.sh >/dev/null; then
+   ! grep -F 'script/check_controls_diagnostics_readiness.sh' script/real_app_smoke.sh >/dev/null; then
   echo "real app smoke self-test expected exact app-stop cleanup to avoid killing the active proof shell" >&2
   exit 1
 fi

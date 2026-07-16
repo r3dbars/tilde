@@ -79,8 +79,8 @@ struct RawTraceReportExportTests {
         #expect(event.reason == "too-slow-to-display")
     }
 
-    @Test("Diagnostics export writes redacted HTML and survival reports")
-    func diagnosticsExportWritesRedactedReports() throws {
+    @Test("Privacy bundle writes redacted HTML and survival reports")
+    func privacyBundleWritesRedactedReports() throws {
         let temporaryFolder = FileManager.default.temporaryDirectory
             .appendingPathComponent("RawTraceReportExportTests-\(UUID().uuidString)")
         defer {
@@ -96,12 +96,20 @@ struct RawTraceReportExportTests {
                     suggestionID: "one",
                     textBeforeCursor: "private-before",
                     textAfterCursor: "private-after",
+                    systemPrompt: "private-system-prompt",
+                    userPrompt: "private-user-prompt",
+                    rawOutput: "private-raw-output",
+                    cleanedVisibleText: "private-cleaned-output",
                     displayedText: "private-model-output",
                     screenshotPath: "/tmp/private-screenshot.png",
                     metadata: [
+                        "contextPreview": "private-context-preview",
                         "documentTitle": "private document title",
                         "fieldKind": "multilineCompose",
+                        "localCacheDirectory": "/Users/private/Library/Application Support/SteadyType/private-cache",
+                        "neighborText": "private-neighbor-text",
                         "recipientEmail": "private-recipient@example.com",
+                        "runtimeReason": "loaded from /Users/private/private-reason.md",
                         "subjectLine": "private subject line",
                         "visibleURL": "https://private.example/draft"
                     ]
@@ -110,6 +118,7 @@ struct RawTraceReportExportTests {
                     .suggestionAccepted,
                     suggestionID: "one",
                     acceptedText: "private-accepted",
+                    remainingVisibleText: "private-remaining",
                     metadata: ["acceptanceID": "accept-one"]
                 ),
                 event(
@@ -132,27 +141,60 @@ struct RawTraceReportExportTests {
             environment: [:]
         )
 
-        let htmlURL = try #require(log.exportHTMLReport(limit: 10))
-        let survivalURL = try #require(log.exportRedactedSurvivalReport(limit: 10))
+        let bundleURL = try #require(log.exportPrivacyBundle(limit: 10))
+        let htmlURL = bundleURL.appendingPathComponent("trace-report.html")
+        let survivalURL = bundleURL.appendingPathComponent("survival-report.json")
+        let manifestURL = bundleURL.appendingPathComponent("manifest.json")
         let html = try String(contentsOf: htmlURL, encoding: .utf8)
         let survivalJSON = try String(contentsOf: survivalURL, encoding: .utf8)
+        let exportedText = try recursiveTextContents(at: bundleURL)
+        let manifest = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any]
+        )
         let survivalEvents = try JSONDecoder().decode(
             [AutocompleteTraceEvent].self,
             from: Data(survivalJSON.utf8)
         )
+        let expectedFiles: Set<String> = [
+            "PRIVACY-CHECKLIST.md",
+            "manifest.json",
+            "redacted-traces.jsonl",
+            "survival-report.json",
+            "trace-report.html",
+            "visual-calibration-report.txt"
+        ]
+        let actualFiles = try Set(FileManager.default.contentsOfDirectory(atPath: bundleURL.path))
+        let privateSentinels = [
+            "private-before",
+            "private-after",
+            "private-system-prompt",
+            "private-user-prompt",
+            "private-raw-output",
+            "private-cleaned-output",
+            "private-model-output",
+            "private-accepted",
+            "private-remaining",
+            "private-context-preview",
+            "private document title",
+            "private-neighbor-text",
+            "private-recipient@example.com",
+            "private subject line",
+            "https://private.example/draft",
+            "/tmp/private-screenshot.png",
+            "/Users/private/Library/Application Support/SteadyType/private-cache",
+            "/Users/private/private-reason.md"
+        ]
 
+        #expect(actualFiles == expectedFiles)
+        #expect(manifest["privacyLane"] as? String == TracePrivacyLane.redactedBetaTelemetry.rawValue)
+        #expect(manifest["rawTextIncluded"] as? Bool == false)
+        #expect(manifest["screenshotsIncluded"] as? Bool == false)
+        for sentinel in privateSentinels {
+            #expect(!exportedText.contains(sentinel))
+        }
         #expect(html.contains("SteadyType Redacted Trace Report"))
         #expect(html.contains("RAM-only retention proof"))
         #expect(html.contains("Generated locally from the default redacted trace. Nothing was uploaded."))
-        #expect(!html.contains("private-before"))
-        #expect(!html.contains("private-after"))
-        #expect(!html.contains("private-model-output"))
-        #expect(!html.contains("private-accepted"))
-        #expect(!html.contains("/tmp/private-screenshot.png"))
-        #expect(!html.contains("private document title"))
-        #expect(!html.contains("private-recipient@example.com"))
-        #expect(!html.contains("private subject line"))
-        #expect(!html.contains("https://private.example/draft"))
 
         #expect(survivalEvents.map(\.type).contains(.suggestionAccepted))
         #expect(survivalEvents.map(\.type).contains(.acceptanceRetentionCleared))
@@ -216,6 +258,28 @@ struct RawTraceReportExportTests {
         try jsonl.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    private func recursiveTextContents(at folderURL: URL) throws -> String {
+        guard let enumerator = FileManager.default.enumerator(
+            at: folderURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return ""
+        }
+
+        var contents = ""
+        for case let fileURL as URL in enumerator {
+            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else {
+                continue
+            }
+
+            contents += (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+            contents += "\n"
+        }
+        return contents
+    }
+
     private func waitForEvents(at url: URL) throws -> [AutocompleteTraceEvent] {
         let decoder = JSONDecoder()
         for _ in 0..<100 {
@@ -236,8 +300,13 @@ struct RawTraceReportExportTests {
         suggestionID: String,
         textBeforeCursor: String = "",
         textAfterCursor: String = "",
+        systemPrompt: String = "",
+        userPrompt: String = "",
+        rawOutput: String = "",
+        cleanedVisibleText: String = "",
         displayedText: String = "",
         acceptedText: String = "",
+        remainingVisibleText: String = "",
         screenshotPath: String = "",
         reason: String = "",
         metadata: [String: String] = [:]
@@ -251,8 +320,13 @@ struct RawTraceReportExportTests {
             requestMode: "wordCompletion",
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: textAfterCursor,
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            rawOutput: rawOutput,
+            cleanedVisibleText: cleanedVisibleText,
             displayedText: displayedText,
             acceptedText: acceptedText,
+            remainingVisibleText: remainingVisibleText,
             reason: reason,
             screenshotPath: screenshotPath,
             metadata: metadata

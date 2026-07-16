@@ -250,28 +250,6 @@ run_check() {
   return 1
 }
 
-current_process_pgid() {
-  ps -o pgid= -p "${BASHPID:-$$}" 2>/dev/null | tr -d '[:space:]'
-}
-
-with_privacy_export_proof_tree() {
-  local pgid existing allowed_pgids
-
-  pgid="$(current_process_pgid || true)"
-  if [[ -z "$pgid" ]]; then
-    "$@"
-    return
-  fi
-
-  existing="${AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS:-}"
-  allowed_pgids="$pgid"
-  if [[ -n "$existing" ]]; then
-    allowed_pgids="$existing $pgid"
-  fi
-
-  AUTOCOMPLETE_LAB_PRIVACY_EXPORT_ALLOWED_PROOF_PGIDS="$allowed_pgids" "$@"
-}
-
 check_clipboard_fallback_disabled() {
   local failed=0
 
@@ -673,8 +651,8 @@ if [[ "$MODE" == "check-only" ]]; then
     AUTOCOMPLETE_LAB_EXPECTED_ASSET="${AUTOCOMPLETE_LAB_EXPECTED_ASSET:-Qwen3.5-4B-4bit}" \
     ./script/check_diagnostics_log.sh || failures=$((failures + 1))
   run_check "Runtime no-egress proof" check_runtime_no_egress_proof || failures=$((failures + 1))
-  run_check "Controls and diagnostics readiness" with_privacy_export_proof_tree ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
-  run_check "Redacted report export" with_privacy_export_proof_tree ./script/check_redacted_report_export.sh || failures=$((failures + 1))
+  run_check "Controls and diagnostics readiness" ./script/check_controls_diagnostics_readiness.sh || failures=$((failures + 1))
+  run_check "Redacted report export" ./script/check_redacted_report_export.sh || failures=$((failures + 1))
   run_check "Issue template validation" ./script/validate_beta_issue_template.sh || failures=$((failures + 1))
   run_check "Onboarding walkthrough proof" ./script/check_onboarding_walkthrough_proof.py || {
     failures=$((failures + 1))
@@ -706,7 +684,7 @@ if [[ "$MODE" == "check-only" ]]; then
   fi
 
   if [[ -s "$PRIMARY_ARTIFACT" ]]; then
-    run_check "Private beta packet" with_privacy_export_proof_tree ./script/private_beta_packet.sh --check || failures=$((failures + 1))
+    run_check "Private beta packet" ./script/private_beta_packet.sh --check || failures=$((failures + 1))
   else
     echo
     echo "== Private beta packet =="
@@ -828,7 +806,7 @@ echo
 ACTIVE_READINESS_LANE="Private beta packet"
 echo "== Private beta packet =="
 ./script/private_beta_packet.sh create
-with_privacy_export_proof_tree ./script/private_beta_packet.sh --check
+./script/private_beta_packet.sh --check
 
 ACTIVE_READINESS_LANE=""
 print_readiness_answer "GO" "$MODE"

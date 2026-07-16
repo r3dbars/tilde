@@ -83,7 +83,7 @@ Candidate files:
 Proof:
 
 - settings snapshot tests,
-- `./script/check_current_build_privacy_export.sh`,
+- `./script/check_redacted_report_export.sh`,
 - `./script/check_runtime_network_egress.py`.
 
 ### Non-Annoyance Persistence

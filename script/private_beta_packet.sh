@@ -322,7 +322,6 @@ SHA-256: $sha
 ./script/private_beta_packet_self_test.sh
 ./script/validate_beta_issue_template.sh
 ./script/beta_readiness.sh --check-only
-./script/check_current_build_privacy_export.sh
 ./script/check_redacted_report_export.sh
 ./script/private_beta_packet.sh --check
 \`\`\`
@@ -593,27 +592,6 @@ check_primary_artifact_app() {
   rm -rf "$verify_dir"
 }
 
-check_archive_privacy_export() {
-  local verify_dir proof_dir app_path
-  verify_dir="$(mktemp -d)"
-  proof_dir="$(mktemp -d)"
-
-  ditto -x -k "$ZIP_PATH" "$verify_dir"
-  app_path="$verify_dir/SteadyType.app"
-
-  if [[ ! -d "$app_path" ]]; then
-    rm -rf "$verify_dir" "$proof_dir"
-    echo "archive does not contain SteadyType.app" >&2
-    exit 1
-  fi
-
-  AUTOCOMPLETE_LAB_APP_BUNDLE="$app_path" \
-  AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_dir" \
-    ./script/check_current_build_privacy_export.sh >/tmp/autocomplete-private-beta-privacy-proof.txt
-
-  rm -rf "$verify_dir" "$proof_dir"
-}
-
 require_same_file() {
   local source_path="$1"
   local packet_path="$2"
@@ -700,7 +678,6 @@ Useful commands:
 ./script/check_trace_eval.sh
 ./script/beta_readiness.sh --check-only
 ./script/model_latency_report.py --latest
-./script/check_current_build_privacy_export.sh
 ./script/check_redacted_report_export.sh
 open "\$HOME/Library/Logs/SteadyType"
 \`\`\`
@@ -810,8 +787,6 @@ check_packet() {
     echo "Run ./script/check_model_asset.py for the exact fix." >&2
     exit 1
   }
-  check_archive_privacy_export
-
   local regeneration_reason
   if regeneration_reason="$(packet_regeneration_reason)"; then
     printf '%s\n' "$regeneration_reason" >&2

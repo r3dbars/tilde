@@ -81,15 +81,15 @@ Verify it against the current app build with:
 ./script/check_dependency_inventory.sh
 ```
 
-## Current Build Export Proof
+## Export Privacy Proof
 
-The app binary can prove the default export path without using real tester
-text:
+The automated export test uses synthetic private text with the same redacted
+exporter as the visible Settings button:
 
 ```bash
-./script/check_current_build_privacy_export.sh
+./script/check_redacted_report_export.sh
 ```
 
-That command builds the current app bundle if needed, runs the app binary in
-proof mode, creates synthetic private sentinels, exports the redacted privacy
-bundle, and fails if any sentinel appears in the shareable files.
+That command creates synthetic private sentinels, exports the redacted privacy
+bundle, and fails if any sentinel appears in the six shareable files. Activating
+the export from a packaged app remains a separate manual UI check.

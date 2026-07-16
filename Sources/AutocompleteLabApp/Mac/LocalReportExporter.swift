@@ -7,8 +7,8 @@ struct LocalReportExporter {
     private let encoder = JSONEncoder()
     private let generator = AutocompleteTraceReportGenerator()
 
-    // Export artifacts can include lightly-redacted survival data (and, for the debug inspector,
-    // raw-trace-derived content), so write them owner-only. See docs/security/threat-model.md (F2).
+    // Export artifacts contain redacted diagnostic data, so write them owner-only.
+    // See docs/security/threat-model.md (F2).
     private func writeSecure(_ data: Data, to url: URL) throws {
         try data.write(to: url, options: .atomic)
         SecureLocalStorage.restrictFile(at: url)
@@ -66,63 +66,6 @@ struct LocalReportExporter {
             let manifestData = try encoder.encode(manifest)
             try writeSecure(manifestData, to: bundleURL.appendingPathComponent("manifest.json"))
             return bundleURL
-        } catch {
-            return nil
-        }
-    }
-
-    func exportRedactedSurvivalReport(limit: Int = 2_000) -> URL? {
-        let events = storedEvents(limit: limit)
-        let reportURL = folderURL.appendingPathComponent("survival-report.json")
-
-        do {
-            SecureLocalStorage.createDirectory(at: folderURL)
-            let data = try generator.redactedSurvivalJSONData(for: events, encoder: encoder)
-            try writeSecure(data, to: reportURL)
-            return reportURL
-        } catch {
-            return nil
-        }
-    }
-
-    func exportDebugSurvivalInspector(limit: Int = 2_000) -> URL? {
-        let events = storedEvents(
-            fileName: "raw-traces.jsonl",
-            limit: limit
-        )
-        guard !events.isEmpty else {
-            return nil
-        }
-
-        let reportURL = folderURL.appendingPathComponent("survival-inspector-debug.json")
-
-        do {
-            SecureLocalStorage.createDirectory(at: folderURL)
-            let data = try generator.debugSurvivalInspectorJSONData(for: events, encoder: encoder)
-            try writeSecure(data, to: reportURL)
-            return reportURL
-        } catch {
-            return nil
-        }
-    }
-
-    func exportHTMLReport(limit: Int = 2_000) -> URL? {
-        let events = storedEvents(limit: limit)
-            .map(RedactionLayer.redactedDefaultTrace)
-        guard !events.isEmpty else {
-            return nil
-        }
-
-        let summary = AutocompleteTraceAnalyzer().summary(for: events)
-        let reportURL = folderURL.appendingPathComponent("trace-report.html")
-
-        do {
-            SecureLocalStorage.createDirectory(at: folderURL)
-            try writeSecure(
-                generator.htmlReport(summary: summary, events: events),
-                to: reportURL
-            )
-            return reportURL
         } catch {
             return nil
         }

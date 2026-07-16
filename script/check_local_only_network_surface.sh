@@ -38,10 +38,6 @@ allow_reference() {
 	      [[ "$line" == *"https://github.com/r3dbars/transcripted-autocomplete-lab/issues/new"* ]]
 	      return
 	      ;;
-	    Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift)
-	      [[ "$line" == *"https://private.example/redbars"* ]]
-	      return
-	      ;;
 	    Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift)
 	      [[ "$line" == *"licenseURL"* || "$line" == *"https://huggingface.co/"* ]]
 	      return
@@ -78,7 +74,6 @@ fi
 
 echo "Local-only network surface verified."
 echo "Allowed network-adjacent source references: ${#matches[@]}"
-echo "- Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift: synthetic URL sentinel for redaction proof only"
 echo "- Sources/AutocompleteLabApp/Runtime/ModelAssetInstaller.swift: explicit user-triggered model install"
 echo "- Sources/AutocompleteLabApp/Runtime/LocalModelAssetInstaller.swift: explicit user-triggered pinned model install"
 echo "- Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift: MLX local model import"

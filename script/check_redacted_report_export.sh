@@ -4,9 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PROOF_OUTPUT="$(mktemp -d "${TMPDIR:-/tmp}/steadytype-redacted-export-proof.XXXXXX")"
-trap 'rm -rf "$PROOF_OUTPUT"' EXIT
-
 SWIFT_TEST_ARGS=()
 SWIFT_TEST_ARGS_CONFIGURED=0
 
@@ -21,11 +18,7 @@ if [[ "${AUTOCOMPLETE_LAB_SWIFT_SKIP_BUILD:-0}" =~ ^(1|true|yes|on)$ ]]; then
 fi
 
 if [[ "$SWIFT_TEST_ARGS_CONFIGURED" == "1" ]]; then
-  swift test "${SWIFT_TEST_ARGS[@]}" --filter 'RawTraceReportExportTests|PrivacyExportProofCommandTests'
+  swift test "${SWIFT_TEST_ARGS[@]}" --filter 'RawTraceReportExportTests'
 else
-  swift test --filter 'RawTraceReportExportTests|PrivacyExportProofCommandTests'
+  swift test --filter 'RawTraceReportExportTests'
 fi
-
-AUTOCOMPLETE_LAB_REBUILD_PRIVACY_PROOF=1 \
-AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$PROOF_OUTPUT" \
-  ./script/check_current_build_privacy_export.sh

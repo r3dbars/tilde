@@ -94,19 +94,6 @@ struct AutocompleteTraceReportGeneratorTests {
         #expect(!String(decoding: data, as: UTF8.self).contains("violet-accepted"))
     }
 
-    @Test("Debug survival inspector preserves raw text only for explicit debug export")
-    func debugSurvivalInspectorPreservesRawTextOnlyForExplicitDebugExport() throws {
-        let data = try generator.debugSurvivalInspectorJSONData(for: reportFixtureEvents())
-        let events = try JSONDecoder().decode([AutocompleteTraceEvent].self, from: data)
-        let json = String(decoding: data, as: UTF8.self)
-
-        #expect(events.map(\.type).contains(.suggestionAccepted))
-        #expect(events.map(\.type).contains(.acceptedTextEdited))
-        #expect(events.map(\.type).contains(.acceptanceRetentionCleared))
-        #expect(json.contains("violet-accepted"))
-        #expect(!json.contains("violet-draft-before"))
-    }
-
     @Test("Field-send survival checkpoint is included in survival reports")
     func fieldSendSurvivalCheckpointIsIncludedInSurvivalReports() throws {
         let data = try generator.redactedSurvivalJSONData(for: [

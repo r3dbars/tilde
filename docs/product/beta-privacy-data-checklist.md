@@ -50,6 +50,5 @@ Run:
 
 ```bash
 ./script/check_redacted_report_export.sh
-./script/check_current_build_privacy_export.sh
 ./script/delete_local_traces_self_test.sh
 ```

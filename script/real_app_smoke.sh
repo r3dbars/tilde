@@ -1254,7 +1254,7 @@ other_smoke_process_lines() {
       processGroup[pid] = pgid
       sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
       readOnlyBetaReadiness[pid] = index(command, "script/beta_readiness.sh --check-only") > 0
-      directScript[pid] = !readOnlyBetaReadiness[pid] && command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness|check_current_build_privacy_export)\.sh([[:space:]]|$)/
+      directScript[pid] = !readOnlyBetaReadiness[pid] && command ~ /^(\.\/)?script\/(real_app_smoke|fresh_latency_proof|smoke_test|build_and_run|beta_readiness|check_score_targets|check_controls_diagnostics_readiness)\.sh([[:space:]]|$)/
       shellWrapper = command ~ /^((\/[^[:space:]]+\/)?(env[[:space:]]+)?(bash|zsh)|\/usr\/bin\/env[[:space:]]+(bash|zsh))([[:space:]]|$)/
       hasSmokeScript[pid] = index(command, "script/real_app_smoke.sh") > 0 ||
         index(command, "script/fresh_latency_proof.sh") > 0 ||
@@ -1263,8 +1263,7 @@ other_smoke_process_lines() {
         index(command, "script/build_and_run.sh") > 0 ||
         index(command, "script/beta_readiness.sh") > 0 ||
         index(command, "script/check_score_targets.sh") > 0 ||
-        index(command, "script/check_controls_diagnostics_readiness.sh") > 0 ||
-        index(command, "script/check_current_build_privacy_export.sh") > 0
+        index(command, "script/check_controls_diagnostics_readiness.sh") > 0
       if (readOnlyBetaReadiness[pid]) hasSmokeScript[pid] = 0
       shellHasSmokeScript[pid] = shellWrapper && hasSmokeScript[pid]
     }

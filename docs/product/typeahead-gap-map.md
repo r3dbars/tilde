@@ -94,13 +94,12 @@ SteadyType map:
 
 - `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`
 - `Sources/AutocompleteLabApp/Mac/LocalReportExporter.swift`
-- `Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift`
 - `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`
 - `Sources/AutocompleteLabCore/Tracing/AutocompleteTracePrivacyFilter.swift`
 - `docs/product/eval-and-tracing.md`
 - `script/check_trace_eval.sh`
 - `script/check_runtime_network_egress.py`
-- `script/check_current_build_privacy_export.sh`
+- `script/check_redacted_report_export.sh`
 
 Gap: the diagnostics system is strong, but the in-the-moment reason text needed
 to be less internal. This pass improves that path.

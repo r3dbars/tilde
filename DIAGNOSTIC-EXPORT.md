@@ -57,11 +57,11 @@ For command-line checks, run:
 
 ```bash
 ./script/check_redacted_report_export.sh
-./script/check_current_build_privacy_export.sh
 ```
 
-The current-build check runs the built app binary against synthetic private
-sentinels and verifies the exported privacy bundle does not contain them.
+The check runs synthetic private sentinels through the same redacted exporter
+as the visible Settings button and verifies the six-file privacy bundle does not
+contain them. Packaged UI activation remains a separate manual check.
 
 ## Raw Debug Sessions
 

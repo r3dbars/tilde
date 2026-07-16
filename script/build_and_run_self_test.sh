@@ -57,7 +57,6 @@ require_contains "elapsed: \${elapsed:-unknown}"
 require_contains "command: \${command:-unknown}"
 require_contains "Retry after the proof run finishes"
 require_contains "Fail fast instead of waiting"
-require_contains '--privacy-export-proof([[:space:]]|$)'
 require_contains "scrub_proof_model_root_if_needed"
 require_contains "AUTOCOMPLETE_LAB_ALLOW_PROOF_MODEL_ROOT"
 require_contains "unset AUTOCOMPLETE_LAB_MODEL_ROOT"
