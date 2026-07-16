@@ -110,6 +110,19 @@ struct SuggestionIdleRetryStateTests {
         ) == nil)
         #expect(!changedState.hasPendingRetry)
 
+        var fieldChangedState = SuggestionIdleRetryState(settleDelayMilliseconds: 100)
+        fieldChangedState.noteTextChange(
+            snapshot: original,
+            cancelledPendingRequest: true,
+            nowMilliseconds: 0
+        )
+        #expect(fieldChangedState.consumeRetryIfReady(
+            snapshot: snapshot("One", elementIdentifier: 8),
+            nowMilliseconds: 100,
+            hasVisibleSuggestion: false
+        ) == nil)
+        #expect(!fieldChangedState.hasPendingRetry)
+
         var visibleState = SuggestionIdleRetryState(settleDelayMilliseconds: 100)
         visibleState.noteTextChange(
             snapshot: original,
@@ -144,12 +157,15 @@ struct SuggestionIdleRetryStateTests {
         ) == nil)
     }
 
-    private func snapshot(_ textBeforeCursor: String) -> FocusedTextSnapshot {
+    private func snapshot(
+        _ textBeforeCursor: String,
+        elementIdentifier: Int = 7
+    ) -> FocusedTextSnapshot {
         FocusedTextSnapshot(
             fieldIdentity: FocusedFieldIdentity(
                 bundleIdentifier: "com.example.synthetic",
                 processIdentifier: 42,
-                elementIdentifier: 7
+                elementIdentifier: elementIdentifier
             ),
             textBeforeCursor: textBeforeCursor,
             textAfterCursor: ""

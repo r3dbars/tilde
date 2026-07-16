@@ -60,7 +60,7 @@ struct AppModelRuntimeFactoryTests {
             defaults: defaults
         )
 
-        #expect(bundle.modelDirectoryURL.path.contains("/Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit"))
+        #expect(bundle.modelDirectoryURL.path.contains("/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"))
         #expect(bundle.bootstrapPlan.activeCandidate == .unavailable)
         #expect(bundle.bootstrapPlan.assetState.statusSummary.contains("missing model asset"))
         #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
@@ -147,7 +147,8 @@ struct AppModelRuntimeFactoryTests {
         )
 
         #expect(bundle.modelOverrideName == nil)
-        #expect(bundle.bootstrapPlan.preferredAsset == .gemma4E4BItOptiQMLX)
+        #expect(bundle.bootstrapPlan.preferredAsset == .qwen35FourBMLX)
+        #expect(bundle.bootstrapPlan.preferredAsset.source != nil)
         #expect(!bundle.modelDirectoryURL.path.hasPrefix(rootURL.path))
     }
 
