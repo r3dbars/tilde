@@ -55,56 +55,6 @@ struct DiagnosticsWindowControllerStateTests {
         #expect(lines.allSatisfy { $0.count <= 160 })
     }
 
-    @Test("Personal Capture loop diagnostics expose score without raw text")
-    func personalCaptureLoopDiagnosticsExposeScoreWithoutRawText() {
-        var record = SuggestionEpisodeRecord(
-            id: "episode-1",
-            createdAt: "2026-05-24T12:00:00Z",
-            appDisplayName: "TextEdit",
-            appBundleIdentifier: "com.apple.TextEdit",
-            fieldIdentity: "field",
-            fieldKind: "plain",
-            fieldKindReason: "safe",
-            requestMode: "wordCompletion",
-            userTypedContext: "private before text",
-            suggestedText: "private suggestion",
-            acceptedText: "private accepted text",
-            model: SuggestionEpisodeModelContext(
-                modelName: "local-test",
-                runtime: "mlx",
-                asset: "asset",
-                promptVersion: "prompt-v1",
-                experimentArm: "arm-a",
-                triggerReason: "typing",
-                candidateSource: "model",
-                latencyMilliseconds: 120
-            ),
-            placement: SuggestionEpisodePlacementContext(renderMode: "inlineAdjacent")
-        )
-        record.appendAction(.accepted, timestamp: "2026-05-24T12:00:01Z")
-        record.appendSurvivalCheckpoint(SuggestionEpisodeSurvivalCheckpoint(
-            checkpoint: "30s",
-            survivalClass: AcceptanceSurvivalClass.exactKept.rawValue,
-            timestamp: "2026-05-24T12:00:30Z"
-        ))
-
-        let diagnostics = PersonalCaptureLoopDiagnostics(
-            scorecard: SuggestionEpisodeScorecard(records: [record])
-        )
-
-        #expect(diagnostics.text.contains("Personal Capture loop:"))
-        #expect(diagnostics.text.contains("score:"))
-        #expect(diagnostics.text.contains("episodes: 1"))
-        #expect(diagnostics.text.contains("accepted: 1"))
-        #expect(diagnostics.text.contains("kept: 1"))
-        #expect(diagnostics.text.contains("eval cases: 1"))
-        #expect(diagnostics.text.contains("average latency: 120ms"))
-        #expect(diagnostics.text.contains("local-test / prompt-v1"))
-        #expect(!diagnostics.text.contains("private before text"))
-        #expect(!diagnostics.text.contains("private suggestion"))
-        #expect(!diagnostics.text.contains("private accepted text"))
-    }
-
     @Test("Placement diagnostics expose confidence without suggestion text")
     func placementDiagnosticsExposeConfidenceWithoutSuggestionText() {
         let diagnostics = PlacementDiagnostics(
@@ -237,13 +187,6 @@ struct DiagnosticsWindowControllerStateTests {
         let diagnostics = PromptContextDiagnostics(
             recentEvents: [
                 event(metadata: [
-                    "documentTitleWordCount": "3",
-                    "documentTitleLengthBucket": "short",
-                    "documentTitleExtension": "md",
-                    "documentTitleIsUntitled": "false",
-                    "documentTitleHasUnsavedMarker": "true"
-                ]),
-                event(metadata: [
                     "partialWordCharacters": "9",
                     "partialWordLetters": "9",
                     "partialWordDigits": "0",
@@ -259,42 +202,35 @@ struct DiagnosticsWindowControllerStateTests {
                         "currentLineContentWords": "4"
                     ],
                     displayedText: "Launch Plan"
-                ),
-                event(
-                    metadata: [
-                        "visiblePageContextActiveLineFiltered": "true"
-                    ],
-                    displayedText: "Launch Plan"
                 )
             ]
         )
 
-        #expect(diagnostics.text.contains("Prompt context diagnostics: recent shape events 3"))
-        #expect(diagnostics.text.contains("Document title shape: length=short, words=3, extension=md, untitled=false, unsaved=true"))
+        #expect(diagnostics.text.contains("Prompt context diagnostics: recent shape events 2"))
         #expect(diagnostics.text.contains("Partial word shape: chars=9, letters=9, digits=0, casing=titlecase, hyphen=false, apostrophe=false"))
         #expect(diagnostics.text.contains("Current line shape: kind=checklist_unchecked, marker=dash, indent=2, contentWords=4"))
-        #expect(diagnostics.text.contains("Screen context active-line filter: removed active typed line"))
         #expect(!diagnostics.text.contains("Launch"))
         #expect(!diagnostics.text.contains("Plan"))
     }
 
-    @Test("Prompt context diagnostics report no OCR active line filtering without raw text")
-    func promptContextDiagnosticsReportNoOCRActiveLineFilteringWithoutRawText() {
+    @Test("Prompt context diagnostics ignore legacy research metadata")
+    func promptContextDiagnosticsIgnoreLegacyResearchMetadata() {
         let diagnostics = PromptContextDiagnostics(
             recentEvents: [
                 event(
                     metadata: [
-                        "visiblePageContextActiveLineFiltered": "false"
+                        "documentTitleWordCount": "3",
+                        "visiblePageContextActiveLineFiltered": "true"
                     ],
                     displayedText: "Private draft sentence"
                 )
             ]
         )
 
-        #expect(diagnostics.text.contains("Screen context active-line filter: no active line removed"))
+        #expect(diagnostics.text.contains("Prompt context diagnostics: recent shape events 0"))
+        #expect(!diagnostics.text.contains("Document title"))
+        #expect(!diagnostics.text.contains("Screen context"))
         #expect(!diagnostics.text.contains("Private"))
-        #expect(!diagnostics.text.contains("draft"))
-        #expect(!diagnostics.text.contains("sentence"))
     }
 
     @Test("Prompt context diagnostics stay useful before shape data exists")
@@ -302,10 +238,8 @@ struct DiagnosticsWindowControllerStateTests {
         let diagnostics = PromptContextDiagnostics(recentEvents: [])
 
         #expect(diagnostics.text.contains("Prompt context diagnostics: recent shape events 0"))
-        #expect(diagnostics.text.contains("Document title shape: no recent title-shape metadata"))
         #expect(diagnostics.text.contains("Partial word shape: no recent partial-word metadata"))
         #expect(diagnostics.text.contains("Current line shape: no recent line-shape metadata"))
-        #expect(diagnostics.text.contains("Screen context active-line filter: no recent OCR context metadata"))
     }
 
     @Test("Learning diagnostics expose kept annoyance and miss state")

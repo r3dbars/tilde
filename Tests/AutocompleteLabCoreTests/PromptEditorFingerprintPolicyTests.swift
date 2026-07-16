@@ -1,10 +1,11 @@
 import CoreGraphics
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Prompt editor fingerprint policy")
 struct PromptEditorFingerprintPolicyTests {
-    private let policy = PromptEditorFingerprintPolicy()
+    private let policy = ProofPromptEditorFingerprintPolicy()
 
     @Test("Allows normal MVP apps without prompt fingerprint checks")
     func allowsNormalApps() {

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Suggestion episode")
 struct SuggestionEpisodeTests {
@@ -111,7 +112,7 @@ struct SuggestionEpisodeTests {
         #expect(scorecard.deletedFast == 1)
         #expect(scorecard.averageLatencyMilliseconds == 200)
         #expect(scorecard.modelPromptRows.contains(
-            "Qwen3.5 4B / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
+            "\(CompletionModelPolicy.mvp.model.rawValue) / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
         ))
         #expect(scorecard.markdown.contains("Score:"))
     }

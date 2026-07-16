@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import AutocompleteLabCore
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 /// End-to-end proof that the live diagnostic/capture writers produce owner-only artifacts
 /// (docs/security/threat-model.md F2). Permission logic is unit-tested in

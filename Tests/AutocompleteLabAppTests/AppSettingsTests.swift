@@ -16,7 +16,6 @@ struct AppSettingsTests {
         #expect(settings.suppressAfterNewline)
         #expect(settings.runtimeMode == .appOwnedLocalModel)
         #expect(settings.minimumCharacters == 3)
-        #expect(!settings.personalCaptureEnabled)
         #expect(settings.runtimeMode.menuTitle == "App-Owned Local Model")
     }
 
@@ -28,7 +27,6 @@ struct AppSettingsTests {
         settings.toggleSecureFieldSuppression()
         settings.toggleShortTextSuppression()
         settings.toggleAfterNewlineSuppression()
-        settings.togglePersonalCapture()
         settings.minimumCharacters = 0
         settings.runtimeMode = .appOwnedLocalModel
 
@@ -39,7 +37,6 @@ struct AppSettingsTests {
         #expect(!settings.suppressSecureFields)
         #expect(!settings.suppressShortText)
         #expect(!settings.suppressAfterNewline)
-        #expect(settings.personalCaptureEnabled)
         #expect(settings.minimumCharacters == 1)
         #expect(settings.runtimeMode == .appOwnedLocalModel)
         #expect(settings.runtimeMode.menuTitle == "App-Owned Local Model")

@@ -137,108 +137,30 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("streamline the workflow"))
     }
 
-    @Test("Prompt includes aggregate kept style sketch")
-    func promptIncludesAggregateKeptStyleSketch() {
+    @Test("Prompt uses focused-field text without personal or screen memory")
+    func promptUsesFocusedFieldTextWithoutPersonalOrScreenMemory() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
-            textBeforeCursor: "Can we make this",
-            acceptedTextStyleSketch: AcceptedTextStyleSketch(
-                sampleCount: 3,
-                averageWordCount: 2.6,
-                terminalPunctuationRate: 0.8,
-                lowercaseStartRate: 0.7,
-                questionEndingRate: 0
-            )
+            textBeforeCursor: "Can we make this"
         ))
 
-        #expect(prompt.system.contains("Recent kept style sketch"))
-        #expect(prompt.system.contains("avg 2.60 words"))
-        #expect(prompt.system.contains("usually terminal punctuation"))
-        #expect(!prompt.system.contains("make this simpler"))
-    }
-
-    @Test("Prompt includes trace safe document title shape")
-    func promptIncludesTraceSafeDocumentTitleShape() {
-        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
-        let prompt = builder.prompt(for: CompletionRequest(
-            textBeforeCursor: "Can we keep this",
-            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *")
-        ))
-
-        #expect(prompt.system.contains("Document/window title shape"))
-        #expect(prompt.system.contains("file extension md"))
-        #expect(prompt.system.contains("unsaved marker present"))
-        #expect(prompt.system.contains("weak genre context"))
-        #expect(!prompt.system.contains("Launch"))
-        #expect(!prompt.system.contains("Plan"))
-    }
-
-    @Test("Prompt can include opt-in visible page context")
-    func promptCanIncludeVisiblePageContext() throws {
-        let pageContext = try #require(VisiblePageContext(text: """
-        Launch Plan
-        - Keep OCR local
-        Untitled 13
-        Save
-        Save
-        !!!
-        """))
-        let builder = CompletionPromptBuilder(maxVisibleWords: 5)
-        let prompt = builder.prompt(for: CompletionRequest(
-            textBeforeCursor: "We should",
-            visiblePageContext: pageContext
-        ))
-
-        #expect(prompt.system.contains("Visible page context source: screen_ocr, scope: visible_screen"))
-        #expect(prompt.system.contains("Use it to infer the active app"))
-        #expect(prompt.system.contains("Prefer a useful best guess"))
-        #expect(prompt.system.contains("Never output visible window titles"))
-        #expect(prompt.user.contains("Visible page context:\nOCR scope: visible_screen\nLaunch Plan"))
-        #expect(prompt.user.contains("OCR scope: visible_screen"))
-        #expect(prompt.user.contains("- Keep OCR local"))
-        #expect(!prompt.user.contains("Untitled 13"))
-        #expect(prompt.user.contains("Before cursor:\nWe should"))
+        #expect(!prompt.system.contains("Recent kept style sketch"))
+        #expect(!prompt.system.contains("Document/window title shape"))
+        #expect(!prompt.system.contains("Visible page context"))
+        #expect(prompt.user.contains("Before cursor:\nCan we make this"))
         #expect(prompt.user.hasSuffix("Next words:"))
-        #expect(!prompt.user.contains("!!!"))
     }
 
-    @Test("Prompt uses active app screen context as reply evidence")
-    func promptUsesActiveAppScreenContextAsReplyEvidence() throws {
-        let pageContext = try #require(VisiblePageContext(
-            captureScope: .visibleScreen,
-            activeApplicationName: "Obsidian",
-            text: """
-            Inbox
-            Sam: Can you send the launch note today?
-            Draft
-            Yeah I can
-            """
-        ))
-        let builder = CompletionPromptBuilder(maxVisibleWords: 8)
-        let prompt = builder.prompt(for: CompletionRequest(
-            textBeforeCursor: "Yeah I can",
-            appBundleIdentifier: "md.obsidian",
-            visiblePageContext: pageContext,
-            maxVisibleWords: 8
-        ))
-
-        #expect(prompt.system.contains("what the user is replying to"))
-        #expect(prompt.system.contains("local writing companion"))
-        #expect(prompt.user.contains("Active app: Obsidian"))
-        #expect(prompt.user.contains("Sam: Can you send the launch note today?"))
-        #expect(prompt.user.contains("Before cursor:\nYeah I can"))
-    }
-
-    @Test("Word prompt includes trace safe document title shape")
-    func wordPromptIncludesTraceSafeDocumentTitleShape() {
+    @Test("Word prompt stays focused on the current field fragment")
+    func wordPromptStaysFocusedOnCurrentFieldFragment() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 5)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "Lau",
-            documentTitleShape: DocumentTitleShape.from(windowTitle: "Launch Plan.md *"),
             mode: .wordCompletion
         ))
 
-        #expect(prompt.system.contains("Document/window title shape"))
+        #expect(!prompt.system.contains("Document/window title shape"))
+        #expect(!prompt.system.contains("Visible page context"))
         #expect(prompt.system.contains("Tab inserts only this visible suffix"))
         #expect(prompt.system.contains("transi -> tion"))
         #expect(prompt.system.contains("qui -> etly"))
@@ -246,7 +168,7 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Do not return tion for redac"))
         #expect(prompt.system.contains("privacy note should stay redac"))
         #expect(prompt.system.contains("Never return tion unless it completes the visible word"))
-        #expect(prompt.system.contains("file extension md"))
+        #expect(!prompt.system.contains("file extension md"))
         #expect(!prompt.system.contains("Launch"))
         #expect(!prompt.system.contains("Plan"))
     }
@@ -394,7 +316,7 @@ struct CompletionPromptBuilderTests {
 
         #expect(prompt.system.contains("Inline word completion"))
         #expect(prompt.system.contains("missing suffix"))
-        #expect(prompt.system.contains("complete the visible local word"))
+        #expect(!prompt.system.contains("complete the visible local word"))
         #expect(prompt.system.contains("return exactly <NO_SUGGESTION>"))
         #expect(prompt.system.contains("suffix would complete the wrong word"))
         #expect(prompt.system.contains("No spaces"))
@@ -422,25 +344,16 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.user.hasSuffix("Next 12-20 words, or <NO_SUGGESTION>:"))
     }
 
-    @Test("High word slider overrides short kept style for length")
-    func highWordSliderOverridesShortKeptStyleForLength() {
+    @Test("High word request keeps the configured length guidance")
+    func highWordRequestKeepsConfiguredLengthGuidance() {
         let builder = CompletionPromptBuilder(maxVisibleWords: 20)
         let prompt = builder.prompt(for: CompletionRequest(
             textBeforeCursor: "The onboarding note should make the setup feel clear and",
-            acceptedTextStyleSketch: AcceptedTextStyleSketch(
-                sampleCount: 22,
-                averageWordCount: 1.23,
-                terminalPunctuationRate: 0,
-                lowercaseStartRate: 1,
-                questionEndingRate: 0,
-                shortSuffixRate: 0.91
-            ),
             maxVisibleWords: 20
         ))
 
-        #expect(prompt.system.contains("Recent kept style sketch: avg 1.23 words"))
-        #expect(prompt.system.contains("Length setting overrides recent short-kept history"))
-        #expect(prompt.system.contains("not to shrink the suggestion below the high word-count target"))
+        #expect(prompt.system.contains("The candidate must be 12-20 words"))
+        #expect(!prompt.system.contains("Recent kept style sketch"))
         #expect(prompt.user.hasSuffix("Next 12-20 words, or <NO_SUGGESTION>:"))
     }
 

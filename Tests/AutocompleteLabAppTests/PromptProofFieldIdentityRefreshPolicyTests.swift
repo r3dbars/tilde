@@ -1,6 +1,7 @@
 import AutocompleteLabCore
 import Testing
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Prompt proof field identity refresh policy")
 struct PromptProofFieldIdentityRefreshPolicyTests {

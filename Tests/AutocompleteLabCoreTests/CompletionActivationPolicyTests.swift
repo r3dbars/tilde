@@ -212,8 +212,8 @@ struct CompletionActivationPolicyTests {
         ) == .block(.sensitiveContent))
     }
 
-    @Test("Trusted proof sensitive-content opt-in still keeps safety gates")
-    func trustedProofSensitiveContentOptInStillKeepsSafetyGates() {
+    @Test("Sensitive content cannot bypass shipping safety gates")
+    func sensitiveContentCannotBypassShippingSafetyGates() {
         let policy = CompletionActivationPolicy()
 
         #expect(policy.decision(
@@ -221,17 +221,15 @@ struct CompletionActivationPolicyTests {
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: false,
-            fieldKind: .multilineCompose,
-            allowsTrustedProofSensitiveContent: true
-        ) == .allow(.wordCompletion))
+            fieldKind: .multilineCompose
+        ) == .block(.sensitiveContent))
 
         #expect(policy.decision(
             textBeforeCursor: "Command line: make this setting con",
             textAfterCursor: "",
             isSecure: true,
             isFieldSuppressed: false,
-            fieldKind: .multilineCompose,
-            allowsTrustedProofSensitiveContent: true
+            fieldKind: .multilineCompose
         ) == .block(.secureField))
 
         #expect(policy.decision(
@@ -239,8 +237,7 @@ struct CompletionActivationPolicyTests {
             textAfterCursor: "",
             isSecure: false,
             isFieldSuppressed: true,
-            fieldKind: .multilineCompose,
-            allowsTrustedProofSensitiveContent: true
+            fieldKind: .multilineCompose
         ) == .block(.suppressedField))
     }
 

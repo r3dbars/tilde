@@ -383,9 +383,6 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
                 )
             ) { _, code in code }
         }
-        let proofMetadata = traceMetadata.merging(AutocompleteTraceProofMetadata.current) { _, current in
-            current
-        }
         let event = AutocompleteTraceEvent(
             timestamp: ISO8601DateFormatter().string(from: Date()),
             sessionID: sessionID,
@@ -436,7 +433,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             reason: reason,
             screenshotPath: screenshotPath,
             metadata: AutocompleteTracePrivacyFilter.metadata(
-                proofMetadata,
+                traceMetadata,
                 rawContentEnabled: rawContentEnabled
             )
         )

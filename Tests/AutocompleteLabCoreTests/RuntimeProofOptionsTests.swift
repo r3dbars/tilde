@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 struct RuntimeProofOptionsTests {
     @Test("Reads proof-only fast word completion disable flag")

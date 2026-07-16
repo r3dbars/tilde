@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Insertion verification timing policy")
 struct InsertionVerificationTimingPolicyTests {

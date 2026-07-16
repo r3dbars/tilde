@@ -5,50 +5,27 @@ import AutocompleteLabCore
 
 @Suite("App model runtime factory")
 struct AppModelRuntimeFactoryTests {
-    @Test("Migrates old one-word experiment assignment to the longer default")
-    func migratesOneWordExperimentAssignment() {
-        let defaults = temporaryDefaults()
-        defaults.set("length_1_word", forKey: AppModelRuntimeFactory.experimentArmDefaultsKey)
+    @Test("Shipping runtime keeps the fixed model and length configuration")
+    func shippingRuntimeKeepsFixedModelAndLengthConfiguration() {
+        let bundle = AppModelRuntimeFactory.makeRuntime(
+            environment: [
+                "AUTOCOMPLETE_LAB_EXPERIMENT_ARM": "length_1_word",
+                "AUTOCOMPLETE_LAB_VISIBLE_WORDS": "20",
+                "AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS": "48",
+                "AUTOCOMPLETE_LAB_MODEL": "qwen35-9b"
+            ]
+        )
 
-        let bundle = AppModelRuntimeFactory.makeRuntime(environment: [:], defaults: defaults)
-
-        #expect(bundle.experimentArm == .length3Word)
+        #expect(bundle.bootstrapPlan.preferredAsset == .gemma4E4BItOptiQMLX)
+        #expect(bundle.lengthConfiguration == .default)
         #expect(bundle.lengthConfiguration.maxVisibleWords == 8)
         #expect(bundle.lengthConfiguration.maxGeneratedTokens == 20)
-        #expect(defaults.string(forKey: AppModelRuntimeFactory.experimentArmDefaultsKey) == "length_3_word")
-    }
-
-    @Test("Keeps explicit one-word environment override")
-    func keepsExplicitOneWordEnvironmentOverride() {
-        let defaults = temporaryDefaults()
-
-        let bundle = AppModelRuntimeFactory.makeRuntime(
-            environment: ["AUTOCOMPLETE_LAB_EXPERIMENT_ARM": "length_1_word"],
-            defaults: defaults
-        )
-
-        #expect(bundle.experimentArm == .length1Word)
-        #expect(bundle.lengthConfiguration.maxVisibleWords == 1)
-        #expect(bundle.lengthConfiguration.maxGeneratedTokens == 4)
-        #expect(defaults.string(forKey: AppModelRuntimeFactory.experimentArmDefaultsKey) == "length_1_word")
-    }
-
-    @Test("Accepts explicit twenty-word length override")
-    func acceptsExplicitTwentyWordLengthOverride() {
-        let defaults = temporaryDefaults()
-
-        let bundle = AppModelRuntimeFactory.makeRuntime(
-            environment: ["AUTOCOMPLETE_LAB_VISIBLE_WORDS": "20"],
-            defaults: defaults
-        )
-
-        #expect(bundle.lengthConfiguration.maxVisibleWords == 20)
-        #expect(bundle.lengthConfiguration.maxGeneratedTokens == 44)
+        #expect(bundle.diagnosticsMetadata["experimentArm"] == nil)
+        #expect(bundle.diagnosticsMetadata["modelOverride"] == nil)
     }
 
     @Test("Uses SteadyType model root override and unavailable runtime for missing model")
     func usesModelRootOverrideAndUnavailableRuntimeForMissingModel() async {
-        let defaults = temporaryDefaults()
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("steadytype-model-root-\(UUID().uuidString)", isDirectory: true)
         defer {
@@ -56,8 +33,7 @@ struct AppModelRuntimeFactoryTests {
         }
 
         let bundle = AppModelRuntimeFactory.makeRuntime(
-            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path],
-            defaults: defaults
+            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path]
         )
 
         #expect(bundle.modelDirectoryURL.path.contains("/Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit"))
@@ -68,7 +44,6 @@ struct AppModelRuntimeFactoryTests {
 
     @Test("Uses unavailable runtime and repair state for invalid model folder")
     func usesUnavailableRuntimeAndRepairStateForInvalidModelFolder() async throws {
-        let defaults = temporaryDefaults()
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("steadytype-invalid-model-root-\(UUID().uuidString)", isDirectory: true)
         defer {
@@ -76,8 +51,7 @@ struct AppModelRuntimeFactoryTests {
         }
 
         let initialBundle = AppModelRuntimeFactory.makeRuntime(
-            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path],
-            defaults: defaults
+            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path]
         )
         try FileManager.default.createDirectory(
             at: initialBundle.modelDirectoryURL,
@@ -86,8 +60,7 @@ struct AppModelRuntimeFactoryTests {
         try Data("{}".utf8).write(to: initialBundle.modelDirectoryURL.appendingPathComponent("config.json"))
 
         let bundle = AppModelRuntimeFactory.makeRuntime(
-            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path],
-            defaults: defaults
+            environment: ["AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path]
         )
         let state = await bundle.runtime.state
         let report = bundle.bootstrapPlan.readinessReport(for: state)
@@ -101,7 +74,6 @@ struct AppModelRuntimeFactoryTests {
 
     @Test("Production runtime ignores mutable model environment overrides")
     func productionRuntimeIgnoresMutableModelEnvironmentOverrides() {
-        let defaults = temporaryDefaults()
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("steadytype-production-model-root-\(UUID().uuidString)", isDirectory: true)
         defer {
@@ -113,11 +85,9 @@ struct AppModelRuntimeFactoryTests {
                 "AUTOCOMPLETE_LAB_MODEL": "qwen35-9b",
                 "AUTOCOMPLETE_LAB_MODEL_ROOT": rootURL.path
             ],
-            defaults: defaults,
             allowEnvironmentOverrides: false
         )
 
-        #expect(bundle.modelOverrideName == nil)
         #expect(bundle.bootstrapPlan.preferredAsset == .gemma4E4BItOptiQMLX)
         #expect(!bundle.modelDirectoryURL.path.hasPrefix(rootURL.path))
     }
@@ -423,13 +393,6 @@ struct AppModelRuntimeFactoryTests {
             checksum: countingChecksum
         ) == "integrity receipt checksum mismatch for model.safetensors")
         #expect(checksummedFiles.contains("model.safetensors"))
-    }
-
-    private func temporaryDefaults() -> UserDefaults {
-        let suiteName = "autocomplete-app-model-runtime-factory-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
     }
 
     private func smallSourceBackedManifest() -> LocalModelAssetManifest {

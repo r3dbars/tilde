@@ -7,5 +7,6 @@ This target holds pure Swift behavior.
 - No model runtime process management.
 - Add unit tests for every behavior change.
 - Runtime choice policy can live here, but native runtime bindings belong outside pure product logic.
+- Keep app-unreachable experiments, proof harnesses, mocks, and replay behavior in `AutocompleteLabResearch`.
 - Text handling should preserve Unicode correctly.
 - Coordinate conversion should stay tested because Accessibility and AppKit use different origins.

@@ -316,7 +316,7 @@ proof_source_paths_for_target() {
 
   local paths="Package.swift Package.resolved Sources"
   if [[ "${TARGET_BUNDLE:-}" != "com.anthropic.claude-code" ]]; then
-    paths+=" :!Sources/AutocompleteLabCore/Configuration/ClaudeCodeTerminalHostProofPolicy.swift"
+    paths+=" :!Sources/AutocompleteLabResearch/ClaudeCodeTerminalHostProofPolicy.swift"
   fi
   printf '%s' "$paths"
 }

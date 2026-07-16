@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Visible suggestion persistence policy")
 struct VisibleSuggestionPersistencePolicyTests {
@@ -173,7 +174,7 @@ struct VisibleSuggestionPersistencePolicyTests {
 
     @Test("preserves active Codex proof suggestions through AX target churn")
     func preservesActiveCodexProofSuggestionsThroughAXTargetChurn() {
-        let policy = VisibleSuggestionPersistencePolicy()
+        let policy = PromptProofTargetGeometryPersistencePolicy()
         let shownFieldIdentity = FocusedFieldIdentity(
             bundleIdentifier: "com.openai.codex",
             processIdentifier: 42,
@@ -186,68 +187,60 @@ struct VisibleSuggestionPersistencePolicyTests {
         )
         let proofText = "AUTOCOMPLETE_LAB_CODEX_PROOF write a tiny test"
 
-        #expect(policy.shouldPreserveDuringGeometryInvalidation(
-            invalidationReason: .caretChanged,
+        #expect(policy.shouldPreserve(
+            proofModeEnabled: true,
+            proofBundleIdentifier: "com.openai.codex",
+            proofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF",
             appBundleIdentifier: "com.openai.codex",
             fieldIdentity: refreshedFieldIdentity,
-            currentSuggestionBundleIdentifier: "com.openai.codex",
             currentSuggestionFieldIdentity: shownFieldIdentity,
             currentSuggestionTextBeforeCursor: proofText,
             currentSuggestionAgeMilliseconds: 89,
             isInvalidatedByUserTyping: false,
             textBeforeCursor: proofText,
-            textAfterCursor: "",
-            promptProofModeEnabled: true,
-            promptProofBundleIdentifier: "com.openai.codex",
-            promptProofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF"
+            textAfterCursor: ""
         ))
 
-        #expect(policy.shouldPreserveDuringGeometryInvalidation(
-            invalidationReason: .caretChanged,
+        #expect(policy.shouldPreserve(
+            proofModeEnabled: true,
+            proofBundleIdentifier: "com.openai.codex",
+            proofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF",
             appBundleIdentifier: "com.openai.codex",
             fieldIdentity: refreshedFieldIdentity,
-            currentSuggestionBundleIdentifier: "com.openai.codex",
             currentSuggestionFieldIdentity: shownFieldIdentity,
             currentSuggestionTextBeforeCursor: proofText,
             currentSuggestionAgeMilliseconds: 8_000,
             isInvalidatedByUserTyping: false,
             textBeforeCursor: proofText,
-            textAfterCursor: "",
-            promptProofModeEnabled: true,
-            promptProofBundleIdentifier: "com.openai.codex",
-            promptProofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF"
+            textAfterCursor: ""
         ))
 
-        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
-            invalidationReason: .caretChanged,
+        #expect(!policy.shouldPreserve(
+            proofModeEnabled: true,
+            proofBundleIdentifier: "com.openai.codex",
+            proofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF",
             appBundleIdentifier: "com.openai.codex",
             fieldIdentity: refreshedFieldIdentity,
-            currentSuggestionBundleIdentifier: "com.openai.codex",
             currentSuggestionFieldIdentity: shownFieldIdentity,
             currentSuggestionTextBeforeCursor: proofText,
             currentSuggestionAgeMilliseconds: 10_001,
             isInvalidatedByUserTyping: false,
             textBeforeCursor: proofText,
-            textAfterCursor: "",
-            promptProofModeEnabled: true,
-            promptProofBundleIdentifier: "com.openai.codex",
-            promptProofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF"
+            textAfterCursor: ""
         ))
 
-        #expect(!policy.shouldPreserveDuringGeometryInvalidation(
-            invalidationReason: .caretChanged,
+        #expect(!policy.shouldPreserve(
+            proofModeEnabled: true,
+            proofBundleIdentifier: "com.openai.codex",
+            proofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF",
             appBundleIdentifier: "com.openai.codex",
             fieldIdentity: refreshedFieldIdentity,
-            currentSuggestionBundleIdentifier: "com.openai.codex",
             currentSuggestionFieldIdentity: shownFieldIdentity,
             currentSuggestionTextBeforeCursor: proofText,
             currentSuggestionAgeMilliseconds: 89,
             isInvalidatedByUserTyping: true,
             textBeforeCursor: proofText,
-            textAfterCursor: "",
-            promptProofModeEnabled: true,
-            promptProofBundleIdentifier: "com.openai.codex",
-            promptProofMarker: "AUTOCOMPLETE_LAB_CODEX_PROOF"
+            textAfterCursor: ""
         ))
     }
 

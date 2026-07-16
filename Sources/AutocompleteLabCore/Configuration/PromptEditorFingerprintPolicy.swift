@@ -25,12 +25,7 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         role: String?,
         fingerprintText: String,
         elementRect: CGRect?,
-        windowRect: CGRect?,
-        proofModeEnabled: Bool = false,
-        textBeforeCursor: String = "",
-        textAfterCursor: String = "",
-        selectedTextLength: Int = 0,
-        codexProofMarker: String = "AUTOCOMPLETE_LAB_CODEX_PROOF"
+        windowRect: CGRect?
     ) -> PromptEditorFingerprintDecision {
         guard Self.dogfoodBundleIdentifiers.contains(bundleIdentifier) else {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "non-dogfood-profile")
@@ -41,23 +36,7 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         }
 
         if bundleIdentifier == "com.openai.codex",
-           proofModeEnabled,
            role == "AXTextArea",
-           selectedTextLength == 0,
-           textAfterCursor.isEmpty,
-           !codexProofMarker.isEmpty,
-           textBeforeCursor.contains(codexProofMarker) {
-            return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-proof-marker")
-        }
-
-        guard bundleIdentifier == "com.openai.codex" || proofModeEnabled else {
-            return PromptEditorFingerprintDecision(canSuggest: false, reason: "prompt-proof-mode-required")
-        }
-
-        if bundleIdentifier == "com.openai.codex",
-           role == "AXTextArea",
-           selectedTextLength == 0,
-           textAfterCursor.isEmpty,
            elementRect != nil {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-text-area")
         }

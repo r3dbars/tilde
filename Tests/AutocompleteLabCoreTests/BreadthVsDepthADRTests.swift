@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 // Locks the invariants recorded in docs/product/adr/0001-breadth-vs-depth.md.
 //

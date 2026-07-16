@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Local completion engine")
 struct LocalCompletionEngineTests {
@@ -14,7 +15,7 @@ struct LocalCompletionEngineTests {
         )
 
         let configuration = await runner.lastConfiguration
-        #expect(configuration?.model == .qwen35FourB)
+        #expect(configuration?.model == .gemma4E4BItOptiQ)
         #expect(configuration?.maxGeneratedTokens == 20)
         #expect(configuration?.maxVisibleWords == 8)
         #expect(configuration?.reasoningEnabled == false)

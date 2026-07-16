@@ -383,19 +383,14 @@ struct MLXModelRuntimeWarmGateTests {
         #expect(selection.selectionSource == "fast-word-completion")
     }
 
-    @Test("Local word completion fallback uses visible page words")
-    func localWordCompletionFallbackUsesVisiblePageWords() throws {
-        let context = try #require(VisiblePageContext(text: "Obsidian vault uses local markdown notes"))
+    @Test("Local word completion fallback does not invent unknown remembered terms")
+    func localWordCompletionFallbackDoesNotInventUnknownRememberedTerms() {
         let request = CompletionRequest(
             textBeforeCursor: "Open Obsid",
-            visiblePageContext: context,
             mode: .wordCompletion
         )
 
-        let selection = try #require(MLXModelRuntime.localWordCompletionFallbackSelection(for: request))
-
-        #expect(selection.suggestion?.visibleText == "ian")
-        #expect(selection.selectionSource == "fast-word-completion")
+        #expect(MLXModelRuntime.localWordCompletionFallbackSelection(for: request) == nil)
     }
 
     @Test("Phrase continuation partial words can fall back to local word completion")

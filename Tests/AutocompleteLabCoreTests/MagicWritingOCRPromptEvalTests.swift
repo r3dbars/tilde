@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Magic writing OCR prompt eval")
 struct MagicWritingOCRPromptEvalTests {
@@ -16,13 +17,16 @@ struct MagicWritingOCRPromptEvalTests {
             The safest next step is to verify the trace
             """
         ))
-        let prompt = CompletionPromptBuilder(maxVisibleWords: 8).prompt(for: CompletionRequest(
+        let request = CompletionRequest(
             textBeforeCursor: activeLine,
             appBundleIdentifier: "com.apple.Notes",
-            visiblePageContext: pageContext,
             maxVisibleWords: 8,
             mode: .phraseContinuation
-        ))
+        )
+        let prompt = ResearchCompletionPromptBuilder(maxVisibleWords: 8).prompt(
+            for: request,
+            visiblePageContext: pageContext
+        )
 
         #expect(prompt.user.contains("Decision: keep OCR local and filtered"))
         #expect(!prompt.user.contains("The safest next step is to verify the trace"))
@@ -34,7 +38,7 @@ struct MagicWritingOCRPromptEvalTests {
         let scenarios = MagicWritingScenario.hundredCaseCorpus
         #expect(scenarios.count == 100)
 
-        let builder = CompletionPromptBuilder(maxVisibleWords: 8)
+        let builder = ResearchCompletionPromptBuilder(maxVisibleWords: 8)
         let tuning = SuggestionTuning(aggressivenessLevel: 5, maxVisibleWords: 8)
         let activation = tuning.activationPolicy(supportPace: .eager)
         let trigger = tuning.triggerPolicy(supportPace: .eager)
@@ -50,11 +54,10 @@ struct MagicWritingOCRPromptEvalTests {
             let request = CompletionRequest(
                 textBeforeCursor: scenario.textBeforeCursor,
                 appBundleIdentifier: scenario.bundleIdentifier,
-                visiblePageContext: pageContext,
                 maxVisibleWords: 8,
                 mode: scenario.mode
             )
-            let prompt = builder.prompt(for: request)
+            let prompt = builder.prompt(for: request, visiblePageContext: pageContext)
             let activationDecision = activation.decision(
                 textBeforeCursor: scenario.textBeforeCursor,
                 textAfterCursor: "",
@@ -79,10 +82,10 @@ struct MagicWritingOCRPromptEvalTests {
                 continue
             }
 
-            let fastWordSelection = ranker.selection(
-                for: scenario.textBeforeCursor,
-                recentWords: pageContext.completionCandidateWords
+            let researchRanker = WordCompletionCandidateRanker(
+                staticWords: pageContext.completionCandidateWords + ranker.staticWords
             )
+            let fastWordSelection = researchRanker.selection(for: scenario.textBeforeCursor)
             if let expectedFastSuffix = scenario.expectedFastSuffix {
                 #expect(
                     fastWordSelection.suggestion?.visibleText == expectedFastSuffix,

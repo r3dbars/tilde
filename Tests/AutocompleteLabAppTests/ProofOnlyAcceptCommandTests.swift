@@ -1,6 +1,7 @@
 import Testing
 import AutocompleteLabCore
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Proof-only accept command")
 struct ProofOnlyAcceptCommandTests {

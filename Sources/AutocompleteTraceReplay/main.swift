@@ -1,4 +1,5 @@
 import AutocompleteLabCore
+import AutocompleteLabResearch
 import Foundation
 
 let arguments = CommandLine.arguments.dropFirst()

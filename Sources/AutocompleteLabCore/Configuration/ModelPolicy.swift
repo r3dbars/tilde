@@ -73,17 +73,6 @@ public struct CompletionModelPolicy: Equatable, Sendable {
         reasoningEnabled: false
     )
 
-    public static let smallDraftExperiment = CompletionModelPolicy(
-        model: .qwen3Medium,
-        runtimeOwnership: .appOwnedEmbedded,
-        minimumMemoryGB: 8,
-        maxGeneratedTokens: 16,
-        maxVisibleWords: 5,
-        debounceMilliseconds: 10,
-        targetLatencyMilliseconds: 35,
-        reasoningEnabled: false
-    )
-
     public func supports(_ hardware: HardwareProfile) -> Bool {
         hardware.isAppleSilicon && hardware.memoryGB >= minimumMemoryGB
     }
@@ -127,16 +116,13 @@ public struct CompletionModelPolicy: Equatable, Sendable {
 }
 
 public struct CompletionLengthConfiguration: Equatable, Sendable {
-    public let experimentArm: AutocompleteExperimentArm
     public let maxVisibleWords: Int
     public let maxGeneratedTokens: Int
 
     public init(
-        experimentArm: AutocompleteExperimentArm = .length3Word,
         maxVisibleWords: Int,
         maxGeneratedTokens: Int? = nil
     ) {
-        self.experimentArm = experimentArm
         let visibleWords = min(
             CompletionModelPolicy.maximumVisibleWords,
             max(CompletionModelPolicy.minimumVisibleWords, maxVisibleWords)
@@ -148,7 +134,6 @@ public struct CompletionLengthConfiguration: Equatable, Sendable {
     }
 
     public static let `default` = CompletionLengthConfiguration(
-        experimentArm: .length3Word,
         maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords,
         maxGeneratedTokens: CompletionModelPolicy.mvp.maxGeneratedTokens
     )
@@ -157,120 +142,7 @@ public struct CompletionLengthConfiguration: Equatable, Sendable {
         "\(maxVisibleWords) words / \(maxGeneratedTokens) tokens"
     }
 
-    public static func fromEnvironment(_ environment: [String: String]) -> CompletionLengthConfiguration {
-        let arm = AutocompleteExperimentArm.fromEnvironment(environment)
-        let visibleWords = parsedInt(environment["AUTOCOMPLETE_LAB_VISIBLE_WORDS"])
-        let generatedTokens = parsedInt(environment["AUTOCOMPLETE_LAB_MAX_GENERATED_TOKENS"])
-        let hasExperimentOverride = environment["AUTOCOMPLETE_LAB_EXPERIMENT_ARM"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty == false
-
-        guard hasExperimentOverride || visibleWords != nil || generatedTokens != nil else {
-            return CompletionLengthConfiguration(
-                experimentArm: arm,
-                maxVisibleWords: CompletionModelPolicy.mvp.maxVisibleWords,
-                maxGeneratedTokens: CompletionModelPolicy.mvp.maxGeneratedTokens
-            )
-        }
-
-        return CompletionLengthConfiguration(
-            experimentArm: arm,
-            maxVisibleWords: visibleWords ?? arm.defaultMaxVisibleWords,
-            maxGeneratedTokens: generatedTokens ?? (visibleWords == nil ? arm.defaultMaxGeneratedTokens : nil)
-        )
-    }
-
-    private static func parsedInt(_ value: String?) -> Int? {
-        guard let value else {
-            return nil
-        }
-
-        return Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
-    }
-
     private static func defaultGeneratedTokens(forVisibleWords visibleWords: Int) -> Int {
         CompletionModelPolicy.generatedTokenBudget(forVisibleWords: visibleWords)
-    }
-}
-
-public enum AutocompleteExperimentArm: String, Codable, Equatable, Sendable, CaseIterable {
-    case length3Word = "length_3_word"
-    case length1Word = "length_1_word"
-
-    public var defaultMaxVisibleWords: Int {
-        switch self {
-        case .length3Word:
-            8
-        case .length1Word:
-            1
-        }
-    }
-
-    public var defaultMaxGeneratedTokens: Int {
-        switch self {
-        case .length3Word:
-            20
-        case .length1Word:
-            4
-        }
-    }
-
-    public var lengthConfiguration: CompletionLengthConfiguration {
-        CompletionLengthConfiguration(
-            experimentArm: self,
-            maxVisibleWords: defaultMaxVisibleWords,
-            maxGeneratedTokens: defaultMaxGeneratedTokens
-        )
-    }
-
-    public static func fromEnvironment(_ environment: [String: String]) -> AutocompleteExperimentArm {
-        guard let rawValue = environment["AUTOCOMPLETE_LAB_EXPERIMENT_ARM"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !rawValue.isEmpty else {
-            return .length3Word
-        }
-
-        return AutocompleteExperimentArm(rawValue: rawValue) ?? .length3Word
-    }
-}
-
-public struct AutocompleteExperimentArmSelection: Equatable, Sendable {
-    public enum Source: String, Equatable, Sendable {
-        case environment
-        case persisted
-        case assigned
-    }
-
-    public let arm: AutocompleteExperimentArm
-    public let source: Source
-
-    public var shouldPersist: Bool {
-        source != .persisted
-    }
-
-    public init(arm: AutocompleteExperimentArm, source: Source) {
-        self.arm = arm
-        self.source = source
-    }
-
-    public static func current(
-        environment: [String: String],
-        persistedRawValue: String?,
-        chooseArm: @Sendable () -> AutocompleteExperimentArm = {
-            Bool.random() ? .length1Word : .length3Word
-        }
-    ) -> AutocompleteExperimentArmSelection {
-        if let rawValue = environment["AUTOCOMPLETE_LAB_EXPERIMENT_ARM"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            let arm = AutocompleteExperimentArm(rawValue: rawValue) {
-            return AutocompleteExperimentArmSelection(arm: arm, source: .environment)
-        }
-
-        if let rawValue = persistedRawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let arm = AutocompleteExperimentArm(rawValue: rawValue) {
-            return AutocompleteExperimentArmSelection(arm: arm, source: .persisted)
-        }
-
-        return AutocompleteExperimentArmSelection(arm: chooseArm(), source: .assigned)
     }
 }

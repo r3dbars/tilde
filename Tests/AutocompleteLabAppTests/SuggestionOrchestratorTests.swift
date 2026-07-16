@@ -3,6 +3,7 @@ import CoreGraphics
 import Testing
 import AutocompleteLabCore
 @testable import AutocompleteLabApp
+@testable import AutocompleteLabResearch
 
 @Suite("Suggestion orchestrator")
 struct SuggestionOrchestratorTests {
@@ -17,7 +18,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentityDescription: "field:compose",
             fieldKind: .multilineCompose,
             behaviorProfileID: .docsProse,
-            documentTitleShape: DocumentTitleShape.from(windowTitle: "Design notes"),
             maxVisibleWords: 7,
             mode: .sentenceContinuation,
             suggestionID: "suggestion-1"
@@ -33,10 +33,9 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Rich input builds request profile metadata and style sketch")
-    func richInputBuildsRequestProfileMetadataAndStyleSketch() {
+    @Test("Rich input builds a request from focused-field context")
+    func richInputBuildsRequestFromFocusedFieldContext() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
-        var styleStore = AcceptedTextStyleMemoryStore()
         let field = FocusedFieldIdentity(
             bundleIdentifier: "com.example.editor",
             processIdentifier: 42,
@@ -48,35 +47,22 @@ struct SuggestionOrchestratorTests {
             textAfterCursor: "?",
             windowTitle: "Plan.md"
         )
-        let styleKey = orchestrator.acceptedTextStyleKey(
-            appBundleIdentifier: "com.example.editor",
-            fieldKind: classification.kind,
-            textBeforeCursor: context.textBeforeCursor
-        )
-        let sketch = styleStore.recordKeptText(" finish this.", key: styleKey)
-
         let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
             context: context,
             appBundleIdentifier: "com.example.editor",
             fieldIdentity: field,
             fieldClassification: classification,
-            acceptedTextStyleSketch: sketch,
-            visiblePageContext: VisiblePageContext(text: "Launch Plan\nKeep this local and fast."),
             maxVisibleWords: 7,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .quiet)
         ))
 
-        #expect(styleKey.behaviorProfile == AutocompleteBehaviorProfileID.bullets.rawValue)
         #expect(orchestration.request.textBeforeCursor == "- Can we")
         #expect(orchestration.request.textAfterCursor == "?")
         #expect(orchestration.request.appBundleIdentifier == "com.example.editor")
         #expect(orchestration.request.fieldIdentityDescription == field.traceDescription)
         #expect(orchestration.request.fieldKind == .multilineCompose)
         #expect(orchestration.request.behaviorProfileID == .bullets)
-        #expect(orchestration.request.acceptedTextStyleSketch == sketch)
-        #expect(orchestration.request.documentTitleShape?.fileExtension == "md")
-        #expect(orchestration.request.visiblePageContext?.text.contains("Launch Plan") == true)
         #expect(orchestration.request.maxVisibleWords == 7)
         #expect(orchestration.request.mode == .phraseContinuation)
         #expect(orchestration.fieldIdentityDescription == field.traceDescription)
@@ -86,8 +72,6 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["suggestionAggressiveness"] == "quiet")
         #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
         #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
-        #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
-        #expect(orchestration.requestMetadata["visiblePageContextCaptureScope"] == "visible_screen")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
         #expect(orchestration.requestMetadata["runtimeSessionCacheResetReason"] == "no-prior-request")
         #expect(orchestrator.allows(orchestration.ticket))
@@ -109,8 +93,6 @@ struct SuggestionOrchestratorTests {
             appBundleIdentifier: "com.example.editor",
             fieldIdentity: field,
             fieldClassification: classification,
-            acceptedTextStyleSketch: nil,
-            visiblePageContext: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .normal)
@@ -120,8 +102,6 @@ struct SuggestionOrchestratorTests {
             appBundleIdentifier: "com.example.editor",
             fieldIdentity: field,
             fieldClassification: classification,
-            acceptedTextStyleSketch: nil,
-            visiblePageContext: nil,
             maxVisibleWords: 5,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .normal)
@@ -413,7 +393,7 @@ struct SuggestionOrchestratorTests {
             wordCompletionRanker: WordCompletionCandidateRanker(staticWords: ["dictation"])
         )
 
-        let selection = orchestrator.fastWordSelection(for: "dic", recentWords: [])
+        let selection = orchestrator.fastWordSelection(for: "dic")
 
         #expect(selection.suggestion?.visibleText == "tation")
         #expect(selection.candidateCount == 1)
@@ -427,12 +407,10 @@ struct SuggestionOrchestratorTests {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
 
         let quietSelection = orchestrator.fastWordSelection(
-            for: "Smoke proof feels",
-            recentWords: []
+            for: "Smoke proof feels"
         )
         let proactiveSelection = orchestrator.fastWordSelection(
             for: "Smoke proof feels",
-            recentWords: [],
             allowPredictiveFallback: true
         )
 
@@ -467,36 +445,32 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Fast phrase selection wires doc-local corpus before canned bridges")
-    func fastPhraseSelectionUsesDocLocalCorpusBeforeCannedBridges() {
+    @Test("Fast phrase selection does not retain prior field text")
+    func fastPhraseSelectionDoesNotRetainPriorFieldText() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let field = testFieldIdentity(elementIdentifier: 7)
         let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
 
         _ = orchestrator.beginRequest(SuggestionRequestInput(
             context: makeContext(
-                textBeforeCursor: "The onboarding screen should make permission feel clear before setup",
+                textBeforeCursor: "Please make this guide land cleanly",
                 textAfterCursor: ""
             ),
             appBundleIdentifier: field.bundleIdentifier,
             fieldIdentity: field,
             fieldClassification: classification,
-            acceptedTextStyleSketch: nil,
-            visiblePageContext: nil,
             maxVisibleWords: 8,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .eager)
         ))
         let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
             context: makeContext(
-                textBeforeCursor: "The onboarding screen should make",
+                textBeforeCursor: "Please make this",
                 textAfterCursor: ""
             ),
             appBundleIdentifier: field.bundleIdentifier,
             fieldIdentity: field,
             fieldClassification: classification,
-            acceptedTextStyleSketch: nil,
-            visiblePageContext: nil,
             maxVisibleWords: 8,
             requestMode: .phraseContinuation,
             suggestionTuning: SuggestionTuning(aggressiveness: .eager)
@@ -504,110 +478,14 @@ struct SuggestionOrchestratorTests {
 
         let selection = orchestrator.fastPhraseSelection(
             for: orchestration.request.textBeforeCursor,
-            docLocalContextTexts: orchestration.docLocalContextTexts,
             behaviorProfileID: orchestration.request.behaviorProfileID,
             maxVisibleWords: orchestration.request.maxVisibleWords,
             allowPredictiveFallback: true
         )
 
-        #expect(selection.suggestion?.visibleText == " permission feel clear before setup")
-        #expect(selection.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
-        #expect(selection.traceMetadata["docLocalNGramMatch"] == "order-5-local-context")
-        #expect(SuggestionStatusText.shown(
-            mode: orchestration.request.mode,
-            triggerReason: "predictive-phrase-fallback",
-            latencyMilliseconds: 0,
-            metadata: selection.traceMetadata
-        ) == "Shown: phrase doc local 0ms")
-    }
-
-    @MainActor
-    @Test("Fast phrase selection picks doc-local n-gram over canned bridge when both match")
-    func fastPhraseSelectionPrefersDocLocalNGramOverCannedBridgeWhenBothMatch() {
-        // "we should probably" is a known canned-bridge context suffix (→ "keep it simple").
-        // Priming doc-local with a different continuation for the same prefix verifies that
-        // the n-gram source wins and the canned bridge is never reached.
-        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
-        let field = testFieldIdentity(elementIdentifier: 7)
-        let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
-
-        // Prime doc-local corpus with a sentence that starts with "we should probably".
-        _ = orchestrator.beginRequest(SuggestionRequestInput(
-            context: makeContext(
-                textBeforeCursor: "we should probably validate this path early and often",
-                textAfterCursor: ""
-            ),
-            appBundleIdentifier: field.bundleIdentifier,
-            fieldIdentity: field,
-            fieldClassification: classification,
-            acceptedTextStyleSketch: nil,
-            visiblePageContext: nil,
-            maxVisibleWords: 8,
-            requestMode: .phraseContinuation,
-            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
-        ))
-        let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
-            context: makeContext(
-                textBeforeCursor: "we should probably",
-                textAfterCursor: ""
-            ),
-            appBundleIdentifier: field.bundleIdentifier,
-            fieldIdentity: field,
-            fieldClassification: classification,
-            acceptedTextStyleSketch: nil,
-            visiblePageContext: nil,
-            maxVisibleWords: 8,
-            requestMode: .phraseContinuation,
-            suggestionTuning: SuggestionTuning(aggressiveness: .eager)
-        ))
-
-        let selection = orchestrator.fastPhraseSelection(
-            for: orchestration.request.textBeforeCursor,
-            docLocalContextTexts: orchestration.docLocalContextTexts,
-            behaviorProfileID: orchestration.request.behaviorProfileID,
-            maxVisibleWords: orchestration.request.maxVisibleWords,
-            allowPredictiveFallback: true
-        )
-
-        // The doc-local n-gram continuation wins over the canned " keep it simple".
-        #expect(selection.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
-        #expect(selection.traceMetadata["candidateSelectionSource"] != "canned-bridge")
-        #expect(selection.suggestion?.visibleText.hasPrefix(" validate") == true)
-    }
-
-    @MainActor
-    @Test("Fast phrase selection prefers the doc-local n-gram over a competing canned bridge")
-    func fastPhraseSelectionPrefersDocLocalNGramOverCompetingCannedBridge() {
-        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
-
-        // The phrase the canned bridge knows ("please make this" -> " clearer"): with no doc-local
-        // corpus the instant path falls through to the canned predictor.
-        let cannedOnly = orchestrator.fastPhraseSelection(
-            for: "Please make this",
-            behaviorProfileID: .docsProse,
-            maxVisibleWords: 8,
-            allowPredictiveFallback: true
-        )
-
-        #expect(cannedOnly.suggestion?.visibleText == " clearer")
-        #expect(cannedOnly.traceMetadata["candidateSelectionSource"] == "canned-bridge")
-        #expect(cannedOnly.traceMetadata["cannedBridgeMatch"] == "please make this")
-
-        // Same head, but now repeated in the doc-local corpus: the n-gram predictor is consulted
-        // first and wins, so the returned candidate is the corpus continuation, not the canned one.
-        let docLocal = orchestrator.fastPhraseSelection(
-            for: "Please make this",
-            docLocalContextTexts: ["Please make this guide land cleanly"],
-            behaviorProfileID: .docsProse,
-            maxVisibleWords: 8,
-            allowPredictiveFallback: true
-        )
-
-        #expect(docLocal.suggestion?.visibleText == " guide land cleanly")
-        #expect(docLocal.suggestion?.visibleText != " clearer")
-        #expect(docLocal.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
-        #expect(docLocal.traceMetadata["docLocalNGramMatch"] == "order-3-local-context")
-        #expect(docLocal.traceMetadata["cannedBridgeMatch"] == nil)
+        #expect(selection.suggestion?.visibleText == " clearer")
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "canned-bridge")
+        #expect(selection.traceMetadata["docLocalNGramMatch"] == nil)
     }
 
     @MainActor
@@ -634,87 +512,6 @@ struct SuggestionOrchestratorTests {
         #expect(proofSelection.traceMetadata["candidateSelectionSource"] == "canned-bridge")
         #expect(proofSelection.traceMetadata["cannedBridgeMatch"] == "please make this")
         #expect(proofSelection.traceMetadata["predictivePhraseMatch"] == nil)
-    }
-
-    @MainActor
-    @Test("Fast phrase fallback uses accepted-kept learning restraint")
-    func fastPhraseFallbackUsesAcceptedKeptLearningRestraint() throws {
-        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
-        let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit"))
-        let request = CompletionRequest(
-            textBeforeCursor: "I think what matters is",
-            textAfterCursor: "",
-            appBundleIdentifier: profile.bundleIdentifier,
-            fieldKind: .multilineCompose,
-            behaviorProfileID: .docsProse,
-            maxVisibleWords: 4,
-            mode: .phraseContinuation,
-            suggestionID: "fast-phrase-learning"
-        )
-        let key = acceptedAndKeptKey(
-            request: request,
-            fieldKind: .multilineCompose,
-            profile: profile
-        )
-
-        var rejectedStore = AcceptedAndKeptLearningStore(priorWeight: 1)
-        var rejectedSignal = rejectedStore.signal(for: key)
-        for offset in 0..<6 {
-            rejectedSignal = rejectedStore.record(
-                .rejected,
-                key: key,
-                now: Date(timeIntervalSince1970: Double(offset))
-            )
-        }
-
-        let rejectedDecision = orchestrator.fastPhraseFallbackLearningDecision(
-            acceptedAndKeptSignal: rejectedSignal,
-            probabilityThreshold: rejectedStore.probabilityThreshold(for: .phraseContinuation)
-        )
-
-        #expect(rejectedDecision.shouldSuppress)
-        #expect(rejectedDecision.reason == "fast-phrase-learning-restraint")
-        #expect(rejectedDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "true")
-        #expect(rejectedDecision.metadata["fastPhraseFallbackLearningThreshold"] == "0.300")
-        #expect(rejectedDecision.metadata["acceptedAndKeptSamples"] == "6")
-        #expect(rejectedDecision.metadata["acceptedAndKeptRejected"] == "6")
-
-        var earlyStore = AcceptedAndKeptLearningStore(priorWeight: 1)
-        var earlySignal = earlyStore.signal(for: key)
-        for offset in 0..<5 {
-            earlySignal = earlyStore.record(
-                .rejected,
-                key: key,
-                now: Date(timeIntervalSince1970: Double(offset))
-            )
-        }
-
-        let earlyDecision = orchestrator.fastPhraseFallbackLearningDecision(
-            acceptedAndKeptSignal: earlySignal,
-            probabilityThreshold: earlyStore.probabilityThreshold(for: .phraseContinuation)
-        )
-
-        #expect(!earlyDecision.shouldSuppress)
-        #expect(earlyDecision.reason == nil)
-        #expect(earlyDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "false")
-
-        var keptStore = AcceptedAndKeptLearningStore(priorWeight: 1)
-        var keptSignal = keptStore.signal(for: key)
-        for offset in 0..<6 {
-            keptSignal = keptStore.record(
-                .kept,
-                key: key,
-                now: Date(timeIntervalSince1970: Double(offset))
-            )
-        }
-
-        let keptDecision = orchestrator.fastPhraseFallbackLearningDecision(
-            acceptedAndKeptSignal: keptSignal,
-            probabilityThreshold: keptStore.probabilityThreshold(for: .phraseContinuation)
-        )
-
-        #expect(!keptDecision.shouldSuppress)
-        #expect(keptDecision.metadata["fastPhraseFallbackLearningSuppressed"] == "false")
     }
 
     @MainActor
@@ -749,14 +546,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "score"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let score = orchestrator.displayScore(
             suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
             request: request,
@@ -765,7 +554,6 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             triggerReason: "model-result",
             latencyMilliseconds: 400,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false
         )
 
@@ -780,8 +568,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Display score includes learning repetition and streaming instability")
-    func displayScoreIncludesLearningRepetitionAndStreamingInstability() throws {
+    @Test("Display score keeps fixed affinity while reflecting repetition and streaming instability")
+    func displayScoreKeepsFixedAffinityWithRepetitionAndStreamingInstability() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome"))
         let classification = AXFieldClassification(kind: .multilineCompose, reason: "test-compose")
@@ -795,17 +583,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "score-learning"
         )
-        let key = acceptedAndKeptKey(
-            request: request,
-            fieldKind: classification.kind,
-            profile: profile
-        )
-        var store = AcceptedAndKeptLearningStore(priorWeight: 1)
-        var signal = store.signal(for: key)
-        for offset in 0..<6 {
-            signal = store.record(.kept, key: key, now: Date(timeIntervalSince1970: Double(offset)))
-        }
-
         let score = orchestrator.displayScore(
             suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
             request: request,
@@ -814,15 +591,14 @@ struct SuggestionOrchestratorTests {
             profile: profile,
             triggerReason: "model-stream",
             latencyMilliseconds: 1_600,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: true
         )
 
-        #expect(score.utility > 0.70)
-        #expect(score.userAffinity > 0.15)
+        #expect(abs(score.utility - 0.74) < 0.001)
+        #expect(abs(score.userAffinity - 0.15) < 0.001)
         #expect(abs(score.repetition - 0.90) < 0.001)
         #expect(abs(score.instability - 0.50) < 0.001)
-        #expect(score.acceptedAndKeptSampleCount == 6)
+        #expect(score.acceptedAndKeptSampleCount == 0)
     }
 
     @MainActor
@@ -845,14 +621,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "late-final"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
             request: request,
@@ -862,7 +630,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 900,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
@@ -891,14 +658,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "first-visible-budget"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         func decide(latency: Int, firstVisible: Bool, scheduledDelay: Int = 0) -> SuggestionDisplayScoreDecision {
             orchestrator.displayScoreDecision(
                 suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
@@ -909,7 +668,6 @@ struct SuggestionOrchestratorTests {
                 fieldIdentity: field,
                 triggerReason: "model-result",
                 latencyMilliseconds: latency,
-                acceptedAndKeptSignal: signal,
                 isRepeatedMiss: false,
                 displayScorePolicy: DisplayScorePolicy(),
                 modelIsFirstVisibleSuggestion: firstVisible,
@@ -944,22 +702,6 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Doc-local corpus gate matches the predictor's aiChat willingness")
-    func docLocalCorpusGateMatchesPredictorWillingness() {
-        // aiChat must be remembered so the prompt-app prediction path has a corpus to read;
-        // otherwise DocLocalNGramPhrasePredictor.allowsPrediction is willing but starved.
-        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .aiChat))
-        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .docsProse))
-        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .notes))
-        #expect(SuggestionOrchestrator.allowsDocLocalCorpus(for: .bullets))
-        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .email))
-        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .casualChat))
-        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .coding))
-        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .forms))
-        #expect(!SuggestionOrchestrator.allowsDocLocalCorpus(for: .search))
-    }
-
-    @MainActor
     @Test("Max tuning still respects low-confidence thin-context suppression")
     func maxTuningStillRespectsLowConfidenceThinContextSuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
@@ -979,14 +721,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "max-thin-context"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let conservativeDisplay = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " ship this today", maxVisibleWords: 8),
             request: request,
@@ -996,7 +730,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 400,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
@@ -1009,7 +742,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 400,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
             suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
@@ -1045,13 +777,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "messages-late-chat"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
         let suggestion = CompletionSuggestion(text: " that sounds good to me", maxVisibleWords: 14)
 
         let conservativeDisplay = orchestrator.displayScoreDecision(
@@ -1063,7 +788,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 1_018,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
@@ -1076,7 +800,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 1_018,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: SuggestionTuning(aggressivenessLevel: 5).displayScorePolicy,
             suggestionTuning: SuggestionTuning(aggressivenessLevel: 5)
@@ -1091,8 +814,8 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
-    @Test("Codex no-submit proof candidates bypass final latency suppression")
-    func codexNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
+    @Test("Codex proof markers do not bypass shipping latency suppression")
+    func codexProofMarkersDoNotBypassShippingLatencySuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier))
         let field = FocusedFieldIdentity(
@@ -1110,14 +833,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "codex-proof-late-final"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
             request: request,
@@ -1127,19 +842,18 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 1_100,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
 
-        #expect(display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
-        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "codex-proof-no-submit")
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == nil)
     }
 
     @MainActor
-    @Test("Codex full-accept no-submit proof candidates bypass final latency suppression")
-    func codexFullAcceptNoSubmitProofCandidatesBypassFinalLatencySuppression() throws {
+    @Test("Codex proof profiles do not bypass shipping latency suppression")
+    func codexProofProfilesDoNotBypassShippingLatencySuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = try #require(
             CompatibilityProfileStore.mvp.profile(for: CodexProofFocusedTargetPolicy.bundleIdentifier)?
@@ -1163,14 +877,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "codex-full-accept-proof-late-final"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " land the proof before broadening the surface", maxVisibleWords: 8),
             request: request,
@@ -1180,19 +886,18 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 1_100,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
 
-        #expect(display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
-        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "codex-proof-no-submit")
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == nil)
     }
 
     @MainActor
-    @Test("Claude Code terminal host proof candidates bypass final latency suppression")
-    func claudeCodeTerminalHostProofCandidatesBypassFinalLatencySuppression() throws {
+    @Test("Claude Code proof profiles do not bypass shipping latency suppression")
+    func claudeCodeProofProfilesDoNotBypassShippingLatencySuppression() throws {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
         let profile = ClaudeCodeTerminalHostProofPolicy.proofProfile
         let field = FocusedFieldIdentity(
@@ -1210,14 +915,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "claude-code-terminal-proof-late-final"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " should feel instant without getting in the way", maxVisibleWords: 8),
             request: request,
@@ -1227,15 +924,14 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 1_600,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
 
-        #expect(display.decision.shouldDisplay)
-        #expect(display.metadata["displayScoreSuppressionReason"] != "too-slow-to-display")
+        #expect(!display.decision.shouldDisplay)
+        #expect(display.metadata["displayScoreSuppressionReason"] == "too-slow-to-display")
         #expect(display.metadata["completionConfidenceReasons"]?.contains("too-slow-to-display") == true)
-        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == "claude-code-terminal-host-proof")
+        #expect(display.metadata["displayScoreLatencySuppressionBypassed"] == nil)
     }
 
     @MainActor
@@ -1258,14 +954,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "late-stream"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " for the meeting", maxVisibleWords: 4),
             request: request,
@@ -1275,7 +963,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-stream",
             latencyMilliseconds: 900,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
@@ -1303,14 +990,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "daily-driver-repair"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " instant without getting in the way today now", maxVisibleWords: 8),
             request: request,
@@ -1320,7 +999,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 900,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
@@ -1379,14 +1057,6 @@ struct SuggestionOrchestratorTests {
             mode: .phraseContinuation,
             suggestionID: "score-prefix"
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " make this easier", maxVisibleWords: 4),
             request: request,
@@ -1396,7 +1066,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 400,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy(),
             now: now
@@ -1434,14 +1103,6 @@ struct SuggestionOrchestratorTests {
             processIdentifier: 42,
             elementIdentifier: 7
         )
-        let signal = AcceptedAndKeptLearningStore().signal(
-            for: acceptedAndKeptKey(
-                request: request,
-                fieldKind: classification.kind,
-                profile: profile
-            )
-        )
-
         let display = orchestrator.displayScoreDecision(
             suggestion: CompletionSuggestion(text: " a calmer start", maxVisibleWords: 4),
             request: request,
@@ -1451,7 +1112,6 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             triggerReason: "model-result",
             latencyMilliseconds: 900,
-            acceptedAndKeptSignal: signal,
             isRepeatedMiss: false,
             displayScorePolicy: DisplayScorePolicy()
         )
@@ -1840,19 +1500,6 @@ private struct FixedCompletionEngine: CompletionEngine {
     func suggestion(for request: CompletionRequest) async throws -> CompletionSuggestion? {
         CompletionSuggestion(text: text, maxVisibleWords: request.maxVisibleWords)
     }
-}
-
-private func acceptedAndKeptKey(
-    request: CompletionRequest,
-    fieldKind: AXFieldKind,
-    profile: CompatibilityProfile
-) -> AcceptedAndKeptLearningKey {
-    AcceptedAndKeptLearningKey(
-        appBundleIdentifier: request.appBundleIdentifier ?? profile.bundleIdentifier,
-        fieldKind: fieldKind,
-        requestMode: request.mode,
-        behaviorProfileID: request.behaviorProfile.id
-    )
 }
 
 private func testFieldIdentity(elementIdentifier: Int) -> FocusedFieldIdentity {

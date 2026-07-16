@@ -9,7 +9,6 @@ struct FocusPollingCadenceSignals {
     var isTrustedForAccessibility: Bool
     var hasSupportedProfile: Bool
     var hasVisibleSuggestion: Bool
-    var hasPersonalCapture: Bool
     var lastFocusedTextChangeAt: Date?
 }
 
@@ -161,7 +160,7 @@ final class SuggestionPipelineController {
             now: now,
             lastPollAt: lastPollAttemptAt,
             isTrustedForAccessibility: signals.isTrustedForAccessibility,
-            hasSupportedProfile: signals.hasSupportedProfile || signals.hasPersonalCapture,
+            hasSupportedProfile: signals.hasSupportedProfile,
             hasVisibleSuggestion: signals.hasVisibleSuggestion,
             hasRecentTextChange: hasRecentTextChange
         )
@@ -344,7 +343,7 @@ final class SuggestionPipelineController {
 //   3. Display / suppression dispatch — `refreshVisibleSuggestion`, `hideSuggestion`,
 //      `suppressField`, and the presentation/annoyance gates.
 //
-// The poll *execution* itself (`pollFocusedText` / `completeFocusedTextPoll` and the
-// personal-capture variants) and the suggestion-hiding throttle application
+// The poll *execution* itself (`pollFocusedText` / `completeFocusedTextPoll`) and the
+// suggestion-hiding throttle application
 // (`applyFocusedTextPollingThrottleIfNeeded`) deliberately stay in `AppDelegate` for now and
 // are reached via `SuggestionPipelineHost`; moving them depends on stages 2 and 3 above.

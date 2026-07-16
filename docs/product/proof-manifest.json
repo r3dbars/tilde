@@ -9,7 +9,7 @@
   },
   "hostPolicy": {
     "policyVersion": "2026-05-31.1",
-    "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
+    "source": "Sources/AutocompleteLabResearch/HostCompatibilityPolicy.swift",
     "entries": [
       {
         "bundle": "*",

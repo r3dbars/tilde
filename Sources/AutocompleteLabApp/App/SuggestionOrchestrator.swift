@@ -1,12 +1,6 @@
 import Foundation
 import AutocompleteLabCore
 
-struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
-    let shouldSuppress: Bool
-    let reason: String?
-    let metadata: [String: String]
-}
-
 @MainActor
 final class SuggestionOrchestrator {
     private static let maximumFinalModelDisplayLatencyMilliseconds = 750
@@ -18,13 +12,8 @@ final class SuggestionOrchestrator {
     /// the model still shows when it is genuinely fast, only the slow cold paints are dropped.
     /// Model results that *refine* an already-visible suggestion keep the looser budget above.
     private static let maximumFirstVisibleModelDisplayLatencyMilliseconds = 450
-    private static let maximumDocLocalFields = 24
-    private static let maximumDocLocalSnapshotsPerField = 4
-    private static let maximumDocLocalSnapshotCharacters = 12_000
-
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
-    private let docLocalPhrasePredictor: DocLocalNGramPhrasePredictor
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private let completionConfidencePolicy: CompletionConfidencePolicy
@@ -34,12 +23,10 @@ final class SuggestionOrchestrator {
     private var currentRequestStorage: CompletionRequest?
     private var prefixFamilyCooldownPolicy: PrefixFamilyCooldownPolicy
     private var streamingPresentationStates: [String: StreamingPresentationState] = [:]
-    private var docLocalCorpusByField: [FocusedFieldIdentity: DocLocalNGramFieldCorpus] = [:]
 
     init(
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
-        docLocalPhrasePredictor: DocLocalNGramPhrasePredictor = DocLocalNGramPhrasePredictor(),
         commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
         completionConfidencePolicy: CompletionConfidencePolicy = CompletionConfidencePolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
@@ -48,7 +35,6 @@ final class SuggestionOrchestrator {
     ) {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
-        self.docLocalPhrasePredictor = docLocalPhrasePredictor
         self.commonPhrasePredictor = commonPhrasePredictor
         self.completionConfidencePolicy = completionConfidencePolicy
         self.suggestionPresentationGate = suggestionPresentationGate
@@ -79,34 +65,12 @@ final class SuggestionOrchestrator {
         return beginRequest(request)
     }
 
-    func acceptedTextStyleKey(
-        appBundleIdentifier: String,
-        fieldKind: AXFieldKind,
-        textBeforeCursor: String
-    ) -> AcceptedTextStyleMemoryKey {
-        AcceptedTextStyleMemoryKey(
-            appBundleIdentifier: appBundleIdentifier,
-            fieldKind: fieldKind,
-            behaviorProfileID: behaviorProfileID(
-                appBundleIdentifier: appBundleIdentifier,
-                fieldKind: fieldKind,
-                textBeforeCursor: textBeforeCursor
-            )
-        )
-    }
-
     func beginRequest(_ input: SuggestionRequestInput) -> SuggestionOrchestration {
         let suggestionID = UUID().uuidString
         let behaviorProfileID = behaviorProfileID(
             appBundleIdentifier: input.appBundleIdentifier,
             fieldKind: input.fieldClassification.kind,
             textBeforeCursor: input.context.textBeforeCursor
-        )
-        let docLocalContextTexts = docLocalContextTexts(
-            for: input.fieldIdentity,
-            context: input.context,
-            fieldClassification: input.fieldClassification,
-            behaviorProfileID: behaviorProfileID
         )
         let fieldIdentityDescription = input.fieldIdentity.traceDescription
         let request = CompletionRequest(
@@ -116,9 +80,6 @@ final class SuggestionOrchestrator {
             fieldIdentityDescription: fieldIdentityDescription,
             fieldKind: input.fieldClassification.kind,
             behaviorProfileID: behaviorProfileID,
-            acceptedTextStyleSketch: input.acceptedTextStyleSketch,
-            documentTitleShape: DocumentTitleShape.from(windowTitle: input.context.fingerprint.windowTitle),
-            visiblePageContext: input.visiblePageContext,
             maxVisibleWords: input.maxVisibleWords,
             mode: input.requestMode,
             suggestionID: suggestionID
@@ -126,8 +87,7 @@ final class SuggestionOrchestrator {
         return beginRequest(
             request,
             fieldClassification: input.fieldClassification,
-            suggestionTuning: input.suggestionTuning,
-            docLocalContextTexts: docLocalContextTexts
+            suggestionTuning: input.suggestionTuning
         )
     }
 
@@ -142,8 +102,7 @@ final class SuggestionOrchestrator {
     private func beginRequest(
         _ request: CompletionRequest,
         fieldClassification: AXFieldClassification?,
-        suggestionTuning: SuggestionTuning?,
-        docLocalContextTexts: [String] = []
+        suggestionTuning: SuggestionTuning?
     ) -> SuggestionOrchestration {
         clearStreamingPresentations()
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
@@ -167,68 +126,8 @@ final class SuggestionOrchestrator {
             startedAt: Date(),
             fieldIdentityDescription: request.fieldIdentityDescription ?? "",
             requestMetadata: requestMetadata,
-            runtimeSessionCacheDecision: runtimeSessionCacheDecision,
-            docLocalContextTexts: docLocalContextTexts
+            runtimeSessionCacheDecision: runtimeSessionCacheDecision
         )
-    }
-
-    private func docLocalContextTexts(
-        for fieldIdentity: FocusedFieldIdentity,
-        context: FocusedTextContext,
-        fieldClassification: AXFieldClassification,
-        behaviorProfileID: AutocompleteBehaviorProfileID
-    ) -> [String] {
-        guard !context.isSecure,
-              !fieldClassification.suppressesSuggestionsByDefault,
-              Self.allowsDocLocalCorpus(for: behaviorProfileID) else {
-            docLocalCorpusByField[fieldIdentity] = nil
-            return []
-        }
-
-        let existingTexts = docLocalCorpusByField[fieldIdentity]?.texts ?? []
-        rememberDocLocalContext(
-            context.textBeforeCursor + context.textAfterCursor,
-            for: fieldIdentity
-        )
-        return existingTexts
-    }
-
-    private func rememberDocLocalContext(
-        _ rawText: String,
-        for fieldIdentity: FocusedFieldIdentity
-    ) {
-        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
-        }
-
-        var corpus = docLocalCorpusByField[fieldIdentity] ?? DocLocalNGramFieldCorpus()
-        corpus.append(
-            rawText,
-            maxSnapshots: Self.maximumDocLocalSnapshotsPerField,
-            maxCharactersPerSnapshot: Self.maximumDocLocalSnapshotCharacters
-        )
-        docLocalCorpusByField[fieldIdentity] = corpus
-
-        if docLocalCorpusByField.count > Self.maximumDocLocalFields,
-           let firstKey = docLocalCorpusByField.keys.first {
-            docLocalCorpusByField[firstKey] = nil
-        }
-    }
-
-    nonisolated static func allowsDocLocalCorpus(
-        for behaviorProfileID: AutocompleteBehaviorProfileID
-    ) -> Bool {
-        switch behaviorProfileID {
-        // aiChat is included so the prompt-app prediction path actually has a corpus to read.
-        // `DocLocalNGramPhrasePredictor.allowsPrediction` is willing to predict for aiChat (gated
-        // behind `allowsPromptAppPrediction`), but the corpus was never remembered here — so that
-        // path could never fire. Remembering the corpus does not surface any new suggestion unless
-        // prompt-app prediction is active; it only stops the two gates from silently disagreeing.
-        case .docsProse, .notes, .bullets, .aiChat:
-            return true
-        case .casualChat, .email, .coding, .forms, .search:
-            return false
-        }
     }
 
     private func behaviorProfileID(
@@ -565,31 +464,26 @@ final class SuggestionOrchestrator {
 
     nonisolated func fastWordSuggestion(
         for textBeforeCursor: String,
-        recentWords: [String],
         allowPredictiveFallback: Bool = false
     ) -> CompletionSuggestion? {
         fastWordSelection(
             for: textBeforeCursor,
-            recentWords: recentWords,
             allowPredictiveFallback: allowPredictiveFallback
         ).suggestion
     }
 
     nonisolated func fastWordSelection(
         for textBeforeCursor: String,
-        recentWords: [String],
         allowPredictiveFallback: Bool = false
     ) -> WordCompletionCandidateSelection {
         wordCompletionRanker.selection(
             for: textBeforeCursor,
-            recentWords: recentWords,
             allowPredictiveFallback: allowPredictiveFallback
         )
     }
 
     nonisolated func fastPhraseSelection(
         for textBeforeCursor: String,
-        docLocalContextTexts: [String] = [],
         behaviorProfileID: AutocompleteBehaviorProfileID?,
         maxVisibleWords: Int,
         allowPredictiveFallback: Bool = false,
@@ -604,49 +498,11 @@ final class SuggestionOrchestrator {
             )
         }
 
-        let docLocalSelection = docLocalPhrasePredictor.selection(
-            for: textBeforeCursor,
-            localContextTexts: docLocalContextTexts,
-            behaviorProfileID: behaviorProfileID,
-            maxVisibleWords: maxVisibleWords,
-            allowsPromptAppPrediction: allowPromptAppPrediction
-        )
-        if docLocalSelection.suggestion != nil {
-            return docLocalSelection
-        }
-
         return commonPhrasePredictor.selection(
             for: textBeforeCursor,
             behaviorProfileID: behaviorProfileID,
             maxVisibleWords: maxVisibleWords,
             allowsPromptAppPrediction: allowPromptAppPrediction
-        )
-    }
-
-    nonisolated func fastPhraseFallbackLearningDecision(
-        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal,
-        probabilityThreshold: Double,
-        minimumSamples: Int = 6,
-        minimumLearningRestraint: Double = 0.35
-    ) -> FastPhraseFallbackLearningDecision {
-        let boundedMinimumSamples = max(0, minimumSamples)
-        let boundedMinimumLearningRestraint = max(0, minimumLearningRestraint)
-        let shouldSuppress = acceptedAndKeptSignal.sampleCount >= boundedMinimumSamples
-            && acceptedAndKeptSignal.probability < probabilityThreshold
-            && acceptedAndKeptSignal.learningRestraint >= boundedMinimumLearningRestraint
-        let reason = shouldSuppress ? "fast-phrase-learning-restraint" : nil
-        var metadata = acceptedAndKeptSignal.traceMetadata
-        metadata["fastPhraseFallbackLearningThreshold"] = Self.traceDecimal(probabilityThreshold)
-        metadata["fastPhraseFallbackLearningMinimumSamples"] = String(boundedMinimumSamples)
-        metadata["fastPhraseFallbackLearningMinimumRestraint"] = Self.traceDecimal(boundedMinimumLearningRestraint)
-        metadata["fastPhraseFallbackLearningSuppressed"] = String(shouldSuppress)
-        if let reason {
-            metadata["fastPhraseFallbackLearningReason"] = reason
-        }
-        return FastPhraseFallbackLearningDecision(
-            shouldSuppress: shouldSuppress,
-            reason: reason,
-            metadata: metadata
         )
     }
 
@@ -671,7 +527,6 @@ final class SuggestionOrchestrator {
         profile: CompatibilityProfile,
         triggerReason: String,
         latencyMilliseconds: Int,
-        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal,
         isRepeatedMiss: Bool
     ) -> DisplayScore {
         let requestFieldKind = request.fieldKind == .unknown ? fieldClassification.kind : request.fieldKind
@@ -680,8 +535,7 @@ final class SuggestionOrchestrator {
             utility: Self.displayUtility(
                 mode: request.mode,
                 visibleWordCount: suggestion.visibleWordCount,
-                visibleCharacterCount: suggestion.visibleText.count,
-                acceptedAndKeptSignal: acceptedAndKeptSignal
+                visibleCharacterCount: suggestion.visibleText.count
             ),
             styleFit: Self.displayStyleFit(
                 fieldKind: requestFieldKind,
@@ -691,8 +545,7 @@ final class SuggestionOrchestrator {
             contextFit: Self.displayContextFit(request: request, context: context),
             userAffinity: Self.displayUserAffinity(
                 mode: request.mode,
-                triggerReason: triggerReason,
-                acceptedAndKeptSignal: acceptedAndKeptSignal
+                triggerReason: triggerReason
             ),
             risk: Self.displayRisk(
                 fieldKind: requestFieldKind,
@@ -705,13 +558,7 @@ final class SuggestionOrchestrator {
                 context: context,
                 triggerReason: triggerReason,
                 latencyMilliseconds: latencyMilliseconds
-            ),
-            learningRestraint: acceptedAndKeptSignal.learningRestraint,
-            acceptedAndKeptProbability: acceptedAndKeptSignal.probability,
-            acceptedAndKeptSampleCount: acceptedAndKeptSignal.sampleCount,
-            acceptedAndKeptUtilityAdjustment: acceptedAndKeptSignal.utilityAdjustment,
-            typeThroughSurvivalCount: acceptedAndKeptSignal.typeThroughSurvivalCount,
-            typeThroughConfidenceCredit: acceptedAndKeptSignal.typeThroughConfidenceCredit
+            )
         )
     }
 
@@ -724,7 +571,6 @@ final class SuggestionOrchestrator {
         fieldIdentity: FocusedFieldIdentity,
         triggerReason: String,
         latencyMilliseconds: Int,
-        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal,
         isRepeatedMiss: Bool,
         displayScorePolicy: DisplayScorePolicy,
         suggestionTuning: SuggestionTuning? = nil,
@@ -750,7 +596,6 @@ final class SuggestionOrchestrator {
             profile: profile,
             triggerReason: triggerReason,
             latencyMilliseconds: latencyMilliseconds,
-            acceptedAndKeptSignal: acceptedAndKeptSignal,
             isRepeatedMiss: isRepeatedMiss
         )
         let adjustedPolicy = displayScorePolicy
@@ -762,31 +607,11 @@ final class SuggestionOrchestrator {
             latencyMilliseconds: latencyMilliseconds,
             supportLevel: profile.supportLevel
         )
-        let promptProofLatencyBypass = request.appBundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
-            && profile.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
-            && (
-                profile.requiresNoSubmitAcceptanceProof
-                    || (profile.supportsFullAcceptance && !profile.requiresNoSubmitAcceptanceProof)
-            )
-            && request.textBeforeCursor.contains(CodexProofFocusedTargetPolicy.marker)
-            && request.textAfterCursor.isEmpty
-        let claudeCodeTerminalHostProofLatencyBypass =
-            request.appBundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                && profile.bundleIdentifier == ClaudeCodeTerminalHostProofPolicy.virtualBundleIdentifier
-                && fieldClassification == ClaudeCodeTerminalHostProofPolicy.proofFieldClassification
-                && request.textAfterCursor.isEmpty
-        let proofLatencyBypass = promptProofLatencyBypass || claudeCodeTerminalHostProofLatencyBypass
         var confidenceMetadata = [
             "completionConfidenceBucket": confidenceDecision.bucket.rawValue,
             "completionConfidenceScore": String(confidenceDecision.score),
             "completionConfidenceReasons": confidenceDecision.reasons.joined(separator: ",")
         ]
-        if promptProofLatencyBypass {
-            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "codex-proof-no-submit"
-        }
-        if claudeCodeTerminalHostProofLatencyBypass {
-            confidenceMetadata["displayScoreLatencySuppressionBypassed"] = "claude-code-terminal-host-proof"
-        }
         let modelDisplayLatencyBudgetMilliseconds = Self.maximumFinalModelDisplayLatencyMilliseconds(
             for: request,
             suggestion: suggestion,
@@ -803,13 +628,10 @@ final class SuggestionOrchestrator {
         confidenceMetadata["modelIsFirstVisibleSuggestion"] = String(modelIsFirstVisibleSuggestion)
         confidenceMetadata["modelLatencyForBudgetMilliseconds"] = String(modelLatencyForBudget)
         let shouldSuppressFinalLatency = triggerReason != "model-stream"
-            && !proofLatencyBypass
             && modelLatencyForBudget > modelDisplayLatencyBudgetMilliseconds
         let shouldSuppressConfidenceLatency = triggerReason != "model-stream"
-            && !proofLatencyBypass
             && confidenceDecision.reasons.contains("too-slow-to-display")
         let shouldSuppressLowConfidence = !confidenceDecision.canDisplay
-            && (!proofLatencyBypass || !confidenceDecision.reasons.contains("too-slow-to-display"))
         if shouldSuppressFinalLatency || shouldSuppressConfidenceLatency {
             let trace = DisplayScoreTrace(
                 score: score,
@@ -876,8 +698,7 @@ final class SuggestionOrchestrator {
     nonisolated private static func displayUtility(
         mode: CompletionRequestMode,
         visibleWordCount: Int,
-        visibleCharacterCount: Int,
-        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal
+        visibleCharacterCount: Int
     ) -> Double {
         let base: Double
         switch mode {
@@ -909,11 +730,7 @@ final class SuggestionOrchestrator {
             }
         }
 
-        return displayComponent(base + acceptedAndKeptSignal.utilityAdjustment)
-    }
-
-    nonisolated private static func traceDecimal(_ value: Double) -> String {
-        String(format: "%.3f", value)
+        return displayComponent(base)
     }
 
     nonisolated private static func displayStyleFit(
@@ -955,8 +772,7 @@ final class SuggestionOrchestrator {
 
     nonisolated private static func displayUserAffinity(
         mode: CompletionRequestMode,
-        triggerReason: String,
-        acceptedAndKeptSignal: AcceptedAndKeptLearningSignal
+        triggerReason: String
     ) -> Double {
         let base: Double
         if triggerReason == "fast-word-completion" {
@@ -972,7 +788,7 @@ final class SuggestionOrchestrator {
             }
         }
 
-        return displayComponent(base + acceptedAndKeptSignal.userAffinityAdjustment)
+        return displayComponent(base)
     }
 
     nonisolated private static func displayRisk(
@@ -1089,33 +905,6 @@ struct SuggestionOrchestration: Sendable {
     let fieldIdentityDescription: String
     let requestMetadata: [String: String]
     let runtimeSessionCacheDecision: RuntimeSessionCacheDecision
-    let docLocalContextTexts: [String]
-}
-
-private struct DocLocalNGramFieldCorpus: Sendable {
-    private(set) var texts: [String] = []
-
-    mutating func append(
-        _ rawText: String,
-        maxSnapshots: Int,
-        maxCharactersPerSnapshot: Int
-    ) {
-        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return
-        }
-
-        let bounded = String(trimmed.suffix(max(1, maxCharactersPerSnapshot)))
-        if texts.last == bounded {
-            return
-        }
-
-        texts.append(bounded)
-        let overflow = texts.count - max(1, maxSnapshots)
-        if overflow > 0 {
-            texts.removeFirst(overflow)
-        }
-    }
 }
 
 struct SuggestionDisplayScoreDecision: Sendable {
@@ -1142,8 +931,6 @@ struct SuggestionRequestInput: Sendable {
     let appBundleIdentifier: String
     let fieldIdentity: FocusedFieldIdentity
     let fieldClassification: AXFieldClassification
-    let acceptedTextStyleSketch: AcceptedTextStyleSketch?
-    let visiblePageContext: VisiblePageContext?
     let maxVisibleWords: Int
     let requestMode: CompletionRequestMode
     let suggestionTuning: SuggestionTuning

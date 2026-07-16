@@ -1,5 +1,6 @@
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 /// Spike coverage for the dictation + inline prediction loop
 /// (docs/product/spikes/voice-text-loop.md). Proves a phrase that only ever

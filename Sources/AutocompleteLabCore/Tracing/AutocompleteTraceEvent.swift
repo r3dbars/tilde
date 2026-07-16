@@ -109,7 +109,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         id: String = UUID().uuidString,
         schemaVersion: Int = AutocompleteTraceEvent.currentSchemaVersion,
         privacyVersion: Int = AutocompleteTraceEvent.currentPrivacyVersion,
-        experimentArm: String = AutocompleteExperimentArm.length3Word.rawValue,
+        experimentArm: String = "length_3_word",
         timestamp: String,
         sessionID: String,
         suggestionID: String,
@@ -167,7 +167,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         privacyVersion = try container.decodeIfPresent(Int.self, forKey: .privacyVersion) ?? 0
         experimentArm = try container.decodeIfPresent(String.self, forKey: .experimentArm)
-            ?? AutocompleteExperimentArm.length3Word.rawValue
+            ?? "length_3_word"
         timestamp = try container.decode(String.self, forKey: .timestamp)
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID) ?? ""
         suggestionID = try container.decodeIfPresent(String.self, forKey: .suggestionID) ?? ""
@@ -290,7 +290,7 @@ public struct AutocompleteTraceEvent: Codable, Equatable, Sendable, Identifiable
     }
 }
 
-extension AutocompleteTraceEvent {
+public extension AutocompleteTraceEvent {
     var acceptanceIdentifier: String {
         metadata["acceptanceID"] ?? suggestionID
     }

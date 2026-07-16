@@ -5,8 +5,6 @@ struct AppModelRuntimeBundle {
     let runtime: any ModelRuntime
     let bootstrapPlan: RuntimeBootstrapPlan
     let modelDirectoryURL: URL
-    let modelOverrideName: String?
-    let experimentArm: AutocompleteExperimentArm
     let lengthConfiguration: CompletionLengthConfiguration
 
     var activeCandidate: CompletionRuntimeCandidate {
@@ -24,8 +22,6 @@ struct AppModelRuntimeBundle {
             "assetState": bootstrapPlan.assetState.statusSummary,
             "assetSourceRepoID": bootstrapPlan.preferredAsset.source?.repoID ?? "",
             "assetSourceRevision": bootstrapPlan.preferredAsset.source?.revision ?? "",
-            "modelOverride": modelOverrideName ?? "",
-            "experimentArm": experimentArm.rawValue,
             "maxVisibleWords": String(lengthConfiguration.maxVisibleWords),
             "maxGeneratedTokens": String(lengthConfiguration.maxGeneratedTokens),
             "promptStyle": CompletionPromptBuilder.promptStyleIdentifier,
@@ -43,7 +39,6 @@ struct AppModelRuntimeBundle {
 }
 
 enum AppModelRuntimeFactory {
-    static let experimentArmDefaultsKey = "AutocompleteLabCurrentExperimentArm"
     #if DEBUG
     static let defaultAllowsEnvironmentOverrides = true
     #else
@@ -53,18 +48,10 @@ enum AppModelRuntimeFactory {
     static func makeRuntime(
         fileManager: FileManager = .default,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        defaults: UserDefaults = .standard,
         allowEnvironmentOverrides: Bool = defaultAllowsEnvironmentOverrides
     ) -> AppModelRuntimeBundle {
-        let modelOverrideName = allowEnvironmentOverrides
-            ? environment["AUTOCOMPLETE_LAB_MODEL"]
-            : nil
-        let experimentArm = resolvedExperimentArm(environment: environment, defaults: defaults)
-        let lengthEnvironment = environment.merging([
-            "AUTOCOMPLETE_LAB_EXPERIMENT_ARM": experimentArm.rawValue
-        ]) { current, _ in current }
-        let lengthConfiguration = CompletionLengthConfiguration.fromEnvironment(lengthEnvironment)
-        let manifest = LocalModelAssetManifest.mlxManifest(named: modelOverrideName)
+        let lengthConfiguration = CompletionLengthConfiguration.default
+        let manifest = LocalModelAssetManifest.mlxManifest(named: nil)
         let modelDirectoryURL = modelAssetURL(
             for: manifest,
             fileManager: fileManager,
@@ -104,43 +91,8 @@ enum AppModelRuntimeFactory {
             runtime: runtime,
             bootstrapPlan: plan,
             modelDirectoryURL: modelDirectoryURL,
-            modelOverrideName: modelOverrideName,
-            experimentArm: experimentArm,
             lengthConfiguration: lengthConfiguration
         )
-    }
-
-    private static func resolvedExperimentArm(
-        environment: [String: String],
-        defaults: UserDefaults
-    ) -> AutocompleteExperimentArm {
-        let selection = AutocompleteExperimentArmSelection.current(
-            environment: environment,
-            persistedRawValue: defaults.string(forKey: experimentArmDefaultsKey),
-            chooseArm: { .length3Word }
-        )
-        let arm = shouldMigratePersistedOneWordArm(selection: selection, environment: environment)
-            ? .length3Word
-            : selection.arm
-        if selection.shouldPersist || arm != selection.arm {
-            defaults.set(arm.rawValue, forKey: experimentArmDefaultsKey)
-        }
-
-        return arm
-    }
-
-    private static func shouldMigratePersistedOneWordArm(
-        selection: AutocompleteExperimentArmSelection,
-        environment: [String: String]
-    ) -> Bool {
-        guard selection.source == .persisted,
-              selection.arm == .length1Word else {
-            return false
-        }
-
-        return environment["AUTOCOMPLETE_LAB_EXPERIMENT_ARM"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty != false
     }
 
     static func modelAssetState(

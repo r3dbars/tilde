@@ -33,9 +33,6 @@ public struct CompletionRequest: Equatable, Sendable {
     public let fieldIdentityDescription: String?
     public let fieldKind: AXFieldKind
     public let behaviorProfileID: AutocompleteBehaviorProfileID?
-    public let acceptedTextStyleSketch: AcceptedTextStyleSketch?
-    public let documentTitleShape: DocumentTitleShape?
-    public let visiblePageContext: VisiblePageContext?
     public let maxVisibleWords: Int
     public let mode: CompletionRequestMode
     public let suggestionID: String
@@ -47,9 +44,6 @@ public struct CompletionRequest: Equatable, Sendable {
         fieldIdentityDescription: String? = nil,
         fieldKind: AXFieldKind = .unknown,
         behaviorProfileID: AutocompleteBehaviorProfileID? = nil,
-        acceptedTextStyleSketch: AcceptedTextStyleSketch? = nil,
-        documentTitleShape: DocumentTitleShape? = nil,
-        visiblePageContext: VisiblePageContext? = nil,
         maxVisibleWords: Int = CompletionModelPolicy.mvp.maxVisibleWords,
         mode: CompletionRequestMode = .phraseContinuation,
         suggestionID: String = ""
@@ -60,9 +54,6 @@ public struct CompletionRequest: Equatable, Sendable {
         self.fieldIdentityDescription = fieldIdentityDescription
         self.fieldKind = fieldKind
         self.behaviorProfileID = behaviorProfileID
-        self.acceptedTextStyleSketch = acceptedTextStyleSketch
-        self.documentTitleShape = documentTitleShape
-        self.visiblePageContext = visiblePageContext
         self.maxVisibleWords = CompletionModelPolicy.clampedVisibleWords(maxVisibleWords)
         self.mode = mode
         self.suggestionID = suggestionID
@@ -80,15 +71,6 @@ public struct CompletionRequest: Equatable, Sendable {
     public var behaviorProfileTraceMetadata: [String: String] {
         var metadata = behaviorProfile.traceMetadata
         metadata["requestFieldKind"] = fieldKind.rawValue
-        if let acceptedTextStyleSketch {
-            metadata.merge(acceptedTextStyleSketch.traceMetadata) { current, _ in current }
-        }
-        if let documentTitleShape {
-            metadata.merge(documentTitleShape.traceMetadata) { current, _ in current }
-        }
-        if let visiblePageContext {
-            metadata.merge(visiblePageContext.traceMetadata) { current, _ in current }
-        }
         if let partialWordShape {
             metadata.merge(partialWordShape.traceMetadata) { current, _ in current }
         }

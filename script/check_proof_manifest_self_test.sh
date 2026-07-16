@@ -27,11 +27,11 @@ cleanup() {
 
 trap cleanup EXIT
 
-TRACE_PROOF_VERSION="$(awk -F '"' '/traceProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
-PLACEMENT_PROOF_VERSION="$(awk -F '"' '/placementProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
-KEY_CAPTURE_PROOF_VERSION="$(awk -F '"' '/keyCaptureProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
-RUNTIME_PROOF_VERSION="$(awk -F '"' '/runtimeProofVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Tracing/AutocompleteTraceProofMetadata.swift)"
-HOST_POLICY_VERSION="$(awk -F '"' '/currentPolicyVersion/ { print $2; exit }' Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift)"
+TRACE_PROOF_VERSION="$(awk -F '"' '/traceProofVersion/ { print $2; exit }' Sources/AutocompleteLabResearch/AutocompleteTraceProofMetadata.swift)"
+PLACEMENT_PROOF_VERSION="$(awk -F '"' '/placementProofVersion/ { print $2; exit }' Sources/AutocompleteLabResearch/AutocompleteTraceProofMetadata.swift)"
+KEY_CAPTURE_PROOF_VERSION="$(awk -F '"' '/keyCaptureProofVersion/ { print $2; exit }' Sources/AutocompleteLabResearch/AutocompleteTraceProofMetadata.swift)"
+RUNTIME_PROOF_VERSION="$(awk -F '"' '/runtimeProofVersion/ { print $2; exit }' Sources/AutocompleteLabResearch/AutocompleteTraceProofMetadata.swift)"
+HOST_POLICY_VERSION="$(awk -F '"' '/currentPolicyVersion/ { print $2; exit }' Sources/AutocompleteLabResearch/HostCompatibilityPolicy.swift)"
 HOST_POLICY_JSON="$(python3 - <<'PY'
 import json
 from pathlib import Path
@@ -542,7 +542,7 @@ write_profile_manifest() {
   "schemaVersion": 1,
   "hostPolicy": {
     "policyVersion": "$HOST_POLICY_VERSION",
-    "source": "Sources/AutocompleteLabCore/Configuration/HostCompatibilityPolicy.swift",
+    "source": "Sources/AutocompleteLabResearch/HostCompatibilityPolicy.swift",
     "entries": [
       {
         "bundle": "com.apple.TextEdit",

@@ -4,8 +4,8 @@ This target builds the menu bar app.
 
 Start map:
 
-- `App/`: app startup, orchestration, settings, proof commands, and suggestion lifecycle wiring.
-- `Mac/`: Accessibility, keyboard capture, insertion, redaction, local reports, trace storage, and page context.
+- `App/`: app startup, orchestration, settings, and suggestion lifecycle wiring.
+- `Mac/`: Accessibility, keyboard capture, insertion, redaction, local reports, and trace storage.
 - `Runtime/`: MLX-backed runtime and app-owned model asset installation.
 - `UI/`: menu bar, settings, diagnostics, overlay, and suggestion panel controllers.
 

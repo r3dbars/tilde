@@ -1,6 +1,7 @@
 import CoreGraphics
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Suggestion placement preflight policy")
 struct SuggestionPlacementPreflightPolicyTests {

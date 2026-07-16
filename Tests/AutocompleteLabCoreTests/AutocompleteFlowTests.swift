@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import AutocompleteLabCore
+@testable import AutocompleteLabResearch
 
 @Suite("Autocomplete flow")
 struct AutocompleteFlowTests {

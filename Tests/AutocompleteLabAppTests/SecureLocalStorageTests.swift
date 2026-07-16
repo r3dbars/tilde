@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import AutocompleteLabApp
+@testable import AutocompleteLabCore
 
 @Suite("Secure local storage")
 struct SecureLocalStorageTests {
