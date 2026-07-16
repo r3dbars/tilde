@@ -53,22 +53,25 @@ public struct WordCompletionCandidateRanker: Equatable, Sendable {
     public func suggestion(
         for textBeforeCursor: String,
         recentWords: [String] = [],
-        allowPredictiveFallback: Bool = false
+        allowPredictiveFallback: Bool = false,
+        minimumFragmentCharacters: Int = 3
     ) -> CompletionSuggestion? {
         selection(
             for: textBeforeCursor,
             recentWords: recentWords,
-            allowPredictiveFallback: allowPredictiveFallback
+            allowPredictiveFallback: allowPredictiveFallback,
+            minimumFragmentCharacters: minimumFragmentCharacters
         ).suggestion
     }
 
     public func selection(
         for textBeforeCursor: String,
         recentWords: [String] = [],
-        allowPredictiveFallback: Bool = false
+        allowPredictiveFallback: Bool = false,
+        minimumFragmentCharacters: Int = 3
     ) -> WordCompletionCandidateSelection {
         guard let fragment = trailingFragment(in: textBeforeCursor),
-              fragment.count >= 3,
+              fragment.count >= max(1, minimumFragmentCharacters),
               fragment.allSatisfy({ $0.isLetter }) else {
             return WordCompletionCandidateSelection(
                 suggestion: nil,

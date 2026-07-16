@@ -7090,7 +7090,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let fastSelection = suggestionOrchestrator.fastWordSelection(
                 for: context.textBeforeCursor,
                 recentWords: candidateWords,
-                allowPredictiveFallback: allowPredictiveFallback
+                allowPredictiveFallback: allowPredictiveFallback,
+                minimumFragmentCharacters: suggestionTuning.wordStartCharacters
             )
             let fastSelectionMetadata = fastSelection.traceMetadata
                 .merging(timingLane.traceMetadata) { current, _ in current }

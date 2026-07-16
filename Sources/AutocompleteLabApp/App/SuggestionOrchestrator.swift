@@ -599,24 +599,28 @@ final class SuggestionOrchestrator {
     nonisolated func fastWordSuggestion(
         for textBeforeCursor: String,
         recentWords: [String],
-        allowPredictiveFallback: Bool = false
+        allowPredictiveFallback: Bool = false,
+        minimumFragmentCharacters: Int = 3
     ) -> CompletionSuggestion? {
         fastWordSelection(
             for: textBeforeCursor,
             recentWords: recentWords,
-            allowPredictiveFallback: allowPredictiveFallback
+            allowPredictiveFallback: allowPredictiveFallback,
+            minimumFragmentCharacters: minimumFragmentCharacters
         ).suggestion
     }
 
     nonisolated func fastWordSelection(
         for textBeforeCursor: String,
         recentWords: [String],
-        allowPredictiveFallback: Bool = false
+        allowPredictiveFallback: Bool = false,
+        minimumFragmentCharacters: Int = 3
     ) -> WordCompletionCandidateSelection {
         wordCompletionRanker.selection(
             for: textBeforeCursor,
             recentWords: recentWords,
-            allowPredictiveFallback: allowPredictiveFallback
+            allowPredictiveFallback: allowPredictiveFallback,
+            minimumFragmentCharacters: minimumFragmentCharacters
         )
     }
 
