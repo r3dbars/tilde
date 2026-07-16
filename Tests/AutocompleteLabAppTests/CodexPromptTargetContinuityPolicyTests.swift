@@ -7,6 +7,24 @@ import Testing
 struct CodexPromptTargetContinuityPolicyTests {
     private let policy = CodexPromptTargetContinuityPolicy()
 
+    @Test("Presentation preparation defers before any focused-context refresh")
+    func presentationPreparationDefersBeforeAnyFocusedContextRefresh() {
+        let preparationPolicy = CodexPromptPresentationPreparationPolicy()
+
+        #expect(preparationPolicy.preparation(
+            refreshBeforePresenting: true,
+            cooldownDelayMilliseconds: 250
+        ) == .deferForAXCooldown(delayMilliseconds: 250))
+        #expect(preparationPolicy.preparation(
+            refreshBeforePresenting: true,
+            cooldownDelayMilliseconds: 0
+        ) == .refreshFocusedContext)
+        #expect(preparationPolicy.preparation(
+            refreshBeforePresenting: false,
+            cooldownDelayMilliseconds: 250
+        ) == .useOriginalContext)
+    }
+
     @Test("Preserves exact prompt through transient AX wrapper and bounds loss")
     func preservesExactPromptThroughTransientAXWrapperAndBoundsLoss() throws {
         let fieldIdentity = identity()
