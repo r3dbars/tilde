@@ -1,6 +1,6 @@
 # Dependency And SDK Data Inventory
 
-Last checked: 2026-05-08.
+Last checked: 2026-07-16.
 
 This inventory is built from `Package.swift`, the current app bundle,
 `Info.plist` permissions, and repo scripts.
@@ -32,7 +32,10 @@ This inventory is built from `Package.swift`, the current app bundle,
 Expected bundle contents:
 
 - `Contents/MacOS/SteadyType`
+- `Contents/MacOS/SteadyTypeTextEventHelper`
+- `Contents/Resources/AppIcon.icns`
 - `Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib`
+- `Contents/Info.plist` and signing metadata
 - system-linked Apple and Swift libraries from the executable
 
 Expected absent bundle contents:
@@ -40,6 +43,10 @@ Expected absent bundle contents:
 - analytics SDK frameworks
 - crash reporting SDK frameworks
 - remote telemetry SDK frameworks
+- local model weights
+
+`script/check_lightweight_budget.py` enforces the exact shipped payload and
+release size ceiling documented in `lightweight-budget.md`.
 
 ## App Permissions
 
