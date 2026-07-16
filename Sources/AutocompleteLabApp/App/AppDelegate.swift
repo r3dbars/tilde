@@ -576,6 +576,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var modelInstallStatusText: String?
     private var isModelInstallCancelRequested = false
     private let keyboardEventTapIdleStopDelayMilliseconds = 700
+    private let eagerTypingPollDelayMilliseconds = 16
     private let postTypingPollPauseMilliseconds = 220
     private let visibleSuggestionTypingPollPauseMilliseconds = 60
     private let postInsertionPollPauseMilliseconds = 220
@@ -4203,12 +4204,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observePassthroughTypingKeyDown() {
-        suggestionPipeline.pausePolling(
-            now: Date(),
-            durationMilliseconds: suggestionSession.hasVisibleSuggestion
-                ? visibleSuggestionTypingPollPauseMilliseconds
-                : postTypingPollPauseMilliseconds
-        )
+        if shouldRequestEagerTypingPoll() {
+            suggestionPipeline.requestPollSoon(afterMilliseconds: eagerTypingPollDelayMilliseconds)
+        } else {
+            suggestionPipeline.pausePolling(
+                now: Date(),
+                durationMilliseconds: suggestionSession.hasVisibleSuggestion
+                    ? visibleSuggestionTypingPollPauseMilliseconds
+                    : postTypingPollPauseMilliseconds
+            )
+        }
         clearPendingAcceptedInsertionUndo(reason: "typing")
 
         guard suggestionSession.hasVisibleSuggestion else {
@@ -4223,6 +4228,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invalidatePendingSuggestionRequest()
         setSuggestionDecision("Shown: tracking typing")
         updateKeyboardEventTapSnapshot()
+    }
+
+    private func shouldRequestEagerTypingPoll() -> Bool {
+        guard suggestionTuning.aggressivenessLevel >= 5,
+              !suggestionSession.hasVisibleSuggestion,
+              let frontmostApp = accessibilityClient.frontmostApplication() else {
+            return false
+        }
+
+        return frontmostApp.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
     }
 
     private func preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: String) -> Bool {

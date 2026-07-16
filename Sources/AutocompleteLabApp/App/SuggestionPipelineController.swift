@@ -61,6 +61,7 @@ final class SuggestionPipelineController {
     // Polling driver state.
     private let pollInterval: TimeInterval = 0.08
     private var pollTimer: Timer?
+    private var requestedPollTask: Task<Void, Never>?
     private var isPollInFlightStorage = false
     private var lastPollAttemptAt: Date?
     private var latestReadRequestID: UInt64?
@@ -87,6 +88,32 @@ final class SuggestionPipelineController {
     func stopPolling() {
         pollTimer?.invalidate()
         pollTimer = nil
+        requestedPollTask?.cancel()
+        requestedPollTask = nil
+    }
+
+    /// Coalesces passthrough typing into a near-immediate focused-text read. This bypasses
+    /// only the repeating timer cadence; the host still applies every normal AX, privacy,
+    /// focus identity, activation, placement, and freshness guard.
+    func requestPollSoon(afterMilliseconds delayMilliseconds: Int) {
+        requestedPollTask?.cancel()
+        pollingPause = FocusedTextPollingPause()
+
+        requestedPollTask = Task { @MainActor [weak self] in
+            guard delayMilliseconds > 0 else {
+                self?.requestedPollTask = nil
+                self?.pollFocusedTextIfIdle(bypassingCadence: true)
+                return
+            }
+
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.requestedPollTask = nil
+            self?.pollFocusedTextIfIdle(bypassingCadence: true)
+        }
     }
 
     // MARK: - In-flight guard (shared with the host's manual-suggestion path)
@@ -114,10 +141,18 @@ final class SuggestionPipelineController {
 
     // MARK: - Cadence-gated idle poll (timer entry point)
 
-    private func pollFocusedTextIfIdle() {
+    private func pollFocusedTextIfIdle(bypassingCadence: Bool = false) {
         let now = Date()
-        guard shouldRunFocusedTextPoll(now: now) else {
-            return
+        if bypassingCadence {
+            let signals = host.focusedTextPollCadenceSignals()
+            guard signals.isTrustedForAccessibility,
+                  signals.hasSupportedProfile || signals.hasPersonalCapture else {
+                return
+            }
+        } else {
+            guard shouldRunFocusedTextPoll(now: now) else {
+                return
+            }
         }
 
         guard !isPollInFlightStorage else {
