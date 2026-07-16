@@ -6,7 +6,6 @@ Start with:
 
 - `ModelPolicy.swift`
 - `SuggestionPrivacyPolicy.swift`
-- `TracePrivacyPolicy.swift`
 - `CompatibilityProfile.swift`
 - `HostCompatibilityPolicy.swift`
 - browser, terminal, clipboard, and fallback policy files.
