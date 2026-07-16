@@ -285,13 +285,23 @@ struct CodexPromptTargetContinuityPolicy {
             return false
         }
 
-        // AXWebArea is a transient wrapper in Codex, so its element bounds are
-        // not composer bounds. The same-window and exact-text checks above keep
-        // the continuity exception scoped to the already verified prompt.
+        // AXWebArea is a transient wrapper in Codex, so its element bounds and
+        // identifier are not composer identity. Require affirmative same-window
+        // evidence before preserving work through that wrapper.
+        if observedContext.role == "AXWebArea" {
+            let identifiersMatch = trusted.windowIdentifier != nil
+                && trusted.windowIdentifier == observed.windowIdentifier
+            let boundsAndTitleMatch = trusted.windowBounds != nil
+                && trusted.windowBounds == observed.windowBounds
+                && trusted.elementFingerprint.windowTitle != nil
+                && trusted.elementFingerprint.windowTitle == observed.elementFingerprint.windowTitle
+
+            return identifiersMatch || boundsAndTitleMatch
+        }
+
         guard observedContext.role == "AXTextArea",
               let observedElementBounds = observed.elementBounds else {
-            return observedContext.role != "AXTextArea"
-                || observedContext.elementIdentifier == trustedAnchor.elementIdentifier
+            return observedContext.elementIdentifier == trustedAnchor.elementIdentifier
         }
 
         guard let trustedElementBounds = trusted.elementBounds else {
@@ -301,6 +311,7 @@ struct CodexPromptTargetContinuityPolicy {
         return abs(trustedElementBounds.x - observedElementBounds.x) <= maximumGeometryDelta
             && abs(trustedElementBounds.y - observedElementBounds.y) <= maximumGeometryDelta
             && abs(trustedElementBounds.width - observedElementBounds.width) <= maximumGeometryDelta
+            && abs(trustedElementBounds.height - observedElementBounds.height) <= maximumGeometryDelta
             && trustedElementBounds.height > 0
             && observedElementBounds.height > 0
     }
