@@ -421,6 +421,33 @@ struct CodexPromptTargetContinuityPolicyTests {
         ))
     }
 
+    @Test("Rejects zero-size anchors before missing-bounds continuity")
+    func rejectsZeroSizeAnchorsBeforeMissingBoundsContinuity() {
+        let fieldIdentity = identity()
+        let invalidAnchorContexts = [
+            context(elementRect: CGRect(x: 100, y: 620, width: 0, height: 80)),
+            context(elementRect: CGRect(x: 100, y: 620, width: 700, height: 0))
+        ]
+
+        for invalidContext in invalidAnchorContexts {
+            let anchor = policy.anchor(
+                appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                context: invalidContext
+            )
+            #expect(anchor == nil)
+            #expect(!policy.canDeferInvalidation(
+                appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+                processIdentifier: 42,
+                promptBlockReason: "missing-prompt-bounds",
+                currentFieldIdentity: fieldIdentity,
+                currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+                trustedAnchor: anchor,
+                observedContext: context(caretRect: nil, elementRect: nil)
+            ))
+        }
+    }
+
     @Test("Presentation refresh retries are bounded")
     func presentationRefreshRetriesAreBounded() {
         let retryPolicy = CodexPromptPresentationRefreshRetryPolicy(
