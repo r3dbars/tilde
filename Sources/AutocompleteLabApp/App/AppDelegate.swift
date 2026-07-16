@@ -7454,7 +7454,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSuggestionDecision("Queued: proof model phrase continuation")
         }
 
-        if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
+        if typingBurstDecision.shouldSuppress(requestMode: requestMode),
+           !suggestionTuning.allowsContinuationDuringTypingBurst {
             if didPresentFastPhraseFallback {
                 suggestionIdleRetryState.cancel()
                 let metadata = [
