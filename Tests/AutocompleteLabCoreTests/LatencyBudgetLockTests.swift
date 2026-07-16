@@ -50,11 +50,11 @@ struct LatencyBudgetLockTests {
         #expect(policy.shouldSuppressResult(latencyMilliseconds: 451, schedule: schedule) == true)
     }
 
-    @Test("Default completion policy keeps the Gemma low-latency target shape")
+    @Test("Default completion policy keeps the verified Qwen low-latency target shape")
     func defaultCompletionPolicyShapeIsLocked() {
         let policy = CompletionModelPolicy.mvp
 
-        #expect(policy.model == .gemma4E4BItOptiQ)
+        #expect(policy.model == .qwen35FourB)
         #expect(policy.targetLatencyMilliseconds == 50)
         #expect(policy.maxGeneratedTokens == 20)
         #expect(policy.maxVisibleWords == 8)
@@ -66,8 +66,9 @@ struct LatencyBudgetLockTests {
     func defaultAssetMatchesDefaultPolicyModel() {
         // The single fact behind docs/research/runtime-options.md: the preferred MLX asset
         // and the default completion policy must agree on the model. Historically the docs
-        // claimed Qwen while the code shipped Gemma; this binds them.
+        // Drift between the runtime asset and prompt policy can silently select the wrong model.
         #expect(LocalModelAssetManifest.preferredMLX.model == CompletionModelPolicy.mvp.model)
-        #expect(LocalModelAssetManifest.preferredMLX.model == .gemma4E4BItOptiQ)
+        #expect(LocalModelAssetManifest.preferredMLX.model == .qwen35FourB)
+        #expect(LocalModelAssetManifest.preferredMLX.source != nil)
     }
 }

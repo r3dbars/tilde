@@ -5,8 +5,23 @@ import AutocompleteLabCore
 struct TraceScreenshotCaptureResult: Equatable {
     let path: String
     let rectDescription: String
+    let screenshotPathAuthorized: Bool
 
-    static let none = TraceScreenshotCaptureResult(path: "", rectDescription: "none")
+    init(
+        path: String,
+        rectDescription: String,
+        screenshotPathAuthorized: Bool = false
+    ) {
+        self.path = path
+        self.rectDescription = rectDescription
+        self.screenshotPathAuthorized = screenshotPathAuthorized
+    }
+
+    static let none = TraceScreenshotCaptureResult(
+        path: "",
+        rectDescription: "none",
+        screenshotPathAuthorized: false
+    )
 }
 
 struct TraceScreenshotCaptureRequest {
@@ -105,7 +120,8 @@ final class TraceScreenshotCaptureCoordinator {
 
         return TraceScreenshotCaptureResult(
             path: screenshotURL.path,
-            rectDescription: Self.compactRectDescription(captureRect)
+            rectDescription: Self.compactRectDescription(captureRect),
+            screenshotPathAuthorized: true
         )
     }
 

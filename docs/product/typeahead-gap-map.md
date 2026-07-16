@@ -95,7 +95,6 @@ SteadyType map:
 - `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`
 - `Sources/AutocompleteLabApp/Mac/LocalReportExporter.swift`
 - `Sources/AutocompleteLabApp/App/PrivacyExportProofCommand.swift`
-- `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`
 - `Sources/AutocompleteLabCore/Tracing/AutocompleteTracePrivacyFilter.swift`
 - `docs/product/eval-and-tracing.md`
 - `script/check_trace_eval.sh`
