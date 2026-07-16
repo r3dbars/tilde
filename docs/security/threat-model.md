@@ -168,7 +168,7 @@ parent directory's mode. Adversary A2.
 (and *tightens existing* artifacts on the next write, so an upgraded install migrates old
 world-readable files). Every local artifact writer now routes through it — the five above plus
 `Mac/TraceLogger.swift` (the `raw-traces.jsonl` dogfood lane), `Mac/LocalReportExporter.swift`
-(export/privacy bundles incl. the raw-derived `survival-inspector-debug.json`), and
+(the redacted export/privacy bundle), and
 `Mac/CompatibilityLearningStore.swift`. `screencapture` output and atomic `Data.write` outputs
 are re-tightened after creation. Tests:
 `Tests/AutocompleteLabAppTests/SecureLocalStorageTests.swift` and

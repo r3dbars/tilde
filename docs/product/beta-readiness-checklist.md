@@ -59,8 +59,8 @@ Use this before inviting private beta testers.
   `./script/check_redacted_report_export.sh`.
 - [x] Dependency/SDK inventory works through
   `./script/check_dependency_inventory.sh`.
-- [x] Current app build redacted export proof works through
-  `./script/check_current_build_privacy_export.sh`.
+- [x] The visible exporter's redaction and six-file artifact contract work
+  through `./script/check_redacted_report_export.sh`.
 
 ## Feedback Ops Gate
 

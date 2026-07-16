@@ -165,7 +165,7 @@ for expected_doc in \
   "tester-docs/autocomplete-beta-feedback.yml" \
   ".github/labels.yml" \
   ".github/ISSUE_TEMPLATE/autocomplete-beta-feedback.yml" \
-  "check_current_build_privacy_export.sh"; do
+  "check_redacted_report_export.sh"; do
   require_contains "$SCRIPT_TEXT" "$expected_doc"
 done
 

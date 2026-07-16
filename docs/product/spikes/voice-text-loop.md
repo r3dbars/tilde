@@ -160,18 +160,17 @@ loopholes:
 
 ### Sentinel coverage (required before graduation)
 
-The current build's export proof,
-[`script/check_current_build_privacy_export.sh`](../../../script/check_current_build_privacy_export.sh),
-runs the real app binary, plants private *sentinels*, exports the redacted
-bundle, and fails if any sentinel survives. Because this spike adds **no app or
-runtime surface**, there is nothing for that script to catch yet — and adding a
-spoken sentinel now would be dishonest proof (it could never appear). That gate
-becomes mandatory the moment spoken text touches the app:
+The export proof in
+[`RawTraceReportExportTests.swift`](../../../Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift)
+plants private *sentinels*, runs the visible Settings exporter's implementation,
+and fails if any sentinel survives. Because this spike adds **no app or runtime
+surface**, there is nothing for that test to catch yet — and adding a spoken
+sentinel now would be dishonest proof (it could never appear). That gate becomes
+mandatory the moment spoken text touches the app:
 
-- Add a spoken-specific sentinel (e.g. `proof-private-spoken-…`) to the proof
-  binary's synthetic inputs and to the grep/`raw_text_fields` checks in that
-  script, so a leak of spoken text into any shareable file or trace field fails
-  the build.
+- Add a spoken-specific sentinel (e.g. `proof-private-spoken-…`) to the test's
+  synthetic inputs and private-sentinel checks, so a leak of spoken text into
+  any shareable file or trace field fails the build.
 - Add a spoken-text row to
   [docs/product/beta-privacy-data-checklist.md](../beta-privacy-data-checklist.md)
   and note the Transcripted local-read dependency in
@@ -214,7 +213,7 @@ spoken-text privacy proof is pending.*
 **Graduate to a gated internal dogfood (Justin-only), behind the existing
 flag**, in this order:
 
-1. Land the spoken sentinel in `check_current_build_privacy_export.sh` and the
+1. Land the spoken sentinel in `RawTraceReportExportTests` and the
    privacy-checklist/dependency rows **first** (privacy proof before wiring).
 2. Wire `VoiceContextPhrasePredictor` into `SuggestionOrchestrator` next to the
    existing `docLocalContextTexts` path, reading a local fixture or a real

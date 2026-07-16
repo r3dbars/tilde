@@ -34,27 +34,6 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
         try encoder.encode(redactedSurvivalEvents(for: events))
     }
 
-    public func debugSurvivalInspectorJSONData(
-        for events: [AutocompleteTraceEvent],
-        encoder: JSONEncoder = JSONEncoder()
-    ) throws -> Data {
-        let survivalEvents = events.filter {
-            $0.type == .suggestionAccepted
-                || $0.type == .acceptedTextEdited
-                || $0.type == .acceptanceRetentionCleared
-        }
-        return try encoder.encode(survivalEvents)
-    }
-
-    public func htmlReport(
-        summary _: AutocompleteTraceSummary,
-        events: [AutocompleteTraceEvent]
-    ) -> String {
-        let redacted = redactedEvents(events)
-        let safeSummary = AutocompleteTraceAnalyzer().summary(for: redacted)
-        return htmlReport(forRedactedEvents: redacted, summary: safeSummary)
-    }
-
     public func htmlReport(for events: [AutocompleteTraceEvent]) -> String {
         let redacted = redactedEvents(events)
         return htmlReport(
@@ -164,7 +143,7 @@ public struct AutocompleteTraceReportGenerator: Equatable, Sendable {
             <li>This report is generated locally from the default redacted trace.</li>
             <li>Typed text, accepted text, screenshots, screenshot paths, document names, URLs, recipients, and subject lines are not included.</li>
             <li>Share only this redacted report for normal beta feedback.</li>
-            <li>Use raw debug exports only for explicit local debugging sessions.</li>
+            <li>Enable raw diagnostics only for explicit local debugging sessions.</li>
           </ul>
           <h2>Accepted-and-kept survival slices</h2>
           <h3>By app</h3><ul>\(sortedRateList(summary.acceptedAndKeptRateByApp))</ul>

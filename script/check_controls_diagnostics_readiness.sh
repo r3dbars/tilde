@@ -5,24 +5,19 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 failures=0
-proof_output="$(mktemp -d)"
 LOG_DIR="$(mktemp -d)"
 SWIFT_TEST_ARGS=()
 SWIFT_TEST_ARGS_CONFIGURED=0
-CURRENT_BUILD_ENV=(
-  AUTOCOMPLETE_LAB_PRIVACY_PROOF_OUTPUT="$proof_output"
-)
 
 if [[ -n "${AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH:-}" ]]; then
   SWIFT_SCRATCH_PATH="$AUTOCOMPLETE_LAB_READINESS_SCRATCH_PATH"
   mkdir -p "$SWIFT_SCRATCH_PATH"
   SWIFT_TEST_ARGS=(--scratch-path "$SWIFT_SCRATCH_PATH/swift-tests")
   SWIFT_TEST_ARGS_CONFIGURED=1
-  CURRENT_BUILD_ENV+=(AUTOCOMPLETE_LAB_SWIFT_SCRATCH_PATH="$SWIFT_SCRATCH_PATH/current-build")
 fi
 
 cleanup() {
-  rm -rf "$proof_output" "$LOG_DIR"
+  rm -rf "$LOG_DIR"
 }
 trap cleanup EXIT
 
@@ -98,12 +93,11 @@ for script_path in \
   ./script/delete_local_traces_self_test.sh \
   ./script/check_diagnostics_log_self_test.sh \
   ./script/check_controls_diagnostics_readiness_self_test.sh \
-  ./script/check_redacted_report_export.sh \
-  ./script/check_current_build_privacy_export.sh; do
+  ./script/check_redacted_report_export.sh; do
   run_check "Executable $(basename "$script_path")" require_executable "$script_path" || failures=$((failures + 1))
 done
 
-CONTROL_FILTER='SettingsWindowControllerStateTests|DiagnosticsWindowControllerStateTests|DiagnosticsTypingHealthTests|SuggestionControlPolicyTests|SuggestionPauseSchedulePolicyTests|DisabledAppSelectionTests|RawTracePrivacyExpiryTests|RawTraceReportExportTests|PrivacyExportProofCommandTests'
+CONTROL_FILTER='SettingsWindowControllerStateTests|DiagnosticsWindowControllerStateTests|DiagnosticsTypingHealthTests|SuggestionControlPolicyTests|SuggestionPauseSchedulePolicyTests|DisabledAppSelectionTests|RawTracePrivacyExpiryTests|RawTraceReportExportTests'
 run_logged_check "Swift controls and diagnostics tests" run_swift_tests "$CONTROL_FILTER" || failures=$((failures + 1))
 
 run_logged_check "Delete local traces self-test" ./script/delete_local_traces_self_test.sh || failures=$((failures + 1))
@@ -112,10 +106,6 @@ run_logged_check "Controls diagnostics readiness self-test" ./script/check_contr
 run_logged_check "Redacted report export" env \
   AUTOCOMPLETE_LAB_SWIFT_SKIP_BUILD=1 \
   ./script/check_redacted_report_export.sh || failures=$((failures + 1))
-
-run_logged_check "Current build privacy export proof" env \
-  "${CURRENT_BUILD_ENV[@]}" \
-  ./script/check_current_build_privacy_export.sh || failures=$((failures + 1))
 
 if ((failures > 0)); then
   echo
