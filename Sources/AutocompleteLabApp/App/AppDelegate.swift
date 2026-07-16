@@ -287,6 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
     private let codexPromptTargetContinuityPolicy = CodexPromptTargetContinuityPolicy()
     private let codexPromptPresentationRefreshRetryPolicy = CodexPromptPresentationRefreshRetryPolicy()
+    private let codexPromptPresentationPreparationPolicy = CodexPromptPresentationPreparationPolicy()
     private let promptProofFieldIdentityRefreshPolicy = PromptProofFieldIdentityRefreshPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
@@ -7770,13 +7771,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionState.invalidatedByUserKeyDown
             && currentSuggestionState.id == suggestionID
-        let axCooldownDelayMilliseconds = refreshBeforePresenting
+        let cooldownDelayMilliseconds = refreshBeforePresenting
             ? codexPromptAXCooldownPresentationDelayMilliseconds(
                 profile: profile,
                 fieldIdentity: fieldIdentity
             )
             : 0
-        if axCooldownDelayMilliseconds > 0 {
+        let refreshedContext: (context: FocusedTextContext?, reason: String?)
+        switch codexPromptPresentationPreparationPolicy.preparation(
+            refreshBeforePresenting: refreshBeforePresenting,
+            cooldownDelayMilliseconds: cooldownDelayMilliseconds
+        ) {
+        case let .deferForAXCooldown(delayMilliseconds):
             scheduleCodexPromptPresentationAfterAXCooldown(
                 suggestion,
                 suggestionID: suggestionID,
@@ -7791,18 +7797,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 candidateSelectionMetadata: candidateSelectionMetadata,
                 scheduledDelayMilliseconds: scheduledDelayMilliseconds,
                 presentationRefreshAttempt: presentationRefreshAttempt,
-                delayMilliseconds: axCooldownDelayMilliseconds
+                delayMilliseconds: delayMilliseconds
             )
             return
-        }
-        let refreshedContext = refreshBeforePresenting
-            ? refreshedPresentationContext(
+        case .refreshFocusedContext:
+            refreshedContext = refreshedPresentationContext(
                 for: request,
                 requestContext: context,
                 profile: profile,
                 fieldIdentity: fieldIdentity
             )
-            : (context: Optional(context), reason: nil)
+        case .useOriginalContext:
+            refreshedContext = (context: context, reason: nil)
+        }
         let verifiedRefreshContext = refreshBeforePresenting ? refreshedContext.context : nil
         let freshnessFieldIdentity = verifiedRefreshContext == nil
             ? currentFieldIdentity

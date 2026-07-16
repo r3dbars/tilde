@@ -7,6 +7,24 @@ import Testing
 struct CodexPromptTargetContinuityPolicyTests {
     private let policy = CodexPromptTargetContinuityPolicy()
 
+    @Test("Presentation preparation defers before any focused-context refresh")
+    func presentationPreparationDefersBeforeAnyFocusedContextRefresh() {
+        let preparationPolicy = CodexPromptPresentationPreparationPolicy()
+
+        #expect(preparationPolicy.preparation(
+            refreshBeforePresenting: true,
+            cooldownDelayMilliseconds: 250
+        ) == .deferForAXCooldown(delayMilliseconds: 250))
+        #expect(preparationPolicy.preparation(
+            refreshBeforePresenting: true,
+            cooldownDelayMilliseconds: 0
+        ) == .refreshFocusedContext)
+        #expect(preparationPolicy.preparation(
+            refreshBeforePresenting: false,
+            cooldownDelayMilliseconds: 250
+        ) == .useOriginalContext)
+    }
+
     @Test("Preserves exact prompt through transient AX wrapper and bounds loss")
     func preservesExactPromptThroughTransientAXWrapperAndBoundsLoss() throws {
         let fieldIdentity = identity()
@@ -149,6 +167,17 @@ struct CodexPromptTargetContinuityPolicyTests {
             trustedAnchor: anchor,
             observedContext: context(
                 elementRect: CGRect(x: 100, y: 620, width: 700, height: 100)
+            )
+        ))
+        #expect(!policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot,
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementRect: CGRect(x: 100, y: 620, width: 0, height: 80)
             )
         ))
         #expect(policy.canDeferInvalidation(
@@ -390,6 +419,33 @@ struct CodexPromptTargetContinuityPolicyTests {
             trustedAnchor: anchor,
             observedContext: context(elementIdentifier: 99, caretRect: nil, elementRect: nil)
         ))
+    }
+
+    @Test("Rejects zero-size anchors before missing-bounds continuity")
+    func rejectsZeroSizeAnchorsBeforeMissingBoundsContinuity() {
+        let fieldIdentity = identity()
+        let invalidAnchorContexts = [
+            context(elementRect: CGRect(x: 100, y: 620, width: 0, height: 80)),
+            context(elementRect: CGRect(x: 100, y: 620, width: 700, height: 0))
+        ]
+
+        for invalidContext in invalidAnchorContexts {
+            let anchor = policy.anchor(
+                appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+                fieldIdentity: fieldIdentity,
+                context: invalidContext
+            )
+            #expect(anchor == nil)
+            #expect(!policy.canDeferInvalidation(
+                appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+                processIdentifier: 42,
+                promptBlockReason: "missing-prompt-bounds",
+                currentFieldIdentity: fieldIdentity,
+                currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+                trustedAnchor: anchor,
+                observedContext: context(caretRect: nil, elementRect: nil)
+            ))
+        }
     }
 
     @Test("Presentation refresh retries are bounded")
