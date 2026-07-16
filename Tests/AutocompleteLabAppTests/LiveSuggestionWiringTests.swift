@@ -57,6 +57,18 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "else if idleRetryReason != nil {")
         try require(appDelegate, contains: "? \"idle-retry\"")
     }
+
+    @Test("App delegate preserves and rechecks transient Codex prompt targets")
+    func appDelegatePreservesAndRechecksTransientCodexPromptTargets() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(appDelegate, contains: "shouldDeferCodexPromptTargetInvalidation(")
+        try require(appDelegate, contains: "\"codex-prompt-target-refresh-deferred\"")
+        try require(appDelegate, contains: "scheduleCodexPromptPresentationRefreshRetry(")
+        try require(appDelegate, contains: "codexPromptPresentationRetryTask?.cancel()")
+        try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
+        try require(appDelegate, contains: "fieldStatusIndicator.hide()")
+    }
 }
 
 private func source(_ relativePath: String) throws -> String {
