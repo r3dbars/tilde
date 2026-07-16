@@ -285,6 +285,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profileStore = CompatibilityProfileStore.mvp
     private let promptEditorPolicy = PromptEditorFingerprintPolicy()
     private let codexProofFocusedTargetPolicy = CodexProofFocusedTargetPolicy()
+    private let codexPromptTargetContinuityPolicy = CodexPromptTargetContinuityPolicy()
+    private let codexPromptPresentationRefreshRetryPolicy = CodexPromptPresentationRefreshRetryPolicy()
+    private let codexPromptPresentationPreparationPolicy = CodexPromptPresentationPreparationPolicy()
     private let promptProofFieldIdentityRefreshPolicy = PromptProofFieldIdentityRefreshPolicy()
     private let browserHostedSurfacePolicy = BrowserHostedSurfacePolicy()
     private let suggestionSilenceExplanationPolicy = SuggestionSilenceExplanationPolicy()
@@ -512,6 +515,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentFieldIdentity: FocusedFieldIdentity?
     private var currentProfile: CompatibilityProfile?
     private var lastTextSnapshot: FocusedTextSnapshot?
+    private var lastTrustedCodexPromptTargetContinuityAnchor: CodexPromptTargetContinuityAnchor?
+    private var codexPromptAXCooldownPreservation: CodexPromptAXCooldownPreservation?
     private var lastTrustedObsidianEndOfDocumentSnapshot: FocusedTextSnapshot?
     private var personalCaptureLastSnapshot: FocusedTextSnapshot?
     private var lastFocusedTextChangeAt: Date?
@@ -522,6 +527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var disabledBundleIdentifiers: Set<String> = []
     private var debounceTask: Task<Void, Never>?
     private var debounceTaskSuggestionID: String?
+    private var codexPromptPresentationRetryTask: Task<Void, Never>?
     private var insertionVerificationTask: Task<Void, Never>?
     private var deferredTerminalHostAcceptanceTask: Task<Void, Never>?
     private let acceptanceSurvivalChecker = AcceptanceSurvivalChecker()
@@ -536,6 +542,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private let typingBurstPolicy = TypingBurstPolicy()
     private var typingBurstState = TypingBurstState()
+    private var suggestionIdleRetryState = SuggestionIdleRetryState()
     private var currentSuggestionState = CurrentSuggestionState()
     private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
     private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
@@ -1363,6 +1370,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         cancelPrefixCooldownRetry()
         lastTextSnapshot = nil
+        lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()
@@ -1763,7 +1772,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard allowFocusedTextAXRead(for: frontmostApp.bundleIdentifier) else {
+        guard allowFocusedTextAXRead(for: frontmostApp) else {
             return
         }
 
@@ -1917,7 +1926,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         guard appSettings.personalCaptureEnabled,
               accessibilityClient.isTrusted,
-              allowFocusedTextAXRead(for: app.bundleIdentifier) else {
+              allowFocusedTextAXRead(for: app) else {
             return false
         }
 
@@ -2079,6 +2088,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for: frontmostApp.bundleIdentifier,
             context: rawContext
         )
+        if !promptMatch.canSuggest,
+           shouldDeferCodexPromptTargetInvalidation(
+            app: frontmostApp,
+            context: rawContext,
+            promptBlockReason: promptMatch.reason
+           ) {
+            let hasVisibleSuggestion = suggestionSession.hasVisibleSuggestion
+            setSuggestionDecision(
+                hasVisibleSuggestion
+                    ? "Shown: preserving current suggestion"
+                    : "Waiting: Codex prompt refresh"
+            )
+            fieldStatusIndicator.hide()
+            DiagnosticsLog.shared.record(
+                "codex-prompt-target-refresh-deferred",
+                metadata: [
+                    "app": frontmostApp.bundleIdentifier,
+                    "reason": promptMatch.reason,
+                    "role": rawContext.role ?? "unknown",
+                    "beforeChars": String(rawContext.textBeforeCursor.count),
+                    "afterChars": String(rawContext.textAfterCursor.count),
+                    "hasVisibleSuggestion": String(hasVisibleSuggestion)
+                ]
+            )
+            if hasVisibleSuggestion {
+                updateKeyboardEventTapSnapshot()
+            }
+            return
+        }
         guard promptMatch.canSuggest else {
             clearFocusedFieldState(resetBlockLogGate: false)
             currentProfile = profile
@@ -2212,6 +2250,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             textBeforeCursor: context.textBeforeCursor,
             textAfterCursor: context.textAfterCursor
         )
+        lastTrustedCodexPromptTargetContinuityAnchor = codexPromptTargetContinuityPolicy.anchor(
+            appBundleIdentifier: frontmostApp.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: context
+        )
         rememberTrustedObsidianEndOfDocumentSnapshotIfNeeded(snapshot)
         recordPersonalCaptureSnapshot(
             context: context,
@@ -2238,7 +2281,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard snapshot != previousSnapshot else {
+        let idleRetryReason: SuggestionIdleRetryReason?
+        if snapshot == previousSnapshot {
+            idleRetryReason = suggestionIdleRetryState.consumeRetryIfReady(
+                snapshot: snapshot,
+                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            )
+        } else {
+            idleRetryReason = nil
+        }
+
+        guard snapshot != previousSnapshot || idleRetryReason != nil else {
             if shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
                 context: context,
                 profile: profile,
@@ -2258,49 +2312,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 return
             }
+            let isWaitingForIdleRetry = suggestionIdleRetryState.hasPendingRetry
             setSuggestionDecision(
                 suggestionSession.hasVisibleSuggestion
                     ? "Shown: tracking current field"
-                    : "Ready: waiting for text change"
+                    : isWaitingForIdleRetry
+                        ? "Waiting: typing to settle"
+                        : "Ready: waiting for text change"
             )
             showFieldStatusIndicator(
-                suggestionSession.hasVisibleSuggestion ? .shown : .ready,
+                suggestionSession.hasVisibleSuggestion
+                    ? .shown
+                    : isWaitingForIdleRetry
+                        ? .waiting.withReason("typing to settle")
+                        : .ready,
                 context: context
             )
             repositionVisibleSuggestion(context: context, profile: profile)
             return
         }
 
-        if previousSnapshot != nil {
+        if previousSnapshot != nil, idleRetryReason == nil {
             lastFocusedTextChangeAt = Date()
         }
         cancelPrefixCooldownRetry()
-        let typingBurstDecision = observeTypingBurst(
-            previousSnapshot: previousSnapshot,
-            currentSnapshot: snapshot
-        )
+        let typingBurstDecision: TypingBurstDecision
+        if let idleRetryReason {
+            typingBurstState.reset()
+            typingBurstDecision = .idle
+            suggestionBlockLogGate.reset()
+            DiagnosticsLog.shared.record(
+                "suggestion-idle-retry",
+                metadata: [
+                    "reason": idleRetryReason.rawValue,
+                    "fieldIdentity": fieldIdentity.traceDescription,
+                    "beforeChars": String(snapshot.textBeforeCursor.count),
+                    "afterChars": String(snapshot.textAfterCursor.count)
+                ]
+            )
+        } else {
+            typingBurstDecision = observeTypingBurst(
+                previousSnapshot: previousSnapshot,
+                currentSnapshot: snapshot
+            )
+        }
 
-        recordTypedOverSuggestionIfNeeded(
-            newTextBeforeCursor: context.textBeforeCursor,
-            fieldIdentity: fieldIdentity,
-            profile: profile
-        )
-        rememberTypedWordsIfNeeded(
-            previousSnapshot: previousSnapshot,
-            currentSnapshot: snapshot,
-            appBundleIdentifier: frontmostApp.bundleIdentifier
-        )
-        if advanceVisibleSuggestionForTypingProgressIfNeeded(
-            context: context,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            snapshot: snapshot
-        ) {
-            return
+        if idleRetryReason == nil {
+            recordTypedOverSuggestionIfNeeded(
+                newTextBeforeCursor: context.textBeforeCursor,
+                fieldIdentity: fieldIdentity,
+                profile: profile
+            )
+            rememberTypedWordsIfNeeded(
+                previousSnapshot: previousSnapshot,
+                currentSnapshot: snapshot,
+                appBundleIdentifier: frontmostApp.bundleIdentifier
+            )
+            if advanceVisibleSuggestionForTypingProgressIfNeeded(
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                snapshot: snapshot
+            ) {
+                return
+            }
         }
 
         lastTextSnapshot = snapshot
-        invalidatePendingSuggestionRequest()
+        let cancelledPendingRequest = invalidatePendingSuggestionRequest()
+        if idleRetryReason == nil {
+            suggestionIdleRetryState.noteTextChange(
+                snapshot: snapshot,
+                cancelledPendingRequest: cancelledPendingRequest,
+                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+                settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+            )
+        }
         if suggestionCadenceResetPolicy.shouldResetLastRequestedText(
             previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
             currentTextBeforeCursor: context.textBeforeCursor,
@@ -2653,6 +2740,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .pausePhrase
                 }
             }
+        } else if idleRetryReason != nil {
+            delayMilliseconds = 0
+            timingLane = switch requestMode {
+            case .wordCompletion:
+                .instantWord
+            case .sentenceContinuation:
+                .longPauseThought
+            case .phraseContinuation:
+                .pausePhrase
+            }
         } else if case let .request(policyDelayMilliseconds, policyTimingLane) = triggerDecision {
             delayMilliseconds = policyDelayMilliseconds
             timingLane = policyTimingLane
@@ -2699,7 +2796,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context: context,
                 appBundleIdentifier: frontmostApp.bundleIdentifier
             ),
-            triggerReason: isManualSuggestionRequest ? "manual-summon" : "poll"
+            triggerReason: isManualSuggestionRequest
+                ? "manual-summon"
+                : idleRetryReason != nil
+                    ? "idle-retry"
+                    : "poll"
         )
     }
 
@@ -2901,13 +3002,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return app.bundleIdentifier
     }
 
-    private func allowFocusedTextAXRead(for bundleIdentifier: String) -> Bool {
+    private func allowFocusedTextAXRead(for app: RunningApplicationInfo) -> Bool {
         switch focusedTextAXHealthPolicy.pollDecision(
-            for: bundleIdentifier,
+            for: app.bundleIdentifier,
             now: Date(),
             state: &focusedTextAXHealthState
         ) {
         case let .allowed(recovery?):
+            codexPromptAXCooldownPreservation = nil
             DiagnosticsLog.shared.record(
                 "focused-text-ax-health-recovered",
                 metadata: [
@@ -2918,8 +3020,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return true
         case .allowed(nil):
+            codexPromptAXCooldownPreservation = nil
             return true
         case let .coolingDown(cooldown):
+            let hasActiveSuggestionWork = debounceTask != nil
+                || codexPromptPresentationRetryTask != nil
+                || suggestionSession.hasVisibleSuggestion
+                || suggestionIdleRetryState.hasPendingRetry
+                || manualSuggestionRequestPending
+            let shouldPreservePendingRequest = codexPromptTargetContinuityPolicy
+                .canPreserveDuringAXCooldown(
+                    appBundleIdentifier: app.bundleIdentifier,
+                    processIdentifier: app.processIdentifier,
+                    currentFieldIdentity: currentFieldIdentity,
+                    currentSnapshot: lastTextSnapshot,
+                    trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+                    preservation: codexPromptAXCooldownPreservation,
+                    hasActiveSuggestionWork: hasActiveSuggestionWork
+                )
+            if !shouldPreservePendingRequest {
+                codexPromptAXCooldownPreservation = nil
+            }
             DiagnosticsLog.shared.record(
                 "focused-text-ax-health-cooldown",
                 metadata: [
@@ -2929,7 +3050,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "remainingMilliseconds": String(cooldown.remainingMilliseconds)
                 ]
             )
-            handleFocusedTextAXHealthCooldown(cooldown, source: "poll")
+            handleFocusedTextAXHealthCooldown(
+                cooldown,
+                source: "poll",
+                preservePendingRequest: shouldPreservePendingRequest
+            )
             setSuggestionDecision("Waiting: AX cooldown")
             return false
         }
@@ -2950,6 +3075,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
 
+        let hasActiveSuggestionWork = debounceTask != nil
+            || codexPromptPresentationRetryTask != nil
+            || suggestionSession.hasVisibleSuggestion
+            || suggestionIdleRetryState.hasPendingRetry
+            || manualSuggestionRequestPending
+        let shouldPreservePendingRequest = result.context.map {
+            codexPromptTargetContinuityPolicy.canBeginAXCooldownPreservation(
+                appBundleIdentifier: result.app.bundleIdentifier,
+                processIdentifier: result.app.processIdentifier,
+                currentFieldIdentity: currentFieldIdentity,
+                currentSnapshot: lastTextSnapshot,
+                trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+                observedContext: $0,
+                hasActiveSuggestionWork: hasActiveSuggestionWork
+            )
+        } ?? false
+        codexPromptAXCooldownPreservation = shouldPreservePendingRequest
+            ? codexPromptTargetContinuityPolicy.axCooldownPreservation(
+                trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+                cooldownMilliseconds: cooldown.cooldownMilliseconds
+            )
+            : nil
+
         DiagnosticsLog.shared.record(
             "focused-text-ax-health-cooldown-started",
             metadata: [
@@ -2962,16 +3110,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "hasContext": String(result.context != nil)
             ]
         )
-        handleFocusedTextAXHealthCooldown(cooldown, source: "read")
+        handleFocusedTextAXHealthCooldown(
+            cooldown,
+            source: "read",
+            preservePendingRequest: shouldPreservePendingRequest
+        )
         setSuggestionDecision("Waiting: AX cooldown")
         return true
     }
 
     private func handleFocusedTextAXHealthCooldown(
         _ cooldown: FocusedTextAXHealthCooldown,
-        source: String
+        source: String,
+        preservePendingRequest: Bool = false
     ) {
-        invalidatePendingSuggestionRequest()
+        fieldStatusIndicator.hide()
+        if !preservePendingRequest {
+            invalidatePendingSuggestionRequest()
+        }
         guard suggestionSession.hasVisibleSuggestion else {
             return
         }
@@ -3556,6 +3712,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selectedTextLength: context.selectedTextLength
         )
         return PromptTextAreaMatch(canSuggest: decision.canSuggest, reason: decision.reason)
+    }
+
+    private func shouldDeferCodexPromptTargetInvalidation(
+        app: RunningApplicationInfo,
+        context: FocusedTextContext,
+        promptBlockReason: String
+    ) -> Bool {
+        let hasActiveSuggestionWork = debounceTask != nil
+            || codexPromptPresentationRetryTask != nil
+            || suggestionSession.hasVisibleSuggestion
+            || suggestionIdleRetryState.hasPendingRetry
+            || manualSuggestionRequestPending
+        guard hasActiveSuggestionWork else {
+            return false
+        }
+
+        return codexPromptTargetContinuityPolicy.canDeferInvalidation(
+            appBundleIdentifier: app.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            promptBlockReason: promptBlockReason,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: lastTextSnapshot,
+            trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+            observedContext: context
+        )
     }
 
     private func syntheticTextAreaCaretRect(
@@ -7176,6 +7357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
             if didPresentFastPhraseFallback {
+                suggestionIdleRetryState.cancel()
                 let metadata = [
                     "renderMode": renderMode.rawValue,
                     "reason": "typing-burst-model-continuation-kept-fast-phrase"
@@ -7238,6 +7420,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: fieldIdentity,
                 metadata: metadata
             )
+            suggestionIdleRetryState.noteTypingBurstSuppression(
+                snapshot: FocusedTextSnapshot(
+                    fieldIdentity: fieldIdentity,
+                    textBeforeCursor: context.textBeforeCursor,
+                    textAfterCursor: context.textAfterCursor
+                ),
+                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+                settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+            )
             hideSuggestion(reason: "typing-burst", metadata: typingBurstMetadata)
             return
         }
@@ -7257,6 +7448,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
+        suggestionIdleRetryState.cancel()
         debounceTaskSuggestionID = suggestionID
         debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
             try? await Task.sleep(for: .milliseconds(requestSchedule.scheduledDelayMilliseconds))
@@ -7573,18 +7765,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestTicket: SuggestionRequestTicket? = nil,
         candidateSelectionMetadata: [String: String] = [:],
         refreshBeforePresenting: Bool = true,
-        scheduledDelayMilliseconds: Int = 0
+        scheduledDelayMilliseconds: Int = 0,
+        presentationRefreshAttempt: Int = 0
     ) {
         let originalContext = context
         let invalidatedByVisibleUserTyping = currentSuggestionState.invalidatedByUserKeyDown
             && currentSuggestionState.id == suggestionID
-        let refreshedContext = refreshBeforePresenting
-            ? refreshedPresentationContext(
-                for: request,
+        let cooldownDelayMilliseconds = refreshBeforePresenting
+            ? codexPromptAXCooldownPresentationDelayMilliseconds(
                 profile: profile,
                 fieldIdentity: fieldIdentity
             )
-            : (context: Optional(context), reason: nil)
+            : 0
+        let refreshedContext: (context: FocusedTextContext?, reason: String?)
+        switch codexPromptPresentationPreparationPolicy.preparation(
+            refreshBeforePresenting: refreshBeforePresenting,
+            cooldownDelayMilliseconds: cooldownDelayMilliseconds
+        ) {
+        case let .deferForAXCooldown(delayMilliseconds):
+            scheduleCodexPromptPresentationAfterAXCooldown(
+                suggestion,
+                suggestionID: suggestionID,
+                request: request,
+                context: originalContext,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: latencyMilliseconds,
+                triggerReason: triggerReason,
+                requestTicket: requestTicket,
+                candidateSelectionMetadata: candidateSelectionMetadata,
+                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+                presentationRefreshAttempt: presentationRefreshAttempt,
+                delayMilliseconds: delayMilliseconds
+            )
+            return
+        case .refreshFocusedContext:
+            refreshedContext = refreshedPresentationContext(
+                for: request,
+                requestContext: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity
+            )
+        case .useOriginalContext:
+            refreshedContext = (context: context, reason: nil)
+        }
         let verifiedRefreshContext = refreshBeforePresenting ? refreshedContext.context : nil
         let freshnessFieldIdentity = verifiedRefreshContext == nil
             ? currentFieldIdentity
@@ -7642,7 +7867,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let context = refreshedContext.context else {
-            let reason = refreshedContext.reason ?? "stale-focused-context"
+            let refreshReason = refreshedContext.reason ?? "stale-focused-context"
+            if refreshReason == "transient-codex-prompt-target",
+               let retry = codexPromptPresentationRefreshRetryPolicy.next(
+                after: presentationRefreshAttempt
+               ) {
+                scheduleCodexPromptPresentationRefreshRetry(
+                    suggestion,
+                    suggestionID: suggestionID,
+                    request: request,
+                    context: originalContext,
+                    profile: profile,
+                    fieldIdentity: fieldIdentity,
+                    renderMode: renderMode,
+                    latencyMilliseconds: latencyMilliseconds,
+                    triggerReason: triggerReason,
+                    requestTicket: requestTicket,
+                    candidateSelectionMetadata: candidateSelectionMetadata,
+                    scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+                    retry: retry
+                )
+                return
+            }
+            let reason = refreshReason == "transient-codex-prompt-target"
+                ? "stale-prompt-target"
+                : refreshReason
             RawAutocompleteTraceLog.shared.record(
                 type: .suggestionSuppressed,
                 suggestionID: suggestionID,
@@ -8141,8 +8390,139 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateKeyboardEventTapSnapshot()
     }
 
+    private func scheduleCodexPromptPresentationRefreshRetry(
+        _ suggestion: CompletionSuggestion,
+        suggestionID: String,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        renderMode: SuggestionRenderMode,
+        latencyMilliseconds: Int,
+        triggerReason: String,
+        requestTicket: SuggestionRequestTicket?,
+        candidateSelectionMetadata: [String: String],
+        scheduledDelayMilliseconds: Int,
+        retry: CodexPromptPresentationRefreshRetry
+    ) {
+        codexPromptPresentationRetryTask?.cancel()
+        setSuggestionDecision("Waiting: Codex prompt refresh")
+        fieldStatusIndicator.hide()
+        DiagnosticsLog.shared.record(
+            "codex-prompt-target-refresh-retry-scheduled",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "attempt": String(retry.attempt),
+                "delayMilliseconds": String(retry.delayMilliseconds),
+                "beforeChars": String(request.textBeforeCursor.count),
+                "afterChars": String(request.textAfterCursor.count)
+            ]
+        )
+        codexPromptPresentationRetryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(retry.delayMilliseconds))
+            guard !Task.isCancelled, let self else {
+                return
+            }
+
+            self.codexPromptPresentationRetryTask = nil
+            self.presentSuggestion(
+                suggestion,
+                suggestionID: suggestionID,
+                request: request,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: latencyMilliseconds + retry.delayMilliseconds,
+                triggerReason: triggerReason,
+                requestTicket: requestTicket,
+                candidateSelectionMetadata: candidateSelectionMetadata,
+                refreshBeforePresenting: true,
+                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+                presentationRefreshAttempt: retry.attempt
+            )
+        }
+    }
+
+    private func scheduleCodexPromptPresentationAfterAXCooldown(
+        _ suggestion: CompletionSuggestion,
+        suggestionID: String,
+        request: CompletionRequest,
+        context: FocusedTextContext,
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity,
+        renderMode: SuggestionRenderMode,
+        latencyMilliseconds: Int,
+        triggerReason: String,
+        requestTicket: SuggestionRequestTicket?,
+        candidateSelectionMetadata: [String: String],
+        scheduledDelayMilliseconds: Int,
+        presentationRefreshAttempt: Int,
+        delayMilliseconds: Int
+    ) {
+        codexPromptPresentationRetryTask?.cancel()
+        setSuggestionDecision("Waiting: Codex AX cooldown")
+        fieldStatusIndicator.hide()
+        DiagnosticsLog.shared.record(
+            "codex-prompt-presentation-deferred-for-ax-cooldown",
+            metadata: [
+                "app": profile.bundleIdentifier,
+                "delayMilliseconds": String(delayMilliseconds),
+                "beforeChars": String(request.textBeforeCursor.count),
+                "afterChars": String(request.textAfterCursor.count)
+            ]
+        )
+        codexPromptPresentationRetryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+            guard !Task.isCancelled, let self else {
+                return
+            }
+
+            self.codexPromptPresentationRetryTask = nil
+            self.presentSuggestion(
+                suggestion,
+                suggestionID: suggestionID,
+                request: request,
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                renderMode: renderMode,
+                latencyMilliseconds: latencyMilliseconds + delayMilliseconds,
+                triggerReason: triggerReason,
+                requestTicket: requestTicket,
+                candidateSelectionMetadata: candidateSelectionMetadata,
+                refreshBeforePresenting: true,
+                scheduledDelayMilliseconds: scheduledDelayMilliseconds,
+                presentationRefreshAttempt: presentationRefreshAttempt
+            )
+        }
+    }
+
+    private func codexPromptAXCooldownPresentationDelayMilliseconds(
+        profile: CompatibilityProfile,
+        fieldIdentity: FocusedFieldIdentity
+    ) -> Int {
+        let canPreserve = codexPromptTargetContinuityPolicy.canPreserveDuringAXCooldown(
+            appBundleIdentifier: profile.bundleIdentifier,
+            processIdentifier: fieldIdentity.processIdentifier,
+            currentFieldIdentity: currentFieldIdentity,
+            currentSnapshot: lastTextSnapshot,
+            trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+            preservation: codexPromptAXCooldownPreservation,
+            hasActiveSuggestionWork: true
+        )
+        guard canPreserve else {
+            return 0
+        }
+
+        return codexPromptTargetContinuityPolicy.remainingAXCooldownMilliseconds(
+            preservation: codexPromptAXCooldownPreservation
+        )
+    }
+
     private func refreshedPresentationContext(
         for request: CompletionRequest,
+        requestContext: FocusedTextContext,
         profile: CompatibilityProfile,
         fieldIdentity: FocusedFieldIdentity
     ) -> (context: FocusedTextContext?, reason: String?) {
@@ -8157,7 +8537,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let rawContext = accessibilityClient.focusedTextContext(
-            allowDescendantTextFallback: profile.allowsDescendantTextFallback
+            for: frontmostApp,
+            allowDescendantTextFallback: profile.allowsDescendantTextFallback,
+            options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)
         ), !rawContext.isSecure,
            rawContext.selectedTextLength == 0 else {
             return (nil, "stale-focused-context")
@@ -8171,11 +8553,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (nil, "stale-terminal-host-proof")
         }
 
-        guard promptTextAreaMatch(
+        let promptMatch = promptTextAreaMatch(
             for: frontmostApp.bundleIdentifier,
             context: rawContext
-        ).canSuggest else {
-            return (nil, "stale-prompt-target")
+        )
+        if !promptMatch.canSuggest {
+            let requestMatchesCurrentSnapshot = lastTextSnapshot?.fieldIdentity == fieldIdentity
+                && lastTextSnapshot?.textBeforeCursor == request.textBeforeCursor
+                && lastTextSnapshot?.textAfterCursor == request.textAfterCursor
+            let resolution = requestMatchesCurrentSnapshot
+                ? codexPromptTargetContinuityPolicy.presentationRefreshResolution(
+                    appBundleIdentifier: frontmostApp.bundleIdentifier,
+                    processIdentifier: frontmostApp.processIdentifier,
+                    promptBlockReason: promptMatch.reason,
+                    currentFieldIdentity: currentFieldIdentity,
+                    currentSnapshot: lastTextSnapshot,
+                    trustedAnchor: lastTrustedCodexPromptTargetContinuityAnchor,
+                    observedContext: rawContext,
+                    trustedContext: requestContext
+                )
+                : .reject
+            guard resolution != .reject else {
+                return (nil, "stale-prompt-target")
+            }
+
+            DiagnosticsLog.shared.record(
+                resolution == .reuseTrustedTextAreaContext
+                    ? "codex-prompt-target-bounds-reused"
+                    : "codex-prompt-target-refresh-retry-needed",
+                metadata: [
+                    "app": frontmostApp.bundleIdentifier,
+                    "reason": promptMatch.reason,
+                    "role": rawContext.role ?? "unknown",
+                    "beforeChars": String(rawContext.textBeforeCursor.count),
+                    "afterChars": String(rawContext.textAfterCursor.count)
+                ]
+            )
+            return resolution == .reuseTrustedTextAreaContext
+                ? (requestContext, nil)
+                : (nil, "transient-codex-prompt-target")
         }
 
         let context = presentationAdjustedContext(
@@ -17556,6 +17972,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 self.lastTextSnapshot = nil
+                self.lastTrustedCodexPromptTargetContinuityAnchor = nil
+                self.codexPromptAXCooldownPreservation = nil
                 self.lastRequestedTextBeforeCursor = nil
                 self.suggestionBlockLogGate.reset()
                 self.setSuggestionDecision("Ready: prefix \(reason) expired")
@@ -17719,9 +18137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentFieldIdentity = fieldIdentity
         lastTextSnapshot = nil
+        lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         typingBurstState.reset()
+        suggestionIdleRetryState.cancel()
         suggestionBlockLogGate.reset()
     }
 
@@ -17745,24 +18166,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentFieldIdentity = nil
         lastTextSnapshot = nil
+        lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         typingBurstState.reset()
+        suggestionIdleRetryState.cancel()
         fieldStatusIndicator.hide()
         if resetBlockLogGate {
             suggestionBlockLogGate.reset()
         }
     }
 
-    private func invalidatePendingSuggestionRequest() {
-        cancelPendingSuggestionTask(reason: "invalidate")
+    @discardableResult
+    private func invalidatePendingSuggestionRequest() -> Bool {
+        let cancelledPendingRequest = cancelPendingSuggestionTask(reason: "invalidate")
         suggestionOrchestrator.clearStreamingPresentations()
         suggestionOrchestrator.invalidate()
+        return cancelledPendingRequest
     }
 
-    private func cancelPendingSuggestionTask(reason: String) {
+    @discardableResult
+    private func cancelPendingSuggestionTask(reason: String) -> Bool {
+        codexPromptAXCooldownPreservation = nil
+        let cancelledPresentationRefreshRetry = codexPromptPresentationRetryTask != nil
+        codexPromptPresentationRetryTask?.cancel()
+        codexPromptPresentationRetryTask = nil
+        if cancelledPresentationRefreshRetry {
+            DiagnosticsLog.shared.record(
+                "codex-prompt-target-refresh-retry-cancelled",
+                metadata: ["reason": reason]
+            )
+        }
+
         guard let debounceTask else {
-            return
+            return cancelledPresentationRefreshRetry
         }
 
         debounceTask.cancel()
@@ -17775,6 +18213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reason": reason
             ]
         )
+        return true
     }
 
     private func clearCompletedSuggestionTask(suggestionID: String) {
@@ -18853,6 +19292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let suggestionID = currentSuggestionState.id ?? ""
         setSuggestionDecision("Ready: app mode \(overrideText)")
         lastTextSnapshot = nil
+        lastTrustedCodexPromptTargetContinuityAnchor = nil
+        codexPromptAXCooldownPreservation = nil
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         invalidatePendingSuggestionRequest()

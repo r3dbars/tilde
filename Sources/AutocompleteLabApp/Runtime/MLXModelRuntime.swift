@@ -117,6 +117,9 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
 
     private func performWarm() async throws {
         let startedAt = Date()
+        let modelLoadDirectoryURL = Self.modelLoadDirectoryURL(for: modelDirectoryURL)
+        // Keep integrity receipts and diagnostics anchored to the configured install path.
+        // Only the upstream MLX enumerator needs the compatibility symlink resolved.
         var integrityValidationCache = stateQueue.sync {
             self.integrityValidationCache
         }
@@ -161,12 +164,12 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
         do {
             if usesVisionLanguageFactory {
                 loadedContainer = try await VLMModelFactory.shared.loadContainer(
-                    from: modelDirectoryURL,
+                    from: modelLoadDirectoryURL,
                     using: #huggingFaceTokenizerLoader()
                 )
             } else {
                 loadedContainer = try await LLMModelFactory.shared.loadContainer(
-                    from: modelDirectoryURL,
+                    from: modelLoadDirectoryURL,
                     using: #huggingFaceTokenizerLoader()
                 )
             }
@@ -241,6 +244,10 @@ public final class MLXModelRuntime: ModelRuntime, @unchecked Sendable {
                 "usesVisionLanguageFactory": String(usesVisionLanguageFactory)
             ]
         )
+    }
+
+    static func modelLoadDirectoryURL(for modelDirectoryURL: URL) -> URL {
+        modelDirectoryURL.resolvingSymlinksInPath()
     }
 
     /// Runs a tiny throwaway generation right after the model loads so the
