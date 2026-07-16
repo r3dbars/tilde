@@ -181,8 +181,8 @@ The directory should contain at least:
 - one or more `.safetensors` weight files
 - `.steadytype-model-integrity.json`
 
-The default model repo is `mlx-community/gemma-4-e4b-it-OptiQ-4bit`. The
-selectable Qwen alternative is `mlx-community/Qwen3.5-4B-MLX-4bit`.
+The default model repo is `mlx-community/Qwen3.5-4B-MLX-4bit`. Gemma 4 E4B IT
+OptiQ remains explicitly selectable for compatibility testing.
 
 ## Future Candidate: LiteRT-LM
 
@@ -198,7 +198,7 @@ Sources:
 
 - app-owned runtime
 - no user-managed server
-- Gemma 4 E4B IT OptiQ (4-bit) default beta asset; Qwen3.5 4B 4-bit selectable
+- Qwen3.5 4B 4-bit default beta asset; Gemma 4 E4B IT OptiQ explicitly selectable
 - macOS 14 or newer on Apple Silicon for the private beta
 - Apple Silicon with 16 GB RAM first target
 - reasoning off
