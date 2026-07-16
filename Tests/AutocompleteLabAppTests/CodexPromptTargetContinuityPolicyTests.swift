@@ -140,6 +140,127 @@ struct CodexPromptTargetContinuityPolicyTests {
                 elementRect: CGRect(x: 80, y: 500, width: 700, height: 80)
             )
         ))
+        #expect(!policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot,
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementRect: CGRect(x: 100, y: 620, width: 700, height: 100)
+            )
+        ))
+        #expect(policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot,
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementRect: CGRect(x: 104, y: 616, width: 704, height: 84)
+            )
+        ))
+    }
+
+    @Test("Rejects a web-area wrapper without affirmative same-window identity")
+    func rejectsWebAreaWrapperWithoutAffirmativeSameWindowIdentity() throws {
+        let fieldIdentity = identity()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: context()
+        ))
+        let inconclusiveWrapper = context(
+            elementIdentifier: 99,
+            role: "AXWebArea",
+            fingerprint: FocusedElementFingerprint(),
+            caretRect: nil,
+            elementRect: nil,
+            windowIdentifier: nil,
+            windowRect: nil
+        )
+
+        #expect(!policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            observedContext: inconclusiveWrapper
+        ))
+        #expect(!policy.canBeginAXCooldownPreservation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            observedContext: inconclusiveWrapper,
+            hasActiveSuggestionWork: true
+        ))
+        #expect(!policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementIdentifier: 99,
+                role: "AXWebArea",
+                fingerprint: FocusedElementFingerprint(windowTitle: "Codex"),
+                caretRect: nil,
+                elementRect: nil,
+                windowIdentifier: nil,
+                windowRect: nil
+            )
+        ))
+        #expect(!policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementIdentifier: 99,
+                role: "AXWebArea",
+                fingerprint: FocusedElementFingerprint(),
+                caretRect: nil,
+                elementRect: nil,
+                windowIdentifier: nil
+            )
+        ))
+    }
+
+    @Test("Accepts a web-area wrapper with matching window bounds and title")
+    func acceptsWebAreaWrapperWithMatchingWindowBoundsAndTitle() throws {
+        let fieldIdentity = identity()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: context(windowIdentifier: nil)
+        ))
+        let verifiedWrapper = context(
+            elementIdentifier: 99,
+            role: "AXWebArea",
+            fingerprint: FocusedElementFingerprint(windowTitle: "Codex"),
+            caretRect: nil,
+            elementRect: nil,
+            windowIdentifier: nil
+        )
+
+        #expect(policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            observedContext: verifiedWrapper
+        ))
     }
 
     @Test("Rejects secure selected unsupported or unanchored contexts")
@@ -485,6 +606,7 @@ struct CodexPromptTargetContinuityPolicyTests {
         caretRect: CGRect? = CGRect(x: 120, y: 650, width: 1, height: 20),
         elementRect: CGRect? = CGRect(x: 100, y: 620, width: 700, height: 80),
         windowIdentifier: Int? = 1,
+        windowRect: CGRect? = CGRect(x: 0, y: 0, width: 900, height: 700),
         isSecure: Bool = false
     ) -> FocusedTextContext {
         FocusedTextContext(
@@ -497,7 +619,7 @@ struct CodexPromptTargetContinuityPolicyTests {
             selectedTextLength: selectedTextLength,
             caretRect: caretRect,
             elementRect: elementRect,
-            windowRect: CGRect(x: 0, y: 0, width: 900, height: 700),
+            windowRect: windowRect,
             windowIdentifier: windowIdentifier,
             textLineRect: nil,
             textStyle: nil,
