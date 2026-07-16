@@ -536,6 +536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var suggestionRepetitionSuppressor = SuggestionRepetitionSuppressor()
     private let typingBurstPolicy = TypingBurstPolicy()
     private var typingBurstState = TypingBurstState()
+    private var suggestionIdleRetryState = SuggestionIdleRetryState()
     private var currentSuggestionState = CurrentSuggestionState()
     private var typeThroughConfidenceCreditedSuggestionIDs: Set<String> = []
     private var proofOnlyAcceptRecentSuggestion: ProofOnlyAcceptRecentSuggestion?
@@ -2238,7 +2239,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard snapshot != previousSnapshot else {
+        let idleRetryReason: SuggestionIdleRetryReason?
+        if snapshot == previousSnapshot {
+            idleRetryReason = suggestionIdleRetryState.consumeRetryIfReady(
+                snapshot: snapshot,
+                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+                hasVisibleSuggestion: suggestionSession.hasVisibleSuggestion
+            )
+        } else {
+            idleRetryReason = nil
+        }
+
+        guard snapshot != previousSnapshot || idleRetryReason != nil else {
             if shouldPreserveVisibleSuggestionDuringTransientEmptyContext(
                 context: context,
                 profile: profile,
@@ -2258,49 +2270,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 return
             }
+            let isWaitingForIdleRetry = suggestionIdleRetryState.hasPendingRetry
             setSuggestionDecision(
                 suggestionSession.hasVisibleSuggestion
                     ? "Shown: tracking current field"
-                    : "Ready: waiting for text change"
+                    : isWaitingForIdleRetry
+                        ? "Waiting: typing to settle"
+                        : "Ready: waiting for text change"
             )
             showFieldStatusIndicator(
-                suggestionSession.hasVisibleSuggestion ? .shown : .ready,
+                suggestionSession.hasVisibleSuggestion
+                    ? .shown
+                    : isWaitingForIdleRetry
+                        ? .waiting.withReason("typing to settle")
+                        : .ready,
                 context: context
             )
             repositionVisibleSuggestion(context: context, profile: profile)
             return
         }
 
-        if previousSnapshot != nil {
+        if previousSnapshot != nil, idleRetryReason == nil {
             lastFocusedTextChangeAt = Date()
         }
         cancelPrefixCooldownRetry()
-        let typingBurstDecision = observeTypingBurst(
-            previousSnapshot: previousSnapshot,
-            currentSnapshot: snapshot
-        )
+        let typingBurstDecision: TypingBurstDecision
+        if let idleRetryReason {
+            typingBurstState.reset()
+            typingBurstDecision = .idle
+            suggestionBlockLogGate.reset()
+            DiagnosticsLog.shared.record(
+                "suggestion-idle-retry",
+                metadata: [
+                    "reason": idleRetryReason.rawValue,
+                    "fieldIdentity": fieldIdentity.traceDescription,
+                    "beforeChars": String(snapshot.textBeforeCursor.count),
+                    "afterChars": String(snapshot.textAfterCursor.count)
+                ]
+            )
+        } else {
+            typingBurstDecision = observeTypingBurst(
+                previousSnapshot: previousSnapshot,
+                currentSnapshot: snapshot
+            )
+        }
 
-        recordTypedOverSuggestionIfNeeded(
-            newTextBeforeCursor: context.textBeforeCursor,
-            fieldIdentity: fieldIdentity,
-            profile: profile
-        )
-        rememberTypedWordsIfNeeded(
-            previousSnapshot: previousSnapshot,
-            currentSnapshot: snapshot,
-            appBundleIdentifier: frontmostApp.bundleIdentifier
-        )
-        if advanceVisibleSuggestionForTypingProgressIfNeeded(
-            context: context,
-            profile: profile,
-            fieldIdentity: fieldIdentity,
-            snapshot: snapshot
-        ) {
-            return
+        if idleRetryReason == nil {
+            recordTypedOverSuggestionIfNeeded(
+                newTextBeforeCursor: context.textBeforeCursor,
+                fieldIdentity: fieldIdentity,
+                profile: profile
+            )
+            rememberTypedWordsIfNeeded(
+                previousSnapshot: previousSnapshot,
+                currentSnapshot: snapshot,
+                appBundleIdentifier: frontmostApp.bundleIdentifier
+            )
+            if advanceVisibleSuggestionForTypingProgressIfNeeded(
+                context: context,
+                profile: profile,
+                fieldIdentity: fieldIdentity,
+                snapshot: snapshot
+            ) {
+                return
+            }
         }
 
         lastTextSnapshot = snapshot
-        invalidatePendingSuggestionRequest()
+        let cancelledPendingRequest = invalidatePendingSuggestionRequest()
+        if idleRetryReason == nil {
+            suggestionIdleRetryState.noteTextChange(
+                snapshot: snapshot,
+                cancelledPendingRequest: cancelledPendingRequest,
+                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+                settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+            )
+        }
         if suggestionCadenceResetPolicy.shouldResetLastRequestedText(
             previousTextBeforeCursor: previousSnapshot?.textBeforeCursor,
             currentTextBeforeCursor: context.textBeforeCursor,
@@ -2653,6 +2698,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .pausePhrase
                 }
             }
+        } else if idleRetryReason != nil {
+            delayMilliseconds = 0
+            timingLane = switch requestMode {
+            case .wordCompletion:
+                .instantWord
+            case .sentenceContinuation:
+                .longPauseThought
+            case .phraseContinuation:
+                .pausePhrase
+            }
         } else if case let .request(policyDelayMilliseconds, policyTimingLane) = triggerDecision {
             delayMilliseconds = policyDelayMilliseconds
             timingLane = policyTimingLane
@@ -2699,7 +2754,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context: context,
                 appBundleIdentifier: frontmostApp.bundleIdentifier
             ),
-            triggerReason: isManualSuggestionRequest ? "manual-summon" : "poll"
+            triggerReason: isManualSuggestionRequest
+                ? "manual-summon"
+                : idleRetryReason != nil
+                    ? "idle-retry"
+                    : "poll"
         )
     }
 
@@ -7176,6 +7235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if typingBurstDecision.shouldSuppress(requestMode: requestMode) {
             if didPresentFastPhraseFallback {
+                suggestionIdleRetryState.cancel()
                 let metadata = [
                     "renderMode": renderMode.rawValue,
                     "reason": "typing-burst-model-continuation-kept-fast-phrase"
@@ -7238,6 +7298,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 fieldIdentity: fieldIdentity,
                 metadata: metadata
             )
+            suggestionIdleRetryState.noteTypingBurstSuppression(
+                snapshot: FocusedTextSnapshot(
+                    fieldIdentity: fieldIdentity,
+                    textBeforeCursor: context.textBeforeCursor,
+                    textAfterCursor: context.textAfterCursor
+                ),
+                nowMilliseconds: Int(ProcessInfo.processInfo.systemUptime * 1_000),
+                settleDelayMilliseconds: triggerPolicy(for: profile).pauseDelayMilliseconds
+            )
             hideSuggestion(reason: "typing-burst", metadata: typingBurstMetadata)
             return
         }
@@ -7257,6 +7326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .merging(requestSchedule.traceMetadata) { current, _ in current }
             .merging(requestMetadata) { current, _ in current }
         )
+        suggestionIdleRetryState.cancel()
         debounceTaskSuggestionID = suggestionID
         debounceTask = Task { [suggestionOrchestrator, requestTicket, fieldIdentity, requestSchedule] in
             try? await Task.sleep(for: .milliseconds(requestSchedule.scheduledDelayMilliseconds))
@@ -17721,6 +17791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         typingBurstState.reset()
+        suggestionIdleRetryState.cancel()
         suggestionBlockLogGate.reset()
     }
 
@@ -17747,21 +17818,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastFocusedTextChangeAt = nil
         lastRequestedTextBeforeCursor = nil
         typingBurstState.reset()
+        suggestionIdleRetryState.cancel()
         fieldStatusIndicator.hide()
         if resetBlockLogGate {
             suggestionBlockLogGate.reset()
         }
     }
 
-    private func invalidatePendingSuggestionRequest() {
-        cancelPendingSuggestionTask(reason: "invalidate")
+    @discardableResult
+    private func invalidatePendingSuggestionRequest() -> Bool {
+        let cancelledPendingRequest = cancelPendingSuggestionTask(reason: "invalidate")
         suggestionOrchestrator.clearStreamingPresentations()
         suggestionOrchestrator.invalidate()
+        return cancelledPendingRequest
     }
 
-    private func cancelPendingSuggestionTask(reason: String) {
+    @discardableResult
+    private func cancelPendingSuggestionTask(reason: String) -> Bool {
         guard let debounceTask else {
-            return
+            return false
         }
 
         debounceTask.cancel()
@@ -17774,6 +17849,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "reason": reason
             ]
         )
+        return true
     }
 
     private func clearCompletedSuggestionTask(suggestionID: String) {

@@ -60,10 +60,39 @@ struct AppModelRuntimeFactoryTests {
             defaults: defaults
         )
 
-        #expect(bundle.modelDirectoryURL.path.contains("/Models/Gemma4E4BItOptiQ/MLX/gemma-4-e4b-it-OptiQ-4bit"))
+        #expect(bundle.modelDirectoryURL.path.contains("/Models/Qwen35FourB/MLX/Qwen3.5-4B-4bit"))
         #expect(bundle.bootstrapPlan.activeCandidate == .unavailable)
         #expect(bundle.bootstrapPlan.assetState.statusSummary.contains("missing model asset"))
         #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
+    }
+
+    @Test("MLX model loading resolves compatibility symlink roots")
+    func mlxModelLoadingResolvesCompatibilitySymlinkRoots() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("steadytype-symlink-model-root-\(UUID().uuidString)", isDirectory: true)
+        let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
+        let compatibilityURL = rootURL.appendingPathComponent("compatibility-model", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        try fileManager.createDirectory(at: modelURL, withIntermediateDirectories: true)
+        try Data("weights".utf8).write(to: modelURL.appendingPathComponent("model.safetensors"))
+        try fileManager.createSymbolicLink(at: compatibilityURL, withDestinationURL: modelURL)
+
+        let loadURL = MLXModelRuntime.modelLoadDirectoryURL(for: compatibilityURL)
+        var shardCount = 0
+        let enumerator = try #require(fileManager.enumerator(
+            at: loadURL,
+            includingPropertiesForKeys: nil
+        ))
+        for case let fileURL as URL in enumerator where fileURL.pathExtension == "safetensors" {
+            shardCount += 1
+        }
+
+        #expect(loadURL == modelURL.resolvingSymlinksInPath())
+        #expect(shardCount == 1)
     }
 
     @Test("Uses unavailable runtime and repair state for invalid model folder")
@@ -118,7 +147,8 @@ struct AppModelRuntimeFactoryTests {
         )
 
         #expect(bundle.modelOverrideName == nil)
-        #expect(bundle.bootstrapPlan.preferredAsset == .gemma4E4BItOptiQMLX)
+        #expect(bundle.bootstrapPlan.preferredAsset == .qwen35FourBMLX)
+        #expect(bundle.bootstrapPlan.preferredAsset.source != nil)
         #expect(!bundle.modelDirectoryURL.path.hasPrefix(rootURL.path))
     }
 
