@@ -8652,6 +8652,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard resolution != .reject else {
                 return (nil, "stale-prompt-target")
             }
+            if resolution == .cancelAndRetry {
+                cancelAndRearmCodexPromptTargetWork(
+                    app: frontmostApp,
+                    context: rawContext,
+                    profile: profile,
+                    promptBlockReason: promptMatch.reason,
+                    source: "presentation-refresh"
+                )
+                return (nil, "quarantined-codex-prompt-target")
+            }
 
             DiagnosticsLog.shared.record(
                 resolution == .reuseTrustedTextAreaContext
