@@ -263,6 +263,44 @@ struct CodexPromptTargetContinuityPolicyTests {
         ))
     }
 
+    @Test("Production Codex reads retain identity required by wrapper continuity")
+    func productionCodexReadsRetainIdentityRequiredByWrapperContinuity() throws {
+        let app = RunningApplicationInfo(
+            bundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            localizedName: "Codex",
+            processIdentifier: 42
+        )
+        let profile = try #require(CompatibilityProfileStore.mvp.profile(
+            for: CodexProofFocusedTargetPolicy.bundleIdentifier
+        ))
+        let options = FocusedTextReadOptionsPolicy.options(for: app, profile: profile)
+        #expect(!options.skipWindowLookup)
+
+        let fieldIdentity = identity()
+        let anchor = try #require(policy.anchor(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            fieldIdentity: fieldIdentity,
+            context: context()
+        ))
+        let verifiedWrapper = context(
+            elementIdentifier: 99,
+            role: "AXWebArea",
+            fingerprint: FocusedElementFingerprint(),
+            caretRect: nil,
+            elementRect: nil
+        )
+
+        #expect(policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: app.processIdentifier,
+            promptBlockReason: "missing-prompt-fingerprint",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot(fieldIdentity: fieldIdentity),
+            trustedAnchor: anchor,
+            observedContext: verifiedWrapper
+        ))
+    }
+
     @Test("Rejects secure selected unsupported or unanchored contexts")
     func rejectsSecureSelectedUnsupportedOrUnanchoredContexts() throws {
         let fieldIdentity = identity()

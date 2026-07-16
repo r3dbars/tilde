@@ -134,7 +134,9 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         skipParameterizedTextGeometry: true,
         skipAttributedText: true,
         useMinimalFingerprint: true,
-        skipWindowLookup: true,
+        // Prompt continuity must retain affirmative same-window identity when
+        // Codex transiently reports AXWebArea instead of the composer.
+        skipWindowLookup: false,
         assumedCanSetSelectedText: true,
         manualAccessibilityWakeAppFamily: nil
     )
