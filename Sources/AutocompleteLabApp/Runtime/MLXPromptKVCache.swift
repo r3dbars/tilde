@@ -204,10 +204,6 @@ struct MLXPromptKVCacheOwner {
             return miss(.promptStyleChanged, currentKey: currentKey, promptTokens: promptTokens)
         }
 
-        if entry.key.systemPromptFingerprint != currentKey.systemPromptFingerprint {
-            return miss(.systemPromptChanged, currentKey: currentKey, promptTokens: promptTokens)
-        }
-
         switch RuntimeSessionCachePolicy().decision(previous: entry.request, current: request) {
         case .reuse:
             break
@@ -220,7 +216,8 @@ struct MLXPromptKVCacheOwner {
             )
         }
 
-        guard promptTokens.starts(with: entry.promptTokens) else {
+        let sharedTokenCount = Self.commonPrefixTokenCount(entry.promptTokens, promptTokens)
+        guard sharedTokenCount > 0 else {
             let reason: MLXPromptKVCacheMissReason = request.textBeforeCursor.hasPrefix(entry.request.textBeforeCursor)
                 ? .tokenPrefixMismatch
                 : .earlierTextEdit
@@ -232,7 +229,29 @@ struct MLXPromptKVCacheOwner {
             )
         }
 
-        let appendTokens = Array(promptTokens.dropFirst(entry.promptTokens.count))
+        let reusableCache = entry.promptCache.map { $0.copy() }
+        let trimCount = entry.promptTokens.count - sharedTokenCount
+        if trimCount > 0 {
+            guard !reusableCache.isEmpty else {
+                return miss(
+                    .tokenPrefixMismatch,
+                    currentKey: currentKey,
+                    promptTokens: promptTokens,
+                    reusedKey: entry.key
+                )
+            }
+            guard canTrimPromptCache(reusableCache),
+                  trimPromptCache(reusableCache, numTokens: trimCount) == trimCount else {
+                return miss(
+                    .untrimmablePromptCache,
+                    currentKey: currentKey,
+                    promptTokens: promptTokens,
+                    reusedKey: entry.key
+                )
+            }
+        }
+
+        let appendTokens = Array(promptTokens.dropFirst(sharedTokenCount))
         guard !appendTokens.isEmpty else {
             return miss(
                 .emptyTokenAppend,
@@ -248,7 +267,7 @@ struct MLXPromptKVCacheOwner {
             reusedKey: entry.key,
             promptTokens: promptTokens,
             appendTokens: appendTokens,
-            reusableCache: entry.promptCache.map { $0.copy() }
+            reusableCache: reusableCache
         )
     }
 
@@ -262,14 +281,18 @@ struct MLXPromptKVCacheOwner {
             return bypassMetadata(reason: .envFlagOff)
         }
 
-        guard canTrimPromptCache(cache), !cache.isEmpty else {
+        guard !cache.isEmpty else {
             entry = nil
             return [
                 "mlxPromptKVCacheStored": "false",
-                "mlxPromptKVCacheStoreReason": MLXPromptKVCacheMissReason.untrimmablePromptCache.rawValue
+                "mlxPromptKVCacheStoreReason": "empty-prompt-cache"
             ]
         }
 
+        // TokenIterator has already prefilled the prompt at this point, and generation has not
+        // started yet. Reuse only copies this exact state and appends newly typed tokens, so it
+        // does not require trim support. This matters for hybrid models such as Qwen3.5, whose
+        // recurrent Mamba caches are copyable and appendable but intentionally not trimmable.
         entry = Entry(
             key: key,
             request: request,
@@ -365,7 +388,7 @@ struct MLXPromptKVCacheOwner {
         }
     }
 
-    private static func key(
+    static func key(
         modelRevision: String,
         promptStyleIdentifier: String,
         systemPrompt: String,
@@ -377,6 +400,14 @@ struct MLXPromptKVCacheOwner {
             systemPromptFingerprint: fingerprint(systemPrompt),
             promptTokenFingerprint: fingerprint(promptTokens)
         )
+    }
+
+    static func commonPrefixTokenCount(_ lhs: [Int], _ rhs: [Int]) -> Int {
+        var count = 0
+        while count < lhs.count, count < rhs.count, lhs[count] == rhs[count] {
+            count += 1
+        }
+        return count
     }
 
     private static func fingerprint(_ text: String) -> String {
