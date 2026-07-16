@@ -92,6 +92,7 @@ grep -F "runtime" <<<"$SIGNATURE_DETAILS" >/dev/null || fail "hardened runtime f
 if [[ "$RELEASE_MODE" == "1" ]]; then
   grep -F "Authority=Developer ID Application" <<<"$SIGNATURE_DETAILS" >/dev/null \
     || fail "release bundle is not signed with Developer ID Application"
+  python3 "$ROOT_DIR/script/check_lightweight_budget.py" --app-bundle "$APP_BUNDLE"
 fi
 
 echo "App bundle verified: $APP_BUNDLE"
