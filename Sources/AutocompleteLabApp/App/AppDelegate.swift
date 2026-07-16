@@ -291,6 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let personalCapturePolicy = PersonalCapturePolicy()
     private let personalCaptureJournal = PersonalCaptureJournalWriter.shared
     private let personalCaptureEpisodes = PersonalCaptureEpisodeStore.shared
+    private let personalizationCoordinator = PersonalizationCoordinator()
     private let suggestionControlPolicy = SuggestionControlPolicy()
     private let suggestionPauseSchedulePolicy = SuggestionPauseSchedulePolicy()
     private let suggestionRequestSchedulingPolicy = SuggestionRequestSchedulingPolicy()
@@ -584,6 +585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadVisiblePageContextEnabled()
         loadAcceptedAndKeptLearning()
         loadAcceptedTextStyleMemory()
+        personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
         loadProofModeOverrides()
         startProofOnlyAcceptCommandObserver()
         configureStatusItem()
@@ -625,6 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modelRuntime.cancel()
         suggestionPipeline.stopPolling()
         resourceDiagnosticsTimer?.invalidate()
+        personalizationCoordinator.stop()
         suggestionSummonHotKey.stop()
         manualSuggestionRetryTask?.cancel()
         stopWorkspaceFocusObservers()
@@ -6712,12 +6715,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let acceptedTextStyleSketch = acceptedTextStyleMemory.sketch(
             for: acceptedTextStyleKey
         )
+        let personalization = personalizationCoordinator.selection(isEnabled: appSettings.personalCaptureEnabled, context: context, appBundleIdentifier: appBundleIdentifier, fieldClassification: fieldClassification, requestMode: requestMode)
         let orchestration = suggestionOrchestrator.beginRequest(SuggestionRequestInput(
             context: context,
             appBundleIdentifier: appBundleIdentifier,
             fieldIdentity: fieldIdentity,
             fieldClassification: fieldClassification,
             acceptedTextStyleSketch: acceptedTextStyleSketch,
+            personalContext: personalization.context,
+            personalWritingMemory: personalization.memory,
             visiblePageContext: visiblePageContext,
             maxVisibleWords: maxVisibleWords(for: requestMode, profile: profile),
             requestMode: requestMode,
@@ -7019,6 +7025,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let fastSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
                 docLocalContextTexts: orchestration.docLocalContextTexts,
+                personalWritingMemory: orchestration.personalWritingMemory,
                 behaviorProfileID: request.behaviorProfileID,
                 maxVisibleWords: request.maxVisibleWords,
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
@@ -8597,6 +8604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             userTypedContext: request.textBeforeCursor,
             textAfterCursor: request.textAfterCursor,
             replyContext: replyContext,
+            replayContext: request.visiblePageContext.map { SuggestionEpisodeReplayContext(visiblePageContext: $0, fingerprintSecret: tracePrivacySecretStore.secret(), includeText: true) },
             suggestedText: suggestion.visibleText,
             model: SuggestionEpisodeModelContext(
                 modelName: runtimeMetadata["model"] ?? CompletionModelPolicy.mvp.model.rawValue,
@@ -18313,6 +18321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !appSettings.personalCaptureEnabled {
             personalCaptureLastSnapshot = nil
         }
+        personalizationCoordinator.refreshIndexing(isEnabled: appSettings.personalCaptureEnabled)
         DiagnosticsLog.shared.record(
             "personal-capture-control",
             metadata: [
@@ -18346,6 +18355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         personalCaptureLastSnapshot = nil
         personalCaptureJournal.deleteAll()
         personalCaptureEpisodes.deleteAll()
+        personalizationCoordinator.deleteAll()
         DiagnosticsLog.shared.record(
             "personal-capture-deleted",
             metadata: ["surface": "settings"]

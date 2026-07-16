@@ -1061,6 +1061,30 @@
       ]
     },
     {
+      "surface": "Personal writing memory dogfood",
+      "status": "partial",
+      "gaps": [
+        "This remains Justin-only dogfood behind the default-off Personal Capture control; beta consent and privacy proof are not claimed."
+      ],
+      "requirements": [
+        {
+          "id": "personal-memory-policy-gates",
+          "status": "complete",
+          "summary": "Focused tests cover opt-in, PersonalCapturePolicy, continuation-mode, safety-filter, and word-completion suppression gates."
+        },
+        {
+          "id": "personal-memory-local-lifecycle",
+          "status": "complete",
+          "summary": "App tests cover writer-parser compatibility, background rebuild persistence, owner-only file permissions, and delete-all snapshot clearing."
+        },
+        {
+          "id": "personal-memory-replay-improvement",
+          "status": "complete",
+          "summary": "A 150-case paired Qwen3.5 4B replay improved saved keystrokes from 0.02 to 0.27 per case while wrong-first-word rate decreased from 97.2% to 93.8%; Gemma was unavailable because the installed MLX runtime does not support gemma4_text."
+        }
+      ]
+    },
+    {
       "surface": "TextEdit",
       "status": "complete",
       "manualSmoke": {

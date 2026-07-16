@@ -111,7 +111,7 @@ struct SuggestionEpisodeTests {
         #expect(scorecard.deletedFast == 1)
         #expect(scorecard.averageLatencyMilliseconds == 200)
         #expect(scorecard.modelPromptRows.contains(
-            "Qwen3.5 4B / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
+            "Gemma 4 E4B IT OptiQ / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
         ))
         #expect(scorecard.markdown.contains("Score:"))
     }
@@ -179,6 +179,32 @@ struct SuggestionEpisodeTests {
 
         #expect(SuggestionEpisodeReplyContext(visiblePageContext: focused)?.text == "focused reply")
         #expect(SuggestionEpisodeReplyContext(visiblePageContext: visibleScreen) == nil)
+    }
+
+    @Test("Replay context records redacted-safe fidelity metadata for every visible scope")
+    func replayContextRecordsFidelityMetadata() throws {
+        let visibleScreen = try #require(VisiblePageContext(
+            captureScope: .visibleScreen,
+            activeApplicationName: "TextEdit",
+            text: "visible reply context"
+        ))
+        let withoutText = SuggestionEpisodeReplayContext(
+            visiblePageContext: visibleScreen,
+            fingerprintSecret: Data("test-secret".utf8),
+            includeText: false
+        )
+        let withText = SuggestionEpisodeReplayContext(
+            visiblePageContext: visibleScreen,
+            fingerprintSecret: Data("test-secret".utf8),
+            includeText: true
+        )
+
+        #expect(withoutText.characterCount == "visible reply context".count)
+        #expect(withoutText.captureScope == VisiblePageContextCaptureScope.visibleScreen.rawValue)
+        #expect(!withoutText.fingerprint.isEmpty)
+        #expect(withoutText.text == nil)
+        #expect(withText.text == "visible reply context")
+        #expect(withText.fingerprint == withoutText.fingerprint)
     }
 
     @Test("One hundred weird episode cases stay scoreable")

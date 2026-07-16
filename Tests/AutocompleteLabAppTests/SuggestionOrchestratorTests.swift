@@ -54,6 +54,10 @@ struct SuggestionOrchestratorTests {
             textBeforeCursor: context.textBeforeCursor
         )
         let sketch = styleStore.recordKeptText(" finish this.", key: styleKey)
+        let personalContext = PersonalContext(
+            snippets: ["Can we finish this with a small proof?"],
+            profileGuidance: "Prefer short direct sentences."
+        )
 
         let orchestration = orchestrator.beginRequest(SuggestionRequestInput(
             context: context,
@@ -61,6 +65,7 @@ struct SuggestionOrchestratorTests {
             fieldIdentity: field,
             fieldClassification: classification,
             acceptedTextStyleSketch: sketch,
+            personalContext: personalContext,
             visiblePageContext: VisiblePageContext(text: "Launch Plan\nKeep this local and fast."),
             maxVisibleWords: 7,
             requestMode: .phraseContinuation,
@@ -75,6 +80,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.request.fieldKind == .multilineCompose)
         #expect(orchestration.request.behaviorProfileID == .bullets)
         #expect(orchestration.request.acceptedTextStyleSketch == sketch)
+        #expect(orchestration.request.personalContext == personalContext)
         #expect(orchestration.request.documentTitleShape?.fileExtension == "md")
         #expect(orchestration.request.visiblePageContext?.text.contains("Launch Plan") == true)
         #expect(orchestration.request.maxVisibleWords == 7)
@@ -87,6 +93,7 @@ struct SuggestionOrchestratorTests {
         #expect(orchestration.requestMetadata["suggestionAggressivenessLevel"] == "1")
         #expect(orchestration.requestMetadata["suggestionMaxVisibleWords"] == "8")
         #expect(orchestration.requestMetadata["visiblePageContextSource"] == "screen_ocr")
+        #expect(orchestration.requestMetadata["personalContextSnippetCount"] == "1")
         #expect(orchestration.requestMetadata["visiblePageContextCaptureScope"] == "visible_screen")
         #expect(orchestration.requestMetadata["runtimeSessionCacheDecision"] == "reset")
         #expect(orchestration.requestMetadata["runtimeSessionCacheResetReason"] == "no-prior-request")
@@ -519,6 +526,73 @@ struct SuggestionOrchestratorTests {
             latencyMilliseconds: 0,
             metadata: selection.traceMetadata
         ) == "Shown: phrase doc local 0ms")
+    }
+
+    @MainActor
+    @Test("Fast phrase selection uses personal memory when the document has no match")
+    func fastPhraseSelectionUsesPersonalMemory() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        let memory = PersonalWritingMemory(
+            ngramContinuations: [
+                "keep the loop": [
+                    PersonalNGramContinuation(
+                        display: "small and measurable",
+                        weight: 2,
+                        lastSeenDay: "2026-07-15"
+                    )
+                ]
+            ],
+            builtAtDay: "2026-07-15"
+        )
+
+        let selection = orchestrator.fastPhraseSelection(
+            for: "We should keep the loop",
+            personalWritingMemory: memory,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " small and measurable")
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "personal-ngram")
+    }
+
+    @MainActor
+    @Test("Document-local memory wins a score tie with personal memory")
+    func fastPhraseSelectionPrefersDocumentLocalOnTie() throws {
+        let context = "Please make this guide land cleanly"
+        let docSelection = DocLocalNGramPhrasePredictor().selection(
+            for: "Please make this",
+            localContextTexts: [context],
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4
+        )
+        let tiedScore = try #require(docSelection.score)
+        let memory = PersonalWritingMemory(
+            ngramContinuations: [
+                "please make this": [
+                    PersonalNGramContinuation(
+                        display: "personal instead of local",
+                        weight: tiedScore,
+                        lastSeenDay: "2026-07-15"
+                    )
+                ]
+            ],
+            builtAtDay: "2026-07-15"
+        )
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+
+        let selection = orchestrator.fastPhraseSelection(
+            for: "Please make this",
+            docLocalContextTexts: [context],
+            personalWritingMemory: memory,
+            behaviorProfileID: .docsProse,
+            maxVisibleWords: 4,
+            allowPredictiveFallback: true
+        )
+
+        #expect(selection.suggestion?.visibleText == " guide land cleanly")
+        #expect(selection.traceMetadata["candidateSelectionSource"] == "doc-local-ngram")
     }
 
     @MainActor
