@@ -12,7 +12,8 @@ struct SuggestionPipelineControllerTests {
         let controller = SuggestionPipelineController(host: host)
 
         controller.requestPollSoon(afterMilliseconds: 30)
-        controller.requestPollSoon(afterMilliseconds: 5)
+        controller.requestPollSoon(afterMilliseconds: 0)
+        await Task.yield()
         try await Task.sleep(for: .milliseconds(50))
 
         #expect(host.pollCount == 1)
