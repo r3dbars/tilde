@@ -66,6 +66,35 @@ struct AppModelRuntimeFactoryTests {
         #expect(await bundle.runtime.state == .unavailable(reason: bundle.bootstrapPlan.unavailableReason ?? ""))
     }
 
+    @Test("MLX model loading resolves compatibility symlink roots")
+    func mlxModelLoadingResolvesCompatibilitySymlinkRoots() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent("steadytype-symlink-model-root-\(UUID().uuidString)", isDirectory: true)
+        let modelURL = rootURL.appendingPathComponent("model", isDirectory: true)
+        let compatibilityURL = rootURL.appendingPathComponent("compatibility-model", isDirectory: true)
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        try fileManager.createDirectory(at: modelURL, withIntermediateDirectories: true)
+        try Data("weights".utf8).write(to: modelURL.appendingPathComponent("model.safetensors"))
+        try fileManager.createSymbolicLink(at: compatibilityURL, withDestinationURL: modelURL)
+
+        let loadURL = MLXModelRuntime.modelLoadDirectoryURL(for: compatibilityURL)
+        var shardCount = 0
+        let enumerator = try #require(fileManager.enumerator(
+            at: loadURL,
+            includingPropertiesForKeys: nil
+        ))
+        for case let fileURL as URL in enumerator where fileURL.pathExtension == "safetensors" {
+            shardCount += 1
+        }
+
+        #expect(loadURL == modelURL.resolvingSymlinksInPath())
+        #expect(shardCount == 1)
+    }
+
     @Test("Uses unavailable runtime and repair state for invalid model folder")
     func usesUnavailableRuntimeAndRepairStateForInvalidModelFolder() async throws {
         let defaults = temporaryDefaults()
