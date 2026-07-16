@@ -75,18 +75,9 @@ Current branch: `codex/obsidian-deep-proof-390d`
 - The first font/zoom run exposed a placement failure: the disposable proof note became `Autocomplete Lab \nSmoke proof feelsObsidian proof`, so accepted/typed text was not at the intended visual end.
 - A later font/zoom retry exposed a harness gap: after zoom, Obsidian AX split the smoke marker across a newline, so exact marker matching failed until the harness was made whitespace-tolerant.
 - Another font/zoom retry showed the suggestion can stay visible after screenshot capture without emitting a second `suggestion-presented` line, so the zoom resync wait is now opportunistic instead of mandatory.
-- Earlier red screenshot evidence is preserved at `docs/product/obsidian-proof-screenshots/cua-long-note-latest-tab-indent-red-2026-05-13.png`.
+- Earlier red screenshot evidence remains available in git history; the dated captures are no longer tracked in the current tree.
 - Earlier Computer Use Tab and synthetic System Events Tab runs were not reliable accept-path proof tools: the visible note changed, but the key-tap log did not record a clean `md.obsidian` Tab accept event before stale runners interfered.
-- Screenshot evidence:
-  - `docs/product/obsidian-proof-screenshots/default-computeruse-before-tab-foreground-obsidian-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/default-computeruse-after-tab-foreground-obsidian-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/frontmost-obsidian-before-tab-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/frontmost-obsidian-after-tab-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/cua-long-note-before-type-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/cua-long-note-after-patch-after-type-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/cua-long-note-after-viewport-tail-repair-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/cua-long-note-after-tab-viewport-tail-repair-2026-05-13.png`
-  - `docs/product/obsidian-proof-screenshots/cua-long-note-latest-tab-indent-red-2026-05-13.png`
+- Historical screenshot captures are no longer tracked; the event and trace details above remain the canonical proof record.
 - Manual click testing can still place the caret before the suffix, producing `moke proof feelsS` instead of the intended text.
 - A separate `steadytype-score-loop` heartbeat in the old `25ed` worktree repeatedly flipped proof mode to TextEdit and killed/invalidated Obsidian proof attempts. That heartbeat was paused during this goal.
 - Even after the automation file showed `status = "PAUSED"`, already-running stale TextEdit proof jobs continued spawning from the old `25ed` context and repeatedly killed the current app. These runs are not valid Obsidian proof.
