@@ -57,6 +57,31 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "else if idleRetryReason != nil {")
         try require(appDelegate, contains: "? \"idle-retry\"")
     }
+
+    @Test("App delegate preserves and rechecks transient Codex prompt targets")
+    func appDelegatePreservesAndRechecksTransientCodexPromptTargets() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(appDelegate, contains: "shouldDeferCodexPromptTargetInvalidation(")
+        try require(appDelegate, contains: "\"codex-prompt-target-refresh-deferred\"")
+        try require(appDelegate, contains: "scheduleCodexPromptPresentationRefreshRetry(")
+        try require(appDelegate, contains: "codexPromptPresentationRetryTask?.cancel()")
+        try require(appDelegate, contains: "canPreserveDuringAXCooldown(")
+        try require(appDelegate, contains: "preservePendingRequest: shouldPreservePendingRequest")
+        try require(appDelegate, contains: "codexPromptAXCooldownPresentationDelayMilliseconds(")
+        try require(appDelegate, contains: "scheduleCodexPromptPresentationAfterAXCooldown(")
+        try require(appDelegate, contains: "codex-prompt-presentation-deferred-for-ax-cooldown")
+        try require(appDelegate, contains: "options: FocusedTextReadOptionsPolicy.options(for: frontmostApp, profile: profile)")
+        try require(appDelegate, contains: "fieldStatusIndicator.hide()")
+
+        let cooldownGate = try #require(appDelegate.range(
+            of: "let axCooldownDelayMilliseconds = refreshBeforePresenting"
+        ))
+        let presentationRefresh = try #require(appDelegate.range(
+            of: "let refreshedContext = refreshBeforePresenting"
+        ))
+        #expect(cooldownGate.lowerBound < presentationRefresh.lowerBound)
+    }
 }
 
 private func source(_ relativePath: String) throws -> String {
