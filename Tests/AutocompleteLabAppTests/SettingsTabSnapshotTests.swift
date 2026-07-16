@@ -18,7 +18,6 @@ struct SettingsTabSnapshotTests {
             performRuntimeAction: { _ in },
             toggleCurrentApp: {},
             toggleCurrentAppMirrorMode: {},
-            startCurrentAppProof: {},
             enableAllApps: {},
             toggleTracingPaused: {},
             toggleRawContentTracing: {},

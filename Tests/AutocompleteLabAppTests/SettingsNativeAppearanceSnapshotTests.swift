@@ -18,7 +18,6 @@ struct SettingsNativeAppearanceSnapshotTests {
             performRuntimeAction: { _ in },
             toggleCurrentApp: {},
             toggleCurrentAppMirrorMode: {},
-            startCurrentAppProof: {},
             enableAllApps: {},
             toggleTracingPaused: {},
             toggleRawContentTracing: {},

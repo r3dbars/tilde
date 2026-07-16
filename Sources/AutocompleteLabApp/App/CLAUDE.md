@@ -8,7 +8,7 @@ Start with:
 - `SuggestionPipelineController.swift` for the focused-text polling driver (first slice carved out of `AppDelegate`; see its file footer for the decomposition follow-ups).
 - `SuggestionOrchestrator.swift` for the live suggestion loop.
 - `AppSettings.swift` for persisted local settings.
-- `AppProofCommandRunner.swift` and proof command files for local verification surfaces.
+- `PrivacyExportProofCommand.swift` and `ProofOnlyAcceptCommand.swift` for local verification surfaces.
 
 Rules:
 

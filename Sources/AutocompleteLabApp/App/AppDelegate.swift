@@ -380,7 +380,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// it and delegates timing concerns to it via `SuggestionPipelineHost` (see extension below).
     private lazy var suggestionPipeline = SuggestionPipelineController(host: self)
     private let diagnosticsWindow = DiagnosticsWindowController()
-    private let appProofCommandCoordinator = AppProofCommandCoordinator()
     private lazy var settingsWindow = SettingsWindowController(
         requestPermission: { [weak self] in
             self?.requestAccessibilityPermission()
@@ -411,9 +410,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         toggleCurrentAppMirrorMode: { [weak self] in
             self?.toggleCurrentAppMirrorMode()
-        },
-        startCurrentAppProof: { [weak self] in
-            self?.startCurrentAppProof()
         },
         startTextEditPractice: { [weak self] in
             self?.startTextEditPractice()
@@ -18883,131 +18879,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profile: profile,
             appEnabled: !disabledBundleIdentifiers.contains(app.bundleIdentifier)
         )
-    }
-
-    @objc
-    private func startCurrentAppProof() {
-        guard let app = targetAppForControls(),
-              let profile = profileStore.profile(for: app.bundleIdentifier),
-              !profile.isSensitive else {
-            return
-        }
-
-        guard !disabledBundleIdentifiers.contains(app.bundleIdentifier) else {
-            setSuggestionDecision("Blocked: enable this app first")
-            refreshRuntimeChrome()
-            DiagnosticsLog.shared.record(
-                "app-proof-blocked",
-                metadata: [
-                    "app": app.bundleIdentifier,
-                    "reason": "disabled"
-                ]
-            )
-            return
-        }
-
-        beginAppProofMode(for: app.bundleIdentifier)
-        compatibilityLearningStore.setScreenshotTracing(true, for: app.bundleIdentifier)
-        DiagnosticsLog.shared.record(
-            "app-proof-started",
-            metadata: [
-                "app": app.bundleIdentifier,
-                "support": profile.supportLevel.rawValue
-            ]
-        )
-
-        if appProofCommandCoordinator.supportsAutomaticPlan(for: app.bundleIdentifier) {
-            runAutomaticAppProof(app: app)
-            return
-        }
-
-        setSuggestionDecision("Ready: app proof started")
-        refreshRuntimeChrome()
-        showDiagnostics()
-    }
-
-    private func runAutomaticAppProof(app: RunningApplicationInfo) {
-        let outcome = appProofCommandCoordinator.start(for: app.bundleIdentifier) { [weak self] completion in
-            guard let self else {
-                return
-            }
-
-            self.setSuggestionDecision(completion.decisionText)
-            self.endAppProofMode(for: completion.plan.bundleIdentifier, reason: completion.endReason)
-            DiagnosticsLog.shared.record(
-                "app-proof-command-finished",
-                metadata: [
-                    "app": completion.plan.bundleIdentifier,
-                    "outcome": completion.passed ? "passed" : "failed",
-                    "status": String(completion.status),
-                    "log": completion.plan.logURL.path
-                ]
-            )
-            self.refreshRuntimeChrome()
-        }
-        if let endReason = outcome.proofModeEndReasonAfterStartAttempt {
-            endAppProofMode(for: app.bundleIdentifier, reason: endReason)
-        }
-
-        switch outcome {
-        case .unsupported:
-            setSuggestionDecision("Ready: app proof started")
-            refreshRuntimeChrome()
-            showDiagnostics()
-        case let .unavailable(bundleIdentifier):
-            setSuggestionDecision("Blocked: proof script unavailable")
-            DiagnosticsLog.shared.record(
-                "app-proof-command-unavailable",
-                metadata: [
-                    "app": bundleIdentifier
-                ]
-            )
-            refreshRuntimeChrome()
-            showDiagnostics()
-        case let .started(plan):
-            setSuggestionDecision(outcome.decisionText ?? "Running: app proof")
-            DiagnosticsLog.shared.record(
-                "app-proof-command-started",
-                metadata: [
-                    "app": plan.bundleIdentifier,
-                    "command": plan.commandText,
-                    "log": plan.logURL.path
-                ]
-            )
-            refreshRuntimeChrome()
-            showDiagnostics()
-        case let .alreadyRunning(bundleIdentifier):
-            setSuggestionDecision(outcome.decisionText ?? "Running: app proof already in progress")
-            DiagnosticsLog.shared.record(
-                "app-proof-command-skipped",
-                metadata: [
-                    "app": bundleIdentifier,
-                    "reason": "already-running"
-                ]
-            )
-            refreshRuntimeChrome()
-            showDiagnostics()
-        case let .failedToStart(bundleIdentifier, logURL, reason):
-            setSuggestionDecision(outcome.decisionText ?? "Blocked: proof command failed to start")
-            DiagnosticsLog.shared.record(
-                "app-proof-command-failed",
-                metadata: [
-                    "app": bundleIdentifier,
-                    "reason": reason,
-                    "log": logURL?.path ?? ""
-                ]
-            )
-            refreshRuntimeChrome()
-            showDiagnostics()
-        }
-    }
-
-    private func beginAppProofMode(for bundleIdentifier: String) {
-        appProofModeCoordinator.begin(for: bundleIdentifier)
-    }
-
-    private func endAppProofMode(for bundleIdentifier: String, reason: String) {
-        appProofModeCoordinator.end(for: bundleIdentifier, reason: reason)
     }
 
     private func enableAllDisabledApps() {
