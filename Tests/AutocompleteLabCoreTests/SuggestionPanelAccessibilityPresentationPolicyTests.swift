@@ -29,6 +29,19 @@ struct SuggestionPanelAccessibilityPresentationPolicyTests {
         #expect(presentation.background == .translucentMaterial)
     }
 
+    @Test("Maximum cadence snaps in immediately without changing the background")
+    func maximumCadenceSnapsInImmediately() {
+        let presentation = SuggestionPanelAccessibilityPresentationPolicy.resolve(
+            reduceMotion: false,
+            reduceTransparency: false,
+            prefersImmediateAppearance: true
+        )
+
+        #expect(presentation.firstAppearanceFadeDuration == 0)
+        #expect(!presentation.animatesFirstAppearance)
+        #expect(presentation.background == .translucentMaterial)
+    }
+
     @Test("Reduce Transparency: uses a solid background but keeps the fade")
     func reduceTransparencyUsesSolidBackground() {
         let presentation = SuggestionPanelAccessibilityPresentationPolicy.resolve(

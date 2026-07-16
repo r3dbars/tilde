@@ -50,10 +50,13 @@ public enum SuggestionPanelAccessibilityPresentationPolicy {
     ///     When true, the panel uses a solid background instead of translucency.
     public static func resolve(
         reduceMotion: Bool,
-        reduceTransparency: Bool
+        reduceTransparency: Bool,
+        prefersImmediateAppearance: Bool = false
     ) -> SuggestionPanelAccessibilityPresentation {
         SuggestionPanelAccessibilityPresentation(
-            firstAppearanceFadeDuration: reduceMotion ? 0 : defaultFirstAppearanceFadeDuration,
+            firstAppearanceFadeDuration: reduceMotion || prefersImmediateAppearance
+                ? 0
+                : defaultFirstAppearanceFadeDuration,
             background: reduceTransparency ? .solid : .translucentMaterial
         )
     }

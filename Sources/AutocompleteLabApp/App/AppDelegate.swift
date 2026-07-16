@@ -4233,11 +4233,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func shouldRequestEagerTypingPoll() -> Bool {
         guard suggestionTuning.aggressivenessLevel >= 5,
               !suggestionSession.hasVisibleSuggestion,
-              let frontmostApp = accessibilityClient.frontmostApplication() else {
+              let frontmostApp = accessibilityClient.frontmostApplication(),
+              let profile = effectiveProfile(for: frontmostApp),
+              profile.canPresentSuggestions,
+              !profile.isSensitive else {
             return false
         }
 
-        return frontmostApp.bundleIdentifier == CodexProofFocusedTargetPolicy.bundleIdentifier
+        return isSuggestionEnabled(for: frontmostApp, profile: profile)
     }
 
     private func preserveClaudeCodeTerminalHostProofSuggestionAfterPassthroughIfNeeded(source: String) -> Bool {
@@ -19210,6 +19213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         suggestionTuning = next
+        suggestionPanel.prefersImmediateFirstAppearance = next.aggressivenessLevel >= 5
         persistSuggestionTuning()
         applySuggestionTuningChange(reason: reason)
         DiagnosticsLog.shared.record(
@@ -20192,6 +20196,7 @@ private extension AppDelegate {
             confidenceLevel: confidenceLevel,
             learningRestraintLevel: learningRestraintLevel
         )
+        suggestionPanel.prefersImmediateFirstAppearance = suggestionTuning.aggressivenessLevel >= 5
         persistSuggestionTuning()
         defaults.set(
             Self.currentSuggestionTuningDefaultsVersion,
