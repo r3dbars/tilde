@@ -22,6 +22,8 @@ LOG_SCAN_SELF_TEST_START_LINE=0
 RUNTIME_READY_SELF_TEST=0
 RUNTIME_READY_SELF_TEST_START_LINE=0
 RUNTIME_READY_SELF_TEST_ALLOW_EXISTING=0
+RUNTIME_TERMINAL_SELF_TEST=0
+RUNTIME_TERMINAL_SELF_TEST_START_LINE=0
 NORMALIZE_OSASCRIPT_STDOUT_SELF_TEST=0
 NORMALIZE_OSASCRIPT_STDOUT_INPUT=""
 NORMALIZE_OSASCRIPT_STDOUT_OUTPUT=""
@@ -219,6 +221,25 @@ has_runtime_start_after_line() {
   log_has_pattern_after_line \
     "$start_line" \
     "app-proof-mode-started|runtime-bootstrap|runtime-warm-start| runtime .*readinessStage=warming"
+}
+
+runtime_terminal_failure_line_after_line() {
+  local start_line="$1"
+  local first_new_line=$((start_line + 1))
+
+  [[ -f "$LOG_PATH" ]] || return 1
+  awk -v first_new_line="$first_new_line" '
+    NR < first_new_line { next }
+    / runtime / && /readinessStage=(downloadNeeded|repairNeeded|runtimeUnavailable|failed)/ {
+      latest = $0
+    }
+    END {
+      if (latest == "") {
+        exit 1
+      }
+      print latest
+    }
+  ' "$LOG_PATH"
 }
 
 wait_for_focused_text_poll_summary_after_line() {
@@ -773,10 +794,18 @@ wait_for_runtime_ready() {
   local existing_ready_grace_seconds="${AUTOCOMPLETE_LAB_SOAK_EXISTING_READY_GRACE_SECONDS:-3}"
   local deadline=$((SECONDS + timeout_seconds))
   local existing_ready_allowed_at=$((SECONDS + existing_ready_grace_seconds))
+  local terminal_line
 
   while ((SECONDS <= deadline)); do
     if has_runtime_ready_after_line "$start_line"; then
       return 0
+    fi
+
+    terminal_line="$(runtime_terminal_failure_line_after_line "$start_line" || true)"
+    if [[ -n "$terminal_line" ]]; then
+      echo "Runtime entered a terminal readiness state before the typing soak." >&2
+      echo "$terminal_line" >&2
+      return 1
     fi
 
     if [[ "$allow_existing_ready" == "1" ]] \
@@ -1074,6 +1103,17 @@ while (($#)); do
       RUNTIME_READY_SELF_TEST_ALLOW_EXISTING="$1"
       RUNTIME_READY_SELF_TEST=1
       ;;
+    --self-test-runtime-terminal)
+      shift
+      if (($# < 2)); then
+        usage >&2
+        exit 2
+      fi
+      LOG_PATH="$1"
+      shift
+      RUNTIME_TERMINAL_SELF_TEST_START_LINE="$1"
+      RUNTIME_TERMINAL_SELF_TEST=1
+      ;;
     --self-test-normalize-osascript-stdout)
       shift
       if (($# < 2)); then
@@ -1115,6 +1155,12 @@ if [[ "$RUNTIME_READY_SELF_TEST" == "1" ]]; then
   runtime_ready_available_now \
     "$RUNTIME_READY_SELF_TEST_START_LINE" \
     "$RUNTIME_READY_SELF_TEST_ALLOW_EXISTING"
+  exit $?
+fi
+
+if [[ "$RUNTIME_TERMINAL_SELF_TEST" == "1" ]]; then
+  require_non_negative_int "$RUNTIME_TERMINAL_SELF_TEST_START_LINE" "--self-test-runtime-terminal start-line"
+  runtime_terminal_failure_line_after_line "$RUNTIME_TERMINAL_SELF_TEST_START_LINE" >/dev/null
   exit $?
 fi
 
