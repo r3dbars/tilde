@@ -36,6 +36,7 @@ struct TraceScreenshotCaptureCoordinatorTests {
 
         #expect(result.path.hasSuffix("/abc123.png"))
         #expect(result.rectDescription == "x=-14,y=-4,w=79,h=59")
+        #expect(result.screenshotPathAuthorized)
         let capture = try #require(captures.items.first)
         #expect(capture.rect == CGRect(x: -14, y: -4, width: 79, height: 59))
         #expect(capture.screenshotURL.lastPathComponent == "abc123.png")
@@ -51,11 +52,12 @@ struct TraceScreenshotCaptureCoordinatorTests {
             captures: captures
         )
 
-        _ = coordinator.capture(request(
+        let result = coordinator.capture(request(
             rects: [CGRect(x: 0, y: 0, width: 10, height: 10)],
             appScreenshotTracingEnabled: true
         ))
 
+        #expect(result.screenshotPathAuthorized)
         let capture = try #require(captures.items.first)
         #expect(capture.allowsLearningCorrection)
     }

@@ -41,6 +41,130 @@ struct RawTraceReportExportTests {
         #expect(event.metadata["acceptanceID"] == "accept-one")
     }
 
+    @Test("Default raw trace record redacts private content and screenshot path")
+    func defaultRawTraceRecordRedactsPrivateContentAndScreenshotPath() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTraceDefaultRedactionTests-\(UUID().uuidString)")
+        let suiteName = "RawTraceDefaultRedactionTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let traceURL = temporaryFolder.appendingPathComponent("traces.jsonl")
+        let log = RawAutocompleteTraceLog(
+            logURL: traceURL,
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            userDefaults: defaults,
+            environment: [:]
+        )
+
+        log.record(
+            type: .modelResult,
+            suggestionID: "redaction-one",
+            appBundleIdentifier: "com.apple.TextEdit",
+            requestMode: "phraseContinuation",
+            textBeforeCursor: "private draft text",
+            textAfterCursor: "private after text",
+            systemPrompt: "private system prompt",
+            userPrompt: "private user prompt",
+            rawOutput: "private model output",
+            cleanedVisibleText: "private cleaned output",
+            displayedText: "private displayed output",
+            acceptedText: "private accepted text",
+            remainingVisibleText: "private remaining text",
+            screenshotPath: "/tmp/private-screenshot.png",
+            metadata: [
+                "typedSuffix": "private words",
+                "fieldKind": "multilineCompose"
+            ]
+        )
+
+        let event = try #require(waitForEvents(at: traceURL).first)
+        let persisted = try String(contentsOf: traceURL, encoding: .utf8)
+
+        #expect(event.textBeforeCursor == "String(18 chars)")
+        #expect(event.textAfterCursor == "String(18 chars)")
+        #expect(event.systemPrompt == "String(21 chars)")
+        #expect(event.userPrompt == "String(19 chars)")
+        #expect(event.rawOutput == "String(20 chars)")
+        #expect(event.cleanedVisibleText == "String(22 chars)")
+        #expect(event.displayedText == "String(24 chars)")
+        #expect(event.acceptedText == "String(21 chars)")
+        #expect(event.remainingVisibleText == "String(22 chars)")
+        #expect(event.screenshotPath.isEmpty)
+        #expect(event.metadata["typedSuffix"] == "String(13 chars)")
+        #expect(event.metadata["fieldKind"] == "multilineCompose")
+        #expect(!persisted.contains("private"))
+    }
+
+    @Test("Screenshot opt-in keeps its path without enabling raw text")
+    func screenshotOptInKeepsPathWithoutEnablingRawText() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTraceScreenshotOptInTests-\(UUID().uuidString)")
+        let suiteName = "RawTraceScreenshotOptInTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let traceURL = temporaryFolder.appendingPathComponent("traces.jsonl")
+        let log = RawAutocompleteTraceLog(
+            logURL: traceURL,
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            userDefaults: defaults,
+            environment: [:]
+        )
+        log.setScreenshotTracingEnabled(true)
+
+        log.record(
+            type: .suggestionPresented,
+            suggestionID: "screenshot-one",
+            textBeforeCursor: "private draft text",
+            screenshotPath: "/tmp/opted-in-screenshot.png"
+        )
+
+        let event = try #require(waitForEvents(at: traceURL).first)
+
+        #expect(event.textBeforeCursor == "String(18 chars)")
+        #expect(event.screenshotPath == "/tmp/opted-in-screenshot.png")
+    }
+
+    @Test("Capture-policy authorization keeps per-app screenshot path")
+    func capturePolicyAuthorizationKeepsPerAppScreenshotPath() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTracePerAppScreenshotTests-\(UUID().uuidString)")
+        let suiteName = "RawTracePerAppScreenshotTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let traceURL = temporaryFolder.appendingPathComponent("traces.jsonl")
+        let log = RawAutocompleteTraceLog(
+            logURL: traceURL,
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            userDefaults: defaults,
+            environment: [:]
+        )
+
+        log.record(
+            type: .suggestionPresented,
+            suggestionID: "per-app-screenshot-one",
+            textBeforeCursor: "private draft text",
+            screenshotPath: "/tmp/per-app-screenshot.png",
+            screenshotPathAuthorized: true
+        )
+
+        let event = try #require(waitForEvents(at: traceURL).first)
+
+        #expect(event.textBeforeCursor == "String(18 chars)")
+        #expect(event.screenshotPath == "/tmp/per-app-screenshot.png")
+    }
+
     @Test("Suppressed trace events include one silence reason code")
     func suppressedTraceEventsIncludeOneSilenceReasonCode() throws {
         let temporaryFolder = FileManager.default.temporaryDirectory
