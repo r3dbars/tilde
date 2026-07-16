@@ -101,8 +101,8 @@ struct SerialFocusedTextAXReaderTests {
         #expect(completionReceived.wait(timeout: .now() + 1) == .success)
     }
 
-    @Test("Codex prompt uses synthetic text area fast path")
-    func codexPromptUsesSyntheticTextAreaFastPath() throws {
+    @Test("Codex prompt fast path retains window identity")
+    func codexPromptFastPathRetainsWindowIdentity() throws {
         let profile = try #require(CompatibilityProfileStore.mvp.profile(for: "com.openai.codex"))
         let options = FocusedTextReadOptionsPolicy.options(
             for: runningApplicationInfo(bundleIdentifier: "com.openai.codex"),
@@ -111,7 +111,12 @@ struct SerialFocusedTextAXReaderTests {
 
         #expect(options == .syntheticTextAreaFastPath)
         #expect(options.useMinimalFingerprint)
-        #expect(options.skipWindowLookup)
+        #expect(options.windowReadMode == .identifierOnly)
+        #expect(options.windowReadMode.plan == FocusedTextWindowReadPlan(
+            readsIdentifier: true,
+            allowsFocusedWindowFallback: false,
+            readsBounds: false
+        ))
         #expect(options.assumedCanSetSelectedText == true)
     }
 

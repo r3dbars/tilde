@@ -111,7 +111,7 @@ struct SuggestionEpisodeTests {
         #expect(scorecard.deletedFast == 1)
         #expect(scorecard.averageLatencyMilliseconds == 200)
         #expect(scorecard.modelPromptRows.contains(
-            "Gemma 4 E4B IT OptiQ / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
+            "\(CompletionModelPolicy.mvp.model.rawValue) / \(CompletionPromptBuilder.promptStyleIdentifier): shown 3, kept 1"
         ))
         #expect(scorecard.markdown.contains("Score:"))
     }
