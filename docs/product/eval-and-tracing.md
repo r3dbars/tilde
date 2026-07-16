@@ -2,6 +2,8 @@
 
 This is the local tuning loop for making autocomplete better before it becomes customer-facing.
 
+Run the checked-in baseline quality suite with `./script/steadytype eval`.
+
 ## Local Tracing
 
 Tracing is local-only and enabled for the lab by default. The default trace is
