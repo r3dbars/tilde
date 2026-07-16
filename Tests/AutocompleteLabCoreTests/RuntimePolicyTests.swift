@@ -49,6 +49,15 @@ struct RuntimePolicyTests {
         #expect(policy.decision(previous: previous, current: current).canReuse)
     }
 
+    @Test("Runtime session cache reuses a growing partial word in the same field")
+    func runtimeSessionCacheReusesGrowingWordCompletion() {
+        let policy = RuntimeSessionCachePolicy()
+        let previous = cacheRequest(text: "Can we make this fa", mode: .wordCompletion)
+        let current = cacheRequest(text: "Can we make this fas", mode: .wordCompletion)
+
+        #expect(policy.decision(previous: previous, current: current).canReuse)
+    }
+
     @Test("Runtime session cache resets on app field mode and edit changes")
     func runtimeSessionCacheResetsOnScopeAndEditChanges() {
         let policy = RuntimeSessionCachePolicy()
@@ -61,7 +70,7 @@ struct RuntimePolicyTests {
         #expect(policy.decision(
             previous: previous,
             current: cacheRequest(text: "Can we make this", mode: .wordCompletion)
-        ) == .reset(.wordCompletion))
+        ) == .reset(.modeChanged))
         #expect(policy.decision(
             previous: previous,
             current: cacheRequest(text: "Can we make this feel", app: "com.apple.Notes")
