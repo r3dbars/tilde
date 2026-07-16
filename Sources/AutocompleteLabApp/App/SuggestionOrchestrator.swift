@@ -25,6 +25,7 @@ final class SuggestionOrchestrator {
     private let engineBox: CompletionEngineBox
     private let wordCompletionRanker: WordCompletionCandidateRanker
     private let docLocalPhrasePredictor: DocLocalNGramPhrasePredictor
+    private let personalPhrasePredictor: PersonalNGramContinuationPredictor
     private let commonPhrasePredictor: CommonPhraseContinuationPredictor
     private let failureVisibilityPolicy = CompletionFailureVisibilityPolicy()
     private let completionConfidencePolicy: CompletionConfidencePolicy
@@ -40,6 +41,7 @@ final class SuggestionOrchestrator {
         engine: any CompletionEngine,
         wordCompletionRanker: WordCompletionCandidateRanker = WordCompletionCandidateRanker(),
         docLocalPhrasePredictor: DocLocalNGramPhrasePredictor = DocLocalNGramPhrasePredictor(),
+        personalPhrasePredictor: PersonalNGramContinuationPredictor = PersonalNGramContinuationPredictor(),
         commonPhrasePredictor: CommonPhraseContinuationPredictor = CommonPhraseContinuationPredictor(),
         completionConfidencePolicy: CompletionConfidencePolicy = CompletionConfidencePolicy(),
         suggestionPresentationGate: SuggestionPresentationGate = SuggestionPresentationGate(),
@@ -49,6 +51,7 @@ final class SuggestionOrchestrator {
         self.engineBox = CompletionEngineBox(engine: engine)
         self.wordCompletionRanker = wordCompletionRanker
         self.docLocalPhrasePredictor = docLocalPhrasePredictor
+        self.personalPhrasePredictor = personalPhrasePredictor
         self.commonPhrasePredictor = commonPhrasePredictor
         self.completionConfidencePolicy = completionConfidencePolicy
         self.suggestionPresentationGate = suggestionPresentationGate
@@ -117,6 +120,7 @@ final class SuggestionOrchestrator {
             fieldKind: input.fieldClassification.kind,
             behaviorProfileID: behaviorProfileID,
             acceptedTextStyleSketch: input.acceptedTextStyleSketch,
+            personalContext: input.personalContext,
             documentTitleShape: DocumentTitleShape.from(windowTitle: input.context.fingerprint.windowTitle),
             visiblePageContext: input.visiblePageContext,
             maxVisibleWords: input.maxVisibleWords,
@@ -127,7 +131,8 @@ final class SuggestionOrchestrator {
             request,
             fieldClassification: input.fieldClassification,
             suggestionTuning: input.suggestionTuning,
-            docLocalContextTexts: docLocalContextTexts
+            docLocalContextTexts: docLocalContextTexts,
+            personalWritingMemory: input.personalWritingMemory
         )
     }
 
@@ -143,7 +148,8 @@ final class SuggestionOrchestrator {
         _ request: CompletionRequest,
         fieldClassification: AXFieldClassification?,
         suggestionTuning: SuggestionTuning?,
-        docLocalContextTexts: [String] = []
+        docLocalContextTexts: [String] = [],
+        personalWritingMemory: PersonalWritingMemory? = nil
     ) -> SuggestionOrchestration {
         clearStreamingPresentations()
         let runtimeSessionCacheDecision = RuntimeSessionCachePolicy().decision(
@@ -168,7 +174,8 @@ final class SuggestionOrchestrator {
             fieldIdentityDescription: request.fieldIdentityDescription ?? "",
             requestMetadata: requestMetadata,
             runtimeSessionCacheDecision: runtimeSessionCacheDecision,
-            docLocalContextTexts: docLocalContextTexts
+            docLocalContextTexts: docLocalContextTexts,
+            personalWritingMemory: personalWritingMemory
         )
     }
 
@@ -590,6 +597,7 @@ final class SuggestionOrchestrator {
     nonisolated func fastPhraseSelection(
         for textBeforeCursor: String,
         docLocalContextTexts: [String] = [],
+        personalWritingMemory: PersonalWritingMemory? = nil,
         behaviorProfileID: AutocompleteBehaviorProfileID?,
         maxVisibleWords: Int,
         allowPredictiveFallback: Bool = false,
@@ -611,8 +619,28 @@ final class SuggestionOrchestrator {
             maxVisibleWords: maxVisibleWords,
             allowsPromptAppPrediction: allowPromptAppPrediction
         )
+        let personalSelection = personalWritingMemory.map {
+            personalPhrasePredictor.selection(
+                for: textBeforeCursor,
+                memory: $0,
+                behaviorProfileID: behaviorProfileID,
+                maxVisibleWords: maxVisibleWords,
+                allowsPromptAppPrediction: allowPromptAppPrediction
+            )
+        }
+        if docLocalSelection.suggestion != nil,
+           let personalSelection,
+           personalSelection.suggestion != nil {
+            // The current field is fresher and more specific, so it wins equal scores.
+            return (docLocalSelection.score ?? 0) >= (personalSelection.score ?? 0)
+                ? docLocalSelection
+                : personalSelection
+        }
         if docLocalSelection.suggestion != nil {
             return docLocalSelection
+        }
+        if let personalSelection, personalSelection.suggestion != nil {
+            return personalSelection
         }
 
         return commonPhrasePredictor.selection(
@@ -1090,6 +1118,7 @@ struct SuggestionOrchestration: Sendable {
     let requestMetadata: [String: String]
     let runtimeSessionCacheDecision: RuntimeSessionCacheDecision
     let docLocalContextTexts: [String]
+    let personalWritingMemory: PersonalWritingMemory?
 }
 
 private struct DocLocalNGramFieldCorpus: Sendable {
@@ -1143,8 +1172,36 @@ struct SuggestionRequestInput: Sendable {
     let fieldIdentity: FocusedFieldIdentity
     let fieldClassification: AXFieldClassification
     let acceptedTextStyleSketch: AcceptedTextStyleSketch?
+    let personalContext: PersonalContext?
+    let personalWritingMemory: PersonalWritingMemory?
     let visiblePageContext: VisiblePageContext?
     let maxVisibleWords: Int
     let requestMode: CompletionRequestMode
     let suggestionTuning: SuggestionTuning
+
+    init(
+        context: FocusedTextContext,
+        appBundleIdentifier: String,
+        fieldIdentity: FocusedFieldIdentity,
+        fieldClassification: AXFieldClassification,
+        acceptedTextStyleSketch: AcceptedTextStyleSketch?,
+        personalContext: PersonalContext? = nil,
+        personalWritingMemory: PersonalWritingMemory? = nil,
+        visiblePageContext: VisiblePageContext?,
+        maxVisibleWords: Int,
+        requestMode: CompletionRequestMode,
+        suggestionTuning: SuggestionTuning
+    ) {
+        self.context = context
+        self.appBundleIdentifier = appBundleIdentifier
+        self.fieldIdentity = fieldIdentity
+        self.fieldClassification = fieldClassification
+        self.acceptedTextStyleSketch = acceptedTextStyleSketch
+        self.personalContext = personalContext
+        self.personalWritingMemory = personalWritingMemory
+        self.visiblePageContext = visiblePageContext
+        self.maxVisibleWords = maxVisibleWords
+        self.requestMode = requestMode
+        self.suggestionTuning = suggestionTuning
+    }
 }

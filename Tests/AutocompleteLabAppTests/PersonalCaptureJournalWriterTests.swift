@@ -37,6 +37,49 @@ struct PersonalCaptureJournalWriterTests {
         #expect(!markdown.contains("```text\nExisting draft\n```"))
     }
 
+    @Test("Writer output round-trips through the personal capture parser")
+    func writerOutputRoundTripsThroughParser() throws {
+        let fixture = try Fixture()
+        let field = FocusedFieldIdentity(
+            bundleIdentifier: "com.apple.TextEdit",
+            processIdentifier: 42,
+            elementIdentifier: 7
+        )
+        let first = FocusedTextSnapshot(
+            fieldIdentity: field,
+            textBeforeCursor: "Existing draft",
+            textAfterCursor: ""
+        )
+        let second = FocusedTextSnapshot(
+            fieldIdentity: field,
+            textBeforeCursor: "Existing draft with a ``` marker and next sentence",
+            textAfterCursor: ""
+        )
+
+        fixture.writer.recordSnapshotChange(previous: nil, current: first, context: fixture.context)
+        fixture.writer.recordSnapshotChange(previous: first, current: second, context: fixture.context)
+        fixture.writer.recordAcceptedSuggestion(
+            acceptedText: " keep the loop small",
+            context: fixture.context,
+            suggestionID: "suggestion-roundtrip",
+            acceptanceID: "acceptance-roundtrip",
+            acceptMode: "nextWord"
+        )
+        fixture.writer.waitForPendingWrites()
+
+        let entries = PersonalCaptureJournalParser().entries(
+            inDailyMarkdown: try fixture.markdown(),
+            dayString: "2026-05-23"
+        )
+
+        #expect(entries.map(\.kind) == [.fieldObserved, .typed, .accepted])
+        #expect(entries[1].text == " with a ``` marker and next sentence")
+        #expect(entries[1].appBundleIdentifier == "com.apple.TextEdit")
+        #expect(entries[1].fieldKind == .multilineCompose)
+        #expect(entries[1].dayString == "2026-05-23")
+        #expect(entries[2].text == " keep the loop small")
+    }
+
     @Test("Records accepted suggestions and five-star survival signals")
     func recordsAcceptedSuggestionsAndSurvivalSignals() throws {
         let fixture = try Fixture()

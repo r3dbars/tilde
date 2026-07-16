@@ -70,6 +70,13 @@ OfflineModelQualityEvaluator|research|Sources/AutocompleteLabCore/Experiments/Of
 OfflineModelQualityThresholdResult|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
 OfflineModelQualityThresholds|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
 OfflineModelTaskKind|research|Sources/AutocompleteLabCore/Experiments/OfflineModelQualityEval.swift|Offline model audit, not live app behavior.
+TypingReplayCase|experimental|Sources/AutocompleteLabCore/Experiments/TypingReplayEval.swift|Replay case data is consumed by the opt-in evaluation executable, not the live suggestion app.
+TypingReplayCaseExtractor|experimental|Sources/AutocompleteLabCore/Experiments/TypingReplayEval.swift|Personal journal replay extraction is evaluation-only and stays outside the live suggestion app.
+TypingReplayCaseScore|experimental|Sources/AutocompleteLabCore/Experiments/TypingReplayEval.swift|Per-case replay scoring is evaluation-only aggregate proof support.
+TypingReplayGateEvaluator|experimental|Sources/AutocompleteLabCore/Experiments/TypingReplayEval.swift|Replay display-gate evaluation is aggregate proof support, not live app behavior.
+TypingReplayScorecard|experimental|Sources/AutocompleteLabCore/Experiments/TypingReplayEval.swift|Replay scorecards are evaluation artifacts, not live app behavior.
+TypingReplayScorer|experimental|Sources/AutocompleteLabCore/Experiments/TypingReplayEval.swift|Replay scoring is used by the opt-in evaluation executable, not the live suggestion app.
+TypingReplayTrendRow|experimental|Sources/AutocompleteLabCore/Experiments/TypingReplayEval.swift|Privacy-safe aggregate trend rows are evaluation output, not live app behavior.
 WordCompletionEvalAction|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
 WordCompletionEvalCase|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
 WordCompletionEvalCaseResult|research|Sources/AutocompleteLabCore/Experiments/WordCompletionQualityEval.swift|Offline word-completion eval, not live app behavior.
