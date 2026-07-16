@@ -46,6 +46,17 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
         try require(appDelegate, contains: "reason: \"survived_typethrough\"")
     }
+
+    @Test("App delegate rearms cancelled suggestions after typing settles")
+    func appDelegateRearmsCancelledSuggestionsAfterTypingSettles() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(appDelegate, contains: "suggestionIdleRetryState.consumeRetryIfReady(")
+        try require(appDelegate, contains: "suggestionIdleRetryState.noteTextChange(")
+        try require(appDelegate, contains: "suggestionIdleRetryState.noteTypingBurstSuppression(")
+        try require(appDelegate, contains: "else if idleRetryReason != nil {")
+        try require(appDelegate, contains: "? \"idle-retry\"")
+    }
 }
 
 private func source(_ relativePath: String) throws -> String {
