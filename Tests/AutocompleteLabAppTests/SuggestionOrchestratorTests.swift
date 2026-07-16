@@ -1699,6 +1699,30 @@ struct SuggestionOrchestratorTests {
     }
 
     @MainActor
+    @Test("Max cadence can display the first streamed continuation word")
+    func maxCadenceDisplaysFirstStreamedWord() {
+        let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())
+        orchestrator.startStreamingPresentation(suggestionID: "max-stream")
+
+        let firstWord = CompletionSuggestion(text: " quickly", maxVisibleWords: 8)
+        #expect(!orchestrator.shouldPresentStreamingPartial(
+            firstWord,
+            suggestionID: "max-stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 100,
+            latencyMilliseconds: 90
+        ))
+        #expect(orchestrator.shouldPresentStreamingPartial(
+            firstWord,
+            suggestionID: "max-stream",
+            mode: .phraseContinuation,
+            nowMilliseconds: 101,
+            latencyMilliseconds: 91,
+            minimumVisibleWordsOverride: 1
+        ))
+    }
+
+    @MainActor
     @Test("Beginning a new request clears older streaming state")
     func beginningNewRequestClearsOlderStreamingState() {
         let orchestrator = SuggestionOrchestrator(engine: EchoCompletionEngine())

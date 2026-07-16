@@ -59,7 +59,8 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         _ suggestion: CompletionSuggestion,
         mode: CompletionRequestMode,
         phase: SuggestionPresentationPhase,
-        previousVisibleText: String? = nil
+        previousVisibleText: String? = nil,
+        minimumVisibleWordsOverride: Int? = nil
     ) -> Bool {
         guard !suggestion.isEmpty else {
             return false
@@ -74,7 +75,8 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         let visibleWords = words(in: visibleText)
         guard visibleWords.count >= minimumStreamingWords(
             for: mode,
-            maxVisibleWords: suggestion.maxVisibleWords
+            maxVisibleWords: suggestion.maxVisibleWords,
+            override: minimumVisibleWordsOverride
         ) else {
             return false
         }
@@ -103,7 +105,8 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
         mode: CompletionRequestMode,
         state: inout StreamingPresentationState,
         nowMilliseconds: Int,
-        latencyMilliseconds: Int = 0
+        latencyMilliseconds: Int = 0,
+        minimumVisibleWordsOverride: Int? = nil
     ) -> Bool {
         guard state.presentedCount > 0
             || latencyMilliseconds <= maximumStreamingPartialLatencyMilliseconds else {
@@ -114,7 +117,8 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
             suggestion,
             mode: mode,
             phase: .streamingPartial,
-            previousVisibleText: state.lastVisibleText
+            previousVisibleText: state.lastVisibleText,
+            minimumVisibleWordsOverride: minimumVisibleWordsOverride
         ) else {
             return false
         }
@@ -151,8 +155,13 @@ public struct SuggestionPresentationGate: Equatable, Sendable {
 
     private func minimumStreamingWords(
         for mode: CompletionRequestMode,
-        maxVisibleWords: Int
+        maxVisibleWords: Int,
+        override: Int?
     ) -> Int {
+        if let override {
+            return max(1, override)
+        }
+
         let baseMinimum: Int
         switch mode {
         case .sentenceContinuation:
