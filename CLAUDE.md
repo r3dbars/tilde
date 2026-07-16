@@ -10,20 +10,28 @@ Per-folder `AGENTS.md` + `CLAUDE.md` pairs exist throughout the tree and carry l
 
 This is a macOS-only SwiftPM package (`swift-tools 6.2`, targets macOS 26, Apple Silicon for the real runtime). The app cannot be built or run on Linux; only the pure `AutocompleteLabCore` tests are platform-light.
 
-- Build and run the app bundle: `./script/build_and_run.sh` (`--verify` to build/validate without launching).
-- All tests: `swift test --jobs 1`
+The public command facade has exactly five operations:
+
+- Build the app bundle without launching: `./script/steadytype build`
+- Run the fast pre-merge test gate: `./script/steadytype test`
+- Run the broad local smoke suite: `./script/steadytype smoke`
+- Run the checked-in quality eval suite: `./script/steadytype eval`
+- Check or build release artifacts: `./script/steadytype release --check` (a bare `release` builds the archive; `release --notarize` uploads it to Apple)
+
+Use the focused internals below only when narrowing a failure or maintaining the facade:
+
+- All Swift tests: `swift test --jobs 1`
 - Core (pure) tests: `swift test --jobs 1 --filter AutocompleteLabCoreTests`
 - App tests: `swift test --jobs 1 --filter AutocompleteLabAppTests`
 - A single test: `swift test --jobs 1 --filter AutocompleteLabCoreTests.<SuiteName>/<testName>`
 - Package shape after docs/target changes: `swift package describe`
 - MLX patch (run after `swift package resolve`, before building the app): `./script/patch_mlx_swift_lm.sh` — applies `patches/mlx-swift-lm/gemma4-optiq-scaled-linear.patch` to the resolved checkout. It is idempotent and no-ops if already applied.
-- **Fast proof gate (run before every PR/push):** `./script/proof.sh fast` — the single cheap proof tier (target < ~10 min): whitespace/conflict markers, `script/*.py` byte-compile, the Linux-friendly harness self-tests, `check_test_coverage_manifest.sh`, core `swift test`, plus a non-blocking `check_proof_manifest.sh` report. This is exactly what CI runs on PRs to `main` (`.github/workflows/fast-proof.yml`), with Swift auto-skipped on the Linux runner. Enable it locally on push with `git config core.hookspath .githooks`.
-- Broad pre-beta gate: `./script/beta_readiness.sh`, plus the specific `script/check_*.sh` for the proof surface you changed.
-- Pre-merge gate (mirrors CI): `./script/proof.sh fast` — runs `swift test`, `check_test_coverage_manifest`, `check_proof_manifest`, and a whitespace check. Exits non-zero if any check fails.
+- Fast gate implementation: `./script/proof.sh fast`; `./script/steadytype test` delegates here. It runs whitespace/conflict checks, Python byte-compilation, harness self-tests, the coverage manifest, core Swift tests, and a non-blocking proof-manifest report.
+- Broad internal pre-beta gate: `./script/beta_readiness.sh`, plus the specific `script/check_*.sh` for the proof surface you changed.
 
 The fast gate is **tiered**: blocking checks fail the build; proof-status checks that still need a pending *manual* proof (e.g. `check_proof_manifest.sh`) run report-only. Keep proof gates honest — don't promote a report lane to blocking until its manual proof actually lands.
 
-Most scripts have a paired `*_self_test.sh` that validates the script itself (`proof.sh` has `proof_self_test.sh`).
+Most scripts have a paired `*_self_test.sh` that validates the script itself (`steadytype` has `steadytype_self_test.sh`; `proof.sh` has `proof_self_test.sh`).
 
 ## Architecture
 

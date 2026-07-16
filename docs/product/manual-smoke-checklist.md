@@ -1,6 +1,6 @@
 # Manual Smoke Checklist
 
-Use this after `./script/smoke_test.sh` when checking real app behavior.
+Use this after `./script/steadytype smoke` when checking real app behavior.
 
 For a repeatable local record, use `script/real_app_smoke.sh <app>` when it is
 listed below. It builds/relaunches the app, prints the safe steps, waits while

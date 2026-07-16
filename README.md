@@ -80,16 +80,19 @@ The current local runtime path uses MLX on Apple Silicon and downloads one pinne
 
 ## Development
 
-```bash
-swift test
-./script/check_test_coverage_manifest.sh
-./script/build_and_run.sh --verify
-```
-
-Full private beta validation lives in:
+Use the SteadyType command facade. These are its five public operations:
 
 ```bash
-./script/beta_readiness.sh
+./script/steadytype build
+./script/steadytype test
+./script/steadytype smoke
+./script/steadytype eval
+./script/steadytype release --check
 ```
+
+`release` forwards release-specific arguments. Start with `--check`; a bare
+release builds the archive, and `--notarize` uploads it to Apple. The facade
+delegates to the existing scripts for now, so focused maintenance commands can
+stay internal while the public command surface stays small.
 
 The repo also includes smoke tests, privacy checks, runtime checks, proof manifests, and visual placement evidence under `script/` and `docs/product/`.
