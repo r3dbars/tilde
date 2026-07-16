@@ -25,7 +25,13 @@ struct CodexProofFocusedTargetPolicy {
     static func allowsPromptProofProfile(_ profile: CompatibilityProfile) -> Bool {
         profile.bundleIdentifier == bundleIdentifier
             && profile.supportsOneWordAcceptance
-            && profile.insertionMode == .axValueReplacement
+            && (
+                profile.insertionMode == .axValueReplacement
+                    || (
+                        profile.insertionMode == .axThenKeyEvents
+                            && profile.fallbackInsertionMode == .axValueReplacement
+                    )
+            )
             && (
                 (!profile.supportsFullAcceptance && profile.requiresNoSubmitAcceptanceProof)
                     || (profile.supportsFullAcceptance && !profile.requiresNoSubmitAcceptanceProof)
