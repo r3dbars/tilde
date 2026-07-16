@@ -10,7 +10,7 @@ does not make Transcripted integration a promise.
 
 Before writing:
 
-- Open Autocomplete Lab from the menu bar.
+- Open SteadyType from the menu bar.
 - Confirm Settings says the local model is ready.
 - Confirm raw text tracing and screenshot tracing are off unless there is a
   separate debug session.

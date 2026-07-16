@@ -1,6 +1,6 @@
 # SteadyType Known Limitations
 
-This is a lab app, not a broad system-wide promise.
+This is an early private-beta build, not a broad system-wide promise.
 
 Current proof truth: strict manual smoke tracks only the boring beta-safe rows.
 Stale screenshots and old insertion rows do not make a beta lane current.

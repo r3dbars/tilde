@@ -549,4 +549,4 @@ Native target: every claim has proof.
 - Apple HIG Machine Learning: https://developer.apple.com/design/human-interface-guidelines/machine-learning/
 - Current scorecard: `docs/product/deep-dive-scorecard-2026-05-06.md`
 - Compatibility matrix: `docs/product/compatibility-matrix.md`
-- Automated real-app smoke: `docs/product/automated-real-app-smoke.md`
+- Automated real-app smoke: `script/real_app_smoke.sh`
