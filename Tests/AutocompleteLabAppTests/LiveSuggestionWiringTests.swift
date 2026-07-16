@@ -46,6 +46,16 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "repositionVisibleSuggestion(context: context, profile: profile)")
         try require(appDelegate, contains: "reason: \"survived_typethrough\"")
     }
+
+    @Test("App delegate forwards capture-policy screenshot authorization to the trace logger")
+    func appDelegateForwardsScreenshotPathAuthorization() throws {
+        let appDelegate = try source("Sources/AutocompleteLabApp/App/AppDelegate.swift")
+
+        try require(
+            appDelegate,
+            contains: "screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized"
+        )
+    }
 }
 
 private func source(_ relativePath: String) throws -> String {
