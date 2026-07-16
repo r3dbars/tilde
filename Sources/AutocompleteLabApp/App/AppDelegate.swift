@@ -8114,6 +8114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayedText: suggestion.visibleText,
             latencyMilliseconds: latencyMilliseconds,
             screenshotPath: screenshotCapture.path,
+            screenshotPathAuthorized: screenshotCapture.screenshotPathAuthorized,
             metadata: presentationTracePayload.rawTraceMetadata
         )
         recordPersonalCaptureSuggestionEpisodePresented(

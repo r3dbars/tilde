@@ -132,6 +132,39 @@ struct RawTraceReportExportTests {
         #expect(event.screenshotPath == "/tmp/opted-in-screenshot.png")
     }
 
+    @Test("Capture-policy authorization keeps per-app screenshot path")
+    func capturePolicyAuthorizationKeepsPerAppScreenshotPath() throws {
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RawTracePerAppScreenshotTests-\(UUID().uuidString)")
+        let suiteName = "RawTracePerAppScreenshotTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer {
+            try? FileManager.default.removeItem(at: temporaryFolder)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let traceURL = temporaryFolder.appendingPathComponent("traces.jsonl")
+        let log = RawAutocompleteTraceLog(
+            logURL: traceURL,
+            screenshotsURL: temporaryFolder.appendingPathComponent("screenshots"),
+            userDefaults: defaults,
+            environment: [:]
+        )
+
+        log.record(
+            type: .suggestionPresented,
+            suggestionID: "per-app-screenshot-one",
+            textBeforeCursor: "private draft text",
+            screenshotPath: "/tmp/per-app-screenshot.png",
+            screenshotPathAuthorized: true
+        )
+
+        let event = try #require(waitForEvents(at: traceURL).first)
+
+        #expect(event.textBeforeCursor == "String(18 chars)")
+        #expect(event.screenshotPath == "/tmp/per-app-screenshot.png")
+    }
+
     @Test("Suppressed trace events include one silence reason code")
     func suppressedTraceEventsIncludeOneSilenceReasonCode() throws {
         let temporaryFolder = FileManager.default.temporaryDirectory

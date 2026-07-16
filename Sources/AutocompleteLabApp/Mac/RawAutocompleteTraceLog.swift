@@ -366,6 +366,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
         outcome: String = "",
         reason: String = "",
         screenshotPath: String = "",
+        screenshotPathAuthorized: Bool = false,
         metadata: [String: String] = [:]
     ) {
         guard isEnabled else {
@@ -434,7 +435,7 @@ final class RawAutocompleteTraceLog: @unchecked Sendable {
             latencyMilliseconds: latencyMilliseconds,
             outcome: outcome,
             reason: reason,
-            screenshotPath: screenshotTracingEnabled ? screenshotPath : "",
+            screenshotPath: (screenshotTracingEnabled || screenshotPathAuthorized) ? screenshotPath : "",
             metadata: AutocompleteTracePrivacyFilter.metadata(
                 proofMetadata,
                 rawContentEnabled: rawContentEnabled
