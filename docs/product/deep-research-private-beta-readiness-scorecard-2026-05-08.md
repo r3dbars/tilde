@@ -212,7 +212,6 @@ Score movement: +4
   `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`,
   `Sources/AutocompleteLabApp/Mac/LocalReportExporter.swift`,
   `Tests/AutocompleteLabCoreTests/AutocompleteTracePrivacyFilterTests.swift`,
-  `Tests/AutocompleteLabAppTests/TraceLoggerTests.swift`,
   `Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift`,
   `script/check_redacted_report_export.sh`, `PRIVACY-BETA.md`,
   `DIAGNOSTIC-EXPORT.md`,
