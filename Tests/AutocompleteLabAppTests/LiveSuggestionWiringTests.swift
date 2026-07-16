@@ -76,6 +76,8 @@ struct LiveSuggestionWiringTests {
         try require(appDelegate, contains: "promptTargetInvalidationResolution == .cancelAndRetry")
         try require(appDelegate, contains: "cancelAndRearmCodexPromptTargetWork(")
         try require(appDelegate, contains: "codex-prompt-target-refresh-quarantined")
+        try require(appDelegate, contains: "source: \"presentation-refresh\"")
+        try require(appDelegate, contains: "return (nil, \"quarantined-codex-prompt-target\")")
         try require(appDelegate, contains: "axHealthInvalidationResolution(")
         try require(appDelegate, contains: "rearmedTransientRequest")
         try require(appDelegate, contains: "\"codex-prompt-target-refresh-deferred\"")

@@ -20,6 +20,7 @@ struct CodexPromptAXCooldownPreservation: Equatable {
 
 enum CodexPromptPresentationRefreshResolution: Equatable {
     case reject
+    case cancelAndRetry
     case reuseTrustedTextAreaContext
     case retry
 }
@@ -185,7 +186,7 @@ struct CodexPromptTargetContinuityPolicy {
         trustedContext: FocusedTextContext,
         nowMilliseconds: Int = Int(ProcessInfo.processInfo.systemUptime * 1_000)
     ) -> CodexPromptPresentationRefreshResolution {
-        guard invalidationResolution(
+        let invalidationResolution = invalidationResolution(
             appBundleIdentifier: appBundleIdentifier,
             processIdentifier: processIdentifier,
             promptBlockReason: promptBlockReason,
@@ -195,8 +196,12 @@ struct CodexPromptTargetContinuityPolicy {
             observedContext: observedContext,
             trustedContext: trustedContext,
             nowMilliseconds: nowMilliseconds
-        ) == .preserveWork else {
+        )
+        guard invalidationResolution != .reject else {
             return .reject
+        }
+        guard invalidationResolution != .cancelAndRetry else {
+            return .cancelAndRetry
         }
 
         guard observedContext.role == "AXTextArea",
