@@ -169,6 +169,17 @@ struct CodexPromptTargetContinuityPolicyTests {
                 elementRect: CGRect(x: 100, y: 620, width: 700, height: 100)
             )
         ))
+        #expect(!policy.canDeferInvalidation(
+            appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
+            processIdentifier: 42,
+            promptBlockReason: "missing-prompt-bounds",
+            currentFieldIdentity: fieldIdentity,
+            currentSnapshot: snapshot,
+            trustedAnchor: anchor,
+            observedContext: context(
+                elementRect: CGRect(x: 100, y: 620, width: 0, height: 80)
+            )
+        ))
         #expect(policy.canDeferInvalidation(
             appBundleIdentifier: CodexProofFocusedTargetPolicy.bundleIdentifier,
             processIdentifier: 42,

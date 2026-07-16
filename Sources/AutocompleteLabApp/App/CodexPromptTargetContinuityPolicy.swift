@@ -353,6 +353,8 @@ struct CodexPromptTargetContinuityPolicy {
             && abs(trustedElementBounds.y - observedElementBounds.y) <= maximumGeometryDelta
             && abs(trustedElementBounds.width - observedElementBounds.width) <= maximumGeometryDelta
             && abs(trustedElementBounds.height - observedElementBounds.height) <= maximumGeometryDelta
+            && trustedElementBounds.width > 0
+            && observedElementBounds.width > 0
             && trustedElementBounds.height > 0
             && observedElementBounds.height > 0
     }
