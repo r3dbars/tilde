@@ -83,7 +83,8 @@ Current local evidence:
   accept after app, field, selected text, or surrounding text changes.
 - `Sources/AutocompleteLabCore/Session/SensitiveTextFieldPolicy.swift` blocks
   native secure fields and password/token/API-key-like fingerprints.
-- `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift` redacts
+- `Sources/AutocompleteLabCore/Tracing/AutocompleteTracePrivacyFilter.swift`
+  and `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift` redact
   raw text and screenshots by default.
 - `script/private_beta_packet.sh` creates local feedback/checksum/privacy packet
   files and now points at the required beta docs and issue form.
@@ -206,11 +207,12 @@ Score movement: +4
   URL/title/recipient/subject metadata, and a current-build export proof command
   that runs from the app binary.
 - Evidence found in repo: `docs/product/privacy-and-controls.md`,
-  `Sources/AutocompleteLabCore/Configuration/TracePrivacyPolicy.swift`,
+  `Sources/AutocompleteLabCore/Tracing/AutocompleteTracePrivacyFilter.swift`,
   `Sources/AutocompleteLabCore/Text/DiagnosticsMetadataRedactor.swift`,
   `Sources/AutocompleteLabApp/Mac/RawAutocompleteTraceLog.swift`,
   `Sources/AutocompleteLabApp/Mac/LocalReportExporter.swift`,
-  `Tests/AutocompleteLabCoreTests/TracePrivacyPolicyTests.swift`,
+  `Tests/AutocompleteLabCoreTests/AutocompleteTracePrivacyFilterTests.swift`,
+  `Tests/AutocompleteLabAppTests/TraceLoggerTests.swift`,
   `Tests/AutocompleteLabAppTests/RawTraceReportExportTests.swift`,
   `script/check_redacted_report_export.sh`, `PRIVACY-BETA.md`,
   `DIAGNOSTIC-EXPORT.md`,

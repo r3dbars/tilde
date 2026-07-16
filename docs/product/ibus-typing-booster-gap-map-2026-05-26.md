@@ -10,7 +10,7 @@ Date: 2026-05-26
 | Keep app support proof-gated | `CompatibilityProfileStore`, `HostCompatibilityPolicy`, `docs/product/proof-manifest.json`. |
 | Keep Tab safe | `KeyboardEventTapConsumptionPolicy`, `KeyboardActionRouter`, `SuggestionAcceptanceProofPolicy`, `AppDelegate`. |
 | Dismiss and quiet the field | `AnnoyanceSuppressor`, `PrefixFamilyCooldownPolicy`, `suppressedFieldIdentities` in `AppDelegate`. |
-| Keep local privacy proof | `TracePrivacyPolicy`, `RawAutocompleteTraceLog`, `PrivacyExportProofCommand`, `PersonalCapturePolicy`. |
+| Keep local privacy proof | `AutocompleteTracePrivacyFilter`, `TraceLogger`, `RawAutocompleteTraceLog`, `PrivacyExportProofCommand`, `PersonalCapturePolicy`. |
 | Explain support state | `SettingsWindowController`, `DiagnosticsWindowController`, `SuggestionSilenceExplanationPolicy` in the current working tree. |
 
 ## Gaps Found
