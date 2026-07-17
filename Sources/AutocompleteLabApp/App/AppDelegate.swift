@@ -7314,7 +7314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     behaviorProfileID: request.behaviorProfileID,
                     visiblePageContext: visiblePageContext
                 )
-            let fastSelection = suggestionOrchestrator.fastPhraseSelection(
+            let phraseSelection = suggestionOrchestrator.fastPhraseSelection(
                 for: context.textBeforeCursor,
                 docLocalContextTexts: orchestration.docLocalContextTexts,
                 personalWritingMemory: orchestration.personalWritingMemory,
@@ -7323,9 +7323,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 allowPredictiveFallback: allowsPredictivePhraseFallback,
                 allowPromptAppPrediction: allowsPromptAppPrediction
             )
-            let fastSelectionMetadata = fastSelection.traceMetadata
-                .merging(timingLane.traceMetadata) { current, _ in current }
-            if let fastSuggestion = fastSelection.suggestion {
+            var fastSuggestion = phraseSelection.suggestion
+            var fastSelectionMetadata = phraseSelection.traceMetadata
+            var fastSelectionSuppressionReason = phraseSelection.suppressionReason
+            var fastTriggerReason = "canned-bridge"
+
+            // Partial words in proactive modes use the instant local suffix as a bridge,
+            // then keep the phrase request alive so the model can extend past that word.
+            if request.partialWordShape != nil {
+                let candidateWords = recentWordMemory.words(for: appBundleIdentifier)
+                    + (visiblePageContext?.completionCandidateWords ?? [])
+                let wordBridge = suggestionOrchestrator.fastWordSelection(
+                    for: context.textBeforeCursor,
+                    recentWords: candidateWords,
+                    allowPredictiveFallback: shouldUsePredictiveWordFallback(
+                        profile: profile,
+                        visiblePageContext: visiblePageContext
+                    ),
+                    minimumFragmentCharacters: suggestionTuning.wordStartCharacters
+                )
+                if let wordSuggestion = wordBridge.suggestion {
+                    fastSuggestion = wordSuggestion
+                    fastSelectionMetadata = wordBridge.traceMetadata
+                    fastSelectionSuppressionReason = wordBridge.suppressionReason
+                    fastTriggerReason = "fast-word-bridge"
+                }
+            }
+
+            fastSelectionMetadata.merge(timingLane.traceMetadata) { current, _ in current }
+            if let fastSuggestion {
                 guard !suggestionRepetitionSuppressor.shouldSuppress(
                     fastSuggestion.visibleText,
                     mode: request.mode,
@@ -7337,7 +7363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         appBundleIdentifier: appBundleIdentifier,
                         fieldIdentity: fieldIdentityDescription,
                         requestMode: request.mode.rawValue,
-                        triggerReason: "canned-bridge",
+                        triggerReason: fastTriggerReason,
                         textBeforeCursor: request.textBeforeCursor,
                         textAfterCursor: request.textAfterCursor,
                         cleanedVisibleText: fastSuggestion.visibleText,
@@ -7356,7 +7382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         profile: profile,
                         metadata: [
                             "reason": "repeated-miss",
-                            "triggerReason": "canned-bridge"
+                            "triggerReason": fastTriggerReason
                         ]
                     )
                     recordAnnoyanceSignal(
@@ -7431,7 +7457,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         fieldIdentity: fieldIdentity,
                         renderMode: renderMode,
                         latencyMilliseconds: 0,
-                        triggerReason: "canned-bridge",
+                        triggerReason: fastTriggerReason,
                         requestTicket: requestTicket,
                         candidateSelectionMetadata: fastPresentationMetadata,
                         refreshBeforePresenting: false
@@ -7452,7 +7478,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            let fastPhraseFallbackOutcome = fastSelection.suppressionReason ?? "no-suggestion"
+            let fastPhraseFallbackOutcome = fastSelectionSuppressionReason ?? "no-suggestion"
             if fastPhraseFallbackMetadata.isEmpty {
                 fastPhraseFallbackMetadata = [
                     "fastPhraseFallbackChecked": "true",
@@ -17798,6 +17824,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ state: FieldStatusIndicatorState,
         context: FocusedTextContext
     ) {
+        guard state.shouldShowNearField else {
+            fieldStatusIndicator.hide()
+            return
+        }
+
         guard let anchorRect = context.caretRect
             ?? context.textLineRect
             ?? context.elementRect

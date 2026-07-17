@@ -323,7 +323,7 @@ struct SuggestionAggressivenessTests {
             isSecure: false,
             isFieldSuppressed: false,
             fieldKind: .multilineCompose
-        ) == .allow(.wordCompletion))
+        ) == .allow(.phraseContinuation))
     }
 
     @Test("predictive fallback stays on for writing surfaces before OCR arrives")

@@ -289,7 +289,7 @@ public struct SuggestionTuning: Equatable, Sendable {
                 maximumWordCompletionCharacters: 18,
                 allowsTerminalSentenceBoundary: allowsTerminalSentenceBoundary,
                 allowsUnfinishedWordPhraseContinuation: true,
-                prefersPhraseContinuationForWordFragments: false
+                prefersPhraseContinuationForWordFragments: true
             )
         }
 
