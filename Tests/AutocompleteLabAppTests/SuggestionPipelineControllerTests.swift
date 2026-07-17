@@ -31,6 +31,36 @@ struct SuggestionPipelineControllerTests {
 
         #expect(host.pollCount == 0)
     }
+
+    @MainActor
+    @Test("Requested polls clear typing pauses")
+    func requestedPollsClearTypingPauses() async {
+        let host = PollingHostStub()
+        let controller = SuggestionPipelineController(host: host)
+        let now = Date()
+
+        controller.pausePolling(now: now, durationMilliseconds: 1_000)
+        controller.requestPollSoon(afterMilliseconds: 0)
+        await Task.yield()
+
+        #expect(host.pollCount == 1)
+        #expect(!controller.isPollingPaused(now: now))
+    }
+
+    @MainActor
+    @Test("Requested polls preserve accessibility backoff")
+    func requestedPollsPreserveAccessibilityBackoff() async {
+        let host = PollingHostStub()
+        let controller = SuggestionPipelineController(host: host)
+        let now = Date()
+
+        controller.pausePollingWithBackoff(now: now, durationMilliseconds: 60_000)
+        controller.requestPollSoon(afterMilliseconds: 0)
+        await Task.yield()
+
+        #expect(host.pollCount == 0)
+        #expect(controller.isPollingPaused(now: now))
+    }
 }
 
 @MainActor
