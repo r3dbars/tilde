@@ -15,6 +15,9 @@ ALLOWED_KEYS = {
     "gitSHA",
     "engine",
     "model",
+    "decodingVariant",
+    "fewShotSource",
+    "promptContextCharacters",
     "promptFormat",
     "variant",
     "corpusKind",
@@ -29,6 +32,7 @@ ALLOWED_KEYS = {
     "suggestionRate",
     "wrongFirstWordRate",
     "endToEndP95LatencyMs",
+    "suffixEnabled",
     "acceptedAndKeptRate",
     "acceptRate",
 }
