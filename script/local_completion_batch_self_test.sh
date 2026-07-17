@@ -105,6 +105,26 @@ assert module.build_prompt(raw_payload, FakeTokenizer()) == "Inline.\n\nBefore c
 import io
 rows = module.read_rows(io.StringIO('{"id": "a"}\n\n{"id": "b"}\n'))
 assert [row["id"] for row in rows] == ["a", "b"], rows
+
+# Generation forwards replay decoding controls when the installed mlx_lm accepts them.
+captured = {}
+def fake_generate(model, tokenizer, prompt, **kwargs):
+    captured.update(kwargs)
+    return "next words"
+
+output = module.generate_once(
+    fake_generate,
+    object(),
+    object(),
+    "prompt",
+    24,
+    sampler="sample-strategy",
+    logits_processors=["repeat-processor"],
+)
+assert output == "next words"
+assert captured["max_tokens"] == 24
+assert captured["sampler"] == "sample-strategy"
+assert captured["logits_processors"] == ["repeat-processor"]
 PY
 
 # The --print-source path resolves a model without importing mlx_lm. Pin an

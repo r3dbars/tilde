@@ -726,6 +726,39 @@ struct CompletionPromptBuilderTests {
         #expect(prompt.system.contains("Behavior profile: email"))
         #expect(prompt.system.contains("Do not invent commitments"))
     }
+
+    @Test("Prompt excludes text after cursor by default")
+    func promptExcludesTextAfterCursorByDefault() {
+        let prompt = CompletionPromptBuilder().prompt(for: CompletionRequest(
+            textBeforeCursor: "The rollout should",
+            textAfterCursor: "without repeating this suffix"
+        ))
+
+        #expect(!prompt.user.contains("Text after cursor"))
+        #expect(!prompt.user.contains("without repeating this suffix"))
+    }
+
+    @Test("Replay prompt can include bounded text after cursor")
+    func replayPromptIncludesBoundedTextAfterCursor() {
+        let prompt = CompletionPromptBuilder(includesTextAfterCursor: true).prompt(for: CompletionRequest(
+            textBeforeCursor: "The rollout should",
+            textAfterCursor: String(repeating: "x", count: 140)
+        ))
+
+        #expect(prompt.user.contains("Text after cursor (do not repeat):"))
+        #expect(prompt.user.contains(String(repeating: "x", count: 120)))
+        #expect(!prompt.user.contains(String(repeating: "x", count: 121)))
+    }
+
+    @Test("Replay prompt can disable built-in few-shot examples")
+    func replayPromptDisablesBuiltInExamples() {
+        let prompt = CompletionPromptBuilder(includesBuiltInExamples: false).prompt(for: CompletionRequest(
+            textBeforeCursor: "The rollout should"
+        ))
+
+        #expect(!prompt.system.contains("Shape examples:"))
+        #expect(!prompt.system.contains("Natural examples:"))
+    }
 }
 
 private extension String {
