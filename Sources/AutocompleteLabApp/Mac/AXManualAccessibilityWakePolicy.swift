@@ -2,6 +2,7 @@ import AutocompleteLabCore
 
 enum AXManualAccessibilityWakeReason: String, Equatable, Sendable {
     case electronTreeHasNoTextNodes = "electron-tree-has-no-text-nodes"
+    case electronFocusedElementUnavailable = "electron-focused-element-unavailable"
 }
 
 struct AXManualAccessibilityWakeDecision: Equatable, Sendable {
@@ -12,6 +13,10 @@ struct AXManualAccessibilityWakeDecision: Equatable, Sendable {
         shouldWake: true,
         reason: .electronTreeHasNoTextNodes
     )
+    static let wakeElectronFocusedElement = AXManualAccessibilityWakeDecision(
+        shouldWake: true,
+        reason: .electronFocusedElementUnavailable
+    )
     static let skip = AXManualAccessibilityWakeDecision(shouldWake: false, reason: nil)
 }
 
@@ -21,11 +26,19 @@ enum AXManualAccessibilityWakePolicy {
     static func decision(
         appFamily: CompatibilityAppFamily,
         focusedReadReturnedContext: Bool,
-        treeHasTextNodes: Bool
+        treeHasTextNodes: Bool,
+        forceAfterMissingContext: Bool = false
     ) -> AXManualAccessibilityWakeDecision {
         guard appFamily == .electron,
-              !focusedReadReturnedContext,
-              !treeHasTextNodes else {
+              !focusedReadReturnedContext else {
+            return .skip
+        }
+
+        if forceAfterMissingContext {
+            return .wakeElectronFocusedElement
+        }
+
+        guard !treeHasTextNodes else {
             return .skip
         }
 

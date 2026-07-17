@@ -173,7 +173,8 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         // expensive window-title/bounds path on every Codex poll.
         windowReadMode: .identifierOnly,
         assumedCanSetSelectedText: true,
-        manualAccessibilityWakeAppFamily: nil
+        manualAccessibilityWakeAppFamily: .electron,
+        forceManualAccessibilityWakeAfterMissingContext: true
     )
 
     let preferDirectTextSnapshot: Bool
@@ -183,6 +184,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
     let windowReadMode: FocusedTextWindowReadMode
     let assumedCanSetSelectedText: Bool?
     let manualAccessibilityWakeAppFamily: CompatibilityAppFamily?
+    let forceManualAccessibilityWakeAfterMissingContext: Bool
 
     init(
         preferDirectTextSnapshot: Bool = false,
@@ -191,7 +193,8 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         useMinimalFingerprint: Bool = false,
         windowReadMode: FocusedTextWindowReadMode = .full,
         assumedCanSetSelectedText: Bool? = nil,
-        manualAccessibilityWakeAppFamily: CompatibilityAppFamily? = nil
+        manualAccessibilityWakeAppFamily: CompatibilityAppFamily? = nil,
+        forceManualAccessibilityWakeAfterMissingContext: Bool = false
     ) {
         self.preferDirectTextSnapshot = preferDirectTextSnapshot
         self.skipParameterizedTextGeometry = skipParameterizedTextGeometry
@@ -200,6 +203,7 @@ struct FocusedTextReadOptions: Equatable, Sendable {
         self.windowReadMode = windowReadMode
         self.assumedCanSetSelectedText = assumedCanSetSelectedText
         self.manualAccessibilityWakeAppFamily = manualAccessibilityWakeAppFamily
+        self.forceManualAccessibilityWakeAfterMissingContext = forceManualAccessibilityWakeAfterMissingContext
     }
 }
 
@@ -376,7 +380,8 @@ final class AccessibilityClient: @unchecked Sendable {
         let decision = AXManualAccessibilityWakePolicy.decision(
             appFamily: appFamily,
             focusedReadReturnedContext: false,
-            treeHasTextNodes: treeHasTextNodes
+            treeHasTextNodes: treeHasTextNodes,
+            forceAfterMissingContext: options.forceManualAccessibilityWakeAfterMissingContext
         )
 
         guard decision.shouldWake else {

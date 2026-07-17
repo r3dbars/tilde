@@ -118,6 +118,14 @@ struct SerialFocusedTextAXReaderTests {
             readsBounds: false
         ))
         #expect(options.assumedCanSetSelectedText == true)
+        #expect(options.manualAccessibilityWakeAppFamily == .electron)
+        #expect(options.forceManualAccessibilityWakeAfterMissingContext)
+        #expect(AXManualAccessibilityWakePolicy.decision(
+            appFamily: .electron,
+            focusedReadReturnedContext: false,
+            treeHasTextNodes: true,
+            forceAfterMissingContext: options.forceManualAccessibilityWakeAfterMissingContext
+        ) == .wakeElectronFocusedElement)
     }
 
     @Test("Electron profiles request AXManualAccessibility wake when no text nodes are exposed")
