@@ -6,6 +6,7 @@ struct InsertionVerificationContextRecoveryPolicyTests {
     private let policy = InsertionVerificationContextRecoveryPolicy()
     private let obsidianProfile = CompatibilityProfileStore.mvp.profile(for: "md.obsidian")!
     private let chromeProfile = CompatibilityProfileStore.mvp.profile(for: "com.google.Chrome")!
+    private let codexProfile = CompatibilityProfileStore.mvp.profile(for: "com.openai.codex")!
     private let textEditProfile = CompatibilityProfileStore.mvp.profile(for: "com.apple.TextEdit")!
     private let expectedField = FocusedFieldIdentity(
         bundleIdentifier: "md.obsidian",
@@ -52,6 +53,40 @@ struct InsertionVerificationContextRecoveryPolicyTests {
             contextRole: "AXTextField",
             verificationResult: .verified,
             mismatch: .targetFingerprint
+        )))
+    }
+
+    @Test("Recovers verified Codex text-area identity churn")
+    func recoversVerifiedCodexTextAreaIdentityChurn() {
+        let codexField = FocusedFieldIdentity(
+            bundleIdentifier: "com.openai.codex",
+            processIdentifier: 42,
+            elementIdentifier: 99
+        )
+
+        #expect(policy.canRecover(input(
+            profile: codexProfile,
+            frontmostBundleIdentifier: "com.openai.codex",
+            expectedField: codexField,
+            contextRole: "AXTextArea",
+            verificationResult: .verified,
+            mismatch: .fieldIdentity
+        )))
+        #expect(!policy.canRecover(input(
+            profile: codexProfile,
+            frontmostBundleIdentifier: "com.openai.codex",
+            expectedField: codexField,
+            contextRole: "AXTextArea",
+            verificationResult: .unchanged,
+            mismatch: .fieldIdentity
+        )))
+        #expect(!policy.canRecover(input(
+            profile: codexProfile,
+            frontmostBundleIdentifier: "com.openai.codex",
+            expectedField: codexField,
+            contextRole: "AXGroup",
+            verificationResult: .verified,
+            mismatch: .fieldIdentity
         )))
     }
 

@@ -651,7 +651,7 @@ public struct CompatibilityProfileStore: Equatable, Sendable {
             supportsOneWordAcceptance: true,
             supportsFullAcceptance: true,
             requiresNoSubmitAcceptanceProof: false,
-            suppressesAfterInsertionFailure: true,
+            suppressesAfterInsertionFailure: false,
             allowsDetachedSuggestions: false,
             promptAppSafetyMode: .wordOnly,
             notes: "Enabled for this local Codex build with one-word no-submit proof, full-accept no-submit proof, prompt-safe accepted-text filtering, and a guarded AX-then-key-event insertion ladder. Detached suggestions and clipboard fallback stay off."
