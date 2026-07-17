@@ -16,8 +16,17 @@ require_line "  workflow_dispatch:"
 require_line "  manual-fast-proof:"
 require_line "  manual-fast-proof-macos:"
 
-if grep -Eq '^  (pull_request|push):' "$WORKFLOW"; then
-  echo "fast proof workflow self-test: hosted workflow must not trigger on PRs or pushes" >&2
+trigger_keys="$(awk '
+  /^on:/ { in_triggers=1; next }
+  /^permissions:/ { in_triggers=0 }
+  in_triggers && /^  [[:alnum:]_-]+:/ {
+    key = $1
+    sub(/:$/, "", key)
+    print key
+  }
+' "$WORKFLOW")"
+if [ "$trigger_keys" != "workflow_dispatch" ]; then
+  echo "fast proof workflow self-test: only workflow_dispatch may trigger hosted proof" >&2
   exit 1
 fi
 
