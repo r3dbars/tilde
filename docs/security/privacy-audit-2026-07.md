@@ -1,7 +1,7 @@
 # Privacy Audit — July 2026
 
-Audit date: 2026-07-17  
-Baseline: `origin/main` at `12a8a0a1`  
+Audit date: 2026-07-17
+Baseline: `origin/main` at `12a8a0a1`
 Method: source review plus synthetic sentinel tests only. No personal writing or user content was inspected.
 
 ## Result
