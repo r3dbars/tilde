@@ -197,6 +197,7 @@ run_blocking "first-token latency self-test" bash script/first_token_latency_sel
 run_blocking "local quality audit self-test" bash script/check_local_quality_audit_self_test.sh
 run_blocking "replay eval report self-test" bash script/replay_eval_report_self_test.sh
 run_blocking "small model blind audit report" bash script/check_small_model_blind_audit_report.sh
+run_blocking "manual hosted fast-proof workflow self-test" bash script/fast_proof_workflow_self_test.sh
 run_blocking "test coverage manifest" ./script/check_test_coverage_manifest.sh
 run_blocking "public-core allowlist canonical" python3 script/normalize_public_core_allowlist.py --check
 run_blocking "public-core allowlist normalizer self-test" bash script/normalize_public_core_allowlist_self_test.sh
