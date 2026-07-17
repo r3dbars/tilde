@@ -57,7 +57,6 @@ public struct PromptEditorFingerprintPolicy: Equatable, Sendable {
         if bundleIdentifier == "com.openai.codex",
            role == "AXTextArea",
            selectedTextLength == 0,
-           textAfterCursor.isEmpty,
            elementRect != nil {
             return PromptEditorFingerprintDecision(canSuggest: true, reason: "codex-text-area")
         }
