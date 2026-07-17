@@ -1,0 +1,103 @@
+import Foundation
+import Testing
+@testable import AutocompleteLabApp
+
+@Suite("AX focused text event coalescer")
+struct AXFocusedTextEventObserverTests {
+    @Test("Coalesces an AX notification burst into one delivery")
+    func coalescesBurst() {
+        let recorder = AXEventBurstRecorder()
+        let delivered = DispatchSemaphore(value: 0)
+        let coalescer = AXFocusedTextEventCoalescer(interval: 0.01) { burst in
+            recorder.append(burst)
+            delivered.signal()
+        }
+
+        coalescer.submit(processIdentifier: 42, notification: .valueChanged)
+        coalescer.submit(processIdentifier: 42, notification: .selectedTextChanged)
+        coalescer.submit(processIdentifier: 42, notification: .valueChanged)
+
+        #expect(delivered.wait(timeout: .now() + 1) == .success)
+        Thread.sleep(forTimeInterval: 0.03)
+        #expect(recorder.bursts == [
+            AXFocusedTextEventBurst(
+                processIdentifier: 42,
+                notifications: [.valueChanged, .selectedTextChanged]
+            )
+        ])
+    }
+
+    @Test("Delivers separate bursts outside the coalescing window")
+    func deliversSeparateBursts() {
+        let recorder = AXEventBurstRecorder()
+        let delivered = DispatchSemaphore(value: 0)
+        let coalescer = AXFocusedTextEventCoalescer(interval: 0.01) { burst in
+            recorder.append(burst)
+            delivered.signal()
+        }
+
+        coalescer.submit(processIdentifier: 42, notification: .valueChanged)
+        #expect(delivered.wait(timeout: .now() + 1) == .success)
+        coalescer.submit(processIdentifier: 42, notification: .selectedTextChanged)
+        #expect(delivered.wait(timeout: .now() + 1) == .success)
+
+        #expect(recorder.bursts.count == 2)
+        #expect(recorder.bursts[0].notifications == [.valueChanged])
+        #expect(recorder.bursts[1].notifications == [.selectedTextChanged])
+    }
+
+    @Test("Switching apps drops the stale pending burst")
+    func switchingAppsDropsStaleBurst() {
+        let recorder = AXEventBurstRecorder()
+        let delivered = DispatchSemaphore(value: 0)
+        let coalescer = AXFocusedTextEventCoalescer(interval: 0.02) { burst in
+            recorder.append(burst)
+            delivered.signal()
+        }
+
+        coalescer.submit(processIdentifier: 41, notification: .valueChanged)
+        coalescer.submit(processIdentifier: 42, notification: .focusedUIElementChanged)
+
+        #expect(delivered.wait(timeout: .now() + 1) == .success)
+        Thread.sleep(forTimeInterval: 0.03)
+        #expect(recorder.bursts == [
+            AXFocusedTextEventBurst(
+                processIdentifier: 42,
+                notifications: [.focusedUIElementChanged]
+            )
+        ])
+    }
+
+    @Test("Cancellation prevents a pending delivery")
+    func cancellationPreventsDelivery() {
+        let recorder = AXEventBurstRecorder()
+        let delivered = DispatchSemaphore(value: 0)
+        let coalescer = AXFocusedTextEventCoalescer(interval: 0.02) { burst in
+            recorder.append(burst)
+            delivered.signal()
+        }
+
+        coalescer.submit(processIdentifier: 42, notification: .valueChanged)
+        coalescer.cancelPending()
+
+        #expect(delivered.wait(timeout: .now() + 0.08) == .timedOut)
+        #expect(recorder.bursts.isEmpty)
+    }
+}
+
+private final class AXEventBurstRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [AXFocusedTextEventBurst] = []
+
+    var bursts: [AXFocusedTextEventBurst] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ burst: AXFocusedTextEventBurst) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(burst)
+    }
+}
