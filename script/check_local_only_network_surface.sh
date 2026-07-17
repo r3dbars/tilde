@@ -50,6 +50,13 @@ allow_reference() {
 	      [[ "$line" == *"func snapshot() -> Int"* ]]
 	      return
       ;;
+	    Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift)
+	      [[ "$line" =~ ^[[:space:]]*url:[[:space:]]\"https://www\.gutenberg\.org/ebooks/[0-9]+\",?[[:space:]]*$ \
+	        || "$line" =~ ^[[:space:]]*url:[[:space:]]\"https://www\.archives\.gov/founding-docs/constitution-transcript\",?[[:space:]]*$ \
+	        || "$line" =~ ^[[:space:]]*url:[[:space:]]\"https://www\.archives\.gov/milestone-documents/gettysburg-address\",?[[:space:]]*$ \
+	        || "$line" =~ ^[[:space:]]*if[[:space:]]+!source\.url\.hasPrefix\(\"https://\"\)[[:space:]]*\{[[:space:]]*$ ]]
+	      return
+      ;;
   esac
 
   return 1
@@ -84,3 +91,4 @@ echo "- Sources/AutocompleteLabApp/Runtime/LocalModelAssetInstaller.swift: expli
 echo "- Sources/AutocompleteLabApp/Runtime/MLXModelRuntime.swift: MLX local model import"
 echo "- Sources/AutocompleteLabApp/UI/BetaFeedbackLink.swift: hard-coded GitHub feedback issue URL"
 echo "- Sources/AutocompleteLabCore/Runtime/RuntimeBootstrapPlan.swift: model license URLs only"
+echo "- Sources/AutocompleteLabCore/Experiments/EvalV2BlindCorpus.swift: offline public-domain source citation URLs only"
