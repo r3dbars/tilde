@@ -119,6 +119,86 @@ struct AXFocusedTextObserverLifecycle: Equatable, Sendable {
     }
 }
 
+struct AXFocusedTextObservationTarget: Equatable, Sendable {
+    private(set) var processIdentifier: pid_t?
+    private(set) var generation: UInt64 = 0
+
+    mutating func begin(processIdentifier: pid_t) -> UInt64 {
+        generation &+= 1
+        self.processIdentifier = processIdentifier
+        return generation
+    }
+
+    mutating func cancel() {
+        generation &+= 1
+        processIdentifier = nil
+    }
+
+    func accepts(processIdentifier: pid_t, generation candidate: UInt64) -> Bool {
+        self.processIdentifier == processIdentifier && generation == candidate
+    }
+}
+
+struct AXFocusedTextSetupRetry: Equatable, Sendable {
+    let attempt: Int
+    let delayMilliseconds: Int
+}
+
+struct AXFocusedTextSetupRetryPolicy: Equatable, Sendable {
+    let maximumRetryAttempts: Int
+    let delayMilliseconds: Int
+
+    init(maximumRetryAttempts: Int = 3, delayMilliseconds: Int = 50) {
+        self.maximumRetryAttempts = max(0, maximumRetryAttempts)
+        self.delayMilliseconds = max(1, delayMilliseconds)
+    }
+
+    func next(after error: AXError, failedAttempt: Int) -> AXFocusedTextSetupRetry? {
+        guard canRetry(error),
+              failedAttempt >= 0,
+              failedAttempt < maximumRetryAttempts else {
+            return nil
+        }
+
+        return AXFocusedTextSetupRetry(
+            attempt: failedAttempt + 1,
+            delayMilliseconds: delayMilliseconds
+        )
+    }
+
+    func canRetry(_ error: AXError) -> Bool {
+        Self.isTransient(error)
+    }
+
+    private static func isTransient(_ error: AXError) -> Bool {
+        error == .cannotComplete || error == .noValue
+    }
+}
+
+struct AXFocusedTextMessagingTimeoutConfigurator {
+    typealias Setter = (AXUIElement, Float) -> AXError
+
+    static let defaultTimeoutSeconds: Float = 0.12
+
+    let timeoutSeconds: Float
+    private let setter: Setter
+
+    init(
+        timeoutSeconds: Float = Self.defaultTimeoutSeconds,
+        setter: @escaping Setter = { element, timeout in
+            AXUIElementSetMessagingTimeout(element, timeout)
+        }
+    ) {
+        self.timeoutSeconds = max(0.01, timeoutSeconds)
+        self.setter = setter
+    }
+
+    @discardableResult
+    func configure(_ element: AXUIElement) -> AXError {
+        setter(element, timeoutSeconds)
+    }
+}
+
 /// Owns the native AX notification lifecycle for the frontmost application.
 ///
 /// The delivered burst contains only notification kinds and a process identifier. It never
@@ -130,11 +210,15 @@ final class AXFocusedTextEventObserver {
 
     private let workspace: NSWorkspace
     private let coalescer: AXFocusedTextEventCoalescer
+    private let messagingTimeoutConfigurator: AXFocusedTextMessagingTimeoutConfigurator
+    private let setupRetryPolicy: AXFocusedTextSetupRetryPolicy
     private var workspaceNotificationTokens: [NSObjectProtocol] = []
     private var observer: AXObserver?
     private var applicationElement: AXUIElement?
     private var focusedElement: AXUIElement?
+    private var setupRetryTask: Task<Void, Never>?
     private var lifecycle = AXFocusedTextObserverLifecycle()
+    private var observationTarget = AXFocusedTextObservationTarget()
     private(set) var observedProcessIdentifier: pid_t?
 
     init(
@@ -144,9 +228,13 @@ final class AXFocusedTextEventObserver {
             label: "com.transcripted.autocomplete.focused-text-ax-events",
             qos: .userInteractive
         ),
+        messagingTimeoutConfigurator: AXFocusedTextMessagingTimeoutConfigurator = .init(),
+        setupRetryPolicy: AXFocusedTextSetupRetryPolicy = .init(),
         delivery: @escaping Delivery
     ) {
         self.workspace = workspace
+        self.messagingTimeoutConfigurator = messagingTimeoutConfigurator
+        self.setupRetryPolicy = setupRetryPolicy
         self.coalescer = AXFocusedTextEventCoalescer(
             interval: coalescingInterval,
             queue: eventQueue,
@@ -244,7 +332,7 @@ final class AXFocusedTextEventObserver {
 
     private func handleDeactivation(processIdentifier: pid_t?, generation: UInt64) {
         guard lifecycle.accepts(generation: generation),
-              observedProcessIdentifier == processIdentifier else {
+              observationTarget.processIdentifier == processIdentifier else {
             return
         }
 
@@ -256,29 +344,67 @@ final class AXFocusedTextEventObserver {
             return
         }
 
-        guard observedProcessIdentifier != processIdentifier else {
+        guard observationTarget.processIdentifier != processIdentifier else {
             return
         }
 
         tearDownObserver()
 
+        let observationGeneration = observationTarget.begin(
+            processIdentifier: processIdentifier
+        )
+        attemptObservation(
+            processIdentifier: processIdentifier,
+            generation: observationGeneration,
+            attempt: 0
+        )
+    }
+
+    private func attemptObservation(
+        processIdentifier: pid_t,
+        generation: UInt64,
+        attempt: Int
+    ) {
+        guard lifecycle.isStarted,
+              observationTarget.accepts(
+                processIdentifier: processIdentifier,
+                generation: generation
+              ) else {
+            return
+        }
+
         var createdObserver: AXObserver?
-        guard AXObserverCreate(
+        let createResult = AXObserverCreate(
             processIdentifier,
             Self.observerCallback,
             &createdObserver
-        ) == .success, let createdObserver else {
+        )
+        guard createResult == .success, let createdObserver else {
+            scheduleSetupRetry(
+                after: createResult,
+                processIdentifier: processIdentifier,
+                generation: generation,
+                failedAttempt: attempt
+            )
             return
         }
 
         let applicationElement = AXUIElementCreateApplication(processIdentifier)
+        messagingTimeoutConfigurator.configure(applicationElement)
         let context = Unmanaged.passUnretained(self).toOpaque()
-        guard Self.addNotification(
+        let registrationResult = Self.addNotification(
             kAXFocusedUIElementChangedNotification,
             observer: createdObserver,
             element: applicationElement,
             context: context
-        ) else {
+        )
+        guard Self.acceptsNotificationRegistration(registrationResult) else {
+            scheduleSetupRetry(
+                after: registrationResult,
+                processIdentifier: processIdentifier,
+                generation: generation,
+                failedAttempt: attempt
+            )
             return
         }
 
@@ -290,44 +416,74 @@ final class AXFocusedTextEventObserver {
             AXObserverGetRunLoopSource(createdObserver),
             .defaultMode
         )
-        registerFocusedElementNotifications()
+        registerFocusedElementNotifications(
+            processIdentifier: processIdentifier,
+            generation: generation,
+            attempt: attempt
+        )
     }
 
-    private func registerFocusedElementNotifications() {
-        guard let observer, let applicationElement else {
+    private func registerFocusedElementNotifications(
+        processIdentifier: pid_t,
+        generation: UInt64,
+        attempt: Int
+    ) {
+        guard observationTarget.accepts(
+            processIdentifier: processIdentifier,
+            generation: generation
+        ), let observer, let applicationElement else {
             return
         }
 
+        cancelSetupRetry()
         removeFocusedElementNotifications()
 
         var focusedValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
+        let focusedElementResult = AXUIElementCopyAttributeValue(
             applicationElement,
             kAXFocusedUIElementAttribute as CFString,
             &focusedValue
-        ) == .success,
+        )
+        guard focusedElementResult == .success,
               let focusedValue,
               CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+            scheduleSetupRetry(
+                after: focusedElementResult == .success ? .noValue : focusedElementResult,
+                processIdentifier: processIdentifier,
+                generation: generation,
+                failedAttempt: attempt
+            )
             return
         }
 
         let focusedElement = focusedValue as! AXUIElement
+        messagingTimeoutConfigurator.configure(focusedElement)
         let context = Unmanaged.passUnretained(self).toOpaque()
-        let observesValue = Self.addNotification(
+        let valueRegistrationResult = Self.addNotification(
             kAXValueChangedNotification,
             observer: observer,
             element: focusedElement,
             context: context
         )
-        let observesSelection = Self.addNotification(
+        let selectionRegistrationResult = Self.addNotification(
             kAXSelectedTextChangedNotification,
             observer: observer,
             element: focusedElement,
             context: context
         )
 
+        let observesValue = Self.acceptsNotificationRegistration(valueRegistrationResult)
+        let observesSelection = Self.acceptsNotificationRegistration(selectionRegistrationResult)
         if observesValue || observesSelection {
             self.focusedElement = focusedElement
+        } else if let transientResult = [valueRegistrationResult, selectionRegistrationResult]
+            .first(where: setupRetryPolicy.canRetry) {
+            scheduleSetupRetry(
+                after: transientResult,
+                processIdentifier: processIdentifier,
+                generation: generation,
+                failedAttempt: attempt
+            )
         }
     }
 
@@ -350,6 +506,8 @@ final class AXFocusedTextEventObserver {
     }
 
     private func tearDownObserver() {
+        observationTarget.cancel()
+        cancelSetupRetry()
         coalescer.cancelPending()
         removeFocusedElementNotifications()
 
@@ -378,9 +536,71 @@ final class AXFocusedTextEventObserver {
         }
 
         if notification == .focusedUIElementChanged {
-            registerFocusedElementNotifications()
+            guard let processIdentifier = observationTarget.processIdentifier else {
+                return
+            }
+            registerFocusedElementNotifications(
+                processIdentifier: processIdentifier,
+                generation: observationTarget.generation,
+                attempt: 0
+            )
         }
         coalescer.submit(processIdentifier: processIdentifier, notification: notification)
+    }
+
+    private func scheduleSetupRetry(
+        after error: AXError,
+        processIdentifier: pid_t,
+        generation: UInt64,
+        failedAttempt: Int
+    ) {
+        guard lifecycle.isStarted,
+              observationTarget.accepts(
+                processIdentifier: processIdentifier,
+                generation: generation
+              ),
+              let retry = setupRetryPolicy.next(
+                after: error,
+                failedAttempt: failedAttempt
+              ) else {
+            return
+        }
+
+        cancelSetupRetry()
+        setupRetryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(retry.delayMilliseconds))
+            guard !Task.isCancelled, let self else {
+                return
+            }
+
+            self.setupRetryTask = nil
+            guard self.lifecycle.isStarted,
+                  self.observationTarget.accepts(
+                    processIdentifier: processIdentifier,
+                    generation: generation
+                  ) else {
+                return
+            }
+
+            if self.observer == nil {
+                self.attemptObservation(
+                    processIdentifier: processIdentifier,
+                    generation: generation,
+                    attempt: retry.attempt
+                )
+            } else {
+                self.registerFocusedElementNotifications(
+                    processIdentifier: processIdentifier,
+                    generation: generation,
+                    attempt: retry.attempt
+                )
+            }
+        }
+    }
+
+    private func cancelSetupRetry() {
+        setupRetryTask?.cancel()
+        setupRetryTask = nil
     }
 
     private static func addNotification(
@@ -388,14 +608,17 @@ final class AXFocusedTextEventObserver {
         observer: AXObserver,
         element: AXUIElement,
         context: UnsafeMutableRawPointer
-    ) -> Bool {
-        let result = AXObserverAddNotification(
+    ) -> AXError {
+        AXObserverAddNotification(
             observer,
             element,
             notification as CFString,
             context
         )
-        return result == .success || result == .notificationAlreadyRegistered
+    }
+
+    private static func acceptsNotificationRegistration(_ result: AXError) -> Bool {
+        result == .success || result == .notificationAlreadyRegistered
     }
 
     private nonisolated static let observerCallback: AXObserverCallback = {
