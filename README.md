@@ -2,94 +2,69 @@
 
 ![SteadyType cover](Assets/GitHub/steadytype-cover.png)
 
-SteadyType is a small Mac app for quiet writing suggestions near your cursor.
+SteadyType is an open-source macOS menu bar app for quiet, local inline writing
+suggestions. It watches the focused text field through Accessibility, shows a
+short ghost-text suggestion near the caret, and inserts text only when you
+accept it. All inference runs on-device with MLX on Apple Silicon — no cloud,
+no telemetry, no separate model server.
 
-It watches the active text field, shows a short suggestion, and only inserts text when you accept it. The question for this beta is simple: does this make writing feel easier, or does it get in the way?
+- `Tab` accepts the next word
+- `Shift-Tab` accepts the whole visible suggestion
+- `Esc` dismisses
 
-Current dogfood stance: suggestions are default-on for normal text fields, with
-hard blocks kept for secure and high-risk system surfaces. If a specific app
-has bad placement or insertion, pause that app, capture a screenshot, and add a
-small compatibility fix.
+## Status
 
-## What It Does
+Beta, and honestly labeled as such. It works best in TextEdit, Apple Notes,
+Obsidian, and browser text areas; other apps go through a generic Accessibility
+path and can be paused individually when placement or insertion misbehaves.
+Prompt/terminal surfaces stay conservative (one word, fail-closed), and secure
+or sensitive fields are hard-blocked.
 
-- runs as a macOS menu bar app
-- reads the focused text field through Accessibility
-- shows a small suggestion near the cursor
-- uses `Tab` to accept one word
-- uses `Shift-Tab` to accept the whole visible suggestion
-- uses `Esc` to dismiss
-- runs local-first by default
-- tries generic Accessibility support by default, then lets you pause bad apps
+## Requirements
 
-## Current Dogfood Scope
+- Apple Silicon Mac, macOS 26+
+- Xcode 26 toolchain (SwiftPM package, no project file)
+- ~4 GB disk for the local model asset
 
-The first supported targets still have the best proof:
+## Build and run
 
-- TextEdit
-- Apple Notes
-- Obsidian
-- Chrome local textarea/contenteditable practice fixtures
-- Codex
-- Claude desktop
-- Claude Code in supported terminal hosts
+```bash
+git clone https://github.com/r3dbars/steadytype
+cd steadytype
+./script/build_and_run.sh          # builds the bundle and launches it
+```
 
-Everything else uses a generic Accessibility path unless it is hard-denied or a
-field is classified as unsafe. Prompt and terminal apps stay one-word and
-fail-closed where possible; screenshots from bad apps become the adapter queue.
-
-## Privacy
-
-SteadyType is local-first. Typed text, prompts, model output, accepted text, screenshots, document names, URLs, recipients, and subject lines are not uploaded by default.
-
-Diagnostics are local and redacted unless a tester explicitly opts into a short-lived raw or screenshot trace for debugging.
-
-## Personal Capture
-
-Personal Capture is a local, opt-in Justin dogfood loop. It writes daily
-Markdown on this Mac so the app can learn from real writing and accepted-kept
-suggestions. It is not telemetry, not a beta requirement, and not enabled for
-customers or testers by default.
-
-When enabled, it also writes local Suggestion Episode JSONL and a daily
-scorecard. Those files connect what was typed, what SteadyType suggested, what
-the user did, model/prompt version, placement, latency, and kept checkpoints.
-
-Useful docs:
-
-- [Beta privacy](PRIVACY-BETA.md)
-- [Known limitations](KNOWN-LIMITATIONS.md)
-- [Diagnostic export](DIAGNOSTIC-EXPORT.md)
-- [Personal Capture](docs/product/personal-capture.md)
-- [Daily Driver Phrase Mode](docs/product/daily-driver-phrase-mode.md)
-- [Uninstall and delete data](UNINSTALL-DELETE-DATA.md)
-
-## Runtime
-
-The app owns the model runtime. Testers should not need to start Ollama, llama.cpp, Python, or any other server.
-
-The current local runtime path uses MLX on Apple Silicon and downloads one pinned default model revision once. The beta gate checks the local checksum receipt before calling the model ready.
-
-## What This Is Not
-
-- not part of another product yet
-- not a cloud-first writing assistant
-- not personalization
-- not a broad compatibility claim
-- not a full release
+The app asks for Accessibility permission on first launch, and opens Settings
+to install the local model if the asset is missing. `build_and_run.sh --verify`
+builds and validates without launching.
 
 ## Development
 
 ```bash
-swift test
-./script/check_test_coverage_manifest.sh
-./script/build_and_run.sh --verify
+./script/proof.sh fast             # the pre-merge gate (CI runs exactly this)
+swift test --jobs 1                # full suite
+./script/smoke_test.sh             # full suite + bundle verify (macOS)
+./script/release_check.sh          # release gate incl. live network-egress proof
 ```
 
-Full private beta validation lives in:
+Enable the pre-push hook once with `git config core.hookspath .githooks`.
 
-```bash
-./script/beta_readiness.sh
-```
+Architecture in one paragraph: `Sources/AutocompleteLabCore` is pure,
+deterministic Swift — every decision about when to request, show, accept, or
+suppress a suggestion lives there as a small tested policy type.
+`Sources/AutocompleteLabApp` is the native shell — Accessibility reading,
+keyboard event tap, text insertion, the overlay panel, and the MLX runtime.
+`AutocompleteTraceReplay` and `SteadyTypeReplayEval` replay redacted traces
+through core logic for offline quality work. See `AGENTS.md` for the working
+rules.
 
-The repo also includes smoke tests, privacy checks, runtime checks, proof manifests, and visual placement evidence under `script/` and `docs/product/`.
+## Privacy
+
+Local-first is a hard product requirement. Typed text, context, prompts, model
+output, and screenshots never leave the machine; diagnostics are redacted by
+default; and the release gate includes a live check that the running app opens
+no unexpected network sockets. Details in [PRIVACY.md](PRIVACY.md).
+
+## License
+
+[MIT](LICENSE)
