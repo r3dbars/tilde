@@ -1929,7 +1929,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         guard personalCapturePolicy.allowsAppRead(
                   personalCaptureEnabled: appSettings.personalCaptureEnabled,
-                  isSensitiveApp: profile?.isSensitive ?? false
+                  supportStatus: profileStore.supportStatus(for: app.bundleIdentifier)
               ),
               accessibilityClient.isTrusted,
               allowFocusedTextAXRead(for: app) else {

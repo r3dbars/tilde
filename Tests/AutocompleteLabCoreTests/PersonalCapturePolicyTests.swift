@@ -5,19 +5,28 @@ import Testing
 struct PersonalCapturePolicyTests {
     private let policy = PersonalCapturePolicy()
 
-    @Test("Sensitive apps cannot be read even when personal capture is enabled")
-    func blocksSensitiveAppReads() {
+    @Test("Sensitive and denylisted apps cannot be read even when personal capture is enabled")
+    func blocksSensitiveAndDenylistedAppReads() {
+        let profileStore = CompatibilityProfileStore.mvp
+        let passwordAppStatus = profileStore.supportStatus(for: "com.apple.Passwords")
+        #expect(passwordAppStatus == .denylisted)
         #expect(!policy.allowsAppRead(
             personalCaptureEnabled: true,
-            isSensitiveApp: true
+            supportStatus: passwordAppStatus
+        ))
+        let supportedSensitiveStatus = profileStore.supportStatus(for: "com.openai.atlas")
+        #expect(profileStore.profile(for: "com.openai.atlas")?.isSensitive == true)
+        #expect(!policy.allowsAppRead(
+            personalCaptureEnabled: true,
+            supportStatus: supportedSensitiveStatus
         ))
         #expect(!policy.allowsAppRead(
             personalCaptureEnabled: false,
-            isSensitiveApp: false
+            supportStatus: profileStore.supportStatus(for: "com.apple.TextEdit")
         ))
         #expect(policy.allowsAppRead(
             personalCaptureEnabled: true,
-            isSensitiveApp: false
+            supportStatus: profileStore.supportStatus(for: "com.apple.TextEdit")
         ))
     }
 
