@@ -166,7 +166,10 @@ struct FocusedTextReadOptions: Equatable, Sendable {
     static let standard = FocusedTextReadOptions()
     static let syntheticTextAreaFastPath = FocusedTextReadOptions(
         preferDirectTextSnapshot: true,
-        skipParameterizedTextGeometry: true,
+        // Current Codex builds expose fast, exact AXBoundsForRange geometry
+        // after AXManualAccessibility is enabled. Prefer it over estimating
+        // the caret from font metrics, which can overlap proportional text.
+        skipParameterizedTextGeometry: false,
         skipAttributedText: true,
         useMinimalFingerprint: true,
         // One direct AXWindow token keeps prompt identity without restoring the
