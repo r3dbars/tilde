@@ -13,6 +13,14 @@ screenshots in `visual-placement-screenshots/`.
 
 Grades are evidence grades, not product grades.
 
+Phase 2 deliberately removed proof as a runtime prerequisite for ordinary
+writing fields. Mail, Safari, Slack, Telegram, Notion, Discord, VS Code,
+Cursor, ChatGPT, Atlas, and ordinary hosted websites are experimental
+default-on paths even while their evidence stays pending here. Sensitive-field
+suppression remains hard-blocking; three consecutive insertion failures demote
+an app to one-word acceptance and six pause it for the session. Personal
+writing capture remains separately opt-in and browser capture stays blocked.
+
 ## Executable Target Gates
 
 The target state is now machine-checked:
@@ -34,27 +42,27 @@ A- rows as `partial`, even when they have a passing live smoke slice.
 
 | Surface | Decision | Why |
 | --- | --- | --- |
-| Google Docs in Chrome | blocked | Hosted Docs is blocked by browser-surface policy until a disposable document has screenshot-backed placement, safe Tab, verified insertion, undo/recovery, and no sensitive-field leak. |
-| Notion browser or desktop | blocked | Notion pages can contain private workspace text, and neither browser Notion nor `notion.id` has disposable-page ProseMirror proof. |
-| Slack browser or desktop | blocked | Message composers need exact no-send proof before suggestions can run. |
-| Discord browser or desktop | blocked | Message composers need exact no-send proof before suggestions can run. |
-| Mail compose | diagnostics-only | Compose content is sensitive and insertion is unproven; suggestions stay off. |
-| Browser webmail | blocked | Email composers can send messages and expose private recipients/subjects; no disposable real-service proof exists. |
-| Browser ChatGPT | blocked | Real ChatGPT prompt surfaces need one-word no-submit proof; the local browser-chat harness does not count. |
+| Google Docs in Chrome | enabled, proof pending | Ordinary hosted writing surfaces are open; disposable real-service placement, insertion, undo, and sensitive-field proof is still missing. |
+| Notion browser or desktop | enabled, proof pending | The synthetic-caret ProseMirror path is live with degraded undo and automatic demotion; disposable-page proof is missing. |
+| Slack browser or desktop | enabled, proof pending | Control-character filtering prevents acceptance from inserting send keys; exact no-send proof is still missing. |
+| Discord browser or desktop | enabled, proof pending | Control-character filtering prevents acceptance from inserting send keys; exact no-send proof is still missing. |
+| Mail compose | enabled, proof pending | Secure-field suppression remains mandatory and native single-edit undo is the target; compose proof is missing. |
+| Browser webmail | enabled, proof pending | Ordinary compose fields are open, personal capture remains blocked, and exact no-send proof is missing. |
+| Browser ChatGPT | enabled, proof pending | Full acceptance is available with word-only command filtering and unconditional control-character blocking; exact no-submit proof is missing. |
 | Prompt-app full accept | proof-only | Codex default composer has exact separate no-submit screenshot and insertion proof; other prompt/chat full-accept claims remain blocked. |
 | Terminal-host Claude Code | proof-only (dogfood) | Default-on word-only dogfood lane: marker-gated, shell-command guarded, verified one-word no-submit accepts on Terminal and iTerm2. Ghostty insertion remains unproven, full accept stays blocked, and no terminal host counts as beta-safe normal writing support. |
-| Chrome production text fields | blocked | Public proof pages and production browser apps do not count as beta-safe local fixture proof. |
+| Chrome production text fields | enabled, proof pending | Public proof pages and production browser apps do not count as current proof; sensitive browser surfaces remain blocked. |
 | Claude desktop layouts | proof-only | Default one-word no-submit proof exists, but normal beta use, layout variants, and full accept remain blocked. |
 | Codex layouts | proof-only | Default one-word and full-accept no-submit proof is recorded for the Codex composer; normal beta use and broader layouts remain gated. |
 | Obsidian long notes | supported | Current-head long-note proof now has bounded strict screenshot evidence, viewport-end repair, verified Tab insertion, and accepted-and-kept behavior; broader vault variance still keeps general Obsidian support yellow. |
-| Real Monaco and CodeMirror editors | blocked | Forced local fixtures are useful evidence, but official/default Monaco and current CodeMirror proof are not complete. |
+| Real Monaco and CodeMirror editors | enabled with degraded fallback | Forced local fixtures are useful evidence, but official/default Monaco and current CodeMirror geometry proof are not complete. |
 
 | Surface | Grade | Screenshot proof | Accept proof | Current read | Evidence gap |
 | --- | --- | --- | --- | --- | --- |
 | TextEdit | A | [textedit-inline.png](visual-placement-screenshots/textedit-inline.png) | Bounded strict visual smoke refreshed at 2026-05-12T05:06:55Z with 2 verified accepts and current app fingerprint proof. Native single-edit proof now has a separate `--native-undo-proof` lane. | Strongest native-app proof. Ghost text is readable, on the same line, and Tab/full accept verifies against the configured shortcut. The smoke lane now uses a unique disposable file, targets that exact AX window/title even when old TextEdit windows are restored, and dismisses TextEdit's native inline completion before waiting for Autocomplete Lab. Native proof is only counted when `acceptedInsertionUndone` records `undoMechanism=nativeSingleEdit`; app rollback is recoverable but degraded. | More dark/light document variants and fresh native undo proof rows. |
 | Chrome local textarea/contenteditable fixtures | A | [chrome-textarea.png](visual-placement-screenshots/chrome-textarea.png), [chrome-contenteditable.png](visual-placement-screenshots/chrome-contenteditable.png) | 2 verified accepts per local fixture at 2026-05-12T09:12:22Z and 2026-05-12T09:12:38Z. | Only local textarea/contenteditable fixtures count as beta-safe Chrome support. Public pages, production browser apps, chat-like fixtures, editor-like fixtures, hosted docs, Monaco, CodeMirror, and ProseMirror stay proof-only or blocked. | More local boring-text variants would be useful, but public or production pages do not raise the beta-safe scope. |
 | Browser editor fixtures | A- | [chrome-editor-like.png](visual-placement-screenshots/chrome-editor-like.png), [chrome-monaco-like.png](visual-placement-screenshots/chrome-monaco-like.png), [chrome-prosemirror-like.png](visual-placement-screenshots/chrome-prosemirror-like.png), [chrome-monaco-real.png](visual-placement-screenshots/chrome-monaco-real.png), [chrome-prosemirror-real.png](visual-placement-screenshots/chrome-prosemirror-real.png) | 2 verified accepts per fixture in the manual smoke log, including recorded `monaco-real` and `prosemirror-real` forced-renderer proof from 2026-05-12T09:13:45Z and 2026-05-12T09:14:02Z, plus normal-Chrome `prosemirror-real-default` proof at 2026-05-12T09:19:46Z. The 2026-05-12 `codemirror-official` attempt now fails closed before Chrome typing when SteadyType is missing macOS Accessibility. | Good recorded proof for CodeMirror-like, Monaco-like, ProseMirror-like, real Monaco, and real ProseMirror under isolated forced-renderer Chrome. Normal Chrome default AX is recorded for real ProseMirror after the same-app focus churn fix. Normal Chrome default Monaco is not claimed. The official-demo harness now checks Accessibility before runtime readiness, allows a longer cold MLX warmup, uses isolated Chrome/DevTools setup where available, and blocks safely when the focused editor cannot be verified. | Monaco default-AX, current-head `codemirror-official`, `monaco-official`, and production editor proof still need verified insertion, not just display. |
-| Chrome chat-like composer | A | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Local chat-like fixture has 2 verified accepts with strict visual trace evidence and submit count zero; bounded HTTP browser-chat harness requires one-word Tab accept with submit, send-key collision, prompt mutation, and wrong-context counters at zero | This is strong proof for the disposable local chat fixture plus the disposable HTTP browser-chat harness only. It is not broad browser chat support and must not be counted as production proof. Browser-hosted ChatGPT, Slack, and Discord stay blocked by surface policy until exact disposable real-service no-submit screenshot and insertion proof exists. | Broad chat apps still need their own exact real-service proof before support. |
+| Chrome chat-like composer | A | [chrome-chat-like.png](visual-placement-screenshots/chrome-chat-like.png) | Local chat-like fixture has 2 verified accepts with strict visual trace evidence and submit count zero; bounded HTTP browser-chat harness requires one-word Tab accept with submit, send-key collision, prompt mutation, and wrong-context counters at zero | This is strong proof for the disposable local chat fixture plus the disposable HTTP browser-chat harness only. Browser-hosted ChatGPT, Slack, and Discord are experimentally enabled but remain production-proof pending. | Broad chat apps still need their own exact real-service proof before a support claim. |
 | Codex | A- | [codex-inline.png](visual-placement-screenshots/codex-inline.png) | Current bounded strict visual smoke at 2026-05-26T02:06:11Z has exactly 1 verified one-word accept, prompt no-submit confirmation, diagnostics lines 413817-413882, trace lines 28053-28056, app proof `app-sha256:6e1ce0e52d256ec0d038e62c7309a63ef833189758bcf324d458702df5667ac4`, and archive proof `archive-sha256:908f96e7df34df2981ed83fe9c4c45bc8098a340b77dfe203c8f34219445da15`. | Codex has a proof-only prompt lane: screenshot, one-word Tab accept, fast-path focus/accept guard proof, direct marked-composer insertion, insertion verification, and no submit in one trace slice. The helper now prefers a disposable prompt over unrelated focused Codex goal fields and keeps private draft backup/restore for real prompt drafts. It is not beta-safe normal writing support. Full accept remains disabled until a separate no-submit lane exists. | Add more prompt layouts before using this outside proof mode. |
 | Obsidian | A- | [obsidian.png](visual-placement-screenshots/obsidian.png) | Bounded strict visual smoke is recorded for forced-renderer default history plus theme, pane, and long-note lanes. Fresh stock no-flags default proof is now a separate required row and must use `obsidian-stock`. | Real CodeMirror proof shows caret-bound synthetic mirror placement, strict screenshot evidence, Tab accept, and configured full accept in disposable vault notes for the proven lanes. The stock launch row prevents `--force-renderer-accessibility` proof from standing in for normal Obsidian support. | Run `AUTOCOMPLETE_LAB_SCREENSHOT_TRACE=1 script/real_app_smoke.sh obsidian --manual-gate` and record `obsidian-stock`; then broaden vault layouts and hidden-caret edge cases. |
 | Apple Notes title | A | [notes-title.png](visual-placement-screenshots/notes-title.png) | Bounded strict visual smoke refreshed at 2026-05-12T05:04:49Z with 2 verified accepts and current app fingerprint proof; same-slice `notes-title-undo` proof was added at 2026-05-12T05:20:17Z; short and long title variant rows were added at 2026-05-12T05:31:38Z and 2026-05-12T05:31:57Z. | Title proof is now separate from generic Notes evidence. The ghost is inline after the title caret, insertion verifies in the same bounded trace slice, Command-Z undo is recorded after the first accept, and the defined short/long title gate is green. | More real-world title layouts would be useful, but the defined Notes title proof gate is green. |
@@ -78,9 +86,9 @@ A- rows as `partial`, even when they have a passing live smoke slice.
    Bear, Drafts, iA Writer, Ulysses, Typora, or CotEditor are preferred because
    they are writing-first and non-send surfaces. Capture bundle/version first
    and use a disposable local document.
-4. After those safe lanes, add exact disposable real-service proof for Google
-   Docs and Notion before removing their hosted-surface blocks. Local fixtures,
-   local harnesses, and public non-auth editor fixtures do not count.
+4. Add exact disposable real-service proof for Google Docs and Notion. Their
+   runtime paths are open experimentally, but local fixtures, local harnesses,
+   and public non-auth editor fixtures do not count as production proof.
 5. Keep browser webmail, browser ChatGPT, Slack, Discord, Mail compose,
    terminal-hosted Claude Code, and prompt-app layout expansion guarded until
    exact no-send/no-submit proof exists for the app, field, and layout.
