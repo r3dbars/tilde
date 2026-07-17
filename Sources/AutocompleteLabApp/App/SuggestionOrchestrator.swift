@@ -9,15 +9,14 @@ struct FastPhraseFallbackLearningDecision: Equatable, Sendable {
 
 @MainActor
 final class SuggestionOrchestrator {
-    private static let maximumFinalModelDisplayLatencyMilliseconds = 750
-    /// Tighter ceiling applied when a model result would be the *first* thing the user sees
-    /// (no instant local phrase or streamed partial already on screen). A model result that
-    /// lands later than this would paint as a stale, late ghost-text flash after the caret has
-    /// moved on, so we suppress it and let the slot stay empty rather than show it cold.
-    /// Tied to `SuggestionRequestSchedulingPolicy.instantWordResultBudgetMilliseconds` (450ms):
-    /// the model still shows when it is genuinely fast, only the slow cold paints are dropped.
-    /// Model results that *refine* an already-visible suggestion keep the looser budget above.
-    private static let maximumFirstVisibleModelDisplayLatencyMilliseconds = 450
+    private static let maximumFinalModelDisplayLatencyMilliseconds = 2_000
+    /// Ceiling applied when a model result would be the *first* thing the user sees
+    /// (no instant local phrase or streamed partial already on screen). Staleness is
+    /// separately guarded by presentationSuppressionReason (any typing after the
+    /// request cancels the paint), so this only needs to drop pathologically late
+    /// results — a local model regularly needs more than a second for its first
+    /// good completion, and dropping those made the app feel dead.
+    private static let maximumFirstVisibleModelDisplayLatencyMilliseconds = 1_200
     private static let maximumDocLocalFields = 24
     private static let maximumDocLocalSnapshotsPerField = 4
     private static let maximumDocLocalSnapshotCharacters = 12_000
