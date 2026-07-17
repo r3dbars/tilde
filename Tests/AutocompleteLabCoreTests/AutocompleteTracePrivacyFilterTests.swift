@@ -100,4 +100,14 @@ struct AutocompleteTracePrivacyFilterTests {
 
         #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: false) == metadata)
     }
+
+    @Test("Keeps aggregate cleaner rejection reasons readable")
+    func keepsAggregateCleanerRejectionReasonsReadable() {
+        let metadata = [
+            "completionCleanRejectionCount": "3",
+            "completionCleanRejectionReasons": "lowSignalPhrase:2,unsafePromptAction:1"
+        ]
+
+        #expect(AutocompleteTracePrivacyFilter.metadata(metadata, rawContentEnabled: false) == metadata)
+    }
 }

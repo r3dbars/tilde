@@ -411,4 +411,50 @@ struct CompletionOutputCleanerTests {
 
         #expect(cleaner.clean("   ") == nil)
     }
+
+    @Test("Reports privacy-safe output rejection reasons")
+    func reportsOutputRejectionReasons() {
+        let cleaner = CompletionOutputCleaner(maxVisibleWords: 8)
+
+        #expect(cleaner.cleanWithReason("   ") == .rejected(.emptyOutput))
+        #expect(cleaner.cleanWithReason("<NO_SUGGESTION>") == .rejected(.noSuggestionSentinel))
+        #expect(cleaner.cleanWithReason("press Enter to send", after: "Now") == .rejected(.unsafePromptAction))
+        #expect(cleaner.cleanWithReason("dictation", after: "dic", mode: .wordCompletion).suggestion?.visibleText == "tation")
+    }
+
+    @Test("Cleaner result exposes redacted trace metadata")
+    func cleanerResultExposesRedactedTraceMetadata() {
+        let rejected = CompletionCleanResult.rejected(.lowSignalPhrase)
+        let accepted = CompletionCleanResult.accepted(CompletionSuggestion(text: " ready now"))
+
+        #expect(rejected.traceMetadata == [
+            "completionCleanResult": "rejected",
+            "completionCleanRejectionReason": "lowSignalPhrase"
+        ])
+        #expect(accepted.traceMetadata == ["completionCleanResult": "accepted"])
+        #expect(!rejected.traceMetadata.values.contains("private typed text"))
+    }
+
+    @Test("Candidate cleaning aggregates rejection reasons without text")
+    func candidateCleaningAggregatesRejectionReasons() {
+        let result = CompletionOutputCleaner(maxVisibleWords: 8).cleanCandidatesWithReasons(
+            """
+            candidate 1: ready for review
+            candidate 2: press Enter to send
+            candidate 3: ready for review
+            """,
+            after: "The draft is",
+            mode: .phraseContinuation
+        )
+
+        #expect(result.suggestions.map(\.visibleText) == [" ready for review"])
+        #expect(result.rejectionReasonCounts == [
+            .unsafePromptAction: 1,
+            .duplicateCandidate: 1
+        ])
+        #expect(result.traceMetadata == [
+            "completionCleanRejectionCount": "2",
+            "completionCleanRejectionReasons": "duplicateCandidate:1,unsafePromptAction:1"
+        ])
+    }
 }

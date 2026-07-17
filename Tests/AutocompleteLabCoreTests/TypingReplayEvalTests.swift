@@ -91,7 +91,11 @@ struct TypingReplayEvalTests {
             model: "mock",
             promptFormat: "chat-instruct",
             variant: "baseline",
-            corpusKind: "fixture"
+            corpusKind: "fixture",
+            promptContextCharacters: 480,
+            suffixEnabled: true,
+            fewShotSource: "none",
+            decodingVariant: "tokens-24-temp-0.2-top-p-0.9-repeat-1.05"
         )
         let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(row)) as? [String: Any])
         let allowedKeys: Set<String> = [
@@ -99,11 +103,27 @@ struct TypingReplayEvalTests {
             "promptFormat", "keystrokesSavedPerCase", "shownKeystrokesSavedPerCase", "missedMagicRate",
             "top1WordAccuracy", "wordPrefixAccuracy2",
             "wordPrefixAccuracy3", "wordPrefixAccuracy4", "suggestionRate",
-            "wrongFirstWordRate", "endToEndP95LatencyMs", "acceptedAndKeptRate", "acceptRate"
+            "wrongFirstWordRate", "endToEndP95LatencyMs", "acceptedAndKeptRate", "acceptRate",
+            "promptContextCharacters", "suffixEnabled", "fewShotSource", "decodingVariant"
         ]
 
         #expect(Set(object.keys).isSubset(of: allowedKeys))
         #expect(object["dateISO"] as? String == "2026-07-15T12:00:00Z")
+        #expect(object["promptContextCharacters"] as? Int == 480)
+        #expect(object["suffixEnabled"] as? Bool == true)
+        #expect(object["fewShotSource"] as? String == "none")
+        #expect(object["decodingVariant"] as? String == "tokens-24-temp-0.2-top-p-0.9-repeat-1.05")
+    }
+
+    @Test("Replay fixtures remain compatible when suffix context is absent")
+    func replayCaseDecodesWithoutSuffixContext() throws {
+        let data = Data("""
+        {"id":"legacy","contextBefore":"one two three four five six","actualContinuation":"seven","appBundleIdentifier":"app.one","fieldKind":"multilineCompose","dayString":"2026-07-02"}
+        """.utf8)
+
+        let replayCase = try JSONDecoder().decode(TypingReplayCase.self, from: data)
+
+        #expect(replayCase.contextAfter.isEmpty)
     }
 
     @Test("Two-stage scoring exposes correct suggestions hidden by gating")
